@@ -63,7 +63,10 @@ function enrichField(field, mappingBySourceId) {
   };
   return {
     ...enriched,
-    aliases: chartAliasesForField(enriched),
+    aliases: unique([
+      ...asArray(field.aliases),
+      ...chartAliasesForField(enriched),
+    ]),
   };
 }
 
@@ -107,17 +110,118 @@ function phraseAfter(prompt, patterns) {
   return "";
 }
 
+function firstText(...values) {
+  return values.map((value) => String(value ?? "").trim()).find(Boolean) || "";
+}
+
+function normalizeColumnHint(value) {
+  const match = String(value || "").trim().match(/\b(?:column|col)?\s*([a-z]{1,3})\b/i);
+  return match ? match[1].toUpperCase() : "";
+}
+
+function stripColumnHint(value) {
+  return normalizeText(value)
+    .replace(/\b(?:column|col)\s+[a-z]{1,3}\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function axisRequestFromText(prompt, axis) {
+  const text = normalizeText(prompt);
+  const otherAxis = axis === "x" ? "y" : "x";
+  const patterns = [
+    new RegExp(`\\b${axis}\\s*axis\\s*(?:is|=|:|should be|should use|uses)?\\s*([a-z0-9 ]+?)(?=\\b(?:the\\s+)?${otherAxis}\\s*axis\\b|\\band\\b|\\bwhere\\b|\\bfor\\b|$)`),
+    new RegExp(`\\buse\\s+([a-z0-9 ]+?)\\s+as\\s+(?:the\\s+)?${axis}\\s*axis\\b`),
+    new RegExp(`\\b([a-z0-9 ]+?)\\s+as\\s+(?:the\\s+)?${axis}\\s*axis\\b`),
+  ];
+  const directColumn = text.match(new RegExp(`\\b(?:column|col)\\s+([a-z]{1,3})\\s+(?:should be|as|for|is)?\\s*(?:the\\s+)?${axis}\\b`));
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) {
+      return {
+        fieldAlias: stripColumnHint(match[1]),
+        columnHint: normalizeColumnHint(match[1]) || normalizeColumnHint(directColumn?.[1]),
+      };
+    }
+  }
+  return {
+    fieldAlias: "",
+    columnHint: normalizeColumnHint(directColumn?.[1]),
+  };
+}
+
+function wantsNormalizeToPercent(text) {
+  return /\b(normalize|normalise|normalized|normalised)\b/.test(text)
+    || /\b(rescale|rescaled|scale|scaled)\b.*\b(100|percent|percentage)\b/.test(text)
+    || /\b(sum|total)\b.*\b(100|percent|percentage)\b/.test(text)
+    || /\bproportionally\b.*\b(100|percent|percentage)\b/.test(text);
+}
+
+function wantsLogScale(prompt, axis = "y") {
+  const text = normalizeText(prompt);
+  return new RegExp(`\\b${axis}\\s*axis\\b[\\s\\S]*\\blog(?:\\s*base\\s*10|10)?\\b`).test(text)
+    || new RegExp(`\\blog(?:\\s*base\\s*10|10)?\\b[\\s\\S]*\\b${axis}\\s*axis\\b`).test(text);
+}
+
+function wantsExcelLikeStyle(prompt) {
+  const text = normalizeText(prompt);
+  return /\b(excel|workbook)\b/.test(text) && /\b(aesthetic|style|replicate|copy|match|graph|chart)\b/.test(text);
+}
+
+function wantsMarkersOnly(prompt) {
+  const text = normalizeText(prompt);
+  return /\bmarkers? only\b/.test(text)
+    || /\bpoints? only\b/.test(text)
+    || /\bno (?:connecting )?lines?\b/.test(text)
+    || /\bwithout (?:connecting )?lines?\b/.test(text)
+    || /\bno line connection\b/.test(text)
+    || /\bdo not connect\b/.test(text);
+}
+
+function wantsOpenMarkers(prompt) {
+  const text = normalizeText(prompt);
+  return /\bhollow (?:markers?|points?|circles?)\b/.test(text)
+    || /\bopen (?:markers?|points?|circles?)\b/.test(text)
+    || /\bempty (?:markers?|points?|circles?)\b/.test(text)
+    || /\bunfilled (?:markers?|points?|circles?)\b/.test(text);
+}
+
+function deterministicRenderStyle(prompt) {
+  const excelLike = wantsExcelLikeStyle(prompt);
+  const markersOnly = wantsMarkersOnly(prompt);
+  const openMarkers = wantsOpenMarkers(prompt);
+  if (!excelLike && !markersOnly && !openMarkers) return {};
+  return {
+    ...(excelLike ? {
+      preset: "excel_like",
+      showLegend: false,
+      grid: { x: true, y: true, color: "#d9d9d9" },
+    } : {}),
+    traceMode: markersOnly ? "markers" : excelLike ? "lines+markers" : undefined,
+    traces: [{
+      target: "primary",
+      ...(excelLike && !markersOnly ? { line: { color: "#4472C4", width: 2 } } : {}),
+      marker: {
+        ...(excelLike ? { color: "#4472C4", size: 6 } : {}),
+        ...(openMarkers ? { symbol: "circle-open" } : excelLike ? { symbol: "circle" } : {}),
+      },
+    }],
+  };
+}
+
 function deterministicIntent(prompt) {
   const text = normalizeText(prompt);
   const wantsDistribution = /\b(c number|cnumber|c-number|carbon number|carbon distribution|hydrocarbon distribution|c\d+\s*(?:to|-)\s*c\d+)\b/.test(text);
-  const wantsNormalize = /\b(normalize|normalised|normalized|scale|scaled|sum to 100|total 100|to 100)\b/.test(text);
+  const wantsNormalize = wantsNormalizeToPercent(text);
   const wantsStack = /\b(stacked|stack)\b/.test(text);
   const wantsGrouped = /\b(grouped bar|grouped bars|group bar|group bars)\b/.test(text);
   const wantsPoint = /\b(point|dot)\b/.test(text);
+  const axisXRequest = axisRequestFromText(prompt, "x");
+  const axisYRequest = axisRequestFromText(prompt, "y");
   const chartType = wantsDistribution ? "distribution_bar"
     : wantsStack ? "stacked_bar"
     : wantsGrouped ? "grouped_bar"
-      : /\b(bar|column)\b/.test(text) ? "bar"
+      : /\bbar(?:s| chart| plot)?\b|\bcolumn (?:chart|plot)\b/.test(text) ? "bar"
         : wantsPoint ? "point"
           : /\b(line|time series)\b/.test(text) ? "scatter"
             : "scatter";
@@ -125,13 +229,13 @@ function deterministicIntent(prompt) {
     /\bgroup(?:ed)? by ([a-z0-9 ]+?)(?:\bwhere\b|\bfilter\b|$)/,
     /\bcolor(?:ed)? by ([a-z0-9 ]+?)(?:\bwhere\b|\bfilter\b|$)/,
   ]);
-  const xFieldAlias = phraseAfter(text, [
-    /\bvs ([a-z0-9 ]+?)(?:\bgroup(?:ed)?\b|\bcolor(?:ed)?\b|\bby\b|$)/,
-    /\bversus ([a-z0-9 ]+?)(?:\bgroup(?:ed)?\b|\bcolor(?:ed)?\b|\bby\b|$)/,
-    /\bagainst ([a-z0-9 ]+?)(?:\bgroup(?:ed)?\b|\bcolor(?:ed)?\b|\bby\b|$)/,
-    /\bover ([a-z0-9 ]+?)(?:\bgroup(?:ed)?\b|\bcolor(?:ed)?\b|\bby\b|$)/,
+  const xFieldAlias = axisXRequest.fieldAlias || phraseAfter(text, [
+    /\bvs ([a-z0-9 ]+?)(?:\bfor\b|\bin\b|\bof\b|\bgroup(?:ed)?\b|\bcolor(?:ed)?\b|\bby\b|$)/,
+    /\bversus ([a-z0-9 ]+?)(?:\bfor\b|\bin\b|\bof\b|\bgroup(?:ed)?\b|\bcolor(?:ed)?\b|\bby\b|$)/,
+    /\bagainst ([a-z0-9 ]+?)(?:\bfor\b|\bin\b|\bof\b|\bgroup(?:ed)?\b|\bcolor(?:ed)?\b|\bby\b|$)/,
+    /\bover ([a-z0-9 ]+?)(?:\bfor\b|\bin\b|\bof\b|\bgroup(?:ed)?\b|\bcolor(?:ed)?\b|\bby\b|$)/,
   ]);
-  let yFieldAlias = phraseAfter(text, [
+  let yFieldAlias = axisYRequest.fieldAlias || phraseAfter(text, [
     /\bplot ([a-z0-9 ]+?)\b(?:vs|versus|against|over)\b/,
     /\bplot of ([a-z0-9 ]+?)\b(?:vs|versus|against|over)\b/,
     /\bplot ([a-z0-9 ]+?)\b(?:as|in)\b(?: a| an)?\b(?:bar|column|point|dot|scatter|line|chart|plot)\b/,
@@ -155,16 +259,40 @@ function deterministicIntent(prompt) {
   const selectivitySetChartType = wantsStack ? "stacked_bar" : "grouped_bar";
   const mentionsExperimentAxis = /\b(by|per|across) (experiment|experiments|exp|run|runs|label)\b/.test(text);
   return {
+    intentVersion: "labrat.chartIntent.v2",
     chartType: wantsSelectivitySet ? selectivitySetChartType : chartType,
     xFieldAlias: xFieldAlias || (wantsSelectivitySet || groupByAlias || mentionsExperimentAxis ? "experiment" : /\btemperature\b/.test(text) ? "temperature" : ""),
+    xColumnHint: axisXRequest.columnHint,
     yFieldAlias,
+    yColumnHint: axisYRequest.columnHint,
     yFieldAliases: wantsSelectivitySet ? ["solid selectivity", "liquid selectivity", "gas selectivity"] : [],
     groupByAlias,
     filters: [],
     transformIntent: wantsNormalize ? "normalize_sum_to_percent" : "",
+    axisOptions: {
+      x: { scale: "linear" },
+      y: { scale: wantsLogScale(prompt, "y") ? "log10" : "linear" },
+    },
+    renderStyle: deterministicRenderStyle(prompt),
     title: "",
     rationale: "Parsed deterministically from the chart prompt.",
   };
+}
+
+function columnFromCellRef(value) {
+  const match = String(value || "").toUpperCase().match(/\$?([A-Z]{1,3})\$?\d+/);
+  return match ? match[1] : "";
+}
+
+function sourceColumnsForField(field, inventory) {
+  return unique(asArray(field.sourceRefs).flatMap((sourceRef) => {
+    const source = inventory.sourcesByRef?.get?.(sourceRef) || {};
+    return [
+      columnFromCellRef(source.cell),
+      columnFromCellRef(source.range),
+      columnFromCellRef(source.cellRange),
+    ];
+  }));
 }
 
 function compactInventory(inventory) {
@@ -183,20 +311,51 @@ function compactInventory(inventory) {
     numericCount: field.numericCount,
     coverageCount: field.coverageCount,
     examples: field.examples,
+    sourceColumns: sourceColumnsForField(field, inventory),
   }));
 }
 
 async function aiIntent(prompt, inventory, options) {
   const ai = await requestAnthropicJson({
     system: [
-      "You convert a user's chart request into chart intent JSON for LabRat.",
+      "You convert a user's chart request into ChartIntent v2 JSON for LabRat.",
       "Use only aliases from the field inventory. Do not invent fields or values.",
-      "Return JSON with chartType, xFieldAlias, yFieldAlias, yFieldAliases, groupByAlias, filters, title, rationale.",
+      "Do not return Plotly code or JavaScript.",
+      "Return JSON with intentVersion, chartType, data.x/data.y/data.yFields, filters, encoding.axes, encoding.traceMode, transforms, style, title, rationale, confidence.",
+      "For hollow/open/unfilled markers with no connecting lines, return encoding.traceMode='markers' and style.traces[0].marker.symbol='circle-open'.",
     ].join(" "),
     prompt: JSON.stringify({
       prompt,
       fields: compactInventory(inventory),
       allowedChartTypes: ["scatter", "point", "bar", "grouped_bar", "stacked_bar", "distribution_bar"],
+      allowedTransforms: ["normalize_sum_to_percent", "percent_of_total", "ratio", "difference", "log10_transform"],
+      allowedAxisScales: ["linear", "log10"],
+      responseShape: {
+        intentVersion: "labrat.chartIntent.v2",
+        chartType: "scatter",
+        data: {
+          x: { fieldAlias: "reaction time", columnHint: "F", unitHint: "min" },
+          y: { fieldAlias: "adjusted rate", columnHint: "H", unitHint: "M/s" },
+          yFields: [],
+          filters: [{ fieldAlias: "experiment", operator: "equals", value: "Exp30" }],
+        },
+        encoding: {
+          traceMode: "markers",
+          axes: {
+            x: { scale: "linear", title: "Reaction Time (min)" },
+            y: { scale: "log10", title: "Adjusted Rate (M/s)" },
+          },
+        },
+        transforms: [],
+        style: {
+          preset: "excel_like",
+          showLegend: false,
+          grid: { x: true, y: true },
+          traces: [{ target: "primary", line: { color: "#4472C4", width: 2 }, marker: { color: "#4472C4", size: 6, symbol: "circle-open" } }],
+        },
+        rationale: "why this chart matches the request",
+        confidence: 0.85,
+      },
     }),
     maxTokens: 1000,
     env: options.env,
@@ -211,6 +370,66 @@ async function aiIntent(prompt, inventory, options) {
       message: "AI chart intent response was not valid JSON; deterministic parsing was used.",
       severity: "warning",
     },
+  };
+}
+
+function axisRequestFromValue(value, legacyAlias = "", legacyColumnHint = "") {
+  if (typeof value === "string") {
+    return { fieldAlias: value, columnHint: legacyColumnHint };
+  }
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  return {
+    fieldAlias: firstText(source.fieldAlias, source.alias, source.field, source.fieldName, source.label, source.name, legacyAlias),
+    columnHint: normalizeColumnHint(firstText(source.columnHint, source.column, source.columnLetter, legacyColumnHint)),
+    unitHint: firstText(source.unitHint, source.unit),
+  };
+}
+
+function normalizeIntent(intent = {}) {
+  const data = intent.data && typeof intent.data === "object" && !Array.isArray(intent.data) ? intent.data : {};
+  const encoding = intent.encoding && typeof intent.encoding === "object" && !Array.isArray(intent.encoding) ? intent.encoding : {};
+  const axes = encoding.axes && typeof encoding.axes === "object" && !Array.isArray(encoding.axes) ? encoding.axes : {};
+  const style = intent.style && typeof intent.style === "object" && !Array.isArray(intent.style) ? intent.style : {};
+  const xRequest = axisRequestFromValue(data.x || intent.x, intent.xFieldAlias || intent.xAlias, intent.xColumnHint);
+  const yRequest = axisRequestFromValue(data.y || intent.y, intent.yFieldAlias || intent.yAlias, intent.yColumnHint);
+  const yFieldRequests = asArray(data.yFields || intent.yFields).map((item) => axisRequestFromValue(item)).filter((item) => item.fieldAlias || item.columnHint);
+  const legacyYAliases = asArray(intent.yFieldAliases || intent.yAliases || intent.multiYAliases)
+    .map((alias) => axisRequestFromValue(alias))
+    .filter((item) => item.fieldAlias || item.columnHint);
+  const renderStyle = {
+    ...(intent.renderStyle && typeof intent.renderStyle === "object" ? intent.renderStyle : {}),
+    ...style,
+    traceMode: firstText(intent.renderStyle?.traceMode, style.traceMode, encoding.traceMode),
+  };
+  const axisOptions = {
+    ...(intent.axisOptions && typeof intent.axisOptions === "object" ? intent.axisOptions : {}),
+    x: {
+      ...(intent.axisOptions?.x || {}),
+      ...(axes.x || {}),
+      scale: firstText(intent.axisOptions?.x?.scale, axes.x?.scale, intent.xAxisScale),
+    },
+    y: {
+      ...(intent.axisOptions?.y || {}),
+      ...(axes.y || {}),
+      scale: firstText(intent.axisOptions?.y?.scale, axes.y?.scale, intent.yAxisScale),
+    },
+  };
+  return {
+    ...intent,
+    chartType: intent.chartType || intent.type || "scatter",
+    xFieldAlias: xRequest.fieldAlias,
+    xColumnHint: xRequest.columnHint,
+    yFieldAlias: yRequest.fieldAlias,
+    yColumnHint: yRequest.columnHint,
+    yFieldRequests: yFieldRequests.length ? yFieldRequests : legacyYAliases.length ? legacyYAliases : [yRequest].filter((item) => item.fieldAlias || item.columnHint),
+    groupByAlias: firstText(data.groupBy?.fieldAlias, intent.groupByAlias, intent.groupAlias, intent.groupBy),
+    filters: asArray(data.filters).length ? asArray(data.filters) : asArray(intent.filters),
+    transformIntent: firstText(intent.transformIntent, intent.transform),
+    transforms: asArray(intent.transforms),
+    axisOptions,
+    renderStyle,
+    title: intent.title || "",
+    rationale: intent.rationale || intent.reason || "",
   };
 }
 
@@ -277,6 +496,62 @@ function resolveField(alias, fields, options = {}) {
   return candidates[0]?.field || null;
 }
 
+function fieldMatchesOptions(field, options = {}) {
+  const roleFilter = options.roles ? new Set(options.roles) : null;
+  const valueType = options.valueType || null;
+  if (roleFilter && !roleFilter.has(field.role)) return false;
+  if (valueType && field.valueType !== valueType) return false;
+  return true;
+}
+
+function resolveFieldByColumnHint(columnHint, fields, inventory, options = {}) {
+  const column = normalizeColumnHint(columnHint);
+  if (!column) return null;
+  const candidates = fields
+    .filter((field) => fieldMatchesOptions(field, options))
+    .map((field) => {
+      const columns = sourceColumnsForField(field, inventory);
+      const score = columns.filter((item) => item === column).length;
+      return { field, score };
+    })
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score || (b.field.confidence || 0) - (a.field.confidence || 0));
+  return candidates[0]?.field || null;
+}
+
+function fieldOption(field) {
+  return field ? {
+    fieldId: field.fieldId,
+    label: field.displayName,
+    role: field.role,
+    unit: field.unit,
+    valueType: field.valueType,
+  } : null;
+}
+
+function resolveRequestedField(request, fields, inventory, options = {}, axisName = "axis") {
+  const aliasField = request?.fieldAlias ? resolveField(request.fieldAlias, fields, options) : null;
+  const hintedColumn = normalizeColumnHint(request?.columnHint);
+  if (aliasField && hintedColumn && sourceColumnsForField(aliasField, inventory).includes(hintedColumn)) {
+    return { field: aliasField, clarification: null };
+  }
+  const columnField = request?.columnHint ? resolveFieldByColumnHint(request.columnHint, fields, inventory, options) : null;
+  const anyColumnField = request?.columnHint ? resolveFieldByColumnHint(request.columnHint, fields, inventory, {}) : null;
+  if (aliasField && anyColumnField && aliasField.fieldId !== anyColumnField.fieldId) {
+    return {
+      field: null,
+      clarification: {
+        message: `The ${axisName} field name and column hint point to different fields. Which field should be used?`,
+        options: unique([aliasField.fieldId, anyColumnField.fieldId])
+          .map((fieldId) => [aliasField, anyColumnField].find((field) => field.fieldId === fieldId))
+          .map(fieldOption)
+          .filter(Boolean),
+      },
+    };
+  }
+  return { field: aliasField || columnField || null, clarification: null };
+}
+
 function fieldOptions(fields, roles = null) {
   const roleSet = roles ? new Set(roles) : null;
   return fields
@@ -296,11 +571,12 @@ function wantsTransform(intent, prompt, type) {
     intent?.transformIntent,
     intent?.transform,
     ...asArray(intent?.transforms).map((item) => typeof item === "string" ? item : item?.type),
-    prompt,
   ].join(" ");
   const text = normalizeText(values);
   if (type === "normalize_sum_to_percent") {
-    return /\b(normalize|normalise|normalized|normalised|scale|scaled|sum to 100|total 100|to 100)\b/.test(text);
+    return /\bnormalize sum to percent\b/.test(text)
+      || /\bnormalize_sum_to_percent\b/.test(String(values))
+      || wantsNormalizeToPercent(`${text} ${normalizeText(prompt)}`);
   }
   return false;
 }
@@ -318,6 +594,7 @@ function identifierField(inventory) {
 }
 
 function isDistributionIntent(intent, prompt) {
+  intent = normalizeIntent(intent);
   const text = normalizeText([
     intent?.chartType,
     intent?.goal,
@@ -332,6 +609,7 @@ function isDistributionIntent(intent, prompt) {
 }
 
 function compileDistributionIntent(intent, inventory, prompt, warnings) {
+  intent = normalizeIntent(intent);
   const yFields = orderedCarbonFields(inventory.fields);
   if (yFields.length < 2) {
     return {
@@ -384,6 +662,8 @@ function compileDistributionIntent(intent, inventory, prompt, warnings) {
         field: seriesField?.field || "experiment",
         label: seriesField?.displayName || "Experiment",
       }],
+      axisOptions: intent.axisOptions,
+      renderStyle: intent.renderStyle,
       warnings,
       rationale: intent.rationale || "C-number component fields were resolved as one distribution family.",
       prompt,
@@ -394,8 +674,12 @@ function compileDistributionIntent(intent, inventory, prompt, warnings) {
 
 function pairCoverage(xField, yFields) {
   if (!xField || !yFields.length) return 0;
-  const xRows = new Set(asArray(xField.rowIndexes).map(String));
-  const yRows = new Set(yFields.flatMap((field) => asArray(field.rowIndexes).map(String)));
+  const xKeys = asArray(xField.recordKeys).length ? asArray(xField.recordKeys) : asArray(xField.rowIndexes);
+  const yKeys = yFields.flatMap((field) => (
+    asArray(field.recordKeys).length ? asArray(field.recordKeys) : asArray(field.rowIndexes)
+  ));
+  const xRows = new Set(xKeys.map(String));
+  const yRows = new Set(yKeys.map(String));
   if (!xRows.size || !yRows.size) return 0;
   return [...yRows].filter((row) => xRows.has(row)).length;
 }
@@ -409,18 +693,34 @@ function titleFor(intent, xField, yFields, groupBy) {
 }
 
 function compileIntent(intent, inventory, prompt, warnings) {
+  intent = normalizeIntent(intent);
   const fields = inventory.fields;
   if (isDistributionIntent(intent, prompt)) {
     return compileDistributionIntent(intent, inventory, prompt, warnings);
   }
-  const xField = resolveField(intent.xFieldAlias, fields, {
+  const xResolved = resolveRequestedField({
+    fieldAlias: intent.xFieldAlias,
+    columnHint: intent.xColumnHint,
+  }, fields, inventory, {
     roles: ["condition", "material", "metadata", "identifier"],
-  });
-  const yAliases = asArray(intent.yFieldAliases).length ? asArray(intent.yFieldAliases) : [intent.yFieldAlias];
-  let yFields = unique(yAliases).map((alias) => resolveField(alias, fields, {
+  }, "x-axis");
+  if (xResolved.clarification) {
+    return { chartSpecDraft: null, clarification: xResolved.clarification };
+  }
+  const xField = xResolved.field;
+  const yRequests = asArray(intent.yFieldRequests).length ? asArray(intent.yFieldRequests) : [{
+    fieldAlias: intent.yFieldAlias,
+    columnHint: intent.yColumnHint,
+  }];
+  const yResolved = yRequests.map((request) => resolveRequestedField(request, fields, inventory, {
     roles: ["measurement"],
     valueType: "numeric",
-  })).filter(Boolean);
+  }, "y-axis"));
+  const yConflict = yResolved.find((item) => item.clarification);
+  if (yConflict?.clarification) {
+    return { chartSpecDraft: null, clarification: yConflict.clarification };
+  }
+  let yFields = unique(yResolved.map((item) => item.field?.fieldId)).map((fieldId) => yResolved.find((item) => item.field?.fieldId === fieldId)?.field).filter(Boolean);
   if (!yFields.length) {
     const mentionedYField = resolveMentionedField(prompt, fields, {
       roles: ["measurement"],
@@ -466,6 +766,19 @@ function compileIntent(intent, inventory, prompt, warnings) {
   }
   const coverage = pairCoverage(xField, yFields);
   const normalizeYFields = wantsTransform(intent, prompt, "normalize_sum_to_percent") && yFields.length >= 2;
+  const intentTransforms = asArray(intent.transforms).filter((transform) => {
+    const type = typeof transform === "string" ? transform : transform?.type || transform?.transformType;
+    return type && normalizeText(type) !== "normalize sum to percent";
+  });
+  const transforms = [
+    ...intentTransforms,
+    ...(normalizeYFields ? [{
+      type: "normalize_sum_to_percent",
+      scope: "per_experiment",
+      inputFieldIds: yFields.flatMap((field) => field.sourceIds),
+      outputUnit: "%",
+    }] : []),
+  ];
   const sourceRefs = unique([
     ...asArray(xField.sourceRefs),
     ...yFields.flatMap((field) => asArray(field.sourceRefs)),
@@ -492,12 +805,19 @@ function compileIntent(intent, inventory, prompt, warnings) {
           severity: "warning",
         }] : []),
       ],
-      transforms: normalizeYFields ? [{
-        type: "normalize_sum_to_percent",
-        scope: "per_experiment",
-        inputFieldIds: yFields.flatMap((field) => field.sourceIds),
-        outputUnit: "%",
-      }] : [],
+      transforms,
+      axisOptions: {
+        ...intent.axisOptions,
+        x: {
+          ...intent.axisOptions?.x,
+          title: intent.axisOptions?.x?.title || xField.displayName,
+        },
+        y: {
+          ...intent.axisOptions?.y,
+          title: intent.axisOptions?.y?.title || (yFields.length === 1 ? yFields[0].displayName : "Value"),
+        },
+      },
+      renderStyle: intent.renderStyle,
       rationale: intent.rationale || "Chart fields were resolved from the prompt and imported field inventory.",
       prompt,
       extra: {

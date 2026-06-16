@@ -73,7 +73,7 @@ Docker Compose runs migrations, seeds local development accounts when enabled, s
 - **Import Engine** wraps scan/normalize, import-run lifecycle, refresh preview/apply, warnings, and review status.
 - **Dataset Store** stores immutable full dataset commits.
 - **Mapping Store** stores semantic mapping proposal sets and user decisions.
-- **Chart Store** stores chart proposal sets and durable ChartSpec v1.2 records.
+- **Chart Store** stores chart proposal sets and durable ChartSpec v1.3 records.
 - **Manuscript Store** stores blocks, pages, canvas state, references, and chart spec snapshots.
 - **Audit Log** records auth, admin, upload, import, dataset, mapping, chart, manuscript, and export actions.
 
@@ -115,13 +115,13 @@ LabRat uses an internal ChartSpec contract, not direct AI-generated Plotly JSON.
 user prompt or proposal recipe
   -> chart intent
   -> backend field resolve
-  -> ChartSpec v1.2 compile/validate
+  -> ChartSpec v1.3 compile/validate
   -> frontend Plotly preview/render
   -> user review
   -> durable chart_spec
 ```
 
-ChartSpec v1.2 supports simple and multi-series charts plus allowlisted chart-local transforms such as normalized selectivity bars and C-number distributions. Transformed values are for chart rendering only; they do not rewrite dataset commits.
+ChartSpec v1.3 supports simple and multi-series charts plus allowlisted chart-local transforms such as normalized selectivity bars and C-number distributions, along with controlled axis/style hints such as log axes and Excel-like rendering. Transformed values are for chart rendering only; they do not rewrite dataset commits.
 
 ## AI And MCP Positioning
 

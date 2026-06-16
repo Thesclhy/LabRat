@@ -1,8 +1,10 @@
 const SUPPORTED_TRANSFORMS = new Set([
   "normalize_sum_to_percent",
   "sum_fields",
+  "difference",
   "ratio",
   "percent_of_total",
+  "log10_transform",
   "pivot_longer",
   "sort_components",
   "filter_non_numeric",
@@ -19,6 +21,9 @@ function unique(values) {
 export function normalizeTransformType(value) {
   const text = String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
   if (["normalize_to_100", "normalize_percent", "normalize_components_to_percent"].includes(text)) return "normalize_sum_to_percent";
+  if (["sum", "add", "addition"].includes(text)) return "sum_fields";
+  if (["subtract", "subtraction"].includes(text)) return "difference";
+  if (["log10", "log_10", "log_base_10"].includes(text)) return "log10_transform";
   if (["pivot", "wide_to_long"].includes(text)) return "pivot_longer";
   if (["sort_carbon", "sort_component", "sort_carbon_number"].includes(text)) return "sort_components";
   return SUPPORTED_TRANSFORMS.has(text) ? text : "";
@@ -50,8 +55,10 @@ export function normalizeChartTransforms(transforms = []) {
 function formulaForTransform(type) {
   if (type === "normalize_sum_to_percent") return "value / sum(input values in scope) * 100";
   if (type === "sum_fields") return "sum(input values)";
+  if (type === "difference") return "input[0] - input[1]";
   if (type === "ratio") return "input[0] / input[1]";
   if (type === "percent_of_total") return "input[0] / sum(input values) * 100";
+  if (type === "log10_transform") return "log10(input[0])";
   if (type === "pivot_longer") return "wide component fields -> component/value rows";
   if (type === "sort_components") return "sort components by declared componentOrder";
   if (type === "filter_non_numeric") return "remove rows where required values are not numeric";
@@ -69,4 +76,3 @@ export function transformInputIds(transform) {
 export function hasTransform(transforms, type) {
   return normalizeChartTransforms(transforms).some((transform) => transform.type === type);
 }
-

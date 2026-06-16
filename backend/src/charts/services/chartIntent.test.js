@@ -1,5 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createReactionRateSupplementWorkbook } from "../../import/fixtures/workbookFixtures.js";
+import { runImportScan } from "../../import/services/importPipeline.js";
+import { normalizeApprovedScan } from "../../import/services/normalizer.js";
+import { annotateSupplementDatasetPatch } from "../../saas/importRelationshipResolver.js";
 import { createChartInterpretResponse } from "./chartIntent.js";
 
 function masterTableImport() {
@@ -41,6 +45,47 @@ function masterTableImport() {
   };
 }
 
+function reactionRateObservationImport() {
+  const scanResult = runImportScan(createReactionRateSupplementWorkbook());
+  const block = scanResult.sheets[0].blocks[0];
+  const normalized = normalizeApprovedScan({ scanResult, approvedBlockIds: [block.blockId] });
+  return annotateSupplementDatasetPatch(normalized.datasetPatch, {
+    supplementType: "reaction_rate_time_series",
+    targetExperimentIds: ["exp_30"],
+  }).genericImports[0];
+}
+
+function masterImportWithConflictingColumnF() {
+  const fields = Array.from({ length: 70 }, (_, index) => ({
+    fieldValueId: `master_f_${index + 1}`,
+    experimentId: `master_exp_${index + 1}`,
+    field: "conflicting_master_column_f",
+    role: "condition",
+    displayName: "Master Column F Condition",
+    value: index,
+    rawValue: String(index),
+    rowIndex: index + 3,
+    sourceRef: `master_src_f_${index + 1}`,
+    confidence: 0.99,
+  }));
+  return {
+    importId: "master_conflict",
+    schemaVersion: "labrat.genericImport.v1",
+    experiments: fields.map((field, index) => ({
+      experimentId: field.experimentId,
+      label: `Master${index + 1}`,
+      name: `Master${index + 1}`,
+    })),
+    fields,
+    sources: fields.map((field, index) => ({
+      sourceRef: field.sourceRef,
+      sheet: "Master",
+      cell: `F${index + 3}`,
+      range: `F${index + 3}`,
+    })),
+  };
+}
+
 test("createChartInterpretResponse resolves gas selectivity vs temperature", async () => {
   const response = await createChartInterpretResponse({
     prompt: "plot gas selectivity vs temperature, grouped by catalyst",
@@ -49,7 +94,7 @@ test("createChartInterpretResponse resolves gas selectivity vs temperature", asy
   });
 
   assert.equal(response.schemaVersion, "labrat.chartInterpretResponse.v1");
-  assert.equal(response.chartSpecDraft.schemaVersion, "labrat.chartSpec.v1.2");
+  assert.equal(response.chartSpecDraft.schemaVersion, "labrat.chartSpec.v1.3");
   assert.equal(response.chartSpecDraft.chartType, "scatter");
   assert.equal(response.chartSpecDraft.x.label, "Temperature (C)");
   assert.equal(response.chartSpecDraft.y.label, "Selectivity Gas (%)");
@@ -69,7 +114,7 @@ test("createChartInterpretResponse creates normalized selectivity transforms", a
   });
 
   assert.equal(response.chartSpecDraft.chartType, "stacked_bar");
-  assert.equal(response.chartSpecDraft.schemaVersion, "labrat.chartSpec.v1.2");
+  assert.equal(response.chartSpecDraft.schemaVersion, "labrat.chartSpec.v1.3");
   assert.equal(response.chartSpecDraft.transforms.some((transform) => transform.type === "normalize_sum_to_percent"), true);
 });
 
@@ -94,7 +139,7 @@ test("createChartInterpretResponse resolves point plot prompts", async () => {
     env: {},
   });
 
-  assert.equal(response.chartSpecDraft.schemaVersion, "labrat.chartSpec.v1.2");
+  assert.equal(response.chartSpecDraft.schemaVersion, "labrat.chartSpec.v1.3");
   assert.equal(response.chartSpecDraft.chartType, "point");
   assert.equal(response.chartSpecDraft.x.label, "Temperature (C)");
   assert.equal(response.chartSpecDraft.y.label, "Selectivity Gas (%)");
@@ -134,7 +179,7 @@ test("createChartInterpretResponse resolves named measurement bar charts by expe
     env: {},
   });
 
-  assert.equal(response.chartSpecDraft.schemaVersion, "labrat.chartSpec.v1.2");
+  assert.equal(response.chartSpecDraft.schemaVersion, "labrat.chartSpec.v1.3");
   assert.equal(response.chartSpecDraft.chartType, "bar");
   assert.equal(response.chartSpecDraft.x.label, "Label");
   assert.equal(response.chartSpecDraft.y.label, "Carbon Balance (%)");
@@ -159,10 +204,178 @@ test("createChartInterpretResponse resolves named measurements when numeric valu
     env: {},
   });
 
-  assert.equal(response.chartSpecDraft.schemaVersion, "labrat.chartSpec.v1.2");
+  assert.equal(response.chartSpecDraft.schemaVersion, "labrat.chartSpec.v1.3");
   assert.equal(response.chartSpecDraft.chartType, "bar");
   assert.equal(response.chartSpecDraft.y.label, "Carbon Balance (%)");
   assert.equal(response.clarification, null);
+});
+
+test("createChartInterpretResponse resolves reaction-rate observation set charts", async () => {
+  const response = await createChartInterpretResponse({
+    prompt: "plot adjusted rate vs reaction time for Exp30",
+    genericImports: [reactionRateObservationImport()],
+    env: {},
+  });
+
+  assert.equal(response.chartSpecDraft.schemaVersion, "labrat.chartSpec.v1.3");
+  assert.equal(response.chartSpecDraft.chartType, "scatter");
+  assert.equal(response.chartSpecDraft.x.label, "Reaction Time (min)");
+  assert.equal(response.chartSpecDraft.y.label, "Adjusted Rate (M/s)");
+  assert.equal(response.chartSpecDraft.x.sourceIds.length, 62);
+  assert.equal(response.chartSpecDraft.y.sourceIds.length, 62);
+  assert.equal(response.chartSpecDraft.dataCoverage.pairedRows, 62);
+  assert.equal(response.clarification, null);
+});
+
+test("createChartInterpretResponse resolves natural axis, column, log-scale, and Excel-like style prompts", async () => {
+  const response = await createChartInterpretResponse({
+    prompt: "consider the graph made in this excel, the x-axis is reaction time(column F), the y-axis is Adjusted Rate(column H), and the y-axis of the graph should be log base 10 scale. replicate the aesthetics of the graph made in this excel file",
+    genericImports: [reactionRateObservationImport()],
+    env: {},
+  });
+
+  assert.equal(response.chartSpecDraft.schemaVersion, "labrat.chartSpec.v1.3");
+  assert.equal(response.chartSpecDraft.chartType, "scatter");
+  assert.equal(response.chartSpecDraft.x.label, "Reaction Time (min)");
+  assert.equal(response.chartSpecDraft.y.label, "Adjusted Rate (M/s)");
+  assert.equal(response.chartSpecDraft.axisOptions.y.scale, "log10");
+  assert.equal(response.chartSpecDraft.renderStyle.preset, "excel_like");
+  assert.equal(response.chartSpecDraft.renderStyle.traceMode, "lines+markers");
+  assert.equal(response.chartSpecDraft.transforms.some((transform) => transform.type === "normalize_sum_to_percent"), false);
+  assert.equal(response.clarification, null);
+});
+
+test("createChartInterpretResponse resolves hollow marker scatter prompts without connecting lines", async () => {
+  const response = await createChartInterpretResponse({
+    prompt: "plot adjusted rate vs reaction time for Exp30 with hollow markers, no connecting lines, and log base 10 y-axis",
+    genericImports: [reactionRateObservationImport()],
+    env: {},
+  });
+
+  assert.equal(response.clarification, null);
+  assert.equal(response.chartSpecDraft.x.label, "Reaction Time (min)");
+  assert.equal(response.chartSpecDraft.y.label, "Adjusted Rate (M/s)");
+  assert.equal(response.chartSpecDraft.axisOptions.y.scale, "log10");
+  assert.equal(response.chartSpecDraft.renderStyle.traceMode, "markers");
+  assert.equal(response.chartSpecDraft.renderStyle.traces[0].marker.symbol, "circle-open");
+});
+
+test("createChartInterpretResponse lets markers-only override Excel-like line defaults", async () => {
+  const response = await createChartInterpretResponse({
+    prompt: "replicate the excel graph aesthetics but use open circles only with no line connection: adjusted rate vs reaction time",
+    genericImports: [reactionRateObservationImport()],
+    env: {},
+  });
+
+  assert.equal(response.clarification, null);
+  assert.equal(response.chartSpecDraft.renderStyle.preset, "excel_like");
+  assert.equal(response.chartSpecDraft.renderStyle.traceMode, "markers");
+  assert.equal(response.chartSpecDraft.renderStyle.traces[0].marker.symbol, "circle-open");
+});
+
+test("createChartInterpretResponse does not let other imports' column hints override matching aliases", async () => {
+  const response = await createChartInterpretResponse({
+    prompt: "consider the graph made in this excel, the x-axis is reaction time(column F), the y-axis is Adjusted Rate(column H), and the y-axis of the graph should be log base 10 scale. replicate the aesthetics of the graph made in this excel file",
+    genericImports: [masterImportWithConflictingColumnF(), reactionRateObservationImport()],
+    env: {},
+  });
+
+  assert.equal(response.clarification, null);
+  assert.equal(response.chartSpecDraft.x.label, "Reaction Time (min)");
+  assert.equal(response.chartSpecDraft.y.label, "Adjusted Rate (M/s)");
+  assert.equal(response.chartSpecDraft.axisOptions.y.scale, "log10");
+});
+
+test("createChartInterpretResponse returns clarification when field alias and column hint conflict", async () => {
+  const response = await createChartInterpretResponse({
+    prompt: "x-axis is reaction time column H, y-axis is adjusted rate column H",
+    genericImports: [reactionRateObservationImport()],
+    env: {},
+  });
+
+  assert.equal(response.chartSpecDraft, null);
+  assert.match(response.clarification.message, /column hint point to different fields/i);
+  assert.equal(response.clarification.options.some((option) => option.label === "Reaction Time (min)"), true);
+  assert.equal(response.clarification.options.some((option) => option.label === "Adjusted Rate (M/s)"), true);
+});
+
+test("createChartInterpretResponse compiles AI ChartIntent v2 through backend validation", async () => {
+  const response = await createChartInterpretResponse({
+    prompt: "copy the workbook chart",
+    genericImports: [reactionRateObservationImport()],
+    env: { ANTHROPIC_API_KEY: "test-key" },
+    fetchImpl: async () => ({
+      ok: true,
+      json: async () => ({
+        content: [{ text: JSON.stringify({
+          intentVersion: "labrat.chartIntent.v2",
+          chartType: "scatter",
+          data: {
+            x: { fieldAlias: "reaction time", columnHint: "F" },
+            y: { fieldAlias: "adjusted rate", columnHint: "H" },
+          },
+          encoding: {
+            traceMode: "lines+markers",
+            axes: {
+              y: { scale: "log10" },
+            },
+          },
+          style: {
+            preset: "excel_like",
+            showLegend: false,
+          },
+          rationale: "User asked to copy the workbook chart.",
+        }) }],
+      }),
+    }),
+  });
+
+  assert.equal(response.chartSpecDraft.x.label, "Reaction Time (min)");
+  assert.equal(response.chartSpecDraft.y.label, "Adjusted Rate (M/s)");
+  assert.equal(response.chartSpecDraft.axisOptions.y.scale, "log10");
+  assert.equal(response.chartSpecDraft.renderStyle.preset, "excel_like");
+  assert.equal(response.clarification, null);
+});
+
+test("createChartInterpretResponse normalizes AI open-circle marker intents", async () => {
+  const response = await createChartInterpretResponse({
+    prompt: "plot hollow marker scatter",
+    genericImports: [reactionRateObservationImport()],
+    env: { ANTHROPIC_API_KEY: "test-key" },
+    fetchImpl: async () => ({
+      ok: true,
+      json: async () => ({
+        content: [{ text: JSON.stringify({
+          intentVersion: "labrat.chartIntent.v2",
+          chartType: "scatter",
+          data: {
+            x: { fieldAlias: "reaction time" },
+            y: { fieldAlias: "adjusted rate" },
+          },
+          encoding: { traceMode: "markers" },
+          style: {
+            traces: [{ target: "primary", marker: { symbol: "open circle" } }],
+          },
+        }) }],
+      }),
+    }),
+  });
+
+  assert.equal(response.chartSpecDraft.renderStyle.traceMode, "markers");
+  assert.equal(response.chartSpecDraft.renderStyle.traces[0].marker.symbol, "circle-open");
+  assert.equal(response.clarification, null);
+});
+
+test("createChartInterpretResponse recognizes proportional selectivity rescaling to 100 percent", async () => {
+  const response = await createChartInterpretResponse({
+    prompt: "make a stacked bar chart of solid liquid gas selectivity and rescale them proportionally so each experiment sums to 100 percent",
+    genericImports: [masterTableImport()],
+    env: {},
+  });
+
+  assert.equal(response.chartSpecDraft.chartType, "stacked_bar");
+  assert.deepEqual(response.chartSpecDraft.yFields.map((field) => field.measurementComponent), ["solid", "liquid", "gas"]);
+  assert.equal(response.chartSpecDraft.transforms.some((transform) => transform.type === "normalize_sum_to_percent"), true);
 });
 
 test("createChartInterpretResponse returns clarification for nonexistent fields", async () => {

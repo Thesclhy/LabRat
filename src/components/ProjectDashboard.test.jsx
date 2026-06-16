@@ -1,7 +1,7 @@
 import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { ChartReviewModal, NewProjectModal, ProjectDashboard, ProjectOverview, RefreshWorkbookModal, Topbar, activeChartSpecsForProject } from "../main.jsx";
+import { ChartReviewModal, DeleteProjectModal, NewProjectModal, ProjectDashboard, ProjectOverview, RefreshWorkbookModal, Topbar, activeChartSpecsForProject } from "../main.jsx";
 
 const project = {
   id: "project_1",
@@ -104,6 +104,7 @@ describe("Topbar", () => {
 describe("ProjectDashboard", () => {
   it("renders project workflow status and opens the selected project", () => {
     const onOpenProject = vi.fn();
+    const onRequestDeleteProject = vi.fn();
     render(
       <ProjectDashboard
         user={{ username: "labuser" }}
@@ -115,6 +116,7 @@ describe("ProjectDashboard", () => {
         onSelectProject={() => {}}
         onOpenProject={onOpenProject}
         onCreateProject={() => {}}
+        onRequestDeleteProject={onRequestDeleteProject}
         activeProjectId="project_1"
         projectState={projectState}
         projectStateLoading={false}
@@ -131,6 +133,72 @@ describe("ProjectDashboard", () => {
 
     expect(onOpenProject).toHaveBeenCalledWith("project_1");
     expect(screen.queryByRole("button", { name: "Open project" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete project" }));
+    expect(onRequestDeleteProject).toHaveBeenCalledWith(expect.objectContaining({ id: "project_1" }));
+  });
+
+  it("shows no delete project action without a selected project", () => {
+    render(
+      <ProjectDashboard
+        user={{ username: "labuser" }}
+        labs={[{ id: "lab_1", name: "Lab A", role: "editor" }]}
+        activeLabId="lab_1"
+        onLabChange={() => {}}
+        projects={[]}
+        selectedProjectId=""
+        onSelectProject={() => {}}
+        onOpenProject={() => {}}
+        onCreateProject={() => {}}
+        onRequestDeleteProject={() => {}}
+        activeProjectId=""
+        projectState={null}
+        projectStateLoading={false}
+        sourceError=""
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Delete project" })).toBeNull();
+  });
+});
+
+describe("DeleteProjectModal", () => {
+  it("confirms or cancels project deletion", () => {
+    const onConfirm = vi.fn();
+    const onClose = vi.fn();
+    const { rerender } = render(
+      <DeleteProjectModal
+        open
+        project={project}
+        loading={false}
+        error=""
+        onConfirm={onConfirm}
+        onClose={onClose}
+      />,
+    );
+
+    expect(screen.getByRole("dialog", { name: "Delete project" })).toBeTruthy();
+    expect(screen.getByText("Catalyst Screening")).toBeTruthy();
+    expect(screen.getByText(/Audit data/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete project" }));
+    expect(onConfirm).toHaveBeenCalledWith(project);
+
+    rerender(
+      <DeleteProjectModal
+        open
+        project={project}
+        loading
+        error="Delete failed"
+        onConfirm={onConfirm}
+        onClose={onClose}
+      />,
+    );
+    expect(screen.getByText("Delete failed")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Deleting..." }).disabled).toBe(true);
   });
 });
 
@@ -138,6 +206,7 @@ describe("ProjectOverview", () => {
   it("shows the next project workflow actions", () => {
     const onOpenImportReview = vi.fn();
     const onOpenRefreshWorkbook = vi.fn();
+    const onOpenSupplementWorkbook = vi.fn();
     const onOpenChartReview = vi.fn();
     render(
       <ProjectOverview
@@ -146,35 +215,49 @@ describe("ProjectOverview", () => {
         onOpenProfile={() => {}}
         onOpenImportReview={onOpenImportReview}
         onOpenRefreshWorkbook={onOpenRefreshWorkbook}
+        onOpenSupplementWorkbook={onOpenSupplementWorkbook}
         onOpenChartReview={onOpenChartReview}
         onGoManuscript={() => {}}
       />,
     );
 
     expect(screen.getByText("Project profile")).toBeTruthy();
+    expect(screen.getByText("Master Dataset")).toBeTruthy();
+    expect(screen.getByText("Supplemental Workbooks")).toBeTruthy();
+    expect(screen.getByText("1 master table")).toBeTruthy();
+    expect(screen.getByText("0 supplemental files")).toBeTruthy();
     expect(screen.getByText("1 specs")).toBeTruthy();
     expect(screen.getByText("Draft")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Refresh workbook" }));
+    expect(screen.getByRole("button", { name: "Upload master table" }).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Refresh master table" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add supplemental workbook" }));
     fireEvent.click(screen.getByRole("button", { name: "Review chart proposals" }));
     expect(onOpenRefreshWorkbook).toHaveBeenCalledTimes(1);
+    expect(onOpenSupplementWorkbook).toHaveBeenCalledTimes(1);
     expect(onOpenChartReview).toHaveBeenCalledTimes(1);
     expect(onOpenImportReview).not.toHaveBeenCalled();
   });
 
-  it("disables workbook refresh without a committed import", () => {
+  it("disables master refresh and supplemental uploads without a committed master import", () => {
+    const onOpenImportReview = vi.fn();
     render(
       <ProjectOverview
         projectState={{ ...projectState, currentDatasetCommit: { id: "commit_1" } }}
         dataset={{ genericImports: [] }}
         onOpenProfile={() => {}}
-        onOpenImportReview={() => {}}
+        onOpenImportReview={onOpenImportReview}
         onOpenRefreshWorkbook={() => {}}
+        onOpenSupplementWorkbook={() => {}}
         onOpenChartReview={() => {}}
         onGoManuscript={() => {}}
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Refresh workbook" }).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Upload master table" }));
+    expect(onOpenImportReview).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("No master table")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Refresh master table" }).disabled).toBe(true);
+    expect(screen.getByRole("button", { name: "Add supplemental workbook" }).disabled).toBe(true);
   });
 
   it("ignores stale chart specs in overview counts and active chart choices", () => {
@@ -193,6 +276,7 @@ describe("ProjectOverview", () => {
         onOpenProfile={() => {}}
         onOpenImportReview={() => {}}
         onOpenRefreshWorkbook={() => {}}
+        onOpenSupplementWorkbook={() => {}}
         onOpenChartReview={() => {}}
         onGoManuscript={() => {}}
       />,
@@ -258,6 +342,7 @@ describe("RefreshWorkbookModal", () => {
         open
         imports={[
           { importId: "import_old", fileName: "old.xlsx", experiments: [{ experimentId: "exp_1" }], fields: [{ fieldId: "field_1" }] },
+          { importId: "import_supp", fileName: "rate.xlsx", relationship: { relationship: "supplement" }, experiments: [], fields: [] },
           { importId: "import_latest", fileName: "latest.xlsx", experiments: [], fields: [] },
         ]}
         defaultImportId="import_old"
@@ -271,6 +356,7 @@ describe("RefreshWorkbookModal", () => {
 
     expect(screen.getByText("old.xlsx")).toBeTruthy();
     expect(screen.getByText("1 experiments - 1 fields")).toBeTruthy();
+    expect(screen.queryByText("rate.xlsx")).toBeNull();
     fireEvent.change(screen.getByLabelText("Upload replacement workbook"), { target: { files: [file] } });
 
     expect(onStartRefresh).toHaveBeenCalledWith({

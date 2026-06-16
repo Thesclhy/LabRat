@@ -4,6 +4,7 @@ import {
   createAmbiguousSparseSheetWorkbook,
   createCleanStandardTableWorkbook,
   createGroupedMasterTableWorkbook,
+  createReactionRateSupplementWorkbook,
   createRepeatedBlockTableWorkbook,
 } from "../fixtures/workbookFixtures.js";
 import { runImportScan } from "./importPipeline.js";
@@ -120,6 +121,51 @@ test("normalizeApprovedScan preserves grouped MasterTable fields with roles and 
   const selectivitySource = genericImport.sources.find((source) => source.sourceRef === firstFields.find((field) => field.displayName === "Selectivity Gas (%)").sourceRef);
   assert.equal(selectivitySource.sheet, "Sheet1");
   assert.equal(selectivitySource.cell, "N3");
+});
+
+test("normalizeApprovedScan converts reaction-rate supplements to observation sets", () => {
+  const scanResult = runImportScan(createReactionRateSupplementWorkbook());
+  const block = scanResult.sheets[0].blocks[0];
+  assert.equal(block.detectedSupplementType, "reaction_rate_time_series");
+  assert.equal(block.observationSetPreview.inferredExperimentLabel, "Exp30");
+
+  const response = normalizeApprovedScan({
+    scanResult,
+    approvedBlockIds: [block.blockId],
+    userEdits: { createdAt: "2026-06-16T00:00:00.000Z" },
+  });
+
+  const genericImport = response.datasetPatch.genericImports[0];
+  assert.equal(genericImport.experiments.length, 0);
+  assert.equal(genericImport.observationSets.length, 1);
+  assert.equal(genericImport.observationSets[0].kind, "reaction_rate_time_series");
+  assert.equal(genericImport.observationSets[0].inferredExperimentLabel, "Exp30");
+  assert.equal(genericImport.observationSets[0].observations.length, 62);
+  assert.equal(genericImport.observationSets[0].summary.observationCount, 62);
+  assert.equal(genericImport.observationSets[0].xField, "reaction_time_min");
+  assert.equal(genericImport.observationSets[0].yFields.includes("adjusted_rate_m_s"), true);
+
+  const firstObservation = genericImport.observationSets[0].observations[0];
+  assert.equal(firstObservation.rowIndex, 3);
+  assert.equal(firstObservation.adjustedRateMPerS, 0.00091612);
+  assert.equal(Array.isArray(firstObservation.sourceRefs), true);
+  assert.equal(firstObservation.sourceRefs.length > 0, true);
+
+  const adjustedRate = genericImport.fields.find((field) => (
+    field.recordKind === "observation"
+    && field.observationId === firstObservation.observationId
+    && field.field === "adjusted_rate_m_s"
+  ));
+  assert.equal(adjustedRate.displayName, "Adjusted Rate (M/s)");
+  assert.equal(adjustedRate.unit, "M/s");
+  assert.equal(adjustedRate.value, 0.00091612);
+  assert.equal(adjustedRate.inferredExperimentLabel, "Exp30");
+  const source = genericImport.sources.find((item) => item.sourceRef === adjustedRate.sourceRef);
+  assert.equal(source.sheet, "Exp30");
+  assert.equal(source.cell, "H3");
+  assert.equal(source.blockId, block.blockId);
+  assert.equal(response.summary.createdExperiments, 0);
+  assert.equal(response.summary.createdMeasurements > 0, true);
 });
 
 test("normalizeApprovedScan applies mapping overrides without mutating HDPE experiments", () => {

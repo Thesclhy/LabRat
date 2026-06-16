@@ -325,6 +325,15 @@ export class MemorySaasStore {
     return copy(this.fileObjects.get(fileObjectId) || null);
   }
 
+  async findFileObjectByProjectChecksumName({ projectId, checksumSha256, originalName }) {
+    const file = [...this.fileObjects.values()].find((candidate) => (
+      candidate.projectId === projectId
+      && candidate.checksumSha256 === checksumSha256
+      && candidate.originalName === originalName
+    ));
+    return copy(file || null);
+  }
+
   async listFileObjects({ projectId }) {
     return [...this.fileObjects.values()]
       .filter((file) => file.projectId === projectId)

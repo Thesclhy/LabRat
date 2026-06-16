@@ -31,7 +31,7 @@ function datasetCommit() {
   };
 }
 
-test("validateChartSpecProposal accepts point ChartSpec v1.2", () => {
+test("validateChartSpecProposal accepts point ChartSpec v1.3", () => {
   const result = validateChartSpecProposal({
     datasetCommit: datasetCommit(),
     proposal: {
@@ -39,12 +39,16 @@ test("validateChartSpecProposal accepts point ChartSpec v1.2", () => {
       title: "Gas Selectivity vs Temperature",
       x: { label: "Temperature", sourceIds: ["temp_1"], sourceRefs: ["src_temp_1"] },
       y: { label: "Gas Selectivity", sourceIds: ["gas_1"], sourceRefs: ["src_gas_1"] },
+      axisOptions: { y: { scale: "log10", title: "Gas Selectivity" } },
+      renderStyle: { preset: "excel_like", traceMode: "lines+markers", showLegend: false },
     },
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.chartSpec.schemaVersion, "labrat.chartSpec.v1.2");
+  assert.equal(result.chartSpec.schemaVersion, "labrat.chartSpec.v1.3");
   assert.equal(result.chartSpec.chartType, "point");
+  assert.equal(result.chartSpec.axisOptions.y.scale, "log10");
+  assert.equal(result.chartSpec.renderStyle.preset, "excel_like");
 });
 
 test("validateChartSpecProposal accepts distribution charts with transform inputs", () => {

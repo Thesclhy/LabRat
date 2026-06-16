@@ -96,6 +96,20 @@ function semanticHints(label, valueType, targetKind) {
   };
 }
 
+function aliasesForFieldLabel(label) {
+  const key = slug(label, "");
+  const aliases = [];
+  if (/\badjusted_rate\b/.test(key)) aliases.push("adjusted rate");
+  if (/\baverage_rate\b/.test(key)) aliases.push("average rate", "average rate per hour");
+  if (/\brate\b/.test(key) && !/\badjusted\b|\baverage\b/.test(key)) aliases.push("rate", "reaction rate");
+  if (/\breaction_time\b/.test(key)) aliases.push("reaction time");
+  if (/\bmean_time\b/.test(key)) aliases.push("mean time");
+  if (/\bstart_time\b/.test(key)) aliases.push("start time");
+  if (/\bend_time\b/.test(key)) aliases.push("end time");
+  if (/\bconcentration\b/.test(key)) aliases.push("concentration");
+  return unique(aliases);
+}
+
 function fieldKey(item) {
   return [
     item.importId,
@@ -120,6 +134,12 @@ function addField(fields, item) {
       sourceRefs: [],
       experimentIds: [],
       rowIndexes: [],
+      recordKeys: [],
+      observationSetIds: [],
+      observationIds: [],
+      relatedExperimentIds: [],
+      inferredExperimentLabels: [],
+      recordKinds: [],
       values: [],
       examples: [],
       confidenceValues: [],
@@ -130,6 +150,12 @@ function addField(fields, item) {
   if (item.sourceRef) field.sourceRefs.push(item.sourceRef);
   if (item.experimentId) field.experimentIds.push(item.experimentId);
   if (item.rowIndex != null) field.rowIndexes.push(item.rowIndex);
+  if (item.recordKey) field.recordKeys.push(item.recordKey);
+  if (item.observationSetId) field.observationSetIds.push(item.observationSetId);
+  if (item.observationId) field.observationIds.push(item.observationId);
+  asArray(item.relatedExperimentIds).forEach((experimentId) => field.relatedExperimentIds.push(experimentId));
+  if (item.inferredExperimentLabel) field.inferredExperimentLabels.push(item.inferredExperimentLabel);
+  if (item.recordKind) field.recordKinds.push(item.recordKind);
   if (item.value != null || item.rawValue != null) field.values.push(item.value ?? item.rawValue);
   if (item.rawValue != null && field.examples.length < 4) field.examples.push(item.rawValue);
   if (typeof item.confidence === "number") field.confidenceValues.push(item.confidence);
@@ -150,6 +176,15 @@ function normalizedFieldRecord(fieldValue) {
     unit: fieldValue.unit,
     confidence: fieldValue.confidence,
     fieldRole: fieldValue.role || null,
+    recordKind: fieldValue.recordKind || null,
+    observationSetId: fieldValue.observationSetId || null,
+    observationId: fieldValue.observationId || null,
+    relatedExperimentIds: asArray(fieldValue.relatedExperimentIds),
+    inferredExperimentLabel: fieldValue.inferredExperimentLabel || null,
+    recordKey: fieldValue.observationId || [
+      fieldValue.experimentId || "",
+      fieldValue.rowIndex ?? "",
+    ].join("|"),
   };
 }
 
@@ -166,6 +201,13 @@ function finalizeField(field) {
     sourceRefs: unique(field.sourceRefs),
     experimentIds: unique(field.experimentIds),
     rowIndexes: unique(field.rowIndexes),
+    recordKeys: unique(field.recordKeys),
+    observationSetIds: unique(field.observationSetIds),
+    observationIds: unique(field.observationIds),
+    relatedExperimentIds: unique(field.relatedExperimentIds),
+    inferredExperimentLabels: unique(field.inferredExperimentLabels),
+    recordKinds: unique(field.recordKinds),
+    aliases: aliasesForFieldLabel(field.displayName || field.field),
     examples: unique(field.examples).slice(0, 4),
     valueType,
     numericCount,

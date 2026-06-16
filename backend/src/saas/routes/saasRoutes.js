@@ -12,11 +12,16 @@ import { validateNormalizeRequest } from "../../import/schemas/normalizationSche
 import { getAuthContext, publicUser, requireAuth, requireLabRole, requireSuperAdmin } from "../authz.js";
 import { activeChartSpecs, decorateChartSpecsStaleness } from "../chartSpecStaleness.js";
 import { clearSessionCookie, setSessionCookie } from "../cookies.js";
-import { persistUploadedFile, readFileObjectBuffer } from "../fileStorage.js";
+import { deleteUploadedFile, persistUploadedFile, readFileObjectBuffer } from "../fileStorage.js";
 import { makeId, makeSessionToken, sha256Hex } from "../ids.js";
 import { isJsonContentType, readJsonBody, routeUrl, sendError } from "../http.js";
 import { verifyPassword } from "../passwords.js";
 import { buildProjectAiContext } from "../projectAiContext.js";
+import { resolveProjectDataQuery } from "../dataResolveQuery.js";
+import {
+  annotateSupplementDatasetPatch,
+  buildImportRelationshipPreview,
+} from "../importRelationshipResolver.js";
 import { validateChartSpecProposal } from "../chartSpecValidation.js";
 import {
   assertExpectedParentDatasetCommit,
@@ -36,6 +41,21 @@ const PROJECT_PROFILE_TEXT_FIELDS = [
   "instruments",
   "analysisNotes",
 ];
+const FILE_OBJECT_DUPLICATE_CONSTRAINT = "file_objects_project_id_checksum_sha256_original_name_key";
+
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function isObject(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function hasCommittedMasterImport(datasetPayload = {}) {
+  return asArray(datasetPayload.genericImports).some((genericImport) => (
+    genericImport?.relationship?.relationship !== "supplement"
+  ));
+}
 
 function clientIp(req) {
   return String(req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "").split(",")[0].trim() || null;
@@ -43,6 +63,10 @@ function clientIp(req) {
 
 function userAgent(req) {
   return String(req.headers["user-agent"] || "") || null;
+}
+
+function isDuplicateFileObjectError(error) {
+  return error?.code === "23505" && error?.constraint === FILE_OBJECT_DUPLICATE_CONSTRAINT;
 }
 
 async function authFor(req, context) {
@@ -273,6 +297,11 @@ function proposalFromChartSpecDraft(chartSpecDraft, prompt) {
     yFields: chartSpecDraft.yFields || [],
     groupBy: chartSpecDraft.groupBy || null,
     filters: chartSpecDraft.filters || [],
+    transforms: chartSpecDraft.transforms || [],
+    series: chartSpecDraft.series || [],
+    axisOptions: chartSpecDraft.axisOptions || {},
+    renderStyle: chartSpecDraft.renderStyle || {},
+    calculationWarnings: chartSpecDraft.calculationWarnings || [],
     sourceImportIds: chartSpecDraft.sourceImportIds || [],
     sourceRefs: chartSpecDraft.sourceRefs || [],
     confidence: chartSpecDraft.confidence || null,
@@ -281,6 +310,31 @@ function proposalFromChartSpecDraft(chartSpecDraft, prompt) {
     prompt,
     chartSpecDraft,
     requiresReview: true,
+  };
+}
+
+function chartSpecProposalPayload(proposal = {}) {
+  const draft = isObject(proposal.chartSpecDraft) ? proposal.chartSpecDraft : {};
+  return {
+    ...draft,
+    ...proposal,
+    chartType: proposal.chartType || draft.chartType || "scatter",
+    title: proposal.title || draft.title || "Interpreted chart",
+    x: proposal.x || draft.x || null,
+    y: proposal.y || draft.y || null,
+    yFields: asArray(proposal.yFields).length ? proposal.yFields : asArray(draft.yFields),
+    groupBy: proposal.groupBy || draft.groupBy || null,
+    filters: asArray(proposal.filters).length ? proposal.filters : asArray(draft.filters),
+    transforms: asArray(proposal.transforms).length ? proposal.transforms : asArray(draft.transforms),
+    series: asArray(proposal.series).length ? proposal.series : asArray(draft.series),
+    axisOptions: isObject(proposal.axisOptions) && Object.keys(proposal.axisOptions).length ? proposal.axisOptions : draft.axisOptions || {},
+    renderStyle: isObject(proposal.renderStyle) && Object.keys(proposal.renderStyle).length ? proposal.renderStyle : draft.renderStyle || {},
+    calculationWarnings: asArray(proposal.calculationWarnings).length ? proposal.calculationWarnings : asArray(draft.calculationWarnings),
+    sourceImportIds: asArray(proposal.sourceImportIds).length ? proposal.sourceImportIds : asArray(draft.sourceImportIds),
+    sourceRefs: asArray(proposal.sourceRefs).length ? proposal.sourceRefs : asArray(draft.sourceRefs),
+    warnings: asArray(proposal.warnings).length ? proposal.warnings : asArray(draft.warnings),
+    confidence: proposal.confidence ?? draft.confidence ?? null,
+    rationale: proposal.rationale || draft.rationale || "Interpreted from user prompt.",
   };
 }
 
@@ -525,7 +579,7 @@ async function handleProjects(req, res, context) {
     }
     requireLabRole(auth, labId, "viewer");
     const projects = await context.store.listProjects({ labId });
-    sendJson(res, 200, { projects: projects.map(projectSummary) });
+    sendJson(res, 200, { projects: projects.filter((project) => project.status !== "deleted").map(projectSummary) });
     return;
   }
   const body = await readJsonBody(req);
@@ -576,14 +630,15 @@ async function handleProjectById(req, res, context, projectId) {
       : undefined,
     updatedBy: auth.user.id,
   });
+  const deletingProject = body.status === "deleted" && project.status !== "deleted";
   await context.store.recordAuditEvent({
     labId: project.labId,
     projectId: project.id,
     actorUserId: auth.user.id,
-    action: "project.update",
+    action: deletingProject ? "project.delete" : "project.update",
     targetType: "project",
     targetId: project.id,
-    summary: `Updated project ${updated.name}.`,
+    summary: deletingProject ? `Deleted project ${updated.name}.` : `Updated project ${updated.name}.`,
     metadata: {
       changed: [
         ...(body.name !== undefined ? ["name"] : []),
@@ -664,6 +719,31 @@ async function handleProjectAiContext(req, res, context, projectId) {
     selectedExperimentIds: Array.isArray(body.selectedExperimentIds) ? body.selectedExperimentIds : [],
   });
   sendJson(res, 200, publicProjectAiContext(aiContext));
+}
+
+async function handleProjectDataResolveQuery(req, res, context, projectId) {
+  const { project } = await projectAuth(req, context, projectId, "viewer");
+  const body = await readJsonBody(req);
+  const [
+    currentDatasetCommit,
+    mappingSets,
+    chartSpecs,
+  ] = await Promise.all([
+    project.currentDatasetCommitId ? context.store.findDatasetCommitById(project.currentDatasetCommitId) : null,
+    context.store.listMappingSets({ projectId: project.id }),
+    context.store.listChartSpecs({ projectId: project.id }),
+  ]);
+  const response = resolveProjectDataQuery({
+    project,
+    datasetCommit: currentDatasetCommit,
+    mappingSets,
+    chartSpecs: activeChartSpecs(chartSpecs, project.currentDatasetCommitId),
+    prompt: body.prompt || "",
+    selectedImportIds: Array.isArray(body.selectedImportIds) ? body.selectedImportIds : [],
+    selectedExperimentIds: Array.isArray(body.selectedExperimentIds) ? body.selectedExperimentIds : [],
+    maxResults: Number.isFinite(Number(body.maxResults)) ? Number(body.maxResults) : 50,
+  });
+  sendJson(res, 200, response);
 }
 
 async function handleProjectChartInterpret(req, res, context, projectId) {
@@ -965,28 +1045,77 @@ async function handleProjectFileUpload(req, res, context, projectId) {
     sendError(res, 400, "missing_file", "Upload a file in multipart field \"file\".");
     return;
   }
-  const fileId = makeId("file");
+  const originalName = file.filename;
   const checksumSha256 = sha256Hex(file.buffer);
+  const existingFileObject = await context.store.findFileObjectByProjectChecksumName({
+    projectId: project.id,
+    checksumSha256,
+    originalName,
+  });
+  if (existingFileObject) {
+    await context.store.recordAuditEvent({
+      labId: project.labId,
+      projectId: project.id,
+      actorUserId: auth.user.id,
+      action: "file.reuse",
+      targetType: "file_object",
+      targetId: existingFileObject.id,
+      summary: `Reused uploaded file ${existingFileObject.originalName}.`,
+      metadata: { checksumSha256 },
+    });
+    sendJson(res, 200, { fileObject: fileObjectSummary(existingFileObject), reused: true });
+    return;
+  }
+
+  const fileId = makeId("file");
   const storageKey = await persistUploadedFile(context.config, {
     fileId,
     projectId: project.id,
-    originalName: file.filename,
+    originalName,
     buffer: file.buffer,
   });
-  const fileObject = await context.store.createFileObject({
-    id: fileId,
-    labId: project.labId,
-    projectId: project.id,
-    originalName: file.filename,
-    mimeType: file.contentType,
-    extension: path.extname(file.filename).replace(/^[.]/, "").toLowerCase(),
-    sizeBytes: file.sizeBytes,
-    checksumSha256,
-    storageProvider: "local",
-    storageKey,
-    buffer: file.buffer,
-    createdBy: auth.user.id,
-  });
+  let fileObject;
+  try {
+    fileObject = await context.store.createFileObject({
+      id: fileId,
+      labId: project.labId,
+      projectId: project.id,
+      originalName,
+      mimeType: file.contentType,
+      extension: path.extname(originalName).replace(/^[.]/, "").toLowerCase(),
+      sizeBytes: file.sizeBytes,
+      checksumSha256,
+      storageProvider: "local",
+      storageKey,
+      buffer: file.buffer,
+      createdBy: auth.user.id,
+    });
+  } catch (error) {
+    try {
+      await deleteUploadedFile(context.config, storageKey);
+    } catch {
+      // Best-effort cleanup; preserve the original store error.
+    }
+    if (!isDuplicateFileObjectError(error)) throw error;
+    const reusedFileObject = await context.store.findFileObjectByProjectChecksumName({
+      projectId: project.id,
+      checksumSha256,
+      originalName,
+    });
+    if (!reusedFileObject) throw error;
+    await context.store.recordAuditEvent({
+      labId: project.labId,
+      projectId: project.id,
+      actorUserId: auth.user.id,
+      action: "file.reuse",
+      targetType: "file_object",
+      targetId: reusedFileObject.id,
+      summary: `Reused uploaded file ${reusedFileObject.originalName}.`,
+      metadata: { checksumSha256, raceRecovered: true },
+    });
+    sendJson(res, 200, { fileObject: fileObjectSummary(reusedFileObject), reused: true });
+    return;
+  }
   await context.store.recordAuditEvent({
     labId: project.labId,
     projectId: project.id,
@@ -997,7 +1126,7 @@ async function handleProjectFileUpload(req, res, context, projectId) {
     summary: `Uploaded ${fileObject.originalName}.`,
     metadata: { checksumSha256 },
   });
-  sendJson(res, 201, { fileObject: fileObjectSummary(fileObject) });
+  sendJson(res, 201, { fileObject: fileObjectSummary(fileObject), reused: false });
 }
 
 async function handleProjectImportRuns(req, res, context, projectId) {
@@ -1136,6 +1265,34 @@ async function handleRefreshPreview(req, res, context, importRunId) {
   sendJson(res, 200, refreshPreview);
 }
 
+async function handleRelationshipPreview(req, res, context, importRunId) {
+  const auth = requireAuth(await authFor(req, context));
+  const importRun = await context.store.findImportRunById(importRunId);
+  if (!importRun) {
+    sendError(res, 404, "import_run_not_found", "Import run not found.");
+    return;
+  }
+  requireLabRole(auth, importRun.labId, "editor");
+  assertCanApplyImportRun(importRun);
+  const project = await context.store.findProjectById(importRun.projectId);
+  const parentCommit = project?.currentDatasetCommitId
+    ? await context.store.findDatasetCommitById(project.currentDatasetCommitId)
+    : null;
+  const [mappingSets, chartSpecs] = await Promise.all([
+    context.store.listMappingSets({ projectId: importRun.projectId }),
+    context.store.listChartSpecs({ projectId: importRun.projectId }),
+  ]);
+  const relationshipPreview = buildImportRelationshipPreview({
+    project,
+    parentCommit,
+    datasetPatch: importRun.normalizePreview.datasetPatch || {},
+    importRunId: importRun.id,
+    mappingSets,
+    chartSpecs: activeChartSpecs(chartSpecs, project?.currentDatasetCommitId),
+  });
+  sendJson(res, 200, relationshipPreview);
+}
+
 async function handleApplyImportRun(req, res, context, importRunId) {
   const auth = requireAuth(await authFor(req, context));
   const importRun = await context.store.findImportRunById(importRunId);
@@ -1151,8 +1308,8 @@ async function handleApplyImportRun(req, res, context, importRunId) {
     : null;
   const body = await readOptionalJsonBody(req);
   const applyMode = body.applyMode || "append";
-  if (!["append", "replace_import"].includes(applyMode)) {
-    sendError(res, 400, "invalid_import_apply_request", "applyMode must be append or replace_import.");
+  if (!["append", "replace_import", "supplement_import"].includes(applyMode)) {
+    sendError(res, 400, "invalid_import_apply_request", "applyMode must be append, replace_import, or supplement_import.");
     return;
   }
   const datasetPatch = importRun.normalizePreview.datasetPatch || {};
@@ -1204,7 +1361,51 @@ async function handleApplyImportRun(req, res, context, importRunId) {
     };
     auditAction = "import.refresh_apply";
     auditSummary = "Applied import refresh.";
+  } else if (applyMode === "supplement_import") {
+    const relationshipDecision = body.relationshipDecision || {};
+    const targetExperimentIds = Array.isArray(relationshipDecision.targetExperimentIds)
+      ? relationshipDecision.targetExperimentIds
+      : Array.isArray(body.targetExperimentIds) ? body.targetExperimentIds : [];
+    if (!targetExperimentIds.length) {
+      sendError(res, 400, "invalid_import_apply_request", "supplement_import requires targetExperimentIds.");
+      return;
+    }
+    const annotatedPatch = annotateSupplementDatasetPatch(datasetPatch, {
+      ...relationshipDecision,
+      targetExperimentIds,
+    });
+    const nextDataset = buildNextDatasetCommitPayload({
+      parentDatasetPayload: parentCommit?.datasetPayload || {},
+      datasetPatch: annotatedPatch,
+    });
+    datasetPayload = nextDataset.datasetPayload;
+    summary = {
+      ...buildDatasetCommitSummary({
+        parentCommit,
+        datasetPatch: annotatedPatch,
+        datasetPayload,
+        normalizeSummary: importRun.normalizePreview.summary || {},
+        sourceImportRunIds: [importRun.id],
+      }),
+      applyMode,
+      relationship: "supplement",
+      supplementType: relationshipDecision.supplementType || "supplemental_data",
+      targetExperimentIds,
+      relationshipProposalId: relationshipDecision.relationshipProposalId || null,
+      reviewNote,
+    };
+    auditAction = "import.supplement_apply";
+    auditSummary = "Applied supplemental import.";
   } else {
+    if (hasCommittedMasterImport(parentCommit?.datasetPayload)) {
+      sendError(
+        res,
+        409,
+        "master_table_already_exists",
+        "This project already has an active master table. Use refresh for the master table or supplement_import for extra workbooks.",
+      );
+      return;
+    }
     const nextDataset = buildNextDatasetCommitPayload({
       parentDatasetPayload: parentCommit?.datasetPayload || {},
       datasetPatch,
@@ -1297,7 +1498,7 @@ async function handleChartSpecFromProposal(req, res, context, projectId) {
     return;
   }
   const datasetCommit = await verifyProjectScopedRef(context, projectId, "dataset_commit", datasetCommitId);
-  const chartValidation = validateChartSpecProposal({ proposal, datasetCommit });
+  const chartValidation = validateChartSpecProposal({ proposal: chartSpecProposalPayload(proposal), datasetCommit });
   const chartSpecPayload = chartValidation.chartSpec;
   const chartSpec = await context.store.createChartSpec({
     labId: project.labId,
@@ -1401,6 +1602,8 @@ async function dispatch(req, res, context) {
   if (projectStateMatch && req.method === "GET") return handleProjectState(req, res, context, projectStateMatch[1]);
   const projectAiContextMatch = pathName.match(/^\/api\/projects\/([^/]+)\/ai\/context$/);
   if (projectAiContextMatch && req.method === "POST") return handleProjectAiContext(req, res, context, projectAiContextMatch[1]);
+  const projectDataResolveQueryMatch = pathName.match(/^\/api\/projects\/([^/]+)\/data\/resolve-query$/);
+  if (projectDataResolveQueryMatch && req.method === "POST") return handleProjectDataResolveQuery(req, res, context, projectDataResolveQueryMatch[1]);
   const projectChartInterpretMatch = pathName.match(/^\/api\/projects\/([^/]+)\/charts\/interpret$/);
   if (projectChartInterpretMatch && req.method === "POST") return handleProjectChartInterpret(req, res, context, projectChartInterpretMatch[1]);
   const projectChartProposeMatch = pathName.match(/^\/api\/projects\/([^/]+)\/charts\/propose$/);
@@ -1427,6 +1630,8 @@ async function dispatch(req, res, context) {
   if (normalizeMatch && req.method === "POST") return handleNormalizePreview(req, res, context, normalizeMatch[1]);
   const refreshPreviewMatch = pathName.match(/^\/api\/import-runs\/([^/]+)\/refresh-preview$/);
   if (refreshPreviewMatch && req.method === "POST") return handleRefreshPreview(req, res, context, refreshPreviewMatch[1]);
+  const relationshipPreviewMatch = pathName.match(/^\/api\/import-runs\/([^/]+)\/relationship-preview$/);
+  if (relationshipPreviewMatch && req.method === "POST") return handleRelationshipPreview(req, res, context, relationshipPreviewMatch[1]);
   const applyMatch = pathName.match(/^\/api\/import-runs\/([^/]+)\/apply$/);
   if (applyMatch && req.method === "POST") return handleApplyImportRun(req, res, context, applyMatch[1]);
   const chartFromProposalMatch = pathName.match(/^\/api\/projects\/([^/]+)\/chart-specs\/from-proposal$/);

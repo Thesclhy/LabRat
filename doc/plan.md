@@ -32,8 +32,10 @@ server-first workspace implemented
 - Generic Excel Importer v2 Phase 1 supports grouped/multi-row headers, role-based `fields[]`, source refs, warnings, and confidence.
 - Experiment Browser uses generic imported rows and accepted semantic mappings as user-facing dynamic columns.
 - Chart Proposal v2 uses field/data profiling, deterministic recipes, optional AI intents, scoring, dedupe, and backend validation.
-- ChartSpec v1.2 supports `scatter`, `point`, `bar`, `grouped_bar`, `stacked_bar`, `distribution_bar`, `yFields[]`, `series[]`, and allowlisted chart-local transforms.
+- ChartSpec v1.3 supports `scatter`, `point`, `bar`, `grouped_bar`, `stacked_bar`, `distribution_bar`, `yFields[]`, `series[]`, allowlisted chart-local transforms, `axisOptions`, and controlled `renderStyle`.
 - Manuscript chart insertion uses durable chart specs, requires explicit compatible experiment selection, and stores chart spec snapshots in blocks for historical rendering.
+- Overview separates the one-master-table workflow from supplemental workbook uploads: `append` creates the master dataset, `replace_import` refreshes it, and `supplement_import` attaches extra workbooks to existing experiments.
+- Project data query resolution exists in the backend for turning natural-language data requests into validated ViewIntent drafts.
 - Stateless local/dev endpoints remain available for compatibility, but server mode is the source of truth for logged-in workspaces.
 - IndexedDB and `.labrat.json` can remain useful for logged-out/local experiments, but old local project migration is not an active goal.
 
@@ -47,7 +49,7 @@ Work in this order unless the user redirects:
 4. Make refresh-related stale chart behavior visible and understandable in the UI without deleting historical chart specs.
 5. Harden Docker/Postgres configuration for friend/debug sharing: `.env` examples, seed-account warnings, local file volume notes, backup/reset instructions, and migration checks.
 6. Add minimal Admin/Audit UI for lab/user management and important project actions.
-7. Plan the next import intelligence pass for supplemental workbooks, such as attaching `Reaction_Rate_Exp30.xlsx` to an existing `Exp30` instead of treating it as an unrelated import.
+7. Add frontend UI for validated data query ViewIntent drafts and continue improving supplemental detail display inside experiment detail views.
 8. Continue chart grammar improvements only through validated ChartSpec/transform extensions, not direct AI-generated Plotly JSON.
 
 ## Deferred

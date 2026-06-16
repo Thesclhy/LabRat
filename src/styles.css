@@ -1047,6 +1047,24 @@ textarea {
   background: var(--color-success-bg);
   color: var(--color-success-text);
 }
+.project-detail-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: auto;
+  padding-top: 4px;
+}
+.danger-subtle {
+  border: 1px solid var(--color-red-200);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--danger);
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.danger-subtle:hover:not(:disabled) {
+  background: var(--color-danger-bg);
+}
 .project-dashboard-empty {
   display: grid;
   place-items: start;
@@ -1334,9 +1352,32 @@ td button {
   background: var(--accent);
   color: var(--color-white);
 }
+.modal-actions .danger {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: var(--color-white);
+}
 .modal-actions button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+.project-delete-modal {
+  width: min(520px, 96vw);
+}
+.project-delete-body {
+  display: grid;
+  gap: 14px;
+}
+.project-delete-body h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+.project-delete-body p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
 }
 .import-review-modal {
   width: min(1080px, 96vw);
@@ -1537,6 +1578,10 @@ td button {
   border-radius: 8px;
   padding: 12px;
   background: #fff;
+}
+.backend-proposal-card.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(74, 108, 247, 0.12);
 }
 .backend-chart-proposal-card {
   grid-template-columns: minmax(220px, 0.9fr) minmax(260px, 1.1fr);
@@ -4446,6 +4491,21 @@ tbody tr:hover {
 .refresh-diff-panel.no-changes {
   border-color: #fde68a;
   background: #fffbeb;
+}
+
+.observation-set-list {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.observation-set-card {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 10px 12px;
 }
 
 .refresh-diff-error {

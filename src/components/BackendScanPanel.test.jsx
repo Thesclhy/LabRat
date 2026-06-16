@@ -67,6 +67,41 @@ function normalizeResult() {
   };
 }
 
+function observationNormalizeResult() {
+  return {
+    schemaVersion: "labrat.importNormalize.v1",
+    datasetPatch: {
+      genericImports: [{
+        importId: "import_reaction_rate",
+        fileName: "Reaction_Rate_Exp30.xlsx",
+        approvedBlockIds: ["sheet_1_table_1"],
+        experiments: [],
+        observationSets: [{
+          observationSetId: "obsset_1",
+          kind: "reaction_rate_time_series",
+          inferredExperimentLabel: "Exp30",
+          fields: [
+            { displayName: "Reaction Time (min)" },
+            { displayName: "Adjusted Rate (M/s)" },
+          ],
+          observations: [{ observationId: "obs_1" }, { observationId: "obs_2" }],
+          summary: { observationCount: 2, timeMin: 0, timeMax: 10 },
+        }],
+        fields: [
+          { fieldValueId: "time_1", displayName: "Reaction Time (min)", role: "condition", recordKind: "observation" },
+          { fieldValueId: "rate_1", displayName: "Adjusted Rate (M/s)", role: "measurement", recordKind: "observation" },
+        ],
+        measurements: [{ measurementId: "rate_1", displayName: "Adjusted Rate (M/s)", recordKind: "observation" }],
+        sources: [{ sourceRef: "src_1" }],
+        files: [{ fileId: "upload_1" }],
+        warnings: [],
+      }],
+    },
+    summary: { genericImportCount: 1, createdExperiments: 0, createdFields: 2, createdMeasurements: 1, warningCount: 0 },
+    warnings: [],
+  };
+}
+
 function refreshPreviewResult(overrides = {}) {
   return {
     schemaVersion: "labrat.importRefreshPreview.v1",
@@ -83,6 +118,30 @@ function refreshPreviewResult(overrides = {}) {
       valuesChanged: 4,
       warningsChanged: 0,
     },
+    warnings: [],
+    ...overrides,
+  };
+}
+
+function relationshipPreviewResult(overrides = {}) {
+  return {
+    schemaVersion: "labrat.importRelationshipPreview.v1",
+    projectId: "project_1",
+    parentDatasetCommitId: "commit_parent",
+    importRunId: "import_run_1",
+    proposals: [{
+      relationshipProposalId: "relationship_1",
+      importRunId: "import_run_1",
+      importId: "import_1",
+      proposedRelationship: "supplement",
+      supplementType: "reaction_rate_time_series",
+      targetExperimentIds: ["generic_exp_30"],
+      evidence: ["Matched existing experiment Exp30.", "Filename contains an experiment-like label."],
+      confidence: 0.91,
+      warnings: [],
+      status: "proposed",
+    }],
+    summary: { proposalCount: 1, supplementCount: 1, replaceCount: 0, standaloneCount: 0 },
     warnings: [],
     ...overrides,
   };
@@ -318,6 +377,82 @@ describe("BackendScanPanel", () => {
     expect(screen.getByText("Fields: Conversion (%)")).toBeTruthy();
     expect(screen.getByText(/labrat\.importNormalize\.v1/)).toBeTruthy();
     expect(screen.getByText("Propose mappings").disabled).toBe(false);
+  });
+
+  it("shows supplemental observation set summaries in normalized preview", () => {
+    render(
+      <BackendScanPanel
+        mode="supplement"
+        scanState={{ fileName: "Reaction_Rate_Exp30.xlsx", result: scanResult() }}
+        blockReview={{ blockIds: ["sheet_1_table_1"], approvedBlockIds: ["sheet_1_table_1"], ignoredBlockIds: [] }}
+        normalizeState={{ result: observationNormalizeResult() }}
+        relationshipDraft={{ preview: relationshipPreviewResult(), selectedProposalId: "relationship_1", loading: false, error: "" }}
+      />,
+    );
+
+    expect(screen.getByText("0 experiments")).toBeTruthy();
+    expect(screen.getByText("1 observation sets")).toBeTruthy();
+    expect(screen.getByText("2 observations")).toBeTruthy();
+    expect(screen.getByText("reaction_rate_time_series")).toBeTruthy();
+    expect(screen.getByText(/Exp30 - 2 observations - 0.00 to 10.00 min/)).toBeTruthy();
+    expect(screen.getByText(/Reaction Time \(min\), Adjusted Rate \(M\/s\)/)).toBeTruthy();
+  });
+
+  it("shows supplemental relationship proposals and enables supplement apply", () => {
+    const onRelationshipProposalSelect = vi.fn();
+    const onApplyNormalize = vi.fn();
+    render(
+      <BackendScanPanel
+        mode="supplement"
+        scanState={{ fileName: "Reaction_Rate_Exp30.xlsx", result: scanResult() }}
+        blockReview={{ blockIds: ["sheet_1_table_1"], approvedBlockIds: ["sheet_1_table_1"], ignoredBlockIds: [] }}
+        normalizeState={{ result: normalizeResult() }}
+        relationshipDraft={{ preview: relationshipPreviewResult(), selectedProposalId: "relationship_1", loading: false, error: "" }}
+        onRelationshipProposalSelect={onRelationshipProposalSelect}
+        onApplyNormalize={onApplyNormalize}
+      />,
+    );
+
+    expect(screen.getByText("Supplement relationship")).toBeTruthy();
+    expect(screen.getByText(/reaction_rate_time_series/)).toBeTruthy();
+    expect(screen.getByText(/generic_exp_30/)).toBeTruthy();
+    expect(screen.getByText("Matched existing experiment Exp30.")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Selected"));
+    fireEvent.click(screen.getByText("Apply supplemental import"));
+
+    expect(onRelationshipProposalSelect).toHaveBeenCalledWith("relationship_1");
+    expect(onApplyNormalize).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables supplemental apply when no relationship target is available", () => {
+    render(
+      <BackendScanPanel
+        mode="supplement"
+        scanState={{ fileName: "unknown.xlsx", result: scanResult() }}
+        blockReview={{ blockIds: ["sheet_1_table_1"], approvedBlockIds: ["sheet_1_table_1"], ignoredBlockIds: [] }}
+        normalizeState={{ result: normalizeResult() }}
+        relationshipDraft={{
+          preview: relationshipPreviewResult({
+            proposals: [{
+              relationshipProposalId: "relationship_unknown",
+              proposedRelationship: "standalone_import",
+              targetExperimentIds: [],
+              evidence: [],
+              confidence: 0.52,
+              warnings: [],
+            }],
+            summary: { proposalCount: 1, supplementCount: 0, replaceCount: 0, standaloneCount: 1 },
+          }),
+          selectedProposalId: "",
+          loading: false,
+          error: "",
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/No existing experiment target/)).toBeTruthy();
+    expect(screen.getByText("Apply supplemental import").disabled).toBe(true);
   });
 
   it("shows mapping proposals and review actions", () => {

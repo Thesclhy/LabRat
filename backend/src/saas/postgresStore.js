@@ -495,6 +495,18 @@ export class PostgresSaasStore {
     return fileFromRow(result.rows[0]);
   }
 
+  async findFileObjectByProjectChecksumName({ projectId, checksumSha256, originalName }) {
+    const result = await this.query(
+      `select * from file_objects
+       where project_id = $1
+         and checksum_sha256 = $2
+         and original_name = $3
+       limit 1`,
+      [projectId, checksumSha256, originalName],
+    );
+    return fileFromRow(result.rows[0]);
+  }
+
   async listFileObjects({ projectId }) {
     const result = await this.query("select * from file_objects where project_id = $1 order by created_at desc", [projectId]);
     return result.rows.map(fileFromRow);

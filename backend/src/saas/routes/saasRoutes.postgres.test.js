@@ -97,7 +97,7 @@ test("Postgres SaaS routes preserve import lifecycle, merged commits, and chart 
       },
       body: options.body && typeof options.body !== "string" ? JSON.stringify(options.body) : options.body,
     });
-    const uploadAndRun = async (projectId, blob, filename) => {
+    const uploadFile = async (projectId, blob, filename) => {
       const form = new FormData();
       form.set("file", blob, filename);
       const upload = await fetch(`${baseUrl}/api/projects/${projectId}/files`, {
@@ -105,8 +105,11 @@ test("Postgres SaaS routes preserve import lifecycle, merged commits, and chart 
         headers: { cookie },
         body: form,
       });
+      return { response: upload, body: await upload.json() };
+    };
+    const uploadAndRun = async (projectId, blob, filename) => {
+      const { response: upload, body: uploadBody } = await uploadFile(projectId, blob, filename);
       assert.equal(upload.status, 201);
-      const uploadBody = await upload.json();
       const run = await jsonFetch(`/api/projects/${projectId}/import-runs`, {
         method: "POST",
         body: { fileObjectId: uploadBody.fileObject.id },
@@ -140,6 +143,19 @@ test("Postgres SaaS routes preserve import lifecycle, merged commits, and chart 
       method: "POST",
       body: { labId, name: "Postgres Parity Project" },
     })).json();
+
+    const duplicateWorkbook = workbookBlob([["Exp0", 225, 3, 0.15]]);
+    const firstUpload = await uploadFile(project.project.id, duplicateWorkbook, "duplicate.xlsx");
+    assert.equal(firstUpload.response.status, 201);
+    const reusedUpload = await uploadFile(project.project.id, duplicateWorkbook, "duplicate.xlsx");
+    assert.equal(reusedUpload.response.status, 200);
+    assert.equal(reusedUpload.body.reused, true);
+    assert.equal(reusedUpload.body.fileObject.id, firstUpload.body.fileObject.id);
+    const reusedRun = await jsonFetch(`/api/projects/${project.project.id}/import-runs`, {
+      method: "POST",
+      body: { fileObjectId: reusedUpload.body.fileObject.id },
+    });
+    assert.equal(reusedRun.status, 201);
 
     const firstRun = await uploadAndRun(project.project.id, workbookBlob([["Exp1", 250, 5, 0.35]]), "first.xlsx");
     const firstApply = await previewAndApply(firstRun);

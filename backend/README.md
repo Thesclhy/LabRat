@@ -73,6 +73,7 @@ PORT=8787
 - `PATCH /api/projects/:projectId/profile`
 - `GET /api/projects/:projectId/state`
 - `POST /api/projects/:projectId/ai/context`
+- `POST /api/projects/:projectId/data/resolve-query`
 - `POST /api/projects/:projectId/charts/interpret`
 - `POST /api/projects/:projectId/charts/propose`
 - `GET /api/projects/:projectId/files`
@@ -87,6 +88,7 @@ PORT=8787
 - `POST /api/projects/:projectId/chart-proposal-sets`
 - `PATCH /api/chart-proposal-sets/:chartProposalSetId`
 - `POST /api/import-runs/:id/normalize-preview`
+- `POST /api/import-runs/:id/relationship-preview`
 - `POST /api/import-runs/:id/apply`
 - `POST /api/projects/:projectId/chart-specs/from-proposal`
 - `GET /api/projects/:projectId/chart-specs`

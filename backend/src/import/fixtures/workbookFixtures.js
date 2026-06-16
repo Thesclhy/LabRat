@@ -70,6 +70,13 @@ export const groupedMasterTableFixture = {
   ],
 };
 
+export const reactionRateSupplementFixture = {
+  fileId: "fixture_reaction_rate_exp30",
+  filename: "Reaction_Rate_Exp30.xlsx",
+  contentType: EXCEL_CONTENT_TYPE,
+  sheetName: "Exp30",
+};
+
 function workbookBufferWithSheetOptions({ name, rows, merges = [], comments = [], hiddenRows = [], hiddenColumns = [] }) {
   const workbook = XLSX.utils.book_new();
   const worksheet = XLSX.utils.aoa_to_sheet(rows);
@@ -143,6 +150,51 @@ export function createGroupedMasterTableWorkbook() {
     filename: groupedMasterTableFixture.filename,
     sizeBytes: buffer.length,
     contentType: groupedMasterTableFixture.contentType,
+    buffer,
+  };
+}
+
+export function createReactionRateSupplementWorkbook() {
+  const workbook = XLSX.utils.book_new();
+  const rows = [
+    ["Exp30", null, null, null, null, null, null, null, null, null, null, "Data from Sweep", null, null, "Average Rate per Hour", null],
+    ["Start Time (min)", "End Time (min)", "Mean Time (min)", "Rate (mol/s)", "Standard Deviation", "Reaction Time (min)", "Time Span (min)", "Adjusted Rate (M/s)", "Concentration (mol/L)", "Adjusted Std. Dev.", null, "# of Hours", "Volume Reduction", null, "# of Hours", "Average Rate (M/s)"],
+    ...Array.from({ length: 62 }, (_, index) => {
+      const start = Number((2.6 + index * 10).toFixed(2));
+      const end = Number((start + (index === 61 ? 3.63 : 10)).toFixed(2));
+      const mean = Number(((start + end) / 2).toFixed(2));
+      const rate = Number((0.00037 / (index + 1)).toPrecision(6));
+      const adjusted = Number((rate * 2.476).toPrecision(6));
+      return [
+        start,
+        end,
+        mean,
+        rate,
+        Number((rate * 0.01).toPrecision(6)),
+        Number((mean - 33.02).toFixed(2)),
+        Number((end - start).toFixed(2)),
+        adjusted,
+        Number((adjusted * 355).toPrecision(6)),
+        Number((rate * 0.017).toPrecision(6)),
+        null,
+        index + 1,
+        Number((1 - index * 0.001).toFixed(3)),
+        null,
+        index + 1,
+        Number((adjusted / (index + 1)).toPrecision(6)),
+      ];
+    }),
+  ];
+  const worksheet = XLSX.utils.aoa_to_sheet(rows);
+  worksheet["!merges"] = ["A1:J1", "L1:M1", "O1:P1"].map((range) => XLSX.utils.decode_range(range));
+  worksheet.H3 = { ...worksheet.H3, f: "D3*2.476", v: worksheet.H3.v };
+  XLSX.utils.book_append_sheet(workbook, worksheet, reactionRateSupplementFixture.sheetName);
+  const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+  return {
+    fileId: reactionRateSupplementFixture.fileId,
+    filename: reactionRateSupplementFixture.filename,
+    sizeBytes: buffer.length,
+    contentType: reactionRateSupplementFixture.contentType,
     buffer,
   };
 }
