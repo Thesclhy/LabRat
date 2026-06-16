@@ -1,7 +1,7 @@
 import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { BackendScanPanel } from "./BackendScanPanel";
+import { BackendScanPanel, ChartReviewPanel } from "./BackendScanPanel";
 
 vi.mock("../charts/Plot.jsx", () => ({ Plot: () => null }));
 
@@ -67,6 +67,27 @@ function normalizeResult() {
   };
 }
 
+function refreshPreviewResult(overrides = {}) {
+  return {
+    schemaVersion: "labrat.importRefreshPreview.v1",
+    targetImportId: "import_old",
+    replacementImportId: "import_1",
+    parentDatasetCommitId: "commit_parent",
+    hasChanges: true,
+    summary: {
+      experimentsAdded: 1,
+      experimentsRemoved: 0,
+      experimentsChanged: 2,
+      fieldsAdded: 1,
+      fieldsRemoved: 0,
+      valuesChanged: 4,
+      warningsChanged: 0,
+    },
+    warnings: [],
+    ...overrides,
+  };
+}
+
 function mappingResult() {
   return {
     schemaVersion: "labrat.semanticMappingResponse.v1",
@@ -118,6 +139,81 @@ function chartProposalResult() {
   };
 }
 
+function chartInterpretResult() {
+  return {
+    schemaVersion: "labrat.chartInterpretResponse.v1",
+    chartSpecDraft: {
+      schemaVersion: "labrat.chartSpecDraft.v1",
+      status: "proposed",
+      chartType: "scatter",
+      title: "Conversion vs Time",
+      x: { label: "Time", unit: "min", sourceIds: ["time_1"] },
+      y: { label: "Conversion", unit: "%", sourceIds: ["measurement_1"] },
+      yFields: [{ label: "Conversion", unit: "%", sourceIds: ["measurement_1"] }],
+      groupBy: { label: "Catalyst Type", sourceIds: ["cat_1"] },
+      rationale: "Resolved from prompt.",
+      confidence: 0.88,
+      warnings: [],
+      filters: [],
+      sourceRefs: [],
+      sourceImportIds: ["import_1"],
+    },
+    clarification: null,
+    warnings: [],
+  };
+}
+
+function persistedChartInterpretResult(status = "proposed") {
+  const result = chartInterpretResult();
+  const proposal = {
+    ...result.chartSpecDraft,
+    schemaVersion: "labrat.chartProposal.v1",
+    proposalId: "chart_interpret_1",
+    status,
+    sourceImportIds: ["import_1"],
+    x: { label: "Time", unit: "min", measurementIds: ["time_1"], sourceIds: ["time_1"] },
+    y: { label: "Conversion", unit: "%", measurementIds: ["measurement_1"], sourceIds: ["measurement_1"] },
+    yFields: [{ label: "Conversion", unit: "%", measurementIds: ["measurement_1"], sourceIds: ["measurement_1"] }],
+  };
+  return {
+    ...result,
+    chartProposalSet: {
+      id: "chart_proposal_set_interpret_1",
+      payload: {
+        proposalSetId: "chart_proposal_set_interpret_1",
+        schemaVersion: "labrat.chartProposalSet.v1",
+        sourceImportIds: ["import_1"],
+        proposals: [proposal],
+        warnings: [],
+      },
+    },
+  };
+}
+
+function chartProposalStateFromInterpret(result) {
+  return {
+    result: {
+      ...result,
+      proposalSet: {
+        ...result.chartProposalSet.payload,
+        serverId: result.chartProposalSet.id,
+      },
+    },
+  };
+}
+
+function chartClarificationResult() {
+  return {
+    schemaVersion: "labrat.chartInterpretResponse.v1",
+    chartSpecDraft: null,
+    clarification: {
+      message: "Which measurement should be plotted?",
+      options: [{ fieldId: "field_1", label: "Conversion", role: "measurement" }],
+    },
+    warnings: [],
+  };
+}
+
 describe("BackendScanPanel", () => {
   it("calls onScanFile when a workbook is selected", () => {
     const onScanFile = vi.fn();
@@ -143,7 +239,7 @@ describe("BackendScanPanel", () => {
     render(<BackendScanPanel scanState={{ fileName: "runs.xlsx", result: scanResult() }} />);
 
     expect(screen.getByText("ready")).toBeTruthy();
-    expect(screen.getByText("2 sheets")).toBeTruthy();
+    expect(screen.getAllByText("2 sheets").length).toBeGreaterThan(0);
     expect(screen.getAllByText("1 blocks").length).toBeGreaterThan(0);
     expect(screen.getByText("2 warnings")).toBeTruthy();
     expect(screen.getByText(/labrat\.importScan\.v1/)).toBeTruthy();
@@ -217,8 +313,9 @@ describe("BackendScanPanel", () => {
     expect(screen.getAllByText("1 approved blocks").length).toBeGreaterThan(0);
     expect(screen.getByText("1 generic imports")).toBeTruthy();
     expect(screen.getByText("1 experiments")).toBeTruthy();
+    expect(screen.getByText("1 fields")).toBeTruthy();
     expect(screen.getByText("1 measurements")).toBeTruthy();
-    expect(screen.getByText("Measurements: Conversion (%)")).toBeTruthy();
+    expect(screen.getByText("Fields: Conversion (%)")).toBeTruthy();
     expect(screen.getByText(/labrat\.importNormalize\.v1/)).toBeTruthy();
     expect(screen.getByText("Propose mappings").disabled).toBe(false);
   });
@@ -252,10 +349,8 @@ describe("BackendScanPanel", () => {
     const onProposeCharts = vi.fn();
     const onChartProposalDecision = vi.fn();
     render(
-      <BackendScanPanel
-        scanState={{ fileName: "runs.xlsx", result: scanResult() }}
-        blockReview={{ blockIds: ["sheet_1_table_1"], approvedBlockIds: ["sheet_1_table_1"], ignoredBlockIds: [] }}
-        normalizeState={{ result: normalizeResult() }}
+      <ChartReviewPanel
+        genericImports={normalizeResult().datasetPatch.genericImports}
         mappingState={{ result: mappingResult() }}
         chartProposalState={{ result: chartProposalResult() }}
         onProposeCharts={onProposeCharts}
@@ -274,6 +369,84 @@ describe("BackendScanPanel", () => {
     expect(onChartProposalDecision).toHaveBeenCalledWith("chart_1", "rejected");
     expect(screen.getByText("Conversion vs Time")).toBeTruthy();
     expect(screen.getByText("X: Time (min) - Y: Conversion (%)")).toBeTruthy();
+  });
+
+  it("sends one-sentence chart prompts and shows ChartSpec drafts", () => {
+    const onInterpretChart = vi.fn();
+    render(
+      <ChartReviewPanel
+        genericImports={normalizeResult().datasetPatch.genericImports}
+        chartInterpretState={{ result: chartInterpretResult() }}
+        onInterpretChart={onInterpretChart}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("e.g. plot gas selectivity vs temperature grouped by catalyst"), {
+      target: { value: "plot conversion vs time grouped by catalyst" },
+    });
+    fireEvent.click(screen.getByText("Draft chart proposal"));
+
+    expect(onInterpretChart).toHaveBeenCalledWith("plot conversion vs time grouped by catalyst");
+    expect(screen.getAllByText("Conversion vs Time").length).toBeGreaterThan(0);
+    expect(screen.getByText("Group by: Catalyst Type")).toBeTruthy();
+    expect(screen.getByText("Resolved from prompt.")).toBeTruthy();
+    expect(screen.getByText(/Preview-only draft/)).toBeTruthy();
+  });
+
+  it("renders project-scoped interpreted chart proposals in the proposal review", () => {
+    const onChartProposalDecision = vi.fn();
+    const interpretedResult = persistedChartInterpretResult();
+    render(
+      <ChartReviewPanel
+        genericImports={normalizeResult().datasetPatch.genericImports}
+        chartInterpretState={{ result: interpretedResult }}
+        chartProposalState={chartProposalStateFromInterpret(interpretedResult)}
+        onChartProposalDecision={onChartProposalDecision}
+      />,
+    );
+
+    expect(screen.getByText("Chart proposal queued")).toBeTruthy();
+    expect(screen.queryByText(/Preview-only draft/)).toBeNull();
+    expect(screen.getAllByText("Conversion vs Time").length).toBeGreaterThan(0);
+    expect(screen.getByText("Resolved from prompt.")).toBeTruthy();
+
+    const acceptButtons = screen.getAllByText("Accept");
+    fireEvent.click(acceptButtons[acceptButtons.length - 1]);
+    const rejectButtons = screen.getAllByText("Reject");
+    fireEvent.click(rejectButtons[rejectButtons.length - 1]);
+
+    expect(onChartProposalDecision).toHaveBeenCalledWith("chart_interpret_1", "accepted");
+    expect(onChartProposalDecision).toHaveBeenCalledWith("chart_interpret_1", "rejected");
+  });
+
+  it("creates chart specs from accepted interpreted chart proposals", () => {
+    const onCreateChartSpec = vi.fn();
+    const interpretedResult = persistedChartInterpretResult("accepted");
+    render(
+      <ChartReviewPanel
+        genericImports={normalizeResult().datasetPatch.genericImports}
+        chartInterpretState={{ result: interpretedResult }}
+        chartProposalState={chartProposalStateFromInterpret(interpretedResult)}
+        onCreateChartSpec={onCreateChartSpec}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Create chart spec"));
+
+    expect(onCreateChartSpec).toHaveBeenCalledWith("chart_proposal_set_interpret_1", "chart_interpret_1");
+  });
+
+  it("shows chart intent clarification options", () => {
+    render(
+      <ChartReviewPanel
+        genericImports={normalizeResult().datasetPatch.genericImports}
+        chartInterpretState={{ result: chartClarificationResult() }}
+      />,
+    );
+
+    expect(screen.getByText("Need clarification")).toBeTruthy();
+    expect(screen.getByText("Which measurement should be plotted?")).toBeTruthy();
+    expect(screen.getByText("Conversion")).toBeTruthy();
   });
 
   it("shows applied normalized data state", () => {
@@ -297,10 +470,52 @@ describe("BackendScanPanel", () => {
     );
 
     expect(screen.getByText("Preview normalized output").disabled).toBe(true);
-    expect(screen.getByText("0 approved blocks")).toBeTruthy();
+    expect(screen.getAllByText("0 approved blocks").length).toBeGreaterThan(0);
     expect(screen.getByText("No normalized preview yet.")).toBeTruthy();
+    expect(screen.getAllByText("Scan workbook").length).toBeGreaterThan(0);
+    expect(screen.getByText("Review blocks/fields")).toBeTruthy();
+    expect(screen.getAllByText("Semantic mappings").length).toBeGreaterThan(0);
+    expect(screen.queryByText("One-chart prompt")).toBeNull();
+    expect(screen.queryByText("Chart proposals")).toBeNull();
+    expect(screen.queryByText("ChartSpecs")).toBeNull();
     expect(screen.getByText("Propose mappings").disabled).toBe(true);
-    expect(screen.getByText("Propose charts").disabled).toBe(true);
+    expect(screen.queryByText("Propose charts")).toBeNull();
+  });
+
+  it("renders refresh diff and applies a changed workbook refresh", () => {
+    const onApplyNormalize = vi.fn();
+    render(
+      <BackendScanPanel
+        mode="refresh"
+        refreshDraft={{ preview: refreshPreviewResult(), loading: false, error: "" }}
+        scanState={{ fileName: "replacement.xlsx", result: scanResult() }}
+        blockReview={{ blockIds: ["sheet_1_table_1"], approvedBlockIds: ["sheet_1_table_1"], ignoredBlockIds: [] }}
+        normalizeState={{ result: normalizeResult() }}
+        onApplyNormalize={onApplyNormalize}
+      />,
+    );
+
+    expect(screen.getByText("Refresh diff")).toBeTruthy();
+    expect(screen.getByText("1 experiments added")).toBeTruthy();
+    expect(screen.getByText("4 values changed")).toBeTruthy();
+    fireEvent.click(screen.getByText("Apply refresh"));
+
+    expect(onApplyNormalize).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables refresh apply when no changes are detected", () => {
+    render(
+      <BackendScanPanel
+        mode="refresh"
+        refreshDraft={{ preview: refreshPreviewResult({ hasChanges: false, summary: { experimentsAdded: 0, experimentsRemoved: 0, experimentsChanged: 0, fieldsAdded: 0, fieldsRemoved: 0, valuesChanged: 0, warningsChanged: 0 } }), loading: false, error: "" }}
+        scanState={{ fileName: "replacement.xlsx", result: scanResult() }}
+        blockReview={{ blockIds: ["sheet_1_table_1"], approvedBlockIds: ["sheet_1_table_1"], ignoredBlockIds: [] }}
+        normalizeState={{ result: normalizeResult() }}
+      />,
+    );
+
+    expect(screen.getByText("No changes detected. Apply refresh is disabled.")).toBeTruthy();
+    expect(screen.getByText("Apply refresh").disabled).toBe(true);
   });
 
   it("shows backend scan errors without a result", () => {

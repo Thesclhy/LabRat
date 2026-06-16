@@ -1,92 +1,91 @@
 # Product Roadmap
 
-This roadmap turns LabRat Blank from a local import-and-figure app into a reproducibility-first research command center.
+This roadmap keeps the active product sequence separate from `doc/PROGRESS.md`, which is the historical log.
 
-## Milestone 1: Generic Data In Experiment Browser
+## Current Status
 
-Goal: approved backend-uploaded data appears in Experiment Browser without pretending to be HDPE data.
+LabRat Blank already has:
 
-- Add a browser-row adapter for HDPE and generic imports.
-- Add an Imported/Generic browser view.
-- Show source file, source range, import status, mapping status, measurement count, warning count, confidence, and mapped display fields.
-- Add a generic detail view with measurements, metadata, warnings, and provenance.
-- Keep existing HDPE table, detail modal, and curated charts working.
+- Local-first generic Excel import, review, normalization, mapping proposals, chart proposals, and imported Experiment Browser rows.
+- IndexedDB project persistence and `.labrat.json` export/import.
+- Backend SaaS Auth v0 foundation with Postgres migrations, username/password sessions, roles, projects, file objects, import runs, dataset commits, chart specs, manuscripts, and audit events.
+- Server-first project persistence with per-project experiment background profiles, project state loading, mapping-set persistence, chart-proposal-set persistence, and project-scoped AI chart APIs.
+- Backend hardening for import-run lifecycle, merged full dataset commits, duplicate import rejection, and source-backed chart spec validation.
+- Backend refresh/replace support for uploading changed lab data and creating a new current dataset commit without mutating historical commits.
+- One-sentence chart interpretation into validated LabRat ChartSpec drafts.
 
-Done when a user can upload a workbook, approve normalized data, and inspect imported experiments in Browser with provenance.
+The next active roadmap item is frontend server mode.
 
-## Milestone 2: Dataset Commit Concept
+## 1. Frontend Server Mode
 
-Goal: accepted imported data becomes an explicit reviewed state rather than an invisible mutation.
+Goal: let a user log in, choose a lab/project, and open a server-backed project from the project state API.
 
-- Introduce local commit metadata around applied generic imports.
-- Show current dataset commit/source state in the browser and import review surfaces.
-- Preserve earlier applied imports and decisions for comparison.
-- Keep `.labrat.json` export/import compatible through normalization.
+- Add login/logout/me frontend API helpers.
+- Add server-mode login UI.
+- Show active user, lab, and project in the app shell.
+- Add lab and project selection.
+- Load server project state from `GET /api/projects/:projectId/state`.
+- Save project background through `PATCH /api/projects/:projectId/profile`.
+- Use `POST /api/projects/:projectId/ai/context` to prepare assistant context.
+- Treat server state as the source of truth after login.
 
-Done when a user can tell which applied import produced the visible browser data.
+Done when seeded `admin` and `labuser` accounts can log in through the frontend, select `Hanqi Test Lab`, open a server project, and view/update its project profile.
 
-## Milestone 3: Mapping-Driven Dynamic Columns
+## 2. Server-Backed Import Apply
 
-Goal: accepted semantic mappings make imported data easy to scan and compare.
+Goal: move accepted imports from local-only state into persisted import runs and dataset commits.
 
-- Promote accepted or `accepted_draft` mappings into dynamic Browser columns.
-- Keep unmapped fields visible as unmapped measurements.
-- Show mapping confidence and warning markers.
-- Let users accept/reject mappings from import review or generic detail.
+- Upload workbooks through project-scoped file APIs when logged in.
+- Create persisted import runs from uploaded file objects.
+- Run normalize preview through import-run APIs.
+- Apply approved previews as immutable merged dataset commits.
+- Refresh an existing imported workbook by uploading a replacement, reviewing the diff, and applying a new commit that supersedes that active import.
+- Point Experiment Browser at the current dataset commit in server mode.
 
-Done when generic rows can show fields such as Temperature, Catalyst, Time, Conversion, Yield, or Selectivity based on reviewed mappings.
+Done when an imported Browser value can be traced to a dataset commit, import run, file object, and source cell/range.
 
-## Milestone 4: Methodology Versioning And Recompute Proposals
+## 3. Chart Specs To Manuscript
 
-Goal: calculation changes preserve old results and produce reviewable diffs.
+Goal: make reviewed chart output durable before manuscript insertion.
 
-- Define methodology versions for calculation templates, derived fields, units, and validation rules.
-- Add recompute proposals that compare old and new values across affected experiments.
-- Store rationale, warnings, source refs, and formula/version references with recomputed values.
-- Require human commit before recompute results become the active dataset state.
+- Use `POST /api/projects/:projectId/charts/interpret` for one-sentence chart drafts.
+- Use `POST /api/projects/:projectId/charts/propose` for automatic project chart recommendations.
+- Convert accepted chart proposals or interpreted ChartSpec drafts into persisted chart specs.
+- Render chart specs from server project state.
+- Insert manuscript chart blocks by chart spec id.
+- Preserve local chart proposal review and legacy HDPE chart behavior.
 
-Done when changing a calculation such as carbon balance creates a visible before/after proposal instead of overwriting existing values.
+Done when a user can upload data, accept a chart, persist it as a chart spec, insert it into a manuscript, reload the project, and export PPTX.
 
-## Milestone 5: Generic Chart Workflow
+## 4. Manuscript Persistence
 
-Goal: users can create charts from imported data and known dataset/methodology versions.
+Goal: make manuscript canvas state part of the server project source of truth.
 
-- Connect selected generic browser rows to chart proposal requests.
-- Generate chart specs from accepted/reviewable mappings.
-- Store chart specs with source field refs, dataset commit refs, methodology refs, labels, units, grouping, and warnings.
-- Keep chart proposals separate from manuscript blocks until explicit insertion.
+- Load manuscript records from project APIs.
+- Save blocks, pages, canvas state, references, and chart spec refs.
+- Preserve selection, drag, resize, and keyboard behavior in the canvas.
 
-Done when imported generic data can produce a reviewable Plotly chart without using HDPE-only `makePlot()` assumptions.
+Done when manuscript work survives reload/login and still exports correctly.
 
-## Milestone 6: Manuscript And PPTX Tied To Versions
+## 5. Admin And Audit UI
 
-Goal: figures and exported presentations cite known reproducible data states.
+Goal: make the SaaS foundation usable by a lab owner or admin.
 
-- Insert accepted generic chart specs into manuscript blocks explicitly.
-- Store chart blocks with chart spec, dataset commit, methodology version, and style state.
-- Render generic charts consistently in PPTX export.
-- Preserve existing text, image, HDPE chart, and manuscript behavior.
+- Add admin UI for labs, users, roles, and password resets.
+- Show audit summaries for important project actions.
+- Keep sensitive payloads and secrets out of audit displays.
 
-Done when a PPTX figure can be traced back to a specific dataset commit and methodology version.
+Done when a lab owner can manage users and inspect who changed important project records.
 
-## Milestone 7: Cloud Workspace And Audit Log
+## Deferred
 
-Goal: move from local-first project files to a single-lab shared workspace.
-
-- Add Docker Compose services for API, worker, Postgres, and object storage.
-- Store immutable raw file versions, import runs, dataset commits, methodology versions, mappings, charts, manuscripts, and audit events server-side.
-- Add single-lab role-based access for admin, editor, and viewer.
-- Keep `.labrat.json` export/import as backup and migration support.
-
-Done when a small lab can share projects on one server without losing provenance or auditability.
-
-## Milestone 8: External AI / MCP Integration
-
-Goal: expose LabRat safely to external assistants after the core audit model is stable.
-
-- Add a permissioned LabRat MCP server.
-- Expose resources for project summaries, field inventories, warnings, chart specs, commits, methods, and provenance.
-- Expose tools for import jobs, mapping proposals, recompute proposals, chart proposals, and export requests.
-- Require role checks, audit logs, and explicit confirmation for sensitive actions.
-
-Done when external assistants can help with LabRat projects without bypassing app permissions, review, or provenance rules.
+- Import Review UI v2
+- Template memory
+- Methodology versioning and recompute proposals
+- External MCP server
+- OAuth/SSO and email invites
+- SMTP password reset
+- Billing
+- Worker queue and object storage service
+- Kubernetes or multi-region deployment
+- Compatibility migrations for old IndexedDB, `.labrat.json`, or previous local project shapes

@@ -64,7 +64,67 @@ function createPage(id, y = 0) {
   };
 }
 
-function Harness({ initialBlocks, initialPages, initialCanvasHeight = 900, initialOrientation = "landscape" }) {
+const genericImportFixture = {
+  importId: "import_1",
+  experiments: [
+    { experimentId: "exp_1", name: "Run 1" },
+    { experimentId: "exp_2", name: "Run 2" },
+    { experimentId: "exp_3", name: "Run 3" },
+  ],
+  fields: [
+    { fieldValueId: "temp_1", measurementId: "temp_1", experimentId: "exp_1", rowIndex: 0, label: "Temperature", value: 250, rawValue: "250" },
+    { fieldValueId: "sel_1", measurementId: "sel_1", experimentId: "exp_1", rowIndex: 0, label: "Selectivity", value: 82, rawValue: "82" },
+    { fieldValueId: "temp_2", measurementId: "temp_2", experimentId: "exp_2", rowIndex: 0, label: "Temperature", value: 275, rawValue: "275" },
+    { fieldValueId: "sel_2", measurementId: "sel_2", experimentId: "exp_2", rowIndex: 0, label: "Selectivity", value: 88, rawValue: "88" },
+    { fieldValueId: "temp_3", measurementId: "temp_3", experimentId: "exp_3", rowIndex: 0, label: "Temperature", value: 300, rawValue: "300" },
+    { fieldValueId: "sel_3", measurementId: "sel_3", experimentId: "exp_3", rowIndex: 0, label: "Selectivity", value: 91, rawValue: "91" },
+  ],
+};
+
+const genericDatasetFixture = {
+  experiments: [],
+  genericImports: [genericImportFixture],
+  genericMappingSets: [{
+    mappingSetId: "mapping_set_1",
+    mappings: [{
+      mappingId: "mapping_temp",
+      status: "accepted",
+      sourceIds: ["temp_1", "temp_2", "temp_3"],
+      rawLabel: "Temperature",
+      canonicalField: "temperature",
+      semanticRole: "condition",
+      unit: "C",
+    }],
+  }],
+};
+
+const chartSpecFixture = {
+  id: "chart_spec_1",
+  title: "Selectivity vs Temperature",
+  chartType: "scatter",
+  datasetCommitId: "commit_1",
+  spec: {
+    chartType: "scatter",
+    title: "Selectivity vs Temperature",
+    x: { label: "Temperature", sourceIds: ["temp_1", "temp_2"] },
+    y: { label: "Selectivity", sourceIds: ["sel_1", "sel_2"] },
+    sourceImportIds: ["import_1"],
+    sourceRefs: ["src_1"],
+  },
+};
+
+const conversionChartSpecFixture = {
+  ...chartSpecFixture,
+  id: "chart_spec_2",
+  title: "Conversion vs Temperature",
+  spec: {
+    ...chartSpecFixture.spec,
+    title: "Conversion vs Temperature",
+    y: { label: "Conversion", sourceIds: ["sel_1", "sel_2"] },
+  },
+};
+
+function Harness({ initialBlocks, initialPages, initialCanvasHeight = 900, initialOrientation = "landscape", dataset = { experiments: [] }, chartSpecs = [] }) {
   const [blocks, setBlocks] = useState(initialBlocks);
   const [pages, setPages] = useState(initialPages);
   const [canvasHeight, setCanvasHeight] = useState(initialCanvasHeight);
@@ -75,7 +135,7 @@ function Harness({ initialBlocks, initialPages, initialCanvasHeight = 900, initi
   return (
     <>
       <ManuscriptCanvas
-        dataset={{ experiments: [] }}
+        dataset={dataset}
         blocks={blocks}
         setBlocks={setBlocks}
         staged={staged}
@@ -83,6 +143,7 @@ function Harness({ initialBlocks, initialPages, initialCanvasHeight = 900, initi
         references={[]}
         chartTemplates={templates}
         setChartTemplates={setTemplates}
+        chartSpecs={chartSpecs}
         pages={pages}
         setPages={setPages}
         canvasHeight={canvasHeight}
@@ -256,6 +317,164 @@ async function openTextEditor(text = "Hello") {
   setCaretToEnd(editor);
   return editor;
 }
+
+describe("ManuscriptCanvas chart specs", () => {
+  it("hides stale chart specs from approved chart insertion choices", () => {
+    render(
+      <Harness
+        initialBlocks={[]}
+        initialPages={[createPage("page-1")]}
+        dataset={{ experiments: [], genericImports: [genericImportFixture] }}
+        chartSpecs={[
+          chartSpecFixture,
+          {
+            ...chartSpecFixture,
+            id: "chart_spec_stale",
+            title: "Old Selectivity Chart",
+            datasetCommitId: "commit_old",
+            status: "stale",
+            isStale: true,
+            staleReason: "dataset_commit_replaced",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Selectivity vs Temperature")).toBeTruthy();
+    expect(screen.queryByText("Old Selectivity Chart")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Selectivity vs Temperature/i }));
+    expect(screen.getByRole("dialog", { name: "Insert chart" })).not.toBeNull();
+    expect(screen.queryByText("Old Selectivity Chart")).toBeNull();
+  });
+
+  it("renders existing stale chart blocks from their chartSpecSnapshot", () => {
+    render(
+      <Harness
+        initialBlocks={[{
+          id: "chart-block-1",
+          kind: "chart",
+          chartSpecId: "chart_spec_stale",
+          datasetCommitId: "commit_old",
+          chartSpecSnapshot: {
+            ...chartSpecFixture,
+            id: "chart_spec_stale",
+            datasetCommitId: "commit_old",
+            status: "stale",
+            isStale: true,
+          },
+          chartView: { selectedExperimentIds: ["exp_1"], excludedExperimentIds: [], filters: [], groupBy: null },
+          chartLayout: {},
+          x: 80,
+          y: 80,
+          w: 640,
+          h: 420,
+        }]}
+        initialPages={[createPage("page-1")]}
+        dataset={genericDatasetFixture}
+        chartSpecs={[]}
+      />,
+    );
+
+    expect(screen.getAllByTestId("plotly-placeholder").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Missing chart spec/)).toBeNull();
+  });
+
+  it("configures chart view before inserting chartSpec-backed chart blocks", async () => {
+    render(
+      <Harness
+        initialBlocks={[]}
+        initialPages={[createPage("page-1")]}
+        dataset={genericDatasetFixture}
+        chartSpecs={[chartSpecFixture]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Selectivity vs Temperature/i }));
+    expect(screen.getByRole("dialog", { name: "Insert chart" })).not.toBeNull();
+    expect(screen.getByText("0 of 2 experiments selected")).not.toBeNull();
+    expect(screen.getByText("Select experiments to preview this chart.")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Insert chart" }).disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Select experiments" }));
+    expect(screen.getByRole("dialog", { name: "Select experiments" })).not.toBeNull();
+    expect(screen.getByRole("columnheader", { name: /temperature/i })).toBeTruthy();
+    expect(screen.getByLabelText("Select Run 3").disabled).toBe(true);
+    expect(screen.getByText("Not in this chart spec")).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Select Run 1"));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    expect(screen.getByText("1 of 2 experiments selected")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Insert chart" }).disabled).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Insert chart" }));
+
+    await waitFor(() => {
+      const state = readDocState();
+      expect(state.blocks).toHaveLength(1);
+      expect(state.blocks[0]).toMatchObject({
+        kind: "chart",
+        chartSpecId: "chart_spec_1",
+        datasetCommitId: "commit_1",
+        chartView: {
+          selectedExperimentIds: ["exp_1"],
+          excludedExperimentIds: [],
+          filters: [],
+          groupBy: null,
+        },
+      });
+      expect(state.blocks[0].chartSpecSnapshot.title).toBe("Selectivity vs Temperature");
+      expect(state.blocks[0].chartLayout.title.text).toBe("Selectivity vs Temperature");
+      expect(state.blocks[0].chartLayout.xAxisTitle.visible).toBe(true);
+      expect(state.blocks[0].chartKind).toBeUndefined();
+      expect(state.blocks[0].labels).toBeUndefined();
+    });
+  });
+
+  it("clears draft experiment selection when switching chart specs", () => {
+    render(
+      <Harness
+        initialBlocks={[]}
+        initialPages={[createPage("page-1")]}
+        dataset={genericDatasetFixture}
+        chartSpecs={[chartSpecFixture, conversionChartSpecFixture]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Selectivity vs Temperature/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Select experiments" }));
+    fireEvent.click(screen.getByLabelText("Select Run 1"));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(screen.getByText("1 of 2 experiments selected")).toBeTruthy();
+
+    fireEvent.click(screen.getAllByRole("button", { name: /Conversion vs Temperature/i }).at(-1));
+
+    expect(screen.getByText("0 of 2 experiments selected")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Insert chart" }).disabled).toBe(true);
+  });
+
+  it("saves chartSpec title edits to manuscript chartLayout", async () => {
+    render(
+      <Harness
+        initialBlocks={[]}
+        initialPages={[createPage("page-1")]}
+        dataset={genericDatasetFixture}
+        chartSpecs={[chartSpecFixture]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Selectivity vs Temperature/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Select experiments" }));
+    fireEvent.click(screen.getByLabelText("Select Run 1"));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("button", { name: "Insert chart" }));
+
+    await waitFor(() => expect(readDocState().blocks).toHaveLength(1));
+    fireEvent.change(screen.getByDisplayValue("Selectivity vs Temperature"), { target: { value: "Custom figure title" } });
+
+    await waitFor(() => {
+      expect(readDocState().blocks[0].chartLayout.title.text).toBe("Custom figure title");
+    });
+  });
+});
 
 describe("ManuscriptCanvas undo/redo", () => {
   it("undoes a typed text batch and keeps text then move ordered as separate transactions", async () => {

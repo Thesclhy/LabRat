@@ -1,10 +1,10 @@
 # Agent Working Context
 
-This file is the first stop for AI coding agents working in this repository. Read it together with `README.md`, `doc/ARCHITECTURE.md`, `doc/ROADMAP.md`, and `doc/PROGRESS.md` before making edits. For backend import, AI parsing, generic experiment support, Experiment Browser work, or chart-normalization work, also read `doc/plan.md`, `doc/backend-api-contract.md`, `doc/canonical-data-dictionary.md`, and `doc/ai-boundaries.md`.
+This file is the first stop for AI coding agents working in this repository. Read it together with `README.md`, `doc/PROGRESS.md`, `doc/ARCHITECTURE.md`, `doc/ROADMAP.md`, and `doc/plan.md` before making edits. For auth, database, project persistence, import persistence, chart-spec, or manuscript persistence work, also read `doc/saas-database-schema-v0.md`, `doc/saas-api-contract-v0.md`, `doc/server-project-migration-plan.md`, `doc/backend-api-contract.md`, `doc/canonical-data-dictionary.md`, and `doc/ai-boundaries.md`; note that old local-data migration is not in scope.
 
 ## Mission
 
-LabRat Blank is a local-first React app evolving into a reproducibility-first research command center for messy lab Excel/CSV imports, experiment browsing, methodology-aware recompute, charting, manuscript layout, and PPTX export. The user cares about turning raw lab files into traceable, versioned experiment records and defensible presentation-ready figures. Preserve scientific data integrity and avoid broad rewrites.
+LabRat Blank is evolving into a multi-lab SaaS research command center for messy lab Excel/CSV imports, experiment browsing, charting, manuscript layout, and PPTX export. The backend now has server-first project persistence; the next active direction is frontend server mode and Postgres deployment hardening. Preserve scientific data integrity and avoid broad rewrites.
 
 ## Current Stack
 
@@ -45,7 +45,7 @@ Use `npm run build` as the minimum verification after code changes. For import/b
 - `backend/src/`: backend scan, normalize, semantic mapping, and chart proposal services.
 - `public/templates/`: example-only workbook templates.
 - `src/styles.css`: all app styling.
-- `doc/`: architecture, roadmap, contracts, data dictionary, AI boundaries, examples, and progress log.
+- `doc/`: active plan, architecture, roadmap, contracts, data dictionary, AI boundaries, migration notes, and progress log.
 
 ## Data Guardrails
 
@@ -71,6 +71,8 @@ Use `npm run build` as the minimum verification after code changes. For import/b
 ## Project Persistence Contract
 
 The active project is persisted in IndexedDB via `src/storage/projectStorage.js`. The saved project record includes dataset, source name, staged experiments, manuscript blocks, pages, canvas height, chart templates, references, schema version, and saved timestamp. The app also supports Export project / Import project `.labrat.json` backups.
+
+The active server-backed persistence target is documented in `doc/plan.md`, `doc/saas-api-contract-v0.md`, and `doc/saas-database-schema-v0.md`. Logged-in server mode should use the backend project state as the source of truth. Do not add compatibility migrations for old IndexedDB, `.labrat.json`, or previous local project shapes unless the user explicitly asks.
 
 Blank projects store user-derived generic data under:
 
@@ -105,9 +107,9 @@ When changing saved block, dataset, or project-file shapes, add migration/normal
 
 The parser currently attaches local object URLs for related source files and parses only the master table into experiment records. Do not imply full workbook ingestion unless you implement it.
 
-## Backend Import Direction
+## Backend And SaaS Direction
 
-The preferred long-term direction is a React frontend plus backend data-processing service for messy lab Excel/CSV imports and reproducible derived results. The backend should scan, classify, parse, normalize approved data, manage methodology versions, produce recompute proposals, and return reviewable structured results while preserving provenance; AI should propose semantic mappings, recomputes, chart ideas, and explanations only after deterministic structure extraction. See `doc/ARCHITECTURE.md`, `doc/ROADMAP.md`, `doc/plan.md`, and companion docs for examples, terminology, API contracts, AI boundaries, and milestones.
+The current local backend should remain compatible while the next phase connects the frontend to Postgres/auth/server persistence. New SaaS work should follow `doc/plan.md`, `doc/ROADMAP.md`, `doc/saas-database-schema-v0.md`, `doc/saas-api-contract-v0.md`, and `doc/server-project-migration-plan.md`. Existing scan/normalize/semantic-map/chart-propose services should be wrapped in authenticated project-scoped APIs instead of replaced first.
 
 ## Known Sharp Edges
 
@@ -120,7 +122,8 @@ The preferred long-term direction is a React frontend plus backend data-processi
 ## Preferred Workflow
 
 1. Read `README.md`, this file, and `doc/PROGRESS.md`.
-   - For architecture or import/browser/chart work, also read `doc/ARCHITECTURE.md`, `doc/ROADMAP.md`, and `doc/plan.md`.
+   - For auth/database/project persistence work, also read `doc/ARCHITECTURE.md`, `doc/ROADMAP.md`, `doc/plan.md`, `doc/saas-database-schema-v0.md`, `doc/saas-api-contract-v0.md`, and `doc/server-project-migration-plan.md`.
+   - For import/parser/chart proposal compatibility work, also read `doc/backend-api-contract.md`, `doc/canonical-data-dictionary.md`, and `doc/ai-boundaries.md`.
 2. Inspect the specific source files touched by the request.
 3. Make the smallest coherent change.
 4. Run relevant tests; `npm run build` is the minimum after code changes.

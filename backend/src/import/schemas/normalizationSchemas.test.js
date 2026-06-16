@@ -24,14 +24,20 @@ test("validateNormalizeRequest accepts a scan result and approved block ids", ()
   const result = validateNormalizeRequest({
     scanResult: { schemaVersion: IMPORT_SCAN_SCHEMA_VERSION, sheets: [] },
     approvedBlockIds: ["sheet_1_block_1"],
+    approvedStructures: { sheet_1_block_1: { headerRows: [1, 2] } },
+    fieldRoleOverrides: { col_1: { role: "identifier" } },
     mappingOverrides: { col_1: { field: "time" } },
+    templateId: "template_1",
     userEdits: { sheet_1_block_1: { name: "Run 1" } },
   });
 
   assert.equal(result.ok, true);
   assert.deepEqual(result.errors, []);
   assert.deepEqual(result.value.approvedBlockIds, ["sheet_1_block_1"]);
+  assert.deepEqual(result.value.approvedStructures.sheet_1_block_1.headerRows, [1, 2]);
+  assert.equal(result.value.fieldRoleOverrides.col_1.role, "identifier");
   assert.equal(result.value.mappingOverrides.col_1.field, "time");
+  assert.equal(result.value.templateId, "template_1");
   assert.equal(result.value.userEdits.sheet_1_block_1.name, "Run 1");
 });
 
@@ -57,6 +63,7 @@ test("shapeNormalizeResponse returns a stable generic-import patch envelope", ()
         importId: "import_1",
         schemaVersion: GENERIC_IMPORT_SCHEMA_VERSION,
         experiments: [{ experimentId: "generic_exp_1" }],
+        fields: [{ fieldValueId: "field_1" }, { fieldValueId: "field_2" }, { fieldValueId: "field_3" }],
         measurements: [{ measurementId: "measurement_1" }, { measurementId: "measurement_2" }],
         warnings: [{ code: "low_confidence" }],
       }],
@@ -69,6 +76,7 @@ test("shapeNormalizeResponse returns a stable generic-import patch envelope", ()
   assert.deepEqual(response.summary, {
     genericImportCount: 1,
     createdExperiments: 1,
+    createdFields: 3,
     createdMeasurements: 2,
     warningCount: 2,
   });

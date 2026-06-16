@@ -3,18 +3,26 @@ import { fileURLToPath } from "node:url";
 import { sendJson } from "./http/json.js";
 import { handleChartRoutes } from "./charts/routes/chartRoutes.js";
 import { handleImportRoutes } from "./import/routes/importRoutes.js";
+import { loadSaasConfig } from "./saas/config.js";
+import { createSaasStore } from "./saas/store.js";
+import { handleSaasRoutes } from "./saas/routes/saasRoutes.js";
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 8787;
 
-export function createServer() {
+export function createServer(options = {}) {
+  const config = options.config || loadSaasConfig();
+  const storePromise = options.store ? Promise.resolve(options.store) : createSaasStore(config);
   return http.createServer(async (req, res) => {
     try {
+      const store = await storePromise;
+      const saasContext = { config, store };
       if (req.method === "GET" && req.url === "/health") {
         sendJson(res, 200, { ok: true, service: "labrat-backend" });
         return;
       }
 
+      if (await handleSaasRoutes(req, res, saasContext)) return;
       if (await handleImportRoutes(req, res)) return;
       if (await handleChartRoutes(req, res)) return;
 
@@ -38,7 +46,7 @@ export function createServer() {
 export function startServer(options = {}) {
   const host = options.host || process.env.HOST || DEFAULT_HOST;
   const port = Number(options.port || process.env.PORT || DEFAULT_PORT);
-  const server = createServer();
+  const server = createServer(options);
   server.listen(port, host, () => {
     console.log(`LabRat backend listening at http://${host}:${port}`);
   });

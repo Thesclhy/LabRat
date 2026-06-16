@@ -42,7 +42,10 @@ export function validateNormalizeRequest(body) {
   }
 
   const mappingOverrides = isObject(body.mappingOverrides) ? body.mappingOverrides : {};
+  const fieldRoleOverrides = isObject(body.fieldRoleOverrides) ? body.fieldRoleOverrides : {};
+  const approvedStructures = isObject(body.approvedStructures) ? body.approvedStructures : {};
   const userEdits = isObject(body.userEdits) ? body.userEdits : {};
+  const templateId = typeof body.templateId === "string" && body.templateId.trim() ? body.templateId.trim() : null;
 
   return {
     ok: errors.length === 0,
@@ -50,8 +53,11 @@ export function validateNormalizeRequest(body) {
     value: {
       scanResult,
       approvedBlockIds,
+      approvedStructures,
+      fieldRoleOverrides,
       mappingOverrides,
       userEdits,
+      templateId,
     },
   };
 }
@@ -67,6 +73,7 @@ export function createNormalizeSummary(datasetPatch, warnings = []) {
   return {
     genericImportCount: genericImports.length,
     createdExperiments: genericImports.reduce((total, item) => total + asArray(item.experiments).length, 0),
+    createdFields: genericImports.reduce((total, item) => total + asArray(item.fields).length, 0),
     createdMeasurements: genericImports.reduce((total, item) => total + asArray(item.measurements).length, 0),
     warningCount: asArray(warnings).length + genericImports.reduce((total, item) => total + asArray(item.warnings).length, 0),
   };

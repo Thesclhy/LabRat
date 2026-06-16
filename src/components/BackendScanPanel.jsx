@@ -32,37 +32,203 @@ function WarningList({ warnings }) {
   );
 }
 
-function NormalizedPreview({ normalizeState, onApplyNormalize }) {
+function WorkflowStepStrip({ steps }) {
+  return (
+    <ol className="backend-workflow-steps" aria-label="Import review workflow">
+      {steps.map((step) => (
+        <li className={`backend-workflow-step is-${step.status}`} key={step.label}>
+          <span>{step.label}</span>
+          <small>{step.detail}</small>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function WorkflowPanelHeader({ title, detail, meta }) {
+  return (
+    <div className="workflow-panel-head">
+      <div>
+        <h4>{title}</h4>
+        {detail && <p>{detail}</p>}
+      </div>
+      {meta && <span>{meta}</span>}
+    </div>
+  );
+}
+
+function StructureProposalList({ structureProposals }) {
+  const proposals = Array.isArray(structureProposals) ? structureProposals : [];
+  if (!proposals.length) return <span className="backend-scan-muted">No structure proposals</span>;
+  return (
+    <div className="backend-structure-list">
+      {proposals.map((proposal) => (
+        <article className="backend-structure-card" key={proposal.tableId || proposal.regionId}>
+          <div className="backend-scan-block-head">
+            <strong>{proposal.tableId || proposal.regionId}</strong>
+            <span>{formatConfidence(proposal.confidence)}</span>
+          </div>
+          <p className="backend-scan-muted">
+            Header rows: {(proposal.headerRows || []).join(", ") || "n/a"} - Data rows: {(proposal.dataRows || []).length || 0}
+          </p>
+          <div className="generic-field-list">
+            {(proposal.columns || []).map((column) => (
+              <div key={column.fieldId || column.columnId || column.displayName} className="generic-field-row">
+                <span>{column.displayName || column.rawName || column.fieldId}</span>
+                <strong>{column.role || "field"}{column.unit ? ` - ${column.unit}` : ""}</strong>
+                <small>{formatConfidence(column.confidence)}</small>
+              </div>
+            ))}
+          </div>
+          <WarningList warnings={proposal.warnings} />
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function FieldReviewEditor({ scanResult, fieldRoleOverrides, onFieldRoleOverride }) {
+  const proposals = (scanResult?.sheets || []).flatMap((sheet) => (
+    (sheet.structureProposals || []).flatMap((proposal) => (
+      (proposal.columns || []).map((column) => ({ sheet, proposal, column }))
+    ))
+  ));
+  if (!proposals.length) return null;
+  const overrideFor = (fieldId) => fieldRoleOverrides?.[fieldId] || {};
+  return (
+    <section className="backend-field-review">
+      <div className="backend-scan-block-head">
+        <strong>Field review</strong>
+        <span>{proposals.length} proposed fields</span>
+      </div>
+      <div className="backend-field-review-grid">
+        {proposals.map(({ sheet, proposal, column }) => {
+          const fieldId = column.fieldId || column.columnId || `${proposal.tableId}-${column.displayName}`;
+          const override = overrideFor(fieldId);
+          return (
+            <div className="backend-field-review-row" key={`${sheet.sheetId}-${proposal.tableId}-${fieldId}`}>
+              <label>
+                <span>Name</span>
+                <input
+                  value={override.displayName ?? column.displayName ?? column.rawName ?? ""}
+                  onChange={(event) => onFieldRoleOverride?.(fieldId, { displayName: event.target.value })}
+                />
+              </label>
+              <label>
+                <span>Role</span>
+                <select
+                  value={override.role ?? column.role ?? "measurement"}
+                  onChange={(event) => onFieldRoleOverride?.(fieldId, { role: event.target.value })}
+                >
+                  <option value="identifier">identifier</option>
+                  <option value="material">material</option>
+                  <option value="condition">condition</option>
+                  <option value="measurement">measurement</option>
+                  <option value="metadata">metadata</option>
+                  <option value="note">note</option>
+                </select>
+              </label>
+              <label>
+                <span>Unit</span>
+                <input
+                  value={override.unit ?? column.unit ?? ""}
+                  onChange={(event) => onFieldRoleOverride?.(fieldId, { unit: event.target.value })}
+                />
+              </label>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function refreshDiffStats(summary = {}) {
+  return [
+    ["Experiments added", summary.experimentsAdded || 0],
+    ["Experiments removed", summary.experimentsRemoved || 0],
+    ["Experiments changed", summary.experimentsChanged || 0],
+    ["Fields added", summary.fieldsAdded || 0],
+    ["Fields removed", summary.fieldsRemoved || 0],
+    ["Values changed", summary.valuesChanged || 0],
+    ["Warnings changed", summary.warningsChanged || 0],
+  ];
+}
+
+function RefreshDiffPreview({ refreshDraft, onReloadProjectState }) {
+  const draft = refreshDraft || {};
+  if (draft.loading) return <div className="import-review-empty is-loading">Preparing refresh diff...</div>;
+  if (draft.error) {
+    const canReload = draft.error.includes("Project data changed");
+    return (
+      <div className="refresh-diff-error">
+        <p className="import-review-error">{draft.error}</p>
+        {canReload && <button type="button" onClick={() => onReloadProjectState?.()}>Reload project state</button>}
+      </div>
+    );
+  }
+  const preview = draft.preview || null;
+  if (!preview) return <div className="import-review-empty">Refresh diff will appear after normalized preview.</div>;
+  const stats = refreshDiffStats(preview.summary);
+  return (
+    <section className={`refresh-diff-panel ${preview.hasChanges ? "" : "no-changes"}`}>
+      <WorkflowPanelHeader
+        title="Refresh diff"
+        detail={preview.hasChanges ? "Review the detected changes before replacing the committed import." : "No changes detected in the replacement workbook."}
+        meta={preview.hasChanges ? "changes found" : "no changes"}
+      />
+      <div className="backend-scan-stats">
+        {stats.map(([label, value]) => <span key={label}>{value} {label.toLowerCase()}</span>)}
+      </div>
+      <p className="backend-scan-muted">
+        Target: {preview.targetImportId || "n/a"} - Replacement: {preview.replacementImportId || "n/a"} - Parent commit: {preview.parentDatasetCommitId || "n/a"}
+      </p>
+      {!preview.hasChanges && <p className="import-review-error">No changes detected. Apply refresh is disabled.</p>}
+      <WarningList warnings={preview.warnings} />
+    </section>
+  );
+}
+
+function NormalizedPreview({ normalizeState, onApplyNormalize, mode = "append", refreshDraft, onReloadProjectState }) {
   const state = normalizeState || {};
   const result = state.result || null;
-  if (state.loading) return <div className="import-review-empty">Preparing normalized preview...</div>;
+  if (state.loading) return <div className="import-review-empty is-loading">Preparing normalized preview...</div>;
   if (state.error) return <p className="import-review-error">{state.error}</p>;
   if (!result) return <div className="import-review-empty">No normalized preview yet.</div>;
 
   const genericImports = result.datasetPatch?.genericImports || [];
   const experimentCount = result.summary?.createdExperiments ?? genericImports.reduce((total, item) => total + (item.experiments?.length || 0), 0);
+  const fieldCount = result.summary?.createdFields ?? genericImports.reduce((total, item) => {
+    const fields = item.fields?.length ? item.fields : item.measurements;
+    return total + (fields?.length || 0);
+  }, 0);
   const measurementCount = result.summary?.createdMeasurements ?? genericImports.reduce((total, item) => total + (item.measurements?.length || 0), 0);
   const warningCountValue = result.summary?.warningCount ?? genericImports.reduce((total, item) => total + (item.warnings?.length || 0), 0);
+  const isRefreshMode = mode === "refresh";
+  const canApply = genericImports.length > 0
+    && (!isRefreshMode || (!!refreshDraft?.preview?.hasChanges && !refreshDraft?.loading && !refreshDraft?.error));
 
   return (
     <div className="backend-normalize-preview">
       <div className="backend-scan-stats">
         <span>{genericImports.length} generic imports</span>
         <span>{experimentCount} experiments</span>
+        <span>{fieldCount} fields</span>
         <span>{measurementCount} measurements</span>
         <span>{warningCountValue} warnings</span>
       </div>
-      <div className="backend-normalize-toolbar">
+      <div className="backend-normalize-toolbar workflow-action-row">
         <button
           type="button"
           className="primary"
-          disabled={!genericImports.length}
+          disabled={!canApply}
           onClick={() => onApplyNormalize?.()}
         >
-          Apply normalized data
+          {isRefreshMode ? "Apply refresh" : "Apply normalized data"}
         </button>
-        {state.applied && <span>Normalized data applied to project</span>}
+        {state.applied && <span className="workflow-status is-applied">{isRefreshMode ? "Refresh applied to project" : "Normalized data applied to project"}</span>}
       </div>
+      {isRefreshMode && <RefreshDiffPreview refreshDraft={refreshDraft} onReloadProjectState={onReloadProjectState} />}
       {genericImports.map((item) => (
         <article className="backend-normalize-card" key={item.importId}>
           <div className="backend-scan-block-head">
@@ -73,7 +239,7 @@ function NormalizedPreview({ normalizeState, onApplyNormalize }) {
             Sources: {item.sources?.length || 0} - Files: {item.files?.length || 0}
           </p>
           <p className="backend-scan-muted">
-            Measurements: {(item.measurements || []).slice(0, 4).map((measurement) => measurement.displayName).join(", ") || "None"}
+            Fields: {((item.fields?.length ? item.fields : item.measurements) || []).slice(0, 4).map((field) => `${field.displayName}${field.role ? ` (${field.role})` : ""}`).join(", ") || "None"}
           </p>
         </article>
       ))}
@@ -91,6 +257,11 @@ function MappingProposalReview({ genericImports, mappingState, onProposeMappings
 
   return (
     <section className="backend-proposal-section">
+      <WorkflowPanelHeader
+        title="Semantic mappings"
+        detail="Review accepted fields before they become Browser columns and chart inputs."
+        meta={`${mappings.length} proposals`}
+      />
       <div className="backend-normalize-toolbar">
         <button
           type="button"
@@ -100,7 +271,6 @@ function MappingProposalReview({ genericImports, mappingState, onProposeMappings
         >
           {state.loading ? "Proposing mappings..." : "Propose mappings"}
         </button>
-        <span>{mappings.length} mapping proposals</span>
       </div>
       {state.error && <p className="import-review-error">{state.error}</p>}
       {!mappingSet && !state.loading && <div className="import-review-empty">No semantic mapping proposals yet.</div>}
@@ -123,7 +293,7 @@ function MappingProposalReview({ genericImports, mappingState, onProposeMappings
               </p>
               <p className="backend-scan-muted">{mapping.rationale}</p>
               <WarningList warnings={mapping.warnings} />
-              <div className="import-review-actions">
+              <div className="import-review-actions decision-actions">
                 <button
                   type="button"
                   className={mapping.status === "accepted" ? "primary" : ""}
@@ -147,8 +317,9 @@ function MappingProposalReview({ genericImports, mappingState, onProposeMappings
   );
 }
 
-function ChartProposalCard({ proposal, genericImports, onChartProposalDecision }) {
+function ChartProposalCard({ proposal, genericImports, chartProposalSetId, chartSpecs, onChartProposalDecision, onCreateChartSpec }) {
   const preview = makeGenericChartPreview(proposal, genericImports);
+  const existingSpec = (chartSpecs || []).find((spec) => spec.sourceProposalId === proposal.proposalId);
   return (
     <article className="backend-proposal-card backend-chart-proposal-card">
       <div className="backend-scan-block-head">
@@ -185,21 +356,35 @@ function ChartProposalCard({ proposal, genericImports, onChartProposalDecision }
         >
           Reject
         </button>
+        {proposal.status === "accepted" && (
+          <button
+            type="button"
+            disabled={!!existingSpec || !chartProposalSetId}
+            onClick={() => onCreateChartSpec?.(chartProposalSetId, proposal.proposalId)}
+          >
+            {existingSpec ? "Chart spec created" : "Create chart spec"}
+          </button>
+        )}
       </div>
     </article>
   );
 }
 
-function ChartProposalReview({ genericImports, mappingState, chartProposalState, onProposeCharts, onChartProposalDecision }) {
+function ChartProposalReview({ genericImports, mappingState, chartProposalState, chartSpecs, onProposeCharts, onChartProposalDecision, onCreateChartSpec }) {
   const state = chartProposalState || {};
   const proposalSet = state.result?.proposalSet || null;
   const proposals = proposalSet?.proposals || [];
-  const mappingCount = mappingState?.result?.mappingSet?.mappings?.length || 0;
-  const canPropose = genericImports.length > 0 && mappingCount > 0 && !state.loading;
+  const chartProposalSetId = state.result?.chartProposalSet?.id || proposalSet?.serverId || state.result?.chartProposalSetId || null;
+  const canPropose = genericImports.length > 0 && !state.loading;
 
   return (
     <section className="backend-proposal-section">
-      <div className="backend-normalize-toolbar">
+      <WorkflowPanelHeader
+        title="Chart proposals"
+        detail="Accept proposed charts, then create ChartSpecs for Manuscript insertion."
+        meta={`${proposals.length} proposals`}
+      />
+      <div className="backend-normalize-toolbar workflow-action-row">
         <button
           type="button"
           className="primary"
@@ -208,7 +393,6 @@ function ChartProposalReview({ genericImports, mappingState, chartProposalState,
         >
           {state.loading ? "Proposing charts..." : "Propose charts"}
         </button>
-        <span>{proposals.length} chart proposals</span>
       </div>
       {state.error && <p className="import-review-error">{state.error}</p>}
       {!proposalSet && !state.loading && <div className="import-review-empty">No chart proposals yet.</div>}
@@ -225,10 +409,108 @@ function ChartProposalReview({ genericImports, mappingState, chartProposalState,
               key={proposal.proposalId}
               proposal={proposal}
               genericImports={genericImports}
+              chartProposalSetId={chartProposalSetId}
+              chartSpecs={chartSpecs}
               onChartProposalDecision={onChartProposalDecision}
+              onCreateChartSpec={onCreateChartSpec}
             />
           ))}
         </div>
+      )}
+    </section>
+  );
+}
+
+function ChartInterpretReview({ genericImports, chartInterpretState, onInterpretChart }) {
+  const [prompt, setPrompt] = React.useState("");
+  const state = chartInterpretState || {};
+  const draft = state.result?.chartSpecDraft || null;
+  const clarification = state.result?.clarification || null;
+  const persistedProposalSet = state.result?.chartProposalSet || null;
+  const canInterpret = genericImports.length > 0 && prompt.trim() && !state.loading;
+  const preview = draft && !persistedProposalSet ? makeGenericChartPreview(draft, genericImports) : null;
+  const persistedProposalCount = persistedProposalSet?.payload?.proposals?.length || 0;
+
+  return (
+    <section className="backend-proposal-section">
+      <WorkflowPanelHeader
+        title="One-chart prompt"
+        detail="Draft one chart proposal from a natural-language request; final review stays in Chart proposals."
+        meta={persistedProposalSet ? `${persistedProposalCount} queued` : ""}
+      />
+      <div className="backend-normalize-toolbar chart-intent-toolbar workflow-action-row">
+        <label className="chart-intent-input">
+          <span>Ask for one chart</span>
+          <input
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+            placeholder="e.g. plot gas selectivity vs temperature grouped by catalyst"
+          />
+        </label>
+        <button
+          type="button"
+          className="primary"
+          disabled={!canInterpret}
+          onClick={() => onInterpretChart?.(prompt)}
+        >
+          {state.loading ? "Drafting chart..." : "Draft chart proposal"}
+        </button>
+      </div>
+      {state.error && <p className="import-review-error">{state.error}</p>}
+      {!state.result && !state.loading && <div className="import-review-empty">No one-chart prompt yet.</div>}
+      {clarification && (
+        <article className="backend-proposal-card">
+          <div className="backend-scan-block-head">
+            <strong>Need clarification</strong>
+            <span>{clarification.options?.length || 0} options</span>
+          </div>
+          <p className="backend-scan-muted">{clarification.message}</p>
+          <div className="chips">
+            {(clarification.options || []).map((option) => (
+              <span className="chip" key={option.fieldId || option.label}>{option.label}</span>
+            ))}
+          </div>
+        </article>
+      )}
+      {persistedProposalSet && (
+        <article className="backend-inline-status">
+          <div className="backend-scan-block-head">
+            <strong>Chart proposal queued</strong>
+            <span>{persistedProposalCount} proposals</span>
+          </div>
+          <p className="backend-scan-muted">
+            Review it in Chart proposals to accept, reject, or create a ChartSpec for Manuscript.
+          </p>
+        </article>
+      )}
+      {draft && !persistedProposalSet && (
+        <article className="backend-proposal-card backend-chart-proposal-card">
+          <div className="backend-scan-block-head">
+            <strong>{draft.title || "ChartSpec draft"}</strong>
+            <span>{draft.chartType} - {formatConfidence(draft.confidence)}</span>
+          </div>
+          {preview && (
+            <div className="generic-chart-preview">
+              <Plot
+                traces={preview.traces}
+                layout={preview.layout}
+                config={{ staticPlot: true, displayModeBar: false }}
+                className="generic-chart-preview-plot"
+              />
+            </div>
+          )}
+          <p className="backend-scan-muted">{draft.rationale}</p>
+          <p className="backend-scan-muted">
+            X: {draft.x?.label || "n/a"}{draft.x?.unit ? ` (${draft.x.unit})` : ""}
+            {" - "}
+            Y: {(draft.yFields?.length ? draft.yFields : [draft.y]).filter(Boolean).map((axis) => axis.label || axis.field).join(", ") || "n/a"}
+          </p>
+          {draft.groupBy && <p className="backend-scan-muted">Group by: {draft.groupBy.label || draft.groupBy.field}</p>}
+          <WarningList warnings={draft.warnings} />
+          <p className="backend-scan-muted">
+            Preview-only draft. Use a server project with a dataset commit to accept this chart, create a chart spec, and insert it into Manuscript.
+          </p>
+        </article>
       )}
     </section>
   );
@@ -279,7 +561,7 @@ function BlockList({ blocks, blockReview, onBlockReviewDecision }) {
               <strong>{block.blockId}</strong>
               <span>{block.type} - {formatConfidence(block.confidence)}</span>
             </div>
-            <div className="backend-scan-review-actions" aria-label={`Review ${block.blockId}`}>
+            <div className="backend-scan-review-actions decision-actions" aria-label={`Review ${block.blockId}`}>
               <span>Review: {decision}</span>
               <button
                 type="button"
@@ -313,6 +595,37 @@ function BlockList({ blocks, blockReview, onBlockReviewDecision }) {
   );
 }
 
+export function ChartReviewPanel({
+  genericImports = [],
+  mappingState,
+  chartProposalState,
+  chartInterpretState,
+  chartSpecs,
+  onProposeCharts,
+  onChartProposalDecision,
+  onInterpretChart,
+  onCreateChartSpec,
+}) {
+  return (
+    <div className="chart-review-panel">
+      <ChartInterpretReview
+        genericImports={genericImports}
+        chartInterpretState={chartInterpretState}
+        onInterpretChart={onInterpretChart}
+      />
+      <ChartProposalReview
+        genericImports={genericImports}
+        mappingState={mappingState}
+        chartProposalState={chartProposalState}
+        chartSpecs={chartSpecs}
+        onProposeCharts={onProposeCharts}
+        onChartProposalDecision={onChartProposalDecision}
+        onCreateChartSpec={onCreateChartSpec}
+      />
+    </div>
+  );
+}
+
 function SheetDetails({ sheet, blockReview, onBlockReviewDecision }) {
   return (
     <article className="backend-scan-sheet">
@@ -333,6 +646,7 @@ function SheetDetails({ sheet, blockReview, onBlockReviewDecision }) {
         <div><h5>Headers</h5><HeaderList headers={sheet.candidateHeaders} /></div>
         <div><h5>Metadata</h5><MetadataList metadata={sheet.candidateMetadata} /></div>
       </div>
+      <div><h5>Structure proposals</h5><StructureProposalList structureProposals={sheet.structureProposals} /></div>
       <div className="backend-scan-subgrid">
         <div><h5>Blocks</h5><BlockList blocks={sheet.blocks} blockReview={blockReview} onBlockReviewDecision={onBlockReviewDecision} /></div>
         <div><h5>Warnings</h5><WarningList warnings={sheet.warnings} /></div>
@@ -342,26 +656,54 @@ function SheetDetails({ sheet, blockReview, onBlockReviewDecision }) {
 }
 
 export function BackendScanPanel({
+  mode = "append",
+  refreshDraft,
   scanState,
   blockReview,
   normalizeState,
   mappingState,
-  chartProposalState,
+  genericImports: genericImportsOverride,
+  fieldRoleOverrides,
   onScanFile,
   onBlockReviewDecision,
+  onFieldRoleOverride,
   onPreviewNormalize,
   onApplyNormalize,
   onProposeMappings,
   onMappingDecision,
-  onProposeCharts,
-  onChartProposalDecision,
+  onReloadProjectState,
 }) {
   const state = scanState || {};
+  const isRefreshMode = mode === "refresh";
   const result = state.result || null;
   const sheetCount = result?.summary?.sheetCount ?? result?.sheets?.length ?? 0;
   const blockCount = result?.summary?.blockCount ?? result?.sheets?.reduce((total, sheet) => total + (sheet.blocks?.length || 0), 0) ?? 0;
   const approvedCount = blockReview?.approvedBlockIds?.length || 0;
-  const genericImports = normalizeState?.result?.datasetPatch?.genericImports || [];
+  const previewImports = normalizeState?.result?.datasetPatch?.genericImports || [];
+  const genericImports = previewImports.length ? previewImports : (genericImportsOverride || []);
+  const mappingSet = mappingState?.result?.mappingSet || null;
+  const workflowSteps = [
+    {
+      label: "Scan workbook",
+      detail: result ? `${sheetCount} sheets` : "choose .xlsx",
+      status: state.loading ? "active" : result ? "done" : "pending",
+    },
+    {
+      label: "Review blocks/fields",
+      detail: result ? `${approvedCount} approved` : "after scan",
+      status: result ? (approvedCount ? "done" : "active") : "pending",
+    },
+    {
+      label: "Preview/apply data",
+      detail: normalizeState?.applied ? "applied" : isRefreshMode && refreshDraft?.preview ? "diff ready" : normalizeState?.result ? "preview ready" : "review first",
+      status: normalizeState?.loading ? "active" : normalizeState?.applied ? "done" : normalizeState?.result ? "active" : "pending",
+    },
+    {
+      label: "Semantic mappings",
+      detail: mappingSet ? `${mappingSet.mappings?.length || 0} proposals` : "after data",
+      status: mappingState?.loading ? "active" : mappingSet ? "done" : "pending",
+    },
+  ];
 
   return (
     <section className="import-review-section backend-scan-panel">
@@ -369,9 +711,10 @@ export function BackendScanPanel({
         <h3>Backend scan</h3>
         <span>{state.loading ? "scanning" : result ? "ready" : "idle"}</span>
       </div>
-      <div className="backend-scan-toolbar">
+      <WorkflowStepStrip steps={workflowSteps} />
+      <div className="backend-scan-toolbar workflow-action-row">
         <label className={`folder-btn backend-scan-upload ${state.loading ? "disabled" : ""}`}>
-          {state.loading ? "Scanning..." : "Scan workbook"}
+          {state.loading ? "Scanning..." : isRefreshMode ? "Scan replacement workbook" : "Scan workbook"}
           <input
             type="file"
             accept=".xlsx,.xls"
@@ -403,6 +746,11 @@ export function BackendScanPanel({
               />
             ))}
           </div>
+          <FieldReviewEditor
+            scanResult={result}
+            fieldRoleOverrides={fieldRoleOverrides}
+            onFieldRoleOverride={onFieldRoleOverride}
+          />
           <div className="backend-normalize-toolbar">
             <button
               type="button"
@@ -414,24 +762,35 @@ export function BackendScanPanel({
             </button>
             <span>{approvedCount} approved blocks</span>
           </div>
-          <NormalizedPreview normalizeState={normalizeState} onApplyNormalize={onApplyNormalize} />
+          <NormalizedPreview
+            normalizeState={normalizeState}
+            onApplyNormalize={onApplyNormalize}
+            mode={mode}
+            refreshDraft={refreshDraft}
+            onReloadProjectState={onReloadProjectState}
+          />
           <MappingProposalReview
             genericImports={genericImports}
             mappingState={mappingState}
             onProposeMappings={onProposeMappings}
             onMappingDecision={onMappingDecision}
           />
-          <ChartProposalReview
-            genericImports={genericImports}
-            mappingState={mappingState}
-            chartProposalState={chartProposalState}
-            onProposeCharts={onProposeCharts}
-            onChartProposalDecision={onChartProposalDecision}
-          />
           <pre>{JSON.stringify(result, null, 2)}</pre>
         </div>
       ) : (
-        <div className="import-review-empty">No backend scan yet.</div>
+        <div>
+          <div className="import-review-empty">No backend scan yet.</div>
+          {genericImports.length > 0 && (
+            <>
+              <MappingProposalReview
+                genericImports={genericImports}
+                mappingState={mappingState}
+                onProposeMappings={onProposeMappings}
+                onMappingDecision={onMappingDecision}
+              />
+            </>
+          )}
+        </div>
       )}
     </section>
   );

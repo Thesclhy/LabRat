@@ -30,6 +30,8 @@ export function scanCells(worksheet) {
 
   const decoded = decodeRange(usedRange);
   const merges = Array.isArray(worksheet["!merges"]) ? worksheet["!merges"] : [];
+  const rowMeta = Array.isArray(worksheet["!rows"]) ? worksheet["!rows"] : [];
+  const colMeta = Array.isArray(worksheet["!cols"]) ? worksheet["!cols"] : [];
   const cells = [];
 
   for (let rowIndex = decoded.s.r; rowIndex <= decoded.e.r; rowIndex += 1) {
@@ -47,6 +49,13 @@ export function scanCells(worksheet) {
         formattedValue: cell?.w ?? (rawValue == null ? "" : String(rawValue)),
         type: cellType(cell),
         formula: cell?.f || null,
+        style: cell?.s || null,
+        comments: Array.isArray(cell?.c) ? cell.c.map((comment) => ({
+          author: comment.a || "",
+          text: comment.t || "",
+        })) : [],
+        hiddenRow: Boolean(rowMeta[rowIndex]?.hidden),
+        hiddenColumn: Boolean(colMeta[colIndex]?.hidden),
         ...merge,
       });
     }
@@ -56,6 +65,12 @@ export function scanCells(worksheet) {
     range: usedRange,
     rowCount: decoded.e.r - decoded.s.r + 1,
     columnCount: decoded.e.c - decoded.s.c + 1,
+    hiddenRows: rowMeta
+      .map((row, index) => (row?.hidden ? index + 1 : null))
+      .filter(Boolean),
+    hiddenColumns: colMeta
+      .map((column, index) => (column?.hidden ? index + 1 : null))
+      .filter(Boolean),
     cells,
   };
 }

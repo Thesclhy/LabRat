@@ -3,13 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Backend scan-only import pipeline for LabRat Phase 1",
+  "description": "LabRat backend import pipeline and SaaS Auth v0 foundation",
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "test": "node --test"
+    "migrate": "node src/saas/migrate.js",
+    "test": "node --test",
+    "test:postgres": "node --test src/saas/routes/saasRoutes.postgres.test.js"
   },
   "dependencies": {
+    "pg": "^8.16.3",
     "xlsx": "^0.18.5"
   }
 }

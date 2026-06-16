@@ -1,6 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
 import { BLANK_ONBOARDING_STEPS, BlankOnboarding } from "./BlankOnboarding.jsx";
 
 const templateLinks = [
@@ -27,13 +27,11 @@ describe("BlankOnboarding", () => {
     expect(screen.getAllByText("Example only - not imported automatically")).toHaveLength(2);
   });
 
-  it("uses Import Excel workbook as the primary action", () => {
-    const onImportWorkbook = vi.fn();
-    render(<BlankOnboarding onImportWorkbook={onImportWorkbook} templateLinks={templateLinks} />);
+  it("keeps workbook import as a page-level action outside onboarding", () => {
+    render(<BlankOnboarding onImportWorkbook={() => {}} templateLinks={templateLinks} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Import Excel workbook" }));
-
-    expect(onImportWorkbook).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Import workbook" })).toBeNull();
+    expect(screen.getByText(/upload your own workbook through Import workbook/i)).toBeTruthy();
   });
 
   it("links to downloadable template resources", () => {

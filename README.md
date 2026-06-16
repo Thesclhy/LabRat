@@ -2,11 +2,38 @@
 
 LabRat Blank is the new-user LabRat workspace. The long-term product goal is a reproducibility-first research command center: LabRat turns scattered lab files into a versioned, browsable, source-backed dataset, then carries that data into charts, manuscript figures, and PPTX output.
 
-The current blank app starts with an empty project and already guides users from raw Excel workbooks through import review, generic normalization, semantic mapping proposals, chart proposals, manuscript layout, and PPTX export.
+The current blank app starts with an empty project and already guides users from raw Excel workbooks through import review, generic normalization, semantic mapping proposals, chart proposals, generic Experiment Browser review, manuscript layout, and PPTX export.
 
 This folder is intentionally separate from `D:\project\labrat`, which remains the research/demo project. This blank copy does not include `public/labratData.json`, does not preload HDPE research data, and does not import example templates automatically.
 
 ## Quick Start
+
+Start the full local development stack with Docker:
+
+```bash
+npm run dev:docker
+```
+
+This starts:
+
+- Postgres at `127.0.0.1:5432`
+- backend API at `http://127.0.0.1:8787`
+- frontend at `http://127.0.0.1:5173/LabRat/`
+
+Seeded development accounts:
+
+```text
+admin / LabRatAdmin123!
+labuser / LabRatLab123!
+```
+
+Stop the stack with:
+
+```bash
+npm run dev:docker:down
+```
+
+If you only want to run the frontend locally against an already-running backend:
 
 ```bash
 npm install
@@ -28,9 +55,13 @@ npm run dev:blank
 npm run build:blank
 ```
 
-Run the backend import service separately when testing backend scan/normalize/mapping/chart-proposal flows:
+Run the backend import service separately when not using Docker Compose:
 
 ```bash
+npm run dev:postgres
+$env:DATABASE_URL="postgres://labrat:labrat_dev@127.0.0.1:5432/labrat"
+$env:SESSION_SECRET="dev-secret"
+$env:LABRAT_SEED_DEV_ACCOUNTS="true"
 npm --prefix backend run dev
 ```
 
@@ -44,7 +75,7 @@ npm --prefix backend run dev
 
 ## Current Workflow
 
-The intended product path is:
+The intended product path is now server-first for logged-in lab workspaces:
 
 ```text
 raw files
@@ -52,15 +83,14 @@ raw files
   -> human review
   -> dataset commits
   -> Experiment Browser
-  -> methodology versions and recompute proposals
   -> chart specs
   -> manuscript canvas
   -> PPTX export
 ```
 
-The current app already supports backend workbook scan, approved normalization, semantic mapping proposals, chart proposal review, local project persistence, manuscript layout, and PPTX export. Dataset commits, methodology versions, recompute proposals, cloud storage, and audit logs are target architecture concepts documented for future implementation.
+The current app already supports backend workbook scan, approved normalization, semantic mapping proposals, chart proposal review, generic Experiment Browser rows, local project persistence, manuscript layout, and PPTX export. The backend now has SaaS Auth v0 plus server-first project persistence for seeded/admin-created accounts, lab-scoped projects, project experiment background profiles, project state loading, persisted file/import-run records, dataset commits, mapping sets, chart proposal sets, chart specs, manuscripts, and audit events.
 
-The next major UX goal is making backend-uploaded generic data first-class in Experiment Browser while preserving provenance.
+The next major engineering goal is frontend server mode: login, lab/project selection, server project state loading, project profile editing, and replacing local-only import apply with server import-run/apply calls. New server-mode work does not need compatibility migrations for old IndexedDB, `.labrat.json`, or previous local project shapes.
 
 ## Example Templates
 
@@ -84,12 +114,13 @@ The backend scan, normalize, semantic mapping, and chart proposal endpoints are 
 ## Documentation Map
 
 - `AGENTS.md`: working instructions for AI coding agents.
-- `doc/ARCHITECTURE.md`: product and technical architecture, including proposal/commit/methodology/provenance concepts.
-- `doc/ROADMAP.md`: staged plan from generic Experiment Browser support to methodology versioning, cloud, and MCP integration.
+- `doc/ARCHITECTURE.md`: current local architecture and next multi-lab SaaS target.
+- `doc/ROADMAP.md`: near-term frontend server-mode and server persistence roadmap.
 - `doc/plan.md`: short current execution plan.
+- `doc/saas-database-schema-v0.md`: Postgres schema target.
+- `doc/saas-api-contract-v0.md`: authenticated SaaS API contract.
+- `doc/server-project-migration-plan.md`: server project state notes; old local-data migration is not in scope.
 - `doc/backend-api-contract.md`: backend endpoint contracts.
 - `doc/canonical-data-dictionary.md`: shared data terminology.
 - `doc/ai-boundaries.md`: AI safety and review rules.
-- `doc/implementation-milestones.md`: compact implementation checklist.
-- `doc/import-examples.md`: parser examples and expected behavior.
 - `doc/PROGRESS.md`: durable project progress log.

@@ -7,6 +7,11 @@
     "scripts":  {
                     "dev":  "vite --mode blank --host 0.0.0.0",
                     "dev:blank":  "vite --mode blank --host 0.0.0.0",
+                    "dev:docker":  "docker compose up",
+                    "dev:docker:detached":  "docker compose up -d",
+                    "dev:docker:down":  "docker compose down",
+                    "dev:postgres":  "docker compose up -d postgres",
+                    "dev:backend:docker":  "docker compose up backend",
                     "build":  "vite build --mode blank",
                     "build:blank":  "vite build --mode blank",
                     "test":  "vitest run --config vitest.config.js --configLoader runner",

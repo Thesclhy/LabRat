@@ -1,7 +1,7 @@
 import PptxGenJS from "pptxgenjs";
 import JSZip from "jszip";
-import { resolveChartLayout, defaultFontFamily } from "../charts/chartLayout.js";
-import { makePlot } from "../charts/makePlot.js";
+import { applyChartLayout, resolveChartLayout, defaultFontFamily } from "../charts/chartLayout.js";
+import { chartSpecToProposal, makeGenericChartPreview } from "../charts/genericChartPreview.js";
 import { defineLabRatDefaultSlideMasters, LABRAT_FIGURE_MASTER } from "./pptxTemplate.js";
 
 const SLIDE_WIDTH_IN = 13.333333;
@@ -17,13 +17,13 @@ function loadPlotly() {
   return plotlyLoader;
 }
 
-export async function exportManuscriptPagesToPptx({ pages, blocks, experiments, startPage, endPage, filename = "labrat-manuscript-pages.pptx" }) {
-  const buffer = await buildManuscriptPagesPptxBuffer({ pages, blocks, experiments, startPage, endPage });
+export async function exportManuscriptPagesToPptx({ pages, blocks, experiments, genericImports = [], chartSpecs = [], startPage, endPage, filename = "labrat-manuscript-pages.pptx" }) {
+  const buffer = await buildManuscriptPagesPptxBuffer({ pages, blocks, experiments, genericImports, chartSpecs, startPage, endPage });
   savePptxBuffer(buffer, filename);
 }
 
-export async function buildManuscriptPagesPptxBuffer({ pages, blocks, experiments, startPage, endPage }) {
-  const { pptx, slideWidth, slideHeight } = await buildManuscriptPresentation({ pages, blocks, experiments, startPage, endPage });
+export async function buildManuscriptPagesPptxBuffer({ pages, blocks, experiments, genericImports = [], chartSpecs = [], startPage, endPage }) {
+  const { pptx, slideWidth, slideHeight } = await buildManuscriptPresentation({ pages, blocks, experiments, genericImports, chartSpecs, startPage, endPage });
   const generatedBuffer = await pptx.write({ outputType: "arraybuffer", compression: true });
   try {
     return await applyDefaultTemplateToGeneratedDeck(generatedBuffer, { slideWidth, slideHeight });
@@ -33,7 +33,7 @@ export async function buildManuscriptPagesPptxBuffer({ pages, blocks, experiment
   }
 }
 
-async function buildManuscriptPresentation({ pages, blocks, experiments, startPage, endPage }) {
+async function buildManuscriptPresentation({ pages, blocks, experiments, genericImports = [], chartSpecs = [], startPage, endPage }) {
   const selectedPages = selectedPageRange(pages, startPage, endPage);
   if (!selectedPages.length) throw new Error("Select at least one manuscript page to export.");
 
@@ -66,7 +66,7 @@ async function buildManuscriptPresentation({ pages, blocks, experiments, startPa
       } else if (block.kind === "image" && block.dataUrl) {
         slide.addImage({ data: block.dataUrl, ...box, sizingCrop: false });
       } else if (block.kind === "chart") {
-        await addChartBlock(slide, box, block, experiments);
+        await addChartBlock(slide, box, block, genericImports, chartSpecs);
       }
     }
   }
@@ -248,13 +248,67 @@ function firstParagraphAlign(block) {
   return ["left", "center", "right"].includes(align) ? align : "left";
 }
 
-async function addChartBlock(slide, box, block, experiments) {
-  const labels = Array.isArray(block.labels) ? block.labels : [];
-  const exps = labels.map((label) => experiments.find((experiment) => experiment.label === label)).filter(Boolean);
-  const chartLayout = resolveChartLayout(block);
-  const plot = makePlot(block.chartKind, exps, block.opts || {}, chartLayout);
-  const image = await renderChartBlockImage(block, chartLayout, plot);
+async function addChartBlock(slide, box, block, genericImports, chartSpecs) {
+  const chartSpec = resolveBlockChartSpec(block, chartSpecs);
+  if (!chartSpec) return;
+  const chartLayout = resolveExportChartLayout(block, chartSpec);
+  const plotArea = chartLayout.plotArea || {};
+  const plot = makeGenericChartPreview(chartSpec, genericImports, {
+    width: Math.max(1, Math.round(Number(plotArea.width) || Number(block.w) || 580)),
+    height: Math.max(1, Math.round(Number(plotArea.height) || Number(block.h) || 380)),
+    chartView: normalizeChartView(block.chartView),
+    config: { displayModeBar: false, staticPlot: true, responsive: false },
+  });
+  const image = await renderChartBlockImage(block, chartLayout, applyChartLayout(plot, chartLayout));
   slide.addImage({ data: image, ...box, sizingCrop: false });
+}
+
+function resolveBlockChartSpec(block, chartSpecs) {
+  return (Array.isArray(chartSpecs) ? chartSpecs : []).find((spec) => spec?.id === block?.chartSpecId)
+    || block?.chartSpecSnapshot
+    || null;
+}
+
+function normalizeChartView(value) {
+  const safe = value && typeof value === "object" ? value : {};
+  const idList = (items) => (Array.isArray(items) ? items : [])
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+  return {
+    selectedExperimentIds: idList(safe.selectedExperimentIds),
+    excludedExperimentIds: idList(safe.excludedExperimentIds),
+    filters: Array.isArray(safe.filters) ? safe.filters : [],
+    groupBy: safe.groupBy || null,
+  };
+}
+
+function chartSpecAxisTitle(axis, fallback) {
+  const label = axis?.label || axis?.field || fallback;
+  const unit = axis?.unit ? ` (${axis.unit})` : "";
+  return `${label || fallback || ""}${unit}`;
+}
+
+function chartSpecLayoutOpts(chartSpec) {
+  const proposal = chartSpecToProposal(chartSpec);
+  const yFields = Array.isArray(proposal.yFields) && proposal.yFields.length ? proposal.yFields : [proposal.y].filter(Boolean);
+  return {
+    title: proposal.title || chartSpec?.title || "Chart",
+    xLabel: chartSpecAxisTitle(proposal.x, "Experiment"),
+    yLabel: yFields.length > 1 ? "Value" : chartSpecAxisTitle(yFields[0], "Value"),
+  };
+}
+
+function resolveExportChartLayout(block, chartSpec) {
+  const proposal = chartSpecToProposal(chartSpec);
+  const layout = resolveChartLayout({
+    ...block,
+    chartKind: proposal.chartType || chartSpec?.chartType || "scatter",
+    opts: chartSpecLayoutOpts(chartSpec),
+  });
+  if (!block?.chartLayout?.xAxisTitle) {
+    layout.xAxisTitle = { ...layout.xAxisTitle, visible: true };
+  }
+  return layout;
 }
 
 async function renderPlotImage(plot, width, height) {

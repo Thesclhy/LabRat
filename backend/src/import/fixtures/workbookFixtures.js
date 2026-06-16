@@ -57,6 +57,36 @@ export const ambiguousSparseSheetFixture = {
   ],
 };
 
+export const groupedMasterTableFixture = {
+  fileId: "fixture_grouped_master",
+  filename: "grouped-master-table.xlsx",
+  contentType: EXCEL_CONTENT_TYPE,
+  sheetName: "Sheet1",
+  rows: [
+    ["Label", "Date", "Catalyst", "", "Polymer", "", "Temperature (C)", "Pressure (bar)", "Reaction Time (hrs)", "RPM", "Impeller", "Selectivity (%)", "", ""],
+    ["", "", "Type", "Loading (g)", "Type", "Loading (g)", "", "", "", "", "", "Solid", "Liquid", "Gas"],
+    ["Exp1", "2025/3/17", "Ru/TiO2", 0.2009, "HDPE (pellets)", 22.02, 250, 50, 5, 500, "flat", 92.8, 0.1, 0.35],
+    ["Exp2", "2025/3/20", "Ru/TiO2", 0.2048, "HDPE (pellets)", 22.0244, 250, 50, 5, 500, "flat", 92.0, 0.34, 0.41],
+  ],
+};
+
+function workbookBufferWithSheetOptions({ name, rows, merges = [], comments = [], hiddenRows = [], hiddenColumns = [] }) {
+  const workbook = XLSX.utils.book_new();
+  const worksheet = XLSX.utils.aoa_to_sheet(rows);
+  if (merges.length) worksheet["!merges"] = merges.map((range) => XLSX.utils.decode_range(range));
+  comments.forEach(({ cell, text, author = "LabRat" }) => {
+    worksheet[cell] = worksheet[cell] || { t: "s", v: "" };
+    worksheet[cell].c = [{ a: author, t: text }];
+  });
+  if (hiddenRows.length) worksheet["!rows"] = rows.map((_, index) => ({ hidden: hiddenRows.includes(index + 1) }));
+  if (hiddenColumns.length) {
+    const width = Math.max(...rows.map((row) => row.length));
+    worksheet["!cols"] = Array.from({ length: width }, (_, index) => ({ hidden: hiddenColumns.includes(index + 1) }));
+  }
+  XLSX.utils.book_append_sheet(workbook, worksheet, name);
+  return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+}
+
 export function createCleanStandardTableWorkbook() {
   const buffer = workbookBufferFromSheets([{
     name: cleanStandardTableFixture.sheetName,
@@ -95,6 +125,24 @@ export function createAmbiguousSparseSheetWorkbook() {
     filename: ambiguousSparseSheetFixture.filename,
     sizeBytes: buffer.length,
     contentType: ambiguousSparseSheetFixture.contentType,
+    buffer,
+  };
+}
+
+export function createGroupedMasterTableWorkbook() {
+  const buffer = workbookBufferWithSheetOptions({
+    name: groupedMasterTableFixture.sheetName,
+    rows: groupedMasterTableFixture.rows,
+    merges: ["C1:D1", "E1:F1", "L1:N1"],
+    comments: [{ cell: "A1", text: "Experiment label" }],
+    hiddenRows: [4],
+    hiddenColumns: [14],
+  });
+  return {
+    fileId: groupedMasterTableFixture.fileId,
+    filename: groupedMasterTableFixture.filename,
+    sizeBytes: buffer.length,
+    contentType: groupedMasterTableFixture.contentType,
     buffer,
   };
 }

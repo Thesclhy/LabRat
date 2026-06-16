@@ -20,12 +20,22 @@ function unique(values) {
 
 function numberValue(value) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
-  const parsed = Number(String(value ?? "").trim());
+  const text = String(value ?? "").trim();
+  if (!text || /^(n\/a|na|null|none|-|--|—)$/i.test(text)) return null;
+  const normalized = text
+    .replace(/,/g, "")
+    .replace(/\s*%\s*$/g, "");
+  if (!/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(normalized)) return null;
+  const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
 function valueTypeFor(values) {
-  const present = values.filter((value) => value != null && String(value).trim() !== "");
+  const present = values.filter((value) => {
+    if (value == null) return false;
+    const text = String(value).trim();
+    return text && !/^(n\/a|na|null|none|-|--|—)$/i.test(text);
+  });
   if (!present.length) return "empty";
   const numericCount = present.filter((value) => numberValue(value) != null).length;
   if (numericCount === present.length) return "numeric";
@@ -101,6 +111,7 @@ function addField(fields, item) {
     fields.set(key, {
       fieldId: `${item.targetKind}_${fields.size + 1}_${slug(item.field || item.displayName || item.rawLabel)}`,
       targetKind: item.targetKind,
+      fieldRole: item.fieldRole || null,
       importId: item.importId,
       field: item.field || slug(item.displayName || item.rawLabel, item.targetKind),
       displayName: item.displayName || item.rawLabel || item.field || "Field",
@@ -122,6 +133,24 @@ function addField(fields, item) {
   if (item.value != null || item.rawValue != null) field.values.push(item.value ?? item.rawValue);
   if (item.rawValue != null && field.examples.length < 4) field.examples.push(item.rawValue);
   if (typeof item.confidence === "number") field.confidenceValues.push(item.confidence);
+}
+
+function normalizedFieldRecord(fieldValue) {
+  return {
+    targetKind: fieldValue.role === "measurement" ? "measurement" : "metadata",
+    sourceId: fieldValue.fieldValueId || fieldValue.measurementId || fieldValue.metadataId,
+    sourceRef: fieldValue.sourceRef,
+    experimentId: fieldValue.experimentId,
+    rowIndex: fieldValue.rowIndex,
+    field: fieldValue.field || fieldValue.fieldId,
+    displayName: fieldValue.displayName || fieldValue.field || fieldValue.fieldId,
+    rawLabel: fieldValue.displayName || fieldValue.field || fieldValue.fieldId,
+    value: fieldValue.value,
+    rawValue: fieldValue.rawValue,
+    unit: fieldValue.unit,
+    confidence: fieldValue.confidence,
+    fieldRole: fieldValue.role || null,
+  };
 }
 
 function finalizeField(field) {
@@ -189,6 +218,7 @@ export function buildGenericImportContext(options = {}) {
         ...experiment,
         importId: genericImport.importId,
       });
+      if (asArray(genericImport.fields).length) return;
       asArray(experiment?.metadata).forEach((metadata) => {
         addField(metadataFields, {
           targetKind: "metadata",
@@ -206,6 +236,16 @@ export function buildGenericImportContext(options = {}) {
         });
       });
     });
+    if (asArray(genericImport.fields).length) {
+      asArray(genericImport.fields).forEach((fieldValue) => {
+        const normalized = normalizedFieldRecord(fieldValue);
+        addField(normalized.targetKind === "measurement" ? measurementFields : metadataFields, {
+          ...normalized,
+          importId: genericImport.importId,
+        });
+      });
+      return;
+    }
     asArray(genericImport.measurements).forEach((measurement) => {
       addField(measurementFields, {
         targetKind: "measurement",

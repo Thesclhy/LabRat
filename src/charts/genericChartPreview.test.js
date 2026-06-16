@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { makeGenericChartPreview } from "./genericChartPreview.js";
+import { experimentOptionsForChartSpec, makeGenericChartPreview } from "./genericChartPreview.js";
 
 function genericImports() {
   return [{
@@ -13,6 +13,32 @@ function genericImports() {
       { measurementId: "conv_1", experimentId: "exp_1", rowIndex: 2, value: 0, rawValue: "0" },
       { measurementId: "time_2", experimentId: "exp_2", rowIndex: 3, value: 10, rawValue: "10" },
       { measurementId: "conv_2", experimentId: "exp_2", rowIndex: 3, value: 25, rawValue: "25" },
+    ],
+  }];
+}
+
+function familyImport() {
+  return [{
+    importId: "import_family",
+    experiments: [
+      { experimentId: "exp_1", name: "Exp1" },
+      { experimentId: "exp_2", name: "Exp2" },
+    ],
+    fields: [
+      { fieldValueId: "label_1", experimentId: "exp_1", rowIndex: 2, field: "label", role: "identifier", value: "Exp1", rawValue: "Exp1" },
+      { fieldValueId: "label_2", experimentId: "exp_2", rowIndex: 3, field: "label", role: "identifier", value: "Exp2", rawValue: "Exp2" },
+      { fieldValueId: "solid_1", experimentId: "exp_1", rowIndex: 2, field: "solid", role: "measurement", value: 50, rawValue: "50" },
+      { fieldValueId: "liquid_1", experimentId: "exp_1", rowIndex: 2, field: "liquid", role: "measurement", value: 25, rawValue: "25" },
+      { fieldValueId: "gas_1", experimentId: "exp_1", rowIndex: 2, field: "gas", role: "measurement", value: 25, rawValue: "25" },
+      { fieldValueId: "solid_2", experimentId: "exp_2", rowIndex: 3, field: "solid", role: "measurement", value: 1, rawValue: "1" },
+      { fieldValueId: "liquid_2", experimentId: "exp_2", rowIndex: 3, field: "liquid", role: "measurement", value: 1, rawValue: "1" },
+      { fieldValueId: "gas_2", experimentId: "exp_2", rowIndex: 3, field: "gas", role: "measurement", value: 2, rawValue: "2" },
+      { fieldValueId: "c7_1", experimentId: "exp_1", rowIndex: 2, field: "C7", role: "measurement", value: 9, rawValue: "9" },
+      { fieldValueId: "c8_1", experimentId: "exp_1", rowIndex: 2, field: "C8", role: "measurement", value: 20, rawValue: "20" },
+      { fieldValueId: "c10_1", experimentId: "exp_1", rowIndex: 2, field: "C10", role: "measurement", value: 18, rawValue: "18" },
+      { fieldValueId: "c7_2", experimentId: "exp_2", rowIndex: 3, field: "C7", role: "measurement", value: 1, rawValue: "1" },
+      { fieldValueId: "c8_2", experimentId: "exp_2", rowIndex: 3, field: "C8", role: "measurement", value: 3, rawValue: "3" },
+      { fieldValueId: "c10_2", experimentId: "exp_2", rowIndex: 3, field: "C10", role: "measurement", value: 5, rawValue: "5" },
     ],
   }];
 }
@@ -31,5 +57,99 @@ describe("makeGenericChartPreview", () => {
     expect(preview.traces[0].y).toEqual([0, 25]);
     expect(preview.layout.title.text).toBe("Conversion vs Time");
     expect(preview.layout.xaxis.title).toBe("Time (min)");
+  });
+
+  it("builds chart spec draft previews from source ids", () => {
+    const preview = makeGenericChartPreview({
+      chartType: "scatter",
+      title: "Conversion vs Time",
+      x: { label: "Time", unit: "min", sourceIds: ["time_1", "time_2"] },
+      y: { label: "Conversion", unit: "%", sourceIds: ["conv_1", "conv_2"] },
+    }, genericImports());
+
+    expect(preview.traces).toHaveLength(1);
+    expect(preview.traces[0].x).toEqual([0, 10]);
+    expect(preview.traces[0].y).toEqual([0, 25]);
+  });
+
+  it("builds grouped bar previews for multi-y chart spec drafts", () => {
+    const preview = makeGenericChartPreview({
+      chartType: "grouped_bar",
+      title: "Conversion and duplicate value vs Time",
+      x: { label: "Time", unit: "min", sourceIds: ["time_1", "time_2"] },
+      yFields: [
+        { label: "Conversion", unit: "%", sourceIds: ["conv_1", "conv_2"] },
+        { label: "Conversion copy", unit: "%", sourceIds: ["conv_1", "conv_2"] },
+      ],
+    }, genericImports());
+
+    expect(preview.traces).toHaveLength(2);
+    expect(preview.traces[0].type).toBe("bar");
+    expect(preview.traces[1].name).toBe("Conversion copy");
+    expect(preview.layout.barmode).toBe("group");
+  });
+
+  it("filters preview traces through chartView experiment selections", () => {
+    const preview = makeGenericChartPreview({
+      chartType: "scatter",
+      title: "Conversion vs Time",
+      x: { label: "Time", unit: "min", sourceIds: ["time_1", "time_2"] },
+      y: { label: "Conversion", unit: "%", sourceIds: ["conv_1", "conv_2"] },
+    }, genericImports(), {
+      chartView: { selectedExperimentIds: ["exp_2"] },
+    });
+
+    expect(preview.traces).toHaveLength(1);
+    expect(preview.traces[0].x).toEqual([10]);
+    expect(preview.traces[0].y).toEqual([25]);
+  });
+
+  it("returns chart-specific experiment options from source ids", () => {
+    const options = experimentOptionsForChartSpec({
+      chartType: "scatter",
+      x: { sourceIds: ["time_1", "time_2"] },
+      y: { sourceIds: ["conv_1", "conv_2"] },
+    }, genericImports());
+
+    expect(options.map((option) => option.id)).toEqual(["exp_1", "exp_2"]);
+  });
+
+  it("normalizes transformed stacked bars per experiment", () => {
+    const preview = makeGenericChartPreview({
+      chartType: "stacked_bar",
+      title: "Normalized selectivity",
+      x: { label: "Experiment", sourceIds: ["label_1", "label_2"] },
+      yFields: [
+        { label: "Solid", sourceIds: ["solid_1", "solid_2"] },
+        { label: "Liquid", sourceIds: ["liquid_1", "liquid_2"] },
+        { label: "Gas", sourceIds: ["gas_1", "gas_2"] },
+      ],
+      transforms: [{ type: "normalize_sum_to_percent" }],
+    }, familyImport());
+
+    expect(preview.traces).toHaveLength(3);
+    expect(preview.traces[0].y).toEqual([50, 25]);
+    expect(preview.traces[1].y).toEqual([25, 25]);
+    expect(preview.traces[2].y).toEqual([25, 50]);
+    expect(preview.layout.barmode).toBe("stack");
+  });
+
+  it("renders distribution_bar as one trace per experiment with numeric C sorting", () => {
+    const preview = makeGenericChartPreview({
+      chartType: "distribution_bar",
+      title: "C-number distribution",
+      yFields: [
+        { label: "C10", measurementComponent: "C10", componentOrder: 10, sourceIds: ["c10_1", "c10_2"] },
+        { label: "C7", measurementComponent: "C7", componentOrder: 7, sourceIds: ["c7_1", "c7_2"] },
+        { label: "C8", measurementComponent: "C8", componentOrder: 8, sourceIds: ["c8_1", "c8_2"] },
+      ],
+      transforms: [{ type: "pivot_longer" }, { type: "sort_components" }],
+    }, familyImport());
+
+    expect(preview.traces).toHaveLength(2);
+    expect(preview.traces[0].name).toBe("Exp1");
+    expect(preview.traces[0].x).toEqual(["C7", "C8", "C10"]);
+    expect(preview.traces[0].y).toEqual([9, 20, 18]);
+    expect(preview.layout.barmode).toBe("group");
   });
 });

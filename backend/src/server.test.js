@@ -123,6 +123,8 @@ test("POST /api/import/scan scans xlsx workbook metadata", async () => {
   const response = await fetch(`${baseUrl}/api/import/scan`, { method: "POST", body: form });
   assert.equal(response.status, 200);
   const body = await response.json();
+  assert.match(body.file.fileId, /^upload_[a-f0-9]{16}$/);
+  assert.match(body.file.checksumSha256, /^[a-f0-9]{64}$/);
   assert.equal(body.file.name, "standard_table.xlsx");
   assert.equal(body.file.type, "xlsx");
   assert.equal(body.sheets.length, 5);
@@ -151,6 +153,10 @@ test("POST /api/import/scan scans xlsx workbook metadata", async () => {
     formattedValue: "Experiment",
     type: "string",
     formula: null,
+    style: { patternType: "none" },
+    comments: [],
+    hiddenRow: false,
+    hiddenColumn: false,
     merged: false,
     mergedRange: null,
   });
@@ -186,6 +192,48 @@ test("POST /api/import/scan scans xlsx workbook metadata", async () => {
   assert.equal(ambiguousSheet.blocks[0].type, "unknown_region");
   assert.equal(ambiguousSheet.blocks[0].table, null);
   assert.equal(ambiguousSheet.warnings[0].code, "unknown_layout");
+});
+
+test("POST /api/import/scan uses stable content ids for repeated uploads", async () => {
+  const blob = makeWorkbookBlob();
+  async function scan(filename) {
+    const form = new FormData();
+    form.set("file", blob, filename);
+    const response = await fetch(`${baseUrl}/api/import/scan`, { method: "POST", body: form });
+    assert.equal(response.status, 200);
+    return response.json();
+  }
+
+  async function normalize(scanResult) {
+    const runsBlockId = scanResult.sheets.find((sheet) => sheet.name === "Runs").blocks[0].blockId;
+    const response = await fetch(`${baseUrl}/api/import/normalize`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scanResult,
+        approvedBlockIds: [runsBlockId],
+      }),
+    });
+    assert.equal(response.status, 200);
+    return response.json();
+  }
+
+  const first = await scan("stable-a.xlsx");
+  const second = await scan("stable-b.xlsx");
+
+  assert.equal(first.file.fileId, second.file.fileId);
+  assert.equal(first.file.checksumSha256, second.file.checksumSha256);
+  assert.equal(first.file.name, "stable-a.xlsx");
+  assert.equal(second.file.name, "stable-b.xlsx");
+
+  const firstNormalize = await normalize(first);
+  const secondNormalize = await normalize(second);
+  assert.equal(
+    firstNormalize.datasetPatch.genericImports[0].importId,
+    secondNormalize.datasetPatch.genericImports[0].importId,
+  );
+  assert.equal(firstNormalize.datasetPatch.genericImports[0].fileId, first.file.fileId);
+  assert.equal(firstNormalize.datasetPatch.genericImports[0].checksumSha256, first.file.checksumSha256);
 });
 
 test("POST /api/import/scan rejects non-Excel uploads", async () => {
@@ -282,7 +330,8 @@ test("POST /api/import/normalize normalizes approved scan fixture blocks", async
   const genericImport = body.datasetPatch.genericImports[0];
   assert.equal(genericImport.fileName, "mixed-normalize.xlsx");
   assert.equal(genericImport.experiments.length, 4);
-  assert.equal(genericImport.measurements.length, 14);
+  assert.equal(genericImport.fields.length, 16);
+  assert.equal(genericImport.measurements.length, 6);
   assert.equal(genericImport.warnings[0].code, "unsupported_block_type");
   assert.equal(genericImport.sources.some((source) => source.cell === "C3" && source.rawValue === 25), true);
   assert.equal(Object.hasOwn(body.datasetPatch, "experiments"), false);
@@ -343,6 +392,48 @@ test("POST /api/charts/propose requires JSON", async () => {
   assert.equal(response.status, 415);
   const body = await response.json();
   assert.equal(body.error.code, "unsupported_media_type");
+});
+
+test("POST /api/charts/interpret requires JSON", async () => {
+  const response = await fetch(`${baseUrl}/api/charts/interpret`, { method: "POST" });
+
+  assert.equal(response.status, 415);
+  const body = await response.json();
+  assert.equal(body.error.code, "unsupported_media_type");
+});
+
+test("POST /api/charts/interpret rejects missing prompt or imports", async () => {
+  const response = await fetch(`${baseUrl}/api/charts/interpret`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ prompt: "", genericImports: [] }),
+  });
+
+  assert.equal(response.status, 400);
+  const body = await response.json();
+  assert.equal(body.error.code, "invalid_chart_interpret_request");
+});
+
+test("POST /api/charts/interpret returns deterministic ChartSpec drafts without AI key", async () => {
+  await withoutAnthropicKey(async () => {
+    const response = await fetch(`${baseUrl}/api/charts/interpret`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        prompt: "plot conversion vs time",
+        genericImports: [genericImportFixture()],
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.schemaVersion, "labrat.chartInterpretResponse.v1");
+    assert.equal(body.chartSpecDraft.schemaVersion, "labrat.chartSpec.v1.2");
+    assert.equal(body.chartSpecDraft.chartType, "scatter");
+    assert.equal(body.chartSpecDraft.x.field, "time");
+    assert.equal(body.chartSpecDraft.y.field, "conversion");
+    assert.equal(body.chartSpecDraft.warnings.some((warning) => warning.code === "ai_unavailable"), true);
+  });
 });
 
 test("POST /api/charts/propose rejects invalid JSON", async () => {

@@ -15,6 +15,7 @@ function makeFileMetadata(file) {
     type: workbookTypeFromName(file.filename),
     sizeBytes: file.sizeBytes,
     contentType: file.contentType,
+    ...(file.checksumSha256 ? { checksumSha256: file.checksumSha256 } : {}),
   };
 }
 
@@ -45,7 +46,14 @@ function sheetSummary(sheetName, worksheet, index, file) {
 }
 
 export function scanWorkbook(file) {
-  const workbook = XLSX.read(file.buffer, { type: "buffer", cellFormula: true, cellNF: true, cellText: true });
+  const workbook = XLSX.read(file.buffer, {
+    type: "buffer",
+    cellFormula: true,
+    cellNF: true,
+    cellText: true,
+    cellStyles: true,
+    cellComments: true,
+  });
   const sheets = workbook.SheetNames.map((sheetName, index) => (
     sheetSummary(sheetName, workbook.Sheets[sheetName], index, file)
   ));

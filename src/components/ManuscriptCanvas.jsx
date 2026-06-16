@@ -1,8 +1,9 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { COLORS, chartTypes } from "../charts/constants";
-import { defaultChartLayout, defaultFontFamily, defaultPlotAreaForLayout, patchChartLayout, resolveChartLayout, scaleChartLayout } from "../charts/chartLayout";
-import { makePlot } from "../charts/makePlot";
+import { applyChartLayout, defaultChartLayout, defaultFontFamily, defaultPlotAreaForLayout, patchChartLayout, resolveChartLayout, scaleChartLayout } from "../charts/chartLayout";
+import { chartSpecToProposal, experimentOptionsForChartSpec, makeGenericChartPreview } from "../charts/genericChartPreview";
 import { Plot } from "../charts/Plot";
+import { buildAcceptedMappingColumns, buildGenericBrowserRows } from "../data/experimentBrowserRows.js";
 import { exportManuscriptPagesToPptx } from "../export/pptxExport";
 import { experimentDateSortValue } from "../utils/date";
 import { fmt, uid } from "../utils/format";
@@ -42,7 +43,7 @@ const TOOLBAR_TRANSITION = {
   BLOCK_SWITCH: "block-switch",
 };
 
-export function ManuscriptCanvas({ dataset, blocks, setBlocks, staged, setStaged, references, chartTemplates, setChartTemplates, pages, setPages, canvasHeight, setCanvasHeight, pageOrientationPreference, setPageOrientationPreference, onSelectedChartContextChange, onRequestChartAnalysis, onSaveProject }) {
+export function ManuscriptCanvas({ dataset, blocks, setBlocks, staged, setStaged, references, chartTemplates, setChartTemplates, chartSpecs, pages, setPages, canvasHeight, setCanvasHeight, pageOrientationPreference, setPageOrientationPreference, onSelectedChartContextChange, onRequestChartAnalysis, onSaveProject }) {
   const [selected, setSelected] = useState(null);
   const [editingTextBoxId, setEditingTextBoxId] = useState(null);
   const [textToolbarState, setTextToolbarState] = useState(null);
@@ -56,8 +57,6 @@ export function ManuscriptCanvas({ dataset, blocks, setBlocks, staged, setStaged
   const [exportError, setExportError] = useState("");
   const [orientationChoiceRequest, setOrientationChoiceRequest] = useState(null);
   const [chartDraft, setChartDraft] = useState(null);
-  const [experimentPickerOpen, setExperimentPickerOpen] = useState(false);
-  const [inspectorExperimentPickerOpen, setInspectorExperimentPickerOpen] = useState(false);
   const [dismissedChartAssistId, setDismissedChartAssistId] = useState(null);
   const canvasWrapRef = useRef(null);
   const imageInputRef = useRef(null);
@@ -66,6 +65,8 @@ export function ManuscriptCanvas({ dataset, blocks, setBlocks, staged, setStaged
   const toolbarControlControllerRef = useRef(null);
   const textEditSessionRef = useRef(null);
   const experiments = useMemo(() => (Array.isArray(dataset?.experiments) ? dataset.experiments : []), [dataset?.experiments]);
+  const genericImports = useMemo(() => (Array.isArray(dataset?.genericImports) ? dataset.genericImports : []), [dataset?.genericImports]);
+  const safeChartSpecs = useMemo(() => normalizeChartSpecs(chartSpecs), [chartSpecs]);
   const safeBlocks = useMemo(() => normalizeManuscriptBlocks(blocks), [blocks]);
   const safeStaged = Array.isArray(staged) ? staged : [];
   const safeReferences = Array.isArray(references) ? references : [];
@@ -360,11 +361,13 @@ export function ManuscriptCanvas({ dataset, blocks, setBlocks, staged, setStaged
       y: clampNumber(requestedY, pageTop, Math.max(pageTop, pageTop + pageHeight - height)),
     };
   };
-  const createChartBlock = (kind = "selectivity", labels = [], point = null, template = null) => {
-    const w = template?.w || 580;
-    const h = template?.h || 380;
+  const createChartBlock = (chartSpec, point = null, chartView = null) => {
+    if (!chartSpec?.id) return;
+    const w = Number(chartSpec?.layout?.width) || 640;
+    const h = Number(chartSpec?.layout?.height) || 420;
     const id = uid();
-    const opts = { ...(template?.opts || {}), title: template?.opts?.title || `${kind} comparison` };
+    const view = normalizeChartView(chartView);
+    const layout = defaultChartSpecBlockLayout(chartSpec, { w, h });
     flushTextForNonTextMutation();
     manuscriptHistory.runImmediateTransaction("block-insert", () => {
       setBlocks((b) => {
@@ -373,73 +376,52 @@ export function ManuscriptCanvas({ dataset, blocks, setBlocks, staged, setStaged
         return [...current, {
           id,
           kind: "chart",
-          chartKind: kind,
-          labels,
+          chartSpecId: chartSpec.id,
+          chartSpecSnapshot: clone(chartSpec),
+          datasetCommitId: chartSpec.datasetCommitId || null,
+          chartView: view,
+          chartLayout: layout,
           x: insertAt.x,
           y: insertAt.y,
           w,
           h,
-          chartLayout: template?.chartLayout ? clone(template.chartLayout) : defaultChartLayout(kind, opts, { w, h }),
-          opts,
         }];
       });
     });
     setSelected(id);
     closeContextMenu();
   };
-  const openInsertChartModal = (point = null) => {
-    const labels = safeStaged.length ? safeStaged : [];
-    setChartDraft({ point, chartKind: "selectivity", labels });
-    setExperimentPickerOpen(false);
+  const openInsertChartModal = (point = null, chartSpecId = "") => {
+    const initialSpec = safeChartSpecs.find((spec) => spec.id === chartSpecId) || safeChartSpecs[0] || null;
+    const experimentOptions = initialSpec ? experimentOptionsForChartSpec(initialSpec, genericImports) : [];
+    setChartDraft({
+      point,
+      chartSpecId: initialSpec?.id || "",
+      selectedExperimentIds: [],
+      excludedExperimentIds: experimentOptions.map((option) => option.id),
+    });
     closeContextMenu();
   };
   const closeInsertChartModal = () => {
     setChartDraft(null);
-    setExperimentPickerOpen(false);
   };
   const insertChartFromDraft = () => {
     if (!chartDraft) return;
-    const labels = Array.isArray(chartDraft.labels) ? chartDraft.labels : [];
-    if (!labels.length) return;
-    createChartBlock(chartDraft.chartKind, labels, chartDraft.point);
-    setChartDraft(null);
-    setExperimentPickerOpen(false);
-  };
-  const saveChartTemplate = (block) => {
-    if (!block || block.kind !== "chart") return;
-    const fallbackName = `${block.chartKind || "chart"} template`;
-    const name = window.prompt("Template name", fallbackName);
-    if (!name?.trim()) return;
-    const layout = resolveChartLayout(block);
-    const template = {
-      id: uid(),
-      kind: "chart",
-      name: name.trim(),
-      chartKind: block.chartKind || "selectivity",
-      w: block.w || 580,
-      h: block.h || 380,
-      chartLayout: clone(layout),
-      opts: { ...(block.opts || {}), title: layout.title?.text || block.opts?.title },
-      createdAt: Date.now(),
-    };
-    setChartTemplates?.((templates) => [...normalizeChartTemplates(templates), template]);
-    closeChartContextMenu();
-  };
-  const applyChartTemplate = (block, template) => {
-    if (!block || block.kind !== "chart" || !template) return;
-    const labels = Array.isArray(block.labels) ? block.labels : [];
-    const nextKind = template.chartKind || block.chartKind || "selectivity";
-    const nextBlockSize = { w: template.w || block.w || 580, h: template.h || block.h || 380 };
-    const nextOpts = { ...(template.opts || {}), title: template.opts?.title || block.opts?.title };
-    patchBlock(block.id, {
-      chartKind: nextKind,
-      labels,
-      w: nextBlockSize.w,
-      h: nextBlockSize.h,
-      chartLayout: template.chartLayout ? clone(template.chartLayout) : defaultChartLayout(nextKind, nextOpts, nextBlockSize),
-      opts: nextOpts,
+    const chartSpec = safeChartSpecs.find((spec) => spec.id === chartDraft.chartSpecId);
+    if (!chartSpec) return;
+    const experimentOptions = experimentOptionsForChartSpec(chartSpec, genericImports);
+    const compatibleIds = new Set(experimentOptions.map((option) => option.id));
+    const selectedExperimentIds = Array.isArray(chartDraft.selectedExperimentIds)
+      ? chartDraft.selectedExperimentIds.map((id) => String(id || "").trim()).filter((id) => id && (!compatibleIds.size || compatibleIds.has(id)))
+      : [];
+    if (experimentOptions.length && !selectedExperimentIds.length) return;
+    createChartBlock(chartSpec, chartDraft.point, {
+      selectedExperimentIds,
+      excludedExperimentIds: selectedExperimentIds.length ? [] : chartDraft.excludedExperimentIds,
+      filters: chartDraft.filters,
+      groupBy: chartDraft.groupBy,
     });
-    closeChartContextMenu();
+    setChartDraft(null);
   };
   const insertText = (point = null) => {
     const id = uid();
@@ -584,6 +566,8 @@ export function ManuscriptCanvas({ dataset, blocks, setBlocks, staged, setStaged
         pages: safePages,
         blocks: safeBlocks,
         experiments,
+        genericImports,
+        chartSpecs: safeChartSpecs,
         startPage,
         endPage,
         filename: `labrat-manuscript-pages-${startPage}-${endPage}.pptx`,
@@ -720,8 +704,8 @@ export function ManuscriptCanvas({ dataset, blocks, setBlocks, staged, setStaged
     }
   }, [pageOrientationPreference, inferredPageOrientation, setPageOrientationPreference]);
   useEffect(() => {
-    onSelectedChartContextChange?.(selectedBlock?.kind === "chart" ? buildChartContext(selectedBlock, experiments) : null);
-  }, [selectedBlockId, safeBlocks, experiments, onSelectedChartContextChange]);
+    onSelectedChartContextChange?.(selectedBlock?.kind === "chart" ? buildChartContext(selectedBlock, safeChartSpecs, genericImports) : null);
+  }, [selectedBlockId, safeBlocks, safeChartSpecs, genericImports, onSelectedChartContextChange]);
   return (
     <div className={`manuscript ${leftSidebarOpen ? "sidebar-open" : "sidebar-closed"} ${inspectorOpen ? "inspector-open" : "inspector-closed"}`} onMouseDownCapture={handleManuscriptMouseDownCapture}>
       {leftSidebarOpen && (
@@ -730,10 +714,11 @@ export function ManuscriptCanvas({ dataset, blocks, setBlocks, staged, setStaged
             <h3>Workspace Overview</h3>
             <button type="button" className="sidebar-toggle" title="Hide workspace overview" aria-label="Hide workspace overview" onClick={() => setLeftSidebarOpen(false)}>‹</button>
           </div>
-          <p>{safePages.length} page{safePages.length === 1 ? "" : "s"} with {safeBlocks.length} blocks. {safeStaged.length} experiments staged.</p>
+          <p>{safePages.length} page{safePages.length === 1 ? "" : "s"} with {safeBlocks.length} blocks. {safeChartSpecs.length} approved chart{safeChartSpecs.length === 1 ? "" : "s"}.</p>
           <CanvasOverview
             blocks={safeBlocks}
-            experiments={experiments}
+            genericImports={genericImports}
+            chartSpecs={safeChartSpecs}
             selectedBlockId={selectedBlockId}
             pages={safePages}
             canvasWidth={effectiveCanvasWidth}
@@ -745,11 +730,22 @@ export function ManuscriptCanvas({ dataset, blocks, setBlocks, staged, setStaged
               setPageContextMenu({ visible: true, x: event.clientX, y: event.clientY, pageIndex });
             }}
           />
-          <div className="template-summary">
-            <h3>Chart Templates</h3>
-            <p>{safeChartTemplates.length ? `${safeChartTemplates.length} saved` : "No saved templates yet."}</p>
+          <div className="template-summary approved-chart-summary">
+            <h3>Approved Charts</h3>
+            {safeChartSpecs.length ? (
+              <div className="approved-chart-list">
+                {safeChartSpecs.map((chartSpec) => (
+                  <button type="button" key={chartSpec.id} onClick={() => openInsertChartModal(null, chartSpec.id)}>
+                    <span>{chartSpec.title || "Untitled chart"}</span>
+                    <small>{chartSpec.chartType || chartSpecToProposal(chartSpec).chartType || "chart"}</small>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p>No approved chart specs yet.</p>
+            )}
           </div>
-          <p className="sidebar-hint">Right-click an empty area of the canvas to insert charts, text boxes, or images.</p>
+          <p className="sidebar-hint">Create chart specs from accepted backend proposals, then insert them here.</p>
           <button type="button" className="wide-action" disabled={!safePages.length} onClick={() => {
             setExportError("");
             setExportModalOpen(true);
@@ -790,8 +786,8 @@ export function ManuscriptCanvas({ dataset, blocks, setBlocks, staged, setStaged
               <span className="canvas-page-label">Page {index + 1}</span>
             </section>
           ))}
-          {!safeBlocks.length && !safePages.length && <div className="empty-hint">Press + to choose a manuscript page orientation and add the first page.</div>}
-          {safeBlocks.map((b) => <CanvasBlock key={b.id} experiments={experiments} block={b} canvasWidth={effectiveCanvasWidth} canvasHeight={Math.max(effectiveCanvasHeight, visibleCanvasHeight)} selectedKey={selected} setSelected={setSelected} patch={patchBlock} patchTextRuns={patchTextRuns} remove={deleteBlock} editingTextBoxId={editingTextBoxId} setEditingTextBoxId={setEditingTextBoxId} richTextApiRef={richTextApiRef} onTextToolbarChange={setTextToolbarState} onBeginTextEdit={beginTextEditSession} onCommitTextEdit={commitTextEditSession} onBeginTransaction={beginHistoryTransaction} onCommitTransaction={commitHistoryTransaction} onUndo={undoManuscript} onRedo={redoManuscript} onChartContextMenu={handleChartContextMenu} onBlockContextMenu={handleBlockContextMenu} />)}
+          {!safeBlocks.length && !safePages.length && <div className="empty-hint">Add a page, then insert an approved chart spec or text box. Chart specs come from backend proposals you accept.</div>}
+          {safeBlocks.map((b) => <CanvasBlock key={b.id} genericImports={genericImports} chartSpecs={safeChartSpecs} block={b} canvasWidth={effectiveCanvasWidth} canvasHeight={Math.max(effectiveCanvasHeight, visibleCanvasHeight)} selectedKey={selected} setSelected={setSelected} patch={patchBlock} patchTextRuns={patchTextRuns} remove={deleteBlock} editingTextBoxId={editingTextBoxId} setEditingTextBoxId={setEditingTextBoxId} richTextApiRef={richTextApiRef} onTextToolbarChange={setTextToolbarState} onBeginTextEdit={beginTextEditSession} onCommitTextEdit={commitTextEditSession} onBeginTransaction={beginHistoryTransaction} onCommitTransaction={commitHistoryTransaction} onUndo={undoManuscript} onRedo={redoManuscript} onChartContextMenu={handleChartContextMenu} onBlockContextMenu={handleBlockContextMenu} />)}
           {chartAssistBlock && (
             <ChartAssistBubble
               block={chartAssistBlock}
@@ -820,7 +816,7 @@ export function ManuscriptCanvas({ dataset, blocks, setBlocks, staged, setStaged
       </main>
       {contextMenu?.visible && (
         <div className="canvas-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
-          <button onClick={() => openInsertChartModal({ x: contextMenu.canvasX, y: contextMenu.canvasY })}>Insert chart</button>
+          <button disabled={!safeChartSpecs.length} onClick={() => openInsertChartModal({ x: contextMenu.canvasX, y: contextMenu.canvasY })}>Insert approved chart</button>
           <button onClick={() => insertText({ x: contextMenu.canvasX, y: contextMenu.canvasY })}>Insert text box</button>
           <button onClick={() => openImagePicker({ x: contextMenu.canvasX, y: contextMenu.canvasY })}>Insert image...</button>
         </div>
@@ -830,9 +826,6 @@ export function ManuscriptCanvas({ dataset, blocks, setBlocks, staged, setStaged
           x={chartContextMenu.x}
           y={chartContextMenu.y}
           block={safeBlocks.find((b) => b.id === chartContextMenu.blockId)}
-          templates={safeChartTemplates}
-          onSave={saveChartTemplate}
-          onApply={applyChartTemplate}
           onDelete={deleteBlock}
         />
       )}
@@ -866,20 +859,12 @@ export function ManuscriptCanvas({ dataset, blocks, setBlocks, staged, setStaged
       {chartDraft && (
         <InsertChartModal
           draft={chartDraft}
-          experiments={experiments}
+          dataset={dataset}
+          chartSpecs={safeChartSpecs}
+          genericImports={genericImports}
           onPatch={(patch) => setChartDraft((current) => current ? { ...current, ...patch } : current)}
-          onOpenExperiments={() => setExperimentPickerOpen(true)}
           onCancel={closeInsertChartModal}
           onInsert={insertChartFromDraft}
-        />
-      )}
-      {chartDraft && experimentPickerOpen && (
-        <ExperimentPickerModal
-          experiments={experiments}
-          selectedLabels={Array.isArray(chartDraft.labels) ? chartDraft.labels : []}
-          onChangeLabels={(labels) => setChartDraft((current) => current ? { ...current, labels } : current)}
-          onDone={() => setExperimentPickerOpen(false)}
-          onClose={() => setExperimentPickerOpen(false)}
         />
       )}
       {exportModalOpen && (
@@ -893,16 +878,7 @@ export function ManuscriptCanvas({ dataset, blocks, setBlocks, staged, setStaged
           onExport={exportPageRange}
         />
       )}
-      {selectedBlock && <Inspector block={selectedBlock} experiments={experiments} patch={patchBlock} onOpenExperimentPicker={() => setInspectorExperimentPickerOpen(true)} />}
-      {inspectorExperimentPickerOpen && selectedBlockId && (
-        <ExperimentPickerModal
-          experiments={experiments}
-          selectedLabels={Array.isArray(safeBlocks.find((b) => b.id === selectedBlockId)?.labels) ? safeBlocks.find((b) => b.id === selectedBlockId).labels : []}
-          onChangeLabels={(labels) => patchBlock(selectedBlockId, { labels })}
-          onDone={() => setInspectorExperimentPickerOpen(false)}
-          onClose={() => setInspectorExperimentPickerOpen(false)}
-        />
-      )}
+      {selectedBlock && <Inspector block={selectedBlock} chartSpecs={safeChartSpecs} genericImports={genericImports} patch={patchBlock} />}
     </div>
   );
 }
@@ -1014,14 +990,116 @@ function normalizeManuscriptBlocks(blocks) {
         normalized.noBorder = !!block.noBorder;
       }
       if (kind === "chart") {
-        normalized.chartKind = chartTypes.some(([value]) => value === block.chartKind) ? block.chartKind : "selectivity";
-        normalized.labels = Array.isArray(block.labels) ? block.labels.filter(Boolean).map(String) : [];
-        normalized.opts = block.opts && typeof block.opts === "object" ? block.opts : {};
-        normalized.chartLayout = block.chartLayout && typeof block.chartLayout === "object" ? block.chartLayout : null;
+        normalized.chartSpecId = String(block.chartSpecId || "");
+        normalized.chartSpecSnapshot = block.chartSpecSnapshot && typeof block.chartSpecSnapshot === "object" ? block.chartSpecSnapshot : null;
+        normalized.datasetCommitId = block.datasetCommitId || normalized.chartSpecSnapshot?.datasetCommitId || null;
+        normalized.chartView = normalizeChartView(block.chartView);
+        normalized.chartLayout = block.chartLayout && typeof block.chartLayout === "object" ? block.chartLayout : {};
       }
       return normalized;
     })
     .filter(Boolean);
+}
+
+function normalizeChartView(value) {
+  const safe = value && typeof value === "object" ? value : {};
+  const idList = (items) => (Array.isArray(items) ? items : [])
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+  return {
+    selectedExperimentIds: idList(safe.selectedExperimentIds),
+    excludedExperimentIds: idList(safe.excludedExperimentIds),
+    filters: (Array.isArray(safe.filters) ? safe.filters : []).filter((filter) => filter && typeof filter === "object").map((filter) => ({ ...filter })),
+    groupBy: safe.groupBy || null,
+  };
+}
+
+function normalizeChartSpecs(chartSpecs) {
+  return (Array.isArray(chartSpecs) ? chartSpecs : [])
+    .filter((chartSpec) => chartSpec && typeof chartSpec === "object" && chartSpec.id)
+    .filter((chartSpec) => !chartSpec.isStale && chartSpec.status !== "stale")
+    .map((chartSpec) => ({
+      ...chartSpec,
+      id: String(chartSpec.id),
+      title: chartSpec.title || chartSpec.spec?.title || "Untitled chart",
+      chartType: chartSpec.chartType || chartSpec.spec?.chartType || "scatter",
+      spec: chartSpec.spec && typeof chartSpec.spec === "object" ? chartSpec.spec : chartSpec,
+      layout: chartSpec.layout && typeof chartSpec.layout === "object" ? chartSpec.layout : {},
+      warnings: Array.isArray(chartSpec.warnings) ? chartSpec.warnings : [],
+    }));
+}
+
+function resolveChartSpecForBlock(block, chartSpecs) {
+  return (Array.isArray(chartSpecs) ? chartSpecs : []).find((chartSpec) => chartSpec.id === block?.chartSpecId)
+    || block?.chartSpecSnapshot
+    || null;
+}
+
+function chartSpecAxisTitle(axis, fallback) {
+  const label = axis?.label || axis?.field || fallback;
+  const unit = axis?.unit ? ` (${axis.unit})` : "";
+  return `${label || fallback || ""}${unit}`;
+}
+
+function chartSpecLayoutOpts(chartSpec) {
+  const proposal = chartSpecToProposal(chartSpec);
+  const yFields = Array.isArray(proposal.yFields) && proposal.yFields.length ? proposal.yFields : [proposal.y].filter(Boolean);
+  return {
+    title: proposal.title || chartSpec?.title || "Chart",
+    xLabel: chartSpecAxisTitle(proposal.x, "Experiment"),
+    yLabel: yFields.length > 1 ? "Value" : chartSpecAxisTitle(yFields[0], "Value"),
+  };
+}
+
+function chartSpecLayoutBlock(block, chartSpec) {
+  const proposal = chartSpecToProposal(chartSpec);
+  return {
+    ...block,
+    chartKind: proposal.chartType || chartSpec?.chartType || "scatter",
+    opts: chartSpecLayoutOpts(chartSpec),
+  };
+}
+
+function resolveChartSpecBlockLayout(block, chartSpec) {
+  const layout = resolveChartLayout(chartSpecLayoutBlock(block, chartSpec));
+  if (!block?.chartLayout?.xAxisTitle) {
+    layout.xAxisTitle = { ...layout.xAxisTitle, visible: true };
+  }
+  return layout;
+}
+
+function defaultChartSpecBlockLayout(chartSpec, block) {
+  const layoutBlock = chartSpecLayoutBlock({ ...block, chartLayout: null }, chartSpec);
+  const layout = defaultChartLayout(layoutBlock.chartKind, layoutBlock.opts, layoutBlock);
+  return { ...layout, xAxisTitle: { ...layout.xAxisTitle, visible: true } };
+}
+
+function patchChartSpecBlockLayout(block, chartSpec, section, patchValue) {
+  const result = patchChartLayout(chartSpecLayoutBlock(block, chartSpec), section, patchValue);
+  const hasSavedXAxisTitle = !!block?.chartLayout?.xAxisTitle;
+  const explicitlyHidingXAxisTitle = section === "xAxisTitle" && patchValue?.visible === false;
+  if (!hasSavedXAxisTitle && !explicitlyHidingXAxisTitle) {
+    result.chartLayout = {
+      ...result.chartLayout,
+      xAxisTitle: { ...result.chartLayout.xAxisTitle, visible: true },
+    };
+  }
+  return result;
+}
+
+function chartSpecBlockPlot(block, chartSpec, genericImports, options = {}) {
+  if (!chartSpec) return null;
+  const chartLayout = resolveChartSpecBlockLayout(block, chartSpec);
+  const plotArea = chartLayout.plotArea || {};
+  const width = Math.max(1, Math.round(Number(options.width) || Number(plotArea.width) || Number(block.w) || 580));
+  const height = Math.max(1, Math.round(Number(options.height) || Number(plotArea.height) || Number(block.h) || 380));
+  const plot = makeGenericChartPreview(chartSpec, genericImports, {
+    width,
+    height,
+    chartView: normalizeChartView(block.chartView),
+    config: options.config,
+  });
+  return applyChartLayout(plot, chartLayout);
 }
 
 function normalizeCssColor(value, fallback) {
@@ -1412,22 +1490,34 @@ function formatToolbarFontSizeValue(value) {
   return Number.isInteger(normalized) ? String(normalized) : String(normalized);
 }
 
-function buildChartContext(block, experiments) {
-  const labels = Array.isArray(block.labels) ? block.labels : [];
-  const exps = labels.map((label) => experiments.find((experiment) => experiment.label === label)).filter(Boolean);
-  const layout = resolveChartLayout(block);
-  const plot = makePlot(block.chartKind, exps, block.opts || {}, layout);
+function buildChartContext(block, chartSpecs, genericImports) {
+  const chartSpec = resolveChartSpecForBlock(block, chartSpecs);
+  if (!chartSpec) {
+    return {
+      blockId: block.id,
+      chartSpecId: block.chartSpecId || null,
+      title: "Missing chart spec",
+      block: { x: block.x || 0, y: block.y || 0, w: block.w || 580, h: block.h || 380 },
+      plottedData: { traces: [] },
+      warnings: ["The manuscript chart references a chart spec that is not available."],
+    };
+  }
+  const proposal = chartSpecToProposal(chartSpec);
+  const plot = chartSpecBlockPlot(block, chartSpec, genericImports, { width: block.w || 580, height: block.h || 380 });
+  const chartLayout = resolveChartSpecBlockLayout(block, chartSpec);
   return {
     blockId: block.id,
-    chartKind: block.chartKind || "selectivity",
-    title: layout.title?.text || block.opts?.title || `${block.chartKind || "chart"} comparison`,
-    labels,
+    chartSpecId: chartSpec.id || block.chartSpecId || null,
+    chartType: proposal.chartType || "chart",
+    title: chartLayout.title?.text || proposal.title || "Chart",
     block: { x: block.x || 0, y: block.y || 0, w: block.w || 580, h: block.h || 380 },
+    chartView: normalizeChartView(block.chartView),
     axisTitles: {
-      x: layout.xAxisTitle?.text || "",
-      y: layout.yAxisTitle?.text || "",
+      x: chartLayout.xAxisTitle?.text || proposal.x?.label || proposal.x?.field || "",
+      y: chartLayout.yAxisTitle?.text || proposal.y?.label || proposal.y?.field || "",
     },
-    experiments: exps.map(compactExperimentForChart),
+    sourceRefs: proposal.sourceRefs || [],
+    sourceImportIds: proposal.sourceImportIds || [],
     plottedData: summarizePlotForAssistant(plot),
   };
 }
@@ -1794,7 +1884,7 @@ function AlignIcon({ align }) {
   );
 }
 
-function CanvasOverview({ blocks, experiments, selectedBlockId, pages, canvasWidth, canvasHeight, onSelectBlock, onPageContextMenu }) {
+function CanvasOverview({ blocks, genericImports, chartSpecs, selectedBlockId, pages, canvasWidth, canvasHeight, onSelectBlock, onPageContextMenu }) {
   const safePages = normalizeManuscriptPages(pages, blocks);
   const overviewWidth = Math.max(CANVAS_WIDTH, Number(canvasWidth) || CANVAS_WIDTH);
   const overviewHeight = Math.max(EMPTY_CANVAS_HEIGHT, Number(canvasHeight) || 0);
@@ -1803,18 +1893,17 @@ function CanvasOverview({ blocks, experiments, selectedBlockId, pages, canvasWid
     return text.length > maxLength ? `${text.slice(0, maxLength - 1)}...` : text;
   };
   const chartSummary = (block) => {
-    const layout = block.kind === "chart" ? resolveChartLayout(block) : null;
-    const title = snippet(layout?.title?.text || block.opts?.title, 72);
-    const labels = Array.isArray(block.labels) ? block.labels : [];
-    const labelSummary = labels.length <= 3 ? labels.join(", ") : `${labels.slice(0, 3).join(", ")} +${labels.length - 3}`;
+    const chartSpec = resolveChartSpecForBlock(block, chartSpecs);
+    const proposal = chartSpec ? chartSpecToProposal(chartSpec) : null;
+    const title = snippet(proposal?.title || chartSpec?.title, 72);
     return {
-      title: title || `${block.chartKind || "chart"} comparison`,
-      detail: labelSummary || `${labels.length} experiments`,
+      title: title || "Missing chart spec",
+      detail: proposal?.chartType || chartSpec?.chartType || block.chartSpecId || "chart",
     };
   };
   const overviewContent = (block) => {
     if (block.kind === "chart") {
-      return <ChartOverviewPreview block={block} experiments={experiments} />;
+      return <ChartOverviewPreview block={block} genericImports={genericImports} chartSpecs={chartSpecs} />;
     }
     if (block.kind === "text") {
       return <span>{snippet(plainTextFromTextRuns(block.textRuns)) || "Empty text box"}</span>;
@@ -1881,50 +1970,44 @@ function CanvasOverview({ blocks, experiments, selectedBlockId, pages, canvasWid
   );
 }
 
-function ChartOverviewPreview({ block, experiments }) {
-  const labels = Array.isArray(block.labels) ? block.labels : [];
-  const exps = labels.map((label) => experiments.find((experiment) => experiment.label === label)).filter(Boolean);
-  const chartLayout = resolveChartLayout(block);
-  const plot = makePlot(block.chartKind, exps, block.opts || {}, chartLayout);
+function ChartOverviewPreview({ block, genericImports, chartSpecs }) {
+  const chartSpec = resolveChartSpecForBlock(block, chartSpecs);
+  if (!chartSpec) {
+    return <div className="overview-chart-preview overview-missing-chart" aria-hidden="true">Missing chart spec</div>;
+  }
+  const chartLayout = resolveChartSpecBlockLayout(block, chartSpec);
+  const plot = chartSpecBlockPlot(block, chartSpec, genericImports, { config: { staticPlot: true, displayModeBar: false } });
   const compactPlot = compactOverviewPlot(plot);
-  const blockWidth = Math.max(1, block.w || 580);
-  const blockHeight = Math.max(1, block.h || 380);
-  const layerStyle = (layer, { font = true } = {}) => ({
-    left: `${((layer.x || 0) / blockWidth) * 100}%`,
-    top: `${((layer.y || 0) / blockHeight) * 100}%`,
-    width: `${((layer.width || 1) / blockWidth) * 100}%`,
-    height: `${((layer.height || 1) / blockHeight) * 100}%`,
-    fontSize: font ? `${overviewFontSize(layer)}px` : undefined,
-    fontFamily: layer.fontFamily || defaultFontFamily,
-    textAlign: layer.align || "center",
+  const layerStyle = (layer) => ({
+    left: `${((Number(layer?.x) || 0) / Math.max(1, Number(block.w) || 580)) * 100}%`,
+    top: `${((Number(layer?.y) || 0) / Math.max(1, Number(block.h) || 380)) * 100}%`,
+    width: `${((Number(layer?.width) || 1) / Math.max(1, Number(block.w) || 580)) * 100}%`,
+    height: `${((Number(layer?.height) || 1) / Math.max(1, Number(block.h) || 380)) * 100}%`,
+    fontSize: overviewFontSize(layer),
   });
+  const textLayer = (section, className = "") => {
+    const layer = chartLayout[section];
+    if (!layer?.visible || !String(layer.text || "").trim()) return null;
+    const rotated = Number(layer.rotation) || 0;
+    return (
+      <span className={`overview-chart-layer overview-chart-axis ${className}`} style={layerStyle(layer)}>
+        <span style={{ transform: rotated ? `rotate(${rotated}deg)` : undefined }}>{layer.text}</span>
+      </span>
+    );
+  };
   return (
     <div className="overview-chart-preview" aria-hidden="true">
-      {chartLayout.title.visible && (
-        <div className="overview-chart-layer overview-chart-title" style={layerStyle(chartLayout.title)}>
-          {chartLayout.title.text}
-        </div>
-      )}
-      {chartLayout.legend.visible && (
-        <div className="overview-chart-layer overview-chart-legend" style={layerStyle(chartLayout.legend)}>
-          <ChartLegendLayer layer={chartLayout.legend} traces={plot.traces} style={{ fontSize: overviewFontSize(chartLayout.legend), fontFamily: chartLayout.legend.fontFamily || defaultFontFamily }} />
-        </div>
-      )}
-      <div className="overview-chart-layer overview-chart-plot" style={layerStyle(chartLayout.plotArea, { font: false })}>
+      <span className="overview-chart-layer overview-chart-plot" style={layerStyle(chartLayout.plotArea)}>
         <Plot {...compactPlot} />
-      </div>
-      {chartLayout.xAxisTitle.visible && (
-        <div className="overview-chart-layer overview-chart-axis" style={layerStyle(chartLayout.xAxisTitle)}>
-          {chartLayout.xAxisTitle.text}
-        </div>
+      </span>
+      {textLayer("title", "overview-chart-title")}
+      {chartLayout.legend?.visible && (
+        <span className="overview-chart-layer overview-chart-legend" style={layerStyle(chartLayout.legend)}>
+          <ChartLegendLayer layer={chartLayout.legend} traces={compactPlot.traces || []} />
+        </span>
       )}
-      {chartLayout.yAxisTitle.visible && (
-        <div className="overview-chart-layer overview-chart-axis" style={layerStyle(chartLayout.yAxisTitle)}>
-          <span style={{ transform: chartLayout.yAxisTitle.rotation ? `rotate(${chartLayout.yAxisTitle.rotation}deg)` : undefined }}>
-            {chartLayout.yAxisTitle.text}
-          </span>
-        </div>
-      )}
+      {textLayer("xAxisTitle")}
+      {textLayer("yAxisTitle")}
     </div>
   );
 }
@@ -1966,57 +2049,259 @@ function overviewFontSize(layer) {
   return Math.max(3, Math.min(8, Math.round((layer?.fontSize || 12) * 0.35)));
 }
 
-function InsertChartModal({ draft, experiments, onPatch, onOpenExperiments, onCancel, onInsert }) {
-  const labels = Array.isArray(draft.labels) ? draft.labels : [];
-  const selectedExperiments = labels.map((label) => experiments.find((experiment) => experiment.label === label)).filter(Boolean);
-  const w = 580;
-  const h = 380;
-  const opts = { title: `${draft.chartKind || "chart"} comparison` };
-  const plot = selectedExperiments.length
-    ? makePlot(draft.chartKind, selectedExperiments, opts, defaultChartLayout(draft.chartKind, opts, { w, h }))
+function ChartExperimentMappingValueCell({ cell }) {
+  const value = cell?.value;
+  if (value == null || value === "") return <span className="backend-scan-muted">-</span>;
+  return <span>{value}</span>;
+}
+
+function ChartExperimentSelectorModal({ dataset, compatibleOptions, selectedExperimentIds, onApply, onClose }) {
+  const [search, setSearch] = useState("");
+  const [draftSelectedIds, setDraftSelectedIds] = useState(selectedExperimentIds);
+  const rows = useMemo(() => buildGenericBrowserRows(dataset), [dataset]);
+  const acceptedMappingColumns = useMemo(() => buildAcceptedMappingColumns(dataset?.genericMappingSets), [dataset?.genericMappingSets]);
+  const compatibleIds = useMemo(() => new Set(compatibleOptions.map((option) => option.id)), [compatibleOptions]);
+  const query = search.toLowerCase().trim();
+  const filteredRows = useMemo(() => {
+    if (!query) return rows;
+    return rows.filter((row) => [
+      row.label,
+      row.sourceFile,
+      row.sourceRange,
+      row.mappingStatus,
+      ...acceptedMappingColumns.map((column) => {
+        const cell = row.acceptedMappingValues?.[column.key];
+        return `${column.label} ${cell?.value || ""}`;
+      }),
+    ].join(" ").toLowerCase().includes(query));
+  }, [acceptedMappingColumns, query, rows]);
+  const draftSelectedSet = new Set(draftSelectedIds);
+  const compatibleVisibleRows = filteredRows.filter((row) => row.experimentId && compatibleIds.has(row.experimentId));
+  const selectedVisibleCount = compatibleVisibleRows.filter((row) => draftSelectedSet.has(row.experimentId)).length;
+  const columnCount = 3 + acceptedMappingColumns.length;
+  const toggleRow = (row) => {
+    if (!row.experimentId || !compatibleIds.has(row.experimentId)) return;
+    setDraftSelectedIds((current) => (
+      current.includes(row.experimentId)
+        ? current.filter((id) => id !== row.experimentId)
+        : [...current, row.experimentId]
+    ));
+  };
+  const selectCompatibleVisible = () => {
+    setDraftSelectedIds((current) => [...new Set([
+      ...current,
+      ...compatibleVisibleRows.map((row) => row.experimentId).filter(Boolean),
+    ])]);
+  };
+  const applySelection = () => {
+    onApply(draftSelectedIds.filter((id) => compatibleIds.has(id)));
+    onClose();
+  };
+  return (
+    <div className="modal-backdrop picker-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal wide chart-experiment-selector-modal" role="dialog" aria-modal="true" aria-label="Select experiments">
+        <div className="modal-head">
+          <h2>Select experiments</h2>
+          <button type="button" onClick={onClose} aria-label="Close">x</button>
+        </div>
+        <div className="modal-body">
+          <div className="chart-experiment-selector-tools">
+            <label>
+              Search
+              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Imported label, source, accepted mapping..." />
+            </label>
+            <div className="experiment-picker-counts">
+              {selectedVisibleCount} of {compatibleVisibleRows.length} compatible visible selected &middot; {draftSelectedIds.length} selected
+            </div>
+          </div>
+          <div className="experiment-picker-table-wrap chart-experiment-table-wrap">
+            {!acceptedMappingColumns.length && (
+              <div className="generic-browser-mapping-guidance">
+                Accept semantic mappings in Import Review to turn reviewed fields into Experiment Browser columns.
+              </div>
+            )}
+            <table className="experiment-picker-table chart-experiment-table">
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>Label</th>
+                  <th>Source</th>
+                  {acceptedMappingColumns.map((column) => (
+                    <th key={column.key} title={column.rawLabel || column.label}>
+                      <span>{column.label}</span>
+                      {column.unit && <small> {column.unit}</small>}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRows.map((row) => {
+                  const compatible = !!row.experimentId && compatibleIds.has(row.experimentId);
+                  return (
+                    <tr
+                      key={row.rowId}
+                      className={`${draftSelectedSet.has(row.experimentId) ? "selected" : ""} ${compatible ? "" : "disabled"}`}
+                      aria-disabled={!compatible}
+                      onClick={() => toggleRow(row)}
+                    >
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={draftSelectedSet.has(row.experimentId)}
+                          disabled={!compatible}
+                          aria-label={`Select ${row.label}`}
+                          onChange={() => toggleRow(row)}
+                          onClick={(event) => event.stopPropagation()}
+                        />
+                      </td>
+                      <td>
+                        <span>{row.label}</span>
+                        {!compatible && <small>Not in this chart spec</small>}
+                      </td>
+                      <td><span>{row.sourceFile || "-"}</span><br /><small>{row.sourceRange || "range n/a"}</small></td>
+                      {acceptedMappingColumns.map((column) => (
+                        <td key={column.key} className="generic-mapped-cell">
+                          <ChartExperimentMappingValueCell cell={row.acceptedMappingValues?.[column.key]} />
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
+                {!filteredRows.length && (
+                  <tr className="table-empty-row">
+                    <td colSpan={columnCount}>No imported records match the current search.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="experiment-picker-footer">
+            <div className="experiment-picker-footer-left">
+              <button type="button" onClick={selectCompatibleVisible} disabled={!compatibleVisibleRows.length}>Select compatible visible</button>
+              <button type="button" onClick={() => setDraftSelectedIds([])}>Clear selection</button>
+            </div>
+            <button type="button" className="primary" onClick={applySelection}>Done</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InsertChartModal({ draft, dataset, chartSpecs, genericImports, onPatch, onCancel, onInsert }) {
+  const [selectorOpen, setSelectorOpen] = useState(false);
+  const safeChartSpecs = normalizeChartSpecs(chartSpecs);
+  const selectedChartSpec = safeChartSpecs.find((chartSpec) => chartSpec.id === draft.chartSpecId) || safeChartSpecs[0] || null;
+  const experimentOptions = selectedChartSpec ? experimentOptionsForChartSpec(selectedChartSpec, genericImports) : [];
+  const compatibleIds = new Set(experimentOptions.map((option) => option.id));
+  const selectedExperimentIds = (Array.isArray(draft.selectedExperimentIds) ? draft.selectedExperimentIds : [])
+    .map((id) => String(id || "").trim())
+    .filter((id) => id && (!compatibleIds.size || compatibleIds.has(id)));
+  const patchSelection = (ids) => onPatch({
+    selectedExperimentIds: ids.filter((id) => !compatibleIds.size || compatibleIds.has(id)),
+    excludedExperimentIds: ids.length ? [] : experimentOptions.map((option) => option.id),
+  });
+  const chartView = normalizeChartView({ ...draft, selectedExperimentIds });
+  const canPreview = !!selectedChartSpec && (!experimentOptions.length || selectedExperimentIds.length > 0);
+  const canInsert = !!selectedChartSpec && (!experimentOptions.length || selectedExperimentIds.length > 0);
+  const plot = canPreview
+    ? makeGenericChartPreview(selectedChartSpec, genericImports, { height: 260, chartView })
     : null;
+  const selectChartSpec = (chartSpec) => {
+    const options = experimentOptionsForChartSpec(chartSpec, genericImports);
+    onPatch({
+      chartSpecId: chartSpec.id,
+      selectedExperimentIds: [],
+      excludedExperimentIds: options.map((option) => option.id),
+      filters: [],
+      groupBy: null,
+    });
+  };
   return (
     <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
       <div className="modal insert-chart-modal" role="dialog" aria-modal="true" aria-label="Insert chart">
         <div className="modal-head">
-          <h2>Insert chart</h2>
+          <h2>Insert approved chart</h2>
           <button onClick={onCancel} aria-label="Close">x</button>
         </div>
         <div className="modal-body">
-          <label className="chart-modal-field">
-            Chart type
-            <select value={draft.chartKind || "selectivity"} onChange={(e) => onPatch({ chartKind: e.target.value })}>
-              {chartTypes.map(([kind, label]) => <option key={kind} value={kind}>{label}</option>)}
-            </select>
-          </label>
           <section className="chart-modal-section">
             <div className="chart-modal-section-head">
               <div>
-                <h3>Experiments</h3>
-                <p>{selectedExperiments.length} selected</p>
+                <h3>Approved chart specs</h3>
+                <p>{safeChartSpecs.length} available</p>
               </div>
-              <button type="button" onClick={onOpenExperiments}>Select experiments...</button>
             </div>
-            {selectedExperiments.length ? (
-              <div className="selected-experiment-strip">
-                {selectedExperiments.map((experiment) => <span key={experiment.label}>{experiment.label}</span>)}
+            {safeChartSpecs.length ? (
+              <div className="chart-spec-choice-list">
+                {safeChartSpecs.map((chartSpec) => (
+                  <button
+                    type="button"
+                    key={chartSpec.id}
+                    className={chartSpec.id === selectedChartSpec?.id ? "active" : ""}
+                    onClick={() => selectChartSpec(chartSpec)}
+                  >
+                    <span>{chartSpec.title || "Untitled chart"}</span>
+                    <small>{chartSpec.chartType || chartSpecToProposal(chartSpec).chartType || "chart"}</small>
+                  </button>
+                ))}
               </div>
             ) : (
-              <p className="chart-empty-message">Select experiments to preview the chart.</p>
+              <p className="chart-empty-message">Accept a backend chart proposal and create a chart spec before inserting charts into the manuscript.</p>
+            )}
+          </section>
+          <section className="chart-modal-section">
+            <div className="chart-modal-section-head">
+              <div>
+                <h3>Chart view</h3>
+                <p>{experimentOptions.length ? `${selectedExperimentIds.length} of ${experimentOptions.length} experiments selected` : "No experiment filter available"}</p>
+              </div>
+              {experimentOptions.length > 0 && (
+                <div className="chart-view-actions">
+                  <button type="button" onClick={() => setSelectorOpen(true)}>
+                    {selectedExperimentIds.length ? "Edit selection" : "Select experiments"}
+                  </button>
+                  <button type="button" onClick={() => patchSelection([])}>Clear</button>
+                </div>
+              )}
+            </div>
+            {experimentOptions.length ? (
+              <div className="selected-experiment-summary">
+                {selectedExperimentIds.length ? (
+                  <div className="selected-experiment-strip">
+                    {experimentOptions
+                      .filter((option) => selectedExperimentIds.includes(option.id))
+                      .map((option) => <span key={option.id}>{option.label}</span>)}
+                  </div>
+                ) : (
+                  <p className="chart-empty-message">Select at least one compatible imported experiment before inserting this chart.</p>
+                )}
+              </div>
+            ) : (
+              <p className="chart-empty-message">This chart spec does not expose row-level experiment ids. It will render all available source values.</p>
             )}
           </section>
           <section className="chart-modal-section">
             <h3>Preview</h3>
             <div className="chart-insert-preview">
-              {plot ? <Plot {...plot} /> : <div className="plot-empty">No experiments selected.</div>}
+              {plot ? <Plot {...plot} /> : <div className="plot-empty">{selectedChartSpec ? "Select experiments to preview this chart." : "No chart spec selected."}</div>}
             </div>
           </section>
           <div className="modal-actions">
             <button type="button" onClick={onCancel}>Cancel</button>
-            <button type="button" className="primary" disabled={!selectedExperiments.length} onClick={onInsert}>Insert chart</button>
+            <button type="button" className="primary" disabled={!canInsert} onClick={onInsert}>Insert chart</button>
           </div>
         </div>
       </div>
+      {selectorOpen && (
+        <ChartExperimentSelectorModal
+          dataset={dataset}
+          compatibleOptions={experimentOptions}
+          selectedExperimentIds={selectedExperimentIds}
+          onApply={patchSelection}
+          onClose={() => setSelectorOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -2327,92 +2612,119 @@ function ChartAssistBubble({ block, canvasWidth, canvasHeight, logoSrc, onClick,
   );
 }
 
-function CanvasBlock({ experiments, block, canvasWidth, canvasHeight, selectedKey, setSelected, patch, patchTextRuns, remove, editingTextBoxId, setEditingTextBoxId, richTextApiRef, onTextToolbarChange, onBeginTextEdit, onCommitTextEdit, onBeginTransaction, onCommitTransaction, onUndo, onRedo, onChartContextMenu, onBlockContextMenu }) {
-  const [editingLayer, setEditingLayer] = useState(null);
+function CanvasBlock({ genericImports, chartSpecs, block, canvasWidth, canvasHeight, selectedKey, setSelected, patch, patchTextRuns, remove, editingTextBoxId, setEditingTextBoxId, richTextApiRef, onTextToolbarChange, onBeginTextEdit, onCommitTextEdit, onBeginTransaction, onCommitTransaction, onUndo, onRedo, onChartContextMenu, onBlockContextMenu }) {
   const blockSelected = selectedKey === block.id;
+  const chartSpec = block.kind === "chart" ? resolveChartSpecForBlock(block, chartSpecs) : null;
   const isEditingText = block.kind === "text" && editingTextBoxId === block.id;
   const textBoxStyle = block.kind === "text" ? textBlockStyle(block) : null;
   const patchOuterFrame = (next, options = {}) => {
     const nextPatch = { x: next.x, y: next.y, w: next.width, h: next.height };
-    const widthChanged = next.width !== block.w;
-    const heightChanged = next.height !== block.h;
-    if (block.kind === "chart" && (widthChanged || heightChanged)) {
-      nextPatch.chartLayout = scaleChartLayout(
-        resolveChartLayout(block),
-        { width: block.w, height: block.h },
-        { width: next.width, height: next.height },
-      );
+    if (block.kind === "chart" && chartSpec) {
+      const prevSize = { width: Math.max(1, Number(block.w) || 580), height: Math.max(1, Number(block.h) || 380) };
+      const nextSize = { width: Math.max(1, Number(next.width) || prevSize.width), height: Math.max(1, Number(next.height) || prevSize.height) };
+      if (prevSize.width !== nextSize.width || prevSize.height !== nextSize.height) {
+        nextPatch.chartLayout = scaleChartLayout(resolveChartSpecBlockLayout(block, chartSpec), prevSize, nextSize);
+      }
     }
     patch(block.id, nextPatch, options);
   };
   let body = null;
   if (block.kind === "chart") {
-    const labels = Array.isArray(block.labels) ? block.labels : [];
-    const exps = labels.map((l) => experiments.find((e) => e.label === l)).filter(Boolean);
-    const plotAreaSelected = selectedKey === `${block.id}:plotArea`;
-    const chartLayout = resolveChartLayout(block);
-    const plot = makePlot(block.chartKind, exps, block.opts || {}, chartLayout);
-    const setOptLabel = (mapKey, key, value) => {
-      const currentOpts = block.opts || {};
-      const labelMap = { ...(currentOpts[mapKey] || {}) };
-      if (value.trim()) labelMap[key] = value;
-      else delete labelMap[key];
-      const nextOpts = { ...currentOpts };
-      if (Object.keys(labelMap).length) nextOpts[mapKey] = labelMap;
-      else delete nextOpts[mapKey];
-      patch(block.id, { opts: nextOpts }, { transactionType: "block-update" });
+    const chartLayout = chartSpec ? resolveChartSpecBlockLayout(block, chartSpec) : null;
+    const plot = chartSpec ? chartSpecBlockPlot(block, chartSpec, genericImports) : null;
+    const layerKey = (section, mode = "") => `${block.id}:${section}${mode ? `:${mode}` : ""}`;
+    const layerSelected = (section) => selectedKey === layerKey(section) || selectedKey === layerKey(section, "edit");
+    const layerEditing = (section) => selectedKey === layerKey(section, "edit");
+    const patchLayer = (section, next, options = {}) => {
+      if (!chartSpec) return;
+      patch(block.id, patchChartSpecBlockLayout(block, chartSpec, section, {
+        x: next.x,
+        y: next.y,
+        width: next.width,
+        height: next.height,
+      }), options);
     };
-    const patchLayer = (section, sectionPatch, options = {}) => {
-      const patchValue = patchChartLayout(block, section, sectionPatch);
-      const next = { ...patchValue };
-      if (section === "title" && Object.prototype.hasOwnProperty.call(sectionPatch, "text")) {
-        next.opts = { ...(block.opts || {}), title: sectionPatch.text };
-      }
-      patch(block.id, next, options);
+    const patchLayerText = (section, text) => {
+      if (!chartSpec) return;
+      patch(block.id, patchChartSpecBlockLayout(block, chartSpec, section, { text }), { transactionType: "chart-layer-text" });
     };
-    const editLayerText = (section, text) => patchLayer(section, { text }, { transactionType: "text-format" });
-    const layerStyle = (layer) => ({
-      fontSize: layer.fontSize,
-      fontFamily: layer.fontFamily || defaultFontFamily,
-      textAlign: layer.align || "center",
-    });
-    const layerFrame = (section, minWidth, minHeight, children) => {
-      const layer = chartLayout[section];
+    const layerFrame = (section, layer, child, minWidth = 24, minHeight = 18, className = "") => {
+      if (!layer?.visible && section !== "plotArea") return null;
       return (
         <SelectionFrame
           key={section}
-          selected={selectedKey === `${block.id}:${section}`}
-          x={layer.x}
-          y={layer.y}
-          width={layer.width}
-          height={layer.height}
+          selected={layerSelected(section)}
+          x={layer.x || 0}
+          y={layer.y || 0}
+          width={layer.width || minWidth}
+          height={layer.height || minHeight}
           minWidth={minWidth}
           minHeight={minHeight}
-          bounds={{ width: block.w, height: block.h }}
-          className="chart-layer"
-          activation="double"
-          onSelect={() => setSelected(`${block.id}:${section}`)}
+          bounds={{ width: Math.max(1, Number(block.w) || 580), height: Math.max(1, Number(block.h) || 380) }}
+          className={`chart-layer ${className}`}
+          onSelect={() => {
+            setSelected(layerKey(section));
+            setEditingTextBoxId?.(null);
+          }}
           onChange={(next, options) => patchLayer(section, next, options)}
-          onMoveStart={() => onBeginTransaction?.("block-move", { blockId: block.id, section })}
+          onMoveStart={() => onBeginTransaction?.("chart-layer-move", { blockId: block.id, section })}
           onMoveEnd={() => onCommitTransaction?.()}
-          onResizeStart={() => onBeginTransaction?.("block-resize", { blockId: block.id, section })}
+          onResizeStart={() => onBeginTransaction?.("chart-layer-resize", { blockId: block.id, section })}
           onResizeEnd={() => onCommitTransaction?.()}
           onUndo={onUndo}
           onRedo={onRedo}
         >
-          {children}
+          {child}
         </SelectionFrame>
       );
     };
-    body = (
-      <>
-        {chartLayout.title.visible && layerFrame("title", 60, 22, <ChartTextLayer className="chart-title-layer" section="title" layer={chartLayout.title} style={layerStyle(chartLayout.title)} editing={editingLayer === "title"} onBeginEdit={() => setEditingLayer("title")} onEndEdit={() => setEditingLayer(null)} onChangeText={editLayerText} />)}
-        {chartLayout.legend.visible && layerFrame("legend", 80, 24, <ChartLegendLayer layer={chartLayout.legend} items={chartLegendRows(block, exps)} traces={plot.traces} style={layerStyle(chartLayout.legend)} onChangeLabel={(key, value) => setOptLabel("traceLabels", key, value)} />)}
-        {layerFrame("plotArea", 160, 110, <div className="chart-plot-area"><Plot {...plot} />{plotAreaSelected && <XAxisLabelOverlay block={block} experiments={exps} onChangeLabel={(key, value) => setOptLabel("seriesLabels", key, value)} />}</div>)}
-        {chartLayout.xAxisTitle.visible && layerFrame("xAxisTitle", 60, 22, <ChartTextLayer className="chart-axis-title" section="xAxisTitle" layer={chartLayout.xAxisTitle} style={layerStyle(chartLayout.xAxisTitle)} editing={editingLayer === "xAxisTitle"} onBeginEdit={() => setEditingLayer("xAxisTitle")} onEndEdit={() => setEditingLayer(null)} onChangeText={editLayerText} />)}
-        {chartLayout.yAxisTitle.visible && layerFrame("yAxisTitle", 60, 22, <ChartTextLayer className="chart-axis-title" section="yAxisTitle" layer={chartLayout.yAxisTitle} style={layerStyle(chartLayout.yAxisTitle)} editing={editingLayer === "yAxisTitle"} onBeginEdit={() => setEditingLayer("yAxisTitle")} onEndEdit={() => setEditingLayer(null)} onChangeText={editLayerText} />)}
-      </>
-    );
+    body = plot
+      ? (
+        <div className="chart-spec-canvas">
+          {layerFrame("plotArea", chartLayout.plotArea, (
+            <div className="chart-plot-area">
+              <Plot {...plot} />
+            </div>
+          ), 160, 110, "chart-plot-layer")}
+          {layerFrame("title", chartLayout.title, (
+            <ChartTextLayer
+              section="title"
+              layer={chartLayout.title}
+              className="chart-title-layer"
+              editing={layerEditing("title")}
+              onBeginEdit={() => setSelected(layerKey("title", "edit"))}
+              onEndEdit={() => setSelected(layerKey("title"))}
+              onChangeText={patchLayerText}
+            />
+          ), 60, 22, "chart-title-frame")}
+          {layerFrame("legend", chartLayout.legend, (
+            <ChartLegendLayer layer={chartLayout.legend} traces={plot.traces || []} />
+          ), 80, 24, "chart-legend-frame")}
+          {layerFrame("xAxisTitle", chartLayout.xAxisTitle, (
+            <ChartTextLayer
+              section="xAxisTitle"
+              layer={chartLayout.xAxisTitle}
+              className="chart-axis-title"
+              editing={layerEditing("xAxisTitle")}
+              onBeginEdit={() => setSelected(layerKey("xAxisTitle", "edit"))}
+              onEndEdit={() => setSelected(layerKey("xAxisTitle"))}
+              onChangeText={patchLayerText}
+            />
+          ), 60, 22, "chart-x-axis-frame")}
+          {layerFrame("yAxisTitle", chartLayout.yAxisTitle, (
+            <ChartTextLayer
+              section="yAxisTitle"
+              layer={chartLayout.yAxisTitle}
+              className="chart-axis-title"
+              editing={layerEditing("yAxisTitle")}
+              onBeginEdit={() => setSelected(layerKey("yAxisTitle", "edit"))}
+              onEndEdit={() => setSelected(layerKey("yAxisTitle"))}
+              onChangeText={patchLayerText}
+            />
+          ), 40, 22, "chart-y-axis-frame")}
+        </div>
+      )
+      : <div className="plot-empty chart-spec-missing">Missing chart spec. Create or reload the approved chart before exporting.</div>;
   } else if (block.kind === "text") {
     body = (
       <RichTextBox
@@ -2467,7 +2779,7 @@ function CanvasBlock({ experiments, block, canvasWidth, canvasHeight, selectedKe
       onRedo={onRedo}
       onContextMenu={block.kind === "chart" ? (e) => onChartContextMenu?.(block, e) : (e) => onBlockContextMenu?.(block, e)}
     >
-      <div className="block-actions"><button onClick={() => remove(block.id)}>×</button></div>
+      <div className="block-actions"><button type="button" aria-label={`Delete ${block.kind} block`} onClick={() => remove(block.id)}>×</button></div>
       {body}
     </SelectionFrame>
   );
@@ -3023,6 +3335,7 @@ function ChartTextLayer({ section, layer, style, className = "", editing = false
 
 function ChartLegendLayer({ layer, traces, items = null, style, onChangeLabel }) {
   const [editingKey, setEditingKey] = useState(null);
+  const editable = typeof onChangeLabel === "function";
   const rows = (items || traces.map((trace, i) => ({
     key: trace.name || `series-${i + 1}`,
     name: trace.name || `Series ${i + 1}`,
@@ -3036,7 +3349,7 @@ function ChartLegendLayer({ layer, traces, items = null, style, onChangeLabel })
       {rows.map((item, i) => (
         <span className="legend-item" key={`${item.name}-${i}`}>
           <span className="legend-swatch" style={{ background: item.color }} />
-          {editingKey === item.key ? (
+          {editable && editingKey === item.key ? (
             <InlineLabelEditor
               value={item.name}
               className="legend-label-editor"
@@ -3048,9 +3361,10 @@ function ChartLegendLayer({ layer, traces, items = null, style, onChangeLabel })
             />
           ) : (
             <span
-              className="editable-legend-label"
+              className={editable ? "editable-legend-label" : ""}
               onMouseDown={(event) => event.stopPropagation()}
               onDoubleClick={(event) => {
+                if (!editable) return;
                 event.preventDefault();
                 event.stopPropagation();
                 setEditingKey(item.key);
@@ -3141,28 +3455,12 @@ function traceColor(trace, i) {
   return Array.isArray(color) ? color[0] : color;
 }
 
-function ChartContextMenu({ x, y, block, templates, onSave, onApply, onDelete }) {
+function ChartContextMenu({ x, y, block, onDelete }) {
   if (!block || block.kind !== "chart") return null;
-  const safeTemplates = normalizeChartTemplates(templates);
   return (
     <div className="canvas-context-menu chart-context-menu" style={{ left: x, top: y }}>
       <button type="button" onClick={() => onDelete?.(block.id)}>Delete chart</button>
-      <button type="button" onClick={() => onSave?.(block)}>Save as template</button>
-      <div className="context-section">
-        <div className="context-title">Apply template</div>
-      </div>
-      {safeTemplates.length ? (
-        <div className="context-template-list">
-          {safeTemplates.map((template) => (
-            <button type="button" key={template.id} onClick={() => onApply?.(block, template)}>
-              <span>{template.name}</span>
-              <small>{chartLabel(template.chartKind)}</small>
-            </button>
-          ))}
-        </div>
-      ) : (
-        <div className="context-empty">No saved templates</div>
-      )}
+      <div className="context-empty">Chart content is controlled by its approved chart spec.</div>
     </div>
   );
 }
@@ -3236,176 +3534,164 @@ function chartXAxisLabelRows(block, selectedExperiments) {
   }));
 }
 
-function Inspector({ block, experiments = [], patch, onOpenExperimentPicker }) {
+function Inspector({ block, chartSpecs = [], genericImports = [], patch }) {
   if (!block) return null;
-  const chartLayout = block.kind === "chart" ? resolveChartLayout(block) : null;
-  const setChartLayout = (section, sectionPatch) => {
-    const patchValue = patchChartLayout(block, section, sectionPatch);
-    const next = { ...patchValue };
-    if (section === "title" && Object.prototype.hasOwnProperty.call(sectionPatch, "text")) {
-      next.opts = { ...(block.opts || {}), title: sectionPatch.text };
-    }
-    patch(block.id, next);
-  };
-  const layoutNumber = (section, key, label, step = 1) => (
-    <label>{label}<input type="number" step={step} value={chartLayout[section][key]} onChange={(e) => setChartLayout(section, { [key]: Number(e.target.value) })} /></label>
-  );
-  const layoutText = (section, key, label) => (
-    <label>{label}<input value={chartLayout[section][key] || ""} onChange={(e) => setChartLayout(section, { [key]: e.target.value })} /></label>
-  );
-  const layoutCheck = (section, key, label) => (
-    <label className="inspector-check"><input type="checkbox" checked={!!chartLayout[section][key]} onChange={(e) => setChartLayout(section, { [key]: e.target.checked })} /> {label}</label>
-  );
-  const layoutSelect = (section, key, label, options) => (
-    <label>{label}<select value={chartLayout[section][key]} onChange={(e) => setChartLayout(section, { [key]: e.target.value })}>{options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
-  );
-  const layoutFont = (section) => layoutSelect(section, "fontFamily", "Font", fontOptions);
-  const positionControls = (section, { font = true, rotation = false } = {}) => (
-    <div className="inspector-grid">
-      {layoutNumber(section, "x", "X")}
-      {layoutNumber(section, "y", "Y")}
-      {layoutNumber(section, "width", "Width")}
-      {layoutNumber(section, "height", "Height")}
-      {font && layoutNumber(section, "fontSize", "Font size")}
-      {rotation && layoutNumber(section, "rotation", "Rotation")}
-    </div>
-  );
-  const elementControls = (section, { text = false, visible = true, font = true, align = true } = {}) => (
-    <>
-      {visible && layoutCheck(section, "visible", "Show")}
-      {text && layoutText(section, "text", "Text")}
-      {font && layoutFont(section)}
-      {font && layoutNumber(section, "fontSize", "Font size")}
-      {align && layoutSelect(section, "align", "Align", [["left", "Left"], ["center", "Center"], ["right", "Right"]])}
-    </>
-  );
   const panel = (title, children, open = false) => (
     <details className="inspector-section" open={open}>
       <summary>{title}</summary>
       <div className="inspector-panel-body">{children}</div>
     </details>
   );
-  const resetLayout = () => {
-    const nextLayout = defaultChartLayout(block.chartKind, { ...(block.opts || {}), title: chartLayout.title.text || block.opts?.title }, block);
-    patch(block.id, { chartLayout: nextLayout, opts: { ...(block.opts || {}), title: nextLayout.title.text } });
+  const patchTextStyle = (patchValue) => patch(block.id, patchValue);
+  const chartSpec = block.kind === "chart" ? resolveChartSpecForBlock(block, chartSpecs) : null;
+  const chartProposal = chartSpec ? chartSpecToProposal(chartSpec) : null;
+  const chartLayout = chartSpec ? resolveChartSpecBlockLayout(block, chartSpec) : null;
+  const chartView = normalizeChartView(block.chartView);
+  const chartExperimentOptions = chartSpec ? experimentOptionsForChartSpec(chartSpec, genericImports) : [];
+  const explicitView = chartView.selectedExperimentIds.length > 0 || chartView.excludedExperimentIds.length > 0;
+  const selectedExperimentIds = explicitView ? chartView.selectedExperimentIds : chartExperimentOptions.map((option) => option.id);
+  const selectedExperimentSet = new Set(selectedExperimentIds);
+  const patchChartViewSelection = (ids) => patch(block.id, {
+    chartView: normalizeChartView({
+      ...chartView,
+      selectedExperimentIds: ids,
+      excludedExperimentIds: ids.length ? [] : chartExperimentOptions.map((option) => option.id),
+    }),
+  });
+  const patchChartLayer = (section, patchValue) => {
+    if (!chartSpec) return;
+    patch(block.id, patchChartSpecBlockLayout(block, chartSpec, section, patchValue), { transactionType: "chart-layout" });
+  };
+  const resetChartLayout = () => {
+    if (!chartSpec) return;
+    patch(block.id, { chartLayout: defaultChartSpecBlockLayout(chartSpec, block) }, { transactionType: "chart-layout-reset" });
   };
   const fitPlotArea = () => {
-    const next = defaultPlotAreaForLayout(block, chartLayout);
-    patch(block.id, patchChartLayout(block, "plotArea", next));
+    if (!chartSpec || !chartLayout) return;
+    patch(block.id, {
+      chartLayout: {
+        ...chartLayout,
+        plotArea: defaultPlotAreaForLayout(chartSpecLayoutBlock(block, chartSpec), chartLayout),
+      },
+    }, { transactionType: "chart-layout-fit" });
   };
   const centerTitle = () => {
-    const title = chartLayout.title;
-    patch(block.id, patchChartLayout(block, "title", { x: Math.max(0, Math.round(((block.w || 580) - title.width) / 2)), y: title.y }));
+    if (!chartLayout?.title) return;
+    patchChartLayer("title", {
+      x: Math.max(0, Math.round(((Number(block.w) || 580) - chartLayout.title.width) / 2)),
+      align: "center",
+    });
   };
-  const setOptLabel = (mapKey, key, value) => {
-    const currentOpts = block.opts || {};
-    const labelMap = { ...(currentOpts[mapKey] || {}) };
-    if (value.trim()) labelMap[key] = value;
-    else delete labelMap[key];
-    const nextOpts = { ...currentOpts };
-    if (Object.keys(labelMap).length) nextOpts[mapKey] = labelMap;
-    else delete nextOpts[mapKey];
-    patch(block.id, { opts: nextOpts });
+  const numberInput = (section, field, label, min = 0, step = 1) => (
+    <label>{label}<input type="number" min={min} step={step} value={Math.round(Number(chartLayout?.[section]?.[field]) || 0)} onChange={(e) => patchChartLayer(section, { [field]: Number(e.target.value) || 0 })} /></label>
+  );
+  const textLayerControls = (section, label) => {
+    const layer = chartLayout?.[section] || {};
+    return panel(label, <>
+      <label className="inspector-check"><input type="checkbox" checked={layer.visible !== false} onChange={(e) => patchChartLayer(section, { visible: e.target.checked })} /> Visible</label>
+      <label>Text<input value={layer.text || ""} onChange={(e) => patchChartLayer(section, { text: e.target.value })} /></label>
+      <div className="inspector-grid">
+        {numberInput(section, "x", "X")}
+        {numberInput(section, "y", "Y")}
+        {numberInput(section, "width", "W", 24)}
+        {numberInput(section, "height", "H", 18)}
+        {numberInput(section, "fontSize", "Font", 1)}
+      </div>
+      <label>Align<select value={layer.align || "center"} onChange={(e) => patchChartLayer(section, { align: e.target.value })}>
+        <option value="left">Left</option>
+        <option value="center">Center</option>
+        <option value="right">Right</option>
+      </select></label>
+    </>, section === "title");
   };
-  const resetOptLabels = (mapKey) => {
-    const nextOpts = { ...(block.opts || {}) };
-    delete nextOpts[mapKey];
-    patch(block.id, { opts: nextOpts });
-  };
-  const selectedLabels = Array.isArray(block.labels) ? block.labels : [];
-  const selectedExperiments = selectedLabels.map((label) => experiments.find((experiment) => experiment.label === label)).filter(Boolean);
-  const xAxisLabelRows = block.kind === "chart" ? chartXAxisLabelRows(block, selectedExperiments) : [];
-  const legendLabelRows = block.kind === "chart" ? chartLegendRows(block, selectedExperiments) : [];
-  const patchTextStyle = (patchValue) => patch(block.id, patchValue);
   return <aside className="inspector"><h3>Inspector</h3>
     {block.kind === "chart" && <>
       {panel("Chart", <>
-        <label>Type<select value={block.chartKind} onChange={(e) => {
-          const chartKind = e.target.value;
-          const opts = { ...(block.opts || {}), title: chartLayout.title.text };
-          patch(block.id, { chartKind, chartLayout: defaultChartLayout(chartKind, opts, block), opts });
-        }}>{chartTypes.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
         <div className="inspector-field">
-          <div className="inspector-field-label">Experiments</div>
-          <button type="button" className="wide-action" onClick={onOpenExperimentPicker}>Select experiments...</button>
-          <div className="inspector-selected-list">{selectedLabels.length ? selectedLabels.join(", ") : "No experiments selected"}</div>
+          <div className="inspector-field-label">Chart spec</div>
+          <div className="inspector-selected-list">{chartSpec?.title || chartProposal?.title || block.chartSpecId || "Missing chart spec"}</div>
+        </div>
+        <div className="inspector-field">
+          <div className="inspector-field-label">Type</div>
+          <div className="inspector-selected-list">{chartProposal?.chartType || chartSpec?.chartType || "chart"}</div>
+        </div>
+        <div className="inspector-field">
+          <div className="inspector-field-label">Dataset commit</div>
+          <div className="inspector-selected-list">{block.datasetCommitId || chartSpec?.datasetCommitId || "n/a"}</div>
+        </div>
+        <div className="inspector-actions">
+          <button type="button" onClick={resetChartLayout} disabled={!chartSpec}>Reset layout</button>
+          <button type="button" onClick={fitPlotArea} disabled={!chartSpec}>Fit plot area</button>
+          <button type="button" onClick={centerTitle} disabled={!chartSpec}>Center title</button>
         </div>
       </>, true)}
-      {panel("Actions", <>
-        <button className="wide-action" onClick={resetLayout}>Reset chart layout</button>
-      </>, true)}
-      {panel("Title", <>
-        {elementControls("title", { text: true })}
-        <button className="wide-action" onClick={centerTitle}>Center title</button>
-      </>, true)}
-      {panel("Legend", <>
-        {elementControls("legend", { font: true, align: false })}
-        {layoutSelect("legend", "orientation", "Orientation", [["h", "Horizontal"], ["v", "Vertical"]])}
-      </>)}
-      {panel("Labels", <>
-        <h4>X-Axis Labels</h4>
-        {xAxisLabelRows.length ? (
-          <div className="series-label-list">
-            {xAxisLabelRows.map((row) => (
-              <label className="series-label-row" key={row.key}>
-                <span>{row.sourceLabel}</span>
+      {panel("Included Experiments", <>
+        <div className="inspector-field">
+          <div className="inspector-field-label">Included</div>
+          <div className="inspector-selected-list">{chartExperimentOptions.length ? `${selectedExperimentIds.length} of ${chartExperimentOptions.length}` : "All source rows"}</div>
+        </div>
+        {chartExperimentOptions.length > 0 && <>
+          <div className="inspector-actions">
+            <button type="button" onClick={() => patchChartViewSelection(chartExperimentOptions.map((option) => option.id))}>Select all</button>
+            <button type="button" onClick={() => patchChartViewSelection([])}>Clear</button>
+          </div>
+          <div className="chart-view-choice-list compact">
+            {chartExperimentOptions.map((option) => (
+              <label key={option.id}>
                 <input
-                  value={block.opts?.seriesLabels?.[row.key] || ""}
-                  placeholder={row.sourceLabel}
-                  onChange={(e) => setOptLabel("seriesLabels", row.key, e.target.value)}
+                  type="checkbox"
+                  checked={selectedExperimentSet.has(option.id)}
+                  onChange={(event) => {
+                    const next = event.target.checked
+                      ? [...selectedExperimentSet, option.id]
+                      : selectedExperimentIds.filter((id) => id !== option.id);
+                    patchChartViewSelection(next);
+                  }}
                 />
+                <span>{option.label}</span>
               </label>
             ))}
-            <button type="button" className="wide-action" onClick={() => resetOptLabels("seriesLabels")}>Reset x-axis labels</button>
           </div>
-        ) : (
-          <div className="inspector-selected-list">This chart uses a numeric or carbon-number x-axis.</div>
-        )}
-        <h4>Legend Labels</h4>
-        {legendLabelRows.length ? (
-          <div className="series-label-list">
-            {legendLabelRows.map((row) => (
-              <label className="series-label-row" key={row.key}>
-                <span>{row.defaultLabel}</span>
-                <input
-                  value={block.opts?.traceLabels?.[row.key] || ""}
-                  placeholder={row.defaultLabel}
-                  onChange={(e) => setOptLabel("traceLabels", row.key, e.target.value)}
-                />
-              </label>
-            ))}
-            <button type="button" className="wide-action" onClick={() => resetOptLabels("traceLabels")}>Reset legend labels</button>
-          </div>
-        ) : (
-          <div className="inspector-selected-list">No visible legend labels for this chart.</div>
-        )}
+        </>}
+      </>, true)}
+      {panel("Fields", <>
+        <div className="inspector-field">
+          <div className="inspector-field-label">X</div>
+          <div className="inspector-selected-list">{chartProposal?.x?.label || chartProposal?.x?.field || "n/a"}</div>
+        </div>
+        <div className="inspector-field">
+          <div className="inspector-field-label">Y</div>
+          <div className="inspector-selected-list">{chartProposal?.y?.label || chartProposal?.y?.field || chartProposal?.yFields?.map((field) => field.label || field.field).join(", ") || "n/a"}</div>
+        </div>
+        <div className="inspector-field">
+          <div className="inspector-field-label">Source refs</div>
+          <div className="inspector-selected-list">{chartProposal?.sourceRefs?.length ? chartProposal.sourceRefs.slice(0, 6).join(", ") : "n/a"}</div>
+        </div>
       </>)}
-      {panel("X-Axis Title", <>
-        {elementControls("xAxisTitle", { text: true })}
+      {chartLayout && textLayerControls("title", "Title")}
+      {chartLayout && panel("Legend", <>
+        <label className="inspector-check"><input type="checkbox" checked={chartLayout.legend.visible !== false} onChange={(e) => patchChartLayer("legend", { visible: e.target.checked })} /> Visible</label>
+        <label>Orientation<select value={chartLayout.legend.orientation || "h"} onChange={(e) => patchChartLayer("legend", { orientation: e.target.value })}>
+          <option value="h">Horizontal</option>
+          <option value="v">Vertical</option>
+        </select></label>
+        <div className="inspector-grid">
+          {numberInput("legend", "x", "X")}
+          {numberInput("legend", "y", "Y")}
+          {numberInput("legend", "width", "W", 24)}
+          {numberInput("legend", "height", "H", 18)}
+          {numberInput("legend", "fontSize", "Font", 1)}
+        </div>
       </>)}
-      {panel("Y-Axis Title", <>
-        {elementControls("yAxisTitle", { text: true })}
-      </>)}
-      {panel("Advanced Layout", <>
-        <h4>Plot</h4>
-        {positionControls("plotArea", { font: false })}
-        <button className="wide-action" onClick={fitPlotArea}>Auto-fit plot area</button>
-        <h4>Title Position</h4>
-        {positionControls("title")}
-        <h4>Legend Position</h4>
-        {positionControls("legend")}
-        <h4>X-Axis Title Position</h4>
-        {positionControls("xAxisTitle")}
-        <h4>Y-Axis Title Position</h4>
-        {positionControls("yAxisTitle", { rotation: true })}
-        <h4>Axes</h4>
-        {layoutNumber("xAxis", "tickFontSize", "X tick size")}
-        {layoutCheck("xAxis", "showGrid", "Show X gridlines")}
-        {layoutNumber("yAxis", "tickFontSize", "Y tick size")}
-        {layoutCheck("yAxis", "showGrid", "Show Y gridlines")}
-        <h4>Plot Toolbar</h4>
-        {layoutCheck("toolbar", "visible", "Show Plotly toolbar")}
-        {layoutSelect("toolbar", "mode", "Toolbar mode", [["hover", "Hover"], ["always", "Always"], ["hidden", "Hidden"]])}
+      {chartLayout && textLayerControls("xAxisTitle", "X-Axis Title")}
+      {chartLayout && textLayerControls("yAxisTitle", "Y-Axis Title")}
+      {chartLayout && panel("Plot Area", <>
+        <div className="inspector-grid">
+          {numberInput("plotArea", "x", "X")}
+          {numberInput("plotArea", "y", "Y")}
+          {numberInput("plotArea", "width", "W", 24)}
+          {numberInput("plotArea", "height", "H", 18)}
+        </div>
       </>)}
     </>}
     {block.kind === "text" && <>

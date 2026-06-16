@@ -4,6 +4,8 @@ dist/
 original/
 extra data/
 .vitest/
+backend/.labrat-files/
+**/.labrat-files/
 public/labratData.json
 src/data/labratData.json
 .env

@@ -3,10 +3,45 @@ import { test } from "node:test";
 import {
   createAmbiguousSparseSheetWorkbook,
   createCleanStandardTableWorkbook,
+  createGroupedMasterTableWorkbook,
   createRepeatedBlockTableWorkbook,
 } from "../fixtures/workbookFixtures.js";
 import { runImportScan } from "./importPipeline.js";
 import { normalizeApprovedScan } from "./normalizer.js";
+
+function assertAllSourceRefsResolve(genericImport) {
+  const sourceRefs = new Set(genericImport.sources.map((source) => source.sourceRef));
+  genericImport.experiments.forEach((experiment) => {
+    assert.equal(sourceRefs.has(experiment.sourceRef), true);
+    assert.equal(typeof experiment.sourceBlockId, "string");
+    assert.equal(Array.isArray(experiment.warnings), true);
+    assert.equal(typeof experiment.confidence, "number");
+    experiment.metadata.forEach((metadata) => {
+      assert.equal(sourceRefs.has(metadata.sourceRef), true);
+      assert.equal(Array.isArray(metadata.warnings), true);
+      assert.notEqual(metadata.rawValue, undefined);
+      assert.notEqual(metadata.confidence, undefined);
+    });
+  });
+  genericImport.measurements.forEach((measurement) => {
+    assert.equal(sourceRefs.has(measurement.sourceRef), true);
+    assert.equal(Array.isArray(measurement.warnings), true);
+    assert.equal(typeof measurement.rawValue, "string");
+    const source = genericImport.sources.find((item) => item.sourceRef === measurement.sourceRef);
+    assert.equal(Boolean(source.fileId), true);
+    assert.equal(Boolean(source.fileName), true);
+    assert.equal(Boolean(source.sheet), true);
+    assert.equal(Boolean(source.range), true);
+    assert.equal(Boolean(source.blockId), true);
+    assert.notEqual(source.rawValue, null);
+  });
+  genericImport.fields.forEach((field) => {
+    assert.equal(sourceRefs.has(field.sourceRef), true);
+    assert.equal(Array.isArray(field.warnings), true);
+    assert.equal(typeof field.rawValue, "string");
+    assert.equal(typeof field.role, "string");
+  });
+}
 
 test("normalizeApprovedScan converts approved standard table rows to generic experiments and measurements", () => {
   const scanResult = runImportScan(createCleanStandardTableWorkbook());
@@ -26,9 +61,13 @@ test("normalizeApprovedScan converts approved standard table rows to generic exp
   assert.equal(genericImport.fileName, "clean-standard-table.xlsx");
   assert.deepEqual(genericImport.approvedBlockIds, [blockId]);
   assert.equal(genericImport.experiments.length, 3);
-  assert.equal(genericImport.measurements.length, 15);
+  assert.equal(genericImport.fields.length, 15);
+  assert.equal(genericImport.measurements.length, 6);
   assert.equal(genericImport.sources.length, 15);
   assert.equal(genericImport.experiments[0].name, "ExpA");
+  assert.equal(genericImport.experiments[0].sourceBlockId, blockId);
+  assert.equal(typeof genericImport.experiments[0].confidence, "number");
+  assert.deepEqual(genericImport.experiments[0].warnings, []);
 
   const conversion = genericImport.measurements.find((measurement) => (
     measurement.displayName === "Conversion (%)" && measurement.rowIndex === 3
@@ -50,9 +89,37 @@ test("normalizeApprovedScan converts approved standard table rows to generic exp
   assert.deepEqual(response.summary, {
     genericImportCount: 1,
     createdExperiments: 3,
-    createdMeasurements: 15,
+    createdFields: 15,
+    createdMeasurements: 6,
     warningCount: 0,
   });
+});
+
+test("normalizeApprovedScan preserves grouped MasterTable fields with roles and experiment labels", () => {
+  const scanResult = runImportScan(createGroupedMasterTableWorkbook());
+  const block = scanResult.sheets[0].blocks[0];
+  const response = normalizeApprovedScan({
+    scanResult,
+    approvedBlockIds: [block.blockId],
+    userEdits: { createdAt: "2026-06-14T00:00:00.000Z" },
+  });
+
+  const genericImport = response.datasetPatch.genericImports[0];
+  assert.equal(genericImport.experiments.length, 2);
+  assert.equal(genericImport.experiments[0].name, "Exp1");
+  assert.equal(genericImport.experiments[1].name, "Exp2");
+  assert.equal(genericImport.fields.filter((field) => field.experimentId === genericImport.experiments[0].experimentId).length, 14);
+  assert.equal(genericImport.measurements.filter((field) => field.experimentId === genericImport.experiments[0].experimentId).length, 3);
+
+  const firstFields = genericImport.fields.filter((field) => field.experimentId === genericImport.experiments[0].experimentId);
+  assert.equal(firstFields.find((field) => field.displayName === "Catalyst Type").role, "material");
+  assert.equal(firstFields.find((field) => field.displayName === "Temperature (C)").role, "condition");
+  assert.equal(firstFields.find((field) => field.displayName === "Selectivity Gas (%)").role, "measurement");
+  assert.equal(firstFields.find((field) => field.displayName === "Selectivity Gas (%)").unit, "%");
+
+  const selectivitySource = genericImport.sources.find((source) => source.sourceRef === firstFields.find((field) => field.displayName === "Selectivity Gas (%)").sourceRef);
+  assert.equal(selectivitySource.sheet, "Sheet1");
+  assert.equal(selectivitySource.cell, "N3");
 });
 
 test("normalizeApprovedScan applies mapping overrides without mutating HDPE experiments", () => {
@@ -102,9 +169,12 @@ test("normalizeApprovedScan converts approved repeated experiment blocks to gene
 
   const genericImport = response.datasetPatch.genericImports[0];
   assert.equal(genericImport.experiments.length, 2);
-  assert.equal(genericImport.measurements.length, 16);
+  assert.equal(genericImport.fields.length, 18);
+  assert.equal(genericImport.measurements.length, 12);
   assert.equal(genericImport.experiments[0].name, "Experiment A");
   assert.equal(genericImport.experiments[1].name, "Experiment B");
+  assert.equal(typeof genericImport.experiments[0].confidence, "number");
+  assert.deepEqual(genericImport.experiments[0].warnings, []);
 
   const firstMetadata = genericImport.experiments[0].metadata[0];
   assert.equal(firstMetadata.displayName, "Temperature");
@@ -130,7 +200,7 @@ test("normalizeApprovedScan converts approved repeated experiment blocks to gene
   assert.equal(measurementSource.cell, "B12");
   assert.equal(measurementSource.blockId, blockIds[1]);
   assert.equal(response.summary.createdExperiments, 2);
-  assert.equal(response.summary.createdMeasurements, 16);
+  assert.equal(response.summary.createdMeasurements, 12);
 });
 
 test("normalizeApprovedScan keeps provenance refs complete for standard and block outputs", () => {
@@ -145,32 +215,10 @@ test("normalizeApprovedScan keeps provenance refs complete for standard and bloc
 
   responses.forEach((response) => {
     const genericImport = response.datasetPatch.genericImports[0];
-    const sourceRefs = new Set(genericImport.sources.map((source) => source.sourceRef));
-
     assert.equal(genericImport.files.length, 1);
     assert.equal(genericImport.files[0].fileId, genericImport.fileId);
     assert.equal(genericImport.files[0].fileName, genericImport.fileName);
-
-    genericImport.experiments.forEach((experiment) => {
-      assert.equal(sourceRefs.has(experiment.sourceRef), true);
-      assert.equal(typeof experiment.sourceBlockId, "string");
-      experiment.metadata.forEach((metadata) => {
-        assert.equal(sourceRefs.has(metadata.sourceRef), true);
-        assert.notEqual(metadata.rawValue, undefined);
-      });
-    });
-
-    genericImport.measurements.forEach((measurement) => {
-      assert.equal(sourceRefs.has(measurement.sourceRef), true);
-      assert.equal(typeof measurement.rawValue, "string");
-      const source = genericImport.sources.find((item) => item.sourceRef === measurement.sourceRef);
-      assert.equal(Boolean(source.fileId), true);
-      assert.equal(Boolean(source.fileName), true);
-      assert.equal(Boolean(source.sheet), true);
-      assert.equal(Boolean(source.range), true);
-      assert.equal(Boolean(source.blockId), true);
-      assert.notEqual(source.rawValue, null);
-    });
+    assertAllSourceRefsResolve(genericImport);
   });
 });
 

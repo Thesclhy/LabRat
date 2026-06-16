@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { sendJson } from "../../http/json.js";
 import { readRequestBody } from "../../http/body.js";
 import { parseMultipartFormData } from "../../http/multipart.js";
@@ -17,6 +18,15 @@ function parseJsonBody(buffer) {
   const text = buffer.toString("utf8").trim();
   if (!text) return null;
   return JSON.parse(text);
+}
+
+function addStableFileIdentity(file) {
+  const checksumSha256 = crypto.createHash("sha256").update(file.buffer).digest("hex");
+  return {
+    ...file,
+    fileId: `upload_${checksumSha256.slice(0, 16)}`,
+    checksumSha256,
+  };
 }
 
 async function handleImportScan(req, res) {
@@ -43,7 +53,7 @@ async function handleImportScan(req, res) {
     return;
   }
 
-  sendJson(res, 200, runImportScan({ ...file, fileId: `upload_${Date.now().toString(36)}` }));
+  sendJson(res, 200, runImportScan(addStableFileIdentity(file)));
 }
 
 async function handleImportNormalize(req, res) {

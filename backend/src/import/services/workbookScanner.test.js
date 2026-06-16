@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as XLSX from "xlsx";
+import { createGroupedMasterTableWorkbook } from "../fixtures/workbookFixtures.js";
 import { scanWorkbook } from "./workbookScanner.js";
 
 function workbookBuffer() {
@@ -85,4 +86,15 @@ test("scanWorkbook preserves formula, merged-cell, and empty-sheet scan details"
   assert.equal(emptySheet.cellGrid.cells.length, 0);
   assert.equal(emptySheet.regions.length, 0);
   assert.equal(emptySheet.warnings[0].code, "empty_sheet");
+});
+
+test("scanWorkbook preserves comments, styles, and hidden row/column hints when available", () => {
+  const result = scanWorkbook(createGroupedMasterTableWorkbook());
+  const sheet = result.sheets[0];
+  const labelCell = sheet.cellGrid.cells.find((cell) => cell.address === "A1");
+
+  assert.equal(sheet.cellGrid.hiddenRows.includes(4), true);
+  assert.equal(sheet.cellGrid.hiddenColumns.includes(14), true);
+  assert.equal(labelCell.comments[0].text, "Experiment label");
+  assert.equal(Object.hasOwn(labelCell, "style"), true);
 });

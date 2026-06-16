@@ -19,6 +19,7 @@ function parseSheet(sheet, file) {
     ...sheet,
     layout,
     blocks: parsed.blocks,
+    structureProposals: parsed.structureProposals || [],
     warnings: [...(sheet.warnings || []), ...(parsed.warnings || [])],
   };
 }

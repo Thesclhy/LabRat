@@ -71,8 +71,12 @@ function normalizeColumn(column) {
     rawName: column.rawName || "",
     label: column.label || column.rawName || "",
     unit: column.unit || null,
+    rawHeaderPath: asArray(column.rawHeaderPath),
+    role: column.role || null,
+    valueType: column.valueType || null,
     source: normalizeSource(column.source),
     confidence: normalizeConfidence(column.confidence, null),
+    warnings: asArray(column.warnings).map(normalizeWarning),
   };
 }
 
@@ -99,6 +103,36 @@ function normalizeTable(table) {
       values: asArray(row.values).map(normalizeValue),
     })),
     source: normalizeSource(table.source),
+    structureProposal: normalizeStructureProposal(table.structureProposal),
+  };
+}
+
+function normalizeStructureProposal(proposal) {
+  if (!proposal) return null;
+  return {
+    ...proposal,
+    tableId: proposal.tableId || null,
+    regionId: proposal.regionId || null,
+    headerRows: asArray(proposal.headerRows),
+    unitRows: asArray(proposal.unitRows),
+    dataRows: asArray(proposal.dataRows),
+    labelColumns: asArray(proposal.labelColumns),
+    sideLabelColumns: asArray(proposal.sideLabelColumns),
+    columns: asArray(proposal.columns).map((column) => ({
+      ...column,
+      fieldId: column.fieldId || column.columnId || null,
+      columnId: column.columnId || column.fieldId || null,
+      displayName: column.displayName || column.rawName || "",
+      rawHeaderPath: asArray(column.rawHeaderPath),
+      unit: column.unit || null,
+      role: column.role || null,
+      valueType: column.valueType || null,
+      confidence: normalizeConfidence(column.confidence, null),
+      source: normalizeSource(column.source),
+      warnings: asArray(column.warnings).map(normalizeWarning),
+    })),
+    warnings: asArray(proposal.warnings).map(normalizeWarning),
+    confidence: normalizeConfidence(proposal.confidence, null),
   };
 }
 
@@ -142,10 +176,13 @@ function normalizeSheet(sheet) {
       range: cellGrid.range || sheet.usedRange || null,
       rowCount: cellGrid.rowCount || 0,
       columnCount: cellGrid.columnCount || 0,
+      hiddenRows: asArray(cellGrid.hiddenRows),
+      hiddenColumns: asArray(cellGrid.hiddenColumns),
       cells: asArray(cellGrid.cells),
     },
     layout: normalizeLayout(sheet.layout),
     regions: asArray(sheet.regions),
+    structureProposals: asArray(sheet.structureProposals).map(normalizeStructureProposal).filter(Boolean),
     candidateHeaders: asArray(sheet.candidateHeaders),
     candidateMetadata: asArray(sheet.candidateMetadata).map(normalizeMetadata),
     blocks: asArray(sheet.blocks).map(normalizeBlock),
@@ -171,6 +208,7 @@ export function shapeScanResponse(scan) {
       type: scan.file?.type || null,
       sizeBytes: scan.file?.sizeBytes ?? null,
       contentType: scan.file?.contentType || null,
+      ...(scan.file?.checksumSha256 ? { checksumSha256: scan.file.checksumSha256 } : {}),
     },
     summary: {
       sheetCount: sheets.length,

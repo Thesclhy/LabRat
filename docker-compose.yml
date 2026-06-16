@@ -1,0 +1,65 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: labrat-postgres
+    environment:
+      POSTGRES_USER: labrat
+      POSTGRES_PASSWORD: labrat_dev
+      POSTGRES_DB: labrat
+    ports:
+      - "5432:5432"
+    volumes:
+      - labrat_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U labrat -d labrat"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    image: node:24-alpine
+    container_name: labrat-backend
+    working_dir: /app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://labrat:labrat_dev@postgres:5432/labrat
+      SESSION_SECRET: dev-secret
+      LABRAT_SEED_DEV_ACCOUNTS: "true"
+      PORT: "8787"
+      HOST: 0.0.0.0
+    ports:
+      - "8787:8787"
+    volumes:
+      - ./:/app
+      - labrat_backend_node_modules:/app/backend/node_modules
+      - labrat_backend_files:/app/backend/.labrat-files
+    command: >
+      sh -c "npm --prefix backend install
+      && npm --prefix backend run migrate
+      && npm --prefix backend run dev"
+
+  frontend:
+    image: node:24-alpine
+    container_name: labrat-frontend
+    working_dir: /app
+    depends_on:
+      - backend
+    environment:
+      VITE_LABRAT_DATA_MODE: blank
+      VITE_LABRAT_API_PROXY_TARGET: http://backend:8787
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./:/app
+      - labrat_frontend_node_modules:/app/node_modules
+    command: >
+      sh -c "npm install
+      && npm run dev -- --host 0.0.0.0"
+
+volumes:
+  labrat_pgdata:
+  labrat_backend_node_modules:
+  labrat_backend_files:
+  labrat_frontend_node_modules:

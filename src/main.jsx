@@ -1,80 +1,733 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { makePlot } from "./charts/makePlot";
-import { BackendScanPanel } from "./components/BackendScanPanel";
+import { BackendScanPanel, ChartReviewPanel } from "./components/BackendScanPanel";
 import { BlankOnboarding } from "./components/BlankOnboarding";
+import { ProjectProfileChat } from "./components/ProjectProfileChat.jsx";
+import { ServerLogin } from "./components/ServerLogin.jsx";
+import { GenericImportBrowser } from "./components/GenericImportBrowser";
 import { Plot } from "./charts/Plot";
 import { ManuscriptCanvas } from "./components/ManuscriptCanvas";
 import { BLANK_PROJECT_SOURCE_NAME, blankTemplateLinks, isBlankDataMode } from "./data/appMode.js";
+import { interpretChartWithBackend } from "./data/backendChartInterpretApi.js";
 import { proposeChartsWithBackend } from "./data/backendChartProposalApi.js";
 import { scanWorkbookWithBackend } from "./data/backendImportScanApi.js";
 import { normalizeScanWithBackend } from "./data/backendImportNormalizeApi.js";
 import { proposeSemanticMappingsWithBackend } from "./data/backendSemanticMappingApi.js";
 import { proposeExcelMappingsFromScan } from "./data/aiExcelParserBoundary.js";
 import { applyGenericImportPatch } from "./data/genericImportPatch.js";
+import { buildGenericBrowserRows } from "./data/experimentBrowserRows.js";
 import { setChartProposalStatus, setMappingStatus, upsertGenericChartProposalSet, upsertGenericMappingSet } from "./data/genericProposalState.js";
 import { createBlockReviewState, setBlockReviewDecision } from "./data/importBlockReviewState.js";
 import { parseLocalExcelFolder } from "./data/masterTableImporter.js";
 import { emptyDataset } from "./data/loadEmbeddedDataset.js";
 import { resolveStartupProject } from "./data/startupProject.js";
 import { scanExcelFolder } from "./data/workbookScanner.js";
+import {
+  applyServerImportRun,
+  createServerChartSpecFromProposal,
+  createServerImportRun,
+  createServerManuscript,
+  createServerMappingSet,
+  createServerProject,
+  getServerProjectState,
+  getServerSession,
+  interpretServerProjectChart,
+  listServerLabs,
+  listServerProjects,
+  loginToServer,
+  logoutFromServer,
+  patchServerChartProposalSet,
+  patchServerManuscript,
+  patchServerMappingSet,
+  patchServerProjectProfile,
+  previewServerImportRefresh,
+  previewServerImportRunNormalization,
+  proposeServerProjectCharts,
+  uploadServerProjectFile,
+} from "./data/serverApi.js";
 import { ls } from "./storage/localStorage";
-import { buildProjectRecord, loadActiveProject, normalizeProjectRecord, saveActiveProject } from "./storage/projectStorage";
+import { buildProjectRecord, loadActiveProject, normalizeProjectDataset, normalizeProjectRecord, saveActiveProject } from "./storage/projectStorage";
 import { experimentDateSortValue, formatExperimentDateForDisplay } from "./utils/date.js";
 import { expNo, fmt, uid } from "./utils/format";
 import "./styles.css";
 
 const BLANK_MODE = isBlankDataMode();
 
-function Topbar({ tab, setTab, dirty, onSave, onExportProject, onImportProject, onAgent, dataset, sourceName, onLoadFolder, loadingSource, sourceError, onOpenImportReview, hasImportReview, blankMode }) {
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function payloadWithServerId(record, idKey) {
+  const payload = record?.payload && typeof record.payload === "object" ? record.payload : {};
+  return {
+    ...payload,
+    serverId: record?.id || payload.serverId || null,
+    [idKey]: payload[idKey] || record?.id || payload.serverId || null,
+  };
+}
+
+function decisionSummary(items = []) {
+  const values = asArray(items);
+  return {
+    accepted: values.filter((item) => item?.status === "accepted").length,
+    rejected: values.filter((item) => item?.status === "rejected").length,
+    proposed: values.filter((item) => !item?.status || item.status === "proposed").length,
+    decisions: values
+      .filter((item) => item?.proposalId || item?.mappingId)
+      .map((item) => ({
+        proposalId: item.proposalId,
+        mappingId: item.mappingId,
+        status: item.status || "proposed",
+      })),
+  };
+}
+
+function datasetFromServerProjectState(projectState) {
+  const payload = projectState?.currentDatasetCommit?.datasetPayload || {};
+  return normalizeProjectDataset({
+    ...emptyDataset(),
+    ...payload,
+    genericImports: asArray(payload.genericImports),
+    genericMappingSets: asArray(projectState?.mappingSets).map((set) => payloadWithServerId(set, "mappingSetId")),
+    genericChartProposals: asArray(projectState?.chartProposalSets).map((set) => payloadWithServerId(set, "proposalSetId")),
+  });
+}
+
+function latestItem(items) {
+  return asArray(items).at(-1) || null;
+}
+
+function emptyRefreshDraft() {
+  return {
+    open: false,
+    replaceImportId: "",
+    expectedParentDatasetCommitId: "",
+    targetImport: null,
+    preview: null,
+    loading: false,
+    error: "",
+  };
+}
+
+function genericImportLabel(genericImport) {
+  if (!genericImport) return "Imported workbook";
+  return genericImport.fileName
+    || genericImport.files?.[0]?.name
+    || genericImport.files?.[0]?.fileName
+    || genericImport.importId
+    || "Imported workbook";
+}
+
+function genericImportExperimentCount(genericImport) {
+  return asArray(genericImport?.experiments).length;
+}
+
+function genericImportFieldCount(genericImport) {
+  const fields = asArray(genericImport?.fields);
+  if (fields.length) return fields.length;
+  const labels = new Set();
+  asArray(genericImport?.measurements).forEach((measurement) => {
+    const key = measurement?.fieldId || measurement?.displayName || measurement?.rawLabel || measurement?.measurementId;
+    if (key) labels.add(key);
+  });
+  return labels.size;
+}
+
+function genericImportLineageText(genericImport) {
+  const metadata = genericImport?.refreshMetadata || {};
+  const parentImportId = genericImport?.refreshOfImportId || metadata.refreshOfImportId || "";
+  const appliedAt = metadata.appliedAt || genericImport?.refreshedAt || "";
+  if (!parentImportId && !appliedAt) return "";
+  const parts = [];
+  if (parentImportId) parts.push(`refreshed from ${parentImportId}`);
+  if (appliedAt) parts.push(`applied ${formatShortDate(appliedAt)}`);
+  return parts.join(" - ");
+}
+
+function refreshErrorMessage(error) {
+  if (error?.code === "refresh_no_changes_detected") return "No changes detected.";
+  if (error?.code === "dataset_commit_conflict") return "Project data changed; reload project and try again.";
+  if (error?.code === "refresh_target_not_found") return "The selected import no longer exists. Choose another refresh target.";
+  return error?.message || String(error);
+}
+
+function upsertServerRecordById(items, incoming) {
+  if (!incoming?.id) return asArray(items);
+  const values = asArray(items);
+  const index = values.findIndex((item) => item?.id === incoming.id);
+  if (index < 0) return [...values, incoming];
+  return values.map((item, itemIndex) => itemIndex === index ? incoming : item);
+}
+
+function formatShortDate(value) {
+  if (!value) return "n/a";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "n/a";
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function completedProfileFields(projectProfile) {
+  const profile = projectProfile || {};
+  return ["researchGoal", "experimentBackground", "materials", "methods", "instruments", "analysisNotes", "tags"]
+    .filter((key) => Array.isArray(profile[key]) ? profile[key].length : String(profile[key] || "").trim()).length;
+}
+
+function projectCurrentDatasetCommitId(projectState) {
+  return projectState?.currentDatasetCommit?.id || projectState?.project?.currentDatasetCommitId || null;
+}
+
+function isActiveChartSpecForProject(chartSpec, projectState) {
+  if (!chartSpec) return false;
+  if (chartSpec.isStale || chartSpec.status === "stale") return false;
+  const currentCommitId = projectCurrentDatasetCommitId(projectState);
+  if (chartSpec.datasetCommitId && currentCommitId && chartSpec.datasetCommitId !== currentCommitId) return false;
+  return true;
+}
+
+export function activeChartSpecsForProject(projectState) {
+  return asArray(projectState?.chartSpecs).filter((chartSpec) => isActiveChartSpecForProject(chartSpec, projectState));
+}
+
+function staleChartSpecCountForProject(projectState) {
+  return asArray(projectState?.chartSpecs).filter((chartSpec) => chartSpec && !isActiveChartSpecForProject(chartSpec, projectState)).length;
+}
+
+function projectWorkflowSummary(project, state = null) {
+  const projectProfile = state?.projectProfile || project?.projectProfile || {};
+  const profileCount = completedProfileFields(projectProfile);
+  const hasDataset = !!(state?.currentDatasetCommit?.id || project?.currentDatasetCommitId);
+  const importRuns = asArray(state?.importRuns);
+  const latestImportRun = latestItem(importRuns);
+  const chartProposalSets = asArray(state?.chartProposalSets);
+  const proposalPayloads = chartProposalSets.flatMap((set) => asArray(set?.payload?.proposals));
+  const acceptedCharts = proposalPayloads.filter((proposal) => proposal.status === "accepted").length;
+  const chartSpecs = activeChartSpecsForProject(state);
+  const staleChartSpecs = staleChartSpecCountForProject(state);
+  const manuscripts = asArray(state?.manuscripts);
+  return {
+    profileCount,
+    profileComplete: profileCount >= 3,
+    hasDataset,
+    importStatus: latestImportRun?.status || (hasDataset ? "applied" : "not started"),
+    chartProposalCount: proposalPayloads.length,
+    acceptedCharts,
+    chartSpecCount: chartSpecs.length,
+    staleChartSpecCount: staleChartSpecs,
+    manuscriptCount: manuscripts.length,
+    manuscriptUpdatedAt: latestItem(manuscripts)?.updatedAt || null,
+  };
+}
+
+function ProjectStatusChip({ tone = "neutral", children }) {
+  return <span className={`project-status-chip ${tone}`}>{children}</span>;
+}
+
+function ProjectSwitcher({
+  user,
+  labs,
+  activeLabId,
+  onLabChange,
+  projects,
+  activeProjectId,
+  onProjectChange,
+  onOpenDashboard,
+  onCreateProject,
+  onOpenProfile,
+  onOpenImportReview,
+  hasImportReview,
+  onLogout,
+}) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef(null);
+  const activeLab = labs.find((lab) => (lab.id || lab.labId) === activeLabId) || null;
+  const activeProject = projects.find((project) => project.id === activeProjectId) || null;
+  const labName = activeLab?.name || "No lab";
+  const projectName = activeProject?.name || "No project";
+  const close = () => setOpen(false);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointerDown = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) close();
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") close();
+    };
+    window.addEventListener("mousedown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("mousedown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+  return (
+    <div className="project-switcher" ref={menuRef}>
+      <div className="project-switcher-context" aria-label="Current lab and project" title={`${labName} / ${projectName}`}>
+        <span>{labName}</span>
+        <strong>{projectName}</strong>
+      </div>
+      <button
+        type="button"
+        className="project-file-button"
+        aria-label="File menu"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        File
+      </button>
+      {open && (
+        <div className="project-switcher-menu" role="menu">
+          <div className="project-switcher-user">
+            <span>{user?.displayName || user?.username || "Signed in"}</span>
+            <small>{user?.username || "workspace"}</small>
+          </div>
+          <label>
+            <span>Lab</span>
+            <select value={activeLabId || ""} onChange={(event) => { onLabChange?.(event.target.value); close(); }}>
+              {labs.map((lab) => <option key={lab.id || lab.labId} value={lab.id || lab.labId}>{lab.name}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Project</span>
+            <select value={activeProjectId || ""} onChange={(event) => { onProjectChange?.(event.target.value); close(); }}>
+              <option value="">Select project</option>
+              {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+            </select>
+          </label>
+          <div className="project-switcher-actions">
+            <button type="button" onClick={() => { close(); onOpenDashboard?.(); }}>Projects</button>
+            <button type="button" onClick={() => { close(); onCreateProject?.(); }}>New project</button>
+            <button type="button" disabled={!activeProjectId} onClick={() => { close(); onOpenProfile?.(); }}>Profile</button>
+            <button type="button" disabled={!hasImportReview || !activeProjectId} onClick={() => { close(); onOpenImportReview?.(); }}>Import workbook</button>
+            <button type="button" onClick={() => { close(); onLogout?.(); }}>Logout</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function Topbar({
+  tab,
+  setTab,
+  workspaceMode,
+  onOpenDashboard,
+  dirty,
+  onSave,
+  onAgent,
+  dataset,
+  sourceName,
+  loadingSource,
+  sourceError,
+  onOpenImportReview,
+  hasImportReview,
+  blankMode,
+  user,
+  labs,
+  activeLabId,
+  onLabChange,
+  projects,
+  activeProjectId,
+  onProjectChange,
+  onCreateProject,
+  onOpenProfile,
+  onLogout,
+}) {
+  const showProjectTabs = workspaceMode !== "dashboard" && !!activeProjectId;
+  const showProjectSwitcher = workspaceMode !== "dashboard";
   return (
     <header className="topbar">
       <div className="brand"><img className="brand-logo" src={`${import.meta.env.BASE_URL}labrat-logo.png`} alt="LabRat" /><span className="brand-word">LabRat</span><span className="sub">&middot; Your AI Research Assistant</span></div>
       <nav className="tabs">
-        {[["browser", "Experiment Browser"], ["manuscript", "Manuscript"], ["reference", "Add Reference"]].map(([k, label]) => (
+        {showProjectTabs && [["overview", "Overview"], ["browser", "Browser"], ["manuscript", "Manuscript"], ["reference", "Refs"]].map(([k, label]) => (
           <button key={k} className={tab === k ? "active" : ""} onClick={() => setTab(k)}>{label}</button>
         ))}
       </nav>
-      <div className="top-actions">
-        <span className={`badge ${sourceError ? "bad-src" : ""}`} title={sourceError || sourceName}>{dataset.experiments.length} experiments</span>
-        {blankMode ? (
-          <>
-            <button className="folder-btn primary-import" type="button" disabled={!hasImportReview} onClick={onOpenImportReview}>Import Excel workbook</button>
-            <label className="folder-btn legacy-import" title="Legacy HDPE MasterTable.xlsx folder import">
-              {loadingSource ? "Loading..." : "Legacy MasterTable folder"}
-              <input type="file" multiple webkitdirectory="" directory="" accept=".xlsx,.xls" onChange={(e) => onLoadFolder(e.target.files)} />
-            </label>
-          </>
-        ) : (
-          <>
-            <label className="folder-btn">
-              {loadingSource ? "Loading..." : "Load Excel folder"}
-              <input type="file" multiple webkitdirectory="" directory="" accept=".xlsx,.xls" onChange={(e) => onLoadFolder(e.target.files)} />
-            </label>
-            <button className="folder-btn" type="button" disabled={!hasImportReview} onClick={onOpenImportReview}>Import review</button>
-          </>
+      <div className="top-actions" aria-label="Workspace actions">
+        {sourceError && <span className="topbar-status bad-src" title={sourceError}>{sourceError}</span>}
+        {showProjectSwitcher && (
+          <ProjectSwitcher
+            user={user}
+            labs={labs}
+            activeLabId={activeLabId}
+            onLabChange={onLabChange}
+            projects={projects}
+            activeProjectId={activeProjectId}
+            onProjectChange={onProjectChange}
+            onOpenDashboard={onOpenDashboard}
+            onCreateProject={onCreateProject}
+            onOpenProfile={onOpenProfile}
+            onOpenImportReview={onOpenImportReview}
+            hasImportReview={hasImportReview}
+            onLogout={onLogout}
+          />
         )}
-        {tab === "manuscript" && <button className={`save ${dirty ? "dirty" : ""}`} onClick={onSave}>Save</button>}
-        <button className="folder-btn" onClick={onExportProject}>Export project</button>
-        <label className="folder-btn">
-          Import project
-          <input type="file" accept=".labrat.json,application/json" onChange={(e) => { onImportProject(e.target.files?.[0]); e.target.value = ""; }} />
-        </label>
-        <button className="agent-btn" onClick={onAgent}>
+        <button className="agent-btn" type="button" onClick={onAgent}>
           <img src={`${import.meta.env.BASE_URL}labrat-logo.png`} alt="" />
-          <span>Ask Lab Rat</span>
+          <span>Ask</span>
         </button>
       </div>
     </header>
   );
 }
 
-function Browser({ dataset, setSelected, sourceName, blankMode, onOpenImportReview, templateLinks }) {
+export function ProjectDashboard({
+  user,
+  labs,
+  activeLabId,
+  onLabChange,
+  projects,
+  selectedProjectId,
+  onSelectProject,
+  onOpenProject,
+  onCreateProject,
+  activeProjectId,
+  projectState,
+  projectStateLoading,
+  sourceError,
+}) {
+  const selectedProject = projects.find((project) => project.id === selectedProjectId)
+    || projects.find((project) => project.id === activeProjectId)
+    || projects[0]
+    || null;
+  const selectedIsLoaded = !!selectedProject && selectedProject.id === projectState?.project?.id;
+  const summary = projectWorkflowSummary(selectedProject, selectedIsLoaded ? projectState : null);
+  const projectRows = projects.map((project) => ({
+    project,
+    summary: projectWorkflowSummary(project, project.id === projectState?.project?.id ? projectState : null),
+  }));
+  return (
+    <main className="project-dashboard">
+      <aside className="project-dashboard-rail">
+        <div>
+          <h2>Labs</h2>
+          <p>{user?.displayName || user?.username || "Signed in"}</p>
+        </div>
+        <div className="lab-list">
+          {labs.map((lab) => {
+            const labId = lab.id || lab.labId;
+            return (
+              <button
+                type="button"
+                key={labId}
+                className={labId === activeLabId ? "active" : ""}
+                onClick={() => onLabChange?.(labId)}
+              >
+                <span>{lab.name}</span>
+                <small>{lab.role || "member"}</small>
+              </button>
+            );
+          })}
+        </div>
+        <button type="button" className="wide-action primary" disabled={!activeLabId} onClick={onCreateProject}>New project</button>
+      </aside>
+
+      <section className="project-dashboard-list">
+        <div className="project-dashboard-head">
+          <div>
+            <h1>Projects</h1>
+            <p>{projects.length ? `${projects.length} project${projects.length === 1 ? "" : "s"} in this lab` : "Create your first research project."}</p>
+          </div>
+          <button type="button" className="primary" disabled={!activeLabId} onClick={onCreateProject}>New project</button>
+        </div>
+        {sourceError && <p className="import-review-error">{sourceError}</p>}
+        {projects.length ? (
+          <div className="project-table" role="table" aria-label="Projects">
+            <div className="project-table-row header" role="row">
+              <span>Project</span>
+              <span>Progress</span>
+              <span>Data</span>
+              <span>Charts</span>
+              <span>Updated</span>
+              <span />
+            </div>
+            {projectRows.map(({ project, summary: rowSummary }) => (
+              <div
+                role="row"
+                tabIndex={0}
+                key={project.id}
+                className={`project-table-row ${selectedProject?.id === project.id ? "active" : ""}`}
+                onClick={() => onSelectProject?.(project.id)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelectProject?.(project.id);
+                  }
+                }}
+              >
+                <span className="project-name-cell">
+                  <strong>{project.name}</strong>
+                  <small>{project.projectProfile?.researchGoal || project.description || "No research goal yet"}</small>
+                </span>
+                <span className="project-progress-cell">
+                  <ProjectStatusChip tone={rowSummary.profileComplete ? "good" : "warn"}>Profile {rowSummary.profileCount}/7</ProjectStatusChip>
+                  <ProjectStatusChip tone={rowSummary.manuscriptCount ? "good" : "neutral"}>{rowSummary.manuscriptCount ? "Manuscript" : "No manuscript"}</ProjectStatusChip>
+                </span>
+                <span>{rowSummary.hasDataset ? "Dataset committed" : "No data"}</span>
+                <span>{rowSummary.chartSpecCount} specs</span>
+                <span>{formatShortDate(project.updatedAt)}</span>
+                <span className="project-open-cell">
+                  <button
+                    type="button"
+                    className="project-row-open"
+                    disabled={projectStateLoading && project.id === activeProjectId}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onSelectProject?.(project.id);
+                      onOpenProject?.(project.id);
+                    }}
+                  >
+                    {projectStateLoading && project.id === activeProjectId ? "Opening..." : "Open"}
+                  </button>
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="project-dashboard-empty">
+            <h2>No projects yet</h2>
+            <p>Start a project for a research topic, then upload data and create reviewed chart specs.</p>
+            <button type="button" className="primary" disabled={!activeLabId} onClick={onCreateProject}>New project</button>
+          </div>
+        )}
+      </section>
+
+      <aside className="project-detail-panel">
+        {selectedProject ? (
+          <>
+            <div className="project-detail-head">
+              <span>{selectedProject.status || "active"}</span>
+              <h2>{selectedProject.name}</h2>
+              <p>{selectedProject.projectProfile?.researchGoal || selectedProject.description || "No project background saved yet."}</p>
+            </div>
+            <div className="project-detail-metrics">
+              <div><strong>{summary.profileCount}/7</strong><span>Profile fields</span></div>
+              <div><strong>{summary.hasDataset ? "Yes" : "No"}</strong><span>Dataset commit</span></div>
+              <div><strong>{summary.chartSpecCount}</strong><span>Chart specs</span></div>
+              <div><strong>{summary.manuscriptCount}</strong><span>Manuscripts</span></div>
+            </div>
+            <div className="project-flow-stack">
+              <ProjectFlowItem done={summary.profileComplete} label="Project background" detail={summary.profileComplete ? "Ready for AI context" : "Needs more context"} />
+              <ProjectFlowItem done={summary.hasDataset} label="Dataset" detail={summary.hasDataset ? "Current commit available" : "Upload and apply import"} />
+              <ProjectFlowItem done={summary.chartSpecCount > 0} label="Approved charts" detail={summary.chartSpecCount ? `${summary.chartSpecCount} chart specs` : `${summary.chartProposalCount} proposals, ${summary.acceptedCharts} accepted`} />
+              <ProjectFlowItem done={summary.manuscriptCount > 0} label="Manuscript" detail={summary.manuscriptUpdatedAt ? `Updated ${formatShortDate(summary.manuscriptUpdatedAt)}` : "Not started"} />
+            </div>
+          </>
+        ) : (
+          <div className="project-dashboard-empty compact">
+            <h2>No project selected</h2>
+            <p>Create a project to start collecting experiment context and data.</p>
+          </div>
+        )}
+      </aside>
+    </main>
+  );
+}
+
+function ProjectFlowItem({ done, label, detail }) {
+  return (
+    <div className={`project-flow-item ${done ? "done" : ""}`}>
+      <span aria-hidden="true">{done ? "OK" : "--"}</span>
+      <div>
+        <strong>{label}</strong>
+        <small>{detail}</small>
+      </div>
+    </div>
+  );
+}
+
+export function ProjectOverview({ projectState, dataset, onOpenProfile, onOpenImportReview, onOpenRefreshWorkbook, onOpenChartReview, onGoManuscript }) {
+  const summary = projectWorkflowSummary(projectState?.project, projectState);
+  const genericImports = asArray(dataset?.genericImports);
+  const canRefreshWorkbook = !!(projectState?.currentDatasetCommit?.id || projectState?.project?.currentDatasetCommitId)
+    && genericImports.length > 0;
+  const chartDetail = summary.staleChartSpecCount
+    ? `${summary.chartProposalCount} proposals, ${summary.acceptedCharts} accepted. Some older chart specs are hidden until regenerated.`
+    : `${summary.chartProposalCount} proposals, ${summary.acceptedCharts} accepted`;
+  const nextAction = !summary.profileComplete
+    ? { label: "Edit profile", action: onOpenProfile }
+    : !summary.hasDataset
+      ? { label: "Import workbook", action: onOpenImportReview }
+    : !summary.chartSpecCount
+        ? { label: "Review chart proposals", action: onOpenChartReview }
+        : { label: "Build manuscript", action: onGoManuscript };
+  return (
+    <main className="project-overview">
+      <section className="project-overview-hero">
+        <div>
+          <h1>{projectState?.project?.name || "Project overview"}</h1>
+          <p>{projectState?.projectProfile?.researchGoal || "Complete the project profile so later chart and manuscript suggestions have context."}</p>
+        </div>
+        <button type="button" className="primary" onClick={nextAction.action}>{nextAction.label}</button>
+      </section>
+      <section className="project-overview-grid">
+        <ProjectOverviewCard title="Project profile" value={`${summary.profileCount}/7`} detail={summary.profileComplete ? "Enough context for chart AI" : "Add research goal, materials, methods, and analysis notes"} action="Edit profile" onClick={onOpenProfile} />
+        <ProjectOverviewCard
+          title="Dataset"
+          value={summary.hasDataset ? `${genericImports.length} imports` : "No data"}
+          detail={summary.hasDataset ? `Import status: ${summary.importStatus}` : "Import a workbook and apply reviewed normalization"}
+          action="Import workbook"
+          onClick={onOpenImportReview}
+          secondaryAction="Refresh workbook"
+          onSecondaryClick={onOpenRefreshWorkbook}
+          secondaryDisabled={!canRefreshWorkbook}
+          secondaryTitle={canRefreshWorkbook ? "Replace a committed import with a reviewed workbook refresh" : "Refresh requires a committed server dataset import"}
+        />
+        <ProjectOverviewCard title="Charts" value={`${summary.chartSpecCount} specs`} detail={chartDetail} action="Review chart proposals" onClick={onOpenChartReview} />
+        <ProjectOverviewCard title="Manuscript" value={summary.manuscriptCount ? "Draft" : "Not started"} detail={summary.manuscriptUpdatedAt ? `Updated ${formatShortDate(summary.manuscriptUpdatedAt)}` : "Insert approved chart specs into the canvas"} action="Open manuscript" onClick={onGoManuscript} />
+      </section>
+    </main>
+  );
+}
+
+function ProjectOverviewCard({ title, value, detail, action, onClick, secondaryAction, onSecondaryClick, secondaryDisabled = false, secondaryTitle = "" }) {
+  return (
+    <article className="project-overview-card">
+      <span>{title}</span>
+      <strong>{value}</strong>
+      <p>{detail}</p>
+      <div className="project-overview-card-actions">
+        <button type="button" onClick={onClick}>{action}</button>
+        {secondaryAction && (
+          <button
+            type="button"
+            className="secondary"
+            disabled={secondaryDisabled}
+            title={secondaryTitle}
+            onClick={onSecondaryClick}
+          >
+            {secondaryAction}
+          </button>
+        )}
+      </div>
+    </article>
+  );
+}
+
+export function NewProjectModal({ open, loading, error, onCreate, onClose }) {
+  const [draft, setDraft] = useState({ name: "", description: "" });
+  useEffect(() => {
+    if (open) setDraft({ name: "", description: "" });
+  }, [open]);
+  if (!open) return null;
+  return (
+    <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !loading) onClose?.(); }}>
+      <form className="modal new-project-modal" role="dialog" aria-modal="true" aria-label="New project" onSubmit={(event) => {
+        event.preventDefault();
+        onCreate?.(draft);
+      }}>
+        <div className="modal-head">
+          <h2>New project</h2>
+          <button type="button" aria-label="Close" disabled={loading} onClick={onClose}>x</button>
+        </div>
+        <div className="modal-body">
+          <label>Project name<input autoFocus value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} placeholder="e.g. CO2 reduction catalyst screen" /></label>
+          <label>Short description<textarea value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} placeholder="Optional research topic, campaign, or objective" /></label>
+          {error && <p className="import-review-error">{error}</p>}
+          <div className="modal-actions">
+            <button type="button" disabled={loading} onClick={onClose}>Cancel</button>
+            <button type="submit" className="primary" disabled={loading || !draft.name.trim()}>{loading ? "Creating..." : "Create project"}</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+export function RefreshWorkbookModal({ open, imports = [], defaultImportId = "", loading = false, error = "", onStartRefresh, onClose }) {
+  const committedImports = asArray(imports).filter((item) => item?.importId);
+  const fallbackImportId = defaultImportId || latestItem(committedImports)?.importId || "";
+  const [selectedImportId, setSelectedImportId] = useState(fallbackImportId);
+  useEffect(() => {
+    if (open) setSelectedImportId(fallbackImportId);
+  }, [open, fallbackImportId]);
+  if (!open) return null;
+  const selectedImport = committedImports.find((item) => item.importId === selectedImportId) || committedImports[0] || null;
+  const startRefresh = (event) => {
+    const file = event.target.files?.[0];
+    if (file && selectedImport) {
+      onStartRefresh?.({
+        file,
+        replaceImportId: selectedImport.importId,
+        targetImport: selectedImport,
+      });
+    }
+    event.target.value = "";
+  };
+  return (
+    <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !loading) onClose?.(); }}>
+      <section className="modal refresh-workbook-modal" role="dialog" aria-modal="true" aria-label="Refresh workbook">
+        <div className="modal-head">
+          <h2>Refresh workbook</h2>
+          <button type="button" aria-label="Close refresh workbook" disabled={loading} onClick={onClose}>x</button>
+        </div>
+        <div className="modal-body">
+          <p className="import-review-note">
+            Choose the committed import to replace, then upload the corrected workbook. The replacement still goes through full scan, block review, normalized preview, and refresh diff review before apply.
+          </p>
+          {committedImports.length ? (
+            <div className="refresh-import-list" role="radiogroup" aria-label="Committed imports">
+              {committedImports.map((item) => {
+                const itemId = item.importId;
+                const lineage = genericImportLineageText(item);
+                return (
+                  <label className={`refresh-import-option ${selectedImportId === itemId ? "active" : ""}`} key={itemId}>
+                    <input
+                      type="radio"
+                      name="refresh-import"
+                      value={itemId}
+                      checked={selectedImportId === itemId}
+                      onChange={() => setSelectedImportId(itemId)}
+                    />
+                    <span>
+                      <strong>{genericImportLabel(item)}</strong>
+                      <small>{genericImportExperimentCount(item)} experiments - {genericImportFieldCount(item)} fields</small>
+                      {lineage && <small>{lineage}</small>}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="import-review-empty">No committed imports are available to refresh.</div>
+          )}
+          {error && <p className="import-review-error">{error}</p>}
+          <div className="modal-actions">
+            <button type="button" disabled={loading} onClick={onClose}>Cancel</button>
+            <label className={`folder-btn ${loading || !selectedImport ? "disabled" : ""}`}>
+              {loading ? "Starting..." : "Upload replacement workbook"}
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                disabled={loading || !selectedImport}
+                onChange={startRefresh}
+              />
+            </label>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function Browser({ dataset, setSelected, sourceName, blankMode, onOpenImportReview, onOpenProfile, projectProfile, templateLinks }) {
   const [filters, setFilters] = useState({ search: "", cat: [], impeller: [], rpm: [], cb95: false, hasPostGc: false, hasSweep: false, hasrate: false });
   const [sort, setSort] = useState(["date", -1]);
+  const [browserView, setBrowserView] = useState("curated");
   const setChip = (key, val) => setFilters((f) => ({ ...f, [key]: f[key].includes(val) ? f[key].filter((x) => x !== val) : [...f[key], val] }));
   const hasPostReactionGc = (e) => !!(e.calculation || e.files?.calculation || e.sources?.some((source) => source.kind === "post_reaction_gc"));
   const hasSweepData = (e) => !!(e.sweep || e.files?.sweep || e.sources?.some((source) => source.kind === "sweep_gc"));
+  const genericRowCount = useMemo(() => buildGenericBrowserRows(dataset).length, [dataset]);
+  const activeView = !dataset.experiments.length && genericRowCount ? "imported" : browserView;
+  const viewSwitch = (
+    <section className="filter">
+      <h4>View</h4>
+      <div className="chips">
+        <Chip active={activeView === "curated"} onClick={() => setBrowserView("curated")}>Curated ({dataset.experiments.length})</Chip>
+        <Chip active={activeView === "imported"} onClick={() => setBrowserView("imported")}>Imported ({genericRowCount})</Chip>
+      </div>
+    </section>
+  );
   const rows = useMemo(() => {
     const q = filters.search.toLowerCase().trim();
     const out = dataset.experiments.filter((e) => {
@@ -115,21 +768,38 @@ function Browser({ dataset, setSelected, sourceName, blankMode, onOpenImportRevi
           </section>
           <section className="filter">
             <h4>Compatibility</h4>
-            <p>Legacy HDPE MasterTable folder import remains available in the topbar.</p>
+            <p>Legacy HDPE MasterTable folder import remains available from Import review.</p>
           </section>
         </aside>
         <main className="main">
           <div className="page-head">
-            <div><h1>New LabRat project</h1><p>No embedded research data is loaded in blank mode.</p></div>
+            <div><h1>New LabRat project</h1><p>{projectProfile?.researchGoal || "No accepted dataset commit yet."}</p></div>
+            <button type="button" className="compact-action primary" onClick={onOpenImportReview}>Import workbook</button>
+          </div>
+          <div className="server-project-start">
+            <button type="button" className="primary" onClick={onOpenProfile}>Edit profile</button>
           </div>
           <BlankOnboarding onImportWorkbook={onOpenImportReview} templateLinks={templateLinks} />
         </main>
       </div>
     );
   }
+  if (activeView === "imported") {
+    return (
+      <div className="browser">
+        <GenericImportBrowser
+          dataset={dataset}
+          sourceName={sourceName}
+          onOpenImportReview={onOpenImportReview}
+          viewSwitch={viewSwitch}
+        />
+      </div>
+    );
+  }
   return (
     <div className="browser">
       <aside className="sidebar">
+        {viewSwitch}
         <Filter title="Search"><input value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} placeholder="Label, comments..." /></Filter>
         <Filter title="Catalyst">{cats.map((c) => <Chip key={c} active={filters.cat.includes(c)} onClick={() => setChip("cat", c)}>{c}</Chip>)}</Filter>
         <Filter title="Impeller">{imps.map((c) => <Chip key={c} active={filters.impeller.includes(c)} onClick={() => setChip("impeller", c)}>{c}</Chip>)}</Filter>
@@ -138,13 +808,14 @@ function Browser({ dataset, setSelected, sourceName, blankMode, onOpenImportRevi
         <label className="check"><input type="checkbox" checked={filters.hasPostGc} onChange={(e) => setFilters({ ...filters, hasPostGc: e.target.checked })} /> Has post-rxn GC data</label>
         <label className="check"><input type="checkbox" checked={filters.hasSweep} onChange={(e) => setFilters({ ...filters, hasSweep: e.target.checked })} /> Has sweep data</label>
         <label className="check"><input type="checkbox" checked={filters.hasrate} onChange={(e) => setFilters({ ...filters, hasrate: e.target.checked })} /> Has rate data</label>
-        <button className="clear" onClick={() => setFilters({ search: "", cat: [], impeller: [], rpm: [], cb95: false, hasPostGc: false, hasSweep: false, hasrate: false })}>Clear filters</button>
+        <button className="clear" type="button" onClick={() => setFilters({ search: "", cat: [], impeller: [], rpm: [], cb95: false, hasPostGc: false, hasSweep: false, hasrate: false })}>Clear filters</button>
       </aside>
       <main className="main">
         <div className="page-head">
           <div><h1>Experiment Browser</h1><p>{rows.length} of {dataset.experiments.length} experiments - source: {sourceName} - click a row for full record.</p></div>
+          <button type="button" className="compact-action primary" onClick={onOpenImportReview}>Import workbook</button>
         </div>
-        <div className="card table-wrap">
+        <div className="card table-wrap experiment-table">
           <table>
             <thead><tr>{[
               ["label", "Label"], ["date", "Date"], ["catalyst_loading_g", "Cat (g)"], ["reaction_time_hr", "t (h)"], ["rpm", "RPM"], ["impeller", "Impeller"], ["conversion_pct", "Conv %"], ["selectivity_liquid_pct", "Sel S/L/G"], ["carbon_balance_pct", "C-bal %"], ["files", "Files"],
@@ -157,7 +828,13 @@ function Browser({ dataset, setSelected, sourceName, blankMode, onOpenImportRevi
                 <td className="plain-cell"><span className={`pill ${e.carbon_balance_pct >= 95 ? "ok" : e.carbon_balance_pct >= 90 ? "warn" : "bad"}`}>{fmt(e.carbon_balance_pct, 1)}</span></td>
                 <td className="plain-cell"><FilePills e={e} /></td>
               </tr>
-            ))}</tbody>
+            ))}
+              {!rows.length && (
+                <tr className="table-empty-row">
+                  <td colSpan={10}>No experiments match the active filters.</td>
+                </tr>
+              )}
+            </tbody>
           </table>
         </div>
       </main>
@@ -170,7 +847,7 @@ function Filter({ title, children }) {
 }
 
 function Chip({ active, onClick, children }) {
-  return <button className={`chip ${active ? "active" : ""}`} onClick={onClick}>{children}</button>;
+  return <button type="button" className={`chip ${active ? "active" : ""}`} aria-pressed={active} onClick={onClick}>{children}</button>;
 }
 
 function FilePills({ e }) {
@@ -198,7 +875,7 @@ function DetailModal({ exp, onClose, onStage }) {
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal wide">
-        <div className="modal-head"><span>{exp.label} - Full record</span><button onClick={onClose}>x</button></div>
+        <div className="modal-head"><span>{exp.label} - Full record</span><button type="button" aria-label="Close full record" onClick={onClose}>x</button></div>
         <div className="modal-body">
           <div className="detail-title">
             <div><h2>{exp.label} <span>{formatExperimentDateForDisplay(exp.date)}</span></h2><p>{exp.catalyst_type} - {exp.polymer_type} - {exp.impeller} impeller</p></div>
@@ -227,105 +904,118 @@ function Stat({ label, value, note }) {
 }
 
 function ImportReviewModal({
-  session,
+  mode = "append",
+  refreshDraft,
   backendScanState,
   backendBlockReview,
   backendNormalizeState,
   backendMappingState,
-  backendChartProposalState,
+  genericImports,
+  fieldRoleOverrides,
   onBackendScanFile,
   onBlockReviewDecision,
+  onFieldRoleOverride,
   onPreviewNormalize,
   onApplyNormalize,
   onProposeMappings,
   onMappingDecision,
-  onProposeCharts,
-  onChartProposalDecision,
+  onReloadProjectState,
   onClose,
-  onApproveProposal,
-  onRejectProposal,
 }) {
-  const proposals = Array.isArray(session?.proposals?.proposals) ? session.proposals.proposals : [];
+  const isRefreshMode = mode === "refresh";
+  const targetLabel = genericImportLabel(refreshDraft?.targetImport);
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <section className="modal wide import-review-modal" role="dialog" aria-modal="true" aria-label="Import review">
+      <section className="modal wide import-review-modal" role="dialog" aria-modal="true" aria-label={isRefreshMode ? "Refresh workbook review" : "Import review"}>
         <div className="modal-head">
-          <span>Import review</span>
-          <button type="button" onClick={onClose}>x</button>
+          <span>{isRefreshMode ? "Refresh workbook review" : "Import review"}</span>
+          <button type="button" aria-label="Close import review" onClick={onClose}>x</button>
         </div>
         <div className="modal-body">
           <p className="import-review-note">
-            Workbook scanning, block review, normalization, semantic mappings, and chart proposals stay review-only until you explicitly apply normalized data or accept/reject proposal overlays.
+            {isRefreshMode
+              ? `Refresh workflow: scan the replacement workbook for ${targetLabel}, review detected blocks and fields, preview normalized data, then approve the refresh diff before replacing the committed import.`
+              : "Import workflow: scan a workbook, review detected blocks and fields, preview/apply normalized data, then review semantic mappings for Browser columns and chart inputs."}
           </p>
           <BackendScanPanel
+            mode={mode}
+            refreshDraft={refreshDraft}
             scanState={backendScanState}
             blockReview={backendBlockReview}
             normalizeState={backendNormalizeState}
             mappingState={backendMappingState}
-            chartProposalState={backendChartProposalState}
+            genericImports={genericImports}
+            fieldRoleOverrides={fieldRoleOverrides}
             onScanFile={onBackendScanFile}
             onBlockReviewDecision={onBlockReviewDecision}
+            onFieldRoleOverride={onFieldRoleOverride}
             onPreviewNormalize={onPreviewNormalize}
             onApplyNormalize={onApplyNormalize}
             onProposeMappings={onProposeMappings}
             onMappingDecision={onMappingDecision}
-            onProposeCharts={onProposeCharts}
-            onChartProposalDecision={onChartProposalDecision}
+            onReloadProjectState={onReloadProjectState}
           />
-          <section className="import-review-section">
-            <div className="import-review-section-head">
-              <h3>Scanned workbooks</h3>
-              <span>{session?.scan?.workbookCount || 0} files</span>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export function ChartReviewModal({
+  open,
+  genericImports = [],
+  mappingState,
+  chartProposalState,
+  chartInterpretState,
+  chartSpecs,
+  onProposeCharts,
+  onChartProposalDecision,
+  onInterpretChart,
+  onCreateChartSpec,
+  onOpenImportReview,
+  onClose,
+}) {
+  if (!open) return null;
+  const hasImports = genericImports.length > 0;
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <section className="modal wide chart-review-modal" role="dialog" aria-modal="true" aria-label="Review chart proposals">
+        <div className="modal-head">
+          <span>Review chart proposals</span>
+          <button type="button" aria-label="Close chart proposal review" onClick={onClose}>x</button>
+        </div>
+        <div className="modal-body">
+          <p className="import-review-note">
+            Draft one chart proposal from a prompt, review chart proposals, then create ChartSpecs for Manuscript.
+          </p>
+          {hasImports ? (
+            <ChartReviewPanel
+              genericImports={genericImports}
+              mappingState={mappingState}
+              chartProposalState={chartProposalState}
+              chartInterpretState={chartInterpretState}
+              chartSpecs={chartSpecs}
+              onProposeCharts={onProposeCharts}
+              onChartProposalDecision={onChartProposalDecision}
+              onInterpretChart={onInterpretChart}
+              onCreateChartSpec={onCreateChartSpec}
+            />
+          ) : (
+            <div className="import-review-empty chart-review-empty">
+              <strong>Import workbook first</strong>
+              <span>Chart proposals need reviewed imported data before LabRat can draft chart specs.</span>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => {
+                  onClose?.();
+                  onOpenImportReview?.();
+                }}
+              >
+                Import workbook
+              </button>
             </div>
-            <div className="import-review-grid">
-              {(session?.scan?.scannedWorkbooks || []).map((workbook) => (
-                <article className="import-review-card" key={workbook.fileName}>
-                  <div className="import-review-card-head">
-                    <strong>{workbook.fileName}</strong>
-                    <span>{workbook.sheetCount} sheets</span>
-                  </div>
-                  <p>Sheets: {workbook.sheetNames.join(", ") || "None"}</p>
-                  <p>Experiment labels: {workbook.sheets.flatMap((sheet) => sheet.detectedExperimentLabels || []).filter((value, index, list) => value && list.indexOf(value) === index).join(", ") || "None detected"}</p>
-                  <p>Units: {workbook.sheets.flatMap((sheet) => sheet.detectedUnits || []).filter((value, index, list) => value && list.indexOf(value) === index).slice(0, 6).join(", ") || "None detected"}</p>
-                  <p>Keywords: {workbook.sheets.flatMap((sheet) => (sheet.keywordHits || []).map((hit) => hit.keyword)).filter((value, index, list) => value && list.indexOf(value) === index).join(", ") || "None detected"}</p>
-                </article>
-              ))}
-            </div>
-          </section>
-          <section className="import-review-section">
-            <div className="import-review-section-head">
-              <h3>AI parser boundary</h3>
-              <span>{session?.proposals?.parserStatus || "unknown"}</span>
-            </div>
-            <p className="import-review-note">{session?.proposals?.notes || "No parser notes."}</p>
-            {proposals.length ? (
-              <div className="import-review-proposals">
-                {proposals.map((proposal) => (
-                  <article className="import-review-proposal" key={proposal.proposalId}>
-                    <div>
-                      <strong>{proposal.targetPath}</strong>
-                      <p>{proposal.experimentLabel || "Unscoped proposal"} from {proposal.sourceWorkbook || "unknown workbook"}</p>
-                    </div>
-                    <div className="import-review-actions">
-                      <button type="button" onClick={() => onRejectProposal(proposal.proposalId)}>Reject</button>
-                      <button type="button" className="primary" onClick={() => onApproveProposal(proposal.proposalId)}>Approve</button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <div className="import-review-empty">
-                No AI mapping proposals yet. The scanner metadata is ready for a future parser to consume.
-              </div>
-            )}
-          </section>
-          <section className="import-review-section">
-            <div className="import-review-section-head">
-              <h3>Review state</h3>
-            </div>
-            <p>Approved: {session?.confirmedProposalIds?.length || 0}</p>
-            <p>Rejected: {session?.rejectedProposalIds?.length || 0}</p>
-          </section>
+          )}
         </div>
       </section>
     </div>
@@ -350,7 +1040,7 @@ function ReferenceLibrary({ references, setReferences }) {
   });
   const shown = filter === "all" ? references : references.filter((r) => r.kind === filter);
   return <main className="reference main">
-    <div className="page-head"><div><h1>Add Reference</h1><p>Upload images, PDFs, raw data, calculations, and notes into the local reference library.</p></div></div>
+    <div className="page-head"><div><h1>References</h1><p>Upload images, PDFs, raw data, calculations, and notes into the local reference library.</p></div></div>
     <label className="drop">Drop or choose files<input type="file" multiple onChange={(e) => addFiles(e.target.files)} /></label>
     <div className="chips ref-filter">{["all", "image", "pdf", "data", "document", "code", "other"].map((k) => <Chip key={k} active={filter === k} onClick={() => setFilter(k)}>{k}</Chip>)}</div>
     <div className="ref-grid">{shown.map((r) => <article className="ref-card" key={r.id}>
@@ -431,7 +1121,12 @@ function AgentPanel({ open, setOpen, dataset, blocks, setBlocks, references, sel
       project_background: projectBackground,
       house_rules: houseRules,
     },
-    manuscript_blocks: blocks.map((b) => ({ kind: b.kind, chartKind: b.chartKind, labels: b.labels, title: b.opts?.title, text: b.kind === "text" ? b.html : undefined })),
+    manuscript_blocks: blocks.map((b) => ({
+      kind: b.kind,
+      chartSpecId: b.chartSpecId,
+      title: b.chartSpecSnapshot?.title || b.opts?.title,
+      text: b.kind === "text" ? b.html : undefined,
+    })),
     references: references.map((r) => ({ name: r.name, kind: r.kind, note: r.note })),
     experiments_csv: dataset.experiments.map((e) => [e.label, e.catalyst_loading_g, e.rpm, e.impeller, e.reaction_time_hr, e.conversion_pct, e.selectivity_liquid_pct, e.carbon_balance_pct].join(",")).join("\n"),
   });
@@ -680,68 +1375,173 @@ function AgentPanel({ open, setOpen, dataset, blocks, setBlocks, references, sel
 }
 
 function App() {
-  const [tab, setTab] = useState("browser");
-  const [dataset, setDataset] = useState(() => BLANK_MODE ? emptyDataset() : ls.get("labrat_dataset", emptyDataset()));
-  const [sourceName, setSourceName] = useState(() => BLANK_MODE ? BLANK_PROJECT_SOURCE_NAME : (localStorage.getItem("labrat_blank_source_name") || "embedded LabRat dataset"));
+  const [tab, setTab] = useState("overview");
+  const [workspaceMode, setWorkspaceMode] = useState("dashboard");
+  const [dataset, setDataset] = useState(() => emptyDataset());
+  const [sourceName, setSourceName] = useState(BLANK_PROJECT_SOURCE_NAME);
   const [sourceError, setSourceError] = useState("");
   const [loadingSource, setLoadingSource] = useState(false);
-  const [staged, setStaged] = useState(() => ls.get("labrat_staged", []));
-  const [blocks, setBlocks] = useState(() => ls.get("labrat_blocks", []));
-  const [canvasHeight, setCanvasHeight] = useState(() => ls.get("labrat_canvas_height", 0));
+  const [staged, setStaged] = useState([]);
+  const [blocks, setBlocks] = useState([]);
+  const [canvasHeight, setCanvasHeight] = useState(0);
   const [pages, setPages] = useState(null);
   const [pageOrientationPreference, setPageOrientationPreference] = useState(null);
-  const [chartTemplates, setChartTemplates] = useState(() => ls.get("labrat_chart_templates", []));
-  const [references, setReferences] = useState(() => ls.get("labrat_refs", []));
+  const [chartTemplates, setChartTemplates] = useState([]);
+  const [references, setReferences] = useState([]);
   const [selected, setSelected] = useState(null);
   const [selectedChartContext, setSelectedChartContext] = useState(null);
   const [pendingChartAnalysis, setPendingChartAnalysis] = useState(null);
   const [dirty, setDirty] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
   const [projectLoaded, setProjectLoaded] = useState(false);
+  const [authState, setAuthState] = useState({ checking: true, loading: false, user: null, labs: [], error: "" });
+  const [labs, setLabs] = useState([]);
+  const [activeLabId, setActiveLabId] = useState("");
+  const [projectList, setProjectList] = useState([]);
+  const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [activeProjectId, setActiveProjectId] = useState("");
+  const [projectState, setProjectState] = useState(null);
+  const [projectStateLoading, setProjectStateLoading] = useState(false);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [newProjectBusy, setNewProjectBusy] = useState(false);
+  const [newProjectError, setNewProjectError] = useState("");
+  const [activeImportRun, setActiveImportRun] = useState(null);
+  const [profileChatOpen, setProfileChatOpen] = useState(false);
   const [importReviewOpen, setImportReviewOpen] = useState(false);
+  const [chartReviewOpen, setChartReviewOpen] = useState(false);
+  const [importReviewMode, setImportReviewMode] = useState("append");
+  const [refreshDraft, setRefreshDraft] = useState(() => emptyRefreshDraft());
   const [importSession, setImportSession] = useState(null);
   const [backendScanState, setBackendScanState] = useState({ loading: false, result: null, error: "", fileName: "" });
   const [backendBlockReview, setBackendBlockReview] = useState(() => createBlockReviewState());
   const [backendNormalizeState, setBackendNormalizeState] = useState({ loading: false, result: null, error: "" });
   const [backendMappingState, setBackendMappingState] = useState({ loading: false, result: null, error: "" });
   const [backendChartProposalState, setBackendChartProposalState] = useState({ loading: false, result: null, error: "" });
+  const [backendChartInterpretState, setBackendChartInterpretState] = useState({ loading: false, result: null, error: "" });
+  const [fieldRoleOverrides, setFieldRoleOverrides] = useState({});
+  const resetReviewState = () => {
+    setBackendScanState({ loading: false, result: null, error: "", fileName: "" });
+    setBackendBlockReview(createBlockReviewState());
+    setBackendNormalizeState({ loading: false, result: null, error: "" });
+    setBackendMappingState({ loading: false, result: null, error: "" });
+    setBackendChartProposalState({ loading: false, result: null, error: "" });
+    setBackendChartInterpretState({ loading: false, result: null, error: "" });
+    setFieldRoleOverrides({});
+    setActiveImportRun(null);
+    setImportReviewMode("append");
+    setRefreshDraft(emptyRefreshDraft());
+    setChartReviewOpen(false);
+  };
+  const resetImportReviewState = () => {
+    setBackendScanState({ loading: false, result: null, error: "", fileName: "" });
+    setBackendBlockReview(createBlockReviewState());
+    setBackendNormalizeState({ loading: false, result: null, error: "" });
+    setBackendMappingState({ loading: false, result: null, error: "" });
+    setFieldRoleOverrides({});
+    setActiveImportRun(null);
+  };
+
+  const applyProjectState = (state) => {
+    const nextDataset = datasetFromServerProjectState(state);
+    const latestMapping = latestItem(state?.mappingSets);
+    const latestChartProposal = latestItem(state?.chartProposalSets);
+    const firstManuscript = asArray(state?.manuscripts)[0] || null;
+    setProjectState(state);
+    setDataset(nextDataset);
+    setSourceName(state?.project?.name || BLANK_PROJECT_SOURCE_NAME);
+    setBlocks(asArray(firstManuscript?.blocks));
+    setPages(firstManuscript?.pages || null);
+    setReferences(asArray(firstManuscript?.references));
+    setCanvasHeight(firstManuscript?.canvasState?.canvasHeight || 0);
+    setPageOrientationPreference(firstManuscript?.canvasState?.pageOrientationPreference || null);
+    setBackendMappingState(latestMapping?.payload ? {
+      loading: false,
+      result: { mappingSet: payloadWithServerId(latestMapping, "mappingSetId") },
+      error: "",
+    } : { loading: false, result: null, error: "" });
+    setBackendChartProposalState(latestChartProposal?.payload ? {
+      loading: false,
+      result: {
+        chartProposalSet: latestChartProposal,
+        proposalSet: payloadWithServerId(latestChartProposal, "proposalSetId"),
+      },
+      error: "",
+    } : { loading: false, result: null, error: "" });
+    setBackendChartInterpretState({ loading: false, result: null, error: "" });
+    setDirty(false);
+    setProjectLoaded(true);
+  };
+
+  const loadProjectState = async (projectId) => {
+    if (!projectId) return;
+    setProjectStateLoading(true);
+    setSourceError("");
+    try {
+      resetReviewState();
+      const state = await getServerProjectState(projectId);
+      setActiveProjectId(projectId);
+      setSelectedProjectId(projectId);
+      setWorkspaceMode("project");
+      setTab("overview");
+      applyProjectState(state);
+    } catch (err) {
+      setSourceError(err.message || String(err));
+    } finally {
+      setProjectStateLoading(false);
+    }
+  };
+
+  const reloadActiveProjectState = async () => {
+    if (!activeProjectId) return;
+    await loadProjectState(activeProjectId);
+    setImportReviewOpen(false);
+  };
+
+  const loadProjectsForLab = async (labId, preferredProjectId = "", { openPreferred = false } = {}) => {
+    if (!labId) return;
+    const response = await listServerProjects({ labId });
+    const projects = response.projects || [];
+    setProjectList(projects);
+    const nextProjectId = preferredProjectId && projects.some((project) => project.id === preferredProjectId)
+      ? preferredProjectId
+      : projects[0]?.id || "";
+    setSelectedProjectId(nextProjectId);
+    if (openPreferred && nextProjectId) {
+      await loadProjectState(nextProjectId);
+    } else {
+      setActiveProjectId("");
+      setProjectState(null);
+      setDataset(emptyDataset());
+      setProjectLoaded(true);
+      setWorkspaceMode("dashboard");
+      resetReviewState();
+    }
+  };
+
+  const loadLabsAndProjects = async (preferredLabId = "", preferredProjectId = "") => {
+    const labResponse = await listServerLabs();
+    const nextLabs = labResponse.labs || [];
+    setLabs(nextLabs);
+    const nextLabId = preferredLabId && nextLabs.some((lab) => (lab.id || lab.labId) === preferredLabId)
+      ? preferredLabId
+      : (nextLabs[0]?.id || nextLabs[0]?.labId || "");
+    setActiveLabId(nextLabId);
+    if (nextLabId) await loadProjectsForLab(nextLabId, preferredProjectId);
+  };
+
   useEffect(() => {
     let cancelled = false;
-    loadActiveProject()
-      .then(async (project) => {
+    getServerSession()
+      .then(async (session) => {
         if (cancelled) return;
-        const next = await resolveStartupProject({
-          existingProject: project,
-          blankMode: BLANK_MODE,
-          legacyDataset: dataset,
-          sourceName,
-          staged,
-          blocks,
-          pages,
-          canvasHeight,
-          pageOrientationPreference,
-          chartTemplates,
-          references,
-        });
-        if (cancelled) return;
-        if (!project) await saveActiveProject(next);
-        if (cancelled) return;
-        setDataset(next.dataset);
-        setSourceName(next.sourceName);
-        setStaged(next.staged);
-        setBlocks(next.blocks);
-        setPages(next.pages);
-        setCanvasHeight(next.canvasHeight);
-        setPageOrientationPreference(next.pageOrientationPreference);
-        setChartTemplates(next.chartTemplates);
-        setReferences(next.references);
-        setDirty(false);
+        setAuthState({ checking: false, loading: false, user: session.user, labs: session.labs || [], error: "" });
+        await loadLabsAndProjects(session.labs?.[0]?.labId || session.labs?.[0]?.id || "");
       })
       .catch((err) => {
-        if (!cancelled) setSourceError(`Startup load failed: ${err.message}`);
-      })
-      .finally(() => {
-        if (!cancelled) setProjectLoaded(true);
+        if (!cancelled) {
+          setAuthState({ checking: false, loading: false, user: null, labs: [], error: err.status === 401 ? "" : (err.message || String(err)) });
+          setProjectLoaded(true);
+        }
       });
     return () => {
       cancelled = true;
@@ -753,7 +1553,30 @@ function App() {
   const currentProject = () => buildProjectRecord({ dataset, sourceName, staged, blocks, pages, canvasHeight, pageOrientationPreference, chartTemplates, references });
   const save = async () => {
     try {
-      await saveActiveProject(currentProject());
+      if (activeProjectId) {
+        const currentManuscript = asArray(projectState?.manuscripts)[0] || null;
+        const request = {
+          title: currentManuscript?.title || "Manuscript",
+          blocks,
+          pages: Array.isArray(pages) ? pages : [],
+          canvasState: { canvasHeight, pageOrientationPreference },
+          references,
+        };
+        const response = currentManuscript?.id
+          ? await patchServerManuscript(currentManuscript.id, request)
+          : await createServerManuscript(activeProjectId, request);
+        setProjectState((current) => {
+          if (!current) return current;
+          const savedManuscript = response.manuscript;
+          const currentManuscripts = asArray(current.manuscripts);
+          const manuscripts = currentManuscripts.some((manuscript) => manuscript.id === savedManuscript.id)
+            ? currentManuscripts.map((manuscript) => manuscript.id === savedManuscript.id ? savedManuscript : manuscript)
+            : [savedManuscript, ...currentManuscripts];
+          return { ...current, manuscripts };
+        });
+      } else {
+        await saveActiveProject(currentProject());
+      }
       setSourceError("");
       setDirty(false);
     } catch (err) {
@@ -798,6 +1621,88 @@ function App() {
     } catch (err) {
       setSourceError(`Import failed: ${err.message}`);
     }
+  };
+  const login = async ({ username, password }) => {
+    setAuthState((current) => ({ ...current, loading: true, error: "" }));
+    try {
+      const session = await loginToServer({ username, password });
+      setAuthState({ checking: false, loading: false, user: session.user, labs: session.labs || [], error: "" });
+      await loadLabsAndProjects(session.labs?.[0]?.labId || session.labs?.[0]?.id || "");
+    } catch (err) {
+      setAuthState({ checking: false, loading: false, user: null, labs: [], error: err.message || String(err) });
+    }
+  };
+  const logout = async () => {
+    try {
+      await logoutFromServer();
+    } catch {
+      // The local UI still clears its session state if the server already forgot it.
+    }
+    setAuthState({ checking: false, loading: false, user: null, labs: [], error: "" });
+    setLabs([]);
+    setActiveLabId("");
+    setProjectList([]);
+    setSelectedProjectId("");
+    setActiveProjectId("");
+    setProjectState(null);
+    setWorkspaceMode("dashboard");
+    setDataset(emptyDataset());
+    setSourceName(BLANK_PROJECT_SOURCE_NAME);
+    resetReviewState();
+  };
+  const changeLab = async (labId) => {
+    setActiveLabId(labId);
+    setProjectList([]);
+    setSelectedProjectId("");
+    setActiveProjectId("");
+    setProjectState(null);
+    setWorkspaceMode("dashboard");
+    setDataset(emptyDataset());
+    await loadProjectsForLab(labId);
+  };
+  const openNewProjectModal = () => {
+    setNewProjectError("");
+    setNewProjectOpen(true);
+  };
+  const createProject = async ({ name, description = "" } = {}) => {
+    if (!activeLabId) return;
+    if (!name?.trim()) return;
+    setSourceError("");
+    setNewProjectError("");
+    setNewProjectBusy(true);
+    try {
+      const response = await createServerProject({
+        labId: activeLabId,
+        name: name.trim(),
+        description: description.trim(),
+        projectProfile: {},
+      });
+      setNewProjectOpen(false);
+      await loadProjectsForLab(activeLabId, response.project.id, { openPreferred: true });
+      setProfileChatOpen(true);
+    } catch (err) {
+      const message = err.message || String(err);
+      setSourceError(message);
+      setNewProjectError(message);
+    } finally {
+      setNewProjectBusy(false);
+    }
+  };
+  const openProjectDashboard = () => {
+    setWorkspaceMode("dashboard");
+    setImportReviewOpen(false);
+    setProfileChatOpen(false);
+    setSelectedProjectId(activeProjectId || selectedProjectId || projectList[0]?.id || "");
+  };
+  const saveProjectProfile = async (projectProfile) => {
+    if (!activeProjectId) return null;
+    const response = await patchServerProjectProfile(activeProjectId, projectProfile);
+    setProjectState((current) => current ? {
+      ...current,
+      project: response.project || current.project,
+      projectProfile: response.projectProfile || projectProfile,
+    } : current);
+    return response;
   };
   const loadFolder = async (files) => {
     if (!files?.length) return;
@@ -858,6 +1763,45 @@ function App() {
     }
   };
   const stage = (label) => setStaged((s) => s.includes(label) ? s.filter((x) => x !== label) : [...s, label]);
+  const currentDatasetCommitId = () => projectState?.currentDatasetCommit?.id || projectState?.project?.currentDatasetCommitId || null;
+  const currentServerMappingSetId = () => backendMappingState.result?.mappingSet?.serverId || latestItem(projectState?.mappingSets)?.id || null;
+  const openAppendImportReview = () => {
+    setImportReviewMode("append");
+    setRefreshDraft(emptyRefreshDraft());
+    setImportReviewOpen(true);
+  };
+  const openRefreshWorkbook = () => {
+    const committedImports = asArray(dataset.genericImports).filter((item) => item?.importId);
+    const parentCommitId = currentDatasetCommitId();
+    if (!activeProjectId || !parentCommitId || !committedImports.length) return;
+    resetImportReviewState();
+    const targetImport = latestItem(committedImports);
+    setImportReviewMode("refresh");
+    setRefreshDraft({
+      ...emptyRefreshDraft(),
+      open: true,
+      replaceImportId: targetImport.importId,
+      expectedParentDatasetCommitId: parentCommitId,
+      targetImport,
+    });
+  };
+  const closeRefreshWorkbookModal = () => {
+    setImportReviewMode("append");
+    setRefreshDraft(emptyRefreshDraft());
+  };
+  const setBackendFieldOverride = (fieldId, patch) => {
+    setFieldRoleOverrides((current) => ({
+      ...current,
+      [fieldId]: { ...(current[fieldId] || {}), ...patch },
+    }));
+    setBackendNormalizeState({ loading: false, result: null, error: "" });
+    setBackendMappingState({ loading: false, result: null, error: "" });
+    setBackendChartProposalState({ loading: false, result: null, error: "" });
+    setBackendChartInterpretState({ loading: false, result: null, error: "" });
+    if (importReviewMode === "refresh") {
+      setRefreshDraft((current) => ({ ...current, preview: null, loading: false, error: "" }));
+    }
+  };
   const requestChartAnalysis = (blockId) => {
     setAgentOpen(true);
     setPendingChartAnalysis({ blockId, nonce: Date.now() });
@@ -879,20 +1823,43 @@ function App() {
       confirmedProposalIds: current.confirmedProposalIds.filter((id) => id !== proposalId),
     } : current);
   };
-  const runBackendScan = async (file) => {
+  const runBackendScan = async (file, options = {}) => {
     if (!file) return;
+    const scanMode = options.mode || importReviewMode;
     setBackendScanState({ loading: true, result: null, error: "", fileName: file.name });
     setBackendBlockReview(createBlockReviewState());
     setBackendNormalizeState({ loading: false, result: null, error: "" });
     setBackendMappingState({ loading: false, result: null, error: "" });
     setBackendChartProposalState({ loading: false, result: null, error: "" });
+    setBackendChartInterpretState({ loading: false, result: null, error: "" });
+    setFieldRoleOverrides({});
+    if (scanMode === "refresh") {
+      setRefreshDraft((current) => ({ ...current, preview: null, loading: false, error: "" }));
+    }
     try {
-      const result = await scanWorkbookWithBackend(file);
+      let result;
+      if (activeProjectId) {
+        const upload = await uploadServerProjectFile(activeProjectId, file);
+        const run = await createServerImportRun(activeProjectId, upload.fileObject.id);
+        setActiveImportRun(run.importRun);
+        result = run.importRun.scanResult;
+        setProjectState((current) => current ? {
+          ...current,
+          fileObjects: [...asArray(current.fileObjects), upload.fileObject],
+          importRuns: [...asArray(current.importRuns), run.importRun],
+        } : current);
+      } else {
+        result = await scanWorkbookWithBackend(file);
+      }
       setBackendScanState({ loading: false, result, error: "", fileName: file.name });
       setBackendBlockReview(createBlockReviewState(result));
       setBackendNormalizeState({ loading: false, result: null, error: "" });
       setBackendMappingState({ loading: false, result: null, error: "" });
       setBackendChartProposalState({ loading: false, result: null, error: "" });
+      setBackendChartInterpretState({ loading: false, result: null, error: "" });
+      if (scanMode === "refresh") {
+        setRefreshDraft((current) => ({ ...current, preview: null, loading: false, error: "" }));
+      }
     } catch (err) {
       setBackendScanState({
         loading: false,
@@ -904,37 +1871,156 @@ function App() {
       setBackendNormalizeState({ loading: false, result: null, error: "" });
       setBackendMappingState({ loading: false, result: null, error: "" });
       setBackendChartProposalState({ loading: false, result: null, error: "" });
+      setBackendChartInterpretState({ loading: false, result: null, error: "" });
+      if (scanMode === "refresh") {
+        setRefreshDraft((current) => ({ ...current, preview: null, loading: false, error: refreshErrorMessage(err) }));
+      }
     }
+  };
+  const startRefreshWorkbook = async ({ file, replaceImportId, targetImport }) => {
+    const parentCommitId = currentDatasetCommitId();
+    const selectedImport = targetImport || asArray(dataset.genericImports).find((item) => item?.importId === replaceImportId) || null;
+    if (!file || !selectedImport?.importId || !parentCommitId) {
+      setRefreshDraft((current) => ({
+        ...current,
+        error: "Refresh requires a committed dataset import and replacement workbook.",
+      }));
+      return;
+    }
+    setImportReviewMode("refresh");
+    setRefreshDraft({
+      ...emptyRefreshDraft(),
+      open: false,
+      replaceImportId: selectedImport.importId,
+      expectedParentDatasetCommitId: parentCommitId,
+      targetImport: selectedImport,
+    });
+    setImportReviewOpen(true);
+    await runBackendScan(file, { mode: "refresh" });
   };
   const setBackendBlockDecision = (blockId, decision) => {
     setBackendBlockReview((current) => setBlockReviewDecision(current, blockId, decision));
     setBackendNormalizeState({ loading: false, result: null, error: "" });
     setBackendMappingState({ loading: false, result: null, error: "" });
     setBackendChartProposalState({ loading: false, result: null, error: "" });
+    setBackendChartInterpretState({ loading: false, result: null, error: "" });
+    if (importReviewMode === "refresh") {
+      setRefreshDraft((current) => ({ ...current, preview: null, loading: false, error: "" }));
+    }
   };
   const previewBackendNormalization = async () => {
     if (!backendScanState.result) return;
     setBackendNormalizeState({ loading: true, result: null, error: "" });
     setBackendMappingState({ loading: false, result: null, error: "" });
     setBackendChartProposalState({ loading: false, result: null, error: "" });
+    setBackendChartInterpretState({ loading: false, result: null, error: "" });
+    if (importReviewMode === "refresh") {
+      setRefreshDraft((current) => ({ ...current, preview: null, loading: false, error: "" }));
+    }
     try {
-      const result = await normalizeScanWithBackend({
-        scanResult: backendScanState.result,
-        approvedBlockIds: backendBlockReview.approvedBlockIds,
-      });
+      let result;
+      let normalizedImportRunId = activeImportRun?.id || "";
+      if (activeImportRun?.id) {
+        const response = await previewServerImportRunNormalization(activeImportRun.id, {
+          approvedBlockIds: backendBlockReview.approvedBlockIds,
+          fieldRoleOverrides,
+        });
+        setActiveImportRun(response.importRun);
+        normalizedImportRunId = response.importRun?.id || activeImportRun.id;
+        result = response.importRun.normalizePreview;
+      } else {
+        result = await normalizeScanWithBackend({
+          scanResult: backendScanState.result,
+          approvedBlockIds: backendBlockReview.approvedBlockIds,
+          fieldRoleOverrides,
+        });
+      }
       setBackendNormalizeState({ loading: false, result, error: "" });
+      if (importReviewMode === "refresh") {
+        if (!normalizedImportRunId || !refreshDraft.replaceImportId || !refreshDraft.expectedParentDatasetCommitId) {
+          setRefreshDraft((current) => ({
+            ...current,
+            preview: null,
+            loading: false,
+            error: "Refresh requires a server import run, refresh target, and parent dataset commit.",
+          }));
+          return;
+        }
+        setRefreshDraft((current) => ({ ...current, preview: null, loading: true, error: "" }));
+        try {
+          const refreshPreview = await previewServerImportRefresh(normalizedImportRunId, {
+            replaceImportId: refreshDraft.replaceImportId,
+            expectedParentDatasetCommitId: refreshDraft.expectedParentDatasetCommitId,
+          });
+          setRefreshDraft((current) => ({ ...current, preview: refreshPreview, loading: false, error: "" }));
+        } catch (refreshErr) {
+          setRefreshDraft((current) => ({
+            ...current,
+            preview: null,
+            loading: false,
+            error: refreshErrorMessage(refreshErr),
+          }));
+        }
+      }
     } catch (err) {
       setBackendNormalizeState({ loading: false, result: null, error: err.message || String(err) });
+      if (importReviewMode === "refresh") {
+        setRefreshDraft((current) => ({ ...current, preview: null, loading: false, error: refreshErrorMessage(err) }));
+      }
     }
   };
-  const applyBackendNormalization = () => {
+  const applyBackendNormalization = async () => {
     const datasetPatch = backendNormalizeState.result?.datasetPatch;
     if (!datasetPatch?.genericImports?.length) return;
-    const ok = window.confirm("Apply normalized generic import data to this project?");
+    const isRefreshMode = importReviewMode === "refresh";
+    if (isRefreshMode) {
+      if (!activeImportRun?.id || !activeProjectId) {
+        setRefreshDraft((current) => ({ ...current, error: "Refresh apply requires a server project import run." }));
+        return;
+      }
+      if (!refreshDraft.preview) {
+        setRefreshDraft((current) => ({ ...current, error: "Review the refresh diff before applying." }));
+        return;
+      }
+      if (!refreshDraft.preview.hasChanges) {
+        setRefreshDraft((current) => ({ ...current, error: "No changes detected." }));
+        return;
+      }
+    }
+    const ok = window.confirm(isRefreshMode
+      ? `Apply this workbook refresh and replace ${genericImportLabel(refreshDraft.targetImport)}?`
+      : "Apply normalized generic import data to this project?");
     if (!ok) return;
-    setDataset((current) => applyGenericImportPatch(current, datasetPatch));
-    setBackendNormalizeState((current) => ({ ...current, applied: true }));
-    setDirty(true);
+    try {
+      if (activeImportRun?.id && activeProjectId) {
+        await applyServerImportRun(activeImportRun.id, isRefreshMode ? {
+          applyMode: "replace_import",
+          replaceImportId: refreshDraft.replaceImportId,
+          expectedParentDatasetCommitId: refreshDraft.expectedParentDatasetCommitId,
+          reviewNote: "Applied workbook refresh.",
+        } : {
+          applyMode: "append",
+          reviewNote: "Approved normalized data from Import review.",
+        });
+        const state = await getServerProjectState(activeProjectId);
+        applyProjectState(state);
+        if (isRefreshMode) {
+          resetReviewState();
+          setImportReviewOpen(false);
+          return;
+        }
+      } else {
+        setDataset((current) => applyGenericImportPatch(current, datasetPatch));
+        setDirty(true);
+      }
+      setBackendNormalizeState((current) => ({ ...current, applied: true }));
+    } catch (err) {
+      if (isRefreshMode) {
+        setRefreshDraft((current) => ({ ...current, error: refreshErrorMessage(err) }));
+      } else {
+        setBackendNormalizeState((current) => ({ ...current, error: err.message || String(err) }));
+      }
+    }
   };
   const currentPhase3GenericImports = () => {
     const previewImports = backendNormalizeState.result?.datasetPatch?.genericImports;
@@ -945,6 +2031,7 @@ function App() {
     if (!genericImports.length) return;
     setBackendMappingState({ loading: true, result: null, error: "" });
     setBackendChartProposalState({ loading: false, result: null, error: "" });
+    setBackendChartInterpretState({ loading: false, result: null, error: "" });
     try {
       const result = await proposeSemanticMappingsWithBackend({
         genericImports,
@@ -952,14 +2039,30 @@ function App() {
         scanSummary: backendScanState.result?.summary || null,
         priorDecisions: (dataset.genericMappingSets || []).flatMap((set) => set.mappings || []),
       });
-      setBackendMappingState({ loading: false, result, error: "" });
-      setDataset((current) => upsertGenericMappingSet(current, result.mappingSet));
+      let mappingSet = result.mappingSet;
+      if (activeProjectId && currentDatasetCommitId()) {
+        const saved = await createServerMappingSet(activeProjectId, {
+          importRunId: activeImportRun?.id || null,
+          datasetCommitId: currentDatasetCommitId(),
+          schemaVersion: result.schemaVersion,
+          status: "proposed",
+          payload: mappingSet,
+          decisionSummary: decisionSummary(mappingSet.mappings),
+        });
+        mappingSet = payloadWithServerId(saved.mappingSet, "mappingSetId");
+        setProjectState((current) => current ? {
+          ...current,
+          mappingSets: [...asArray(current.mappingSets), saved.mappingSet],
+        } : current);
+      }
+      setBackendMappingState({ loading: false, result: { ...result, mappingSet }, error: "" });
+      setDataset((current) => upsertGenericMappingSet(current, mappingSet));
       setDirty(true);
     } catch (err) {
       setBackendMappingState({ loading: false, result: null, error: err.message || String(err) });
     }
   };
-  const setBackendMappingDecision = (mappingId, status) => {
+  const setBackendMappingDecision = async (mappingId, status) => {
     const mappingSet = backendMappingState.result?.mappingSet;
     if (!mappingSet) return;
     const nextMappingSet = setMappingStatus(mappingSet, mappingId, status);
@@ -968,29 +2071,99 @@ function App() {
       result: { ...current.result, mappingSet: nextMappingSet },
     }) : current);
     setBackendChartProposalState({ loading: false, result: null, error: "" });
+    setBackendChartInterpretState({ loading: false, result: null, error: "" });
     setDataset((current) => upsertGenericMappingSet(current, nextMappingSet));
+    if (nextMappingSet.serverId) {
+      try {
+        const saved = await patchServerMappingSet(nextMappingSet.serverId, {
+          status: "proposed",
+          payload: nextMappingSet,
+          decisionSummary: decisionSummary(nextMappingSet.mappings),
+        });
+        setProjectState((current) => current ? {
+          ...current,
+          mappingSets: asArray(current.mappingSets).map((set) => set.id === saved.mappingSet.id ? saved.mappingSet : set),
+        } : current);
+      } catch (err) {
+        setBackendMappingState((current) => ({ ...current, error: err.message || String(err) }));
+      }
+    }
     setDirty(true);
   };
   const proposeBackendCharts = async () => {
     const genericImports = currentPhase3GenericImports();
     const mappingSet = backendMappingState.result?.mappingSet;
-    if (!genericImports.length || !mappingSet) return;
+    if (!genericImports.length) return;
     setBackendChartProposalState({ loading: true, result: null, error: "" });
     try {
-      const result = await proposeChartsWithBackend({
-        genericImports,
-        selectedImportIds: genericImports.map((item) => item.importId).filter(Boolean),
-        mappingSets: [mappingSet],
-        priorDecisions: (dataset.genericChartProposals || []).flatMap((set) => set.proposals || []),
-      });
-      setBackendChartProposalState({ loading: false, result, error: "" });
-      setDataset((current) => upsertGenericChartProposalSet(current, result.proposalSet));
+      const result = activeProjectId && currentDatasetCommitId()
+        ? await proposeServerProjectCharts(activeProjectId, {
+          selectedImportIds: genericImports.map((item) => item.importId).filter(Boolean),
+          userGoal: projectState?.projectProfile?.researchGoal || "",
+        })
+        : await proposeChartsWithBackend({
+          genericImports,
+          selectedImportIds: genericImports.map((item) => item.importId).filter(Boolean),
+          mappingSets: mappingSet ? [mappingSet] : [],
+          priorDecisions: (dataset.genericChartProposals || []).flatMap((set) => set.proposals || []),
+        });
+      const proposalSet = result.chartProposalSet
+        ? payloadWithServerId(result.chartProposalSet, "proposalSetId")
+        : result.proposalSet;
+      setBackendChartProposalState({ loading: false, result: { ...result, proposalSet }, error: "" });
+      setDataset((current) => upsertGenericChartProposalSet(current, proposalSet));
+      if (result.chartProposalSet) {
+        setProjectState((current) => current ? {
+          ...current,
+          chartProposalSets: upsertServerRecordById(current.chartProposalSets, result.chartProposalSet),
+        } : current);
+      }
       setDirty(true);
     } catch (err) {
       setBackendChartProposalState({ loading: false, result: null, error: err.message || String(err) });
     }
   };
-  const setBackendChartProposalDecision = (proposalId, status) => {
+  const interpretBackendChart = async (prompt) => {
+    const genericImports = currentPhase3GenericImports();
+    if (!genericImports.length) return;
+    setBackendChartInterpretState({ loading: true, result: null, error: "" });
+    try {
+      const result = activeProjectId && currentDatasetCommitId()
+        ? await interpretServerProjectChart(activeProjectId, {
+          prompt,
+          selectedImportIds: genericImports.map((item) => item.importId).filter(Boolean),
+          persistAsProposal: true,
+        })
+        : await interpretChartWithBackend({
+          prompt,
+          genericImports,
+          selectedImportIds: genericImports.map((item) => item.importId).filter(Boolean),
+          mappingSets: [
+            ...(dataset.genericMappingSets || []),
+            ...(backendMappingState.result?.mappingSet ? [backendMappingState.result.mappingSet] : []),
+          ],
+          priorDecisions: (dataset.genericChartProposals || []).flatMap((set) => set.proposals || []),
+        });
+      setBackendChartInterpretState({ loading: false, result, error: "" });
+      if (result.chartProposalSet) {
+        const proposalSet = payloadWithServerId(result.chartProposalSet, "proposalSetId");
+        setBackendChartProposalState({
+          loading: false,
+          result: { ...result, chartProposalSet: result.chartProposalSet, proposalSet },
+          error: "",
+        });
+        setDataset((current) => upsertGenericChartProposalSet(current, proposalSet));
+        setProjectState((current) => current ? {
+          ...current,
+          chartProposalSets: upsertServerRecordById(current.chartProposalSets, result.chartProposalSet),
+        } : current);
+        setDirty(true);
+      }
+    } catch (err) {
+      setBackendChartInterpretState({ loading: false, result: null, error: err.message || String(err) });
+    }
+  };
+  const setBackendChartProposalDecision = async (proposalId, status) => {
     const proposalSet = backendChartProposalState.result?.proposalSet;
     if (!proposalSet) return;
     const nextProposalSet = setChartProposalStatus(proposalSet, proposalId, status);
@@ -999,39 +2172,212 @@ function App() {
       result: { ...current.result, proposalSet: nextProposalSet },
     }) : current);
     setDataset((current) => upsertGenericChartProposalSet(current, nextProposalSet));
+    if (nextProposalSet.serverId) {
+      try {
+        const saved = await patchServerChartProposalSet(nextProposalSet.serverId, {
+          status: "proposed",
+          payload: nextProposalSet,
+          decisionSummary: decisionSummary(nextProposalSet.proposals),
+        });
+        setProjectState((current) => current ? {
+          ...current,
+          chartProposalSets: asArray(current.chartProposalSets).map((set) => set.id === saved.chartProposalSet.id ? saved.chartProposalSet : set),
+        } : current);
+      } catch (err) {
+        setBackendChartProposalState((current) => ({ ...current, error: err.message || String(err) }));
+      }
+    }
     setDirty(true);
   };
+  const createChartSpecFromProposal = async (chartProposalSetId, proposalId) => {
+    if (!activeProjectId || !chartProposalSetId || !proposalId) return;
+    setBackendChartProposalState((current) => ({ ...current, error: "" }));
+    try {
+      await createServerChartSpecFromProposal(activeProjectId, {
+        chartProposalSetId,
+        proposalId,
+        datasetCommitId: currentDatasetCommitId(),
+      });
+      const state = await getServerProjectState(activeProjectId);
+      applyProjectState(state);
+    } catch (err) {
+      setBackendChartProposalState((current) => ({ ...current, error: err.message || String(err) }));
+    }
+  };
+  if (authState.checking) {
+    return (
+      <main className="server-login">
+        <section className="server-login-panel">
+          <div className="typing">Loading workspace...</div>
+        </section>
+      </main>
+    );
+  }
+  if (!authState.user) {
+    return <ServerLogin loading={authState.loading} error={authState.error} onLogin={login} />;
+  }
+  if (workspaceMode === "dashboard" || !activeProjectId) {
+    return (
+      <>
+        <Topbar
+          tab={tab}
+          setTab={setTab}
+          workspaceMode="dashboard"
+          onOpenDashboard={openProjectDashboard}
+          dirty={dirty}
+          onSave={save}
+          onAgent={() => setAgentOpen(true)}
+          dataset={dataset}
+          sourceName={sourceError || sourceName}
+          sourceError={sourceError}
+          loadingSource={loadingSource}
+          onOpenImportReview={openAppendImportReview}
+          hasImportReview={false}
+          blankMode={BLANK_MODE}
+          user={authState.user}
+          labs={labs}
+          activeLabId={activeLabId}
+          onLabChange={changeLab}
+          projects={projectList}
+          activeProjectId={activeProjectId}
+          onProjectChange={loadProjectState}
+          onCreateProject={openNewProjectModal}
+          onOpenProfile={() => setProfileChatOpen(true)}
+          onLogout={logout}
+        />
+        <ProjectDashboard
+          user={authState.user}
+          labs={labs}
+          activeLabId={activeLabId}
+          onLabChange={changeLab}
+          projects={projectList}
+          selectedProjectId={selectedProjectId}
+          onSelectProject={setSelectedProjectId}
+          onOpenProject={loadProjectState}
+          onCreateProject={openNewProjectModal}
+          activeProjectId={activeProjectId}
+          projectState={projectState}
+          projectStateLoading={projectStateLoading}
+          sourceError={sourceError}
+        />
+        <NewProjectModal
+          open={newProjectOpen}
+          loading={newProjectBusy}
+          error={newProjectError}
+          onCreate={createProject}
+          onClose={() => setNewProjectOpen(false)}
+        />
+      </>
+    );
+  }
   return (
     <>
       <Topbar tab={tab} setTab={setTab} dirty={dirty} onSave={save} onAgent={() => setAgentOpen(true)}
-        dataset={dataset} sourceName={sourceName} sourceError={sourceError} loadingSource={loadingSource} onLoadFolder={loadFolder} onExportProject={exportProject} onImportProject={importProject} onOpenImportReview={() => setImportReviewOpen(true)} hasImportReview blankMode={BLANK_MODE} />
-      {tab === "browser" && <Browser dataset={dataset} sourceName={sourceError || sourceName} setSelected={setSelected} blankMode={BLANK_MODE} onOpenImportReview={() => setImportReviewOpen(true)} templateLinks={blankTemplateLinks()} />}
-      {tab === "manuscript" && <ManuscriptCanvas dataset={dataset} blocks={blocks} setBlocks={setBlocks} staged={staged} setStaged={setStaged} references={references} chartTemplates={chartTemplates} setChartTemplates={setChartTemplates} pages={pages} setPages={setPages} canvasHeight={canvasHeight} setCanvasHeight={setCanvasHeight} pageOrientationPreference={pageOrientationPreference} setPageOrientationPreference={setPageOrientationPreference} onSelectedChartContextChange={setSelectedChartContext} onRequestChartAnalysis={requestChartAnalysis} onSaveProject={save} />}
+        workspaceMode={workspaceMode}
+        onOpenDashboard={openProjectDashboard}
+        dataset={dataset}
+        sourceName={sourceName}
+        sourceError={sourceError || (projectStateLoading ? "Loading project..." : "")}
+        loadingSource={loadingSource}
+        onOpenImportReview={openAppendImportReview}
+        hasImportReview={!!activeProjectId}
+        blankMode={BLANK_MODE}
+        user={authState.user}
+        labs={labs}
+        activeLabId={activeLabId}
+        onLabChange={changeLab}
+        projects={projectList}
+        activeProjectId={activeProjectId}
+        onProjectChange={loadProjectState}
+        onCreateProject={openNewProjectModal}
+        onOpenProfile={() => setProfileChatOpen(true)}
+        onLogout={logout}
+      />
+      {tab === "overview" && <ProjectOverview
+        projectState={projectState}
+        dataset={dataset}
+        onOpenProfile={() => setProfileChatOpen(true)}
+        onOpenImportReview={openAppendImportReview}
+        onOpenRefreshWorkbook={openRefreshWorkbook}
+        onOpenChartReview={() => setChartReviewOpen(true)}
+        onGoManuscript={() => setTab("manuscript")}
+      />}
+      {tab === "browser" && <Browser
+        dataset={dataset}
+        sourceName={sourceError || sourceName}
+        setSelected={setSelected}
+        blankMode={BLANK_MODE}
+        onOpenImportReview={openAppendImportReview}
+        onOpenProfile={() => setProfileChatOpen(true)}
+        projectProfile={projectState?.projectProfile}
+        templateLinks={blankTemplateLinks()}
+      />}
+      {tab === "manuscript" && <ManuscriptCanvas dataset={dataset} blocks={blocks} setBlocks={setBlocks} staged={staged} setStaged={setStaged} references={references} chartTemplates={chartTemplates} setChartTemplates={setChartTemplates} chartSpecs={activeChartSpecsForProject(projectState)} pages={pages} setPages={setPages} canvasHeight={canvasHeight} setCanvasHeight={setCanvasHeight} pageOrientationPreference={pageOrientationPreference} setPageOrientationPreference={setPageOrientationPreference} onSelectedChartContextChange={setSelectedChartContext} onRequestChartAnalysis={requestChartAnalysis} onSaveProject={save} />}
       {tab === "reference" && <ReferenceLibrary references={references} setReferences={setReferences} />}
       <DetailModal exp={selected} onClose={() => setSelected(null)} onStage={stage} />
       {importReviewOpen && <ImportReviewModal
-        session={importSession}
+        mode={importReviewMode}
+        refreshDraft={refreshDraft}
         backendScanState={backendScanState}
         backendBlockReview={backendBlockReview}
         backendNormalizeState={backendNormalizeState}
         backendMappingState={backendMappingState}
-        backendChartProposalState={backendChartProposalState}
+        genericImports={dataset.genericImports || []}
+        fieldRoleOverrides={fieldRoleOverrides}
         onBackendScanFile={runBackendScan}
         onBlockReviewDecision={setBackendBlockDecision}
+        onFieldRoleOverride={setBackendFieldOverride}
         onPreviewNormalize={previewBackendNormalization}
         onApplyNormalize={applyBackendNormalization}
         onProposeMappings={proposeBackendMappings}
         onMappingDecision={setBackendMappingDecision}
+        onReloadProjectState={reloadActiveProjectState}
+        onClose={() => setImportReviewOpen(false)}
+      />}
+      <ChartReviewModal
+        open={chartReviewOpen}
+        genericImports={dataset.genericImports || []}
+        mappingState={backendMappingState}
+        chartProposalState={backendChartProposalState}
+        chartInterpretState={backendChartInterpretState}
+        chartSpecs={activeChartSpecsForProject(projectState)}
         onProposeCharts={proposeBackendCharts}
         onChartProposalDecision={setBackendChartProposalDecision}
-        onClose={() => setImportReviewOpen(false)}
-        onApproveProposal={approveImportProposal}
-        onRejectProposal={rejectImportProposal}
-      />}
+        onInterpretChart={interpretBackendChart}
+        onCreateChartSpec={createChartSpecFromProposal}
+        onOpenImportReview={openAppendImportReview}
+        onClose={() => setChartReviewOpen(false)}
+      />
+      <RefreshWorkbookModal
+        open={refreshDraft.open}
+        imports={dataset.genericImports || []}
+        defaultImportId={refreshDraft.replaceImportId}
+        loading={backendScanState.loading}
+        error={refreshDraft.error}
+        onStartRefresh={startRefreshWorkbook}
+        onClose={closeRefreshWorkbookModal}
+      />
+      <ProjectProfileChat
+        open={profileChatOpen}
+        project={projectState?.project}
+        projectProfile={projectState?.projectProfile}
+        onSaveProfile={saveProjectProfile}
+        onClose={() => setProfileChatOpen(false)}
+      />
+      <NewProjectModal
+        open={newProjectOpen}
+        loading={newProjectBusy}
+        error={newProjectError}
+        onCreate={createProject}
+        onClose={() => setNewProjectOpen(false)}
+      />
       <AgentPanel open={agentOpen} setOpen={setAgentOpen} dataset={dataset} blocks={blocks} setBlocks={setBlocks} references={references} selected={selected} selectedChartContext={selectedChartContext} pendingChartAnalysis={pendingChartAnalysis} onChartAnalysisHandled={clearChartAnalysisRequest} />
     </>
   );
 }
 
-createRoot(document.getElementById("root")).render(<App />);
+const rootElement = document.getElementById("root");
+if (rootElement) {
+  createRoot(rootElement).render(<App />);
+}
 

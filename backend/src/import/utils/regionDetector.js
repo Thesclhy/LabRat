@@ -21,16 +21,27 @@ function regionRange(cells) {
 
 function summarizeRegion(cells, index) {
   const kinds = cells.map(valueKind);
+  const numericCellCount = kinds.filter((kind) => kind === "numeric").length;
+  const textCellCount = kinds.filter((kind) => kind === "text").length;
+  const type = numericCellCount && textCellCount ? "table_candidate" : textCellCount ? "metadata_candidate" : "unknown_dense_region";
   return {
     regionId: `region_${index + 1}`,
+    type,
     range: encodeRange(regionRange(cells)),
     startRow: Math.min(...cells.map((cell) => cell.row)),
     endRow: Math.max(...cells.map((cell) => cell.row)),
     startCol: Math.min(...cells.map((cell) => cell.col)),
     endCol: Math.max(...cells.map((cell) => cell.col)),
     nonEmptyCellCount: cells.length,
-    textCellCount: kinds.filter((kind) => kind === "text").length,
-    numericCellCount: kinds.filter((kind) => kind === "numeric").length,
+    textCellCount,
+    numericCellCount,
+    confidence: Number(Math.min(0.95, 0.35 + Math.min(0.4, cells.length / 100) + (numericCellCount && textCellCount ? 0.2 : 0)).toFixed(3)),
+    reasons: [
+      `${cells.length} non-empty cell${cells.length === 1 ? "" : "s"}`,
+      `${textCellCount} text cell${textCellCount === 1 ? "" : "s"}`,
+      `${numericCellCount} numeric cell${numericCellCount === 1 ? "" : "s"}`,
+    ],
+    warnings: [],
   };
 }
 
