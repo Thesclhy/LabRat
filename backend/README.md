@@ -114,4 +114,4 @@ See these docs before changing backend architecture:
 - `../doc/backend-api-contract.md`: current local/dev endpoint contracts.
 - `../doc/saas-database-schema-v0.md`: Postgres schema target.
 - `../doc/saas-api-contract-v0.md`: authenticated SaaS API contract.
-- `../doc/server-project-migration-plan.md`: server project state notes; old local-data migration is not in scope.
+- `../doc/server-project-state-plan.md`: server project state notes; old local-data migration is not in scope.

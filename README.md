@@ -88,9 +88,9 @@ raw files
   -> PPTX export
 ```
 
-The current app already supports backend workbook scan, approved normalization, semantic mapping proposals, chart proposal review, generic Experiment Browser rows, local project persistence, manuscript layout, and PPTX export. The backend now has SaaS Auth v0 plus server-first project persistence for seeded/admin-created accounts, lab-scoped projects, project experiment background profiles, project state loading, persisted file/import-run records, dataset commits, mapping sets, chart proposal sets, chart specs, manuscripts, and audit events.
+The current app supports server login, lab/project selection, project profile editing, server project state loading, backend workbook scan, approved normalization, refresh/replace, semantic mapping proposals, chart proposal review, generic Experiment Browser rows, durable chart specs, manuscript layout, server manuscript persistence, and PPTX export.
 
-The next major engineering goal is frontend server mode: login, lab/project selection, server project state loading, project profile editing, and replacing local-only import apply with server import-run/apply calls. New server-mode work does not need compatibility migrations for old IndexedDB, `.labrat.json`, or previous local project shapes.
+The next major engineering goal is server workflow hardening: reliable reload behavior, clearer import/refresh and chart review UX, Docker/Postgres deployment readiness, admin/audit UI, and smarter import/chart intelligence. New server-mode work does not need compatibility migrations for old IndexedDB, `.labrat.json`, or previous local project shapes.
 
 ## Example Templates
 
@@ -114,12 +114,12 @@ The backend scan, normalize, semantic mapping, and chart proposal endpoints are 
 ## Documentation Map
 
 - `AGENTS.md`: working instructions for AI coding agents.
-- `doc/ARCHITECTURE.md`: current local architecture and next multi-lab SaaS target.
-- `doc/ROADMAP.md`: near-term frontend server-mode and server persistence roadmap.
+- `doc/ARCHITECTURE.md`: current server-first architecture and compatibility boundaries.
+- `doc/ROADMAP.md`: near-term server workflow hardening and deployment roadmap.
 - `doc/plan.md`: short current execution plan.
 - `doc/saas-database-schema-v0.md`: Postgres schema target.
 - `doc/saas-api-contract-v0.md`: authenticated SaaS API contract.
-- `doc/server-project-migration-plan.md`: server project state notes; old local-data migration is not in scope.
+- `doc/server-project-state-plan.md`: server project source-of-truth notes; old local-data migration is not in scope.
 - `doc/backend-api-contract.md`: backend endpoint contracts.
 - `doc/canonical-data-dictionary.md`: shared data terminology.
 - `doc/ai-boundaries.md`: AI safety and review rules.

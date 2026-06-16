@@ -484,6 +484,7 @@ Rules:
 - Required role: `viewer` or above.
 - The response is scoped to one project and must not include records from another project or lab.
 - `currentDatasetCommit` includes the full current commit payload; list arrays may be used for UI state and review history.
+- `chartSpecs[]` may include response-time staleness decoration such as `isStale`, `status: "stale"`, and `staleReason` when a chart spec references an older dataset commit after refresh/replace. Do not delete historical chart specs just because they are stale.
 
 ### `POST /api/projects/:projectId/ai/context`
 
@@ -973,7 +974,10 @@ Response:
     "chartType": "scatter",
     "title": "Selectivity Gas vs Temperature",
     "spec": {},
-    "layout": {}
+    "layout": {},
+    "isStale": false,
+    "status": "active",
+    "staleReason": null
   }
 }
 ```
@@ -1000,9 +1004,23 @@ Response:
 
 ```json
 {
-  "chartSpecs": []
+  "chartSpecs": [
+    {
+      "id": "chart_spec_...",
+      "datasetCommitId": "commit_...",
+      "isStale": false,
+      "status": "active",
+      "staleReason": null
+    }
+  ]
 }
 ```
+
+Rules:
+
+- Return project-owned chart specs only.
+- Decorate chart specs as stale when their `datasetCommitId` no longer matches the active/reachable current dataset after refresh/replace.
+- Stale chart specs remain historical records and existing manuscript snapshots may still render them.
 
 ## Manuscripts
 

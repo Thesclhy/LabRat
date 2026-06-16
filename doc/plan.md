@@ -1,108 +1,78 @@
 # Current Development Plan
 
-This file is the short active plan for current work. Historical checkpoint detail lives in `doc/PROGRESS.md`; do not turn this file back into a running log.
+This is the short active plan for the current repository state. Historical checkpoint detail belongs in `doc/PROGRESS.md`; do not turn this file into a running log.
 
 ## Current Focus
 
-LabRat Blank has completed the local-first generic importer/browser foundation and now has a backend SaaS foundation for server-first projects. The next active milestone is connecting the frontend to authenticated server projects through the project state API. New server-mode work does not need to migrate or preserve old IndexedDB, `.labrat.json`, or previous local project shapes.
+LabRat Blank now has a working server-first project workflow: Docker Compose local stack, username/password auth, lab/project selection, project state loading, server-backed imports, immutable dataset commits, refresh/replace, mapping review, chart proposal review, durable chart specs, manuscript persistence, and PPTX export.
 
-The current transition is:
+The active milestone is hardening the end-to-end server workflow and preparing the app for other people to run/debug locally.
 
 ```text
-local-first generic importer completed
-  -> backend SaaS Auth v0 foundation completed
-  -> server-first project persistence completed
-  -> frontend login/lab/project selection
-  -> server project state loading
-  -> server-backed import apply and dataset commits
-  -> chart specs to manuscript UI
+server-first workspace implemented
+  -> workflow reliability and visual QA
+  -> Docker/Postgres deployment hardening
+  -> admin/audit usability
+  -> smarter import relationships and chart grammar
+  -> methodology/recompute later
 ```
 
 ## Current State
 
-- Blank mode starts from an empty dataset unless a saved blank project exists.
-- Local project state is persisted in IndexedDB and can be exported/imported as `.labrat.json`.
-- Backend scan, normalize, semantic mapping, and chart proposal endpoints exist as stateless local/dev compatibility endpoints.
-- Stable content-based upload ids and normalized generic import ids exist for repeated uploads of the same workbook.
-- Generic Excel Importer v2 Phase 1 is complete for grouped/multi-row header tables.
-- Generic Browser integration is complete: `dataset.genericImports[]` can be shown as imported rows with source-backed detail.
-- Backend SaaS Auth v0 foundation is implemented:
-  - config/env guardrails
-  - Postgres migration SQL
-  - migration runner
-  - dev/test seeded accounts
-  - username/password login
-  - httpOnly sessions
-  - role checks
-  - admin lab/user APIs
-  - lab/project APIs
-  - file upload records
-  - persisted import runs
-  - normalize preview/apply
-  - refresh preview/apply for replacing active imports through immutable dataset commits
-  - dataset commits
-  - chart specs from proposals
-  - manuscript persistence
-  - audit events
-- Server-first project persistence is implemented:
-  - multiple projects per lab
-  - `projects.metadata.projectProfile` for experiment background
-  - `GET /api/projects/:projectId/state`
-  - project-scoped list/create/update APIs for files, import runs, dataset commits, mapping sets, chart proposal sets, chart specs, and manuscripts
-  - project-scoped AI context and chart APIs:
-    - `PATCH /api/projects/:projectId/profile`
-    - `POST /api/projects/:projectId/ai/context`
-    - `POST /api/projects/:projectId/charts/interpret`
-    - `POST /api/projects/:projectId/charts/propose`
-- Backend data-integrity hardening is implemented:
-  - import-run lifecycle checks around normalize/apply
-  - merged full dataset commits instead of latest-patch-only commits
-  - duplicate committed `genericImports[].importId` rejection
-  - refresh replacement of active generic imports without mutating parent commits
-  - source-backed ChartSpec validation before persistence
-  - optional Postgres route parity test gated by `LABRAT_TEST_DATABASE_URL`
-- Local no-Postgres development can use the in-memory SaaS store; `DATABASE_URL` mode uses the Postgres store after migrations/dependencies are installed.
-- Frontend still mostly uses IndexedDB/local project persistence; login/lab/project UI has not been added yet. Do not add migration code for old local project shapes unless the user explicitly reopens that requirement.
+- `npm run dev:docker` starts Postgres, backend, and frontend for local development.
+- Seeded development accounts are available for local testing:
+  - `admin / LabRatAdmin123!`
+  - `labuser / LabRatLab123!`
+- Logged-in users land on a Projects dashboard, choose a lab/project, and open a server-backed workspace.
+- Projects store editable experiment background in `projects.metadata.projectProfile`.
+- `GET /api/projects/:projectId/state` hydrates project shell, profile, current dataset commit, files, import runs, mapping sets, chart proposal sets, chart specs, and manuscripts.
+- Server import flow persists file objects, import runs, normalize previews, apply decisions, and full immutable dataset commits.
+- Refresh/Replace flow creates a new dataset commit that replaces one active import while preserving historical parent commits.
+- Chart specs bound to older replaced dataset commits are decorated as stale in API responses and hidden from new insertion choices while existing manuscript blocks keep rendering from snapshots.
+- Generic Excel Importer v2 Phase 1 supports grouped/multi-row headers, role-based `fields[]`, source refs, warnings, and confidence.
+- Experiment Browser uses generic imported rows and accepted semantic mappings as user-facing dynamic columns.
+- Chart Proposal v2 uses field/data profiling, deterministic recipes, optional AI intents, scoring, dedupe, and backend validation.
+- ChartSpec v1.2 supports `scatter`, `point`, `bar`, `grouped_bar`, `stacked_bar`, `distribution_bar`, `yFields[]`, `series[]`, and allowlisted chart-local transforms.
+- Manuscript chart insertion uses durable chart specs, requires explicit compatible experiment selection, and stores chart spec snapshots in blocks for historical rendering.
+- Stateless local/dev endpoints remain available for compatibility, but server mode is the source of truth for logged-in workspaces.
+- IndexedDB and `.labrat.json` can remain useful for logged-out/local experiments, but old local project migration is not an active goal.
 
-## Active Milestone: Frontend Server Mode
+## Active Milestone: Server Workflow Hardening
 
-Build the UI/API integration in this order:
+Work in this order unless the user redirects:
 
-1. Add frontend API helpers for `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `GET /api/labs`, and project APIs.
-2. Add a compact login screen or auth panel for server mode.
-3. Show active user, lab, and project in the app shell.
-4. Add lab/project selection after login.
-5. Load server project state from `GET /api/projects/:projectId/state`.
-6. Let users edit project background through `PATCH /api/projects/:projectId/profile`.
-7. Use `POST /api/projects/:projectId/ai/context` to hydrate assistant/chart context.
-8. Route workbook upload through `POST /api/projects/:projectId/files` and `POST /api/projects/:projectId/import-runs` when logged in.
-9. Route normalize/apply through server import-run APIs when logged in.
-10. Use project-scoped chart `interpret` / `propose` APIs for chart drafts and recommendations.
-11. Store accepted chart proposals as chart specs before manuscript insertion.
-12. Persist manuscript blocks/pages/canvas state through manuscript APIs.
+1. Verify the current Docker stack from a clean checkout: `npm run dev:docker`, seeded login, project open, workbook import, chart proposal review, chart spec creation, manuscript insertion.
+2. Polish the split Import/Refresh Review and Review Chart Proposals modals after manual UI inspection.
+3. Tighten server project reload behavior so Browser, Overview, chart review, and Manuscript always derive from `GET /api/projects/:projectId/state`.
+4. Make refresh-related stale chart behavior visible and understandable in the UI without deleting historical chart specs.
+5. Harden Docker/Postgres configuration for friend/debug sharing: `.env` examples, seed-account warnings, local file volume notes, backup/reset instructions, and migration checks.
+6. Add minimal Admin/Audit UI for lab/user management and important project actions.
+7. Plan the next import intelligence pass for supplemental workbooks, such as attaching `Reaction_Rate_Exp30.xlsx` to an existing `Exp30` instead of treating it as an unrelated import.
+8. Continue chart grammar improvements only through validated ChartSpec/transform extensions, not direct AI-generated Plotly JSON.
 
 ## Deferred
 
 These remain out of scope unless the user asks to expand:
 
-- Import Review UI v2
-- Template memory
-- Methodology recompute
-- MCP server
-- OAuth, SSO, or email invite
-- SMTP password reset
-- Billing
-- Cloud worker queue
-- Kubernetes deployment
+- Old IndexedDB or `.labrat.json` compatibility migrations.
+- Arbitrary Python/code-interpreter execution for charts.
+- Methodology versioning and recompute proposals.
+- Template memory trusted auto-apply.
+- MCP server.
+- OAuth, SSO, email invite, SMTP password reset.
+- Billing.
+- Cloud object storage and worker queues.
+- Kubernetes or multi-region deployment.
 
 ## Guardrails
 
-- Keep the existing stateless local endpoints working during the SaaS migration.
-- Do not build new compatibility or migration layers for old IndexedDB, `.labrat.json`, or previous local project shapes.
-- Do not store plaintext passwords.
-- Do not enable development seed passwords silently in production.
-- Lab-scoped data must have server-side role checks; frontend hiding is not authorization.
-- Do not insert accepted chart proposals into manuscripts directly. Create chart specs first.
+- Keep the Docker local stack easy to start and safe to share.
+- Keep stateless local endpoints working, but do not design new features around local-only persistence.
+- Do not store plaintext passwords or seed development credentials in production mode.
+- Lab-scoped data must have server-side role checks.
+- Raw files, dataset commits, and historical chart/manuscript snapshots are immutable audit evidence.
+- Refresh replaces the active dataset view through a new commit; it must not mutate parent commits.
+- Do not insert chart proposals into manuscripts directly. Create chart specs first.
 - Preserve provenance and source refs for imported scientific data.
 - AI may propose mappings/charts/explanations, but it must not commit scientific data without review.
 - Use `doc/PROGRESS.md` as the only durable progress log.
@@ -115,4 +85,11 @@ After backend or frontend behavior changes:
 npm test
 npm --prefix backend test
 npm run build
+```
+
+For Docker/Postgres changes, also run:
+
+```bash
+docker compose config
+npm run dev:docker
 ```

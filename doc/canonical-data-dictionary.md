@@ -1,116 +1,257 @@
 # Canonical Data Dictionary
 
-This dictionary defines the concepts LabRat import, AI mapping, Experiment Browser, recompute, chart, and presentation work should use. It is intentionally broader than the current HDPE-specific fields.
+This dictionary defines the shared concepts LabRat agents and code should use for imports, server project state, Experiment Browser, charting, recompute, manuscripts, and auditability. It is intentionally broader than the legacy HDPE-specific fields.
 
-## Experiment
+## Project
 
-A single run, sample, trial, or condition set that can be compared or plotted. In the current app, experiments are stored in `dataset.experiments[]` with labels such as `Exp1`. Future generic imports may create experiments from block titles, table rows, matrix columns, or approved user mappings.
+A lab-scoped research workspace. In server mode, a project is the main user-facing unit for a topic, manuscript, or experimental campaign.
 
-Required ideas:
+Project records preserve:
 
-- stable id or label
-- human-readable name
-- provenance to the source block/table/row
-- metadata describing conditions
-- measurements produced by the experiment
+- stable project id
+- `lab_id`
+- name, description, and status
+- `current_dataset_commit_id`
+- editable project context in `metadata.projectProfile`
+- created/updated actor and timestamps
 
-## Metadata
+Logged-in workflows should load project data from `GET /api/projects/:projectId/state`.
 
-Contextual values that describe an experiment, file, sheet, report, or block. Examples: temperature, pressure, catalyst, operator, instrument, date, solvent, sample mass.
+## Project Profile
 
-Metadata should preserve:
+The editable experiment background for a project, stored in `projects.metadata.projectProfile`.
 
-- raw key
-- mapped key when known
-- raw value
-- parsed value when safe
-- unit if detected
-- source reference
-- confidence and warnings when uncertain
+Project profile fields:
 
-## Measurement
+- `schemaVersion`
+- `researchGoal`
+- `experimentBackground`
+- `materials`
+- `methods`
+- `instruments`
+- `analysisNotes`
+- `tags`
+- `updatedAt`
+- `updatedBy`
 
-A recorded numeric, categorical, or time-series value produced by an experiment. Measurements can come from table cells, row records, matrix values, or calculation outputs.
+This context can be used for AI chart/mapping/caption suggestions, but it is not itself a scientific measurement table.
 
-Measurements should preserve:
+## File Object
 
-- display name
-- optional mapped field name
-- value or series values
-- unit
-- source reference
-- relationship to experiment
-- optional x/y role for charting
+An immutable uploaded raw file record.
 
-## Import Proposal
+File objects preserve:
 
-A reviewable result produced after uploaded files are scanned, parsed, and optionally normalized. Import proposals are not committed data.
+- file id
+- lab and project ids
+- original file name
+- extension and MIME type
+- size
+- checksum
+- storage provider and storage key
+- uploader and timestamp
 
-Import proposals should preserve:
+Raw files should not be edited in place. A corrected workbook is a new file object and, after review, a new dataset commit.
 
-- proposal id and schema version
-- source file versions and scan/import run ids
-- proposed experiments, metadata, measurements, and mappings
-- warnings, confidence, and rationale
-- provenance refs for every proposed value
-- review status, such as proposed, edited, accepted, rejected, or superseded
+## Import Run
 
-Rules:
+A persisted review lifecycle for one uploaded file.
 
-- Do not silently apply import proposals to the active dataset.
-- Accepted proposals should create or update a dataset commit.
-- Rejected proposals should remain useful context so the AI does not repeat bad suggestions.
+Import runs can hold:
+
+- scan result
+- review decisions
+- normalize preview
+- refresh preview context
+- warnings
+- status
+- applied dataset commit id
+
+Important states:
+
+```text
+review_ready -> normalized_preview -> applied
+review_ready -> rejected
+normalized_preview -> rejected
+any valid processing failure -> failed
+```
+
+An applied import run must not be applied again.
 
 ## Dataset Commit
 
 An immutable reviewed dataset state. A dataset commit is the answer to "what data did the browser/chart/manuscript use?"
 
-Dataset commits should preserve:
+Dataset commits preserve:
 
-- commit id and parent commit id when applicable
-- project id or local project id
-- created time and approving user or local actor
-- source import proposals or recompute proposals
-- experiment, metadata, and measurement records included in the commit
-- summary of added, changed, and removed values
-- warnings and audit refs
-
-Current local state does not yet implement first-class dataset commits. Until it does, applied generic imports and project save/export records are the closest local approximation.
-
-## Methodology Version
-
-A reviewed calculation/method bundle used to derive values. Examples: carbon balance calculation, selectivity normalization, GC calibration treatment, unit conversion rule, or lab-specific Excel template semantics.
-
-Methodology versions should preserve:
-
-- methodology id and version id
-- human-readable name and description
-- formulas, calculation steps, or template references
-- applicable field mappings and units
-- validation rules and expected ranges
-- created/approved actor and timestamp
-- parent version when a method changes
+- commit id
+- lab and project ids
+- parent commit id
+- source import run ids
+- source mapping set ids
+- full `dataset_payload`
+- summary of changes
+- warnings
+- creator and timestamp
 
 Rules:
 
-- Changing methodology must not overwrite historical results.
-- Recomputed values should reference the methodology version that produced them.
-- Unit conversions require explicit rules and tests before automatic use.
+- Commits are immutable.
+- Import apply creates a new commit.
+- Refresh/Replace creates a new commit with one active import replaced.
+- The commit payload stores the full accepted dataset state, not only the latest patch.
+- Browser rows, chart specs, and manuscripts should reference the commit or chart spec that produced their view.
 
-## Recompute Proposal
+## Dataset Payload
 
-A reviewable comparison produced by applying a methodology version to existing raw or normalized data.
+The JSON scientific state stored in a dataset commit.
 
-Recompute proposals should preserve:
+Current payload can include:
 
-- proposal id and methodology version id
-- target dataset commit id
-- affected experiment and measurement ids
-- old values, new values, deltas, and warnings
-- source refs and calculation refs for each changed value
-- confidence, rationale, and review status
+- `genericImports[]`
+- legacy or curated `experiments[]` when present
+- `sources[]`
+- `files[]`
+- warnings and compatibility fields
 
-Accepted recompute proposals should create a new dataset commit. Rejected proposals should not alter active results.
+Review state such as mapping sets, chart proposal sets, chart specs, and manuscripts lives in separate server tables, even though local/logged-out compatibility may still store similar arrays inside a local dataset object.
+
+## Generic Import
+
+A source-backed normalized import inside `datasetPayload.genericImports[]`.
+
+Generic imports preserve:
+
+- `importId`
+- schema version
+- source file metadata
+- approved blocks/tables/structures
+- normalized `experiments[]`
+- complete long-table `fields[]`
+- compatibility `metadata[]` and `measurements[]` where present
+- source lookup records in `sources[]`
+- file records in `files[]`
+- warnings and confidence
+- refresh lineage metadata when replacing an older active import
+
+Generic imports are accepted scientific data once included in a dataset commit, but they remain raw normalized evidence. Semantic mappings and chart decisions are overlays, not rewrites.
+
+## Generic Experiment
+
+A source-backed row, block, sample, trial, or condition set derived from a generic import.
+
+Generic experiments preserve:
+
+- stable experiment id
+- label or human-readable name
+- import id
+- source block id when available
+- source ref
+- confidence
+- warnings
+
+For a master table, one spreadsheet row may become one generic experiment. For a block-style workbook, one block or repeated table section may become one generic experiment.
+
+## Field Value
+
+The primary normalized long-table record in generic imports. `fields[]` is now the preferred complete representation of imported cell values.
+
+Field values preserve:
+
+- field value id
+- experiment id
+- source field id or column id
+- role
+- display name
+- canonical field when mapped
+- raw value
+- parsed value when deterministic
+- unit
+- row/column/source location
+- source ref
+- confidence
+- warnings
+
+Do not inflate `measurements[]` with conditions, identifiers, materials, or metadata. Use `fields[]` for complete Browser/detail/chart context.
+
+## Field Role
+
+A deterministic or reviewed category describing how a field should be used.
+
+Current roles:
+
+```text
+identifier
+material
+condition
+measurement
+metadata
+note
+ignored
+```
+
+Examples:
+
+- `Label` -> `identifier`
+- `Date` -> `metadata`
+- `Catalyst Type` -> `material`
+- `Temperature (C)` -> `condition`
+- `Selectivity Gas (%)` -> `measurement`
+
+Roles guide Browser summaries, semantic mapping, chart proposal recipes, and AI context.
+
+## Metadata
+
+Contextual values that describe an experiment, file, sheet, report, block, or project.
+
+Examples:
+
+- date
+- operator
+- instrument
+- project background
+- notes
+- reaction setup context
+
+In generic imports, metadata-like values should still appear in `fields[]` with `role: "metadata"` and may also be mirrored into compatibility `metadata[]` if useful.
+
+## Measurement
+
+A value produced by an experiment that can reasonably be analyzed as an output, response, or observed result.
+
+Examples:
+
+- selectivity
+- conversion
+- yield
+- rate
+- concentration
+- carbon number distribution value
+
+Measurement values should preserve:
+
+- display name
+- canonical field when mapped
+- value or series values
+- unit
+- source ref
+- experiment relationship
+- confidence and warnings
+
+Only `role: "measurement"` field values should be mirrored into `measurements[]`.
+
+## Source Ref
+
+A stable pointer from a normalized value back to evidence.
+
+Minimum source information:
+
+- file id or file name
+- sheet name when applicable
+- cell, row, range, or block id when applicable
+- raw value or raw range summary when available
+
+Every committed scientific value should be resolvable to a source record. Do not discard existing provenance fields such as `sources`, `files`, `rate_sources`, `calculation`, `sweep`, or `parr_data`.
 
 ## Provenance Graph
 
@@ -119,203 +260,242 @@ The trace from a committed value back to evidence and decisions.
 The graph should connect:
 
 - committed value
-- measurement or metadata record
-- source file version
+- field, measurement, or metadata record
+- source file object
 - sheet/cell/range or instrument row
 - raw value
 - parser/import run
 - semantic mapping
-- methodology version or formula
-- recompute/import proposal
+- methodology version or formula when derived
+- dataset commit
 - approving audit event
 
-The current local implementation stores source refs and provenance lookup records inside dataset objects. Future backend work should make provenance queryable as a first-class graph or graph-shaped relational model.
+The current v0 implementation stores this graph mostly through JSONB payloads and source refs. Future high-volume versions may split provenance into relational or graph-shaped tables.
+
+## Semantic Mapping
+
+A reviewed or proposed interpretation that links an imported field to a scientific meaning LabRat can reason about.
+
+Semantic mappings preserve:
+
+- mapping id and schema version
+- source import ids
+- referenced field ids/source ids
+- raw label and unit
+- proposed canonical field
+- semantic role
+- value type
+- confidence, rationale, warnings, and source refs
+- user review status
+
+Mappings must not rewrite raw generic import records. Accepted mappings are overlays that improve Browser columns, chart proposals, AI context, and future search.
+
+## Mapping Set
+
+A persisted group of semantic mapping proposals and user decisions.
+
+Mapping sets preserve:
+
+- mapping set id
+- lab/project/import/dataset refs
+- payload
+- status
+- decision summary
+- created/updated actor and timestamps
+
+Mapping decisions are review state; they are not dataset commits by themselves.
+
+## Chart Proposal Set
+
+A persisted group of reviewable chart ideas.
+
+Chart proposal sets preserve:
+
+- chart proposal set id
+- project and dataset commit refs
+- optional mapping set ref
+- payload with proposals
+- review status and decision summary
+- origin metadata such as deterministic recipe or AI intent
+- scores, rationale, warnings, and source refs
+
+Chart proposals are not manuscript blocks. Accepted proposals should become chart specs before insertion.
+
+## Chart Spec
+
+A durable, validated chart definition.
+
+Chart specs preserve:
+
+- chart spec id
+- project id
+- dataset commit id
+- source chart proposal set/proposal ids when applicable
+- chart type
+- title
+- normalized `spec`
+- layout settings
+- warnings
+- created/updated actor and timestamps
+
+ChartSpec v1.2 supports:
+
+```text
+scatter
+point
+bar
+grouped_bar
+stacked_bar
+distribution_bar
+```
+
+Chart specs should reference source-backed fields and dataset commits. Chart specs tied to replaced dataset commits can be decorated as stale in API responses; existing manuscript chart blocks may continue rendering from their stored `chartSpecSnapshot`.
+
+## Chart Transform
+
+An allowlisted chart-local calculation used for preview/rendering without mutating dataset commits.
+
+Supported transform direction:
+
+```text
+normalize_sum_to_percent
+sum_fields
+ratio
+percent_of_total
+pivot_longer
+sort_components
+filter_non_numeric
+```
+
+Rules:
+
+- Transforms are part of ChartSpec, not raw dataset data.
+- Transform inputs must resolve to real fields/source refs.
+- Missing, zero, or non-numeric values should produce warnings.
+- AI may request a transform intent, but backend must compile and validate the transform.
+- Arbitrary formulas or user-supplied code are not allowed in the short-term chart system.
+
+## Manuscript
+
+A persisted canvas document for figures, text, references, and presentation export.
+
+Manuscripts preserve:
+
+- manuscript id
+- project id
+- title and status
+- blocks
+- pages
+- canvas state
+- references payload
+- created/updated actor and timestamps
+
+Chart blocks should reference chart specs and store a chart spec snapshot so historical figures remain renderable even when the active dataset changes.
+
+## Experiment Browser Row
+
+A display-oriented row derived from canonical data. Browser rows are not the source of truth.
+
+For generic imports, a browser row can include:
+
+- stable row id
+- row kind
+- experiment label
+- source file and range
+- import/mapping status
+- field/material/condition/measurement counts
+- warning count
+- confidence
+- accepted mapping display columns
+- source refs for detail view
+
+Rules:
+
+- Do not persist Browser rows as scientific data.
+- Do not flatten generic imports into legacy HDPE fields just to reuse old UI paths.
+- Keep unmapped fields inspectable.
+- Main generic Browser columns should come from explicit accepted mappings, not hidden AI guesses.
+- Clicking a generic row should open source-backed generic detail rather than HDPE-only detail/chart logic.
+
+## Methodology Version
+
+A reviewed calculation/method bundle used to derive values.
+
+Examples:
+
+- carbon balance calculation
+- selectivity normalization
+- GC calibration treatment
+- unit conversion rule
+- lab-specific Excel template semantics
+
+Methodology versions are future work. Changing methodology must create reviewable recompute proposals and then new dataset commits rather than overwriting historical results.
+
+## Recompute Proposal
+
+A future reviewable comparison produced by applying a methodology version to existing raw or normalized data.
+
+Recompute proposals should preserve:
+
+- target dataset commit id
+- methodology version id
+- affected experiments and fields
+- old values, new values, deltas, and warnings
+- source refs and calculation refs
+- confidence, rationale, and review status
+
+Accepted recompute proposals should create a new dataset commit.
 
 ## Audit Event
 
 A durable record of a meaningful action.
 
-Audit events should preserve:
+Audit events preserve:
 
-- event id, actor, timestamp, project, and action type
-- target ids, such as file, import run, mapping, methodology, recompute, chart, manuscript, or export
-- before/after summary when values or statuses change
-- rationale or user note when available
+- event id
+- actor
+- timestamp
+- lab/project
+- action type
+- target ids
+- summary
+- safe metadata
 
-Audit events are required for cloud collaboration and useful for local reproducibility summaries.
-
-## Semantic Mapping
-
-A reviewed or proposed interpretation that links a generic import field to a scientific meaning LabRat can reason about. Examples: a measurement labeled `Conv %` maps to canonical field `conversion` with semantic role `response`; metadata labeled `Catalyst` maps to canonical field `catalyst` with semantic role `condition`.
-
-Semantic mappings should preserve:
-
-- mapping id and schema version
-- source generic import ids
-- referenced measurement or metadata ids
-- raw label and unit
-- proposed canonical field
-- semantic role, such as identifier, condition, time, response, grouping, replicate, or note
-- value type, such as numeric, categorical, date, text, or boolean
-- confidence, rationale, warnings, and source references
-- user review status, such as proposed, accepted, or rejected
-
-Semantic mappings should not rewrite the original generic import records. Accepted mappings are an overlay that makes imported measurements more useful for chart proposals and future search.
-
-## Chart Proposal
-
-A reviewable chart idea derived from approved generic imports and semantic mappings. A chart proposal is not a manuscript block and should not be inserted automatically.
-
-Chart proposals should preserve:
-
-- proposal id and schema version
-- source generic import ids
-- referenced measurement, metadata, and mapping ids
-- chart type
-- x/y fields, labels, units, and value types
-- grouping, color, or faceting suggestions where useful
-- title, rationale, confidence, warnings, and source references
-- review status, such as proposed, accepted, or rejected
-
-Chart proposals should be generated from approved/imported data without inventing derived values. If a useful chart requires unit conversion, aggregation, or calculated fields, the proposal should include a warning and require explicit later implementation.
-
-## Chart Spec
-
-A committed or saved chart definition. A chart spec is more durable than a preview and more reproducible than a static image.
-
-Chart specs should preserve:
-
-- chart id and chart type
-- source dataset commit id
-- source methodology version id when derived values are involved
-- x/y/grouping/filter field references
-- labels, units, and style settings
-- warnings and provenance refs
-- render/export metadata
-
-Manuscript chart blocks should eventually reference chart specs instead of only storing HDPE labels or static images.
-
-## Source / Provenance
-
-The trace back to original files and cells. Provenance is mandatory for scientific data changes.
-
-Minimum source reference:
-
-- file id or file name
-- sheet name when applicable
-- cell or range when applicable
-- block/table id when applicable
-- raw value or raw range summary
-
-Do not discard existing LabRat provenance fields: `sources`, `files`, `rate_sources`, `calculation`, `sweep`, and `parr_data`.
-
-## Unit
-
-The measurement unit found in headers, metadata, or nearby labels. Examples: `min`, `h`, `C`, `bar`, `%`, `M/s`, `g`.
-
-Rules:
-
-- Extract units when visible.
-- Keep the raw label even when unit parsing succeeds.
-- If unit is inferred rather than explicit, add a warning or lower confidence.
-- Do not convert units unless the conversion is explicit and test-covered.
+Do not store passwords, session tokens, API keys, or unnecessary raw scientific payloads in audit metadata.
 
 ## Warning
 
-A human-review signal attached to a file, sheet, block, table, column, row, or value.
+A human-review signal attached to a file, sheet, block, table, column, row, value, mapping, chart, or manuscript state.
 
 Examples:
 
 - no clear header row found
-- multiple possible header rows found
 - unit could not be determined
-- matrix orientation inferred
-- mixed incompatible column types
-- merged cells may affect interpretation
-- skipped mostly empty rows
+- low paired chart count
+- mostly constant field
+- transform skipped non-numeric values
+- chart spec is stale after dataset refresh
 
-Warnings should be visible in import review and available to AI context.
+Warnings should be visible in review surfaces and available to AI context.
 
 ## Confidence
 
-A heuristic score that explains how certain the parser is. Confidence is not scientific truth.
+A heuristic score that explains how certain the parser, mapper, chart proposer, or AI resolver is.
 
 Rules:
 
-- Include reason strings with important confidence scores.
-- Lower confidence when headers, units, regions, or orientation are ambiguous.
+- Confidence is not scientific truth.
+- Include reasons or warnings where scores matter.
+- Lower confidence when headers, units, regions, field roles, transforms, or mappings are ambiguous.
 - Prefer `unknown` with useful warnings over confident bad parsing.
 
-## Canonical Dataset
+## Legacy Compatibility
 
-The approved project-level data shape used by LabRat. The current local dataset has a legacy HDPE-oriented `dataset.experiments[]` path plus generic import extensions. Future work should move toward commit-backed generic experiment, metadata, and measurement records instead of replacing HDPE fields in place.
-
-Compatibility rule:
-
-- Existing curated charts must keep working for HDPE records.
-- Generic imports should add structured measurements and provenance without erasing current fields.
-- Experiment Browser should use an adapter layer to display HDPE and generic data together or separately.
-
-## Generic Import Dataset Extension
-
-Current local storage keeps approved generic lab imports under `dataset.genericImports[]`. This is the current local implementation of approved imported data, not the final cloud data model.
-
-Each generic import record should contain:
-
-- `importId`
-- `schemaVersion`
-- original file metadata
-- approved scan block ids
-- generic `experiments[]`
-- generic `measurements[]`
-- `sources[]` provenance lookup records
-- `files[]`
-- warnings and confidence
-
-The existing `dataset.experiments[]` array remains the curated HDPE experiment list. Generic imported measurements must not be copied into HDPE-specific fields unless a future explicit, reviewed mapping step supports that behavior.
-
-Future direction:
-
-- accepted imports should create dataset commits
-- generic measurements should remain source-backed
-- browser rows and chart specs should reference commit/methodology state when available
-
-## Generic Mapping And Proposal Extensions
-
-Current local storage keeps review state as additive dataset siblings, separate from raw generic imports:
-
-- `dataset.genericMappingSets[]` for semantic mapping proposals and accepted/rejected decisions.
-- `dataset.genericChartProposals[]` for chart proposal history and accepted/rejected decisions.
+Legacy HDPE-shaped `dataset.experiments[]`, local IndexedDB persistence, `.labrat.json` export/import, and stateless local/dev endpoints remain available for compatibility and development.
 
 Compatibility rules:
 
-- Keep `dataset.genericImports[]` as the raw approved import record with provenance.
-- Keep `dataset.experiments[]` as the curated HDPE experiment list.
-- Do not auto-insert chart proposals into manuscript blocks.
-- Preserve rejected proposal history when useful so the AI does not repeatedly suggest the same unwanted mapping or chart.
-
-## Experiment Browser Row
-
-A display-oriented row derived from canonical data. Browser rows are not the source of truth; they make heterogeneous records scannable.
-
-For HDPE records, a row can be derived from `dataset.experiments[]` and keep current columns such as catalyst loading, RPM, conversion, selectivity, carbon balance, and file pills.
-
-For generic imports, a row should include:
-
-- stable `rowId`
-- `kind`, usually `generic`
-- experiment label or name
-- source file and source range
-- import or mapping status
-- measurement count
-- warning count
-- confidence
-- dynamic display fields from accepted or `accepted_draft` semantic mappings
-- provenance refs for the source detail view
-
-Rules:
-
-- Do not persist browser rows as scientific data.
-- Do not flatten generic measurements into HDPE fields just to reuse the old browser table.
-- Keep unmapped measurements inspectable.
-- Clicking a generic row should open a generic detail view instead of HDPE-only chart/detail logic.
+- Existing curated HDPE charts should keep working where that path is still used.
+- Generic imports should not mutate HDPE-specific fields unless a future explicit reviewed mapping supports it.
+- Logged-in server mode should treat Postgres project state and dataset commits as the source of truth.
+- Do not add old local-data migration layers unless explicitly requested.

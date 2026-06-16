@@ -114,11 +114,12 @@ Current chart proposal flows stop at displayed/reviewable proposals. Automatic m
 
 ## Semi-Automatic AI Direction
 
-Future LabRat cloud or advanced local flows may allow high-confidence AI results to become `accepted_draft`.
+Future advanced flows may allow high-confidence AI results to become `accepted_draft` review aids.
 
 Rules:
 
-- `accepted_draft` may improve browser columns and chart suggestions.
+- `accepted_draft` may improve draft review surfaces and chart suggestions.
+- Main Browser columns should continue to use explicit `accepted` mappings unless a separate visible draft-column mode is implemented.
 - `accepted_draft` must remain reversible and visible.
 - Final report, manuscript, or exported presentation use should make the review state clear.
 - Any automatic threshold must account for confidence, warnings, unit ambiguity, sparse coverage, and prior user decisions.

@@ -1,12 +1,12 @@
 # Backend API Contract
 
-This document defines the current backend-facing contracts for upload review, normalization, semantic mapping, and chart proposal work. These endpoints are now local/dev compatibility endpoints. The next authenticated, project-scoped SaaS APIs are defined in `doc/saas-api-contract-v0.md` and should wrap the same scan/normalize/proposal services without changing the scientific guardrails.
+This document defines the backend-facing contracts for upload review, normalization, semantic mapping, and chart proposal work. These endpoint paths remain available as local/dev compatibility endpoints. Authenticated, project-scoped SaaS APIs are defined in `doc/saas-api-contract-v0.md` and wrap the same scan/normalize/proposal services with persistence, role checks, dataset commits, chart specs, manuscripts, and audit events.
 
 ## API Direction
 
-Backend-uploaded data can already become visible in Experiment Browser through generic experiment rows. The next backend step is to persist the lifecycle around that data: file objects, import runs, dataset commits, mapping sets, chart proposal sets, chart specs, manuscripts, and audit events.
+Backend-uploaded data can become visible in Experiment Browser through generic experiment rows. In logged-in server mode, the lifecycle around that data is persisted as file objects, import runs, dataset commits, mapping sets, chart proposal sets, chart specs, manuscripts, and audit events.
 
-All future write paths should follow this pattern:
+All write paths should follow this pattern:
 
 ```text
 raw action
@@ -137,10 +137,10 @@ Current scan behavior:
 - return candidate regions and warnings for low-confidence sheets
 - never mutate frontend project state directly
 
-Future cloud behavior:
+Project-scoped SaaS behavior:
 
-- create or reference an immutable uploaded file version
-- create an import run/job record
+- create or reference an immutable uploaded file object
+- create an import run record
 - persist scan results and warnings for later review
 - keep raw file storage separate from normalized experiment data
 
@@ -273,7 +273,7 @@ Rules:
 - proposals are not accepted mappings until user review
 - do not mutate `dataset.genericImports[]` or `dataset.experiments[]`
 - include confidence, rationale, and warnings
-- high-confidence results may be shown as `accepted_draft` in future semi-automatic flows, but the raw import remains unchanged
+- high-confidence results may be shown as draft review aids in future semi-automatic flows, but the raw import remains unchanged and main Browser columns should come from explicit accepted mappings unless a separate reviewed draft-column mode is implemented
 
 ## `POST /api/charts/propose`
 
@@ -357,7 +357,7 @@ Rules:
 - never allow AI to return direct Plotly JSON or unresolved fields
 - do not return manuscript block insertion payloads from chart proposal endpoints
 - keep accepted/rejected proposal state separate from raw generic imports
-- future chart specs should be reusable by Experiment Browser and manuscript insertion flows
+- accepted chart proposals should become reusable chart specs before Browser/manuscript insertion flows depend on them
 
 ## `POST /api/charts/interpret`
 
@@ -437,9 +437,9 @@ Rules:
 - keep output review-only; do not insert manuscript blocks or persist chart specs from this endpoint
 - support deterministic fallback without an AI key for common prompts such as `plot gas selectivity vs temperature`
 
-## SaaS API Direction
+## Authenticated Project APIs
 
-When LabRat moves beyond local-first project files, use `doc/saas-api-contract-v0.md` as the active API contract. The high-level shape is:
+For logged-in project work, use `doc/saas-api-contract-v0.md` as the active API contract. The high-level shape is:
 
 ```text
 POST /api/auth/login
@@ -458,11 +458,11 @@ POST /api/projects/:projectId/manuscripts
 PATCH /api/manuscripts/:manuscriptId
 ```
 
-These APIs should use the same scan, normalize, mapping, and chart proposal shapes while adding authentication, role checks, persistence, dataset commit state, chart specs, manuscript persistence, and audit logging. Methodology/recompute APIs are deferred until after Auth v0/server project persistence.
+These APIs use the same scan, normalize, mapping, and chart proposal shapes while adding authentication, role checks, persistence, dataset commit state, chart specs, manuscript persistence, and audit logging. Methodology/recompute APIs remain deferred until the import/chart/manuscript workflow is reliable.
 
-## Future Dataset Commit Shape
+## Dataset Commit Shape
 
-Cloud commit responses should make the accepted dataset state explicit:
+Dataset commit records make the accepted dataset state explicit:
 
 ```json
 {

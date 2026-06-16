@@ -374,6 +374,7 @@ Notes:
 - `spec` should reference source fields, generic import ids, dataset commit ids, and units.
 - Manuscripts should reference chart specs, not chart proposal ids.
 - API creation should reject chart specs whose source fields or source refs do not resolve in the referenced dataset commit.
+- Refresh/replace does not delete or mutate older chart specs. APIs may decorate chart specs as stale when their `dataset_commit_id` no longer matches the active dataset, but the database row remains historical evidence.
 
 ## `manuscripts`
 

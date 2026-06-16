@@ -1,10 +1,10 @@
 # Agent Working Context
 
-This file is the first stop for AI coding agents working in this repository. Read it together with `README.md`, `doc/PROGRESS.md`, `doc/ARCHITECTURE.md`, `doc/ROADMAP.md`, and `doc/plan.md` before making edits. For auth, database, project persistence, import persistence, chart-spec, or manuscript persistence work, also read `doc/saas-database-schema-v0.md`, `doc/saas-api-contract-v0.md`, `doc/server-project-migration-plan.md`, `doc/backend-api-contract.md`, `doc/canonical-data-dictionary.md`, and `doc/ai-boundaries.md`; note that old local-data migration is not in scope.
+This file is the first stop for AI coding agents working in this repository. Read it together with `README.md`, `doc/PROGRESS.md`, `doc/ARCHITECTURE.md`, `doc/ROADMAP.md`, and `doc/plan.md` before making edits. For auth, database, project persistence, import persistence, chart-spec, or manuscript persistence work, also read `doc/saas-database-schema-v0.md`, `doc/saas-api-contract-v0.md`, `doc/server-project-state-plan.md`, `doc/backend-api-contract.md`, `doc/canonical-data-dictionary.md`, and `doc/ai-boundaries.md`; note that old local-data migration is not in scope.
 
 ## Mission
 
-LabRat Blank is evolving into a multi-lab SaaS research command center for messy lab Excel/CSV imports, experiment browsing, charting, manuscript layout, and PPTX export. The backend now has server-first project persistence; the next active direction is frontend server mode and Postgres deployment hardening. Preserve scientific data integrity and avoid broad rewrites.
+LabRat Blank is evolving into a multi-lab SaaS research command center for messy lab Excel/CSV imports, experiment browsing, charting, manuscript layout, and PPTX export. Server-first project mode is now implemented; the next active direction is workflow reliability, Docker/Postgres deployment hardening, admin/audit usability, and smarter import/chart intelligence. Preserve scientific data integrity and avoid broad rewrites.
 
 ## Current Stack
 
@@ -45,7 +45,7 @@ Use `npm run build` as the minimum verification after code changes. For import/b
 - `backend/src/`: backend scan, normalize, semantic mapping, and chart proposal services.
 - `public/templates/`: example-only workbook templates.
 - `src/styles.css`: all app styling.
-- `doc/`: active plan, architecture, roadmap, contracts, data dictionary, AI boundaries, migration notes, and progress log.
+- `doc/`: active plan, architecture, roadmap, contracts, data dictionary, AI boundaries, server state notes, and progress log.
 
 ## Data Guardrails
 
@@ -109,7 +109,7 @@ The parser currently attaches local object URLs for related source files and par
 
 ## Backend And SaaS Direction
 
-The current local backend should remain compatible while the next phase connects the frontend to Postgres/auth/server persistence. New SaaS work should follow `doc/plan.md`, `doc/ROADMAP.md`, `doc/saas-database-schema-v0.md`, `doc/saas-api-contract-v0.md`, and `doc/server-project-migration-plan.md`. Existing scan/normalize/semantic-map/chart-propose services should be wrapped in authenticated project-scoped APIs instead of replaced first.
+The current local backend should remain compatible while server-first project workflows continue to harden. New SaaS work should follow `doc/plan.md`, `doc/ROADMAP.md`, `doc/saas-database-schema-v0.md`, `doc/saas-api-contract-v0.md`, and `doc/server-project-state-plan.md`. Existing scan/normalize/semantic-map/chart-propose services should stay available through compatibility endpoints while authenticated project-scoped APIs remain the logged-in source of truth.
 
 ## Known Sharp Edges
 
@@ -122,7 +122,7 @@ The current local backend should remain compatible while the next phase connects
 ## Preferred Workflow
 
 1. Read `README.md`, this file, and `doc/PROGRESS.md`.
-   - For auth/database/project persistence work, also read `doc/ARCHITECTURE.md`, `doc/ROADMAP.md`, `doc/plan.md`, `doc/saas-database-schema-v0.md`, `doc/saas-api-contract-v0.md`, and `doc/server-project-migration-plan.md`.
+   - For auth/database/project persistence work, also read `doc/ARCHITECTURE.md`, `doc/ROADMAP.md`, `doc/plan.md`, `doc/saas-database-schema-v0.md`, `doc/saas-api-contract-v0.md`, and `doc/server-project-state-plan.md`.
    - For import/parser/chart proposal compatibility work, also read `doc/backend-api-contract.md`, `doc/canonical-data-dictionary.md`, and `doc/ai-boundaries.md`.
 2. Inspect the specific source files touched by the request.
 3. Make the smallest coherent change.
