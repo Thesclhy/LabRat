@@ -17,6 +17,7 @@ LabRat Blank already has:
 - Server chart spec insertion into Manuscript with explicit compatible experiment selection and historical chart spec snapshots.
 - Split master/supplemental upload UI: one active master table per project, refresh/replace for the master, and reviewable supplemental workbook attachment for extra experiment files.
 - Backend natural-language project data query resolution into validated ViewIntent drafts.
+- Server-backed LabRat chat action planning that turns natural-language requests into confirmable action cards for uploads, supplements, chart proposals, ChartSpecs, and data queries.
 
 The next active roadmap item is server workflow hardening and local deployment readiness.
 
@@ -26,6 +27,7 @@ Goal: make the logged-in project workflow dependable enough for another person t
 
 - Verify seeded login, lab/project selection, project open, import, refresh, chart proposal review, chart spec creation, manuscript insertion, reload, and PPTX export from a clean Docker stack.
 - Keep Import/Refresh Review focused on data ingestion and the Review Chart Proposals modal focused on chart drafting/review.
+- Let the LabRat chat launch the same reviewed workflows through action cards, without silently committing scientific data.
 - Ensure project state reloads consistently after import apply, refresh apply, mapping updates, chart proposal decisions, chart spec creation, and manuscript saves.
 - Make stale chart specs after refresh understandable without deleting historical chart/manuscript evidence.
 

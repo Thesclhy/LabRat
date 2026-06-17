@@ -2,6 +2,10 @@
 
 Use this file to record user requests, meaningful changes, verification results, and notable follow-up items. Keep entries concise, newest first, and include dates.
 
+## 2026-06-17
+
+- Implemented server-backed conversational LabRat action planning. Added `POST /api/projects/:projectId/agent/plan`, deterministic safe action plans for master upload, master refresh, supplemental workbook upload, chart proposal, chart interpretation, ChartSpec creation, and data-query requests, plus auth/cross-lab route coverage. Refactored the AgentPanel path in logged-in project mode to call the server planner, render confirmable action cards, execute uploads through existing file/import/normalize/relationship/refresh/apply APIs, persist chart proposals/specs only after card confirmation, and reload project state after mutations. Updated AI boundary/API/plan/roadmap docs. Verified `npm test` passed with 24 files and 163 tests, `npm --prefix backend test` passed with 169 tests and 1 skipped optional Postgres test, and `npm run build` passed with the existing large Plotly chunk warning.
+
 ## 2026-06-16
 
 - Added three synthetic manual smoke-test workbooks under `public/templates/test-workbooks/`: `LabRat_Test_Master_Exp30.xlsx`, `LabRat_Test_Reaction_Rate_Exp30.xlsx`, and `LabRat_Test_Selectivity_Normalize.xlsx`, plus a README with upload order and chart prompts. Verified with the backend scan/normalize services that the master workbook parses as 4 experiments, the reaction-rate workbook parses as a `reaction_rate_time_series` observation set with 62 observations, and the selectivity workbook parses as 4 experiments with component selectivity fields. Also inspected/rendered the generated workbooks and scanned for formula errors; `npm run build` passed with the existing large Plotly chunk warning.

@@ -17,6 +17,7 @@ import {
   patchServerManuscript,
   patchServerMappingSet,
   patchServerProjectProfile,
+  planServerProjectAgent,
   previewServerImportRelationship,
   previewServerImportRefresh,
   previewServerImportRunNormalization,
@@ -146,7 +147,8 @@ describe("serverApi", () => {
   it("applies a server import run as a supplement and resolves project data queries", async () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ datasetCommit: { id: "commit_supplement" } }))
-      .mockResolvedValueOnce(jsonResponse({ schemaVersion: "labrat.dataResolveQuery.v1", viewIntentDraft: {} }));
+      .mockResolvedValueOnce(jsonResponse({ schemaVersion: "labrat.dataResolveQuery.v1", viewIntentDraft: {} }))
+      .mockResolvedValueOnce(jsonResponse({ schemaVersion: "labrat.agentPlan.v1", actions: [] }));
 
     await applyServerImportRun("import_run_2", {
       applyMode: "supplement_import",
@@ -161,6 +163,11 @@ describe("serverApi", () => {
       prompt: "show Exp30 reaction rate",
       selectedExperimentIds: ["exp_30"],
       maxResults: 12,
+    }, { fetch: fetchImpl });
+    await planServerProjectAgent("project_1", {
+      message: "upload supplement for Exp30",
+      conversation: [{ role: "user", text: "hello" }],
+      selectedContext: { tab: "overview" },
     }, { fetch: fetchImpl });
 
     expect(fetchImpl.mock.calls[0][0]).toBe("/api/import-runs/import_run_2/apply");
@@ -179,6 +186,12 @@ describe("serverApi", () => {
       selectedImportIds: [],
       selectedExperimentIds: ["exp_30"],
       maxResults: 12,
+    });
+    expect(fetchImpl.mock.calls[2][0]).toBe("/api/projects/project_1/agent/plan");
+    expect(JSON.parse(fetchImpl.mock.calls[2][1].body)).toEqual({
+      message: "upload supplement for Exp30",
+      conversation: [{ role: "user", text: "hello" }],
+      selectedContext: { tab: "overview" },
     });
   });
 

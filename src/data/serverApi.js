@@ -199,6 +199,15 @@ export function resolveServerProjectDataQuery(projectId, request = {}, options =
   }, options);
 }
 
+export function planServerProjectAgent(projectId, request = {}, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before asking LabRat to plan project actions.");
+  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/agent/plan`, {
+    message: request.message || "",
+    conversation: request.conversation || [],
+    selectedContext: request.selectedContext || {},
+  }, options);
+}
+
 export function patchServerChartProposalSet(chartProposalSetId, request = {}, options = {}) {
   if (!chartProposalSetId) throw new ServerApiError("Select a chart proposal set before updating decisions.");
   return serverJson(`/api/chart-proposal-sets/${encodeURIComponent(chartProposalSetId)}`, request, {

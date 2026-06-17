@@ -1046,6 +1046,114 @@ test("project AI context summarizes fields, mappings, prior decisions, and chart
   assert.equal(contextBody.serviceInput, undefined);
 });
 
+test("project agent plan returns deterministic upload, supplement, chart, and query actions", async () => {
+  const { project } = await createProjectWithAppliedImport("Agent Plan Project");
+
+  const master = await jsonFetch(`/api/projects/${project.id}/agent/plan`, {
+    method: "POST",
+    body: { message: "upload master table" },
+  });
+  assert.equal(master.status, 200);
+  const masterBody = await master.json();
+  assert.equal(masterBody.schemaVersion, "labrat.agentPlan.v1");
+  assert.equal(masterBody.actions[0].type, "upload_master_table");
+  assert.equal(masterBody.actions[0].requiresFile, true);
+  assert.equal(masterBody.actions[0].status, "requires_confirmation");
+  assert.equal(masterBody.contextSummary.hasCurrentDatasetCommit, true);
+  assert.equal(JSON.stringify(masterBody).includes("cellGrid"), false);
+
+  const supplement = await jsonFetch(`/api/projects/${project.id}/agent/plan`, {
+    method: "POST",
+    body: { message: "upload supplement reaction rate for Exp30" },
+  });
+  assert.equal(supplement.status, 200);
+  const supplementBody = await supplement.json();
+  assert.equal(supplementBody.actions[0].type, "upload_supplement");
+  assert.deepEqual(supplementBody.actions[0].params.targetExperimentAliases, ["Exp30"]);
+
+  const chart = await jsonFetch(`/api/projects/${project.id}/agent/plan`, {
+    method: "POST",
+    body: { message: "plot gas selectivity vs temperature" },
+  });
+  assert.equal(chart.status, 200);
+  const chartBody = await chart.json();
+  assert.equal(chartBody.actions[0].type, "interpret_chart");
+  assert.equal(chartBody.actions[0].params.prompt, "gas selectivity vs temperature");
+
+  const query = await jsonFetch(`/api/projects/${project.id}/agent/plan`, {
+    method: "POST",
+    body: { message: "show Exp1 data as a table" },
+  });
+  assert.equal(query.status, 200);
+  const queryBody = await query.json();
+  assert.equal(queryBody.actions[0].type, "resolve_data_query");
+  assert.equal(queryBody.actions[0].requiresReview, false);
+});
+
+test("project agent plan can target an accepted chart proposal for chart spec creation", async () => {
+  const { project } = await createProjectWithAppliedImport("Agent ChartSpec Plan Project");
+  const proposalCreate = await jsonFetch(`/api/projects/${project.id}/chart-proposal-sets`, {
+    method: "POST",
+    body: {
+      payload: {
+        proposals: [{
+          proposalId: "chart_agent_keep",
+          status: "accepted",
+          chartType: "scatter",
+          title: "Accepted agent chart",
+        }],
+      },
+      decisionSummary: { acceptedProposalIds: ["chart_agent_keep"] },
+    },
+  });
+  assert.equal(proposalCreate.status, 201);
+  const proposalBody = await proposalCreate.json();
+
+  const response = await jsonFetch(`/api/projects/${project.id}/agent/plan`, {
+    method: "POST",
+    body: { message: "create chart spec from accepted proposal" },
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.actions[0].type, "create_chart_spec_from_proposal");
+  assert.equal(body.actions[0].params.chartProposalSetId, proposalBody.chartProposalSet.id);
+  assert.equal(body.actions[0].params.proposalId, "chart_agent_keep");
+});
+
+test("project agent plan requires auth and project access", async () => {
+  const ownerCookie = cookie;
+  const { project } = await createProjectWithAppliedImport("Agent Auth Project");
+  cookie = "";
+  const unauth = await jsonFetch(`/api/projects/${project.id}/agent/plan`, {
+    method: "POST",
+    body: { message: "upload master table" },
+  });
+  assert.equal(unauth.status, 401);
+
+  const adminLogin = await jsonFetch("/api/auth/login", {
+    method: "POST",
+    body: { username: "admin", password: "LabRatAdmin123!" },
+  });
+  assert.equal(adminLogin.status, 200);
+  cookie = cookieFrom(adminLogin);
+  const slug = `agent-other-lab-${Date.now()}`;
+  const otherLab = await (await jsonFetch("/api/admin/labs", {
+    method: "POST",
+    body: { name: "Agent Other Lab", slug },
+  })).json();
+  const otherProject = await (await jsonFetch("/api/projects", {
+    method: "POST",
+    body: { labId: otherLab.lab.id, name: "Agent Other Project" },
+  })).json();
+
+  cookie = ownerCookie;
+  const crossLab = await jsonFetch(`/api/projects/${otherProject.project.id}/agent/plan`, {
+    method: "POST",
+    body: { message: "show data" },
+  });
+  assert.equal(crossLab.status, 403);
+});
+
 test("project chart interpret previews by default and can persist interpreted proposals", async () => {
   const { project } = await createProjectWithAppliedImport("Project Chart Interpret Project");
 

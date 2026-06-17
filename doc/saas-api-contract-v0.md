@@ -591,6 +591,76 @@ Rules:
 - `viewIntentDraft` is a render intent, not a dataset mutation.
 - Frontend must render only validated ids/source refs returned by the backend.
 
+### `POST /api/projects/:projectId/agent/plan`
+
+Purpose: parse one LabRat chat message into safe, confirmable project action cards.
+
+Required role: `viewer` or above.
+
+Request:
+
+```json
+{
+  "message": "upload this as supplement for Exp30",
+  "conversation": [],
+  "selectedContext": {}
+}
+```
+
+Response:
+
+```json
+{
+  "schemaVersion": "labrat.agentPlan.v1",
+  "reply": "I can attach a supplemental workbook to Exp30 after you choose a file.",
+  "actions": [
+    {
+      "actionId": "agent_action_...",
+      "type": "upload_supplement",
+      "status": "requires_confirmation",
+      "label": "Add supplemental workbook",
+      "description": "Choose a workbook and review its relationship to existing experiments.",
+      "requiresFile": true,
+      "requiresReview": true,
+      "params": {
+        "targetExperimentAliases": ["Exp30"]
+      },
+      "warnings": []
+    }
+  ],
+  "contextSummary": {
+    "hasDataset": true,
+    "fileCount": 3,
+    "importRunCount": 2,
+    "chartProposalSetCount": 1,
+    "chartSpecCount": 0,
+    "manuscriptCount": 1
+  },
+  "warnings": []
+}
+```
+
+Supported first action types:
+
+```text
+upload_master_table
+refresh_master_table
+upload_supplement
+propose_charts
+interpret_chart
+create_chart_spec_from_proposal
+resolve_data_query
+```
+
+Rules:
+
+- This endpoint plans only; it must not mutate project state.
+- Mutating actions require a frontend confirmation card and then call existing project APIs.
+- Upload actions require file selection before import run creation.
+- The planner may use deterministic parsing and optional AI, but it returns action plans, not final scientific values.
+- Context must be compact and must not include raw workbook cell grids.
+- Cross-lab access is forbidden.
+
 ### `POST /api/projects/:projectId/charts/interpret`
 
 Purpose: turn one user prompt into a validated ChartSpec draft using the current project dataset and mappings.

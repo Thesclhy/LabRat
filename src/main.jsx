@@ -43,10 +43,12 @@ import {
   patchServerManuscript,
   patchServerMappingSet,
   patchServerProjectProfile,
+  planServerProjectAgent,
   previewServerImportRelationship,
   previewServerImportRefresh,
   previewServerImportRunNormalization,
   proposeServerProjectCharts,
+  resolveServerProjectDataQuery,
   uploadServerProjectFile,
 } from "./data/serverApi.js";
 import { ls } from "./storage/localStorage";
@@ -127,6 +129,21 @@ function selectableRelationshipProposals(preview) {
     proposal?.proposedRelationship === "supplement"
     && asArray(proposal.targetExperimentIds).length > 0
   ));
+}
+
+function scanBlockIds(scanResult) {
+  return asArray(scanResult?.sheets).flatMap((sheet) => asArray(sheet?.blocks).map((block) => block?.blockId).filter(Boolean));
+}
+
+function summarizeNormalizePreview(normalizePreview) {
+  const imports = asArray(normalizePreview?.datasetPatch?.genericImports);
+  return {
+    importCount: imports.length,
+    experimentCount: normalizePreview?.summary?.createdExperiments ?? imports.reduce((total, item) => total + asArray(item?.experiments).length, 0),
+    fieldCount: normalizePreview?.summary?.createdFields ?? imports.reduce((total, item) => total + asArray(item?.fields).length, 0),
+    measurementCount: normalizePreview?.summary?.createdMeasurements ?? imports.reduce((total, item) => total + asArray(item?.measurements).length, 0),
+    warningCount: normalizePreview?.summary?.warningCount ?? imports.reduce((total, item) => total + asArray(item?.warnings).length, 0),
+  };
 }
 
 function genericImportLabel(genericImport) {
@@ -1152,7 +1169,101 @@ function refKind(file) {
   return "other";
 }
 
-function AgentPanel({ open, setOpen, dataset, blocks, setBlocks, references, selected, selectedChartContext, pendingChartAnalysis, onChartAnalysisHandled }) {
+function AgentActionCard({ action, projectState, busyActionId, onChooseFile, onUseExistingFile, onExecute, onConfirm }) {
+  const params = action.params || {};
+  const preview = action.preview || null;
+  const fileOptions = asArray(params.existingFiles);
+  const isBusy = busyActionId === action.actionId || action.status === "previewing" || action.status === "executing";
+  const canConfirm = ["ready_to_apply", "ready_to_persist", "ready_to_create"].includes(action.status);
+  const warnings = [...asArray(action.warnings), ...asArray(preview?.warnings)];
+  return (
+    <div className={`agent-action-card is-${action.status || "proposed"}`}>
+      <div className="agent-action-head">
+        <strong>{action.label || action.type}</strong>
+        <span>{action.status || "proposed"}</span>
+      </div>
+      {action.description && <p>{action.description}</p>}
+      {params.targetExperimentAliases?.length > 0 && <small>Target: {params.targetExperimentAliases.join(", ")}</small>}
+      {params.prompt && <small>Prompt: {params.prompt}</small>}
+      {preview?.summary && (
+        <div className="agent-action-summary">
+          {Object.entries(preview.summary).map(([key, value]) => (
+            <span key={key}>{key}: {String(value)}</span>
+          ))}
+        </div>
+      )}
+      {preview?.relationshipProposal && (
+        <small>
+          Relationship: {preview.relationshipProposal.supplementType || preview.relationshipProposal.proposedRelationship}
+          {" -> "}
+          {asArray(preview.relationshipProposal.targetExperimentIds).join(", ")}
+        </small>
+      )}
+      {preview?.chartTitle && <small>Chart: {preview.chartTitle}</small>}
+      {preview?.message && <small>{preview.message}</small>}
+      {warnings.length > 0 && (
+        <ul className="agent-action-warnings">
+          {warnings.map((warning, index) => (
+            <li key={`${warning.code || "warning"}-${index}`}>{warning.message || warning.code || String(warning)}</li>
+          ))}
+        </ul>
+      )}
+      {action.error && <p className="import-review-error">{action.error}</p>}
+      <div className="agent-action-buttons">
+        {action.requiresFile && !canConfirm && action.status !== "completed" && (
+          <>
+            <button type="button" disabled={isBusy} onClick={() => onChooseFile?.(action.actionId)}>
+              {isBusy ? "Working..." : "Choose file"}
+            </button>
+            {fileOptions.length > 0 && (
+              <select
+                disabled={isBusy}
+                defaultValue=""
+                onChange={(event) => {
+                  if (event.target.value) onUseExistingFile?.(action.actionId, event.target.value);
+                  event.target.value = "";
+                }}
+              >
+                <option value="">Use existing file...</option>
+                {fileOptions.map((file) => (
+                  <option key={file.fileObjectId} value={file.fileObjectId}>{file.name}</option>
+                ))}
+              </select>
+            )}
+          </>
+        )}
+        {!action.requiresFile && !canConfirm && action.status !== "completed" && (
+          <button type="button" disabled={isBusy} onClick={() => onExecute?.(action.actionId)}>
+            {isBusy ? "Working..." : action.type === "resolve_data_query" ? "Resolve query" : "Prepare"}
+          </button>
+        )}
+        {canConfirm && (
+          <button type="button" className="primary" disabled={isBusy} onClick={() => onConfirm?.(action.actionId)}>
+            {isBusy ? "Applying..." : action.type === "create_chart_spec_from_proposal" ? "Create ChartSpec" : action.type?.includes("chart") ? "Confirm chart action" : "Confirm apply"}
+          </button>
+        )}
+        {action.status === "completed" && <span className="workflow-status is-applied">Completed</span>}
+      </div>
+      {projectState?.project?.name && <small>Project: {projectState.project.name}</small>}
+    </div>
+  );
+}
+
+export function AgentPanel({
+  open,
+  setOpen,
+  dataset,
+  blocks,
+  setBlocks,
+  references,
+  selected,
+  selectedChartContext,
+  pendingChartAnalysis,
+  onChartAnalysisHandled,
+  activeProjectId,
+  projectState,
+  onProjectStateLoaded,
+}) {
   const [history, setHistory] = useState(() => ls.get("labrat_blank_chat_history_v1_react", []).map(({ streaming, streamId, ...message }) => message));
   const [apiKey, setApiKey] = useState(() => localStorage.getItem("labrat_blank_anthropic_key_v1") || "");
   const [model, setModel] = useState(() => localStorage.getItem("labrat_blank_anthropic_model_v1") || "claude-sonnet-4-5");
@@ -1163,6 +1274,9 @@ function AgentPanel({ open, setOpen, dataset, blocks, setBlocks, references, sel
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [pendingFileActionId, setPendingFileActionId] = useState("");
+  const [busyActionId, setBusyActionId] = useState("");
+  const fileActionInputRef = useRef(null);
   const [settingsDraft, setSettingsDraft] = useState({
     apiKey,
     model,
@@ -1221,6 +1335,209 @@ function AgentPanel({ open, setOpen, dataset, blocks, setBlocks, references, sel
     references: references.map((r) => ({ name: r.name, kind: r.kind, note: r.note })),
     experiments_csv: dataset.experiments.map((e) => [e.label, e.catalyst_loading_g, e.rpm, e.impeller, e.reaction_time_hr, e.conversion_pct, e.selectivity_liquid_pct, e.carbon_balance_pct].join(",")).join("\n"),
   });
+  const serverAgentEnabled = Boolean(activeProjectId);
+  const updateActionInHistory = (actionId, patch) => {
+    setHistory((current) => current.map((message) => {
+      if (!Array.isArray(message.actions)) return message;
+      return {
+        ...message,
+        actions: message.actions.map((action) => (
+          action.actionId === actionId ? { ...action, ...patch } : action
+        )),
+      };
+    }));
+  };
+  const actionById = (actionId) => {
+    for (const message of history) {
+      const action = asArray(message.actions).find((item) => item.actionId === actionId);
+      if (action) return action;
+    }
+    return null;
+  };
+  const reloadProjectAfterAgentAction = async () => {
+    if (!activeProjectId) return null;
+    const state = await getServerProjectState(activeProjectId);
+    onProjectStateLoaded?.(state);
+    return state;
+  };
+  const createImportRunFromAgentFile = async (action, { file = null, fileObjectId = "" } = {}) => {
+    if (!activeProjectId) throw new Error("Select a server project first.");
+    let nextFileObjectId = fileObjectId;
+    if (!nextFileObjectId && file) {
+      const uploaded = await uploadServerProjectFile(activeProjectId, file);
+      nextFileObjectId = uploaded.fileObject?.id;
+    }
+    if (!nextFileObjectId) throw new Error("Choose a workbook file first.");
+    const runResponse = await createServerImportRun(activeProjectId, nextFileObjectId);
+    const importRun = runResponse.importRun;
+    const approvedBlockIds = scanBlockIds(importRun.scanResult);
+    if (!approvedBlockIds.length) throw new Error("No importable workbook blocks were detected.");
+    const normalizeResponse = await previewServerImportRunNormalization(importRun.id, { approvedBlockIds });
+    const normalizePreview = normalizeResponse.importRun?.normalizePreview || importRun.normalizePreview;
+    const normalizeSummary = summarizeNormalizePreview(normalizePreview);
+
+    if (action.type === "upload_supplement") {
+      const relationshipPreview = await previewServerImportRelationship(importRun.id, {});
+      const aliases = asArray(action.params?.targetExperimentAliases).map((item) => String(item).toLowerCase());
+      const proposals = selectableRelationshipProposals(relationshipPreview);
+      const proposal = proposals.find((candidate) => (
+        aliases.length && asArray(candidate.targetExperimentIds).some((target) => aliases.some((alias) => String(target).toLowerCase().includes(alias)))
+      )) || proposals.sort((a, b) => (b.confidence || 0) - (a.confidence || 0))[0] || null;
+      updateActionInHistory(action.actionId, {
+        status: proposal ? "ready_to_apply" : "failed",
+        importRunId: importRun.id,
+        preview: {
+          summary: normalizeSummary,
+          relationshipProposal: proposal,
+          warnings: relationshipPreview.warnings,
+        },
+        relationshipDecision: proposal,
+        error: proposal ? "" : "No supplemental relationship target was found.",
+      });
+      return;
+    }
+
+    if (action.type === "refresh_master_table") {
+      const parentCommitId = projectState?.currentDatasetCommit?.id || projectState?.project?.currentDatasetCommitId || action.params?.expectedParentDatasetCommitId || "";
+      const targetImport = getMasterImports(dataset)[0];
+      if (!parentCommitId || !targetImport?.importId) throw new Error("Refresh requires an active master import.");
+      const refreshPreview = await previewServerImportRefresh(importRun.id, {
+        replaceImportId: targetImport.importId,
+        expectedParentDatasetCommitId: parentCommitId,
+      });
+      updateActionInHistory(action.actionId, {
+        status: refreshPreview.hasChanges ? "ready_to_apply" : "failed",
+        importRunId: importRun.id,
+        replaceImportId: targetImport.importId,
+        expectedParentDatasetCommitId: parentCommitId,
+        preview: {
+          summary: refreshPreview.summary,
+          message: refreshPreview.hasChanges ? "Refresh diff is ready for confirmation." : "No changes detected.",
+          warnings: refreshPreview.warnings,
+        },
+        error: refreshPreview.hasChanges ? "" : "No changes detected in the replacement workbook.",
+      });
+      return;
+    }
+
+    updateActionInHistory(action.actionId, {
+      status: "ready_to_apply",
+      importRunId: importRun.id,
+      preview: { summary: normalizeSummary },
+      error: "",
+    });
+  };
+  const executeAgentAction = async (actionId, filePayload = {}) => {
+    const action = actionById(actionId);
+    if (!action || busyActionId) return;
+    setBusyActionId(actionId);
+    updateActionInHistory(actionId, { status: action.requiresFile ? "previewing" : "executing", error: "" });
+    try {
+      if (action.requiresFile) {
+        await createImportRunFromAgentFile(action, filePayload);
+      } else if (action.type === "resolve_data_query") {
+        const response = await resolveServerProjectDataQuery(activeProjectId, { prompt: action.params?.prompt || "" });
+        updateActionInHistory(actionId, {
+          status: "completed",
+          preview: {
+            summary: {
+              experiments: response.retrievedContext?.experiments?.length || 0,
+              fields: response.retrievedContext?.fields?.length || 0,
+              imports: response.retrievedContext?.imports?.length || 0,
+            },
+            message: response.viewIntentDraft?.title || response.clarification?.message || "Data query resolved.",
+            warnings: response.warnings,
+          },
+        });
+      } else if (action.type === "propose_charts") {
+        const response = await proposeServerProjectCharts(activeProjectId, { userGoal: action.params?.userGoal || "" });
+        updateActionInHistory(actionId, {
+          status: "completed",
+          preview: {
+            summary: response.summary || { proposals: response.proposalSet?.proposals?.length || 0 },
+            message: `Created chart proposal set ${response.chartProposalSet?.id || ""}.`,
+            warnings: response.warnings,
+          },
+        });
+        await reloadProjectAfterAgentAction();
+      } else if (action.type === "interpret_chart") {
+        const response = await interpretServerProjectChart(activeProjectId, {
+          prompt: action.params?.prompt || "",
+          persistAsProposal: true,
+        });
+        updateActionInHistory(actionId, {
+          status: response.chartProposalSet ? "completed" : "failed",
+          preview: {
+            chartTitle: response.chartSpecDraft?.title,
+            message: response.chartProposalSet ? `Queued chart proposal set ${response.chartProposalSet.id}.` : response.clarification?.message || "Chart could not be drafted.",
+            warnings: response.warnings,
+          },
+          error: response.chartProposalSet ? "" : response.clarification?.message || "Chart draft requires clarification.",
+        });
+        if (response.chartProposalSet) await reloadProjectAfterAgentAction();
+      } else if (action.type === "create_chart_spec_from_proposal") {
+        if (!action.params?.chartProposalSetId || !action.params?.proposalId) throw new Error("No accepted proposal is available for ChartSpec creation.");
+        updateActionInHistory(actionId, { status: "ready_to_create" });
+      }
+    } catch (err) {
+      updateActionInHistory(actionId, { status: "failed", error: err.message || String(err) });
+    } finally {
+      setBusyActionId("");
+    }
+  };
+  const confirmAgentAction = async (actionId) => {
+    const action = actionById(actionId);
+    if (!action || busyActionId) return;
+    setBusyActionId(actionId);
+    updateActionInHistory(actionId, { status: "executing", error: "" });
+    try {
+      if (action.type === "upload_master_table") {
+        await applyServerImportRun(action.importRunId, {
+          applyMode: "append",
+          reviewNote: "Applied master table from LabRat chat action.",
+        });
+        await reloadProjectAfterAgentAction();
+      } else if (action.type === "upload_supplement") {
+        if (!action.relationshipDecision) throw new Error("Supplement relationship preview is missing.");
+        await applyServerImportRun(action.importRunId, {
+          applyMode: "supplement_import",
+          relationshipDecision: action.relationshipDecision,
+          reviewNote: "Applied supplemental workbook from LabRat chat action.",
+        });
+        await reloadProjectAfterAgentAction();
+      } else if (action.type === "refresh_master_table") {
+        await applyServerImportRun(action.importRunId, {
+          applyMode: "replace_import",
+          replaceImportId: action.replaceImportId,
+          expectedParentDatasetCommitId: action.expectedParentDatasetCommitId,
+          reviewNote: "Applied master table refresh from LabRat chat action.",
+        });
+        await reloadProjectAfterAgentAction();
+      } else if (action.type === "create_chart_spec_from_proposal") {
+        await createServerChartSpecFromProposal(activeProjectId, {
+          chartProposalSetId: action.params?.chartProposalSetId,
+          proposalId: action.params?.proposalId,
+        });
+        await reloadProjectAfterAgentAction();
+      }
+      updateActionInHistory(actionId, { status: "completed", error: "" });
+    } catch (err) {
+      updateActionInHistory(actionId, { status: "failed", error: err.message || String(err) });
+    } finally {
+      setBusyActionId("");
+    }
+  };
+  const chooseFileForAgentAction = (actionId) => {
+    setPendingFileActionId(actionId);
+    fileActionInputRef.current?.click();
+  };
+  const onAgentFileSelected = async (event) => {
+    const file = event.target.files?.[0];
+    const actionId = pendingFileActionId;
+    event.target.value = "";
+    setPendingFileActionId("");
+    if (file && actionId) await executeAgentAction(actionId, { file });
+  };
   const appendStreamDelta = (streamId, delta) => {
     setHistory((current) => current.map((message) => (
       message.streamId === streamId ? { ...message, text: `${message.text || ""}${delta}` } : message
@@ -1269,6 +1586,34 @@ function AgentPanel({ open, setOpen, dataset, blocks, setBlocks, references, sel
     setInput("");
     const next = [...history.map(({ streaming, streamId, ...message }) => message), { role: "user", text, meta }];
     setHistory(next);
+    if (serverAgentEnabled && !meta?.source) {
+      setBusy(true);
+      try {
+        const plan = await planServerProjectAgent(activeProjectId, {
+          message: text,
+          conversation: next.slice(-10).map((message) => ({
+            role: message.role === "assistant" ? "assistant" : "user",
+            text: message.text,
+          })),
+          selectedContext: {
+            tab: selectedChartContext ? "manuscript_chart" : "project",
+            selectedExperimentLabel: selected?.label || "",
+            selectedChartTitle: selectedChartContext?.title || "",
+          },
+        });
+        const actions = asArray(plan.actions);
+        setHistory([...next, {
+          role: "assistant",
+          text: plan.reply || (actions.length ? "I prepared a project action for review." : "I could not identify a project action yet."),
+          actions,
+        }]);
+      } catch (err) {
+        setHistory([...next, { role: "assistant", text: `Project agent failed: ${err.message || String(err)}` }]);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     if (!apiKey) {
       setHistory([...next, { role: "assistant", text: "Add an Anthropic API key in settings to enable live answers. I can already see the selected chart context locally." }]);
       return;
@@ -1397,6 +1742,18 @@ function AgentPanel({ open, setOpen, dataset, blocks, setBlocks, references, sel
         <div className="msg-body">
           <span>{m.role === "user" ? "You" : "the lab rat"}</span>
           <p>{m.text}</p>
+          {asArray(m.actions).map((action) => (
+            <AgentActionCard
+              key={action.actionId}
+              action={action}
+              projectState={projectState}
+              busyActionId={busyActionId}
+              onChooseFile={chooseFileForAgentAction}
+              onUseExistingFile={(actionId, fileObjectId) => executeAgentAction(actionId, { fileObjectId })}
+              onExecute={executeAgentAction}
+              onConfirm={confirmAgentAction}
+            />
+          ))}
           {m.role === "assistant" && m.meta?.source === "chart" && m.text && !m.streaming && !m.text.startsWith("Request failed:") && <button className="insert-chat-text" onClick={() => insertAssistantText(m)}>Insert as text box</button>}
         </div>
       </div>)}
@@ -1406,6 +1763,7 @@ function AgentPanel({ open, setOpen, dataset, blocks, setBlocks, references, sel
       <button type="button" className="agent-tool" aria-label="Attach reference">+</button>
       <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="Ask the rat about your data, charts, or manuscript..." />
       <button type="button" className="agent-send" onClick={() => send()}>&#8593;</button>
+      <input ref={fileActionInputRef} className="agent-file-input" type="file" accept=".xlsx,.xls" onChange={onAgentFileSelected} />
     </div>
   </aside>
   {settingsOpen && (
@@ -2599,7 +2957,21 @@ function App() {
         onCreate={createProject}
         onClose={() => setNewProjectOpen(false)}
       />
-      <AgentPanel open={agentOpen} setOpen={setAgentOpen} dataset={dataset} blocks={blocks} setBlocks={setBlocks} references={references} selected={selected} selectedChartContext={selectedChartContext} pendingChartAnalysis={pendingChartAnalysis} onChartAnalysisHandled={clearChartAnalysisRequest} />
+      <AgentPanel
+        open={agentOpen}
+        setOpen={setAgentOpen}
+        dataset={dataset}
+        blocks={blocks}
+        setBlocks={setBlocks}
+        references={references}
+        selected={selected}
+        selectedChartContext={selectedChartContext}
+        pendingChartAnalysis={pendingChartAnalysis}
+        onChartAnalysisHandled={clearChartAnalysisRequest}
+        activeProjectId={activeProjectId}
+        projectState={projectState}
+        onProjectStateLoaded={applyProjectState}
+      />
     </>
   );
 }

@@ -29,6 +29,8 @@ services:
       LABRAT_SEED_DEV_ACCOUNTS: "true"
       PORT: "8787"
       HOST: 0.0.0.0
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-5}
     ports:
       - "8787:8787"
     volumes:

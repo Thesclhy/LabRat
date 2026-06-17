@@ -18,6 +18,7 @@ import { isJsonContentType, readJsonBody, routeUrl, sendError } from "../http.js
 import { verifyPassword } from "../passwords.js";
 import { buildProjectAiContext } from "../projectAiContext.js";
 import { resolveProjectDataQuery } from "../dataResolveQuery.js";
+import { createProjectAgentPlan } from "../projectAgentPlanner.js";
 import {
   annotateSupplementDatasetPatch,
   buildImportRelationshipPreview,
@@ -744,6 +745,43 @@ async function handleProjectDataResolveQuery(req, res, context, projectId) {
     maxResults: Number.isFinite(Number(body.maxResults)) ? Number(body.maxResults) : 50,
   });
   sendJson(res, 200, response);
+}
+
+async function handleProjectAgentPlan(req, res, context, projectId) {
+  const { project } = await projectAuth(req, context, projectId, "viewer");
+  const body = await readJsonBody(req);
+  const [
+    currentDatasetCommit,
+    fileObjects,
+    importRuns,
+    mappingSets,
+    chartProposalSets,
+    chartSpecs,
+    manuscripts,
+  ] = await Promise.all([
+    project.currentDatasetCommitId ? context.store.findDatasetCommitById(project.currentDatasetCommitId) : null,
+    context.store.listFileObjects({ projectId: project.id }),
+    context.store.listImportRuns({ projectId: project.id }),
+    context.store.listMappingSets({ projectId: project.id }),
+    context.store.listChartProposalSets({ projectId: project.id }),
+    context.store.listChartSpecs({ projectId: project.id }),
+    context.store.listManuscripts({ projectId: project.id }),
+  ]);
+  const plan = createProjectAgentPlan({
+    project,
+    projectProfile: projectProfileFor(project),
+    currentDatasetCommit,
+    fileObjects: fileObjects.map(fileObjectSummary),
+    importRuns: importRuns.map(importRunSummary),
+    mappingSets: mappingSets.map(mappingSetSummary),
+    chartProposalSets: chartProposalSets.map(chartProposalSetSummary),
+    chartSpecs: decorateChartSpecsStaleness(chartSpecs, project.currentDatasetCommitId),
+    manuscripts,
+    message: body.message || "",
+    conversation: Array.isArray(body.conversation) ? body.conversation : [],
+    selectedContext: isObject(body.selectedContext) ? body.selectedContext : {},
+  });
+  sendJson(res, 200, plan);
 }
 
 async function handleProjectChartInterpret(req, res, context, projectId) {
@@ -1604,6 +1642,8 @@ async function dispatch(req, res, context) {
   if (projectAiContextMatch && req.method === "POST") return handleProjectAiContext(req, res, context, projectAiContextMatch[1]);
   const projectDataResolveQueryMatch = pathName.match(/^\/api\/projects\/([^/]+)\/data\/resolve-query$/);
   if (projectDataResolveQueryMatch && req.method === "POST") return handleProjectDataResolveQuery(req, res, context, projectDataResolveQueryMatch[1]);
+  const projectAgentPlanMatch = pathName.match(/^\/api\/projects\/([^/]+)\/agent\/plan$/);
+  if (projectAgentPlanMatch && req.method === "POST") return handleProjectAgentPlan(req, res, context, projectAgentPlanMatch[1]);
   const projectChartInterpretMatch = pathName.match(/^\/api\/projects\/([^/]+)\/charts\/interpret$/);
   if (projectChartInterpretMatch && req.method === "POST") return handleProjectChartInterpret(req, res, context, projectChartInterpretMatch[1]);
   const projectChartProposeMatch = pathName.match(/^\/api\/projects\/([^/]+)\/charts\/propose$/);

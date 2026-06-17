@@ -1,7 +1,7 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { ChartReviewModal, DeleteProjectModal, NewProjectModal, ProjectDashboard, ProjectOverview, RefreshWorkbookModal, Topbar, activeChartSpecsForProject } from "../main.jsx";
+import { AgentPanel, ChartReviewModal, DeleteProjectModal, NewProjectModal, ProjectDashboard, ProjectOverview, RefreshWorkbookModal, Topbar, activeChartSpecsForProject } from "../main.jsx";
 
 const project = {
   id: "project_1",
@@ -364,6 +364,62 @@ describe("RefreshWorkbookModal", () => {
       replaceImportId: "import_old",
       targetImport: expect.objectContaining({ importId: "import_old" }),
     });
+  });
+});
+
+describe("AgentPanel", () => {
+  it("plans server-backed project actions and renders a confirmable action card", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        schemaVersion: "labrat.agentPlan.v1",
+        reply: "I can add a supplemental workbook after you choose a file.",
+        actions: [{
+          actionId: "agent_action_1",
+          type: "upload_supplement",
+          status: "requires_confirmation",
+          label: "Add supplemental workbook",
+          description: "Choose a workbook and review its relationship to existing experiments.",
+          requiresFile: true,
+          requiresReview: true,
+          params: { targetExperimentAliases: ["Exp30"] },
+          warnings: [],
+        }],
+      }),
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+
+    try {
+      render(
+        <AgentPanel
+          open
+          setOpen={() => {}}
+          dataset={{ metadata: {}, experiments: [], genericImports: [] }}
+          blocks={[]}
+          setBlocks={() => {}}
+          references={[]}
+          selected={null}
+          selectedChartContext={null}
+          pendingChartAnalysis={null}
+          activeProjectId="project_1"
+          projectState={{ project: { id: "project_1", name: "Catalyst Screening" }, fileObjects: [] }}
+          onProjectStateLoaded={() => {}}
+        />,
+      );
+
+      fireEvent.change(screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript..."), {
+        target: { value: "upload supplement for Exp30" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "↑" }));
+
+      await waitFor(() => expect(screen.getByText("Add supplemental workbook")).toBeTruthy());
+      expect(screen.getByText("Target: Exp30")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Choose file" })).toBeTruthy();
+      expect(fetchMock).toHaveBeenCalledWith("/api/projects/project_1/agent/plan", expect.objectContaining({ method: "POST" }));
+    } finally {
+      global.fetch = originalFetch;
+    }
   });
 });
 

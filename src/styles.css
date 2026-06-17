@@ -4120,6 +4120,90 @@ td button {
   word-break: break-word;
   line-height: 1.45;
 }
+.agent-action-card {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+}
+.agent-action-card.is-ready_to_apply,
+.agent-action-card.is-ready_to_create,
+.agent-action-card.is-ready_to_persist {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+.agent-action-card.is-completed {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+.agent-action-card.is-failed {
+  border-color: #fecaca;
+  background: #fff1f2;
+}
+.agent-action-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.agent-action-head strong {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 600;
+}
+.agent-action-head span,
+.agent-action-card small {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.agent-action-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.agent-action-summary span {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475569;
+  padding: 3px 7px;
+  font-size: 11px;
+}
+.agent-action-warnings {
+  margin: 0;
+  padding-left: 18px;
+  color: #92400e;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.agent-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+}
+.agent-action-buttons button,
+.agent-action-buttons select {
+  min-height: 30px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: #fff;
+  color: #334155;
+  padding: 5px 9px;
+  font-size: 12px;
+}
+.agent-action-buttons .primary {
+  border-color: #4f46e5;
+  background: #4f46e5;
+  color: #fff;
+}
+.agent-file-input {
+  display: none;
+}
 .insert-chat-text {
   margin-top: 8px;
 }

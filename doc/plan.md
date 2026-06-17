@@ -36,6 +36,7 @@ server-first workspace implemented
 - Manuscript chart insertion uses durable chart specs, requires explicit compatible experiment selection, and stores chart spec snapshots in blocks for historical rendering.
 - Overview separates the one-master-table workflow from supplemental workbook uploads: `append` creates the master dataset, `replace_import` refreshes it, and `supplement_import` attaches extra workbooks to existing experiments.
 - Project data query resolution exists in the backend for turning natural-language data requests into validated ViewIntent drafts.
+- Project chat can now request server-backed action plans for master uploads, refreshes, supplemental uploads, chart proposals, chart interpretation, ChartSpec creation, and data queries; mutating actions stay behind confirmable action cards.
 - Stateless local/dev endpoints remain available for compatibility, but server mode is the source of truth for logged-in workspaces.
 - IndexedDB and `.labrat.json` can remain useful for logged-out/local experiments, but old local project migration is not an active goal.
 
@@ -46,11 +47,12 @@ Work in this order unless the user redirects:
 1. Verify the current Docker stack from a clean checkout: `npm run dev:docker`, seeded login, project open, workbook import, chart proposal review, chart spec creation, manuscript insertion.
 2. Polish the split Import/Refresh Review and Review Chart Proposals modals after manual UI inspection.
 3. Tighten server project reload behavior so Browser, Overview, chart review, and Manuscript always derive from `GET /api/projects/:projectId/state`.
-4. Make refresh-related stale chart behavior visible and understandable in the UI without deleting historical chart specs.
-5. Harden Docker/Postgres configuration for friend/debug sharing: `.env` examples, seed-account warnings, local file volume notes, backup/reset instructions, and migration checks.
-6. Add minimal Admin/Audit UI for lab/user management and important project actions.
-7. Add frontend UI for validated data query ViewIntent drafts and continue improving supplemental detail display inside experiment detail views.
-8. Continue chart grammar improvements only through validated ChartSpec/transform extensions, not direct AI-generated Plotly JSON.
+4. Polish conversational action cards so uploads, supplements, chart drafts, and data queries feel like one guided workflow while still requiring explicit confirmation for mutations.
+5. Make refresh-related stale chart behavior visible and understandable in the UI without deleting historical chart specs.
+6. Harden Docker/Postgres configuration for friend/debug sharing: `.env` examples, seed-account warnings, local file volume notes, backup/reset instructions, and migration checks.
+7. Add minimal Admin/Audit UI for lab/user management and important project actions.
+8. Add frontend UI for validated data query ViewIntent drafts and continue improving supplemental detail display inside experiment detail views.
+9. Continue chart grammar improvements only through validated ChartSpec/transform extensions, not direct AI-generated Plotly JSON.
 
 ## Deferred
 
