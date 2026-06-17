@@ -1,5 +1,9 @@
 import React, { useMemo, useState } from "react";
 import { buildAcceptedMappingColumns, buildGenericBrowserRows, getGenericExperimentDetail } from "../data/experimentBrowserRows.js";
+import { getProjectStars, setNote as persistNote, toggleStar as persistToggleStar } from "../data/experimentStars.js";
+import { getColumnPrefs, hideColumn as persistHideColumn, renameColumn as persistRenameColumn, setColumnWidth as persistColumnWidth, showColumn as persistShowColumn } from "../data/experimentColumnPrefs.js";
+import { StarCell } from "./StarCell.jsx";
+import { ColumnHeaderCell } from "./ColumnHeaderCell.jsx";
 
 function formatConfidence(value) {
   return typeof value === "number" ? `${Math.round(value * 100)}%` : "n/a";
@@ -50,7 +54,7 @@ function FieldList({ fields, emptyLabel = "No fields" }) {
 function MappingValueCell({ cell }) {
   const value = cell?.value;
   if (value == null || value === "") return <span className="backend-scan-muted">-</span>;
-  return <span>{value}</span>;
+  return <span title={String(value)}>{value}</span>;
 }
 
 function GenericDetailModal({ dataset, row, onClose }) {
@@ -153,26 +157,51 @@ function GenericDetailModal({ dataset, row, onClose }) {
   );
 }
 
-export function GenericImportBrowser({ dataset, sourceName, onOpenImportReview, viewSwitch = null }) {
+export function GenericImportBrowser({ dataset, sourceName, onOpenImportReview, viewSwitch = null, projectId = null }) {
   const [search, setSearch] = useState("");
   const [selectedRow, setSelectedRow] = useState(null);
+  const [starredOnly, setStarredOnly] = useState(false);
+  const [stars, setStars] = useState(() => getProjectStars(projectId));
+  const [columnPrefs, setColumnPrefs] = useState(() => getColumnPrefs(projectId));
   const rows = useMemo(() => buildGenericBrowserRows(dataset), [dataset]);
   const acceptedMappingColumns = useMemo(() => buildAcceptedMappingColumns(dataset?.genericMappingSets), [dataset?.genericMappingSets]);
+  const baseColumns = useMemo(() => [
+    { key: "__label__", label: "Label", kind: "label" },
+    { key: "__source__", label: "Source", kind: "source" },
+    ...acceptedMappingColumns.map((column) => ({ ...column, kind: "mapping" })),
+  ], [acceptedMappingColumns]);
+  const decoratedColumns = useMemo(() => baseColumns.map((column) => {
+    const pref = columnPrefs[column.key] || {};
+    return { ...column, displayLabel: pref.label || column.label, hidden: !!pref.hidden, width: pref.width || null };
+  }), [baseColumns, columnPrefs]);
+  const visibleColumns = useMemo(() => decoratedColumns.filter((column) => !column.hidden), [decoratedColumns]);
+  const hiddenColumns = useMemo(() => decoratedColumns.filter((column) => column.hidden), [decoratedColumns]);
   const query = search.toLowerCase().trim();
+  const starredCount = useMemo(() => rows.filter((row) => stars[row.rowId]?.starred).length, [rows, stars]);
+  const toggleStar = (rowId) => setStars(persistToggleStar(projectId, rowId));
+  const saveNote = (rowId, note) => setStars(persistNote(projectId, rowId, note));
+  const hideColumn = (columnKey) => setColumnPrefs(persistHideColumn(projectId, columnKey));
+  const showColumn = (columnKey) => setColumnPrefs(persistShowColumn(projectId, columnKey));
+  const renameColumn = (columnKey, label) => setColumnPrefs(persistRenameColumn(projectId, columnKey, label));
+  const resizeColumn = (columnKey, width) => setColumnPrefs(persistColumnWidth(projectId, columnKey, width));
+  const autoFitColumn = (columnKey) => setColumnPrefs(persistColumnWidth(projectId, columnKey, null));
   const filteredRows = useMemo(() => {
-    if (!query) return rows;
-    return rows.filter((row) => [
-      row.label,
-      row.sourceFile,
-      row.sourceRange,
-      row.mappingStatus,
-      ...acceptedMappingColumns.map((column) => {
-        const cell = row.acceptedMappingValues?.[column.key];
-        return `${column.label} ${cell?.value || ""}`;
-      }),
-    ].join(" ").toLowerCase().includes(query));
-  }, [acceptedMappingColumns, query, rows]);
-  const columnCount = 2 + acceptedMappingColumns.length;
+    return rows.filter((row) => {
+      if (starredOnly && !stars[row.rowId]?.starred) return false;
+      if (!query) return true;
+      return [
+        row.label,
+        row.sourceFile,
+        row.sourceRange,
+        row.mappingStatus,
+        ...acceptedMappingColumns.map((column) => {
+          const cell = row.acceptedMappingValues?.[column.key];
+          return `${column.label} ${cell?.value || ""}`;
+        }),
+      ].join(" ").toLowerCase().includes(query);
+    });
+  }, [acceptedMappingColumns, query, rows, starredOnly, stars]);
+  const columnCount = 1 + visibleColumns.length;
 
   return (
     <>
@@ -185,6 +214,39 @@ export function GenericImportBrowser({ dataset, sourceName, onOpenImportReview, 
         <section className="filter">
           <h4>Search</h4>
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Imported label, source, accepted mapping..." />
+        </section>
+        <section className="filter">
+          <h4>Filters</h4>
+          <div className="chips">
+            <button
+              type="button"
+              className={`chip star-filter-chip ${starredOnly ? "active" : ""}`}
+              aria-pressed={starredOnly}
+              onClick={() => setStarredOnly((value) => !value)}
+            >
+              <span className="star-chip-glyph" aria-hidden="true">{"★"}</span> Starred only ({starredCount})
+            </button>
+          </div>
+        </section>
+        <section className="filter">
+          <h4>Hidden</h4>
+          {hiddenColumns.length ? (
+            <div className="chips hidden-columns">
+              {hiddenColumns.map((column) => (
+                <button
+                  type="button"
+                  key={column.key}
+                  className="chip hidden-column-chip"
+                  title={`Show "${column.displayLabel}" column`}
+                  onClick={() => showColumn(column.key)}
+                >
+                  {column.displayLabel} <span aria-hidden="true">+</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="generic-browser-note">No hidden columns. Right-click a column header to hide or rename it.</p>
+          )}
         </section>
       </aside>
       <main className="main">
@@ -210,26 +272,47 @@ export function GenericImportBrowser({ dataset, sourceName, onOpenImportReview, 
             <table>
               <thead>
                 <tr>
-                  <th>Label</th>
-                  <th>Source</th>
-                  {acceptedMappingColumns.map((column) => (
-                    <th key={column.key} title={column.rawLabel || column.label}>
-                      <span>{column.label}</span>
-                      {column.unit && <small> {column.unit}</small>}
-                    </th>
+                  <th className="star-col" aria-label="Star"></th>
+                  {visibleColumns.map((column) => (
+                    <ColumnHeaderCell
+                      key={column.key}
+                      label={column.displayLabel}
+                      unit={column.unit}
+                      title={column.rawLabel || column.label}
+                      width={column.width}
+                      onHide={() => hideColumn(column.key)}
+                      onRename={(label) => renameColumn(column.key, label)}
+                      onResize={(width) => resizeColumn(column.key, width)}
+                      onAutoFit={() => autoFitColumn(column.key)}
+                    />
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {filteredRows.map((row) => (
-                  <tr key={row.rowId} onClick={() => setSelectedRow(row)}>
-                    <td><strong>{row.label}</strong></td>
-                    <td><span>{row.sourceFile || "-"}</span><br /><small>{row.sourceRange || "range n/a"}</small></td>
-                    {acceptedMappingColumns.map((column) => (
-                      <td key={column.key} className="generic-mapped-cell">
-                        <MappingValueCell cell={row.acceptedMappingValues?.[column.key]} />
-                      </td>
-                    ))}
+                  <tr key={row.rowId} className={stars[row.rowId]?.starred ? "row-starred" : ""} onClick={() => setSelectedRow(row)}>
+                    <td className="star-col plain-cell">
+                      <StarCell
+                        label={row.label}
+                        starred={!!stars[row.rowId]?.starred}
+                        note={stars[row.rowId]?.note || ""}
+                        onToggle={() => toggleStar(row.rowId)}
+                        onSaveNote={(note) => saveNote(row.rowId, note)}
+                      />
+                    </td>
+                    {visibleColumns.map((column) => {
+                      if (column.kind === "label") {
+                        return <td key={column.key}><strong>{row.label}</strong></td>;
+                      }
+                      if (column.kind === "source") {
+                        return <td key={column.key}><span>{row.sourceFile || "-"}</span><br /><small>{row.sourceRange || "range n/a"}</small></td>;
+                      }
+                      return (
+                        <td key={column.key} className="generic-mapped-cell">
+                          <MappingValueCell cell={row.acceptedMappingValues?.[column.key]} />
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
                 {!filteredRows.length && (

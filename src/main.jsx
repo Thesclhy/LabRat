@@ -810,7 +810,7 @@ export function RefreshWorkbookModal({ open, imports = [], defaultImportId = "",
   );
 }
 
-function Browser({ dataset, setSelected, sourceName, blankMode, onOpenImportReview, onOpenProfile, projectProfile, templateLinks }) {
+function Browser({ dataset, setSelected, sourceName, blankMode, onOpenImportReview, onOpenProfile, projectProfile, templateLinks, projectId }) {
   const [filters, setFilters] = useState({ search: "", cat: [], impeller: [], rpm: [], cb95: false, hasPostGc: false, hasSweep: false, hasrate: false });
   const [sort, setSort] = useState(["date", -1]);
   const [browserView, setBrowserView] = useState("curated");
@@ -892,6 +892,7 @@ function Browser({ dataset, setSelected, sourceName, blankMode, onOpenImportRevi
           sourceName={sourceName}
           onOpenImportReview={onOpenImportReview}
           viewSwitch={viewSwitch}
+          projectId={projectId}
         />
       </div>
     );
@@ -2891,6 +2892,7 @@ function App() {
         onOpenProfile={() => setProfileChatOpen(true)}
         projectProfile={projectState?.projectProfile}
         templateLinks={blankTemplateLinks()}
+        projectId={activeProjectId}
       />}
       {tab === "manuscript" && <ManuscriptCanvas dataset={dataset} blocks={blocks} setBlocks={setBlocks} staged={staged} setStaged={setStaged} references={references} chartTemplates={chartTemplates} setChartTemplates={setChartTemplates} chartSpecs={activeChartSpecsForProject(projectState)} pages={pages} setPages={setPages} canvasHeight={canvasHeight} setCanvasHeight={setCanvasHeight} pageOrientationPreference={pageOrientationPreference} setPageOrientationPreference={setPageOrientationPreference} onSelectedChartContextChange={setSelectedChartContext} onRequestChartAnalysis={requestChartAnalysis} onSaveProject={save} />}
       {tab === "reference" && <ReferenceLibrary references={references} setReferences={setReferences} />}
