@@ -1,7 +1,7 @@
 import { slug } from "../../import/services/genericImportContext.js";
 import { normalizeChartTransforms } from "./chartTransforms.js";
 
-export const CHART_SPEC_VERSION = "labrat.chartSpec.v1.2";
+export const CHART_SPEC_VERSION = "labrat.chartSpec.v1.3";
 export const SUPPORTED_CHART_TYPES = ["scatter", "point", "bar", "grouped_bar", "stacked_bar", "distribution_bar"];
 
 function asArray(value) {
@@ -10,6 +10,10 @@ function asArray(value) {
 
 function unique(values) {
   return [...new Set(values.filter((value) => value != null && String(value).trim()).map((value) => String(value)))];
+}
+
+function isObject(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
 export function normalizeText(value) {
@@ -117,7 +121,14 @@ export function chartAliasesForField(field) {
   if (/\btemperature\b|\btemp\b/.test(text)) aliases.push("temperature", "temp");
   if (/\bpressure\b/.test(text)) aliases.push("pressure");
   if (/\brpm\b|\bspeed\b/.test(text)) aliases.push("rpm", "speed");
-  if (/\breaction time\b|\btime\b|\bhours?\b|\bhrs?\b/.test(text)) aliases.push("time", "reaction time");
+  if (/\breaction time\b/.test(text)) aliases.push("reaction time", "time");
+  else if (/\bmean time\b/.test(text)) aliases.push("mean time", "time");
+  else if (/\bstart time\b/.test(text)) aliases.push("start time", "time");
+  else if (/\bend time\b/.test(text)) aliases.push("end time", "time");
+  else if (/\btime\b|\bhours?\b|\bhrs?\b/.test(text)) aliases.push("time");
+  if (/\badjusted rate\b/.test(text)) aliases.push("adjusted rate");
+  if (/\baverage rate\b/.test(text)) aliases.push("average rate", "average rate per hour");
+  if (/\brate\b/.test(text) && !/\badjusted\b|\baverage\b/.test(text)) aliases.push("rate", "reaction rate");
   if (/\bexperiment\b|\bexp\b|\blabel\b|\brun\b/.test(text)) aliases.push("experiment", "experiment id", "label", "run");
 
   return unique(aliases).map(normalizeText).filter(Boolean);
@@ -148,6 +159,115 @@ function axisSourceRefs(axis) {
   return unique(asArray(axis?.sourceRefs));
 }
 
+function normalizeAxisScale(value) {
+  const text = normalizeText(value);
+  if (["log", "log10", "log 10", "log base 10", "base 10 log"].includes(text)) return "log10";
+  return "linear";
+}
+
+function normalizeAxisOption(axis = {}) {
+  const source = isObject(axis) ? axis : {};
+  const range = asArray(source.range).map(Number).filter(Number.isFinite);
+  return {
+    scale: normalizeAxisScale(source.scale),
+    title: source.title == null ? null : String(source.title),
+    range: range.length === 2 ? range : null,
+    tickFormat: source.tickFormat == null ? null : String(source.tickFormat),
+  };
+}
+
+export function normalizeAxisOptions(axisOptions = {}) {
+  const source = isObject(axisOptions) ? axisOptions : {};
+  return {
+    x: normalizeAxisOption(source.x),
+    y: normalizeAxisOption(source.y),
+  };
+}
+
+function normalizeTraceMode(value) {
+  const text = normalizeText(value).replace(/\s+/g, "+");
+  if (text === "lines" || text === "line") return "lines";
+  if (text === "markers" || text === "marker" || text === "points") return "markers";
+  if (text === "lines+markers" || text === "line+markers" || text === "lines+points") return "lines+markers";
+  return null;
+}
+
+function normalizeLegendPosition(value) {
+  const text = normalizeText(value);
+  if (["right", "left", "top", "bottom"].includes(text)) return text;
+  return "top";
+}
+
+function normalizeGrid(value) {
+  if (typeof value === "boolean") return { x: value, y: value, color: null };
+  const source = isObject(value) ? value : {};
+  return {
+    x: source.x !== false,
+    y: source.y !== false,
+    color: source.color == null ? null : String(source.color),
+  };
+}
+
+function normalizeMarkerSymbol(value) {
+  const text = normalizeText(value);
+  if (!text) return null;
+  if ([
+    "open circle",
+    "open circles",
+    "circle open",
+    "circle opens",
+    "hollow circle",
+    "hollow circles",
+    "empty circle",
+    "empty circles",
+    "unfilled circle",
+    "unfilled circles",
+    "open marker",
+    "open markers",
+    "hollow marker",
+    "hollow markers",
+    "open point",
+    "open points",
+    "hollow point",
+    "hollow points",
+  ].includes(text)) return "circle-open";
+  if (["filled circle", "filled circles", "solid circle", "solid circles"].includes(text)) return "circle";
+  return String(value);
+}
+
+function normalizeTraceStyle(trace = {}) {
+  const source = isObject(trace) ? trace : {};
+  return {
+    target: source.target || "primary",
+    name: source.name == null ? null : String(source.name),
+    line: isObject(source.line) ? {
+      color: source.line.color == null ? null : String(source.line.color),
+      width: Number.isFinite(Number(source.line.width)) ? Number(source.line.width) : null,
+      dash: source.line.dash == null ? null : String(source.line.dash),
+    } : {},
+    marker: isObject(source.marker) ? {
+      color: source.marker.color == null ? null : String(source.marker.color),
+      size: Number.isFinite(Number(source.marker.size)) ? Number(source.marker.size) : null,
+      symbol: normalizeMarkerSymbol(source.marker.symbol),
+    } : {},
+  };
+}
+
+export function normalizeRenderStyle(renderStyle = {}) {
+  const source = isObject(renderStyle) ? renderStyle : {};
+  const presetText = normalizeText(source.preset);
+  const preset = presetText === "excel like" || presetText === "excel_like" ? "excel_like" : "default";
+  const traceMode = normalizeTraceMode(source.traceMode) || (preset === "excel_like" ? "lines+markers" : null);
+  return {
+    preset,
+    traceMode,
+    showLegend: source.showLegend == null ? null : Boolean(source.showLegend),
+    legendPosition: normalizeLegendPosition(source.legendPosition),
+    grid: normalizeGrid(source.grid ?? (preset === "excel_like" ? { x: true, y: true, color: "#d9d9d9" } : {})),
+    traces: asArray(source.traces).map(normalizeTraceStyle),
+  };
+}
+
 export function normalizeChartSpecShape(spec = {}) {
   const yFields = asArray(spec.yFields).length ? asArray(spec.yFields) : [spec.y].filter(Boolean);
   const normalized = {
@@ -171,6 +291,8 @@ export function normalizeChartSpecShape(spec = {}) {
     warnings: asArray(spec.warnings),
     transforms: normalizeChartTransforms(spec.transforms),
     series: asArray(spec.series),
+    axisOptions: normalizeAxisOptions(spec.axisOptions),
+    renderStyle: normalizeRenderStyle(spec.renderStyle),
     calculationWarnings: asArray(spec.calculationWarnings),
     confidence: spec.confidence ?? null,
     rationale: spec.rationale || spec.reason || "",
@@ -190,6 +312,8 @@ export function compileChartSpec({
   sourceRefs = [],
   transforms = [],
   series = [],
+  axisOptions = {},
+  renderStyle = {},
   calculationWarnings = [],
   confidence = null,
   warnings = [],
@@ -212,6 +336,8 @@ export function compileChartSpec({
     filters: asArray(filters),
     transforms: normalizeChartTransforms(transforms),
     series: asArray(series),
+    axisOptions,
+    renderStyle,
     calculationWarnings: asArray(calculationWarnings),
     sourceImportIds,
     sourceRefs,

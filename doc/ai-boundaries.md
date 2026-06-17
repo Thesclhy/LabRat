@@ -21,6 +21,8 @@ AI may:
 - explain before/after value changes from recompute proposals
 - summarize provenance for a chart, manuscript figure, or selected value
 - draft commit summaries and review notes
+- parse a user message into a project-scoped action plan for uploads, supplemental imports, chart proposals, chart specs, or data queries
+- prepare confirmable action cards that call existing reviewed APIs after the user chooses files and approves the action
 
 ## Disallowed AI Uses
 
@@ -41,6 +43,8 @@ AI must not:
 - overwrite methodology versions or historical results
 - invent missing raw files, source cells, calculation steps, or audit events
 - hide changed values in a recompute proposal
+- execute project mutations directly from a chat message
+- apply master imports, supplement imports, refreshes, chart proposal persistence, chart spec creation, or manuscript insertion without an explicit user confirmation step
 
 ## AI Input Policy
 
@@ -85,8 +89,23 @@ AI output categories:
 - `MappingProposal`
 - `RecomputeProposal`
 - `ChartProposal`
+- `AgentActionPlan`
 - `CaptionDraft`
 - `CommitSummaryDraft`
+
+## Conversational Action Planning
+
+Project chat may become a workflow launcher, but the backend planner only returns safe action plans.
+
+Rules:
+
+- `POST /api/projects/:projectId/agent/plan` must not write database rows or mutate project state.
+- Planner context should include compact project profile, dataset summaries, file/import/mapping/chart/manuscript summaries, and prior decisions.
+- Planner context must not include raw workbook cell grids or full source files.
+- Mutating actions must be represented as confirmable action cards before execution.
+- Upload actions must still use the normal file object, import run, normalization preview, relationship/refresh preview, and apply APIs.
+- Chart actions may create drafts/proposals first; durable `chart_specs` still require explicit confirmation.
+- Read-only data queries may run from chat, but the returned view intent remains a proposal and must reference validated project ids/source refs.
 
 ## Mapping And Chart Proposal Rules
 

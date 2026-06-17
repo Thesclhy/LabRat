@@ -78,6 +78,27 @@ any valid processing failure -> failed
 
 An applied import run must not be applied again.
 
+## Import Relationship Proposal
+
+A reviewable interpretation of how a newly normalized workbook relates to existing project data.
+
+Relationship proposal types:
+
+```text
+supplement
+replace_import
+standalone_import
+ignore
+```
+
+Examples:
+
+- `Reaction_Rate_Exp30.xlsx` -> `supplement` for existing `Exp30`
+- corrected master table -> `replace_import`
+- unrelated new screen -> `standalone_import`
+
+Accepted supplemental imports should create a new dataset commit with relationship metadata; they should not rewrite the target experiment values.
+
 ## Dataset Commit
 
 An immutable reviewed dataset state. A dataset commit is the answer to "what data did the browser/chart/manuscript use?"
@@ -338,7 +359,7 @@ Chart specs preserve:
 - warnings
 - created/updated actor and timestamps
 
-ChartSpec v1.2 supports:
+ChartSpec v1.3 supports:
 
 ```text
 scatter
@@ -371,6 +392,8 @@ Rules:
 
 - Transforms are part of ChartSpec, not raw dataset data.
 - Transform inputs must resolve to real fields/source refs.
+- `axisOptions` may request controlled axis presentation such as `linear` or `log10`.
+- `renderStyle` may request controlled presentation hints such as `excel_like`, trace mode, marker/line style, grid, and legend visibility.
 - Missing, zero, or non-numeric values should produce warnings.
 - AI may request a transform intent, but backend must compile and validate the transform.
 - Arbitrary formulas or user-supplied code are not allowed in the short-term chart system.
@@ -416,6 +439,20 @@ Rules:
 - Keep unmapped fields inspectable.
 - Main generic Browser columns should come from explicit accepted mappings, not hidden AI guesses.
 - Clicking a generic row should open source-backed generic detail rather than HDPE-only detail/chart logic.
+
+## View Intent
+
+A validated render intent returned by the backend for natural-language data browsing.
+
+View intents preserve:
+
+- view type, such as table or detail panel
+- resolved experiment ids
+- resolved field ids
+- source refs
+- title, warnings, and rationale
+
+AI may suggest aliases, but backend must resolve them against the project data catalog before the frontend renders a view.
 
 ## Methodology Version
 

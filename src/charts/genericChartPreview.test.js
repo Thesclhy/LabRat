@@ -43,6 +43,30 @@ function familyImport() {
   }];
 }
 
+function observationImport() {
+  return [{
+    importId: "import_reaction_rate",
+    relatedExperimentIds: ["exp_30"],
+    observationSets: [{
+      observationSetId: "obsset_1",
+      kind: "reaction_rate_time_series",
+      inferredExperimentLabel: "Exp30",
+      targetExperimentIds: ["exp_30"],
+      observations: [
+        { observationId: "obs_1", rowIndex: 3 },
+        { observationId: "obs_2", rowIndex: 4 },
+      ],
+      summary: { observationCount: 2 },
+    }],
+    fields: [
+      { fieldValueId: "rt_1", recordKind: "observation", observationSetId: "obsset_1", observationId: "obs_1", relatedExperimentIds: ["exp_30"], inferredExperimentLabel: "Exp30", rowIndex: 3, field: "reaction_time_min", role: "condition", value: 0, rawValue: "0" },
+      { fieldValueId: "ar_1", recordKind: "observation", observationSetId: "obsset_1", observationId: "obs_1", relatedExperimentIds: ["exp_30"], inferredExperimentLabel: "Exp30", rowIndex: 3, field: "adjusted_rate_m_s", role: "measurement", value: 0.001, rawValue: "0.001" },
+      { fieldValueId: "rt_2", recordKind: "observation", observationSetId: "obsset_1", observationId: "obs_2", relatedExperimentIds: ["exp_30"], inferredExperimentLabel: "Exp30", rowIndex: 4, field: "reaction_time_min", role: "condition", value: 10, rawValue: "10" },
+      { fieldValueId: "ar_2", recordKind: "observation", observationSetId: "obsset_1", observationId: "obs_2", relatedExperimentIds: ["exp_30"], inferredExperimentLabel: "Exp30", rowIndex: 4, field: "adjusted_rate_m_s", role: "measurement", value: 0.002, rawValue: "0.002" },
+    ],
+  }];
+}
+
 describe("makeGenericChartPreview", () => {
   it("builds read-only scatter traces from paired proposal measurements", () => {
     const preview = makeGenericChartPreview({
@@ -112,6 +136,93 @@ describe("makeGenericChartPreview", () => {
     }, genericImports());
 
     expect(options.map((option) => option.id)).toEqual(["exp_1", "exp_2"]);
+  });
+
+  it("builds scatter previews and experiment options from observation sets", () => {
+    const proposal = {
+      chartType: "scatter",
+      title: "Adjusted rate vs reaction time",
+      x: { label: "Reaction Time", unit: "min", sourceIds: ["rt_1", "rt_2"] },
+      y: { label: "Adjusted Rate", unit: "M/s", sourceIds: ["ar_1", "ar_2"] },
+    };
+    const preview = makeGenericChartPreview(proposal, observationImport(), {
+      chartView: { selectedExperimentIds: ["exp_30"] },
+    });
+    const options = experimentOptionsForChartSpec(proposal, observationImport());
+
+    expect(preview.traces).toHaveLength(1);
+    expect(preview.traces[0].name).toBe("Exp30");
+    expect(preview.traces[0].x).toEqual([0, 10]);
+    expect(preview.traces[0].y).toEqual([0.001, 0.002]);
+    expect(options).toEqual([{ id: "exp_30", label: "Exp30", detail: "" }]);
+  });
+
+  it("projects ChartSpec v1.3 log axes and Excel-like trace style into Plotly preview", () => {
+    const preview = makeGenericChartPreview({
+      schemaVersion: "labrat.chartSpec.v1.3",
+      chartType: "scatter",
+      title: "Adjusted rate vs reaction time",
+      x: { label: "Reaction Time", unit: "min", sourceIds: ["rt_1", "rt_2"] },
+      y: { label: "Adjusted Rate", unit: "M/s", sourceIds: ["ar_1", "ar_2"] },
+      axisOptions: {
+        y: { scale: "log10", title: "Adjusted Rate (M/s)", tickFormat: ".1e" },
+      },
+      renderStyle: {
+        preset: "excel_like",
+        traceMode: "lines+markers",
+        showLegend: false,
+        grid: { x: true, y: true, color: "#d9d9d9" },
+        traces: [{ target: "primary", line: { color: "#4472C4", width: 2 }, marker: { color: "#4472C4", size: 6 } }],
+      },
+    }, observationImport());
+
+    expect(preview.layout.yaxis.type).toBe("log");
+    expect(preview.layout.yaxis.title).toBe("Adjusted Rate (M/s)");
+    expect(preview.layout.yaxis.tickformat).toBe(".1e");
+    expect(preview.layout.xaxis.showgrid).toBe(true);
+    expect(preview.layout.yaxis.gridcolor).toBe("#d9d9d9");
+    expect(preview.layout.showlegend).toBe(false);
+    expect(preview.traces[0].mode).toBe("lines+markers");
+    expect(preview.traces[0].line.color).toBe("#4472C4");
+    expect(preview.traces[0].marker.size).toBe(6);
+  });
+
+  it("projects ChartSpec v1.3 markers-only hollow scatter style into Plotly preview", () => {
+    const preview = makeGenericChartPreview({
+      schemaVersion: "labrat.chartSpec.v1.3",
+      chartType: "scatter",
+      title: "Adjusted rate vs reaction time",
+      x: { label: "Reaction Time", unit: "min", sourceIds: ["rt_1", "rt_2"] },
+      y: { label: "Adjusted Rate", unit: "M/s", sourceIds: ["ar_1", "ar_2"] },
+      renderStyle: {
+        traceMode: "markers",
+        traces: [{ target: "primary", marker: { symbol: "circle-open", color: "#222222", size: 7 } }],
+      },
+    }, observationImport());
+
+    expect(preview.traces[0].mode).toBe("markers");
+    expect(preview.traces[0].marker.symbol).toBe("circle-open");
+    expect(preview.traces[0].marker.color).toBe("#222222");
+    expect(preview.traces[0].marker.size).toBe(7);
+  });
+
+  it("uses nested ChartSpec draft style when previewing older interpreted proposals", () => {
+    const preview = makeGenericChartPreview({
+      proposalId: "legacy_interpreted_proposal",
+      chartType: "scatter",
+      title: "Adjusted rate vs reaction time",
+      x: { label: "Reaction Time", unit: "min", sourceIds: ["rt_1", "rt_2"] },
+      y: { label: "Adjusted Rate", unit: "M/s", sourceIds: ["ar_1", "ar_2"] },
+      chartSpecDraft: {
+        renderStyle: {
+          traceMode: "markers",
+          traces: [{ target: "primary", marker: { symbol: "circle-open" } }],
+        },
+      },
+    }, observationImport());
+
+    expect(preview.traces[0].mode).toBe("markers");
+    expect(preview.traces[0].marker.symbol).toBe("circle-open");
   });
 
   it("normalizes transformed stacked bars per experiment", () => {

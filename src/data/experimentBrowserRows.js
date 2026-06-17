@@ -1,3 +1,5 @@
+import { getMasterImports } from "./genericImportRelationships.js";
+
 function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -121,7 +123,7 @@ export function buildGenericBrowserRows(dataset = {}) {
   const mappingIndex = buildAcceptedMappingIndex(dataset.genericMappingSets);
   const acceptedMappingColumns = buildAcceptedMappingColumns(dataset.genericMappingSets);
   const rows = [];
-  asArray(dataset.genericImports).forEach((genericImport) => {
+  getMasterImports(dataset).forEach((genericImport) => {
     const sourcesByRef = new Map(asArray(genericImport.sources).map((source) => [source.sourceRef, source]));
     asArray(genericImport.experiments).forEach((experiment, index) => {
       const fields = fieldsForExperiment(genericImport, experiment);

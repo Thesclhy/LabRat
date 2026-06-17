@@ -385,7 +385,7 @@ Output:
 {
   "schemaVersion": "labrat.chartInterpretResponse.v1",
   "chartSpecDraft": {
-    "schemaVersion": "labrat.chartSpec.v1.2",
+    "schemaVersion": "labrat.chartSpec.v1.3",
     "status": "proposed",
     "chartType": "scatter",
     "title": "Selectivity Gas (%) vs Temperature (C)",
@@ -426,9 +426,10 @@ Output:
 Rules:
 
 - return a LabRat ChartSpec draft, not direct Plotly JSON
-- use ChartSpec v1.2 with supported chart types: `scatter`, `point`, `bar`, `grouped_bar`, `stacked_bar`, and `distribution_bar`
+- use ChartSpec v1.3 with supported chart types: `scatter`, `point`, `bar`, `grouped_bar`, `stacked_bar`, and `distribution_bar`
 - use `yFields[]` for multi-series charts such as solid/liquid/gas selectivity grouped or stacked bars
-- use allowlisted chart-local `transforms[]` for preview-only calculations such as `normalize_sum_to_percent`, `pivot_longer`, `sort_components`, `sum_fields`, `ratio`, and `percent_of_total`
+- use allowlisted chart-local `transforms[]` for preview-only calculations such as `normalize_sum_to_percent`, `pivot_longer`, `sort_components`, `sum_fields`, `difference`, `ratio`, `percent_of_total`, and `log10_transform`
+- use `axisOptions` and `renderStyle` for controlled log axes, trace mode, grid, legend, and Excel-like presentation hints
 - use `distribution_bar` plus `pivot_longer` / `sort_components` for C-number or component-family distributions such as `C7` through `C37`
 - AI may parse chart intent aliases, but backend must resolve aliases against real imported fields
 - never invent fields or source ids when AI output references unavailable data

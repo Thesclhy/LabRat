@@ -1,5 +1,5 @@
 export const CHART_INTERPRET_RESPONSE_VERSION = "labrat.chartInterpretResponse.v1";
-export const CHART_SPEC_DRAFT_VERSION = "labrat.chartSpec.v1.2";
+export const CHART_SPEC_DRAFT_VERSION = "labrat.chartSpec.v1.3";
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -64,6 +64,8 @@ export function shapeChartInterpretResponse({ chartSpecDraft = null, clarificati
       filters: asArray(chartSpecDraft.filters),
       transforms: asArray(chartSpecDraft.transforms),
       series: asArray(chartSpecDraft.series),
+      axisOptions: chartSpecDraft.axisOptions,
+      renderStyle: chartSpecDraft.renderStyle,
       calculationWarnings: asArray(chartSpecDraft.calculationWarnings),
       sourceImportIds: asArray(chartSpecDraft.sourceImportIds),
       sourceRefs: asArray(chartSpecDraft.sourceRefs),

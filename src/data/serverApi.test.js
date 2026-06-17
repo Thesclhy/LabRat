@@ -6,6 +6,7 @@ import {
   createServerImportRun,
   createServerManuscript,
   createServerProject,
+  deleteServerProject,
   createServerMappingSet,
   getServerProjectState,
   getServerSession,
@@ -16,9 +17,12 @@ import {
   patchServerManuscript,
   patchServerMappingSet,
   patchServerProjectProfile,
+  planServerProjectAgent,
+  previewServerImportRelationship,
   previewServerImportRefresh,
   previewServerImportRunNormalization,
   proposeServerProjectCharts,
+  resolveServerProjectDataQuery,
   uploadServerProjectFile,
 } from "./serverApi.js";
 
@@ -64,10 +68,12 @@ describe("serverApi", () => {
   it("creates projects and saves project profile updates", async () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ project: { id: "project_1" } }, { status: 201 }))
-      .mockResolvedValueOnce(jsonResponse({ projectProfile: { researchGoal: "Goal" } }));
+      .mockResolvedValueOnce(jsonResponse({ projectProfile: { researchGoal: "Goal" } }))
+      .mockResolvedValueOnce(jsonResponse({ project: { id: "project_1", status: "deleted" } }));
 
     await createServerProject({ labId: "lab_1", name: "Project A", projectProfile: { researchGoal: "Goal" }, fetch: fetchImpl });
     await patchServerProjectProfile("project_1", { materials: "Ru/TiO2" }, { fetch: fetchImpl });
+    await deleteServerProject("project_1", { fetch: fetchImpl });
 
     expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects");
     expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
@@ -78,6 +84,9 @@ describe("serverApi", () => {
     });
     expect(fetchImpl.mock.calls[1][0]).toBe("/api/projects/project_1/profile");
     expect(fetchImpl.mock.calls[1][1].method).toBe("PATCH");
+    expect(fetchImpl.mock.calls[2][0]).toBe("/api/projects/project_1");
+    expect(fetchImpl.mock.calls[2][1].method).toBe("PATCH");
+    expect(JSON.parse(fetchImpl.mock.calls[2][1].body)).toEqual({ status: "deleted" });
   });
 
   it("loads project state and routes import run operations", async () => {
@@ -87,6 +96,7 @@ describe("serverApi", () => {
       .mockResolvedValueOnce(jsonResponse({ importRun: { id: "import_run_1" } }, { status: 201 }))
       .mockResolvedValueOnce(jsonResponse({ importRun: { normalizePreview: {} } }))
       .mockResolvedValueOnce(jsonResponse({ schemaVersion: "labrat.importRefreshPreview.v1", hasChanges: true }))
+      .mockResolvedValueOnce(jsonResponse({ schemaVersion: "labrat.importRelationshipPreview.v1", proposals: [] }))
       .mockResolvedValueOnce(jsonResponse({ datasetCommit: { id: "commit_1" } }));
 
     await getServerProjectState("project_1", { fetch: fetchImpl });
@@ -94,6 +104,7 @@ describe("serverApi", () => {
     await createServerImportRun("project_1", "file_1", { fetch: fetchImpl });
     await previewServerImportRunNormalization("import_run_1", { approvedBlockIds: ["block_1"] }, { fetch: fetchImpl });
     await previewServerImportRefresh("import_run_1", { replaceImportId: "import_old", expectedParentDatasetCommitId: "commit_parent" }, { fetch: fetchImpl });
+    await previewServerImportRelationship("import_run_1", {}, { fetch: fetchImpl });
     await applyServerImportRun("import_run_1", { reviewNote: "Approved" }, { fetch: fetchImpl });
 
     expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects/project_1/state");
@@ -106,8 +117,9 @@ describe("serverApi", () => {
       replaceImportId: "import_old",
       expectedParentDatasetCommitId: "commit_parent",
     });
-    expect(fetchImpl.mock.calls[5][0]).toBe("/api/import-runs/import_run_1/apply");
-    expect(JSON.parse(fetchImpl.mock.calls[5][1].body)).toEqual({
+    expect(fetchImpl.mock.calls[5][0]).toBe("/api/import-runs/import_run_1/relationship-preview");
+    expect(fetchImpl.mock.calls[6][0]).toBe("/api/import-runs/import_run_1/apply");
+    expect(JSON.parse(fetchImpl.mock.calls[6][1].body)).toEqual({
       applyMode: "append",
       reviewNote: "Approved",
     });
@@ -129,6 +141,57 @@ describe("serverApi", () => {
       replaceImportId: "import_old",
       expectedParentDatasetCommitId: "commit_parent",
       reviewNote: "Applied workbook refresh.",
+    });
+  });
+
+  it("applies a server import run as a supplement and resolves project data queries", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ datasetCommit: { id: "commit_supplement" } }))
+      .mockResolvedValueOnce(jsonResponse({ schemaVersion: "labrat.dataResolveQuery.v1", viewIntentDraft: {} }))
+      .mockResolvedValueOnce(jsonResponse({ schemaVersion: "labrat.agentPlan.v1", actions: [] }));
+
+    await applyServerImportRun("import_run_2", {
+      applyMode: "supplement_import",
+      relationshipDecision: {
+        relationshipProposalId: "relationship_1",
+        targetExperimentIds: ["exp_30"],
+        supplementType: "reaction_rate_time_series",
+      },
+      reviewNote: "Attach rate details.",
+    }, { fetch: fetchImpl });
+    await resolveServerProjectDataQuery("project_1", {
+      prompt: "show Exp30 reaction rate",
+      selectedExperimentIds: ["exp_30"],
+      maxResults: 12,
+    }, { fetch: fetchImpl });
+    await planServerProjectAgent("project_1", {
+      message: "upload supplement for Exp30",
+      conversation: [{ role: "user", text: "hello" }],
+      selectedContext: { tab: "overview" },
+    }, { fetch: fetchImpl });
+
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/import-runs/import_run_2/apply");
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
+      applyMode: "supplement_import",
+      reviewNote: "Attach rate details.",
+      relationshipDecision: {
+        relationshipProposalId: "relationship_1",
+        targetExperimentIds: ["exp_30"],
+        supplementType: "reaction_rate_time_series",
+      },
+    });
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/projects/project_1/data/resolve-query");
+    expect(JSON.parse(fetchImpl.mock.calls[1][1].body)).toEqual({
+      prompt: "show Exp30 reaction rate",
+      selectedImportIds: [],
+      selectedExperimentIds: ["exp_30"],
+      maxResults: 12,
+    });
+    expect(fetchImpl.mock.calls[2][0]).toBe("/api/projects/project_1/agent/plan");
+    expect(JSON.parse(fetchImpl.mock.calls[2][1].body)).toEqual({
+      message: "upload supplement for Exp30",
+      conversation: [{ role: "user", text: "hello" }],
+      selectedContext: { tab: "overview" },
     });
   });
 

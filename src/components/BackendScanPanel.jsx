@@ -71,6 +71,11 @@ function StructureProposalList({ structureProposals }) {
           <p className="backend-scan-muted">
             Header rows: {(proposal.headerRows || []).join(", ") || "n/a"} - Data rows: {(proposal.dataRows || []).length || 0}
           </p>
+          {proposal.observationSetPreview && (
+            <p className="backend-scan-muted">
+              Detected supplemental time series: {proposal.observationSetPreview.inferredExperimentLabel || "unknown experiment"} - {proposal.observationSetPreview.kind}
+            </p>
+          )}
           <div className="generic-field-list">
             {(proposal.columns || []).map((column) => (
               <div key={column.fieldId || column.columnId || column.displayName} className="generic-field-row">
@@ -189,7 +194,107 @@ function RefreshDiffPreview({ refreshDraft, onReloadProjectState }) {
   );
 }
 
-function NormalizedPreview({ normalizeState, onApplyNormalize, mode = "append", refreshDraft, onReloadProjectState }) {
+function RelationshipPreview({ relationshipDraft, selectedProposalId, onRelationshipProposalSelect }) {
+  const draft = relationshipDraft || {};
+  if (draft.loading) return <div className="import-review-empty is-loading">Resolving supplemental workbook relationship...</div>;
+  if (draft.error) return <p className="import-review-error">{draft.error}</p>;
+  const preview = draft.preview || null;
+  if (!preview) return <div className="import-review-empty">Supplement relationship preview will appear after normalized preview.</div>;
+  const proposals = Array.isArray(preview.proposals) ? preview.proposals : [];
+  const selectable = proposals.filter((proposal) => (
+    proposal?.proposedRelationship === "supplement"
+    && Array.isArray(proposal.targetExperimentIds)
+    && proposal.targetExperimentIds.length
+  ));
+  return (
+    <section className="refresh-diff-panel relationship-preview-panel">
+      <WorkflowPanelHeader
+        title="Supplement relationship"
+        detail={selectable.length ? "Choose the detected relationship before attaching this workbook." : "No supplement target was confidently detected."}
+        meta={`${proposals.length} proposals`}
+      />
+      <div className="backend-scan-stats">
+        <span>{preview.summary?.supplementCount || 0} supplement</span>
+        <span>{preview.summary?.standaloneCount || 0} standalone</span>
+        <span>{preview.summary?.replaceCount || 0} replace-like</span>
+      </div>
+      {!selectable.length && <p className="import-review-error">No existing experiment target was found. Apply is disabled for supplemental mode.</p>}
+      <div className="backend-proposal-grid">
+        {proposals.map((proposal) => {
+          const canSelect = proposal.proposedRelationship === "supplement"
+            && Array.isArray(proposal.targetExperimentIds)
+            && proposal.targetExperimentIds.length;
+          const active = selectedProposalId === proposal.relationshipProposalId;
+          return (
+            <article className={`backend-proposal-card ${active ? "is-selected" : ""}`} key={proposal.relationshipProposalId || proposal.importId}>
+              <div className="backend-scan-block-head">
+                <strong>{proposal.proposedRelationship || "relationship"}</strong>
+                <span>{formatConfidence(proposal.confidence)}</span>
+              </div>
+              <p className="backend-scan-muted">
+                Type: {proposal.supplementType || "n/a"} - Targets: {(proposal.targetExperimentIds || []).join(", ") || "none"}
+              </p>
+              <ul className="backend-scan-list">
+                {(proposal.evidence || []).map((item, index) => (
+                  <li key={`${proposal.relationshipProposalId || "evidence"}-${index}`}>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+              <WarningList warnings={proposal.warnings} />
+              <div className="import-review-actions">
+                <button
+                  type="button"
+                  className={active ? "primary" : ""}
+                  disabled={!canSelect}
+                  onClick={() => onRelationshipProposalSelect?.(proposal.relationshipProposalId)}
+                >
+                  {active ? "Selected" : "Use this relationship"}
+                </button>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+      <WarningList warnings={preview.warnings} />
+    </section>
+  );
+}
+
+function observationSetSummary(observationSet) {
+  const summary = observationSet?.summary || {};
+  const timeRange = summary.timeMin != null && summary.timeMax != null
+    ? `${Number(summary.timeMin).toFixed(2)} to ${Number(summary.timeMax).toFixed(2)} min`
+    : "time range n/a";
+  return [
+    observationSet?.inferredExperimentLabel || "unknown experiment",
+    `${summary.observationCount ?? (observationSet?.observations || []).length} observations`,
+    timeRange,
+  ].join(" - ");
+}
+
+function ObservationSetList({ observationSets }) {
+  const sets = Array.isArray(observationSets) ? observationSets : [];
+  if (!sets.length) return null;
+  return (
+    <div className="observation-set-list">
+      {sets.map((set) => (
+        <article className="observation-set-card" key={set.observationSetId}>
+          <div className="backend-scan-block-head">
+            <strong>{set.kind || "observation_set"}</strong>
+            <span>{set.inferredExperimentLabel || "target pending"}</span>
+          </div>
+          <p className="backend-scan-muted">{observationSetSummary(set)}</p>
+          <p className="backend-scan-muted">
+            Fields: {(set.fields || []).slice(0, 5).map((field) => field.displayName || field.field).join(", ") || "None"}
+          </p>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function NormalizedPreview({ normalizeState, onApplyNormalize, mode = "append", refreshDraft, relationshipDraft, onRelationshipProposalSelect, onReloadProjectState }) {
   const state = normalizeState || {};
   const result = state.result || null;
   if (state.loading) return <div className="import-review-empty is-loading">Preparing normalized preview...</div>;
@@ -203,10 +308,27 @@ function NormalizedPreview({ normalizeState, onApplyNormalize, mode = "append", 
     return total + (fields?.length || 0);
   }, 0);
   const measurementCount = result.summary?.createdMeasurements ?? genericImports.reduce((total, item) => total + (item.measurements?.length || 0), 0);
+  const observationSetCount = genericImports.reduce((total, item) => total + (item.observationSets?.length || 0), 0);
+  const observationCount = genericImports.reduce((total, item) => (
+    total + (item.observationSets || []).reduce((setTotal, set) => setTotal + (set.summary?.observationCount ?? (set.observations?.length || 0)), 0)
+  ), 0);
   const warningCountValue = result.summary?.warningCount ?? genericImports.reduce((total, item) => total + (item.warnings?.length || 0), 0);
   const isRefreshMode = mode === "refresh";
+  const isSupplementMode = mode === "supplement";
+  const selectedRelationship = (relationshipDraft?.preview?.proposals || []).find((proposal) => (
+    proposal.relationshipProposalId === relationshipDraft?.selectedProposalId
+  ));
   const canApply = genericImports.length > 0
-    && (!isRefreshMode || (!!refreshDraft?.preview?.hasChanges && !refreshDraft?.loading && !refreshDraft?.error));
+    && (!isRefreshMode || (!!refreshDraft?.preview?.hasChanges && !refreshDraft?.loading && !refreshDraft?.error))
+    && (!isSupplementMode || (
+      !!selectedRelationship
+      && selectedRelationship.proposedRelationship === "supplement"
+      && Array.isArray(selectedRelationship.targetExperimentIds)
+      && selectedRelationship.targetExperimentIds.length > 0
+      && !relationshipDraft?.loading
+      && !relationshipDraft?.error
+    ));
+  const applyLabel = isRefreshMode ? "Apply refresh" : isSupplementMode ? "Apply supplemental import" : "Apply normalized data";
 
   return (
     <div className="backend-normalize-preview">
@@ -215,6 +337,8 @@ function NormalizedPreview({ normalizeState, onApplyNormalize, mode = "append", 
         <span>{experimentCount} experiments</span>
         <span>{fieldCount} fields</span>
         <span>{measurementCount} measurements</span>
+        {observationSetCount > 0 && <span>{observationSetCount} observation sets</span>}
+        {observationCount > 0 && <span>{observationCount} observations</span>}
         <span>{warningCountValue} warnings</span>
       </div>
       <div className="backend-normalize-toolbar workflow-action-row">
@@ -224,11 +348,18 @@ function NormalizedPreview({ normalizeState, onApplyNormalize, mode = "append", 
           disabled={!canApply}
           onClick={() => onApplyNormalize?.()}
         >
-          {isRefreshMode ? "Apply refresh" : "Apply normalized data"}
+          {applyLabel}
         </button>
-        {state.applied && <span className="workflow-status is-applied">{isRefreshMode ? "Refresh applied to project" : "Normalized data applied to project"}</span>}
+        {state.applied && <span className="workflow-status is-applied">{isRefreshMode ? "Refresh applied to project" : isSupplementMode ? "Supplemental import applied to project" : "Normalized data applied to project"}</span>}
       </div>
       {isRefreshMode && <RefreshDiffPreview refreshDraft={refreshDraft} onReloadProjectState={onReloadProjectState} />}
+      {isSupplementMode && (
+        <RelationshipPreview
+          relationshipDraft={relationshipDraft}
+          selectedProposalId={relationshipDraft?.selectedProposalId}
+          onRelationshipProposalSelect={onRelationshipProposalSelect}
+        />
+      )}
       {genericImports.map((item) => (
         <article className="backend-normalize-card" key={item.importId}>
           <div className="backend-scan-block-head">
@@ -238,6 +369,7 @@ function NormalizedPreview({ normalizeState, onApplyNormalize, mode = "append", 
           <p className="backend-scan-muted">
             Sources: {item.sources?.length || 0} - Files: {item.files?.length || 0}
           </p>
+          <ObservationSetList observationSets={item.observationSets} />
           <p className="backend-scan-muted">
             Fields: {((item.fields?.length ? item.fields : item.measurements) || []).slice(0, 4).map((field) => `${field.displayName}${field.role ? ` (${field.role})` : ""}`).join(", ") || "None"}
           </p>
@@ -583,6 +715,11 @@ function BlockList({ blocks, blockReview, onBlockReviewDecision }) {
               <span>Rows</span><strong>{block.table?.rows?.length ?? 0}</strong>
               <span>Source</span><strong>{sourceLabel(block.source)}</strong>
             </div>
+            {block.observationSetPreview && (
+              <p className="backend-scan-muted">
+                Detected supplemental time series: {block.observationSetPreview.inferredExperimentLabel || "unknown experiment"} - {block.observationSetPreview.kind}
+              </p>
+            )}
             {block.title && <p className="backend-scan-muted">Title: {block.title.value || block.title.rawValue} - {sourceLabel(block.title.source)}</p>}
             <div className="backend-scan-subgrid">
               <div><h5>Metadata</h5><MetadataList metadata={block.metadata || block.candidateMetadata} /></div>
@@ -658,6 +795,7 @@ function SheetDetails({ sheet, blockReview, onBlockReviewDecision }) {
 export function BackendScanPanel({
   mode = "append",
   refreshDraft,
+  relationshipDraft,
   scanState,
   blockReview,
   normalizeState,
@@ -669,12 +807,14 @@ export function BackendScanPanel({
   onFieldRoleOverride,
   onPreviewNormalize,
   onApplyNormalize,
+  onRelationshipProposalSelect,
   onProposeMappings,
   onMappingDecision,
   onReloadProjectState,
 }) {
   const state = scanState || {};
   const isRefreshMode = mode === "refresh";
+  const isSupplementMode = mode === "supplement";
   const result = state.result || null;
   const sheetCount = result?.summary?.sheetCount ?? result?.sheets?.length ?? 0;
   const blockCount = result?.summary?.blockCount ?? result?.sheets?.reduce((total, sheet) => total + (sheet.blocks?.length || 0), 0) ?? 0;
@@ -695,7 +835,13 @@ export function BackendScanPanel({
     },
     {
       label: "Preview/apply data",
-      detail: normalizeState?.applied ? "applied" : isRefreshMode && refreshDraft?.preview ? "diff ready" : normalizeState?.result ? "preview ready" : "review first",
+      detail: normalizeState?.applied
+        ? "applied"
+        : isRefreshMode && refreshDraft?.preview
+          ? "diff ready"
+          : isSupplementMode && relationshipDraft?.preview
+            ? "relationship ready"
+            : normalizeState?.result ? "preview ready" : "review first",
       status: normalizeState?.loading ? "active" : normalizeState?.applied ? "done" : normalizeState?.result ? "active" : "pending",
     },
     {
@@ -714,7 +860,7 @@ export function BackendScanPanel({
       <WorkflowStepStrip steps={workflowSteps} />
       <div className="backend-scan-toolbar workflow-action-row">
         <label className={`folder-btn backend-scan-upload ${state.loading ? "disabled" : ""}`}>
-          {state.loading ? "Scanning..." : isRefreshMode ? "Scan replacement workbook" : "Scan workbook"}
+          {state.loading ? "Scanning..." : isRefreshMode ? "Scan replacement workbook" : isSupplementMode ? "Scan supplemental workbook" : "Scan workbook"}
           <input
             type="file"
             accept=".xlsx,.xls"
@@ -767,6 +913,8 @@ export function BackendScanPanel({
             onApplyNormalize={onApplyNormalize}
             mode={mode}
             refreshDraft={refreshDraft}
+            relationshipDraft={relationshipDraft}
+            onRelationshipProposalSelect={onRelationshipProposalSelect}
             onReloadProjectState={onReloadProjectState}
           />
           <MappingProposalReview

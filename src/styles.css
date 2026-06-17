@@ -1047,6 +1047,24 @@ textarea {
   background: var(--color-success-bg);
   color: var(--color-success-text);
 }
+.project-detail-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: auto;
+  padding-top: 4px;
+}
+.danger-subtle {
+  border: 1px solid var(--color-red-200);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--danger);
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.danger-subtle:hover:not(:disabled) {
+  background: var(--color-danger-bg);
+}
 .project-dashboard-empty {
   display: grid;
   place-items: start;
@@ -1334,9 +1352,32 @@ td button {
   background: var(--accent);
   color: var(--color-white);
 }
+.modal-actions .danger {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: var(--color-white);
+}
 .modal-actions button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+.project-delete-modal {
+  width: min(520px, 96vw);
+}
+.project-delete-body {
+  display: grid;
+  gap: 14px;
+}
+.project-delete-body h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+.project-delete-body p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
 }
 .import-review-modal {
   width: min(1080px, 96vw);
@@ -1537,6 +1578,10 @@ td button {
   border-radius: 8px;
   padding: 12px;
   background: #fff;
+}
+.backend-proposal-card.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(74, 108, 247, 0.12);
 }
 .backend-chart-proposal-card {
   grid-template-columns: minmax(220px, 0.9fr) minmax(260px, 1.1fr);
@@ -4075,6 +4120,90 @@ td button {
   word-break: break-word;
   line-height: 1.45;
 }
+.agent-action-card {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+}
+.agent-action-card.is-ready_to_apply,
+.agent-action-card.is-ready_to_create,
+.agent-action-card.is-ready_to_persist {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+.agent-action-card.is-completed {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+.agent-action-card.is-failed {
+  border-color: #fecaca;
+  background: #fff1f2;
+}
+.agent-action-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.agent-action-head strong {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 600;
+}
+.agent-action-head span,
+.agent-action-card small {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.agent-action-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.agent-action-summary span {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475569;
+  padding: 3px 7px;
+  font-size: 11px;
+}
+.agent-action-warnings {
+  margin: 0;
+  padding-left: 18px;
+  color: #92400e;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.agent-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+}
+.agent-action-buttons button,
+.agent-action-buttons select {
+  min-height: 30px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: #fff;
+  color: #334155;
+  padding: 5px 9px;
+  font-size: 12px;
+}
+.agent-action-buttons .primary {
+  border-color: #4f46e5;
+  background: #4f46e5;
+  color: #fff;
+}
+.agent-file-input {
+  display: none;
+}
 .insert-chat-text {
   margin-top: 8px;
 }
@@ -4446,6 +4575,21 @@ tbody tr:hover {
 .refresh-diff-panel.no-changes {
   border-color: #fde68a;
   background: #fffbeb;
+}
+
+.observation-set-list {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.observation-set-card {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 10px 12px;
 }
 
 .refresh-diff-error {

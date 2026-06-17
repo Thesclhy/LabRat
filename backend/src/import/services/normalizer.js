@@ -3,6 +3,10 @@ import {
   shapeNormalizeResponse,
 } from "../schemas/normalizationSchemas.js";
 import { classifyFieldRole } from "../utils/fieldRoleClassifier.js";
+import {
+  detectReactionRateObservationSet,
+  normalizeReactionRateObservationSetBlock,
+} from "./reactionRateObservationSet.js";
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -350,6 +354,7 @@ export function normalizeApprovedScan({ scanResult, approvedBlockIds, approvedSt
     experiments: [],
     fields: [],
     measurements: [],
+    observationSets: [],
     sources: [],
     files: [{
       fileId: scanResult?.file?.fileId || null,
@@ -372,16 +377,26 @@ export function normalizeApprovedScan({ scanResult, approvedBlockIds, approvedSt
       experimentOffset: genericImport.experiments.length,
       measurementOffset: genericImport.measurements.length,
       fieldOffset: genericImport.fields.length,
+      observationSetOffset: genericImport.observationSets.length,
       blockConfidence: block.confidence ?? null,
+      fileName: scanResult?.file?.name || "",
     };
-    const normalized = block.type === "standard_table"
-      ? normalizeStandardTableBlock({ sheet, block }, context)
+    const reactionRateDetection = detectReactionRateObservationSet({
+      fileName: scanResult?.file?.name || "",
+      sheetName: sheet.name,
+      block,
+    });
+    const normalized = reactionRateDetection
+      ? normalizeReactionRateObservationSetBlock({ sheet, block }, context, reactionRateDetection)
+      : block.type === "standard_table"
+        ? normalizeStandardTableBlock({ sheet, block }, context)
       : block.type === "experiment_block"
         ? normalizeBlockTableBlock({ sheet, block }, context)
         : { experiments: [], measurements: [], warnings: [unsupportedBlockWarning(block)] };
     genericImport.experiments.push(...normalized.experiments);
     genericImport.fields.push(...asArray(normalized.fields));
     genericImport.measurements.push(...normalized.measurements);
+    genericImport.observationSets.push(...asArray(normalized.observationSets));
     genericImport.warnings.push(...normalized.warnings);
   });
 
@@ -393,7 +408,7 @@ export function normalizeApprovedScan({ scanResult, approvedBlockIds, approvedSt
     ? Number((confidenceValues.reduce((total, value) => total + value, 0) / confidenceValues.length).toFixed(3))
     : null;
 
-  const genericImports = genericImport.experiments.length || genericImport.fields.length || genericImport.measurements.length || genericImport.warnings.length
+  const genericImports = genericImport.experiments.length || genericImport.fields.length || genericImport.measurements.length || genericImport.observationSets.length || genericImport.warnings.length
     ? [genericImport]
     : [];
 

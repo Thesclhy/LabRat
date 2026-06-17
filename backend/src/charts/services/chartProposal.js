@@ -51,11 +51,19 @@ function importFieldRecords(genericImport) {
     id: field.fieldValueId,
     experimentId: field.experimentId,
     rowIndex: field.rowIndex,
+    recordKey: field.observationId || [
+      field.experimentId || "",
+      field.rowIndex ?? "",
+    ].join("|"),
   }));
   return asArray(genericImport.measurements).map((measurement) => ({
     id: measurement.measurementId,
     experimentId: measurement.experimentId,
     rowIndex: measurement.rowIndex,
+    recordKey: measurement.observationId || [
+      measurement.experimentId || "",
+      measurement.rowIndex ?? "",
+    ].join("|"),
   }));
 }
 
@@ -93,7 +101,10 @@ function enrichChartField(field) {
   };
   return {
     ...enriched,
-    aliases: chartAliasesForField(enriched),
+    aliases: [...new Set([
+      ...asArray(field.aliases),
+      ...chartAliasesForField(enriched),
+    ])],
   };
 }
 
@@ -104,7 +115,7 @@ function pairCount(xField, yField, genericImports) {
   const yByKey = new Set();
   asArray(genericImports).forEach((genericImport) => {
     importFieldRecords(genericImport).forEach((field) => {
-      const key = `${field.experimentId || ""}|${field.rowIndex ?? ""}`;
+      const key = field.recordKey || `${field.experimentId || ""}|${field.rowIndex ?? ""}`;
       if (xIds.has(field.id)) xByKey.add(key);
       if (yIds.has(field.id)) yByKey.add(key);
     });

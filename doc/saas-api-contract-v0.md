@@ -336,6 +336,7 @@ Response:
       "labId": "lab_...",
       "name": "Blank Project",
       "description": "",
+      "status": "active",
       "currentDatasetCommitId": "commit_...",
       "projectProfile": {},
       "updatedAt": "2026-06-14T00:00:00.000Z"
@@ -343,6 +344,11 @@ Response:
   ]
 }
 ```
+
+Rules:
+
+- Projects with `status: "deleted"` are soft-deleted and omitted from the default list response.
+- Soft-deleted project records and their scientific/audit child records remain stored.
 
 ### `POST /api/projects`
 
@@ -420,8 +426,9 @@ Rules:
 
 - `projectProfile` is merged into `projects.metadata.projectProfile`.
 - Updating `projectProfile` must not erase unrelated `projects.metadata` keys.
+- Setting `status` to `"deleted"` soft-deletes the project and hides it from the default project list. It does not physically delete imports, dataset commits, chart specs, manuscripts, or audit records.
 - `viewer` can read project records; `editor` or above can update them.
-- Project update writes a `project.update` audit event with changed fields.
+- Project update writes a `project.update` audit event with changed fields. Soft delete writes `project.delete`.
 
 ### `PATCH /api/projects/:projectId/profile`
 
@@ -525,6 +532,134 @@ Rules:
 - Include accepted mapping decisions from persisted `mapping_sets`.
 - Include prior accepted/rejected chart decisions from `chart_proposal_sets`.
 - Do not include raw workbook payloads or internal service input.
+
+### `POST /api/projects/:projectId/data/resolve-query`
+
+Purpose: resolve a natural-language data request against the current project dataset catalog and return a validated table/view intent draft.
+
+Required role: `viewer` or above.
+
+Request:
+
+```json
+{
+  "prompt": "show Exp30 reaction rate data",
+  "selectedImportIds": [],
+  "selectedExperimentIds": [],
+  "maxResults": 50
+}
+```
+
+Response:
+
+```json
+{
+  "schemaVersion": "labrat.dataResolveQuery.v1",
+  "catalogSummary": {},
+  "retrievedContext": {
+    "experiments": [],
+    "fields": [],
+    "imports": [],
+    "sources": [],
+    "mappings": []
+  },
+  "viewIntentDraft": {
+    "schemaVersion": "labrat.viewIntent.v1",
+    "status": "proposed",
+    "viewType": "table",
+    "title": "Data view: show Exp30 reaction rate data",
+    "rows": {
+      "source": "experiments",
+      "experimentIds": []
+    },
+    "columns": [],
+    "filters": [],
+    "sort": [],
+    "sourceRefs": [],
+    "warnings": [],
+    "rationale": ""
+  },
+  "clarification": null,
+  "warnings": []
+}
+```
+
+Rules:
+
+- This is structured retrieval over dataset commits, mapping sets, and chart specs; it is not raw workbook embedding.
+- Return `clarification` instead of inventing fields or experiment ids.
+- `viewIntentDraft` is a render intent, not a dataset mutation.
+- Frontend must render only validated ids/source refs returned by the backend.
+
+### `POST /api/projects/:projectId/agent/plan`
+
+Purpose: parse one LabRat chat message into safe, confirmable project action cards.
+
+Required role: `viewer` or above.
+
+Request:
+
+```json
+{
+  "message": "upload this as supplement for Exp30",
+  "conversation": [],
+  "selectedContext": {}
+}
+```
+
+Response:
+
+```json
+{
+  "schemaVersion": "labrat.agentPlan.v1",
+  "reply": "I can attach a supplemental workbook to Exp30 after you choose a file.",
+  "actions": [
+    {
+      "actionId": "agent_action_...",
+      "type": "upload_supplement",
+      "status": "requires_confirmation",
+      "label": "Add supplemental workbook",
+      "description": "Choose a workbook and review its relationship to existing experiments.",
+      "requiresFile": true,
+      "requiresReview": true,
+      "params": {
+        "targetExperimentAliases": ["Exp30"]
+      },
+      "warnings": []
+    }
+  ],
+  "contextSummary": {
+    "hasDataset": true,
+    "fileCount": 3,
+    "importRunCount": 2,
+    "chartProposalSetCount": 1,
+    "chartSpecCount": 0,
+    "manuscriptCount": 1
+  },
+  "warnings": []
+}
+```
+
+Supported first action types:
+
+```text
+upload_master_table
+refresh_master_table
+upload_supplement
+propose_charts
+interpret_chart
+create_chart_spec_from_proposal
+resolve_data_query
+```
+
+Rules:
+
+- This endpoint plans only; it must not mutate project state.
+- Mutating actions require a frontend confirmation card and then call existing project APIs.
+- Upload actions require file selection before import run creation.
+- The planner may use deterministic parsing and optional AI, but it returns action plans, not final scientific values.
+- Context must be compact and must not include raw workbook cell grids.
+- Cross-lab access is forbidden.
 
 ### `POST /api/projects/:projectId/charts/interpret`
 
@@ -759,9 +894,48 @@ Rules:
 - The normalized replacement must contain exactly one `datasetPatch.genericImports[]` item.
 - This route is read-only and does not write audit events, import-run decisions, or dataset commits.
 
+### `POST /api/import-runs/:id/relationship-preview`
+
+Purpose: propose whether a newly normalized workbook should supplement an existing experiment, replace an active import, stand alone as a new import, or be ignored.
+
+Response:
+
+```json
+{
+  "schemaVersion": "labrat.importRelationshipPreview.v1",
+  "projectId": "project_...",
+  "parentDatasetCommitId": "commit_...",
+  "importRunId": "import_run_...",
+  "proposals": [
+    {
+      "relationshipProposalId": "relationship_...",
+      "importId": "import_...",
+      "proposedRelationship": "supplement",
+      "supplementType": "reaction_rate_time_series",
+      "targetExperimentIds": ["..."],
+      "targetImportId": null,
+      "evidence": ["Filename contains an experiment-like label."],
+      "confidence": 0.9,
+      "warnings": [],
+      "status": "proposed"
+    }
+  ],
+  "summary": {},
+  "warnings": []
+}
+```
+
+Rules:
+
+- Required role: `editor` or above for the import run's lab.
+- The import run must already be in `normalized_preview`.
+- The route is read-only and does not write database rows.
+- Exact experiment ids found in filenames, such as `Exp30`, are stronger evidence than fuzzy text overlap.
+- User approval is required before applying supplemental data.
+
 ### `POST /api/import-runs/:id/apply`
 
-Purpose: accept a normalized preview and create a full merged dataset commit.
+Purpose: accept a normalized preview and create a full merged dataset commit. In server project mode, default `append` is the master table apply path.
 
 Request:
 
@@ -780,6 +954,20 @@ Refresh replacement request:
   "replaceImportId": "import_...",
   "expectedParentDatasetCommitId": "commit_...",
   "reviewNote": "Uploaded corrected MasterTable after updating selectivity values."
+}
+```
+
+Supplement request:
+
+```json
+{
+  "applyMode": "supplement_import",
+  "relationshipDecision": {
+    "relationshipProposalId": "relationship_...",
+    "targetExperimentIds": ["..."],
+    "supplementType": "reaction_rate_time_series"
+  },
+  "reviewNote": "Attach reaction rate details to Exp30."
 }
 ```
 
@@ -810,10 +998,13 @@ Rules:
 - Create immutable `dataset_commits` row.
 - Update `projects.current_dataset_commit_id`.
 - The new commit payload is the full current dataset state: parent commit payload plus the accepted `datasetPatch`.
-- Append `datasetPatch.genericImports[]` by `importId`; reject duplicates with `409 duplicate_import_already_committed`.
-- Default `applyMode` is `append`.
+- Default `applyMode` is `append`, which creates the project's one active master-table import.
+- If an active master import already exists, another `append` returns `409 master_table_already_exists`; use `replace_import` for the master table or `supplement_import` for extra workbooks.
+- Append `datasetPatch.genericImports[]` by `importId`; duplicate import ids are rejected when reached by the active apply mode.
 - `applyMode: "replace_import"` creates a new full dataset state where one active `genericImports[]` item is replaced by the normalized replacement import.
+- `applyMode: "supplement_import"` appends the normalized import as supplemental data linked to reviewed `targetExperimentIds`.
 - Refresh apply annotates the replacement import with `refreshOfImportId` and `refreshMetadata`, and records replacement details in `datasetCommit.summary`.
+- Supplement apply annotates the new import with `relationship` and `relatedExperimentIds`; it does not rewrite target experiment values.
 - Refresh apply preserves the parent commit unchanged; old data remains available through commit history.
 - Refresh apply returns `409 refresh_no_changes_detected` if the uploaded replacement does not change active experiment/field/warning data.
 - Refresh apply returns `409 dataset_commit_conflict` if the current project commit no longer matches `expectedParentDatasetCommitId`.
@@ -823,6 +1014,7 @@ Rules:
 - A second apply returns `409 import_run_already_applied` and does not create another commit.
 - Append apply writes `import.apply` and `dataset_commit.create` audit events.
 - Refresh apply writes `import.refresh_apply` and `dataset_commit.create` audit events.
+- Supplement apply writes `import.supplement_apply` and `dataset_commit.create` audit events.
 
 ## Dataset Commits
 
@@ -987,11 +1179,12 @@ Rules:
 - A chart spec is the insertion target for manuscripts.
 - Do not insert raw chart proposals into manuscripts.
 - Requires a current or requested project-owned dataset commit.
-- Saves `chart_specs.spec` as normalized `labrat.chartSpec.v1.2`.
+- Saves `chart_specs.spec` as normalized `labrat.chartSpec.v1.3`.
 - Validates the chart type and required x/y fields before saving.
-- Supported v1.2 chart types are `scatter`, `point`, `bar`, `grouped_bar`, `stacked_bar`, and `distribution_bar`.
+- Supported v1.3 chart types are `scatter`, `point`, `bar`, `grouped_bar`, `stacked_bar`, and `distribution_bar`.
 - `grouped_bar`, `stacked_bar`, and `distribution_bar` require `yFields[]` with at least two resolved fields.
 - Validates allowlisted chart-local `transforms[]`; transform inputs must resolve in the dataset commit and do not mutate scientific dataset payloads.
+- Preserves validated `axisOptions` and `renderStyle` for log axes and controlled Plotly-style presentation hints.
 - Validates source field ids and source refs against the dataset commit payload.
 - Return `409 dataset_commit_required` when no dataset commit is available.
 - Return `400 invalid_chart_spec` for unsupported or incomplete chart specs.

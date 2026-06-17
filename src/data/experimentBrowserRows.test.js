@@ -153,4 +153,25 @@ describe("experiment browser generic rows", () => {
     expect(detail.warnings[0].code).toBe("unit_review");
     expect(detail.mappedFields.map((field) => field.key)).toEqual(["time"]);
   });
+
+  it("does not derive browser rows from supplemental imports", () => {
+    const dataset = datasetFixture();
+    dataset.genericImports.push({
+      importId: "import_supplement",
+      fileName: "Reaction_Rate_Exp30.xlsx",
+      relationship: {
+        relationship: "supplement",
+        targetExperimentIds: ["generic_exp_1"],
+      },
+      experiments: [{ experimentId: "generic_exp_rate", label: "Reaction Rate Detail" }],
+      fields: [{ fieldValueId: "rate_1", experimentId: "generic_exp_rate", displayName: "Reaction Rate", role: "measurement" }],
+      sources: [],
+      warnings: [],
+    });
+
+    const rows = buildGenericBrowserRows(dataset);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].importId).toBe("import_1");
+  });
 });

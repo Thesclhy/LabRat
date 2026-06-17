@@ -4,6 +4,7 @@ import path from "node:path";
 import { after, before, test } from "node:test";
 import * as XLSX from "xlsx";
 import { createServer } from "../../server.js";
+import { createReactionRateSupplementWorkbook } from "../../import/fixtures/workbookFixtures.js";
 import { loadSaasConfig } from "../config.js";
 import { MemorySaasStore } from "../memoryStore.js";
 
@@ -44,16 +45,32 @@ function makeSelectivityWorkbookBlob(rows = [
   });
 }
 
-async function uploadAndCreateImportRun(projectId, blob = makeWorkbookBlob(), filename = "MasterTable_updated.xlsx") {
-  const form = new FormData();
-  form.set("file", blob, filename);
-  const upload = await fetch(`${baseUrl}/api/projects/${projectId}/files`, {
-    method: "POST",
-    headers: { cookie },
-    body: form,
+function makeReactionRateWorkbookBlob(rows = [
+  [0, 0],
+  [5, 1.2],
+  [10, 2.4],
+]) {
+  const workbook = XLSX.utils.book_new();
+  const worksheet = XLSX.utils.aoa_to_sheet([
+    ["Time (min)", "Reaction Rate (mol/g/h)"],
+    ...rows,
+  ]);
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Reaction Rate");
+  const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+  return new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
+}
+
+function fixtureBlob(file) {
+  return new Blob([file.buffer], {
+    type: file.contentType || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+}
+
+async function uploadAndCreateImportRun(projectId, blob = makeWorkbookBlob(), filename = "MasterTable_updated.xlsx") {
+  const { response: upload, body: uploadBody } = await uploadProjectFile(projectId, blob, filename);
   assert.equal(upload.status, 201);
-  const uploadBody = await upload.json();
   const importRunResponse = await jsonFetch(`/api/projects/${projectId}/import-runs`, {
     method: "POST",
     body: { fileObjectId: uploadBody.fileObject.id },
@@ -61,6 +78,18 @@ async function uploadAndCreateImportRun(projectId, blob = makeWorkbookBlob(), fi
   assert.equal(importRunResponse.status, 201);
   const importRunBody = await importRunResponse.json();
   return { upload: uploadBody.fileObject, importRun: importRunBody.importRun };
+}
+
+async function uploadProjectFile(projectId, blob = makeWorkbookBlob(), filename = "MasterTable_updated.xlsx") {
+  const form = new FormData();
+  form.set("file", blob, filename);
+  const upload = await fetch(`${baseUrl}/api/projects/${projectId}/files`, {
+    method: "POST",
+    headers: { cookie },
+    body: form,
+  });
+  const uploadBody = await upload.json();
+  return { response: upload, body: uploadBody };
 }
 
 async function normalizeAndApplyImportRun(importRun, approvedBlockIds = null) {
@@ -199,6 +228,32 @@ test("lab owner can create a server project", async () => {
   assert.equal(listBody.projects.some((project) => project.id === createBody.project.id), true);
 });
 
+test("lab owner can soft-delete a project and hide it from project lists", async () => {
+  const labs = await (await jsonFetch("/api/labs")).json();
+  const labId = labs.labs[0].labId;
+  const create = await (await jsonFetch("/api/projects", {
+    method: "POST",
+    body: { labId, name: "Delete Me Project" },
+  })).json();
+
+  const deletion = await jsonFetch(`/api/projects/${create.project.id}`, {
+    method: "PATCH",
+    body: { status: "deleted" },
+  });
+  assert.equal(deletion.status, 200);
+  const deletionBody = await deletion.json();
+  assert.equal(deletionBody.project.status, "deleted");
+
+  const list = await (await jsonFetch(`/api/projects?labId=${labId}`)).json();
+  assert.equal(list.projects.some((project) => project.id === create.project.id), false);
+
+  const fetched = await (await jsonFetch(`/api/projects/${create.project.id}`)).json();
+  assert.equal(fetched.project.status, "deleted");
+
+  const auditEvents = await store.listAuditEvents({ projectId: create.project.id });
+  assert.equal(auditEvents.some((event) => event.action === "project.delete"), true);
+});
+
 test("projects persist independent profiles and merge profile updates", async () => {
   const labs = await (await jsonFetch("/api/labs")).json();
   const labId = labs.labs[0].labId;
@@ -288,6 +343,12 @@ test("viewer can read project state but cannot update project profile", async ()
     body: { projectProfile: { researchGoal: "Viewer edit attempt." } },
   });
   assert.equal(patch.status, 403);
+
+  const deletePatch = await jsonFetch(`/api/projects/${project.project.id}`, {
+    method: "PATCH",
+    body: { status: "deleted" },
+  });
+  assert.equal(deletePatch.status, 403);
   cookie = ownerCookie;
 });
 
@@ -354,12 +415,55 @@ test("file upload, import run, normalize preview, and apply create a dataset com
   assert.equal(auditEvents.some((event) => event.action === "dataset_commit.create"), true);
 });
 
-test("applying later imports creates merged current dataset commits without mutating parents", async () => {
+test("duplicate workbook upload reuses the existing file object and can create another import run", async () => {
   const labs = await (await jsonFetch("/api/labs")).json();
   const labId = labs.labs[0].labId;
   const project = await (await jsonFetch("/api/projects", {
     method: "POST",
-    body: { labId, name: "Merged Dataset Commit Project" },
+    body: { labId, name: "Duplicate Upload Project" },
+  })).json();
+  const workbook = makeWorkbookBlob([
+    ["Exp1", 250, 5, 0.35],
+  ]);
+
+  const first = await uploadProjectFile(project.project.id, workbook, "duplicate.xlsx");
+  assert.equal(first.response.status, 201);
+  assert.equal(first.body.reused, false);
+  assert.match(first.body.fileObject.id, /^file_/);
+
+  const duplicate = await uploadProjectFile(project.project.id, workbook, "duplicate.xlsx");
+  assert.equal(duplicate.response.status, 200);
+  assert.equal(duplicate.body.reused, true);
+  assert.equal(duplicate.body.fileObject.id, first.body.fileObject.id);
+
+  const duplicateRun = await jsonFetch(`/api/projects/${project.project.id}/import-runs`, {
+    method: "POST",
+    body: { fileObjectId: duplicate.body.fileObject.id },
+  });
+  assert.equal(duplicateRun.status, 201);
+
+  const renamed = await uploadProjectFile(project.project.id, workbook, "renamed.xlsx");
+  assert.equal(renamed.response.status, 201);
+  assert.notEqual(renamed.body.fileObject.id, first.body.fileObject.id);
+
+  const otherProject = await (await jsonFetch("/api/projects", {
+    method: "POST",
+    body: { labId, name: "Duplicate Upload Other Project" },
+  })).json();
+  const otherProjectUpload = await uploadProjectFile(otherProject.project.id, workbook, "duplicate.xlsx");
+  assert.equal(otherProjectUpload.response.status, 201);
+  assert.notEqual(otherProjectUpload.body.fileObject.id, first.body.fileObject.id);
+
+  const auditEvents = await store.listAuditEvents({ projectId: project.project.id });
+  assert.equal(auditEvents.some((event) => event.action === "file.reuse"), true);
+});
+
+test("a project allows one master append and rejects a second append", async () => {
+  const labs = await (await jsonFetch("/api/labs")).json();
+  const labId = labs.labs[0].labId;
+  const project = await (await jsonFetch("/api/projects", {
+    method: "POST",
+    body: { labId, name: "Single Master Dataset Project" },
   })).json();
 
   const first = await uploadAndCreateImportRun(project.project.id, makeWorkbookBlob([
@@ -372,20 +476,20 @@ test("applying later imports creates merged current dataset commits without muta
   const second = await uploadAndCreateImportRun(project.project.id, makeWorkbookBlob([
     ["Exp3", 300, 10, 0.55],
   ]), "second.xlsx");
-  const secondApply = await normalizeAndApplyImportRun(second.importRun);
-  const secondCommit = secondApply.apply.datasetCommit;
-
-  assert.equal(secondCommit.parentCommitId, firstCommitId);
-  assert.equal(secondCommit.datasetPayload.genericImports.length, 2);
-  assert.equal(secondCommit.datasetPayload.genericImports[0].importId, firstImportId);
-  assert.equal(secondCommit.summary.totalGenericImportCount, 2);
-  assert.equal(secondCommit.summary.totalExperimentCount, 2);
+  await normalizeImportRun(second.importRun);
+  const secondApply = await jsonFetch(`/api/import-runs/${second.importRun.id}/apply`, {
+    method: "POST",
+    body: { reviewNote: "Attempt second master append." },
+  });
+  assert.equal(secondApply.status, 409);
+  assert.equal((await secondApply.json()).error.code, "master_table_already_exists");
 
   const state = await (await jsonFetch(`/api/projects/${project.project.id}/state`)).json();
   const parent = state.datasetCommits.find((commit) => commit.id === firstCommitId);
   assert.equal(parent.datasetPayload.genericImports.length, 1);
-  assert.equal(state.currentDatasetCommit.id, secondCommit.id);
-  assert.equal(state.currentDatasetCommit.datasetPayload.genericImports.length, 2);
+  assert.equal(parent.datasetPayload.genericImports[0].importId, firstImportId);
+  assert.equal(state.currentDatasetCommit.id, firstCommitId);
+  assert.equal(state.currentDatasetCommit.datasetPayload.genericImports.length, 1);
 });
 
 test("refresh preview and apply replace one active import while preserving parent commits", async () => {
@@ -476,6 +580,114 @@ test("refresh preview and apply replace one active import while preserving paren
   assert.equal((await repeatRefreshApply.json()).error.code, "import_run_already_applied");
 });
 
+test("relationship preview and supplement apply attach a detailed workbook to an existing experiment", async () => {
+  const labs = await (await jsonFetch("/api/labs")).json();
+  const labId = labs.labs[0].labId;
+  const project = await (await jsonFetch("/api/projects", {
+    method: "POST",
+    body: { labId, name: "Supplement Relationship Project" },
+  })).json();
+
+  const master = await uploadAndCreateImportRun(project.project.id, makeWorkbookBlob([
+    ["Exp30", 250, 14, 0.28],
+    ["Exp31", 260, 10, 0.44],
+  ]), "MasterTable.xlsx");
+  const masterApply = await normalizeAndApplyImportRun(master.importRun);
+  const parentCommit = masterApply.apply.datasetCommit;
+  const exp30 = parentCommit.datasetPayload.genericImports[0].experiments.find((experiment) => experiment.label === "Exp30");
+  assert.ok(exp30?.experimentId);
+
+  const supplement = await uploadAndCreateImportRun(
+    project.project.id,
+    fixtureBlob(createReactionRateSupplementWorkbook()),
+    "Reaction_Rate_Exp30.xlsx",
+  );
+  const supplementPreview = await normalizeImportRun(supplement.importRun);
+  const supplementImport = supplementPreview.importRun.normalizePreview.datasetPatch.genericImports[0];
+  assert.equal(supplementImport.experiments.length, 0);
+  assert.equal(supplementImport.observationSets.length, 1);
+  assert.equal(supplementImport.observationSets[0].observations.length, 62);
+
+  const relationshipPreview = await jsonFetch(`/api/import-runs/${supplement.importRun.id}/relationship-preview`, {
+    method: "POST",
+    body: {},
+  });
+  assert.equal(relationshipPreview.status, 200);
+  const relationshipBody = await relationshipPreview.json();
+  assert.equal(relationshipBody.schemaVersion, "labrat.importRelationshipPreview.v1");
+  const proposal = relationshipBody.proposals[0];
+  assert.equal(proposal.proposedRelationship, "supplement");
+  assert.equal(proposal.supplementType, "reaction_rate_time_series");
+  assert.equal(proposal.targetExperimentIds.includes(exp30.experimentId), true);
+
+  const supplementApply = await jsonFetch(`/api/import-runs/${supplement.importRun.id}/apply`, {
+    method: "POST",
+    body: {
+      applyMode: "supplement_import",
+      relationshipDecision: proposal,
+      reviewNote: "Attach reaction rate detail to Exp30.",
+    },
+  });
+  assert.equal(supplementApply.status, 200);
+  const supplementApplyBody = await supplementApply.json();
+  const supplementCommit = supplementApplyBody.datasetCommit;
+  assert.equal(supplementCommit.parentCommitId, parentCommit.id);
+  assert.equal(supplementCommit.datasetPayload.genericImports.length, 2);
+  assert.equal(supplementCommit.summary.applyMode, "supplement_import");
+  assert.equal(supplementCommit.summary.relationship, "supplement");
+  assert.equal(supplementCommit.summary.targetExperimentIds.includes(exp30.experimentId), true);
+  const linkedImport = supplementCommit.datasetPayload.genericImports.find((item) => item.fileName === "Reaction_Rate_Exp30.xlsx");
+  assert.equal(linkedImport.relationship.relationship, "supplement");
+  assert.equal(linkedImport.relationship.targetExperimentIds.includes(exp30.experimentId), true);
+  assert.equal(linkedImport.observationSets[0].targetExperimentIds.includes(exp30.experimentId), true);
+  assert.equal(linkedImport.fields.some((field) => field.recordKind === "observation" && field.relatedExperimentIds.includes(exp30.experimentId)), true);
+
+  const secondSupplement = await uploadAndCreateImportRun(
+    project.project.id,
+    makeReactionRateWorkbookBlob([[0, 0], [15, 3.1]]),
+    "Reaction_Rate_Exp30_repeat.xlsx",
+  );
+  await normalizeImportRun(secondSupplement.importRun);
+  const secondRelationshipPreview = await (await jsonFetch(`/api/import-runs/${secondSupplement.importRun.id}/relationship-preview`, {
+    method: "POST",
+    body: {},
+  })).json();
+  const secondProposal = secondRelationshipPreview.proposals[0];
+  assert.equal(secondProposal.proposedRelationship, "supplement");
+  assert.equal(secondProposal.targetExperimentIds.includes(exp30.experimentId), true);
+  const secondSupplementApply = await jsonFetch(`/api/import-runs/${secondSupplement.importRun.id}/apply`, {
+    method: "POST",
+    body: {
+      applyMode: "supplement_import",
+      relationshipDecision: secondProposal,
+      reviewNote: "Attach repeated reaction rate detail to Exp30.",
+    },
+  });
+  assert.equal(secondSupplementApply.status, 200);
+  const secondSupplementCommit = (await secondSupplementApply.json()).datasetCommit;
+  assert.equal(secondSupplementCommit.datasetPayload.genericImports.length, 3);
+  assert.equal(secondSupplementCommit.summary.applyMode, "supplement_import");
+
+  const state = await (await jsonFetch(`/api/projects/${project.project.id}/state`)).json();
+  const historicalParent = state.datasetCommits.find((commit) => commit.id === parentCommit.id);
+  assert.equal(historicalParent.datasetPayload.genericImports.length, 1);
+  assert.equal(state.currentDatasetCommit.id, secondSupplementCommit.id);
+
+  const query = await jsonFetch(`/api/projects/${project.project.id}/data/resolve-query`, {
+    method: "POST",
+    body: { prompt: "show Exp30 reaction rate data" },
+  });
+  assert.equal(query.status, 200);
+  const queryBody = await query.json();
+  assert.equal(queryBody.schemaVersion, "labrat.dataResolveQuery.v1");
+  assert.equal(queryBody.retrievedContext.experiments.some((entry) => entry.label === "Exp30"), true);
+  assert.equal(queryBody.retrievedContext.fields.some((entry) => entry.metadata?.recordKind === "observation" && /rate/i.test(entry.label)), true);
+  assert.equal(queryBody.viewIntentDraft.columns.some((column) => /rate/i.test(column.label)), true);
+
+  const auditEvents = await store.listAuditEvents({ projectId: project.project.id });
+  assert.equal(auditEvents.some((event) => event.action === "import.supplement_apply"), true);
+});
+
 test("refresh rejects no-op replacement, missing target, stale parent, and repeated apply", async () => {
   const labs = await (await jsonFetch("/api/labs")).json();
   const labId = labs.labs[0].labId;
@@ -529,10 +741,21 @@ test("refresh rejects no-op replacement, missing target, stale parent, and repea
   assert.equal(missingTargetApply.status, 404);
   assert.equal((await missingTargetApply.json()).error.code, "refresh_target_not_found");
 
-  const appended = await uploadAndCreateImportRun(project.project.id, makeWorkbookBlob([
-    ["Exp2", 275, 8, 0.24],
-  ]), "refresh-stale-append.xlsx");
-  await normalizeAndApplyImportRun(appended.importRun);
+  const supplement = await uploadAndCreateImportRun(project.project.id, makeReactionRateWorkbookBlob(), "Reaction_Rate_Exp1.xlsx");
+  await normalizeImportRun(supplement.importRun);
+  const supplementRelationship = await (await jsonFetch(`/api/import-runs/${supplement.importRun.id}/relationship-preview`, {
+    method: "POST",
+    body: {},
+  })).json();
+  const supplementProposal = supplementRelationship.proposals[0];
+  const supplementApply = await jsonFetch(`/api/import-runs/${supplement.importRun.id}/apply`, {
+    method: "POST",
+    body: {
+      applyMode: "supplement_import",
+      relationshipDecision: supplementProposal,
+    },
+  });
+  assert.equal(supplementApply.status, 200);
   const stale = await uploadAndCreateImportRun(project.project.id, makeWorkbookBlob([
     ["Exp1", 250, 5, 0.9],
   ]), "refresh-stale-replacement.xlsx");
@@ -552,7 +775,7 @@ test("refresh rejects no-op replacement, missing target, stale parent, and repea
   assert.equal(state.currentDatasetCommit.datasetPayload.genericImports.length, 2);
 });
 
-test("duplicate imports and repeated apply are rejected", async () => {
+test("second master append and repeated apply are rejected", async () => {
   const labs = await (await jsonFetch("/api/labs")).json();
   const labId = labs.labs[0].labId;
   const project = await (await jsonFetch("/api/projects", {
@@ -581,7 +804,7 @@ test("duplicate imports and repeated apply are rejected", async () => {
     body: {},
   });
   assert.equal(duplicateApply.status, 409);
-  assert.equal((await duplicateApply.json()).error.code, "duplicate_import_already_committed");
+  assert.equal((await duplicateApply.json()).error.code, "master_table_already_exists");
 
   const state = await (await jsonFetch(`/api/projects/${project.project.id}/state`)).json();
   assert.equal(state.datasetCommits.length, 1);
@@ -823,6 +1046,114 @@ test("project AI context summarizes fields, mappings, prior decisions, and chart
   assert.equal(contextBody.serviceInput, undefined);
 });
 
+test("project agent plan returns deterministic upload, supplement, chart, and query actions", async () => {
+  const { project } = await createProjectWithAppliedImport("Agent Plan Project");
+
+  const master = await jsonFetch(`/api/projects/${project.id}/agent/plan`, {
+    method: "POST",
+    body: { message: "upload master table" },
+  });
+  assert.equal(master.status, 200);
+  const masterBody = await master.json();
+  assert.equal(masterBody.schemaVersion, "labrat.agentPlan.v1");
+  assert.equal(masterBody.actions[0].type, "upload_master_table");
+  assert.equal(masterBody.actions[0].requiresFile, true);
+  assert.equal(masterBody.actions[0].status, "requires_confirmation");
+  assert.equal(masterBody.contextSummary.hasCurrentDatasetCommit, true);
+  assert.equal(JSON.stringify(masterBody).includes("cellGrid"), false);
+
+  const supplement = await jsonFetch(`/api/projects/${project.id}/agent/plan`, {
+    method: "POST",
+    body: { message: "upload supplement reaction rate for Exp30" },
+  });
+  assert.equal(supplement.status, 200);
+  const supplementBody = await supplement.json();
+  assert.equal(supplementBody.actions[0].type, "upload_supplement");
+  assert.deepEqual(supplementBody.actions[0].params.targetExperimentAliases, ["Exp30"]);
+
+  const chart = await jsonFetch(`/api/projects/${project.id}/agent/plan`, {
+    method: "POST",
+    body: { message: "plot gas selectivity vs temperature" },
+  });
+  assert.equal(chart.status, 200);
+  const chartBody = await chart.json();
+  assert.equal(chartBody.actions[0].type, "interpret_chart");
+  assert.equal(chartBody.actions[0].params.prompt, "gas selectivity vs temperature");
+
+  const query = await jsonFetch(`/api/projects/${project.id}/agent/plan`, {
+    method: "POST",
+    body: { message: "show Exp1 data as a table" },
+  });
+  assert.equal(query.status, 200);
+  const queryBody = await query.json();
+  assert.equal(queryBody.actions[0].type, "resolve_data_query");
+  assert.equal(queryBody.actions[0].requiresReview, false);
+});
+
+test("project agent plan can target an accepted chart proposal for chart spec creation", async () => {
+  const { project } = await createProjectWithAppliedImport("Agent ChartSpec Plan Project");
+  const proposalCreate = await jsonFetch(`/api/projects/${project.id}/chart-proposal-sets`, {
+    method: "POST",
+    body: {
+      payload: {
+        proposals: [{
+          proposalId: "chart_agent_keep",
+          status: "accepted",
+          chartType: "scatter",
+          title: "Accepted agent chart",
+        }],
+      },
+      decisionSummary: { acceptedProposalIds: ["chart_agent_keep"] },
+    },
+  });
+  assert.equal(proposalCreate.status, 201);
+  const proposalBody = await proposalCreate.json();
+
+  const response = await jsonFetch(`/api/projects/${project.id}/agent/plan`, {
+    method: "POST",
+    body: { message: "create chart spec from accepted proposal" },
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.actions[0].type, "create_chart_spec_from_proposal");
+  assert.equal(body.actions[0].params.chartProposalSetId, proposalBody.chartProposalSet.id);
+  assert.equal(body.actions[0].params.proposalId, "chart_agent_keep");
+});
+
+test("project agent plan requires auth and project access", async () => {
+  const ownerCookie = cookie;
+  const { project } = await createProjectWithAppliedImport("Agent Auth Project");
+  cookie = "";
+  const unauth = await jsonFetch(`/api/projects/${project.id}/agent/plan`, {
+    method: "POST",
+    body: { message: "upload master table" },
+  });
+  assert.equal(unauth.status, 401);
+
+  const adminLogin = await jsonFetch("/api/auth/login", {
+    method: "POST",
+    body: { username: "admin", password: "LabRatAdmin123!" },
+  });
+  assert.equal(adminLogin.status, 200);
+  cookie = cookieFrom(adminLogin);
+  const slug = `agent-other-lab-${Date.now()}`;
+  const otherLab = await (await jsonFetch("/api/admin/labs", {
+    method: "POST",
+    body: { name: "Agent Other Lab", slug },
+  })).json();
+  const otherProject = await (await jsonFetch("/api/projects", {
+    method: "POST",
+    body: { labId: otherLab.lab.id, name: "Agent Other Project" },
+  })).json();
+
+  cookie = ownerCookie;
+  const crossLab = await jsonFetch(`/api/projects/${otherProject.project.id}/agent/plan`, {
+    method: "POST",
+    body: { message: "show data" },
+  });
+  assert.equal(crossLab.status, 403);
+});
+
 test("project chart interpret previews by default and can persist interpreted proposals", async () => {
   const { project } = await createProjectWithAppliedImport("Project Chart Interpret Project");
 
@@ -842,13 +1173,18 @@ test("project chart interpret previews by default and can persist interpreted pr
   const persisted = await jsonFetch(`/api/projects/${project.id}/charts/interpret`, {
     method: "POST",
     body: {
-      prompt: "plot gas selectivity vs temperature grouped by label",
+      prompt: "plot gas selectivity vs temperature with hollow markers, no connecting lines, and log base 10 y-axis",
       persistAsProposal: true,
     },
   });
   assert.equal(persisted.status, 200);
   const persistedBody = await persisted.json();
   assert.match(persistedBody.chartProposalSet.id, /^chart_proposal_set_/);
+  const proposal = persistedBody.chartProposalSet.payload.proposals[0];
+  assert.equal(proposal.axisOptions.y.scale, "log10");
+  assert.equal(proposal.renderStyle.traceMode, "markers");
+  assert.equal(proposal.renderStyle.traces[0].marker.symbol, "circle-open");
+  assert.equal(proposal.chartSpecDraft.renderStyle.traceMode, "markers");
   const listAfterPersist = await (await jsonFetch(`/api/projects/${project.id}/chart-proposal-sets`)).json();
   assert.equal(listAfterPersist.chartProposalSets.length, beforeCount + 1);
 });
@@ -924,7 +1260,7 @@ test("project chart propose can persist grouped selectivity ChartSpec v1", async
   assert.equal(chartSpec.status, 201);
   const chartSpecBody = await chartSpec.json();
   assert.equal(chartSpecBody.chartSpec.chartType, "grouped_bar");
-  assert.equal(chartSpecBody.chartSpec.spec.schemaVersion, "labrat.chartSpec.v1.2");
+  assert.equal(chartSpecBody.chartSpec.spec.schemaVersion, "labrat.chartSpec.v1.3");
   assert.equal(chartSpecBody.chartSpec.spec.yFields.length, 3);
 });
 
@@ -1047,13 +1383,40 @@ test("accepted chart proposal can become a durable chart spec", async () => {
   assert.equal(body.chartSpec.sourceProposalId, proposal.proposalId);
   assert.equal(body.chartSpec.datasetCommitId, interpretedBody.chartProposalSet.datasetCommitId);
   assert.match(body.chartSpec.title, /Selectivity Gas/i);
-  assert.equal(body.chartSpec.spec.schemaVersion, "labrat.chartSpec.v1.2");
+  assert.equal(body.chartSpec.spec.schemaVersion, "labrat.chartSpec.v1.3");
 
   const list = await jsonFetch(`/api/projects/${project.id}/chart-specs`);
   const listBody = await list.json();
   assert.equal(listBody.chartSpecs.some((chartSpec) => chartSpec.id === body.chartSpec.id), true);
   assert.equal(listBody.chartSpecs.find((chartSpec) => chartSpec.id === body.chartSpec.id).status, "active");
   assert.equal(listBody.chartSpecs.find((chartSpec) => chartSpec.id === body.chartSpec.id).isStale, false);
+
+  const legacyNestedStyle = await jsonFetch(`/api/projects/${project.id}/chart-specs/from-proposal`, {
+    method: "POST",
+    body: {
+      proposalId: "legacy_nested_style",
+      proposal: {
+        proposalId: "legacy_nested_style",
+        chartType: proposal.chartType,
+        title: proposal.title,
+        x: proposal.x,
+        y: proposal.y,
+        chartSpecDraft: {
+          ...proposal,
+          axisOptions: { y: { scale: "log10" } },
+          renderStyle: {
+            traceMode: "markers",
+            traces: [{ target: "primary", marker: { symbol: "circle-open" } }],
+          },
+        },
+      },
+    },
+  });
+  assert.equal(legacyNestedStyle.status, 201);
+  const legacyNestedStyleBody = await legacyNestedStyle.json();
+  assert.equal(legacyNestedStyleBody.chartSpec.spec.axisOptions.y.scale, "log10");
+  assert.equal(legacyNestedStyleBody.chartSpec.spec.renderStyle.traceMode, "markers");
+  assert.equal(legacyNestedStyleBody.chartSpec.spec.renderStyle.traces[0].marker.symbol, "circle-open");
 });
 
 test("chart specs from replaced dataset commits are marked stale and excluded from AI context", async () => {

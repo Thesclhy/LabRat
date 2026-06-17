@@ -428,7 +428,7 @@ test("POST /api/charts/interpret returns deterministic ChartSpec drafts without 
     assert.equal(response.status, 200);
     const body = await response.json();
     assert.equal(body.schemaVersion, "labrat.chartInterpretResponse.v1");
-    assert.equal(body.chartSpecDraft.schemaVersion, "labrat.chartSpec.v1.2");
+    assert.equal(body.chartSpecDraft.schemaVersion, "labrat.chartSpec.v1.3");
     assert.equal(body.chartSpecDraft.chartType, "scatter");
     assert.equal(body.chartSpecDraft.x.field, "time");
     assert.equal(body.chartSpecDraft.y.field, "conversion");

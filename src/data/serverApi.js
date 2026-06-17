@@ -80,6 +80,14 @@ export function createServerProject({ labId, name, description = "", projectProf
   return serverJson("/api/projects", { labId, name, description, projectProfile }, options);
 }
 
+export function deleteServerProject(projectId, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before deleting it.");
+  return serverJson(`/api/projects/${encodeURIComponent(projectId)}`, { status: "deleted" }, {
+    ...options,
+    method: "PATCH",
+  });
+}
+
 export function getServerProjectState(projectId, options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before loading server state.");
   return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/state`, options);
@@ -130,6 +138,11 @@ export function previewServerImportRefresh(importRunId, request = {}, options = 
   }, options);
 }
 
+export function previewServerImportRelationship(importRunId, request = {}, options = {}) {
+  if (!importRunId) throw new ServerApiError("Create a normalized import preview before resolving relationships.");
+  return serverJson(`/api/import-runs/${encodeURIComponent(importRunId)}/relationship-preview`, request, options);
+}
+
 export function applyServerImportRun(importRunId, request = {}, options = {}) {
   if (!importRunId) throw new ServerApiError("Create a normalized import preview before applying.");
   return serverJson(`/api/import-runs/${encodeURIComponent(importRunId)}/apply`, {
@@ -137,6 +150,8 @@ export function applyServerImportRun(importRunId, request = {}, options = {}) {
     reviewNote: request.reviewNote || "",
     ...(request.replaceImportId ? { replaceImportId: request.replaceImportId } : {}),
     ...(request.expectedParentDatasetCommitId ? { expectedParentDatasetCommitId: request.expectedParentDatasetCommitId } : {}),
+    ...(request.relationshipDecision ? { relationshipDecision: request.relationshipDecision } : {}),
+    ...(request.targetExperimentIds ? { targetExperimentIds: request.targetExperimentIds } : {}),
   }, options);
 }
 
@@ -171,6 +186,25 @@ export function interpretServerProjectChart(projectId, request = {}, options = {
     selectedExperimentIds: request.selectedExperimentIds || [],
     chartConstraints: request.chartConstraints || {},
     persistAsProposal: request.persistAsProposal !== false,
+  }, options);
+}
+
+export function resolveServerProjectDataQuery(projectId, request = {}, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before resolving project data.");
+  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/data/resolve-query`, {
+    prompt: request.prompt || "",
+    selectedImportIds: request.selectedImportIds || [],
+    selectedExperimentIds: request.selectedExperimentIds || [],
+    maxResults: request.maxResults || 50,
+  }, options);
+}
+
+export function planServerProjectAgent(projectId, request = {}, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before asking LabRat to plan project actions.");
+  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/agent/plan`, {
+    message: request.message || "",
+    conversation: request.conversation || [],
+    selectedContext: request.selectedContext || {},
   }, options);
 }
 

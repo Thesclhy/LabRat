@@ -15,6 +15,11 @@ export async function persistUploadedFile(config, { fileId, projectId, originalN
   return storageKey;
 }
 
+export async function deleteUploadedFile(config, storageKey) {
+  if (!storageKey) return;
+  await fs.rm(path.join(config.fileStorageRoot, storageKey), { force: true });
+}
+
 export async function readFileObjectBuffer(config, fileObject) {
   if (fileObject?.buffer) return Buffer.from(fileObject.buffer);
   if (!fileObject?.storageKey) {
@@ -25,4 +30,3 @@ export async function readFileObjectBuffer(config, fileObject) {
   }
   return fs.readFile(path.join(config.fileStorageRoot, fileObject.storageKey));
 }
-

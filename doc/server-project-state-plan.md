@@ -55,6 +55,7 @@ Use `POST /api/projects` for the initial profile and `PATCH /api/projects/:proje
 - Chart review decisions are stored in `chart_proposal_sets`.
 - Durable chart definitions are stored in `chart_specs`.
 - Manuscript canvas state is stored in `manuscripts`.
+- Supplemental workbook relationships are review proposals on import runs and become linked generic imports inside new dataset commits after approval.
 
 Scientific data v0 remains JSONB-first inside commits/imports/review records. Do not split generic fields into relational experiment/measurement tables in this pass.
 
@@ -80,6 +81,17 @@ parent current dataset commit
 ```
 
 Parent commits are immutable. Duplicate committed import ids are rejected unless the operation is an explicit refresh replacing the target import.
+
+Supplement mode:
+
+```text
+parent current dataset commit
+  + reviewed supplemental generic import
+  + relationship metadata pointing at existing experiment ids
+  -> new full dataset commit
+```
+
+Supplement mode does not rewrite the target experiment. It links additional source-backed data to it.
 
 ## Chart State
 
