@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { getNote, getProjectStars, isStarred, setNote, toggleStar } from "./experimentStars.js";
+import { DEFAULT_STAR_COLOR, getNote, getProjectStars, getStarColorId, isStarred, setNote, setStarColor, toggleStar } from "./experimentStars.js";
 
 const PROJECT = "proj-1";
 const ROW = "generic:imp-1:exp-1";
@@ -44,6 +44,33 @@ describe("experimentStars", () => {
   it("falls back to a local scope when no projectId is given", () => {
     toggleStar(null, ROW, 1000);
     expect(isStarred(null, ROW)).toBe(true);
+  });
+
+  it("defaults to the amber color and lets it be changed", () => {
+    toggleStar(PROJECT, ROW, 1000);
+    expect(getStarColorId(PROJECT, ROW)).toBe(DEFAULT_STAR_COLOR);
+    setStarColor(PROJECT, ROW, "blue", 1100);
+    expect(getStarColorId(PROJECT, ROW)).toBe("blue");
+  });
+
+  it("ignores unknown colors and preserves the note", () => {
+    setNote(PROJECT, ROW, "keep", 1000);
+    setStarColor(PROJECT, ROW, "not-a-color", 1100);
+    expect(getStarColorId(PROJECT, ROW)).toBe(DEFAULT_STAR_COLOR);
+    expect(getNote(PROJECT, ROW)).toBe("keep");
+  });
+
+  it("choosing a color implicitly stars the row", () => {
+    setStarColor(PROJECT, ROW, "green", 1000);
+    expect(isStarred(PROJECT, ROW)).toBe(true);
+    expect(getStarColorId(PROJECT, ROW)).toBe("green");
+  });
+
+  it("unstarring clears the color back to default", () => {
+    setStarColor(PROJECT, ROW, "red", 1000);
+    toggleStar(PROJECT, ROW, 1100);
+    expect(isStarred(PROJECT, ROW)).toBe(false);
+    expect(getStarColorId(PROJECT, ROW)).toBe(DEFAULT_STAR_COLOR);
   });
 
   it("persists across reads via localStorage", () => {

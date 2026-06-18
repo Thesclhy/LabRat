@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { buildAcceptedMappingColumns, buildGenericBrowserRows, getGenericExperimentDetail } from "../data/experimentBrowserRows.js";
-import { getProjectStars, setNote as persistNote, toggleStar as persistToggleStar } from "../data/experimentStars.js";
-import { getColumnPrefs, hideColumn as persistHideColumn, renameColumn as persistRenameColumn, setColumnWidth as persistColumnWidth, showColumn as persistShowColumn } from "../data/experimentColumnPrefs.js";
+import { getProjectStars, getStarColor, setNote as persistNote, setStarColor as persistStarColor, toggleStar as persistToggleStar } from "../data/experimentStars.js";
+import { applyColumnOrder, getColumnOrder, getColumnPrefs, hideColumn as persistHideColumn, moveKeyRelative, renameColumn as persistRenameColumn, setColumnOrder as persistColumnOrder, setColumnWidth as persistColumnWidth, showColumn as persistShowColumn } from "../data/experimentColumnPrefs.js";
 import { StarCell } from "./StarCell.jsx";
 import { ColumnHeaderCell } from "./ColumnHeaderCell.jsx";
 
@@ -163,6 +163,9 @@ export function GenericImportBrowser({ dataset, sourceName, onOpenImportReview, 
   const [starredOnly, setStarredOnly] = useState(false);
   const [stars, setStars] = useState(() => getProjectStars(projectId));
   const [columnPrefs, setColumnPrefs] = useState(() => getColumnPrefs(projectId));
+  const [columnOrder, setColumnOrderState] = useState(() => getColumnOrder(projectId));
+  const [dragKey, setDragKey] = useState(null);
+  const [dropTarget, setDropTarget] = useState(null); // { key, before }
   const rows = useMemo(() => buildGenericBrowserRows(dataset), [dataset]);
   const acceptedMappingColumns = useMemo(() => buildAcceptedMappingColumns(dataset?.genericMappingSets), [dataset?.genericMappingSets]);
   const baseColumns = useMemo(() => [
@@ -170,21 +173,40 @@ export function GenericImportBrowser({ dataset, sourceName, onOpenImportReview, 
     { key: "__source__", label: "Source", kind: "source" },
     ...acceptedMappingColumns.map((column) => ({ ...column, kind: "mapping" })),
   ], [acceptedMappingColumns]);
-  const decoratedColumns = useMemo(() => baseColumns.map((column) => {
+  const orderedColumns = useMemo(() => applyColumnOrder(baseColumns, columnOrder), [baseColumns, columnOrder]);
+  const decoratedColumns = useMemo(() => orderedColumns.map((column) => {
     const pref = columnPrefs[column.key] || {};
     return { ...column, displayLabel: pref.label || column.label, hidden: !!pref.hidden, width: pref.width || null };
-  }), [baseColumns, columnPrefs]);
+  }), [orderedColumns, columnPrefs]);
   const visibleColumns = useMemo(() => decoratedColumns.filter((column) => !column.hidden), [decoratedColumns]);
   const hiddenColumns = useMemo(() => decoratedColumns.filter((column) => column.hidden), [decoratedColumns]);
   const query = search.toLowerCase().trim();
   const starredCount = useMemo(() => rows.filter((row) => stars[row.rowId]?.starred).length, [rows, stars]);
   const toggleStar = (rowId) => setStars(persistToggleStar(projectId, rowId));
   const saveNote = (rowId, note) => setStars(persistNote(projectId, rowId, note));
+  const changeStarColor = (rowId, color) => setStars(persistStarColor(projectId, rowId, color));
   const hideColumn = (columnKey) => setColumnPrefs(persistHideColumn(projectId, columnKey));
   const showColumn = (columnKey) => setColumnPrefs(persistShowColumn(projectId, columnKey));
   const renameColumn = (columnKey, label) => setColumnPrefs(persistRenameColumn(projectId, columnKey, label));
   const resizeColumn = (columnKey, width) => setColumnPrefs(persistColumnWidth(projectId, columnKey, width));
   const autoFitColumn = (columnKey) => setColumnPrefs(persistColumnWidth(projectId, columnKey, null));
+  const commitOrder = (keys) => setColumnOrderState(persistColumnOrder(projectId, keys));
+  const reorderDrop = () => {
+    if (dragKey && dropTarget && dropTarget.key !== dragKey) {
+      const fullKeys = orderedColumns.map((column) => column.key);
+      commitOrder(moveKeyRelative(fullKeys, dragKey, dropTarget.key, dropTarget.before));
+    }
+    setDragKey(null);
+    setDropTarget(null);
+  };
+  const moveColumn = (columnKey, direction) => {
+    const visibleKeys = visibleColumns.map((column) => column.key);
+    const index = visibleKeys.indexOf(columnKey);
+    const neighbor = direction === "left" ? visibleKeys[index - 1] : visibleKeys[index + 1];
+    if (!neighbor) return;
+    const fullKeys = orderedColumns.map((column) => column.key);
+    commitOrder(moveKeyRelative(fullKeys, columnKey, neighbor, direction === "left"));
+  };
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
       if (starredOnly && !stars[row.rowId]?.starred) return false;
@@ -273,31 +295,49 @@ export function GenericImportBrowser({ dataset, sourceName, onOpenImportReview, 
               <thead>
                 <tr>
                   <th className="star-col" aria-label="Star"></th>
-                  {visibleColumns.map((column) => (
+                  {visibleColumns.map((column, index) => (
                     <ColumnHeaderCell
                       key={column.key}
                       label={column.displayLabel}
                       unit={column.unit}
                       title={column.rawLabel || column.label}
                       width={column.width}
+                      isDragging={dragKey === column.key}
+                      dropEdge={dropTarget?.key === column.key ? (dropTarget.before ? "before" : "after") : null}
                       onHide={() => hideColumn(column.key)}
                       onRename={(label) => renameColumn(column.key, label)}
                       onResize={(width) => resizeColumn(column.key, width)}
                       onAutoFit={() => autoFitColumn(column.key)}
+                      onReorderStart={() => setDragKey(column.key)}
+                      onReorderOver={(before) => { if (dragKey === column.key) return; setDropTarget((current) => (current?.key === column.key && current?.before === before) ? current : { key: column.key, before }); }}
+                      onReorderDrop={reorderDrop}
+                      onReorderEnd={() => { setDragKey(null); setDropTarget(null); }}
+                      onMove={(direction) => moveColumn(column.key, direction)}
+                      canMoveLeft={index > 0}
+                      canMoveRight={index < visibleColumns.length - 1}
                     />
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {filteredRows.map((row) => (
-                  <tr key={row.rowId} className={stars[row.rowId]?.starred ? "row-starred" : ""} onClick={() => setSelectedRow(row)}>
+                {filteredRows.map((row) => {
+                  const star = stars[row.rowId];
+                  return (
+                  <tr
+                    key={row.rowId}
+                    className={star?.starred ? "row-starred" : ""}
+                    style={star?.starred ? { background: getStarColor(star.color).tint } : undefined}
+                    onClick={() => setSelectedRow(row)}
+                  >
                     <td className="star-col plain-cell">
                       <StarCell
                         label={row.label}
-                        starred={!!stars[row.rowId]?.starred}
-                        note={stars[row.rowId]?.note || ""}
+                        starred={!!star?.starred}
+                        note={star?.note || ""}
+                        color={star?.color}
                         onToggle={() => toggleStar(row.rowId)}
                         onSaveNote={(note) => saveNote(row.rowId, note)}
+                        onChangeColor={(color) => changeStarColor(row.rowId, color)}
                       />
                     </td>
                     {visibleColumns.map((column) => {
@@ -314,7 +354,8 @@ export function GenericImportBrowser({ dataset, sourceName, onOpenImportReview, 
                       );
                     })}
                   </tr>
-                ))}
+                  );
+                })}
                 {!filteredRows.length && (
                   <tr className="table-empty-row">
                     <td colSpan={columnCount}>No imported records match the current search.</td>
