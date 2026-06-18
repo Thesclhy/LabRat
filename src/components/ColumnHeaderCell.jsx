@@ -11,6 +11,8 @@ export function ColumnHeaderCell({
   width,
   isDragging = false,
   dropEdge = null,
+  sortDir = null,
+  onSort,
   onHide,
   onRename,
   onResize,
@@ -142,6 +144,7 @@ export function ColumnHeaderCell({
       className={className}
       title={title || label}
       style={style}
+      onClick={onSort ? () => onSort() : undefined}
       onContextMenu={openMenu}
       onDragOver={handleDragOver}
       onDrop={(event) => { if (onReorderDrop) { event.preventDefault(); onReorderDrop(); } }}
@@ -160,6 +163,11 @@ export function ColumnHeaderCell({
         {label}
       </span>
       {unit && <small> {unit}</small>}
+      {onSort && (
+        <span className={`column-sort-arrow ${sortDir || ""}`} aria-hidden="true">
+          {sortDir === "asc" ? "▲" : sortDir === "desc" ? "▼" : "↕"}
+        </span>
+      )}
       <span
         className="column-resize-handle"
         role="separator"
@@ -171,7 +179,7 @@ export function ColumnHeaderCell({
         onClick={(event) => event.stopPropagation()}
       />
       {menu && (
-        <div className="column-header-menu" role="menu" style={{ left: menu.x, top: menu.y }} onMouseDown={(event) => event.stopPropagation()}>
+        <div className="column-header-menu" role="menu" style={{ left: menu.x, top: menu.y }} onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
           <button type="button" role="menuitem" onClick={() => { setMenu(null); onHide?.(); }}>Hide column</button>
           <button type="button" role="menuitem" onClick={startRename}>Rename...</button>
           <button type="button" role="menuitem" disabled={!canMoveLeft} onClick={() => { setMenu(null); onMove?.("left"); }}>Move left</button>

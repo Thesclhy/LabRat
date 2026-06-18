@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { buildAcceptedMappingColumns, buildGenericBrowserRows, getGenericExperimentDetail } from "../data/experimentBrowserRows.js";
 import { getProjectStars, getStarColor, setNote as persistNote, setStarColor as persistStarColor, toggleStar as persistToggleStar } from "../data/experimentStars.js";
+import { sortRows } from "../data/experimentSort.js";
 import { applyColumnOrder, getColumnOrder, getColumnPrefs, hideColumn as persistHideColumn, moveKeyRelative, renameColumn as persistRenameColumn, setColumnOrder as persistColumnOrder, setColumnWidth as persistColumnWidth, showColumn as persistShowColumn } from "../data/experimentColumnPrefs.js";
 import { StarCell } from "./StarCell.jsx";
 import { ColumnHeaderCell } from "./ColumnHeaderCell.jsx";
@@ -166,6 +167,7 @@ export function GenericImportBrowser({ dataset, sourceName, onOpenImportReview, 
   const [columnOrder, setColumnOrderState] = useState(() => getColumnOrder(projectId));
   const [dragKey, setDragKey] = useState(null);
   const [dropTarget, setDropTarget] = useState(null); // { key, before }
+  const [sort, setSort] = useState(null); // { key, dir: "asc" | "desc" }
   const rows = useMemo(() => buildGenericBrowserRows(dataset), [dataset]);
   const acceptedMappingColumns = useMemo(() => buildAcceptedMappingColumns(dataset?.genericMappingSets), [dataset?.genericMappingSets]);
   const baseColumns = useMemo(() => [
@@ -207,6 +209,12 @@ export function GenericImportBrowser({ dataset, sourceName, onOpenImportReview, 
     const fullKeys = orderedColumns.map((column) => column.key);
     commitOrder(moveKeyRelative(fullKeys, columnKey, neighbor, direction === "left"));
   };
+  // Cycle a column's sort: unsorted -> ascending -> descending -> default order.
+  const cycleSort = (columnKey) => setSort((current) => {
+    if (!current || current.key !== columnKey) return { key: columnKey, dir: "asc" };
+    if (current.dir === "asc") return { key: columnKey, dir: "desc" };
+    return null;
+  });
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
       if (starredOnly && !stars[row.rowId]?.starred) return false;
@@ -223,6 +231,12 @@ export function GenericImportBrowser({ dataset, sourceName, onOpenImportReview, 
       ].join(" ").toLowerCase().includes(query);
     });
   }, [acceptedMappingColumns, query, rows, starredOnly, stars]);
+  const sortedRows = useMemo(() => {
+    if (!sort) return filteredRows;
+    const column = decoratedColumns.find((item) => item.key === sort.key);
+    if (!column) return filteredRows;
+    return sortRows(filteredRows, column, sort.dir);
+  }, [filteredRows, sort, decoratedColumns]);
   const columnCount = 1 + visibleColumns.length;
 
   return (
@@ -304,6 +318,8 @@ export function GenericImportBrowser({ dataset, sourceName, onOpenImportReview, 
                       width={column.width}
                       isDragging={dragKey === column.key}
                       dropEdge={dropTarget?.key === column.key ? (dropTarget.before ? "before" : "after") : null}
+                      sortDir={sort?.key === column.key ? sort.dir : null}
+                      onSort={() => cycleSort(column.key)}
                       onHide={() => hideColumn(column.key)}
                       onRename={(label) => renameColumn(column.key, label)}
                       onResize={(width) => resizeColumn(column.key, width)}
@@ -320,7 +336,7 @@ export function GenericImportBrowser({ dataset, sourceName, onOpenImportReview, 
                 </tr>
               </thead>
               <tbody>
-                {filteredRows.map((row) => {
+                {sortedRows.map((row) => {
                   const star = stars[row.rowId];
                   return (
                   <tr

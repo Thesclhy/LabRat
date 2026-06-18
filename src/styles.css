@@ -5372,11 +5372,25 @@ tbody tr:hover {
 
 /* Column header right-click menu, inline rename, hidden-column chips */
 .generic-browser-table th.column-header {
-  cursor: context-menu;
+  cursor: pointer;
   white-space: normal;
   overflow-wrap: anywhere;
   word-break: break-word;
   vertical-align: middle;
+}
+.column-sort-arrow {
+  margin-left: 4px;
+  font-size: 9px;
+  color: var(--muted);
+  opacity: 0;
+}
+.generic-browser-table th.column-header:hover .column-sort-arrow {
+  opacity: 0.4;
+}
+.generic-browser-table th.column-header .column-sort-arrow.asc,
+.generic-browser-table th.column-header .column-sort-arrow.desc {
+  opacity: 1;
+  color: var(--accent);
 }
 .column-header-label {
   border-bottom: 1px dotted transparent;
@@ -5455,7 +5469,7 @@ tbody tr:hover {
 
 /* Drag-to-reorder columns */
 .column-header-label {
-  cursor: grab;
+  cursor: pointer;
 }
 .column-header-label:active {
   cursor: grabbing;
