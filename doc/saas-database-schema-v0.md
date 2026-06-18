@@ -13,10 +13,17 @@ This document defines the first Postgres schema target for LabRat's multi-lab Sa
   - `file_...`
   - `import_run_...`
   - `commit_...`
+  - `source_doc_...`
+  - `source_region_...`
+  - `source_index_blob_...`
+  - `source_extract_proposal_...`
+  - `observation_series_...`
+  - `analysis_view_...`
   - `mapping_set_...`
   - `chart_proposal_set_...`
   - `chart_spec_...`
   - `manuscript_...`
+  - `agent_run_...`
   - `audit_...`
 - All lab-scoped scientific data must include `lab_id`.
 - Use `created_at` and `updated_at` timestamps on mutable records.
@@ -37,11 +44,17 @@ users
           -> projects
               -> file_objects
               -> import_runs
+              -> source_documents
+              -> source_regions
+              -> source_extract_proposals
               -> dataset_commits
+              -> observation_series
+              -> analysis_views
               -> mapping_sets
               -> chart_proposal_sets
               -> chart_specs
               -> manuscripts
+              -> agent_runs
           -> audit_events
   -> sessions
 ```
@@ -263,6 +276,76 @@ Notes:
 - Valid v0 lifecycle is `review_ready -> normalized_preview -> applied`, with `rejected` and `failed` as terminal states.
 - Applying the same import run twice must not create a second dataset commit.
 
+## `supplemental_import_batches`
+
+Persists multi-workbook supplemental import jobs. Batches prepare reviewable import runs and relationship previews, but do not apply dataset commits.
+
+Columns:
+
+```text
+id text primary key
+lab_id text not null references labs(id)
+project_id text not null references projects(id)
+status text not null default 'queued'
+summary jsonb not null default '{}'
+created_at timestamptz not null
+updated_at timestamptz not null
+created_by text not null references users(id)
+updated_by text references users(id)
+```
+
+Statuses:
+
+```text
+queued
+processing
+ready_for_review
+failed
+```
+
+## `supplemental_import_batch_items`
+
+Tracks each workbook inside a supplemental batch.
+
+Columns:
+
+```text
+id text primary key
+batch_id text not null references supplemental_import_batches(id)
+lab_id text not null references labs(id)
+project_id text not null references projects(id)
+file_object_id text not null references file_objects(id)
+import_run_id text references import_runs(id)
+file_name text not null
+status text not null default 'queued'
+progress_message text
+summary jsonb not null default '{}'
+relationship_preview jsonb
+warnings jsonb not null default '[]'
+error jsonb
+created_at timestamptz not null
+updated_at timestamptz not null
+created_by text not null references users(id)
+updated_by text references users(id)
+```
+
+Item statuses:
+
+```text
+queued
+scanning
+normalizing
+resolving_relationship
+ready_for_review
+failed
+```
+
+Notes:
+
+- `ready_for_review` items reference normal `import_runs` in `normalized_preview` state.
+- Users still apply supplemental imports through reviewed `supplement_import`.
+- Failed items preserve file id, error, and warnings so they can be retried.
+
 ## `dataset_commits`
 
 Immutable accepted dataset states.
@@ -289,6 +372,183 @@ Notes:
 - `dataset_payload` stores the full accepted project dataset state, including all committed `genericImports[]`, not just the latest import patch.
 - `parent_commit_id` points to the previous project dataset commit when a new accepted import appends data.
 - Future phases can split high-volume field values into relational tables after behavior stabilizes.
+
+## `source_documents` Planned
+
+Persists inspectable source metadata for uploaded files, beginning with Excel workbooks.
+
+Columns:
+
+```text
+id text primary key
+lab_id text not null references labs(id)
+project_id text not null references projects(id)
+file_object_id text not null references file_objects(id)
+document_type text not null
+index_version text not null
+status text not null default 'indexed'
+metadata jsonb not null default '{}'
+summary jsonb not null default '{}'
+warnings jsonb not null default '[]'
+created_at timestamptz not null
+updated_at timestamptz not null
+created_by text not null references users(id)
+updated_by text references users(id)
+```
+
+Notes:
+
+- Source documents are evidence records, not dataset commits.
+- Do not include large cell grids in project state responses.
+- Re-indexing should preserve the immutable file object ref.
+
+## `source_regions` Planned
+
+Persists detected regions inside a source document.
+
+Columns:
+
+```text
+id text primary key
+lab_id text not null references labs(id)
+project_id text not null references projects(id)
+source_document_id text not null references source_documents(id)
+kind text not null
+label text
+sheet_name text
+range_ref text
+confidence numeric
+signals jsonb not null default '[]'
+candidate_fields jsonb not null default '[]'
+source_refs jsonb not null default '[]'
+warnings jsonb not null default '[]'
+status text not null default 'active'
+created_at timestamptz not null
+updated_at timestamptz not null
+created_by text not null references users(id)
+updated_by text references users(id)
+```
+
+Notes:
+
+- Region kinds include `standard_table`, `block_table`, `component_distribution`, `formula_summary`, `calibration_table`, and `unknown_region`.
+- Regions are review aids and extraction candidates; they are not accepted dataset values.
+
+## `source_index_blobs` Planned
+
+Stores or points to large source index payloads such as cell grids and search indexes.
+
+Columns:
+
+```text
+id text primary key
+lab_id text not null references labs(id)
+project_id text not null references projects(id)
+source_document_id text not null references source_documents(id)
+blob_kind text not null
+storage_provider text not null default 'local'
+storage_key text
+payload jsonb
+checksum_sha256 text
+created_at timestamptz not null
+created_by text not null references users(id)
+```
+
+Notes:
+
+- Use either `storage_key` or `payload`; large blobs should prefer storage pointers.
+- Range read APIs must enforce cell-count caps.
+
+## `source_extract_proposals` Planned
+
+Persists reviewable structured extracts from source regions/ranges.
+
+Columns:
+
+```text
+id text primary key
+lab_id text not null references labs(id)
+project_id text not null references projects(id)
+source_document_id text references source_documents(id)
+source_region_id text references source_regions(id)
+dataset_commit_id text references dataset_commits(id)
+status text not null default 'proposed'
+purpose text
+extract_type text
+intent jsonb not null default '{}'
+preview jsonb not null default '{}'
+warnings jsonb not null default '[]'
+decision_summary jsonb not null default '{}'
+created_at timestamptz not null
+updated_at timestamptz not null
+created_by text not null references users(id)
+updated_by text references users(id)
+```
+
+Notes:
+
+- V1 source extracts can draft source-backed chart proposals.
+- Promotion into dataset commits is deferred.
+
+## `observation_series` Planned
+
+Persists comparable series derived from supplemental observation sets or reviewed source extracts.
+
+Columns:
+
+```text
+id text primary key
+lab_id text not null references labs(id)
+project_id text not null references projects(id)
+dataset_commit_id text references dataset_commits(id)
+source_import_id text
+observation_set_id text
+experiment_id text
+experiment_label text
+series_kind text not null
+x_field text not null
+y_field text not null
+source_refs jsonb not null default '[]'
+summary jsonb not null default '{}'
+status text not null default 'active'
+created_at timestamptz not null
+updated_at timestamptz not null
+created_by text not null references users(id)
+updated_by text references users(id)
+```
+
+Notes:
+
+- Reaction-rate supplemental workbooks should derive `reaction_rate_time_series` records first.
+- APIs may decorate series as stale when `dataset_commit_id` no longer matches the current project dataset commit.
+
+## `analysis_views` Planned
+
+Persists reviewable table/chart-ready analysis intents.
+
+Columns:
+
+```text
+id text primary key
+lab_id text not null references labs(id)
+project_id text not null references projects(id)
+dataset_commit_id text references dataset_commits(id)
+view_type text not null
+status text not null default 'draft'
+title text
+spec jsonb not null default '{}'
+source_refs jsonb not null default '[]'
+warnings jsonb not null default '[]'
+created_at timestamptz not null
+updated_at timestamptz not null
+created_by text not null references users(id)
+updated_by text references users(id)
+```
+
+Notes:
+
+- V1 view types include `series_compare`, `source_range_extract`, `data_table`, and `chart_ready`.
+- Analysis views are drafts/proposals; they do not mutate dataset commits.
 
 ## `mapping_sets`
 
@@ -356,6 +616,8 @@ lab_id text not null references labs(id)
 project_id text not null references projects(id)
 dataset_commit_id text references dataset_commits(id)
 mapping_set_id text references mapping_sets(id)
+analysis_view_id text references analysis_views(id)
+source_extract_proposal_id text references source_extract_proposals(id)
 source_chart_proposal_set_id text references chart_proposal_sets(id)
 source_proposal_id text
 title text
@@ -372,8 +634,11 @@ updated_by text references users(id)
 Notes:
 
 - `spec` should reference source fields, generic import ids, dataset commit ids, and units.
+- Current dataset-backed specs use ChartSpec v1.3. Planned v1.4-compatible specs may reference `analysis_view_id` or `source_extract_proposal_id`.
 - Manuscripts should reference chart specs, not chart proposal ids.
 - API creation should reject chart specs whose source fields or source refs do not resolve in the referenced dataset commit.
+- Source-backed specs may use immutable `sourceSnapshot` and exact source refs instead of a dataset commit.
+- Analysis-view-backed specs may resolve observation series from the current dataset commit.
 - Refresh/replace does not delete or mutate older chart specs. APIs may decorate chart specs as stale when their `dataset_commit_id` no longer matches the active dataset, but the database row remains historical evidence.
 
 ## `manuscripts`
@@ -402,6 +667,55 @@ Notes:
 
 - Chart blocks should reference `chart_specs.id`.
 - Preserve existing text/image/chart block shapes through migration helpers.
+
+## `agent_runs` Planned
+
+Persists controlled agent workflow traces.
+
+Columns:
+
+```text
+id text primary key
+lab_id text not null references labs(id)
+project_id text not null references projects(id)
+status text not null default 'created'
+mode text
+user_message text not null
+selected_context jsonb not null default '{}'
+visible_steps jsonb not null default '[]'
+tool_trace jsonb not null default '[]'
+analysis_view_id text references analysis_views(id)
+proposal_refs jsonb not null default '[]'
+actions jsonb not null default '[]'
+usage jsonb not null default '{}'
+warnings jsonb not null default '[]'
+error jsonb
+created_at timestamptz not null
+updated_at timestamptz not null
+created_by text not null references users(id)
+updated_by text references users(id)
+```
+
+Statuses:
+
+```text
+created
+planning
+retrieving_evidence
+drafting_view
+drafting_proposal
+waiting_for_user
+executing_confirmed_action
+completed
+failed
+cancelled
+```
+
+Notes:
+
+- `visible_steps` are audit/workflow summaries, not hidden chain-of-thought.
+- Planning must not mutate project state.
+- Confirmed execution should use existing reviewed APIs and write audit events.
 
 ## `audit_events`
 
@@ -446,6 +760,11 @@ mapping_set.update_decision
 chart_proposal_set.create
 chart_proposal_set.update_decision
 chart_spec.create
+source.index
+source.extract.propose
+analysis_view.create
+agent_run.create
+agent_run.confirm
 manuscript.create
 manuscript.update
 export.pptx
@@ -473,10 +792,16 @@ file_objects(lab_id, project_id)
 file_objects(checksum_sha256)
 import_runs(lab_id, project_id)
 dataset_commits(lab_id, project_id)
+source_documents(lab_id, project_id)
+source_regions(lab_id, project_id)
+source_extract_proposals(lab_id, project_id)
+observation_series(lab_id, project_id, dataset_commit_id)
+analysis_views(lab_id, project_id)
 mapping_sets(lab_id, project_id)
 chart_proposal_sets(lab_id, project_id)
 chart_specs(lab_id, project_id)
 manuscripts(lab_id, project_id)
+agent_runs(lab_id, project_id, created_at)
 audit_events(lab_id, project_id, created_at)
 audit_events(actor_user_id, created_at)
 ```

@@ -2,7 +2,7 @@
 
 LabRat Blank is the new-user LabRat workspace. The long-term product goal is a reproducibility-first research command center: LabRat turns scattered lab files into a versioned, browsable, source-backed dataset, then carries that data into charts, manuscript figures, and PPTX output.
 
-The current blank app starts with an empty project and already guides users from raw Excel workbooks through import review, generic normalization, semantic mapping proposals, chart proposals, generic Experiment Browser review, manuscript layout, and PPTX export.
+The current blank app starts with an empty project and already guides users from raw Excel workbooks through import review, generic normalization, semantic mapping proposals, chart proposals, generic Experiment Browser review, manuscript layout, and PPTX export. The active product direction is now an agent-first evidence workflow: LabRat should inspect project evidence, draft auditable analysis views, propose charts/data actions, and execute only after human confirmation.
 
 This folder is intentionally separate from `D:\project\labrat`, which remains the research/demo project. This blank copy does not include `public/labratData.json`, does not preload HDPE research data, and does not import example templates automatically.
 
@@ -82,6 +82,7 @@ raw files
   -> import proposals
   -> human review
   -> dataset commits
+  -> evidence graph / analysis views
   -> Experiment Browser
   -> chart specs
   -> manuscript canvas
@@ -90,7 +91,7 @@ raw files
 
 The current app supports server login, lab/project selection, project profile editing, server project state loading, backend workbook scan, approved normalization, refresh/replace, semantic mapping proposals, chart proposal review, generic Experiment Browser rows, durable chart specs, manuscript layout, server manuscript persistence, and PPTX export.
 
-The next major engineering goal is server workflow hardening: reliable reload behavior, clearer import/refresh and chart review UX, Docker/Postgres deployment readiness, admin/audit UI, and smarter import/chart intelligence. New server-mode work does not need compatibility migrations for old IndexedDB, `.labrat.json`, or previous local project shapes.
+The next major engineering goal is Agent-first Evidence Workflow v1: observation-series compare for supplemental files, Analysis Views, controlled AgentRun traces, source document/range retrieval, source extract proposals, and source-backed or analysis-view-backed ChartSpecs. Server workflow reliability, Docker/Postgres readiness, and admin/audit usability remain guardrails. New server-mode work does not need compatibility migrations for old IndexedDB, `.labrat.json`, or previous local project shapes.
 
 ## Example Templates
 
@@ -115,8 +116,12 @@ The backend scan, normalize, semantic mapping, and chart proposal endpoints are 
 
 - `AGENTS.md`: working instructions for AI coding agents.
 - `doc/ARCHITECTURE.md`: current server-first architecture and compatibility boundaries.
-- `doc/ROADMAP.md`: near-term server workflow hardening and deployment roadmap.
-- `doc/plan.md`: short current execution plan.
+- `doc/ROADMAP.md`: product roadmap led by the Agent-first evidence workflow.
+- `doc/plan.md`: active Agent-first evidence workflow execution plan.
+- `doc/source-understanding-long-term-plan.md`: long-term source-aware workbook/document understanding architecture.
+- `doc/decisions.md`: durable product and architecture decisions.
+- `doc/task-checklist.md`: working checklist template for long Codex milestones.
+- `doc/code-review.md`: standing review checklist for scientific workflow changes.
 - `doc/saas-database-schema-v0.md`: Postgres schema target.
 - `doc/saas-api-contract-v0.md`: authenticated SaaS API contract.
 - `doc/server-project-state-plan.md`: server project source-of-truth notes; old local-data migration is not in scope.

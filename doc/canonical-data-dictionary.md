@@ -293,6 +293,152 @@ The graph should connect:
 
 The current v0 implementation stores this graph mostly through JSONB payloads and source refs. Future high-volume versions may split provenance into relational or graph-shaped tables.
 
+## Evidence Graph
+
+The planned product-level graph of project evidence, review decisions, analysis views, and outputs. V1 does not require a graph database; explicit ids, source refs, JSONB payloads, and audit events are sufficient.
+
+Evidence Graph nodes include:
+
+- `FileObject`
+- `SourceDocument`
+- `SourceRegion`
+- `SourceRange`
+- `GenericImport`
+- `Experiment`
+- `ObservationSet`
+- `ObservationSeries`
+- `DatasetCommit`
+- `MappingSet`
+- `AnalysisView`
+- `ChartProposalSet`
+- `ChartSpec`
+- `ManuscriptBlock`
+- `AgentRun`
+- `AuditEvent`
+
+Evidence Graph edges include:
+
+- file contains source document
+- source document has source region
+- source region exposes source range
+- generic import creates experiments or observation sets
+- observation set belongs to an experiment
+- observation series is derived from observation set fields
+- analysis view uses evidence nodes
+- chart proposal is derived from analysis view
+- chart spec is created from accepted proposal
+- manuscript block snapshots chart spec
+- agent run records evidence retrieval, proposals, and confirmed actions
+
+## Source Document
+
+A planned inspectable source index for an uploaded raw file, beginning with Excel workbooks.
+
+Source documents preserve:
+
+- source document id
+- project and file object refs
+- document type and source index version
+- sheet names, used ranges, row/column counts, and warnings
+- pointer to large source index blobs when needed
+
+Source documents are evidence records, not dataset commits.
+
+## Source Region
+
+A planned detected region inside a source document.
+
+Source regions preserve:
+
+- source region id
+- source document id
+- kind, label, sheet, and range
+- confidence, signals, candidate fields, source refs, and warnings
+
+Examples include `standard_table`, `block_table`, `component_distribution`, `formula_summary`, `calibration_table`, and `unknown_region`.
+
+## Source Extract Proposal
+
+A planned reviewable proposal that turns a source region or range into structured rows/fields.
+
+Source extract proposals preserve:
+
+- proposal id
+- source document and source region refs
+- extract type and purpose
+- preview rows/fields
+- exact source refs per extracted value where possible
+- status, warnings, and review decision
+
+Accepting a source extract in v1 can draft a source-backed chart proposal. Promotion into a dataset commit is deferred.
+
+## Observation Set
+
+A source-backed group of related observations, usually from a supplemental workbook that adds detailed measurements to an existing experiment.
+
+Reaction-rate supplemental workbooks currently normalize into `observationSets[]` with:
+
+- observation set id
+- kind such as `reaction_rate_time_series`
+- inferred experiment label and target experiment ids
+- x field, y fields, observations, summary, source sheet, confidence, and warnings
+
+Observation sets are part of committed generic imports. They are not yet the optimized compare layer by themselves.
+
+## Observation Series
+
+A planned comparable series derived from an observation set and a selected x/y field pair.
+
+Observation series preserve:
+
+- series id
+- project and dataset commit refs
+- experiment id and label
+- series kind
+- x field and y field
+- source import and observation set refs
+- source refs and summary stats such as point count and x range
+- status or stale decoration
+
+Observation series are the preferred substrate for cross-experiment supplemental comparisons, such as comparing `adjusted_rate_m_s` vs `reaction_time_min` across Exp1, Exp2, and Exp3.
+
+## Analysis View
+
+A planned reviewable analysis intent between evidence retrieval and chart/table output.
+
+Analysis view types include:
+
+- `series_compare`
+- `source_range_extract`
+- `data_table`
+- `chart_ready`
+
+Analysis Views preserve:
+
+- analysis view id
+- project and optional dataset commit refs
+- view type and status
+- selected evidence ids
+- fields, filters, grouping, source refs, warnings, and rationale
+
+Analysis Views are drafts/proposals; they do not mutate dataset commits.
+
+## Agent Run
+
+A planned controlled workflow trace from a user goal to retrieved evidence, drafted views/proposals, and user-confirmed execution.
+
+Agent runs preserve:
+
+- agent run id
+- project, actor, message, mode, and status
+- visible trace steps
+- tool call summaries and observations
+- analysis view/proposal/action refs
+- warnings and errors
+- AI provider/model/token/cost metadata when available
+
+AgentRun traces are visible audit/workflow records, not hidden chain-of-thought.
+
 ## Semantic Mapping
 
 A reviewed or proposed interpretation that links an imported field to a scientific meaning LabRat can reason about.
@@ -350,7 +496,8 @@ Chart specs preserve:
 
 - chart spec id
 - project id
-- dataset commit id
+- dataset commit id for dataset-backed specs
+- optional analysis view id or source extract proposal id for planned v1.4 specs
 - source chart proposal set/proposal ids when applicable
 - chart type
 - title
@@ -359,7 +506,7 @@ Chart specs preserve:
 - warnings
 - created/updated actor and timestamps
 
-ChartSpec v1.3 supports:
+ChartSpec v1.3 currently supports:
 
 ```text
 scatter
@@ -370,7 +517,7 @@ stacked_bar
 distribution_bar
 ```
 
-Chart specs should reference source-backed fields and dataset commits. Chart specs tied to replaced dataset commits can be decorated as stale in API responses; existing manuscript chart blocks may continue rendering from their stored `chartSpecSnapshot`.
+ChartSpec v1.4 is planned to add analysis-view-backed compare charts over `ObservationSeries` and source-backed charts with immutable `sourceSnapshot` rows/fields. Dataset-backed chart specs should reference source-backed fields and dataset commits. Chart specs tied to replaced dataset commits can be decorated as stale in API responses; existing manuscript chart blocks may continue rendering from their stored `chartSpecSnapshot`.
 
 ## Chart Transform
 

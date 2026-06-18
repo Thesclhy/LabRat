@@ -481,6 +481,9 @@ Response:
   "importRuns": [],
   "mappingSets": [],
   "chartProposalSets": [],
+  "observationSeries": [],
+  "analysisViews": [],
+  "agentRuns": [],
   "chartSpecs": [],
   "manuscripts": []
 }
@@ -491,6 +494,7 @@ Rules:
 - Required role: `viewer` or above.
 - The response is scoped to one project and must not include records from another project or lab.
 - `currentDatasetCommit` includes the full current commit payload; list arrays may be used for UI state and review history.
+- Planned Agent-first summary arrays such as `observationSeries`, `analysisViews`, and `agentRuns` may be added when implemented, but full source cell grids must not be included.
 - `chartSpecs[]` may include response-time staleness decoration such as `isStale`, `status: "stale"`, and `staleReason` when a chart spec references an older dataset commit after refresh/replace. Do not delete historical chart specs just because they are stale.
 
 ### `POST /api/projects/:projectId/ai/context`
@@ -661,6 +665,223 @@ Rules:
 - Context must be compact and must not include raw workbook cell grids.
 - Cross-lab access is forbidden.
 
+### `POST /api/projects/:projectId/agent/runs` Planned
+
+Purpose: start a controlled Agent-first workflow that retrieves evidence, drafts an AnalysisView or proposal, records visible trace steps, and waits for user confirmation before mutations.
+
+Required role: `viewer` or above for read-only planning; mutating confirmations require the role of the underlying action.
+
+Request:
+
+```json
+{
+  "message": "compare reaction rate for Exp1, Exp2, Exp3",
+  "selectedContext": {},
+  "modeHint": "auto"
+}
+```
+
+Response:
+
+```json
+{
+  "agentRun": {
+    "id": "agent_run_...",
+    "projectId": "project_...",
+    "status": "waiting_for_user",
+    "mode": "series_compare",
+    "visibleSteps": [],
+    "usage": {},
+    "warnings": []
+  },
+  "visibleSteps": [],
+  "analysisView": {},
+  "proposals": [],
+  "actions": [],
+  "warnings": []
+}
+```
+
+Rules:
+
+- Planning must not mutate project state.
+- Visible steps are concise workflow/audit summaries, not hidden chain-of-thought.
+- Agent tools are allowlisted and split into read-only evidence tools, proposal tools, and user-confirmed execution tools.
+- Context must be compact; source tools may return selected bounded ranges, but not full workbook cell grids.
+- Store provider/model/token/cost usage when available.
+- Cross-lab access is forbidden.
+
+### `GET /api/agent-runs/:agentRunId` Planned
+
+Purpose: read an AgentRun trace and linked draft/proposal/action refs.
+
+Required role: `viewer` or above.
+
+Rules:
+
+- Return only project-owned runs visible to the current user.
+- Return visible trace steps and summarized tool observations.
+- Do not return hidden chain-of-thought.
+
+### `POST /api/agent-runs/:agentRunId/confirm` Planned
+
+Purpose: execute one user-confirmed AgentRun action through existing reviewed backend APIs.
+
+Required role: depends on the underlying action; editor or above for scientific mutations.
+
+Rules:
+
+- Reject confirmation if the referenced proposal/view/action is stale or missing.
+- Write both the underlying action audit event and `agent_run.confirm`.
+- Mutations must still preserve import review, proposal review, ChartSpec validation, and manuscript save boundaries.
+
+### `POST /api/agent-runs/:agentRunId/cancel` Planned
+
+Purpose: cancel a running or waiting AgentRun.
+
+Required role: `viewer` or above.
+
+Rules:
+
+- Cancellation must not mutate project state.
+- Preserve the run trace and cancellation timestamp.
+
+## Observation Series And Analysis Views Planned
+
+### `GET /api/projects/:projectId/observation-series`
+
+Purpose: list comparable series derived from current dataset commits and supplemental observation sets.
+
+Required role: `viewer` or above.
+
+Response:
+
+```json
+{
+  "observationSeries": [
+    {
+      "id": "observation_series_...",
+      "datasetCommitId": "commit_...",
+      "experimentId": "exp_1",
+      "experimentLabel": "Exp1",
+      "seriesKind": "reaction_rate_time_series",
+      "xField": "reaction_time_min",
+      "yField": "adjusted_rate_m_s",
+      "summary": { "pointCount": 62 },
+      "status": "active"
+    }
+  ],
+  "warnings": []
+}
+```
+
+Rules:
+
+- Derive or list project-owned series only.
+- Decorate series as stale when their dataset commit is no longer current.
+- V1 priority is reaction-rate supplemental time series.
+
+### `POST /api/projects/:projectId/analysis-views`
+
+Purpose: create a reviewable AnalysisView draft such as `series_compare`, `source_range_extract`, or `data_table`.
+
+Required role: `editor` or above.
+
+Request:
+
+```json
+{
+  "viewType": "series_compare",
+  "title": "Reaction rate comparison",
+  "spec": {
+    "seriesKind": "reaction_rate_time_series",
+    "experimentIds": ["exp_1", "exp_2", "exp_3"],
+    "xField": "reaction_time_min",
+    "yField": "adjusted_rate_m_s",
+    "groupBy": "experiment"
+  }
+}
+```
+
+Rules:
+
+- Creating an AnalysisView does not mutate dataset commits.
+- Validate referenced project evidence ids before persistence.
+- Return clarification or validation errors for incompatible series.
+
+### `GET /api/projects/:projectId/analysis-views`
+
+Purpose: list project AnalysisView drafts and review states.
+
+Required role: `viewer` or above.
+
+### `POST /api/analysis-views/:analysisViewId/chart-proposal`
+
+Purpose: derive a chart proposal set from a validated AnalysisView.
+
+Required role: `editor` or above.
+
+Rules:
+
+- Persist a normal chart proposal set with origin metadata linking to the AnalysisView.
+- Do not create ChartSpecs directly.
+- Existing Accept/Reject/Create ChartSpec flow remains the review boundary.
+
+## Source Workspace APIs Planned
+
+### `GET /api/projects/:projectId/source-documents`
+
+Purpose: list source document indexes for project files.
+
+Required role: `viewer` or above.
+
+Rules:
+
+- Return metadata, sheets, summaries, warnings, and region counts.
+- Do not return full source cell grids.
+
+### `GET /api/source-documents/:sourceDocumentId/regions`
+
+Purpose: list detected source regions for a source document.
+
+Required role: `viewer` or above.
+
+### `POST /api/source-documents/:sourceDocumentId/query`
+
+Purpose: search source document text, sheet names, region labels, and source refs.
+
+Required role: `viewer` or above.
+
+### `POST /api/source-documents/:sourceDocumentId/range`
+
+Purpose: read a bounded source range with raw/formatted values, formulas, and cell refs.
+
+Required role: `viewer` or above.
+
+Rules:
+
+- Enforce a cell-count cap.
+- Return clear errors for oversized or missing ranges.
+- Do not expose files outside the project/lab.
+
+### `POST /api/source-regions/:sourceRegionId/extract-preview`
+
+Purpose: preview a structured extract from a source region without mutating dataset commits.
+
+Required role: `viewer` or above.
+
+### `POST /api/projects/:projectId/source-extract-proposals`
+
+Purpose: persist a reviewable source extract proposal.
+
+Required role: `editor` or above.
+
+### `PATCH /api/source-extract-proposals/:proposalId`
+
+Purpose: update source extract review status or decision summary.
+
+Required role: `editor` or above.
+
 ### `POST /api/projects/:projectId/charts/interpret`
 
 Purpose: turn one user prompt into a validated ChartSpec draft using the current project dataset and mappings.
@@ -814,6 +1035,77 @@ Response:
   "importRuns": []
 }
 ```
+
+### `POST /api/projects/:projectId/supplemental-import-batches`
+
+Purpose: create a server-backed batch job for multiple supplemental workbooks. The batch processes each file through scan, normalize preview, and relationship preview, but does not apply scientific data.
+
+Request:
+
+```json
+{
+  "fileObjectIds": ["file_...", "file_..."]
+}
+```
+
+Response:
+
+```json
+{
+  "batch": {
+    "schemaVersion": "labrat.supplementalImportBatch.v1",
+    "id": "supplement_batch_...",
+    "status": "queued",
+    "summary": { "total": 2, "ready": 0, "failed": 0, "processing": 2, "completed": 0 },
+    "items": [
+      {
+        "id": "supplement_batch_item_...",
+        "fileObjectId": "file_...",
+        "importRunId": null,
+        "fileName": "Reaction_Rate_Exp30.xlsx",
+        "status": "queued",
+        "relationshipPreview": null,
+        "warnings": []
+      }
+    ]
+  }
+}
+```
+
+Rules:
+
+- Required role: `editor`.
+- Each file object must belong to the project.
+- Backend item statuses are `queued`, `scanning`, `normalizing`, `resolving_relationship`, `ready_for_review`, or `failed`.
+- A `ready_for_review` item has a normal persisted `importRunId` and relationship preview; users still apply it through `POST /api/import-runs/:id/apply` with `applyMode: "supplement_import"`.
+- A failed item does not fail the whole batch.
+- The batch records audit events for create, item ready, item failed, and complete.
+
+### `GET /api/projects/:projectId/supplemental-import-batches/:batchId`
+
+Returns the latest persisted batch state.
+
+### `GET /api/projects/:projectId/supplemental-import-batches/:batchId/events`
+
+Purpose: stream batch progress with Server-Sent Events.
+
+Events:
+
+```text
+snapshot
+batch
+item
+item_ready
+item_failed
+complete
+```
+
+Rules:
+
+- Required role: `editor`.
+- The stream sends a `snapshot` immediately.
+- If the batch is already terminal, the stream also sends `complete` immediately so reconnecting clients can settle.
+- Clients should fall back to polling the status endpoint if SSE repeatedly fails.
 
 ### `POST /api/import-runs/:id/normalize-preview`
 
@@ -1180,6 +1472,10 @@ Rules:
 - Do not insert raw chart proposals into manuscripts.
 - Requires a current or requested project-owned dataset commit.
 - Saves `chart_specs.spec` as normalized `labrat.chartSpec.v1.3`.
+- Planned ChartSpec v1.4-compatible specs may add `origin`, `analysisViewId`, `sourceExtractProposalId`, `seriesScope`, `compatibleExperimentIds`, and `sourceSnapshot`.
+- Dataset-backed specs continue to require dataset commit validation.
+- Analysis-view-backed specs must resolve project-owned ObservationSeries against the current dataset commit.
+- Source-backed specs may use `datasetCommitId: null` only when they include an immutable `sourceSnapshot` and exact source refs.
 - Validates the chart type and required x/y fields before saving.
 - Supported v1.3 chart types are `scatter`, `point`, `bar`, `grouped_bar`, `stacked_bar`, and `distribution_bar`.
 - `grouped_bar`, `stacked_bar`, and `distribution_bar` require `yFields[]` with at least two resolved fields.

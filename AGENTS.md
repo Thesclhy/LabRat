@@ -28,7 +28,7 @@ read docs -> create checklist -> implement one milestone -> run tests -> update 
 
 ## Mission
 
-LabRat Blank is evolving into a multi-lab SaaS research command center for messy lab Excel/CSV imports, experiment browsing, charting, manuscript layout, and PPTX export. Server-first project mode is now implemented; the next active direction is workflow reliability, Docker/Postgres deployment hardening, admin/audit usability, and smarter import/chart intelligence. Preserve scientific data integrity and avoid broad rewrites.
+LabRat Blank is evolving into a multi-lab SaaS research command center for messy lab Excel/CSV imports, experiment browsing, charting, manuscript layout, and PPTX export. Server-first project mode is now implemented; the next active direction is the Agent-first evidence workflow documented in `doc/plan.md`: evidence graph primitives, observation-series compare, Analysis Views, controlled AgentRun traces, source retrieval, source extract proposals, and reviewed ChartSpecs/manuscript output. Preserve scientific data integrity and avoid broad rewrites.
 
 ## Current Stack
 

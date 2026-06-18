@@ -4,6 +4,8 @@ This folder contains the current LabRat backend. It provides local/dev workbook 
 
 The existing import/chart endpoints remain stateless compatibility endpoints. New SaaS endpoints wrap those services in authenticated project-scoped APIs instead of replacing the parser first.
 
+The active product direction is the Agent-first evidence workflow in `../doc/plan.md`. Planned AgentRun, Source Workspace, ObservationSeries, and AnalysisView endpoints are documented in `../doc/saas-api-contract-v0.md`, but should not be listed below as current endpoints until implemented.
+
 ## Commands
 
 Recommended local stack:
@@ -103,6 +105,7 @@ PORT=8787
 - Do not return direct HDPE `dataset.experiments[]` mutations for generic imports.
 - Keep semantic mapping and chart output as proposals until a user reviews them.
 - Do not send full raw workbooks to AI services; use compact summaries only.
+- Keep Agent-first workflows controlled: the backend may retrieve evidence and draft proposals, but mutations still require explicit user confirmation.
 - Keep stateless import/chart endpoints available while adding and hardening SaaS project-scoped APIs.
 - Import-run apply now creates full merged dataset commits and rejects duplicate committed import ids.
 - Chart spec creation validates source-backed fields against the referenced dataset commit before persistence.

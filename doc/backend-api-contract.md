@@ -461,6 +461,8 @@ PATCH /api/manuscripts/:manuscriptId
 
 These APIs use the same scan, normalize, mapping, and chart proposal shapes while adding authentication, role checks, persistence, dataset commit state, chart specs, manuscript persistence, and audit logging. Methodology/recompute APIs remain deferred until the import/chart/manuscript workflow is reliable.
 
+Agent-first Evidence Workflow APIs such as AgentRun, Source Workspace, ObservationSeries, and AnalysisView are planned in `doc/plan.md` and `doc/saas-api-contract-v0.md`. They are intentionally not listed in this local/dev compatibility contract until implemented.
+
 ## Dataset Commit Shape
 
 Dataset commit records make the accepted dataset state explicit:

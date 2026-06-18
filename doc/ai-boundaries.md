@@ -23,6 +23,9 @@ AI may:
 - draft commit summaries and review notes
 - parse a user message into a project-scoped action plan for uploads, supplemental imports, chart proposals, chart specs, or data queries
 - prepare confirmable action cards that call existing reviewed APIs after the user chooses files and approves the action
+- run controlled AgentRun workflows that retrieve evidence, draft Analysis Views, draft proposals, and expose visible trace steps
+- search bounded source evidence and selected source ranges when the user asks source-specific questions
+- estimate and report AI token/cost metadata when available
 
 ## Disallowed AI Uses
 
@@ -45,10 +48,12 @@ AI must not:
 - hide changed values in a recompute proposal
 - execute project mutations directly from a chat message
 - apply master imports, supplement imports, refreshes, chart proposal persistence, chart spec creation, or manuscript insertion without an explicit user confirmation step
+- run open-ended tools outside the allowlisted LabRat evidence/proposal/execution APIs
+- expose hidden chain-of-thought as the workflow trace
 
 ## AI Input Policy
 
-Send compact summaries, not raw full files.
+Send compact summaries and selected evidence snippets, not raw full files.
 
 Good AI context:
 
@@ -61,6 +66,9 @@ Good AI context:
 - units
 - parser warnings
 - source ranges
+- selected source range values when specifically retrieved by a bounded source tool
+- observation series summaries
+- analysis view drafts
 - approved generic import summaries
 - measurement and metadata ids, labels, units, value types, coverage counts, and source references
 - accepted/rejected mapping decisions when available
@@ -68,6 +76,7 @@ Good AI context:
 Avoid:
 
 - entire workbook contents
+- full source cell grids
 - large raw JSON dumps
 - private source files unless the user explicitly approves
 
@@ -89,13 +98,32 @@ AI output categories:
 - `MappingProposal`
 - `RecomputeProposal`
 - `ChartProposal`
+- `SourceExtractProposal`
+- `AnalysisView`
 - `AgentActionPlan`
+- `AgentRun`
 - `CaptionDraft`
 - `CommitSummaryDraft`
 
-## Conversational Action Planning
+## Controlled Agent Runs
 
-Project chat may become a workflow launcher, but the backend planner only returns safe action plans.
+Project chat should become a controlled workflow launcher. The backend may run allowlisted evidence retrieval and proposal-drafting tools, but mutating execution stays behind confirmation.
+
+Rules:
+
+- `POST /api/projects/:projectId/agent/runs` is the planned Agent-first workflow endpoint.
+- AgentRun planning must not mutate project state.
+- AgentRun visible trace steps should be concise audit/workflow summaries, not hidden chain-of-thought.
+- AgentRun context should include compact project profile, dataset summaries, observation series summaries, source document/region summaries, chart/manuscript summaries, prior decisions, and selected source ranges only when needed.
+- AgentRun context must not include raw workbook cell grids or full source files.
+- Read-only tools may retrieve project summaries, data catalog entries, source documents, source regions, bounded source ranges, observation series, mappings, chart specs, and manuscripts.
+- Drafting tools may create AnalysisView drafts, source extract proposals, chart proposals, mapping proposals, or view intents.
+- Mutating tools such as import apply, proposal acceptance, ChartSpec creation, dataset promotion, and manuscript insertion require explicit user confirmation.
+- AgentRun records should capture provider, model, input tokens, output tokens, estimated cost, warnings, and proposal refs when available.
+
+## Conversational Action Planning Compatibility
+
+The existing project chat planner remains a compatibility path that returns safe action plans.
 
 Rules:
 

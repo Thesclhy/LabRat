@@ -19,9 +19,36 @@ LabRat Blank already has:
 - Backend natural-language project data query resolution into validated ViewIntent drafts.
 - Server-backed LabRat chat action planning that turns natural-language requests into confirmable action cards for uploads, supplements, chart proposals, ChartSpecs, and data queries.
 
-The next active roadmap item is server workflow hardening and local deployment readiness.
+The next active roadmap item is the Agent-first evidence workflow: Evidence Graph primitives, ObservationSeries compare, Analysis Views, controlled AgentRun traces, Source Workspace retrieval, source extract proposals, and reviewed ChartSpec/manuscript output.
 
-## 1. Server Workflow Reliability
+## 1. Agent-First Evidence Workflow
+
+Goal: make LabRat feel like a workflow agent for lab data while keeping every scientific mutation reviewed and auditable.
+
+- Add evidence graph primitives around files, source documents, source regions, dataset commits, observation series, analysis views, chart specs, manuscripts, and audit events.
+- Derive comparable `ObservationSeries` from supplemental workbooks such as reaction-rate time series.
+- Add `AnalysisView` drafts for `series_compare`, `source_range_extract`, and validated data views before chart proposals.
+- Add controlled `AgentRun` records with visible trace steps, proposal refs, warnings, and AI usage/cost metadata.
+- Keep the agent limited to allowlisted evidence tools and proposal tools until the user confirms a mutating action.
+- Let chat and UI entrypoints converge on the same AgentRun/proposal flow.
+
+Done when a user can ask LabRat to compare Exp1/Exp2/Exp3 reaction-rate supplements, review the resulting analysis view/chart proposal, create a ChartSpec, insert it into Manuscript, and later audit which evidence was used.
+
+## 2. Source Understanding Workspace
+
+Goal: let LabRat inspect original workbooks/documents as auditable source evidence when useful information was not captured by the normalized dataset.
+
+- Persist source document indexes for uploaded Excel workbooks, including sheets, ranges, raw/formatted values, formulas, and source refs.
+- Detect reviewable source regions such as component distributions, formula summaries, calibration tables, and unknown regions.
+- Add bounded source retrieval tools for search, range preview, cell inspection, formula tracing, and extraction proposals.
+- Let chart requests use source hints such as row numbers, sheet names, labels, and C-number headers before asking for clarification.
+- Keep source-derived values behind reviewable extract/chart proposals and preserve exact file/sheet/range citations.
+
+Done when a request such as `use Overall tots row 69 to plot the Exp30 carbon number distribution` resolves to a source-backed chart proposal with cited workbook cells instead of asking the user to choose from unrelated normalized fields.
+
+See `doc/source-understanding-long-term-plan.md` for the detailed architecture and phased rollout.
+
+## 3. Server Workflow Reliability
 
 Goal: make the logged-in project workflow dependable enough for another person to debug with real workbooks.
 
@@ -33,7 +60,7 @@ Goal: make the logged-in project workflow dependable enough for another person t
 
 Done when a user can run `npm run dev:docker`, log in as `labuser`, upload/refresh data, create a chart spec, insert it into a manuscript, reload the project, and see the same state.
 
-## 2. Docker/Postgres Deployment Hardening
+## 4. Docker/Postgres Deployment Hardening
 
 Goal: make local sharing and future hosted deployment safer.
 
@@ -46,7 +73,7 @@ Goal: make local sharing and future hosted deployment safer.
 
 Done when a friend with Docker can clone, start, test, reset, and debug the app without receiving local database contents.
 
-## 3. Admin And Audit UI
+## 5. Admin And Audit UI
 
 Goal: make the SaaS foundation usable by a lab owner or admin.
 
@@ -56,7 +83,7 @@ Goal: make the SaaS foundation usable by a lab owner or admin.
 
 Done when a lab owner can manage users and inspect who changed important project records.
 
-## 4. Smarter Import Relationships
+## 6. Smarter Import Relationships
 
 Goal: support realistic lab workflows where later files add detail to existing experiments.
 
@@ -67,18 +94,18 @@ Goal: support realistic lab workflows where later files add detail to existing e
 
 Done when supplemental files can enrich existing experiments while keeping the active dataset and historical commits auditable.
 
-## 5. Chart Grammar Expansion
+## 7. Chart Grammar Expansion
 
 Goal: make charts more expressive without letting AI invent data or return arbitrary Plotly JSON.
 
 - Extend ChartSpec and allowlisted transforms when a real chart need appears.
 - Add recipes for response curves, distributions, grouped/stacked normalized bars, ratios, sums, and component families.
 - Keep AI at the intent layer; backend resolves fields and validates ChartSpec; frontend renders Plotly.
-- Consider a future Browser/ViewSpec layer for AI-proposed data views after field provenance and permissions are solid.
+- Use Analysis Views for compare/source/table intents before creating chart proposals.
 
 Done when common catalysis/lab chart requests can be expressed as validated, source-backed ChartSpecs.
 
-## 6. Methodology And Recompute
+## 8. Methodology And Recompute
 
 Goal: handle calculation changes without overwriting scientific history.
 
