@@ -332,12 +332,12 @@ Evidence Graph edges include:
 
 ## Source Document
 
-A planned inspectable source index for an uploaded raw file, beginning with Excel workbooks.
+An inspectable source index for an uploaded raw file, beginning with Excel workbooks. The Phase 5 backend foundation persists source document metadata and region summaries after workbook scan/import without adding full source grids to project state.
 
 Source documents preserve:
 
 - source document id
-- project and file object refs
+- project, file object, and import run refs
 - document type and source index version
 - sheet names, used ranges, row/column counts, and warnings
 - pointer to large source index blobs when needed
@@ -346,16 +346,31 @@ Source documents are evidence records, not dataset commits.
 
 ## Source Region
 
-A planned detected region inside a source document.
+A detected region inside a source document.
 
 Source regions preserve:
 
 - source region id
-- source document id
-- kind, label, sheet, and range
+- source document and import run refs
+- kind, label, sheet, Excel range, and zero-based row/column bounds
 - confidence, signals, candidate fields, source refs, and warnings
 
-Examples include `standard_table`, `block_table`, `component_distribution`, `formula_summary`, `calibration_table`, and `unknown_region`.
+Examples include `standard_table`, `block_table`, `reaction_rate_time_series`, `component_distribution`, `formula_summary`, `calibration_table`, and `unknown_region`.
+
+Source regions are retrieval/extraction candidates. They are not accepted dataset values until a later reviewed extract or import flow promotes derived data.
+
+## Source Range
+
+A bounded read of source cells from a source document index.
+
+Source ranges preserve:
+
+- source document id
+- sheet name and Excel range
+- row/column/cell counts
+- raw values, formatted values, formulas, cell addresses, and source refs
+
+Range APIs must enforce cell-count caps and must not be used to send full workbooks or full source grids to model APIs.
 
 ## Source Extract Proposal
 

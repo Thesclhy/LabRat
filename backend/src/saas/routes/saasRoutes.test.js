@@ -490,6 +490,117 @@ test("file upload, import run, normalize preview, and apply create a dataset com
   assert.equal(auditEvents.some((event) => event.action === "dataset_commit.create"), true);
 });
 
+test("workbook scan persists source documents, regions, queryable cells, and capped ranges", async () => {
+  const labs = await (await jsonFetch("/api/labs")).json();
+  const labId = labs.labs[0].labId;
+  const project = await (await jsonFetch("/api/projects", {
+    method: "POST",
+    body: { labId, name: "Source Document Index Project" },
+  })).json();
+  const created = await uploadAndCreateImportRun(project.project.id);
+  assert.equal(created.importRun.scanResult.sheets[0].cellGrid.cells, undefined);
+
+  const documentsResponse = await jsonFetch(`/api/projects/${project.project.id}/source-documents`);
+  assert.equal(documentsResponse.status, 200);
+  const documentsBody = await documentsResponse.json();
+  assert.equal(documentsBody.schemaVersion, "labrat.sourceDocumentList.v1");
+  assert.equal(documentsBody.sourceDocuments.length, 1);
+  const sourceDocument = documentsBody.sourceDocuments[0];
+  assert.equal(sourceDocument.projectId, project.project.id);
+  assert.equal(sourceDocument.fileObjectId, created.upload.id);
+  assert.equal(sourceDocument.importRunId, created.importRun.id);
+  assert.deepEqual(sourceDocument.metadata.sheetNames, ["Runs"]);
+  assert.equal(sourceDocument.summary.sheetCount, 1);
+  assert.equal(sourceDocument.summary.regionCount > 0, true);
+  assert.equal(JSON.stringify(documentsBody).includes('"cells"'), false);
+
+  const regionsResponse = await jsonFetch(`/api/source-documents/${sourceDocument.id}/regions`);
+  assert.equal(regionsResponse.status, 200);
+  const regionsBody = await regionsResponse.json();
+  assert.equal(regionsBody.schemaVersion, "labrat.sourceRegionList.v1");
+  assert.equal(regionsBody.regions.length > 0, true);
+  assert.equal(regionsBody.regions.some((region) => region.sheetName === "Runs" && region.rangeRef), true);
+  assert.equal(regionsBody.regions.some((region) => (
+    region.candidateFields || []
+  ).some((field) => /temperature/i.test(field.displayName || field.rawName))), true);
+  assert.equal(JSON.stringify(regionsBody).includes('"cells"'), false);
+
+  const queryResponse = await jsonFetch(`/api/source-documents/${sourceDocument.id}/query`, {
+    method: "POST",
+    body: { query: "Temperature", limit: 10 },
+  });
+  assert.equal(queryResponse.status, 200);
+  const queryBody = await queryResponse.json();
+  assert.equal(queryBody.schemaVersion, "labrat.sourceQuery.v1");
+  assert.equal(queryBody.matches.some((match) => match.type === "cell" && match.sheetName === "Runs"), true);
+  assert.equal(queryBody.matches.some((match) => JSON.stringify(match).includes("Temperature")), true);
+
+  const rangeResponse = await jsonFetch(`/api/source-documents/${sourceDocument.id}/range`, {
+    method: "POST",
+    body: { sheetName: "Runs", range: "A1:B2" },
+  });
+  assert.equal(rangeResponse.status, 200);
+  const rangeBody = await rangeResponse.json();
+  assert.equal(rangeBody.schemaVersion, "labrat.sourceRange.v1");
+  assert.equal(rangeBody.rowCount, 2);
+  assert.equal(rangeBody.columnCount, 2);
+  assert.equal(rangeBody.cells.find((cell) => cell.address === "A1").rawValue, "Label");
+  assert.equal(rangeBody.cells.find((cell) => cell.address === "B2").rawValue, 250);
+
+  const oversizedRange = await jsonFetch(`/api/source-documents/${sourceDocument.id}/range`, {
+    method: "POST",
+    body: { sheetName: "Runs", range: "A1:ZZ100" },
+  });
+  assert.equal(oversizedRange.status, 400);
+  assert.equal((await oversizedRange.json()).error.code, "source_range_too_large");
+
+  const stateResponse = await jsonFetch(`/api/projects/${project.project.id}/state`);
+  assert.equal(stateResponse.status, 200);
+  const stateBody = await stateResponse.json();
+  const stateImportRun = stateBody.importRuns.find((run) => run.id === created.importRun.id);
+  assert.equal(stateImportRun.scanResult.sheets[0].cellGrid.cells, undefined);
+
+  const ownerCookie = cookie;
+  cookie = "";
+  const unauthenticated = await jsonFetch(`/api/projects/${project.project.id}/source-documents`);
+  assert.equal(unauthenticated.status, 401);
+
+  const adminLogin = await jsonFetch("/api/auth/login", {
+    method: "POST",
+    body: { username: "admin", password: "LabRatAdmin123!" },
+  });
+  assert.equal(adminLogin.status, 200);
+  cookie = cookieFrom(adminLogin);
+  const otherLab = await (await jsonFetch("/api/admin/labs", {
+    method: "POST",
+    body: { name: "Other Source Lab", slug: `other-source-${Date.now()}` },
+  })).json();
+  const otherUsername = `source_viewer_${Date.now()}`;
+  const otherUser = await jsonFetch("/api/admin/users", {
+    method: "POST",
+    body: {
+      username: otherUsername,
+      displayName: "Other Source User",
+      temporaryPassword: "SourcePass123!",
+      labId: otherLab.lab.id,
+      role: "lab_owner",
+    },
+  });
+  assert.equal(otherUser.status, 201);
+  const otherLogin = await jsonFetch("/api/auth/login", {
+    method: "POST",
+    body: { username: otherUsername, password: "SourcePass123!" },
+  });
+  assert.equal(otherLogin.status, 200);
+  cookie = cookieFrom(otherLogin);
+  const crossLabRead = await jsonFetch(`/api/source-documents/${sourceDocument.id}/regions`);
+  assert.equal(crossLabRead.status, 403);
+  cookie = ownerCookie;
+
+  const auditEvents = await store.listAuditEvents({ projectId: project.project.id });
+  assert.equal(auditEvents.some((event) => event.action === "source.index"), true);
+});
+
 test("duplicate workbook upload reuses the existing file object and can create another import run", async () => {
   const labs = await (await jsonFetch("/api/labs")).json();
   const labId = labs.labs[0].labId;

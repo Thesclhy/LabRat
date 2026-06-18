@@ -17,17 +17,17 @@ Use this file as the working checklist for long Codex tasks. Update it before st
 
 ## Current Objective
 
-Objective: Implement `doc/plan.md` Agent-first evidence workflow vertical slice on `feature/agent-first-evidence-workflow`.
+Objective: Implement `doc/plan.md` Agent-first evidence workflow on `feature/agent-first-evidence-workflow`.
 
-Milestone: Add a lightweight natural-language compare command to the existing project chat planner. A prompt like `compare reaction rate for Exp1, Exp2, Exp3` should route to the implemented ObservationSeries -> `series_compare` AnalysisView -> chart proposal -> existing Chart Review/action-card flow.
+Milestone: Phase 5 Source Document Index backend foundation. Uploaded Excel workbooks should persist compact source document metadata and detected source region summaries, expose source document/region/query/range APIs, and keep full source cell grids out of project state and model context.
 
-Relevant docs read: `AGENTS.md`, `doc/plan.md`, `doc/PROGRESS.md`, `doc/saas-api-contract-v0.md`, `doc/canonical-data-dictionary.md`, `doc/backend-api-contract.md`, `doc/ai-boundaries.md`.
+Relevant docs read: `AGENTS.md`, `doc/plan.md`, `doc/PROGRESS.md`, `doc/saas-api-contract-v0.md`, `doc/saas-database-schema-v0.md`, `doc/canonical-data-dictionary.md`, `doc/backend-api-contract.md`, `doc/ai-boundaries.md`, `doc/source-understanding-long-term-plan.md`.
 
-Touched areas: backend `/agent/plan` deterministic routing, frontend AgentPanel action execution, existing AnalysisView/chart proposal API helpers, tests, progress log.
+Touched areas: backend SaaS store persistence, Postgres migration, project import scan indexing, source document/region/query/range routes, backend tests, API/schema/data dictionary docs, progress log.
 
-Verification plan: targeted backend SaaS route tests for planner behavior, targeted frontend AgentPanel tests for action-card execution, then `npm run codex:verify` before commit when feasible.
+Verification plan: targeted SaaS route tests for source document persistence/query/range/auth behavior passed; full `npm run codex:verify` passed.
 
-Open risks: Keep this as deterministic planner compatibility only; do not implement full AgentRun, Anthropic, Source Explorer, or Source Extract Proposals. Existing unrelated `package-lock.json` metadata remains unstaged.
+Open risks: Keep this as backend-only Phase 5 foundation; do not add Source Explorer UI, Source Extract Proposals, Controlled AgentRun, Anthropic calls, dataset promotion, arbitrary code execution, or direct AI Plotly JSON. Existing unrelated `package-lock.json` metadata remains unstaged.
 
 ## Milestone Checklist Template
 
@@ -45,10 +45,14 @@ Open risks: Keep this as deterministic planner compatibility only; do not implem
 - [x] Keep AI/tool actions proposal-first until explicit user confirmation.
 - [x] Preserve source refs and stale-state metadata across derived views, proposals, ChartSpecs, and manuscript snapshots.
 - [x] Add or update API/schema/data-dictionary docs in the same change when persisted shapes change.
-- [ ] Record token/cost/latency assumptions for new AI-backed flows.
+- [x] Record token/cost/latency assumptions for new AI-backed flows. Not applicable for this deterministic backend-only milestone; no model calls were added.
 - [x] Keep this milestone deterministic and do not add Anthropic or AgentRun behavior.
 
 ## Recent Checkpoints
+
+- 2026-06-18: Implemented Phase 5 Source Document Index backend foundation. Workbook scans now persist source document metadata, region summaries, and bounded cell-grid index blobs; new source document/region/query/range APIs are covered by targeted SaaS route tests and full `npm run codex:verify` passed.
+
+- 2026-06-18: Started Phase 5 Source Document Index backend foundation. Scope is compact source document/region persistence and bounded source query/range APIs from existing workbook scans; no Source Explorer, Source Extract Proposal, Controlled AgentRun, Anthropic integration, PDF/CSV source understanding, or dataset promotion.
 
 - 2026-06-18: Implemented lightweight natural-language compare command in the existing chat planner. Backend `/agent/plan` now returns `compare_series` actions for simple reaction-rate compare prompts after resolving active compatible ObservationSeries, and the frontend action card creates the AnalysisView plus chart proposal through existing APIs. Targeted backend/frontend tests and full `npm run codex:verify` passed.
 

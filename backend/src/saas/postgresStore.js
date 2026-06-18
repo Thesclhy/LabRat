@@ -217,6 +217,74 @@ function analysisViewFromRow(row) {
   };
 }
 
+function sourceDocumentFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    fileObjectId: row.file_object_id,
+    importRunId: row.import_run_id,
+    documentType: row.document_type,
+    indexVersion: row.index_version,
+    status: row.status,
+    metadata: row.metadata || {},
+    summary: row.summary || {},
+    warnings: row.warnings || [],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    createdBy: row.created_by,
+    updatedBy: row.updated_by,
+  };
+}
+
+function sourceRegionFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    sourceDocumentId: row.source_document_id,
+    importRunId: row.import_run_id,
+    regionKey: row.region_key,
+    kind: row.kind,
+    label: row.label,
+    sheetName: row.sheet_name,
+    rangeRef: row.range_ref,
+    startRow: row.start_row,
+    endRow: row.end_row,
+    startCol: row.start_col,
+    endCol: row.end_col,
+    confidence: row.confidence == null ? null : Number(row.confidence),
+    signals: row.signals || {},
+    candidateFields: row.candidate_fields || [],
+    sourceRefs: row.source_refs || [],
+    warnings: row.warnings || [],
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    createdBy: row.created_by,
+    updatedBy: row.updated_by,
+  };
+}
+
+function sourceIndexBlobFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    sourceDocumentId: row.source_document_id,
+    blobKind: row.blob_kind,
+    storageProvider: row.storage_provider,
+    storageKey: row.storage_key,
+    payload: row.payload || {},
+    checksumSha256: row.checksum_sha256,
+    createdAt: row.created_at,
+    createdBy: row.created_by,
+  };
+}
+
 function mappingSetFromRow(row) {
   if (!row) return null;
   return {
@@ -869,6 +937,140 @@ export class PostgresSaasStore {
   async listAnalysisViews({ projectId }) {
     const result = await this.query("select * from analysis_views where project_id = $1 order by updated_at desc", [projectId]);
     return result.rows.map(analysisViewFromRow);
+  }
+
+  async replaceSourceDocumentIndex(input) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const existing = await client.query(
+        "select * from source_documents where project_id = $1 and file_object_id = $2 limit 1",
+        [input.projectId, input.fileObjectId || null],
+      );
+      const existingDocument = sourceDocumentFromRow(existing.rows[0]);
+      const sourceDocumentId = existingDocument?.id || input.id || makeId("source_doc");
+      const documentResult = await client.query(
+        `insert into source_documents
+         (id, lab_id, project_id, file_object_id, import_run_id, document_type, index_version, status, metadata, summary, warnings, created_at, updated_at, created_by, updated_by)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now(), now(), $12, $13)
+         on conflict (project_id, file_object_id)
+         do update set
+           import_run_id = excluded.import_run_id,
+           document_type = excluded.document_type,
+           index_version = excluded.index_version,
+           status = excluded.status,
+           metadata = excluded.metadata,
+           summary = excluded.summary,
+           warnings = excluded.warnings,
+           updated_at = now(),
+           updated_by = excluded.updated_by
+         returning *`,
+        [
+          sourceDocumentId,
+          input.labId,
+          input.projectId,
+          input.fileObjectId || null,
+          input.importRunId || null,
+          input.documentType || "excel_workbook",
+          input.indexVersion || "labrat.sourceIndex.v1",
+          input.status || "indexed",
+          jsonb(input.metadata || {}),
+          jsonb(input.summary || {}),
+          jsonb(input.warnings || [], []),
+          input.createdBy || null,
+          input.updatedBy || input.createdBy || null,
+        ],
+      );
+      const document = sourceDocumentFromRow(documentResult.rows[0]);
+      await client.query("delete from source_regions where source_document_id = $1", [document.id]);
+      await client.query("delete from source_index_blobs where source_document_id = $1", [document.id]);
+      for (const region of input.regions || []) {
+        await client.query(
+          `insert into source_regions
+           (id, lab_id, project_id, source_document_id, import_run_id, region_key, kind, label, sheet_name, range_ref, start_row, end_row, start_col, end_col, confidence, signals, candidate_fields, source_refs, warnings, status, created_at, updated_at, created_by, updated_by)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, now(), now(), $21, $22)`,
+          [
+            region.id || makeId("source_region"),
+            input.labId,
+            input.projectId,
+            document.id,
+            input.importRunId || null,
+            region.regionKey || null,
+            region.kind || "unknown_region",
+            region.label || "",
+            region.sheetName || null,
+            region.rangeRef || null,
+            region.startRow ?? null,
+            region.endRow ?? null,
+            region.startCol ?? null,
+            region.endCol ?? null,
+            region.confidence ?? null,
+            jsonb(region.signals || {}),
+            jsonb(region.candidateFields || [], []),
+            jsonb(region.sourceRefs || [], []),
+            jsonb(region.warnings || [], []),
+            region.status || "active",
+            input.updatedBy || input.createdBy || null,
+            input.updatedBy || input.createdBy || null,
+          ],
+        );
+      }
+      for (const blob of input.indexBlobs || []) {
+        await client.query(
+          `insert into source_index_blobs
+           (id, lab_id, project_id, source_document_id, blob_kind, storage_provider, storage_key, payload, checksum_sha256, created_at, created_by)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, now(), $10)`,
+          [
+            blob.id || makeId("source_index_blob"),
+            input.labId,
+            input.projectId,
+            document.id,
+            blob.blobKind || "excel_cell_grid_v1",
+            blob.storageProvider || "database",
+            blob.storageKey || null,
+            jsonb(blob.payload || {}),
+            blob.checksumSha256 || null,
+            input.updatedBy || input.createdBy || null,
+          ],
+        );
+      }
+      await client.query("commit");
+      return document;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async findSourceDocumentById(id) {
+    const result = await this.query("select * from source_documents where id = $1", [id]);
+    return sourceDocumentFromRow(result.rows[0]);
+  }
+
+  async listSourceDocuments({ projectId }) {
+    const result = await this.query(
+      "select * from source_documents where project_id = $1 order by updated_at desc",
+      [projectId],
+    );
+    return result.rows.map(sourceDocumentFromRow);
+  }
+
+  async listSourceRegions({ sourceDocumentId }) {
+    const result = await this.query(
+      "select * from source_regions where source_document_id = $1 order by sheet_name asc, start_row asc nulls last, start_col asc nulls last",
+      [sourceDocumentId],
+    );
+    return result.rows.map(sourceRegionFromRow);
+  }
+
+  async listSourceIndexBlobs({ sourceDocumentId }) {
+    const result = await this.query(
+      "select * from source_index_blobs where source_document_id = $1 order by created_at asc",
+      [sourceDocumentId],
+    );
+    return result.rows.map(sourceIndexBlobFromRow);
   }
 
   async createMappingSet(input) {

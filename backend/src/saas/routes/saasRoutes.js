@@ -25,6 +25,16 @@ import {
   subscribeSupplementalImportBatchEvents,
 } from "../supplementalImportBatches.js";
 import {
+  SOURCE_DOCUMENT_LIST_SCHEMA_VERSION,
+  SOURCE_REGION_LIST_SCHEMA_VERSION,
+  persistSourceIndexForImportRun,
+  publicScanResult,
+  querySourceDocument,
+  readSourceDocumentRange,
+  sourceDocumentSummary,
+  sourceRegionSummary,
+} from "../sourceDocuments.js";
+import {
   decorateObservationSeriesStaleness,
   deriveObservationSeriesFromDatasetCommit,
   mergePersistedAndDerivedObservationSeries,
@@ -194,7 +204,7 @@ function importRunSummary(run) {
     projectId: run.projectId,
     fileObjectId: run.fileObjectId,
     status: run.status,
-    scanResult: run.scanResult,
+    scanResult: publicScanResult(run.scanResult),
     normalizePreview: run.normalizePreview,
     reviewDecisions: run.reviewDecisions || {},
     warnings: run.warnings || [],
@@ -410,6 +420,19 @@ async function projectAuth(req, context, projectId, role = "viewer") {
   }
   requireLabRole(auth, project.labId, role);
   return { auth, project };
+}
+
+async function sourceDocumentAuth(req, context, sourceDocumentId, role = "viewer") {
+  const auth = requireAuth(await authFor(req, context));
+  const sourceDocument = await context.store.findSourceDocumentById?.(sourceDocumentId);
+  if (!sourceDocument) {
+    throw Object.assign(new Error("Source document not found."), {
+      statusCode: 404,
+      code: "source_document_not_found",
+    });
+  }
+  requireLabRole(auth, sourceDocument.labId, role);
+  return { auth, sourceDocument };
 }
 
 async function handleLogin(req, res, context) {
@@ -996,6 +1019,67 @@ async function handleProjectImportRunsList(req, res, context, projectId) {
   sendJson(res, 200, { importRuns: importRuns.map(importRunSummary) });
 }
 
+async function handleProjectSourceDocuments(req, res, context, projectId) {
+  const { project } = await projectAuth(req, context, projectId, "viewer");
+  const sourceDocuments = context.store.listSourceDocuments
+    ? await context.store.listSourceDocuments({ projectId: project.id })
+    : [];
+  sendJson(res, 200, {
+    schemaVersion: SOURCE_DOCUMENT_LIST_SCHEMA_VERSION,
+    projectId: project.id,
+    sourceDocuments: sourceDocuments.map(sourceDocumentSummary),
+    summary: { count: sourceDocuments.length },
+  });
+}
+
+async function handleSourceDocumentRegions(req, res, context, sourceDocumentId) {
+  const { sourceDocument } = await sourceDocumentAuth(req, context, sourceDocumentId, "viewer");
+  const regions = context.store.listSourceRegions
+    ? await context.store.listSourceRegions({ sourceDocumentId: sourceDocument.id })
+    : [];
+  sendJson(res, 200, {
+    schemaVersion: SOURCE_REGION_LIST_SCHEMA_VERSION,
+    sourceDocument: sourceDocumentSummary(sourceDocument),
+    regions: regions.map(sourceRegionSummary),
+    summary: { count: regions.length },
+  });
+}
+
+async function handleSourceDocumentQuery(req, res, context, sourceDocumentId) {
+  const { sourceDocument } = await sourceDocumentAuth(req, context, sourceDocumentId, "viewer");
+  const body = await readJsonBody(req);
+  const regions = context.store.listSourceRegions
+    ? await context.store.listSourceRegions({ sourceDocumentId: sourceDocument.id })
+    : [];
+  const indexBlobs = context.store.listSourceIndexBlobs
+    ? await context.store.listSourceIndexBlobs({ sourceDocumentId: sourceDocument.id })
+    : [];
+  const result = querySourceDocument({
+    sourceDocument,
+    regions,
+    indexBlobs,
+    query: body.query,
+    limit: body.limit,
+  });
+  sendJson(res, 200, result);
+}
+
+async function handleSourceDocumentRange(req, res, context, sourceDocumentId) {
+  const { sourceDocument } = await sourceDocumentAuth(req, context, sourceDocumentId, "viewer");
+  const body = await readJsonBody(req);
+  const indexBlobs = context.store.listSourceIndexBlobs
+    ? await context.store.listSourceIndexBlobs({ sourceDocumentId: sourceDocument.id })
+    : [];
+  const result = readSourceDocumentRange({
+    sourceDocument,
+    indexBlobs,
+    sheetName: body.sheetName,
+    range: body.range,
+    maxCells: body.maxCells,
+  });
+  sendJson(res, 200, result);
+}
+
 async function handleProjectDatasetCommits(req, res, context, projectId) {
   await projectAuth(req, context, projectId, "viewer");
   sendJson(res, 200, { datasetCommits: await context.store.listDatasetCommits({ projectId }) });
@@ -1412,6 +1496,13 @@ async function handleProjectImportRuns(req, res, context, projectId) {
     scanResult,
     warnings: scanResult.warnings || [],
     createdBy: auth.user.id,
+  });
+  await persistSourceIndexForImportRun(context, {
+    project,
+    fileObject,
+    importRun,
+    scanResult,
+    actorUserId: auth.user.id,
   });
   await context.store.recordAuditEvent({
     labId: project.labId,
@@ -1942,6 +2033,8 @@ async function dispatch(req, res, context) {
   const importRunsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/import-runs$/);
   if (importRunsMatch && req.method === "GET") return handleProjectImportRunsList(req, res, context, importRunsMatch[1]);
   if (importRunsMatch && req.method === "POST") return handleProjectImportRuns(req, res, context, importRunsMatch[1]);
+  const sourceDocumentsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/source-documents$/);
+  if (sourceDocumentsMatch && req.method === "GET") return handleProjectSourceDocuments(req, res, context, sourceDocumentsMatch[1]);
   const supplementalBatchesMatch = pathName.match(/^\/api\/projects\/([^/]+)\/supplemental-import-batches$/);
   if (supplementalBatchesMatch && (req.method === "GET" || req.method === "POST")) return handleProjectSupplementalImportBatches(req, res, context, supplementalBatchesMatch[1]);
   const supplementalBatchEventsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/supplemental-import-batches\/([^/]+)\/events$/);
@@ -1956,6 +2049,12 @@ async function dispatch(req, res, context) {
   if (analysisViewsMatch && (req.method === "GET" || req.method === "POST")) return handleProjectAnalysisViews(req, res, context, analysisViewsMatch[1]);
   const analysisViewChartProposalMatch = pathName.match(/^\/api\/analysis-views\/([^/]+)\/chart-proposal$/);
   if (analysisViewChartProposalMatch && req.method === "POST") return handleAnalysisViewChartProposal(req, res, context, analysisViewChartProposalMatch[1]);
+  const sourceDocumentRegionsMatch = pathName.match(/^\/api\/source-documents\/([^/]+)\/regions$/);
+  if (sourceDocumentRegionsMatch && req.method === "GET") return handleSourceDocumentRegions(req, res, context, sourceDocumentRegionsMatch[1]);
+  const sourceDocumentQueryMatch = pathName.match(/^\/api\/source-documents\/([^/]+)\/query$/);
+  if (sourceDocumentQueryMatch && req.method === "POST") return handleSourceDocumentQuery(req, res, context, sourceDocumentQueryMatch[1]);
+  const sourceDocumentRangeMatch = pathName.match(/^\/api\/source-documents\/([^/]+)\/range$/);
+  if (sourceDocumentRangeMatch && req.method === "POST") return handleSourceDocumentRange(req, res, context, sourceDocumentRangeMatch[1]);
   const mappingSetsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/mapping-sets$/);
   if (mappingSetsMatch && (req.method === "GET" || req.method === "POST")) return handleProjectMappingSets(req, res, context, mappingSetsMatch[1]);
   const mappingSetMatch = pathName.match(/^\/api\/mapping-sets\/([^/]+)$/);
@@ -1989,6 +2088,7 @@ export async function handleSaasRoutes(req, res, context) {
     && !req.url?.startsWith("/api/labs")
     && !req.url?.startsWith("/api/projects")
     && !req.url?.startsWith("/api/analysis-views")
+    && !req.url?.startsWith("/api/source-documents")
     && !req.url?.startsWith("/api/import-runs")
     && !req.url?.startsWith("/api/mapping-sets")
     && !req.url?.startsWith("/api/chart-proposal-sets")

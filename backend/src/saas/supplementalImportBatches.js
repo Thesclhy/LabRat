@@ -4,6 +4,7 @@ import { validateNormalizeRequest } from "../import/schemas/normalizationSchemas
 import { activeChartSpecs } from "./chartSpecStaleness.js";
 import { readFileObjectBuffer } from "./fileStorage.js";
 import { buildImportRelationshipPreview } from "./importRelationshipResolver.js";
+import { persistSourceIndexForImportRun } from "./sourceDocuments.js";
 
 const BATCH_SCHEMA_VERSION = "labrat.supplementalImportBatch.v1";
 const TERMINAL_ITEM_STATUSES = new Set(["ready_for_review", "failed"]);
@@ -181,6 +182,14 @@ async function processOneItem(context, batch, item, userId) {
       scanResult,
       warnings: scanResult.warnings || [],
       createdBy: userId,
+    });
+    await persistSourceIndexForImportRun(context, {
+      project: { id: batch.projectId, labId: batch.labId },
+      fileObject,
+      importRun,
+      scanResult,
+      actorUserId: userId,
+      auditMetadata: { batchId: batch.id, batchItemId: item.id },
     });
     await context.store.recordAuditEvent({
       labId: batch.labId,

@@ -373,9 +373,9 @@ Notes:
 - `parent_commit_id` points to the previous project dataset commit when a new accepted import appends data.
 - Future phases can split high-volume field values into relational tables after behavior stabilizes.
 
-## `source_documents` Planned
+## `source_documents`
 
-Persists inspectable source metadata for uploaded files, beginning with Excel workbooks.
+Persists inspectable source metadata for uploaded files, beginning with Excel workbooks. Implemented by `005_source_documents.sql`.
 
 Columns:
 
@@ -383,28 +383,31 @@ Columns:
 id text primary key
 lab_id text not null references labs(id)
 project_id text not null references projects(id)
-file_object_id text not null references file_objects(id)
-document_type text not null
-index_version text not null
+file_object_id text references file_objects(id)
+import_run_id text references import_runs(id)
+document_type text not null default 'excel_workbook'
+index_version text not null default 'labrat.sourceIndex.v1'
 status text not null default 'indexed'
 metadata jsonb not null default '{}'
 summary jsonb not null default '{}'
 warnings jsonb not null default '[]'
 created_at timestamptz not null
 updated_at timestamptz not null
-created_by text not null references users(id)
+created_by text references users(id)
 updated_by text references users(id)
+unique (project_id, file_object_id)
 ```
 
 Notes:
 
 - Source documents are evidence records, not dataset commits.
 - Do not include large cell grids in project state responses.
-- Re-indexing should preserve the immutable file object ref.
+- Re-indexing for the same project/file object replaces region/blob index content while preserving the source document id.
+- `metadata` stores workbook name, sheet names, sheet bounds, file object/import run refs, checksum, MIME type, and summary sheet metadata.
 
-## `source_regions` Planned
+## `source_regions`
 
-Persists detected regions inside a source document.
+Persists detected regions inside a source document. Implemented by `005_source_documents.sql`.
 
 Columns:
 
@@ -413,30 +416,37 @@ id text primary key
 lab_id text not null references labs(id)
 project_id text not null references projects(id)
 source_document_id text not null references source_documents(id)
+import_run_id text references import_runs(id)
+region_key text
 kind text not null
 label text
 sheet_name text
 range_ref text
+start_row integer
+end_row integer
+start_col integer
+end_col integer
 confidence numeric
-signals jsonb not null default '[]'
+signals jsonb not null default '{}'
 candidate_fields jsonb not null default '[]'
 source_refs jsonb not null default '[]'
 warnings jsonb not null default '[]'
 status text not null default 'active'
 created_at timestamptz not null
 updated_at timestamptz not null
-created_by text not null references users(id)
+created_by text references users(id)
 updated_by text references users(id)
 ```
 
 Notes:
 
-- Region kinds include `standard_table`, `block_table`, `component_distribution`, `formula_summary`, `calibration_table`, and `unknown_region`.
+- Region kinds include `standard_table`, `block_table`, `reaction_rate_time_series`, `component_distribution`, `formula_summary`, `calibration_table`, and `unknown_region`.
 - Regions are review aids and extraction candidates; they are not accepted dataset values.
+- Row/column bounds use the same zero-based indexing as scan cells while `range_ref` keeps Excel-style A1 notation.
 
-## `source_index_blobs` Planned
+## `source_index_blobs`
 
-Stores or points to large source index payloads such as cell grids and search indexes.
+Stores or points to large source index payloads such as cell grids and search indexes. Implemented by `005_source_documents.sql`.
 
 Columns:
 
@@ -446,18 +456,19 @@ lab_id text not null references labs(id)
 project_id text not null references projects(id)
 source_document_id text not null references source_documents(id)
 blob_kind text not null
-storage_provider text not null default 'local'
+storage_provider text not null default 'database'
 storage_key text
 payload jsonb
 checksum_sha256 text
 created_at timestamptz not null
-created_by text not null references users(id)
+created_by text references users(id)
 ```
 
 Notes:
 
 - Use either `storage_key` or `payload`; large blobs should prefer storage pointers.
 - Range read APIs must enforce cell-count caps.
+- Phase 5 stores Excel cell-grid blobs for bounded source query/range APIs, but project state and source document lists do not expose full grids.
 
 ## `source_extract_proposals` Planned
 

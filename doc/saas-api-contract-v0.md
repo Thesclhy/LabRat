@@ -837,7 +837,9 @@ Rules:
 - Do not create ChartSpecs directly.
 - Existing Accept/Reject/Create ChartSpec flow remains the review boundary.
 
-## Source Workspace APIs Planned
+## Source Workspace APIs
+
+Status: Phase 5 minimal backend foundation implemented for uploaded Excel workbooks. Source Explorer UI, source extract proposals, Controlled AgentRun retrieval, PDF/CSV understanding, and model-backed source reasoning remain planned.
 
 ### `GET /api/projects/:projectId/source-documents`
 
@@ -849,6 +851,37 @@ Rules:
 
 - Return metadata, sheets, summaries, warnings, and region counts.
 - Do not return full source cell grids.
+- Do not include source documents in `GET /api/projects/:projectId/state`; use this endpoint when source evidence is needed.
+
+Response:
+
+```json
+{
+  "schemaVersion": "labrat.sourceDocumentList.v1",
+  "projectId": "project_...",
+  "sourceDocuments": [
+    {
+      "id": "source_doc_...",
+      "projectId": "project_...",
+      "fileObjectId": "file_...",
+      "importRunId": "import_run_...",
+      "documentType": "excel_workbook",
+      "indexVersion": "labrat.sourceIndex.v1",
+      "status": "indexed",
+      "metadata": {
+        "workbookName": "MasterTable.xlsx",
+        "sheetNames": ["Runs"],
+        "sheets": [
+          { "name": "Runs", "usedRange": "A1:D10", "rowCount": 10, "columnCount": 4 }
+        ]
+      },
+      "summary": { "sheetCount": 1, "regionCount": 2, "nonEmptyCellCount": 40 },
+      "warnings": []
+    }
+  ],
+  "summary": { "count": 1 }
+}
+```
 
 ### `GET /api/source-documents/:sourceDocumentId/regions`
 
@@ -856,11 +889,69 @@ Purpose: list detected source regions for a source document.
 
 Required role: `viewer` or above.
 
+Response:
+
+```json
+{
+  "schemaVersion": "labrat.sourceRegionList.v1",
+  "sourceDocument": {},
+  "regions": [
+    {
+      "id": "source_region_...",
+      "sourceDocumentId": "source_doc_...",
+      "regionKey": "block:sheet_1:block_1",
+      "kind": "standard_table",
+      "label": "Temperature (C), Reaction Time (hrs)",
+      "sheetName": "Runs",
+      "rangeRef": "A1:D10",
+      "startRow": 0,
+      "endRow": 9,
+      "startCol": 0,
+      "endCol": 3,
+      "confidence": 0.9,
+      "candidateFields": [],
+      "sourceRefs": [],
+      "warnings": []
+    }
+  ],
+  "summary": { "count": 1 }
+}
+```
+
 ### `POST /api/source-documents/:sourceDocumentId/query`
 
 Purpose: search source document text, sheet names, region labels, and source refs.
 
 Required role: `viewer` or above.
+
+Request:
+
+```json
+{
+  "query": "temperature",
+  "limit": 25
+}
+```
+
+Response:
+
+```json
+{
+  "schemaVersion": "labrat.sourceQuery.v1",
+  "sourceDocumentId": "source_doc_...",
+  "query": "temperature",
+  "matches": [
+    {
+      "type": "cell",
+      "sheetName": "Runs",
+      "cell": { "address": "B1", "rawValue": "Temperature (C)" },
+      "sourceRef": { "sourceType": "excel_cell", "sheet": "Runs", "cell": "B1" }
+    }
+  ],
+  "summary": { "matchCount": 1, "truncated": false, "limit": 25 },
+  "warnings": []
+}
+```
 
 ### `POST /api/source-documents/:sourceDocumentId/range`
 
@@ -868,11 +959,39 @@ Purpose: read a bounded source range with raw/formatted values, formulas, and ce
 
 Required role: `viewer` or above.
 
+Request:
+
+```json
+{
+  "sheetName": "Runs",
+  "range": "A1:D20"
+}
+```
+
+Response:
+
+```json
+{
+  "schemaVersion": "labrat.sourceRange.v1",
+  "sourceDocumentId": "source_doc_...",
+  "sheetName": "Runs",
+  "range": "A1:D20",
+  "rowCount": 20,
+  "columnCount": 4,
+  "cellCount": 80,
+  "cells": [],
+  "rows": [],
+  "sourceRef": { "sourceType": "excel_range", "sheet": "Runs", "range": "A1:D20" },
+  "warnings": []
+}
+```
+
 Rules:
 
 - Enforce a cell-count cap.
-- Return clear errors for oversized or missing ranges.
+- Return `source_range_too_large`, `source_sheet_not_found`, or `invalid_source_range` for oversized, missing, or invalid ranges.
 - Do not expose files outside the project/lab.
+- This is a user/backend inspection API only; it does not call model APIs and does not mutate dataset commits.
 
 ### `POST /api/source-regions/:sourceRegionId/extract-preview`
 

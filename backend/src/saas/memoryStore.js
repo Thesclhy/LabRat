@@ -32,6 +32,9 @@ export class MemorySaasStore {
     this.datasetCommits = new Map();
     this.observationSeries = new Map();
     this.analysisViews = new Map();
+    this.sourceDocuments = new Map();
+    this.sourceRegions = new Map();
+    this.sourceIndexBlobs = new Map();
     this.mappingSets = new Map();
     this.chartProposalSets = new Map();
     this.chartSpecs = new Map();
@@ -562,6 +565,110 @@ export class MemorySaasStore {
   async listAnalysisViews({ projectId }) {
     return [...this.analysisViews.values()]
       .filter((view) => view.projectId === projectId)
+      .map(copy);
+  }
+
+  async replaceSourceDocumentIndex(input) {
+    const createdAt = nowIso();
+    const existing = [...this.sourceDocuments.values()].find((document) => (
+      document.projectId === input.projectId && document.fileObjectId === input.fileObjectId
+    ));
+    const id = existing?.id || input.id || makeId("source_doc");
+    if (existing) {
+      for (const [regionId, region] of this.sourceRegions.entries()) {
+        if (region.sourceDocumentId === id) this.sourceRegions.delete(regionId);
+      }
+      for (const [blobId, blob] of this.sourceIndexBlobs.entries()) {
+        if (blob.sourceDocumentId === id) this.sourceIndexBlobs.delete(blobId);
+      }
+    }
+    const document = {
+      id,
+      labId: input.labId,
+      projectId: input.projectId,
+      fileObjectId: input.fileObjectId || null,
+      importRunId: input.importRunId || null,
+      documentType: input.documentType || "excel_workbook",
+      indexVersion: input.indexVersion || "labrat.sourceIndex.v1",
+      status: input.status || "indexed",
+      metadata: copy(input.metadata) || {},
+      summary: copy(input.summary) || {},
+      warnings: copy(input.warnings) || [],
+      createdAt: existing?.createdAt || createdAt,
+      updatedAt: createdAt,
+      createdBy: existing?.createdBy || input.createdBy || null,
+      updatedBy: input.updatedBy || input.createdBy || null,
+    };
+    this.sourceDocuments.set(id, document);
+    for (const regionInput of input.regions || []) {
+      const region = {
+        id: regionInput.id || makeId("source_region"),
+        labId: input.labId,
+        projectId: input.projectId,
+        sourceDocumentId: id,
+        importRunId: input.importRunId || null,
+        regionKey: regionInput.regionKey || null,
+        kind: regionInput.kind || "unknown_region",
+        label: regionInput.label || "",
+        sheetName: regionInput.sheetName || null,
+        rangeRef: regionInput.rangeRef || null,
+        startRow: regionInput.startRow ?? null,
+        endRow: regionInput.endRow ?? null,
+        startCol: regionInput.startCol ?? null,
+        endCol: regionInput.endCol ?? null,
+        confidence: regionInput.confidence ?? null,
+        signals: copy(regionInput.signals) || {},
+        candidateFields: copy(regionInput.candidateFields) || [],
+        sourceRefs: copy(regionInput.sourceRefs) || [],
+        warnings: copy(regionInput.warnings) || [],
+        status: regionInput.status || "active",
+        createdAt,
+        updatedAt: createdAt,
+        createdBy: input.updatedBy || input.createdBy || null,
+        updatedBy: input.updatedBy || input.createdBy || null,
+      };
+      this.sourceRegions.set(region.id, region);
+    }
+    for (const blobInput of input.indexBlobs || []) {
+      const blob = {
+        id: blobInput.id || makeId("source_index_blob"),
+        labId: input.labId,
+        projectId: input.projectId,
+        sourceDocumentId: id,
+        blobKind: blobInput.blobKind || "excel_cell_grid_v1",
+        storageProvider: blobInput.storageProvider || "memory",
+        storageKey: blobInput.storageKey || null,
+        payload: copy(blobInput.payload) || {},
+        checksumSha256: blobInput.checksumSha256 || null,
+        createdAt,
+        createdBy: input.updatedBy || input.createdBy || null,
+      };
+      this.sourceIndexBlobs.set(blob.id, blob);
+    }
+    return copy(document);
+  }
+
+  async findSourceDocumentById(id) {
+    return copy(this.sourceDocuments.get(id) || null);
+  }
+
+  async listSourceDocuments({ projectId }) {
+    return [...this.sourceDocuments.values()]
+      .filter((document) => document.projectId === projectId)
+      .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
+      .map(copy);
+  }
+
+  async listSourceRegions({ sourceDocumentId }) {
+    return [...this.sourceRegions.values()]
+      .filter((region) => region.sourceDocumentId === sourceDocumentId)
+      .sort((a, b) => String(a.sheetName).localeCompare(String(b.sheetName)) || (a.startRow ?? 0) - (b.startRow ?? 0))
+      .map(copy);
+  }
+
+  async listSourceIndexBlobs({ sourceDocumentId }) {
+    return [...this.sourceIndexBlobs.values()]
+      .filter((blob) => blob.sourceDocumentId === sourceDocumentId)
       .map(copy);
   }
 
