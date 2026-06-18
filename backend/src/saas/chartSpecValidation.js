@@ -67,6 +67,56 @@ function collectDatasetReferences(datasetPayload = {}) {
   return { valueIds, sourceRefs };
 }
 
+function observationFieldsForSeries(datasetPayload = {}, series = {}, fieldName = "") {
+  return asArray(datasetPayload.genericImports)
+    .filter((genericImport) => !series.sourceImportId || genericImport.importId === series.sourceImportId)
+    .flatMap((genericImport) => asArray(genericImport.fields))
+    .filter((field) => (
+      field?.recordKind === "observation"
+      && field.field === fieldName
+      && (!series.observationSetId || field.observationSetId === series.observationSetId)
+      && (
+        !series.experimentId
+        || asArray(field.relatedExperimentIds).includes(series.experimentId)
+        || field.inferredExperimentLabel === series.experimentLabel
+      )
+    ));
+}
+
+function validateSeriesScope(chartSpec, datasetPayload) {
+  if (!isObject(chartSpec.seriesScope)) return;
+  const series = asArray(chartSpec.series).filter(isObject);
+  if (!series.length) {
+    throw validationError("invalid_chart_spec", "Series-backed chart specs require series definitions.", {
+      seriesScope: chartSpec.seriesScope,
+    });
+  }
+  const compatible = new Set(asArray(chartSpec.compatibleExperimentIds).map(String));
+  series.forEach((item, index) => {
+    if (!item.experimentId || !item.observationSetId || !item.xField || !item.yField) {
+      throw validationError("invalid_chart_spec", "Series-backed chart definitions require experiment, observation set, x field, and y field refs.", {
+        seriesIndex: index,
+      });
+    }
+    if (compatible.size && !compatible.has(String(item.experimentId))) {
+      throw validationError("invalid_chart_spec", "Series-backed chart references an experiment outside compatibleExperimentIds.", {
+        seriesIndex: index,
+        experimentId: item.experimentId,
+      });
+    }
+    const xFields = observationFieldsForSeries(datasetPayload, item, item.xField);
+    const yFields = observationFieldsForSeries(datasetPayload, item, item.yField);
+    if (!xFields.length || !yFields.length) {
+      throw validationError("chart_source_unresolved", "Series-backed chart references observation fields not present in the dataset commit.", {
+        seriesIndex: index,
+        experimentId: item.experimentId,
+        xField: item.xField,
+        yField: item.yField,
+      });
+    }
+  });
+}
+
 function axisLabel(axis, fallback) {
   return axis?.label || axis?.field || axis?.fieldId || fallback;
 }
@@ -118,11 +168,13 @@ export function validateChartSpecProposal({ proposal, datasetCommit } = {}) {
   }
 
   const { valueIds, sourceRefs } = collectDatasetReferences(datasetCommit.datasetPayload);
+  const seriesBacked = isObject(chartSpec.seriesScope) && asArray(chartSpec.series).length > 0;
+  validateSeriesScope(chartSpec, datasetCommit.datasetPayload);
   if (chartType === "distribution_bar") {
     if (!isObject(chartSpec.x)) {
       throw validationError("invalid_chart_spec", "Distribution charts require a component x axis.", { axis: "x" });
     }
-  } else {
+  } else if (!(seriesBacked && !sourceIdsForAxis(chartSpec.x).length)) {
     requireAxisSources(chartSpec.x, "x", valueIds);
   }
   const yFields = asArray(chartSpec.yFields).length ? asArray(chartSpec.yFields) : [chartSpec.y];
@@ -136,7 +188,10 @@ export function validateChartSpecProposal({ proposal, datasetCommit } = {}) {
       yFieldCount: usableYFields.length,
     });
   }
-  usableYFields.forEach((axis, index) => requireAxisSources(axis, `y${index + 1}`, valueIds));
+  usableYFields.forEach((axis, index) => {
+    if (seriesBacked && !sourceIdsForAxis(axis).length) return;
+    requireAxisSources(axis, `y${index + 1}`, valueIds);
+  });
 
   asArray(chartSpec.transforms).forEach((transform, index) => {
     const inputIds = transformInputIds(transform);

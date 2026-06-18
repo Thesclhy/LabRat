@@ -2,6 +2,7 @@ import { slug } from "../../import/services/genericImportContext.js";
 import { normalizeChartTransforms } from "./chartTransforms.js";
 
 export const CHART_SPEC_VERSION = "labrat.chartSpec.v1.3";
+export const CHART_SPEC_V14_VERSION = "labrat.chartSpec.v1.4";
 export const SUPPORTED_CHART_TYPES = ["scatter", "point", "bar", "grouped_bar", "stacked_bar", "distribution_bar"];
 
 function asArray(value) {
@@ -272,7 +273,7 @@ export function normalizeChartSpecShape(spec = {}) {
   const yFields = asArray(spec.yFields).length ? asArray(spec.yFields) : [spec.y].filter(Boolean);
   const normalized = {
     ...spec,
-    schemaVersion: CHART_SPEC_VERSION,
+    schemaVersion: spec.schemaVersion === CHART_SPEC_V14_VERSION ? CHART_SPEC_V14_VERSION : CHART_SPEC_VERSION,
     status: spec.status || "proposed",
     chartType: normalizeChartType(spec.chartType),
     title: spec.title || "Untitled chart",
@@ -291,6 +292,13 @@ export function normalizeChartSpecShape(spec = {}) {
     warnings: asArray(spec.warnings),
     transforms: normalizeChartTransforms(spec.transforms),
     series: asArray(spec.series),
+    seriesScope: isObject(spec.seriesScope) ? {
+      seriesKind: spec.seriesScope.seriesKind || null,
+      xField: spec.seriesScope.xField || null,
+      yField: spec.seriesScope.yField || null,
+      groupBy: spec.seriesScope.groupBy || null,
+    } : null,
+    compatibleExperimentIds: unique(asArray(spec.compatibleExperimentIds)),
     axisOptions: normalizeAxisOptions(spec.axisOptions),
     renderStyle: normalizeRenderStyle(spec.renderStyle),
     calculationWarnings: asArray(spec.calculationWarnings),

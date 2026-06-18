@@ -905,6 +905,34 @@ test("series compare AnalysisView drafts a reviewable chart proposal set", async
   assert.equal(proposal.y.sourceIds.length > 0, true);
   assert.equal(proposal.groupBy.sourceIds.includes(exp30.experimentId), true);
   assert.equal(proposal.groupBy.sourceIds.includes(exp31.experimentId), true);
+
+  const acceptedPayload = {
+    ...chartBody.chartProposalSet.payload,
+    proposals: [{ ...proposal, status: "accepted" }],
+  };
+  const patchResponse = await jsonFetch(`/api/chart-proposal-sets/${chartBody.chartProposalSet.id}`, {
+    method: "PATCH",
+    body: {
+      status: "accepted",
+      payload: acceptedPayload,
+      decisionSummary: { accepted: 1, rejected: 0, proposalCount: 1 },
+    },
+  });
+  assert.equal(patchResponse.status, 200);
+  const chartSpecResponse = await jsonFetch(`/api/projects/${project.project.id}/chart-specs/from-proposal`, {
+    method: "POST",
+    body: {
+      chartProposalSetId: chartBody.chartProposalSet.id,
+      proposalId: proposal.proposalId,
+    },
+  });
+  assert.equal(chartSpecResponse.status, 201);
+  const chartSpecBody = await chartSpecResponse.json();
+  assert.equal(chartSpecBody.chartSpec.spec.schemaVersion, "labrat.chartSpec.v1.4");
+  assert.equal(chartSpecBody.chartSpec.spec.analysisViewId, viewBody.analysisView.id);
+  assert.equal(chartSpecBody.chartSpec.spec.seriesScope.yField, "reaction_rate_mol_g_h");
+  assert.deepEqual(chartSpecBody.chartSpec.spec.compatibleExperimentIds, [exp30.experimentId, exp31.experimentId]);
+  assert.equal(chartSpecBody.chartSpec.spec.series.length, 2);
 });
 
 test("supplemental import batch processes multiple workbooks to review and streams status", async () => {

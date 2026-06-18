@@ -1479,8 +1479,9 @@ Rules:
 - A chart spec is the insertion target for manuscripts.
 - Do not insert raw chart proposals into manuscripts.
 - Requires a current or requested project-owned dataset commit.
-- Saves `chart_specs.spec` as normalized `labrat.chartSpec.v1.3`.
-- Planned ChartSpec v1.4-compatible specs may add `origin`, `analysisViewId`, `sourceExtractProposalId`, `seriesScope`, `compatibleExperimentIds`, and `sourceSnapshot`.
+- Saves ordinary dataset-backed chart specs as normalized `labrat.chartSpec.v1.3`.
+- Saves AnalysisView compare chart specs as normalized `labrat.chartSpec.v1.4` with `origin`, `analysisViewId`, `seriesScope`, `compatibleExperimentIds`, and `series[]`.
+- Source-backed v1.4-compatible specs may later add `sourceExtractProposalId` and `sourceSnapshot`.
 - Dataset-backed specs continue to require dataset commit validation.
 - Analysis-view-backed specs must resolve project-owned ObservationSeries against the current dataset commit.
 - Source-backed specs may use `datasetCommitId: null` only when they include an immutable `sourceSnapshot` and exact source refs.

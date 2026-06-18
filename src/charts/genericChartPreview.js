@@ -151,6 +151,10 @@ function proposalSourceIds(proposal) {
   ].map((id) => String(id || "").trim()).filter(Boolean);
 }
 
+function proposalSeries(proposal) {
+  return asArray(proposal?.series).filter((series) => series && typeof series === "object");
+}
+
 export function chartSpecToProposal(chartSpecOrProposal) {
   const value = chartSpecOrProposal || {};
   const baseSpec = value.spec && typeof value.spec === "object" ? value.spec : value;
@@ -170,6 +174,24 @@ export function chartSpecToProposal(chartSpecOrProposal) {
 export function experimentOptionsForChartSpec(chartSpecOrProposal, genericImports) {
   const proposal = chartSpecToProposal(chartSpecOrProposal);
   const { measurements, experiments } = indexGenericData(genericImports);
+  const series = proposalSeries(proposal);
+  if (series.length || asArray(proposal.compatibleExperimentIds).length) {
+    const byExperiment = new Map();
+    series.forEach((item) => {
+      if (!item.experimentId || byExperiment.has(item.experimentId)) return;
+      byExperiment.set(item.experimentId, item.experimentLabel || item.label || item.experimentId);
+    });
+    asArray(proposal.compatibleExperimentIds).forEach((experimentId) => {
+      if (!experimentId || byExperiment.has(experimentId)) return;
+      const experiment = experiments.get(experimentId);
+      byExperiment.set(experimentId, experiment?.name || experiment?.label || experimentId);
+    });
+    if (byExperiment.size) {
+      return [...byExperiment.entries()]
+        .map(([id, label]) => ({ id, label, detail: "" }))
+        .sort((a, b) => String(a.label).localeCompare(String(b.label), undefined, { numeric: true, sensitivity: "base" }));
+    }
+  }
   const sourceIds = proposalSourceIds(proposal);
   const candidateMeasurements = sourceIds.length
     ? sourceIds.map((id) => measurements.get(id)).filter(Boolean)
@@ -192,7 +214,61 @@ export function experimentOptionsForChartSpec(chartSpecOrProposal, genericImport
   return [...options.values()].sort((a, b) => String(a.label).localeCompare(String(b.label), undefined, { numeric: true, sensitivity: "base" }));
 }
 
+function observationFieldsForSeries(genericImports, series, fieldName) {
+  return asArray(genericImports)
+    .filter((genericImport) => !series.sourceImportId || genericImport.importId === series.sourceImportId)
+    .flatMap((genericImport) => asArray(genericImport.fields))
+    .filter((field) => (
+      field?.recordKind === "observation"
+      && field.field === fieldName
+      && (!series.observationSetId || field.observationSetId === series.observationSetId)
+      && (
+        !series.experimentId
+        || asArray(field.relatedExperimentIds).includes(series.experimentId)
+        || field.inferredExperimentLabel === series.experimentLabel
+      )
+    ));
+}
+
+function makeSeriesScatterTraces(proposal, genericImports, chartView, style) {
+  const series = proposalSeries(proposal);
+  if (!series.length && !proposal?.seriesScope) return null;
+  return series.map((item, index) => {
+    const experimentId = String(item.experimentId || "").trim();
+    if (!matchesChartView({ experimentId, relatedExperimentIds: [experimentId] }, chartView)) return null;
+    const xField = item.xField || proposal.seriesScope?.xField || proposal.x?.field;
+    const yField = item.yField || proposal.seriesScope?.yField || proposal.y?.field;
+    const xFields = observationFieldsForSeries(genericImports, item, xField);
+    const yFields = observationFieldsForSeries(genericImports, item, yField);
+    const xByKey = new Map(xFields.map((field) => [pairKey(field), field]));
+    const points = yFields
+      .map((yFieldValue) => {
+        const xFieldValue = xByKey.get(pairKey(yFieldValue));
+        return {
+          x: numericValue(xFieldValue?.value ?? xFieldValue?.rawValue),
+          y: numericValue(yFieldValue?.value ?? yFieldValue?.rawValue),
+        };
+      })
+      .filter((point) => point.x != null && point.y != null);
+    if (!points.length) return null;
+    const traceStyle = traceStyleFor(style, index);
+    const name = traceStyle.name || item.label || item.experimentLabel || experimentId || `Series ${index + 1}`;
+    return {
+      type: "scatter",
+      mode: style.traceMode || (points.length > 1 ? "lines+markers" : "markers"),
+      name,
+      x: points.map((point) => point.x),
+      y: points.map((point) => point.y),
+      text: points.map(() => name),
+      line: traceStyle.line,
+      marker: { size: 8, ...traceStyle.marker },
+    };
+  }).filter(Boolean);
+}
+
 function makeScatterTraces(proposal, genericImports, chartView, style) {
+  const seriesTraces = makeSeriesScatterTraces(proposal, genericImports, chartView, style);
+  if (seriesTraces) return seriesTraces;
   const { measurements, experiments, observationSets } = indexGenericData(genericImports);
   const xIds = new Set(axisIds(proposal.x));
   const xByKey = new Map();

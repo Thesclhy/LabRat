@@ -337,12 +337,20 @@ export function chartProposalFromAnalysisView({ analysisView, datasetCommit, obs
     extra: {
       analysisViewId: analysisView.id || null,
       analysisViewType: analysisView.viewType,
+      seriesScope: {
+        seriesKind: spec.seriesKind,
+        xField: spec.xField,
+        yField: spec.yField,
+        groupBy: spec.groupBy || "experiment",
+      },
+      compatibleExperimentIds: asArray(spec.experimentIds),
       selectedExperimentIds: asArray(spec.experimentIds),
       seriesKind: spec.seriesKind,
     },
   });
   return {
     ...proposal,
+    schemaVersion: "labrat.chartSpec.v1.4",
     proposalId,
     origin: "analysis_view",
     insight: `Compare ${yField.displayName} across ${selectedSeries.map((series) => series.experimentLabel || series.experimentId).join(", ")}.`,

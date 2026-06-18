@@ -19,7 +19,7 @@ Use this file as the working checklist for long Codex tasks. Update it before st
 
 Objective: Implement `doc/plan.md` Agent-first evidence workflow vertical slice on `feature/agent-first-evidence-workflow`.
 
-Milestone: Phase 2 Series Compare Analysis Views implemented and under commit. Continue to Phase 3 dynamic series chart rendering only after the milestone commit leaves the tree clean.
+Milestone: Phase 3 Dynamic Series Chart Rendering implemented and under commit. The cross-experiment compare vertical slice is complete through ObservationSeries -> AnalysisView -> proposal -> ChartSpec v1.4 -> Manuscript selectedExperimentIds.
 
 Relevant docs read: `AGENTS.md`, `doc/plan.md`, `doc/PROGRESS.md`, `doc/saas-api-contract-v0.md`, `doc/saas-database-schema-v0.md`, `doc/canonical-data-dictionary.md`, `doc/backend-api-contract.md`, `doc/ai-boundaries.md`, `doc/source-understanding-long-term-plan.md`.
 
@@ -48,6 +48,8 @@ Open risks: ChartSpec v1.4 must stay additive and must not bypass accepted propo
 - [ ] Record token/cost/latency assumptions for new AI-backed flows.
 
 ## Recent Checkpoints
+
+- 2026-06-18: Implemented Phase 3 Dynamic Series Chart Rendering with ChartSpec v1.4 `seriesScope`, series-backed validation, multi-trace frontend rendering, Manuscript selectedExperimentIds coverage, docs, targeted tests, and full `npm run codex:verify`.
 
 - 2026-06-18: Implemented Phase 2 Series Compare AnalysisViews with persistence, API routes, resolver, AnalysisView-derived chart proposal sets, docs, targeted route tests, and full `npm run codex:verify`.
 

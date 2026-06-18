@@ -186,6 +186,52 @@ describe("makeGenericChartPreview", () => {
     expect(preview.traces[0].y).toEqual([0.01, 0.02]);
   });
 
+  it("renders ChartSpec v1.4 seriesScope as one trace per selected experiment", () => {
+    const imports = [
+      ...observationImport(),
+      ...observationImport({
+        importId: "import_reaction_rate_exp31",
+        experimentId: "exp_31",
+        experimentLabel: "Exp31",
+        observationSetId: "obsset_31",
+        prefix: "exp31",
+        points: [[2, 0.01], [4, 0.02]],
+      }),
+    ];
+    const chartSpec = {
+      schemaVersion: "labrat.chartSpec.v1.4",
+      chartType: "scatter",
+      title: "Reaction rate comparison",
+      x: { label: "Reaction Time", unit: "min" },
+      y: { label: "Adjusted Rate", unit: "M/s" },
+      seriesScope: {
+        seriesKind: "reaction_rate_time_series",
+        xField: "reaction_time_min",
+        yField: "adjusted_rate_m_s",
+        groupBy: "experiment",
+      },
+      compatibleExperimentIds: ["exp_30", "exp_31"],
+      series: [
+        { seriesId: "series_30", experimentId: "exp_30", experimentLabel: "Exp30", sourceImportId: "import_reaction_rate", observationSetId: "obsset_1", xField: "reaction_time_min", yField: "adjusted_rate_m_s" },
+        { seriesId: "series_31", experimentId: "exp_31", experimentLabel: "Exp31", sourceImportId: "import_reaction_rate_exp31", observationSetId: "obsset_31", xField: "reaction_time_min", yField: "adjusted_rate_m_s" },
+      ],
+    };
+
+    const preview = makeGenericChartPreview(chartSpec, imports);
+    const filtered = makeGenericChartPreview(chartSpec, imports, {
+      chartView: { selectedExperimentIds: ["exp_31"] },
+    });
+    const options = experimentOptionsForChartSpec(chartSpec, imports);
+
+    expect(preview.traces).toHaveLength(2);
+    expect(preview.traces.map((trace) => trace.name)).toEqual(["Exp30", "Exp31"]);
+    expect(preview.traces[0].x).toEqual([0, 10]);
+    expect(preview.traces[1].x).toEqual([2, 4]);
+    expect(filtered.traces).toHaveLength(1);
+    expect(filtered.traces[0].name).toBe("Exp31");
+    expect(options.map((option) => option.id)).toEqual(["exp_30", "exp_31"]);
+  });
+
   it("projects ChartSpec v1.3 log axes and Excel-like trace style into Plotly preview", () => {
     const preview = makeGenericChartPreview({
       schemaVersion: "labrat.chartSpec.v1.3",

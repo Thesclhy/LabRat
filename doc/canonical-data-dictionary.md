@@ -497,7 +497,7 @@ Chart specs preserve:
 - chart spec id
 - project id
 - dataset commit id for dataset-backed specs
-- optional analysis view id or source extract proposal id for planned v1.4 specs
+- optional analysis view id for implemented v1.4 series-compare specs, or source extract proposal id for future source-backed specs
 - source chart proposal set/proposal ids when applicable
 - chart type
 - title
@@ -517,7 +517,7 @@ stacked_bar
 distribution_bar
 ```
 
-ChartSpec v1.4 is planned to add analysis-view-backed compare charts over `ObservationSeries` and source-backed charts with immutable `sourceSnapshot` rows/fields. Dataset-backed chart specs should reference source-backed fields and dataset commits. Chart specs tied to replaced dataset commits can be decorated as stale in API responses; existing manuscript chart blocks may continue rendering from their stored `chartSpecSnapshot`.
+ChartSpec v1.4 supports analysis-view-backed compare charts over `ObservationSeries` with `seriesScope`, `compatibleExperimentIds`, and `series[]`. Source-backed charts with immutable `sourceSnapshot` rows/fields remain planned. Dataset-backed chart specs should reference source-backed fields and dataset commits. Chart specs tied to replaced dataset commits can be decorated as stale in API responses; existing manuscript chart blocks may continue rendering from their stored `chartSpecSnapshot`.
 
 ## Chart Transform
 

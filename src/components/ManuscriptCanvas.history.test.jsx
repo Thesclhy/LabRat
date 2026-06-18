@@ -124,6 +124,56 @@ const conversionChartSpecFixture = {
   },
 };
 
+const seriesObservationImportFixture = {
+  importId: "import_series_exp1",
+  relatedExperimentIds: ["exp_1"],
+  observationSets: [{ observationSetId: "obsset_exp1", kind: "reaction_rate_time_series", inferredExperimentLabel: "Run 1", targetExperimentIds: ["exp_1"] }],
+  fields: [
+    { fieldValueId: "rt_exp1_1", recordKind: "observation", observationSetId: "obsset_exp1", observationId: "obs_exp1_1", relatedExperimentIds: ["exp_1"], inferredExperimentLabel: "Run 1", field: "reaction_time_min", value: 0, rawValue: "0" },
+    { fieldValueId: "rate_exp1_1", recordKind: "observation", observationSetId: "obsset_exp1", observationId: "obs_exp1_1", relatedExperimentIds: ["exp_1"], inferredExperimentLabel: "Run 1", field: "reaction_rate_mol_g_h", value: 1.1, rawValue: "1.1" },
+  ],
+};
+
+const seriesObservationImportFixture2 = {
+  importId: "import_series_exp2",
+  relatedExperimentIds: ["exp_2"],
+  observationSets: [{ observationSetId: "obsset_exp2", kind: "reaction_rate_time_series", inferredExperimentLabel: "Run 2", targetExperimentIds: ["exp_2"] }],
+  fields: [
+    { fieldValueId: "rt_exp2_1", recordKind: "observation", observationSetId: "obsset_exp2", observationId: "obs_exp2_1", relatedExperimentIds: ["exp_2"], inferredExperimentLabel: "Run 2", field: "reaction_time_min", value: 0, rawValue: "0" },
+    { fieldValueId: "rate_exp2_1", recordKind: "observation", observationSetId: "obsset_exp2", observationId: "obs_exp2_1", relatedExperimentIds: ["exp_2"], inferredExperimentLabel: "Run 2", field: "reaction_rate_mol_g_h", value: 1.4, rawValue: "1.4" },
+  ],
+};
+
+const seriesDatasetFixture = {
+  ...genericDatasetFixture,
+  genericImports: [genericImportFixture, seriesObservationImportFixture, seriesObservationImportFixture2],
+};
+
+const seriesChartSpecFixture = {
+  id: "chart_spec_series",
+  title: "Reaction rate comparison",
+  chartType: "scatter",
+  datasetCommitId: "commit_1",
+  spec: {
+    schemaVersion: "labrat.chartSpec.v1.4",
+    chartType: "scatter",
+    title: "Reaction rate comparison",
+    x: { label: "Reaction Time", unit: "min" },
+    y: { label: "Reaction Rate", unit: "mol/g/h" },
+    seriesScope: {
+      seriesKind: "reaction_rate_time_series",
+      xField: "reaction_time_min",
+      yField: "reaction_rate_mol_g_h",
+      groupBy: "experiment",
+    },
+    compatibleExperimentIds: ["exp_1", "exp_2"],
+    series: [
+      { seriesId: "series_exp1", experimentId: "exp_1", experimentLabel: "Run 1", sourceImportId: "import_series_exp1", observationSetId: "obsset_exp1", xField: "reaction_time_min", yField: "reaction_rate_mol_g_h" },
+      { seriesId: "series_exp2", experimentId: "exp_2", experimentLabel: "Run 2", sourceImportId: "import_series_exp2", observationSetId: "obsset_exp2", xField: "reaction_time_min", yField: "reaction_rate_mol_g_h" },
+    ],
+  },
+};
+
 function Harness({
   initialBlocks,
   initialPages,
@@ -490,6 +540,43 @@ describe("ManuscriptCanvas chart specs", () => {
       expect(state.blocks[0].chartLayout.xAxisTitle.visible).toBe(true);
       expect(state.blocks[0].chartKind).toBeUndefined();
       expect(state.blocks[0].labels).toBeUndefined();
+    });
+  });
+
+  it("configures experiment selection for series-backed compare ChartSpecs", async () => {
+    render(
+      <Harness
+        initialBlocks={[]}
+        initialPages={[createPage("page-1")]}
+        dataset={seriesDatasetFixture}
+        chartSpecs={[seriesChartSpecFixture]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Reaction rate comparison/i }));
+    expect(screen.getByRole("dialog", { name: "Insert chart" })).not.toBeNull();
+    expect(screen.getByText("0 of 2 experiments selected")).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Select experiments" }));
+    fireEvent.click(screen.getByLabelText("Select Run 2"));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("button", { name: "Insert chart" }));
+
+    await waitFor(() => {
+      const state = readDocState();
+      expect(state.blocks).toHaveLength(1);
+      expect(state.blocks[0]).toMatchObject({
+        kind: "chart",
+        chartSpecId: "chart_spec_series",
+        chartView: {
+          selectedExperimentIds: ["exp_2"],
+          excludedExperimentIds: [],
+          filters: [],
+          groupBy: null,
+        },
+      });
+      expect(state.blocks[0].chartSpecSnapshot.spec.schemaVersion).toBe("labrat.chartSpec.v1.4");
+      expect(state.blocks[0].chartSpecSnapshot.spec.seriesScope.yField).toBe("reaction_rate_mol_g_h");
     });
   });
 
