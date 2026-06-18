@@ -2,6 +2,30 @@
 
 This file is the first stop for AI coding agents working in this repository. Read it together with `README.md`, `doc/PROGRESS.md`, `doc/ARCHITECTURE.md`, `doc/ROADMAP.md`, and `doc/plan.md` before making edits. For auth, database, project persistence, import persistence, chart-spec, or manuscript persistence work, also read `doc/saas-database-schema-v0.md`, `doc/saas-api-contract-v0.md`, `doc/server-project-state-plan.md`, `doc/backend-api-contract.md`, `doc/canonical-data-dictionary.md`, and `doc/ai-boundaries.md`; note that old local-data migration is not in scope.
 
+## Mandatory Codex Long-Task Execution Loop
+
+Codex agents must use the repository as a durable long-task environment, not as a one-shot code editing target.
+
+For every non-trivial implementation task:
+
+1. Run or mentally perform `npm run codex:preflight` before editing.
+2. Read `doc/plan.md` before deciding what to build.
+3. Read the active architecture/data-model/API docs before touching matching code:
+   - Routes, auth, roles, persistence, migrations, project state, or frontend API helpers: `doc/saas-api-contract-v0.md`, `doc/saas-database-schema-v0.md`, `doc/server-project-state-plan.md`, and `doc/backend-api-contract.md`.
+   - Data shape, import, Browser rows, ChartSpec, manuscript, AI context, or scientific semantics: `doc/canonical-data-dictionary.md`, `doc/ARCHITECTURE.md`, and `doc/ai-boundaries.md`.
+4. Create or update a concrete checklist in `doc/task-checklist.md` before starting a long milestone.
+5. Implement one coherent milestone at a time.
+6. Run the relevant tests. Use `npm run codex:verify` for full verification, or record why a narrower command was chosen.
+7. Update `doc/PROGRESS.md` after every milestone with the request, meaningful changes, verification, and follow-ups. On Windows this is the canonical progress file; do not create a separate `doc/progress.md`.
+8. Re-read `doc/plan.md` and any touched contracts before continuing to the next milestone.
+9. Stop and report conflicts between code and docs instead of guessing. If implementation reality differs from the docs, either update the docs as part of the reviewed change or ask the user which source of truth should win.
+
+Use `doc/decisions.md` for durable architecture/product decisions and `doc/code-review.md` as the standing review checklist. Long tasks should loop:
+
+```text
+read docs -> create checklist -> implement one milestone -> run tests -> update progress -> re-read docs -> continue
+```
+
 ## Mission
 
 LabRat Blank is evolving into a multi-lab SaaS research command center for messy lab Excel/CSV imports, experiment browsing, charting, manuscript layout, and PPTX export. Server-first project mode is now implemented; the next active direction is workflow reliability, Docker/Postgres deployment hardening, admin/audit usability, and smarter import/chart intelligence. Preserve scientific data integrity and avoid broad rewrites.
@@ -45,7 +69,7 @@ Use `npm run build` as the minimum verification after code changes. For import/b
 - `backend/src/`: backend scan, normalize, semantic mapping, and chart proposal services.
 - `public/templates/`: example-only workbook templates.
 - `src/styles.css`: all app styling.
-- `doc/`: active plan, architecture, roadmap, contracts, data dictionary, AI boundaries, server state notes, and progress log.
+- `doc/`: active plan, architecture, roadmap, contracts, data dictionary, AI boundaries, durable decisions, task checklist, review checklist, server state notes, and progress log.
 
 ## Data Guardrails
 

@@ -2,6 +2,10 @@
 
 Use this file to record user requests, meaningful changes, verification results, and notable follow-up items. Keep entries concise, newest first, and include dates.
 
+## 2026-06-18
+
+- Added durable Codex long-task execution loop environment Files: AGENTS.md, doc/decisions.md, doc/task-checklist.md, doc/code-review.md, scripts/codex-preflight.mjs, scripts/codex-checkpoint.mjs, scripts/codex-verify.mjs, package.json. Verification: npm run codex:preflight; npm run codex:verify.
+
 ## 2026-06-17
 
 - Implemented server-backed conversational LabRat action planning. Added `POST /api/projects/:projectId/agent/plan`, deterministic safe action plans for master upload, master refresh, supplemental workbook upload, chart proposal, chart interpretation, ChartSpec creation, and data-query requests, plus auth/cross-lab route coverage. Refactored the AgentPanel path in logged-in project mode to call the server planner, render confirmable action cards, execute uploads through existing file/import/normalize/relationship/refresh/apply APIs, persist chart proposals/specs only after card confirmation, and reload project state after mutations. Updated AI boundary/API/plan/roadmap docs. Verified `npm test` passed with 24 files and 163 tests, `npm --prefix backend test` passed with 169 tests and 1 skipped optional Postgres test, and `npm run build` passed with the existing large Plotly chunk warning.
