@@ -999,17 +999,145 @@ Purpose: preview a structured extract from a source region without mutating data
 
 Required role: `viewer` or above.
 
+Status: Phase 6 backend foundation implemented for bounded table ranges and C-number/component distributions.
+
+Request:
+
+```json
+{
+  "extractType": "component_distribution",
+  "intent": {
+    "title": "Exp30 Overall tots",
+    "chartTitle": "Exp30 carbon number distribution"
+  }
+}
+```
+
+Response:
+
+```json
+{
+  "preview": {
+    "schemaVersion": "labrat.sourceExtractPreview.v1",
+    "extractType": "component_distribution",
+    "purpose": "chart_source",
+    "title": "Overall tots component distribution",
+    "fields": [
+      { "fieldId": "carbon_number", "label": "C number", "valueType": "integer" },
+      { "fieldId": "percentage", "label": "Overall tots", "unit": "%", "valueType": "number" }
+    ],
+    "rows": [
+      {
+        "rowId": "component_1",
+        "values": { "carbon_number": 1, "percentage": 5 },
+        "sourceRefs": [
+          { "sourceType": "excel_cell", "sheet": "Sheet1", "cell": "B2", "fieldId": "percentage" }
+        ]
+      }
+    ],
+    "sourceRefs": [],
+    "summary": {},
+    "warnings": []
+  }
+}
+```
+
+Rules:
+
+- Preview is read-only and does not create proposals, chart proposals, ChartSpecs, or dataset commits.
+- The backend reads only a bounded range from the source index.
+- `component_distribution` detects C-number headers such as `C1`, `C2`, and a numeric row such as `Overall tots`.
+- Fallback extraction treats the first row as headers and following rows as source-backed table rows.
+- Every extracted value should preserve an exact source cell ref when available.
+
+### `GET /api/projects/:projectId/source-extract-proposals`
+
+Purpose: list reviewable source extract proposals for a project.
+
+Required role: `viewer` or above.
+
 ### `POST /api/projects/:projectId/source-extract-proposals`
 
 Purpose: persist a reviewable source extract proposal.
 
 Required role: `editor` or above.
 
+Status: Phase 6 backend foundation implemented.
+
+Request:
+
+```json
+{
+  "sourceRegionId": "source_region_...",
+  "extractType": "component_distribution",
+  "purpose": "chart_source",
+  "intent": {
+    "title": "Exp30 Overall tots",
+    "chartTitle": "Exp30 carbon number distribution"
+  }
+}
+```
+
+Response:
+
+```json
+{
+  "sourceExtractProposal": {
+    "id": "source_extract_proposal_...",
+    "status": "proposed",
+    "sourceDocumentId": "source_doc_...",
+    "sourceRegionId": "source_region_...",
+    "extractType": "component_distribution",
+    "purpose": "chart_source",
+    "preview": {},
+    "decisionSummary": {}
+  }
+}
+```
+
+Rules:
+
+- Creating a source extract proposal does not mutate dataset commits.
+- Proposal previews are deterministic and source-backed; no model call is required.
+- Write `source.extract.propose` audit events.
+
 ### `PATCH /api/source-extract-proposals/:proposalId`
 
 Purpose: update source extract review status or decision summary.
 
 Required role: `editor` or above.
+
+Request:
+
+```json
+{
+  "status": "accepted",
+  "decisionSummary": {
+    "note": "Use Overall tots row."
+  }
+}
+```
+
+Rules:
+
+- Allowed statuses are `proposed`, `accepted`, and `rejected`.
+- Accept/reject changes review state only; it does not create dataset commits or chart specs.
+- Write `source.extract.accept`, `source.extract.reject`, or `source.extract.update_decision` audit events.
+
+### `POST /api/source-extract-proposals/:proposalId/chart-proposal`
+
+Purpose: create a normal reviewable chart proposal set from an accepted source extract proposal.
+
+Required role: `editor` or above.
+
+Status: Phase 6 backend foundation implemented.
+
+Rules:
+
+- Requires `sourceExtractProposal.status === "accepted"`; otherwise return `409 source_extract_not_accepted`.
+- Creates a normal `chart_proposal_sets` row with `payload.origin: "source_extract"` and `datasetCommitId: null`.
+- The proposal contains `chartSpecDraft.origin: "source_extract"`, an immutable `sourceSnapshot`, and exact source refs.
+- This endpoint does not create a ChartSpec or manuscript block. Existing Chart Review / ChartSpec validation remains the next review boundary.
 
 ### `POST /api/projects/:projectId/charts/interpret`
 

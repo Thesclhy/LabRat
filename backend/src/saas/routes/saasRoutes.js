@@ -35,6 +35,11 @@ import {
   sourceRegionSummary,
 } from "../sourceDocuments.js";
 import {
+  buildSourceExtractPreview,
+  chartProposalFromSourceExtract,
+  sourceExtractProposalSummary,
+} from "../sourceExtracts.js";
+import {
   decorateObservationSeriesStaleness,
   deriveObservationSeriesFromDatasetCommit,
   mergePersistedAndDerivedObservationSeries,
@@ -433,6 +438,32 @@ async function sourceDocumentAuth(req, context, sourceDocumentId, role = "viewer
   }
   requireLabRole(auth, sourceDocument.labId, role);
   return { auth, sourceDocument };
+}
+
+async function sourceRegionAuth(req, context, sourceRegionId, role = "viewer") {
+  const auth = requireAuth(await authFor(req, context));
+  const sourceRegion = await context.store.findSourceRegionById?.(sourceRegionId);
+  if (!sourceRegion) {
+    throw Object.assign(new Error("Source region not found."), {
+      statusCode: 404,
+      code: "source_region_not_found",
+    });
+  }
+  requireLabRole(auth, sourceRegion.labId, role);
+  return { auth, sourceRegion };
+}
+
+async function sourceExtractProposalAuth(req, context, proposalId, role = "viewer") {
+  const auth = requireAuth(await authFor(req, context));
+  const sourceExtractProposal = await context.store.findSourceExtractProposalById?.(proposalId);
+  if (!sourceExtractProposal) {
+    throw Object.assign(new Error("Source extract proposal not found."), {
+      statusCode: 404,
+      code: "source_extract_proposal_not_found",
+    });
+  }
+  requireLabRole(auth, sourceExtractProposal.labId, role);
+  return { auth, sourceExtractProposal };
 }
 
 async function handleLogin(req, res, context) {
@@ -1078,6 +1109,185 @@ async function handleSourceDocumentRange(req, res, context, sourceDocumentId) {
     maxCells: body.maxCells,
   });
   sendJson(res, 200, result);
+}
+
+async function sourceDocumentForRegion(context, sourceRegion) {
+  const sourceDocument = await context.store.findSourceDocumentById?.(sourceRegion.sourceDocumentId);
+  if (!sourceDocument) {
+    throw Object.assign(new Error("Source document not found for source region."), {
+      statusCode: 404,
+      code: "source_document_not_found",
+    });
+  }
+  return sourceDocument;
+}
+
+async function buildExtractPreviewForRoute(context, { sourceDocument, sourceRegion = null, body = {} }) {
+  const indexBlobs = context.store.listSourceIndexBlobs
+    ? await context.store.listSourceIndexBlobs({ sourceDocumentId: sourceDocument.id })
+    : [];
+  return buildSourceExtractPreview({
+    sourceDocument,
+    sourceRegion,
+    indexBlobs,
+    body,
+  });
+}
+
+async function handleSourceRegionExtractPreview(req, res, context, sourceRegionId) {
+  const { sourceRegion } = await sourceRegionAuth(req, context, sourceRegionId, "viewer");
+  const sourceDocument = await sourceDocumentForRegion(context, sourceRegion);
+  const body = await readJsonBody(req);
+  const preview = await buildExtractPreviewForRoute(context, { sourceDocument, sourceRegion, body });
+  sendJson(res, 200, { preview });
+}
+
+async function resolveSourceExtractTarget(context, project, body) {
+  let sourceRegion = null;
+  let sourceDocument = null;
+  if (body.sourceRegionId) {
+    sourceRegion = await context.store.findSourceRegionById?.(body.sourceRegionId);
+    if (!sourceRegion || sourceRegion.projectId !== project.id) {
+      throw Object.assign(new Error("Source region not found for this project."), {
+        statusCode: 404,
+        code: "source_region_not_found",
+      });
+    }
+    sourceDocument = await sourceDocumentForRegion(context, sourceRegion);
+  } else if (body.sourceDocumentId) {
+    sourceDocument = await context.store.findSourceDocumentById?.(body.sourceDocumentId);
+    if (!sourceDocument || sourceDocument.projectId !== project.id) {
+      throw Object.assign(new Error("Source document not found for this project."), {
+        statusCode: 404,
+        code: "source_document_not_found",
+      });
+    }
+  } else {
+    throw Object.assign(new Error("sourceRegionId or sourceDocumentId is required."), {
+      statusCode: 400,
+      code: "invalid_source_extract_request",
+    });
+  }
+  return { sourceDocument, sourceRegion };
+}
+
+async function handleProjectSourceExtractProposals(req, res, context, projectId) {
+  const { auth, project } = await projectAuth(req, context, projectId, req.method === "POST" ? "editor" : "viewer");
+  if (req.method === "GET") {
+    const proposals = context.store.listSourceExtractProposals
+      ? await context.store.listSourceExtractProposals({ projectId: project.id })
+      : [];
+    sendJson(res, 200, {
+      sourceExtractProposals: proposals.map(sourceExtractProposalSummary),
+    });
+    return;
+  }
+  const body = await readJsonBody(req);
+  const { sourceDocument, sourceRegion } = await resolveSourceExtractTarget(context, project, body);
+  const preview = await buildExtractPreviewForRoute(context, { sourceDocument, sourceRegion, body });
+  const proposal = await context.store.createSourceExtractProposal({
+    labId: project.labId,
+    projectId: project.id,
+    sourceDocumentId: sourceDocument.id,
+    sourceRegionId: sourceRegion?.id || null,
+    datasetCommitId: body.datasetCommitId || null,
+    status: body.status || "proposed",
+    purpose: body.purpose || preview.purpose || "chart_source",
+    extractType: body.extractType || preview.extractType || "table_range",
+    intent: body.intent || {},
+    preview,
+    warnings: preview.warnings || [],
+    decisionSummary: body.decisionSummary || {},
+    createdBy: auth.user.id,
+  });
+  await context.store.recordAuditEvent({
+    labId: project.labId,
+    projectId: project.id,
+    actorUserId: auth.user.id,
+    action: "source.extract.propose",
+    targetType: "source_extract_proposal",
+    targetId: proposal.id,
+    summary: `Created source extract proposal ${proposal.extractType || proposal.id}.`,
+    metadata: {
+      sourceDocumentId: sourceDocument.id,
+      sourceRegionId: sourceRegion?.id || null,
+      extractType: proposal.extractType || null,
+    },
+  });
+  sendJson(res, 201, { sourceExtractProposal: sourceExtractProposalSummary(proposal) });
+}
+
+async function handleSourceExtractProposalPatch(req, res, context, proposalId) {
+  const { auth, sourceExtractProposal } = await sourceExtractProposalAuth(req, context, proposalId, "editor");
+  const body = await readJsonBody(req);
+  const allowedStatuses = new Set(["proposed", "accepted", "rejected"]);
+  const nextStatus = body.status == null ? sourceExtractProposal.status : String(body.status);
+  if (!allowedStatuses.has(nextStatus)) {
+    sendError(res, 400, "invalid_source_extract_status", "Source extract status must be proposed, accepted, or rejected.");
+    return;
+  }
+  const updated = await context.store.updateSourceExtractProposal(sourceExtractProposal.id, {
+    status: nextStatus,
+    decisionSummary: body.decisionSummary || sourceExtractProposal.decisionSummary || {},
+    warnings: body.warnings || sourceExtractProposal.warnings || [],
+    updatedBy: auth.user.id,
+  });
+  await context.store.recordAuditEvent({
+    labId: sourceExtractProposal.labId,
+    projectId: sourceExtractProposal.projectId,
+    actorUserId: auth.user.id,
+    action: nextStatus === "accepted"
+      ? "source.extract.accept"
+      : nextStatus === "rejected"
+        ? "source.extract.reject"
+        : "source.extract.update_decision",
+    targetType: "source_extract_proposal",
+    targetId: sourceExtractProposal.id,
+    summary: `Updated source extract proposal to ${nextStatus}.`,
+  });
+  sendJson(res, 200, { sourceExtractProposal: sourceExtractProposalSummary(updated) });
+}
+
+async function handleSourceExtractChartProposal(req, res, context, proposalId) {
+  const { auth, sourceExtractProposal } = await sourceExtractProposalAuth(req, context, proposalId, "editor");
+  if (sourceExtractProposal.status !== "accepted") {
+    sendError(res, 409, "source_extract_not_accepted", "Accept the source extract proposal before drafting a chart proposal.");
+    return;
+  }
+  const proposal = chartProposalFromSourceExtract(sourceExtractProposal);
+  const chartProposalSet = await context.store.createChartProposalSet({
+    labId: sourceExtractProposal.labId,
+    projectId: sourceExtractProposal.projectId,
+    datasetCommitId: null,
+    mappingSetId: null,
+    schemaVersion: "labrat.chartProposalSet.v1",
+    status: "proposed",
+    payload: {
+      proposalSetId: `chart_proposal_set_source_extract_${sha256Hex(sourceExtractProposal.id).slice(0, 16)}`,
+      schemaVersion: "labrat.chartProposalSet.v1",
+      sourceImportIds: [],
+      proposals: [proposal],
+      warnings: proposal.warnings || [],
+      origin: "source_extract",
+      sourceExtractProposalId: sourceExtractProposal.id,
+    },
+    decisionSummary: { accepted: 0, rejected: 0, proposalCount: 1 },
+    createdBy: auth.user.id,
+  });
+  await context.store.recordAuditEvent({
+    labId: sourceExtractProposal.labId,
+    projectId: sourceExtractProposal.projectId,
+    actorUserId: auth.user.id,
+    action: "chart_proposal_set.create",
+    targetType: "chart_proposal_set",
+    targetId: chartProposalSet.id,
+    summary: "Created chart proposal set from source extract proposal.",
+    metadata: { sourceExtractProposalId: sourceExtractProposal.id },
+  });
+  sendJson(res, 201, {
+    sourceExtractProposal: sourceExtractProposalSummary(sourceExtractProposal),
+    chartProposalSet: chartProposalSetSummary(chartProposalSet),
+  });
 }
 
 async function handleProjectDatasetCommits(req, res, context, projectId) {
@@ -2035,6 +2245,10 @@ async function dispatch(req, res, context) {
   if (importRunsMatch && req.method === "POST") return handleProjectImportRuns(req, res, context, importRunsMatch[1]);
   const sourceDocumentsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/source-documents$/);
   if (sourceDocumentsMatch && req.method === "GET") return handleProjectSourceDocuments(req, res, context, sourceDocumentsMatch[1]);
+  const sourceExtractProposalsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/source-extract-proposals$/);
+  if (sourceExtractProposalsMatch && (req.method === "GET" || req.method === "POST")) {
+    return handleProjectSourceExtractProposals(req, res, context, sourceExtractProposalsMatch[1]);
+  }
   const supplementalBatchesMatch = pathName.match(/^\/api\/projects\/([^/]+)\/supplemental-import-batches$/);
   if (supplementalBatchesMatch && (req.method === "GET" || req.method === "POST")) return handleProjectSupplementalImportBatches(req, res, context, supplementalBatchesMatch[1]);
   const supplementalBatchEventsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/supplemental-import-batches\/([^/]+)\/events$/);
@@ -2055,6 +2269,12 @@ async function dispatch(req, res, context) {
   if (sourceDocumentQueryMatch && req.method === "POST") return handleSourceDocumentQuery(req, res, context, sourceDocumentQueryMatch[1]);
   const sourceDocumentRangeMatch = pathName.match(/^\/api\/source-documents\/([^/]+)\/range$/);
   if (sourceDocumentRangeMatch && req.method === "POST") return handleSourceDocumentRange(req, res, context, sourceDocumentRangeMatch[1]);
+  const sourceRegionExtractPreviewMatch = pathName.match(/^\/api\/source-regions\/([^/]+)\/extract-preview$/);
+  if (sourceRegionExtractPreviewMatch && req.method === "POST") return handleSourceRegionExtractPreview(req, res, context, sourceRegionExtractPreviewMatch[1]);
+  const sourceExtractProposalChartMatch = pathName.match(/^\/api\/source-extract-proposals\/([^/]+)\/chart-proposal$/);
+  if (sourceExtractProposalChartMatch && req.method === "POST") return handleSourceExtractChartProposal(req, res, context, sourceExtractProposalChartMatch[1]);
+  const sourceExtractProposalMatch = pathName.match(/^\/api\/source-extract-proposals\/([^/]+)$/);
+  if (sourceExtractProposalMatch && req.method === "PATCH") return handleSourceExtractProposalPatch(req, res, context, sourceExtractProposalMatch[1]);
   const mappingSetsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/mapping-sets$/);
   if (mappingSetsMatch && (req.method === "GET" || req.method === "POST")) return handleProjectMappingSets(req, res, context, mappingSetsMatch[1]);
   const mappingSetMatch = pathName.match(/^\/api\/mapping-sets\/([^/]+)$/);
@@ -2089,6 +2309,8 @@ export async function handleSaasRoutes(req, res, context) {
     && !req.url?.startsWith("/api/projects")
     && !req.url?.startsWith("/api/analysis-views")
     && !req.url?.startsWith("/api/source-documents")
+    && !req.url?.startsWith("/api/source-regions")
+    && !req.url?.startsWith("/api/source-extract-proposals")
     && !req.url?.startsWith("/api/import-runs")
     && !req.url?.startsWith("/api/mapping-sets")
     && !req.url?.startsWith("/api/chart-proposal-sets")

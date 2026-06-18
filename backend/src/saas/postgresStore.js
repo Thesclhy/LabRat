@@ -285,6 +285,30 @@ function sourceIndexBlobFromRow(row) {
   };
 }
 
+function sourceExtractProposalFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    sourceDocumentId: row.source_document_id,
+    sourceRegionId: row.source_region_id,
+    datasetCommitId: row.dataset_commit_id,
+    schemaVersion: row.schema_version || "labrat.sourceExtractProposal.v1",
+    status: row.status,
+    purpose: row.purpose,
+    extractType: row.extract_type,
+    intent: row.intent || {},
+    preview: row.preview || {},
+    warnings: row.warnings || [],
+    decisionSummary: row.decision_summary || {},
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    createdBy: row.created_by,
+    updatedBy: row.updated_by,
+  };
+}
+
 function mappingSetFromRow(row) {
   if (!row) return null;
   return {
@@ -1065,12 +1089,84 @@ export class PostgresSaasStore {
     return result.rows.map(sourceRegionFromRow);
   }
 
+  async findSourceRegionById(id) {
+    const result = await this.query("select * from source_regions where id = $1", [id]);
+    return sourceRegionFromRow(result.rows[0]);
+  }
+
   async listSourceIndexBlobs({ sourceDocumentId }) {
     const result = await this.query(
       "select * from source_index_blobs where source_document_id = $1 order by created_at asc",
       [sourceDocumentId],
     );
     return result.rows.map(sourceIndexBlobFromRow);
+  }
+
+  async createSourceExtractProposal(input) {
+    const result = await this.query(
+      `insert into source_extract_proposals
+       (id, lab_id, project_id, source_document_id, source_region_id, dataset_commit_id, schema_version, status, purpose, extract_type, intent, preview, warnings, decision_summary, created_at, updated_at, created_by, updated_by)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, now(), now(), $15, $15)
+       returning *`,
+      [
+        input.id || makeId("source_extract_proposal"),
+        input.labId,
+        input.projectId,
+        input.sourceDocumentId || null,
+        input.sourceRegionId || null,
+        input.datasetCommitId || null,
+        input.schemaVersion || "labrat.sourceExtractProposal.v1",
+        input.status || "proposed",
+        input.purpose || null,
+        input.extractType || null,
+        jsonb(input.intent || {}),
+        jsonb(input.preview || {}),
+        jsonb(input.warnings || [], []),
+        jsonb(input.decisionSummary || {}),
+        input.createdBy,
+      ],
+    );
+    return sourceExtractProposalFromRow(result.rows[0]);
+  }
+
+  async findSourceExtractProposalById(id) {
+    const result = await this.query("select * from source_extract_proposals where id = $1", [id]);
+    return sourceExtractProposalFromRow(result.rows[0]);
+  }
+
+  async listSourceExtractProposals({ projectId }) {
+    const result = await this.query(
+      "select * from source_extract_proposals where project_id = $1 order by updated_at desc",
+      [projectId],
+    );
+    return result.rows.map(sourceExtractProposalFromRow);
+  }
+
+  async updateSourceExtractProposal(id, changes) {
+    const current = await this.findSourceExtractProposalById(id);
+    if (!current) return null;
+    const result = await this.query(
+      `update source_extract_proposals
+       set status = $2,
+           intent = $3,
+           preview = $4,
+           warnings = $5,
+           decision_summary = $6,
+           updated_by = coalesce($7, updated_by),
+           updated_at = now()
+       where id = $1
+       returning *`,
+      [
+        id,
+        changes.status ?? current.status,
+        jsonb(changes.intent ?? current.intent ?? {}),
+        jsonb(changes.preview ?? current.preview ?? {}),
+        jsonb(changes.warnings ?? current.warnings ?? [], []),
+        jsonb(changes.decisionSummary ?? current.decisionSummary ?? {}),
+        changes.updatedBy || null,
+      ],
+    );
+    return sourceExtractProposalFromRow(result.rows[0]);
   }
 
   async createMappingSet(input) {

@@ -470,9 +470,9 @@ Notes:
 - Range read APIs must enforce cell-count caps.
 - Phase 5 stores Excel cell-grid blobs for bounded source query/range APIs, but project state and source document lists do not expose full grids.
 
-## `source_extract_proposals` Planned
+## `source_extract_proposals`
 
-Persists reviewable structured extracts from source regions/ranges.
+Persists reviewable structured extracts from source regions/ranges. Implemented by `006_source_extract_proposals.sql`.
 
 Columns:
 
@@ -483,6 +483,7 @@ project_id text not null references projects(id)
 source_document_id text references source_documents(id)
 source_region_id text references source_regions(id)
 dataset_commit_id text references dataset_commits(id)
+schema_version text not null default 'labrat.sourceExtractProposal.v1'
 status text not null default 'proposed'
 purpose text
 extract_type text
@@ -498,8 +499,9 @@ updated_by text references users(id)
 
 Notes:
 
-- V1 source extracts can draft source-backed chart proposals.
-- Promotion into dataset commits is deferred.
+- Phase 6 source extracts can preview bounded source ranges, preserve per-value source refs, and draft source-backed chart proposal sets after acceptance.
+- Accepting or rejecting a source extract changes review state only; it does not mutate dataset commits.
+- Promotion into dataset commits and source-backed ChartSpec creation are deferred.
 
 ## `observation_series`
 

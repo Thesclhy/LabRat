@@ -374,7 +374,7 @@ Range APIs must enforce cell-count caps and must not be used to send full workbo
 
 ## Source Extract Proposal
 
-A planned reviewable proposal that turns a source region or range into structured rows/fields.
+A reviewable proposal that turns a source region or bounded source range into structured rows/fields. The Phase 6 backend foundation supports generic table/range extraction and C-number/component-distribution extraction from Excel source indexes.
 
 Source extract proposals preserve:
 
@@ -385,7 +385,7 @@ Source extract proposals preserve:
 - exact source refs per extracted value where possible
 - status, warnings, and review decision
 
-Accepting a source extract in v1 can draft a source-backed chart proposal. Promotion into a dataset commit is deferred.
+Accepting a source extract in v1 can draft a source-backed chart proposal set with an immutable source snapshot. It does not create a ChartSpec, insert into Manuscript, or promote values into a dataset commit by itself. Promotion into a dataset commit remains deferred.
 
 ## Observation Set
 

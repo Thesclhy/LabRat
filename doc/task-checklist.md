@@ -19,15 +19,15 @@ Use this file as the working checklist for long Codex tasks. Update it before st
 
 Objective: Implement `doc/plan.md` Agent-first evidence workflow on `feature/agent-first-evidence-workflow`.
 
-Milestone: Phase 5 Source Document Index backend foundation. Uploaded Excel workbooks should persist compact source document metadata and detected source region summaries, expose source document/region/query/range APIs, and keep full source cell grids out of project state and model context.
+Milestone: Phase 6 Source Extract Proposals backend foundation. Source regions/ranges should produce reviewable structured extract previews with exact source refs, persist source extract proposals, record accept/reject decisions, and let accepted extracts draft source-backed chart proposal sets without mutating dataset commits.
 
 Relevant docs read: `AGENTS.md`, `doc/plan.md`, `doc/PROGRESS.md`, `doc/saas-api-contract-v0.md`, `doc/saas-database-schema-v0.md`, `doc/canonical-data-dictionary.md`, `doc/backend-api-contract.md`, `doc/ai-boundaries.md`, `doc/source-understanding-long-term-plan.md`.
 
-Touched areas: backend SaaS store persistence, Postgres migration, project import scan indexing, source document/region/query/range routes, backend tests, API/schema/data dictionary docs, progress log.
+Touched areas: backend SaaS store persistence, Postgres migration, source extract preview/proposal routes, source-backed chart proposal draft route, backend tests, API/schema/data dictionary docs, progress log.
 
-Verification plan: targeted SaaS route tests for source document persistence/query/range/auth behavior passed; full `npm run codex:verify` passed.
+Verification plan: targeted SaaS route tests for source extract preview/proposal/review/chart-proposal behavior passed; full `npm run codex:verify` passed; `docker compose config` completed with existing Docker config warning; optional Postgres route test skipped because no test database URL was configured.
 
-Open risks: Keep this as backend-only Phase 5 foundation; do not add Source Explorer UI, Source Extract Proposals, Controlled AgentRun, Anthropic calls, dataset promotion, arbitrary code execution, or direct AI Plotly JSON. Existing unrelated `package-lock.json` metadata remains unstaged.
+Open risks: Keep this as backend-only Phase 6 foundation; do not add Source Explorer UI, Controlled AgentRun, Anthropic calls, dataset promotion, arbitrary code execution, direct AI Plotly JSON, or source-backed ChartSpec creation unless the review boundary is already satisfied.
 
 ## Milestone Checklist Template
 
@@ -45,10 +45,14 @@ Open risks: Keep this as backend-only Phase 5 foundation; do not add Source Expl
 - [x] Keep AI/tool actions proposal-first until explicit user confirmation.
 - [x] Preserve source refs and stale-state metadata across derived views, proposals, ChartSpecs, and manuscript snapshots.
 - [x] Add or update API/schema/data-dictionary docs in the same change when persisted shapes change.
-- [x] Record token/cost/latency assumptions for new AI-backed flows. Not applicable for this deterministic backend-only milestone; no model calls were added.
+- [x] Record token/cost/latency assumptions for new AI-backed flows. Not applicable for this deterministic backend-only milestone; no model calls are planned.
 - [x] Keep this milestone deterministic and do not add Anthropic or AgentRun behavior.
 
 ## Recent Checkpoints
+
+- 2026-06-18: Implemented Phase 6 Source Extract Proposals backend foundation. Source regions/ranges now produce deterministic extract previews, source extract proposals can be accepted/rejected, and accepted extracts can draft source-backed chart proposal sets while preserving dataset commits. Verification passed with targeted SaaS route tests, full `npm run codex:verify`, Docker config, and optional Postgres route test skip.
+
+- 2026-06-18: Started Phase 6 Source Extract Proposals backend foundation. Scope is deterministic preview/proposal/review persistence and source-backed chart proposal drafting from accepted extracts; no Source Explorer UI, AgentRun, Anthropic integration, dataset promotion, arbitrary code execution, or direct Plotly JSON.
 
 - 2026-06-18: Implemented Phase 5 Source Document Index backend foundation. Workbook scans now persist source document metadata, region summaries, and bounded cell-grid index blobs; new source document/region/query/range APIs are covered by targeted SaaS route tests and full `npm run codex:verify` passed.
 

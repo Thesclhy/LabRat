@@ -35,6 +35,7 @@ export class MemorySaasStore {
     this.sourceDocuments = new Map();
     this.sourceRegions = new Map();
     this.sourceIndexBlobs = new Map();
+    this.sourceExtractProposals = new Map();
     this.mappingSets = new Map();
     this.chartProposalSets = new Map();
     this.chartSpecs = new Map();
@@ -666,10 +667,63 @@ export class MemorySaasStore {
       .map(copy);
   }
 
+  async findSourceRegionById(id) {
+    return copy(this.sourceRegions.get(id) || null);
+  }
+
   async listSourceIndexBlobs({ sourceDocumentId }) {
     return [...this.sourceIndexBlobs.values()]
       .filter((blob) => blob.sourceDocumentId === sourceDocumentId)
       .map(copy);
+  }
+
+  async createSourceExtractProposal(input) {
+    const createdAt = nowIso();
+    const proposal = {
+      id: input.id || makeId("source_extract_proposal"),
+      labId: input.labId,
+      projectId: input.projectId,
+      sourceDocumentId: input.sourceDocumentId || null,
+      sourceRegionId: input.sourceRegionId || null,
+      datasetCommitId: input.datasetCommitId || null,
+      schemaVersion: input.schemaVersion || "labrat.sourceExtractProposal.v1",
+      status: input.status || "proposed",
+      purpose: input.purpose || null,
+      extractType: input.extractType || null,
+      intent: copy(input.intent) || {},
+      preview: copy(input.preview) || {},
+      warnings: copy(input.warnings) || [],
+      decisionSummary: copy(input.decisionSummary) || {},
+      createdAt,
+      updatedAt: createdAt,
+      createdBy: input.createdBy,
+      updatedBy: input.createdBy,
+    };
+    this.sourceExtractProposals.set(proposal.id, proposal);
+    return copy(proposal);
+  }
+
+  async findSourceExtractProposalById(id) {
+    return copy(this.sourceExtractProposals.get(id) || null);
+  }
+
+  async listSourceExtractProposals({ projectId }) {
+    return [...this.sourceExtractProposals.values()]
+      .filter((proposal) => proposal.projectId === projectId)
+      .map(copy);
+  }
+
+  async updateSourceExtractProposal(id, changes) {
+    const proposal = this.sourceExtractProposals.get(id);
+    if (!proposal) return null;
+    if (changes.status != null) proposal.status = String(changes.status);
+    if (changes.intent != null) proposal.intent = copy(changes.intent) || {};
+    if (changes.preview != null) proposal.preview = copy(changes.preview) || {};
+    if (changes.warnings != null) proposal.warnings = copy(changes.warnings) || [];
+    if (changes.decisionSummary != null) proposal.decisionSummary = copy(changes.decisionSummary) || {};
+    proposal.updatedAt = nowIso();
+    proposal.updatedBy = changes.updatedBy || proposal.updatedBy;
+    return copy(proposal);
   }
 
   async createMappingSet(input) {

@@ -77,6 +77,20 @@ function makeReactionRateWorkbookBlob(rows = [
   });
 }
 
+function makeComponentDistributionWorkbookBlob() {
+  const workbook = XLSX.utils.book_new();
+  const worksheet = XLSX.utils.aoa_to_sheet([
+    ["Label", "C1", "C2", "C3", "C4"],
+    ["Overall tots", 5, 12.5, 21, 9.5],
+    ["Light fraction", 1, 2, 3, 4],
+  ]);
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
+  const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+  return new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+}
+
 function fixtureBlob(file) {
   return new Blob([file.buffer], {
     type: file.contentType || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -599,6 +613,120 @@ test("workbook scan persists source documents, regions, queryable cells, and cap
 
   const auditEvents = await store.listAuditEvents({ projectId: project.project.id });
   assert.equal(auditEvents.some((event) => event.action === "source.index"), true);
+});
+
+test("source extract proposals preserve cell refs and draft source-backed chart proposals", async () => {
+  const labs = await (await jsonFetch("/api/labs")).json();
+  const labId = labs.labs[0].labId;
+  const project = await (await jsonFetch("/api/projects", {
+    method: "POST",
+    body: { labId, name: "Source Extract Project" },
+  })).json();
+  const created = await uploadAndCreateImportRun(
+    project.project.id,
+    makeComponentDistributionWorkbookBlob(),
+    "Calculation_Exp30.xlsx",
+  );
+
+  const documents = await (await jsonFetch(`/api/projects/${project.project.id}/source-documents`)).json();
+  const sourceDocument = documents.sourceDocuments[0];
+  const regions = await (await jsonFetch(`/api/source-documents/${sourceDocument.id}/regions`)).json();
+  const sourceRegion = regions.regions.find((region) => region.sheetName === "Sheet1" && region.rangeRef);
+  assert.ok(sourceRegion);
+
+  const previewResponse = await jsonFetch(`/api/source-regions/${sourceRegion.id}/extract-preview`, {
+    method: "POST",
+    body: {
+      extractType: "component_distribution",
+      intent: { title: "Exp30 Overall tots", chartTitle: "Exp30 carbon number distribution" },
+    },
+  });
+  assert.equal(previewResponse.status, 200);
+  const previewBody = await previewResponse.json();
+  assert.equal(previewBody.preview.extractType, "component_distribution");
+  assert.equal(previewBody.preview.rows.length, 4);
+  assert.deepEqual(previewBody.preview.rows.map((row) => row.values.carbon_number), [1, 2, 3, 4]);
+  assert.deepEqual(previewBody.preview.rows.map((row) => row.values.percentage), [5, 12.5, 21, 9.5]);
+  assert.equal(previewBody.preview.rows[0].sourceRefs.some((ref) => ref.cell === "B2" && ref.fieldId === "percentage"), true);
+
+  const unauthenticatedCookie = cookie;
+  cookie = "";
+  const unauthenticatedCreate = await jsonFetch(`/api/projects/${project.project.id}/source-extract-proposals`, {
+    method: "POST",
+    body: { sourceRegionId: sourceRegion.id, extractType: "component_distribution" },
+  });
+  assert.equal(unauthenticatedCreate.status, 401);
+  cookie = unauthenticatedCookie;
+
+  const proposalResponse = await jsonFetch(`/api/projects/${project.project.id}/source-extract-proposals`, {
+    method: "POST",
+    body: {
+      sourceRegionId: sourceRegion.id,
+      extractType: "component_distribution",
+      purpose: "chart_source",
+      intent: { title: "Exp30 Overall tots", chartTitle: "Exp30 carbon number distribution" },
+    },
+  });
+  assert.equal(proposalResponse.status, 201);
+  const proposalBody = await proposalResponse.json();
+  const proposal = proposalBody.sourceExtractProposal;
+  assert.equal(proposal.status, "proposed");
+  assert.equal(proposal.extractType, "component_distribution");
+  assert.equal(proposal.preview.rows.length, 4);
+  assert.equal(proposal.preview.rows[2].sourceRefs.some((ref) => ref.cell === "D2"), true);
+
+  const prematureChart = await jsonFetch(`/api/source-extract-proposals/${proposal.id}/chart-proposal`, {
+    method: "POST",
+    body: {},
+  });
+  assert.equal(prematureChart.status, 409);
+  assert.equal((await prematureChart.json()).error.code, "source_extract_not_accepted");
+
+  const acceptedResponse = await jsonFetch(`/api/source-extract-proposals/${proposal.id}`, {
+    method: "PATCH",
+    body: {
+      status: "accepted",
+      decisionSummary: { acceptedByUser: true, note: "Use Overall tots row." },
+    },
+  });
+  assert.equal(acceptedResponse.status, 200);
+  const accepted = (await acceptedResponse.json()).sourceExtractProposal;
+  assert.equal(accepted.status, "accepted");
+
+  const listResponse = await jsonFetch(`/api/projects/${project.project.id}/source-extract-proposals`);
+  assert.equal(listResponse.status, 200);
+  const listBody = await listResponse.json();
+  assert.equal(listBody.sourceExtractProposals.some((item) => item.id === proposal.id), true);
+
+  const chartResponse = await jsonFetch(`/api/source-extract-proposals/${proposal.id}/chart-proposal`, {
+    method: "POST",
+    body: {},
+  });
+  assert.equal(chartResponse.status, 201);
+  const chartBody = await chartResponse.json();
+  const chartProposalSet = chartBody.chartProposalSet;
+  assert.equal(chartProposalSet.datasetCommitId, null);
+  assert.equal(chartProposalSet.payload.origin, "source_extract");
+  assert.equal(chartProposalSet.payload.sourceExtractProposalId, proposal.id);
+  const chartProposal = chartProposalSet.payload.proposals[0];
+  assert.equal(chartProposal.origin, "source_extract");
+  assert.equal(chartProposal.chartType, "distribution_bar");
+  assert.equal(chartProposal.chartSpecDraft.origin, "source_extract");
+  assert.equal(chartProposal.chartSpecDraft.datasetCommitId, null);
+  assert.equal(chartProposal.chartSpecDraft.sourceSnapshot.rows.length, 4);
+  assert.equal(chartProposal.sourceRefs.some((ref) => ref.cell === "B2"), true);
+
+  const state = await (await jsonFetch(`/api/projects/${project.project.id}/state`)).json();
+  assert.equal(state.currentDatasetCommit, null);
+  assert.equal(state.importRuns.some((run) => run.id === created.importRun.id), true);
+
+  const auditEvents = await store.listAuditEvents({ projectId: project.project.id });
+  assert.equal(auditEvents.some((event) => event.action === "source.extract.propose"), true);
+  assert.equal(auditEvents.some((event) => event.action === "source.extract.accept"), true);
+  assert.equal(auditEvents.some((event) => (
+    event.action === "chart_proposal_set.create"
+    && event.metadata?.sourceExtractProposalId === proposal.id
+  )), true);
 });
 
 test("duplicate workbook upload reuses the existing file object and can create another import run", async () => {
