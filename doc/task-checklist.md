@@ -19,13 +19,13 @@ Use this file as the working checklist for long Codex tasks. Update it before st
 
 Objective: Implement `doc/plan.md` Agent-first evidence workflow vertical slice on `feature/agent-first-evidence-workflow`.
 
-Milestone: Phase 1 ObservationSeries registry is implemented and under verification; continue to Phase 2 AnalysisView compare charts only after the milestone commit leaves the tree clean.
+Milestone: Phase 2 Series Compare Analysis Views implemented and under commit. Continue to Phase 3 dynamic series chart rendering only after the milestone commit leaves the tree clean.
 
 Relevant docs read: `AGENTS.md`, `doc/plan.md`, `doc/PROGRESS.md`, `doc/saas-api-contract-v0.md`, `doc/saas-database-schema-v0.md`, `doc/canonical-data-dictionary.md`, `doc/backend-api-contract.md`, `doc/ai-boundaries.md`, `doc/source-understanding-long-term-plan.md`.
 
 Touched areas: SaaS store/routes/migrations, observation-series derivation, chart proposal/ChartSpec validation, generic chart rendering, manuscript chart selection, server API helpers, tests, progress log.
 
-Verification plan: targeted backend route/store tests after each backend milestone, targeted frontend chart/manuscript tests for rendering work, `npm run codex:verify` before each commit when feasible.
+Verification plan: targeted backend AnalysisView/route tests for Phase 2, targeted frontend chart/manuscript tests for rendering work, `npm run codex:verify` before each commit when feasible.
 
 Open risks: ChartSpec v1.4 must stay additive and must not bypass accepted proposal -> ChartSpec -> Manuscript review; source evidence and AgentRun stretch work should stop if the compare-chart slice is not clean.
 
@@ -48,6 +48,8 @@ Open risks: ChartSpec v1.4 must stay additive and must not bypass accepted propo
 - [ ] Record token/cost/latency assumptions for new AI-backed flows.
 
 ## Recent Checkpoints
+
+- 2026-06-18: Implemented Phase 2 Series Compare AnalysisViews with persistence, API routes, resolver, AnalysisView-derived chart proposal sets, docs, targeted route tests, and full `npm run codex:verify`.
 
 - 2026-06-18: Implemented Phase 1 ObservationSeries registry foundation with reaction-rate supplement derivation, stale marking, state/list API wiring, persistence methods, migration docs, targeted backend tests, and full `npm run codex:verify`.
 

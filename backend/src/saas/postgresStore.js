@@ -196,6 +196,27 @@ function observationSeriesFromRow(row) {
   };
 }
 
+function analysisViewFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    datasetCommitId: row.dataset_commit_id,
+    schemaVersion: row.schema_version || "labrat.analysisView.v1",
+    viewType: row.view_type,
+    status: row.status,
+    title: row.title,
+    spec: row.spec || {},
+    sourceRefs: row.source_refs || [],
+    warnings: row.warnings || [],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    createdBy: row.created_by,
+    updatedBy: row.updated_by,
+  };
+}
+
 function mappingSetFromRow(row) {
   if (!row) return null;
   return {
@@ -815,6 +836,39 @@ export class PostgresSaasStore {
       [projectId],
     );
     return result.rows.map(observationSeriesFromRow);
+  }
+
+  async createAnalysisView(input) {
+    const result = await this.query(
+      `insert into analysis_views
+       (id, lab_id, project_id, dataset_commit_id, view_type, status, title, spec, source_refs, warnings, created_at, updated_at, created_by, updated_by)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(), now(), $11, $11)
+       returning *`,
+      [
+        input.id || makeId("analysis_view"),
+        input.labId,
+        input.projectId,
+        input.datasetCommitId || null,
+        input.viewType,
+        input.status || "draft",
+        input.title || null,
+        jsonb(input.spec || {}),
+        jsonb(input.sourceRefs || []),
+        jsonb(input.warnings || []),
+        input.createdBy,
+      ],
+    );
+    return analysisViewFromRow(result.rows[0]);
+  }
+
+  async findAnalysisViewById(id) {
+    const result = await this.query("select * from analysis_views where id = $1", [id]);
+    return analysisViewFromRow(result.rows[0]);
+  }
+
+  async listAnalysisViews({ projectId }) {
+    const result = await this.query("select * from analysis_views where project_id = $1 order by updated_at desc", [projectId]);
+    return result.rows.map(analysisViewFromRow);
   }
 
   async createMappingSet(input) {

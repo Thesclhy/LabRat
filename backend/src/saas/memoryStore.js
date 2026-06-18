@@ -31,6 +31,7 @@ export class MemorySaasStore {
     this.supplementalImportBatchItems = new Map();
     this.datasetCommits = new Map();
     this.observationSeries = new Map();
+    this.analysisViews = new Map();
     this.mappingSets = new Map();
     this.chartProposalSets = new Map();
     this.chartSpecs = new Map();
@@ -528,6 +529,39 @@ export class MemorySaasStore {
   async listObservationSeries({ projectId }) {
     return [...this.observationSeries.values()]
       .filter((series) => series.projectId === projectId)
+      .map(copy);
+  }
+
+  async createAnalysisView(input) {
+    const createdAt = nowIso();
+    const view = {
+      id: input.id || makeId("analysis_view"),
+      labId: input.labId,
+      projectId: input.projectId,
+      datasetCommitId: input.datasetCommitId || null,
+      schemaVersion: input.schemaVersion || "labrat.analysisView.v1",
+      viewType: input.viewType,
+      status: input.status || "draft",
+      title: input.title || null,
+      spec: copy(input.spec) || {},
+      sourceRefs: copy(input.sourceRefs) || [],
+      warnings: copy(input.warnings) || [],
+      createdAt,
+      updatedAt: createdAt,
+      createdBy: input.createdBy,
+      updatedBy: input.createdBy,
+    };
+    this.analysisViews.set(view.id, view);
+    return copy(view);
+  }
+
+  async findAnalysisViewById(id) {
+    return copy(this.analysisViews.get(id) || null);
+  }
+
+  async listAnalysisViews({ projectId }) {
+    return [...this.analysisViews.values()]
+      .filter((view) => view.projectId === projectId)
       .map(copy);
   }
 

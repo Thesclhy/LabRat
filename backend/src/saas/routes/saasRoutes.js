@@ -30,6 +30,11 @@ import {
   mergePersistedAndDerivedObservationSeries,
 } from "../observationSeries.js";
 import {
+  ANALYSIS_VIEW_SCHEMA_VERSION,
+  chartProposalFromAnalysisView,
+  resolveSeriesCompareAnalysisView,
+} from "../analysisViews.js";
+import {
   annotateSupplementDatasetPatch,
   buildImportRelationshipPreview,
 } from "../importRelationshipResolver.js";
@@ -243,6 +248,26 @@ function mappingSetSummary(set) {
     updatedAt: set.updatedAt,
     createdBy: set.createdBy,
     updatedBy: set.updatedBy,
+  };
+}
+
+function analysisViewSummary(view) {
+  return {
+    id: view.id,
+    labId: view.labId,
+    projectId: view.projectId,
+    datasetCommitId: view.datasetCommitId || null,
+    schemaVersion: view.schemaVersion || ANALYSIS_VIEW_SCHEMA_VERSION,
+    viewType: view.viewType,
+    status: view.status || "draft",
+    title: view.title || null,
+    spec: view.spec || {},
+    sourceRefs: view.sourceRefs || [],
+    warnings: view.warnings || [],
+    createdAt: view.createdAt,
+    updatedAt: view.updatedAt,
+    createdBy: view.createdBy,
+    updatedBy: view.updatedBy,
   };
 }
 
@@ -720,6 +745,7 @@ async function handleProjectState(req, res, context, projectId) {
     fileObjects,
     importRuns,
     mappingSets,
+    analysisViews,
     chartProposalSets,
     chartSpecs,
     manuscripts,
@@ -729,6 +755,7 @@ async function handleProjectState(req, res, context, projectId) {
     context.store.listFileObjects({ projectId }),
     context.store.listImportRuns({ projectId }),
     context.store.listMappingSets({ projectId }),
+    context.store.listAnalysisViews ? context.store.listAnalysisViews({ projectId }) : [],
     context.store.listChartProposalSets({ projectId }),
     context.store.listChartSpecs({ projectId }),
     context.store.listManuscripts({ projectId }),
@@ -747,6 +774,7 @@ async function handleProjectState(req, res, context, projectId) {
     fileObjects: fileObjects.map(fileObjectSummary),
     importRuns: importRuns.map(importRunSummary),
     mappingSets: mappingSets.map(mappingSetSummary),
+    analysisViews: analysisViews.map(analysisViewSummary),
     chartProposalSets: chartProposalSets.map(chartProposalSetSummary),
     chartSpecs: decoratedChartSpecs,
     observationSeries,
@@ -988,6 +1016,132 @@ async function handleProjectObservationSeries(req, res, context, projectId) {
       active: observationSeries.filter((series) => !series.isStale && series.status !== "stale").length,
       stale: observationSeries.filter((series) => series.isStale || series.status === "stale").length,
     },
+  });
+}
+
+async function handleProjectAnalysisViews(req, res, context, projectId) {
+  const { auth, project } = await projectAuth(req, context, projectId, req.method === "POST" ? "editor" : "viewer");
+  if (req.method === "GET") {
+    const analysisViews = context.store.listAnalysisViews
+      ? await context.store.listAnalysisViews({ projectId })
+      : [];
+    sendJson(res, 200, { analysisViews: analysisViews.map(analysisViewSummary) });
+    return;
+  }
+  const body = await readJsonBody(req);
+  const currentDatasetCommit = project.currentDatasetCommitId
+    ? await context.store.findDatasetCommitById(project.currentDatasetCommitId)
+    : null;
+  if (!currentDatasetCommit) {
+    datasetCommitRequired(res);
+    return;
+  }
+  const observationSeries = await observationSeriesForProject(context, project, currentDatasetCommit);
+  const resolved = resolveSeriesCompareAnalysisView({
+    project,
+    datasetCommit: currentDatasetCommit,
+    observationSeries,
+    request: body,
+  });
+  if (resolved.error) {
+    sendError(res, resolved.error.statusCode || 400, resolved.error.code, resolved.error.message, resolved.error);
+    return;
+  }
+  if (resolved.clarification) {
+    sendJson(res, 200, {
+      schemaVersion: "labrat.analysisViewDraft.v1",
+      clarification: resolved.clarification,
+    });
+    return;
+  }
+  const draft = resolved.analysisView;
+  const analysisView = await context.store.createAnalysisView({
+    labId: project.labId,
+    projectId: project.id,
+    datasetCommitId: currentDatasetCommit.id,
+    schemaVersion: ANALYSIS_VIEW_SCHEMA_VERSION,
+    viewType: draft.viewType,
+    status: draft.status || "draft",
+    title: draft.title,
+    spec: draft.spec,
+    sourceRefs: draft.sourceRefs,
+    warnings: draft.warnings,
+    createdBy: auth.user.id,
+  });
+  await context.store.recordAuditEvent({
+    labId: project.labId,
+    projectId: project.id,
+    actorUserId: auth.user.id,
+    action: "analysis_view.create",
+    targetType: "analysis_view",
+    targetId: analysisView.id,
+    summary: `Created AnalysisView ${analysisView.title || analysisView.id}.`,
+  });
+  sendJson(res, 201, { analysisView: analysisViewSummary(analysisView) });
+}
+
+async function handleAnalysisViewChartProposal(req, res, context, analysisViewId) {
+  const auth = requireAuth(await authFor(req, context));
+  const analysisView = context.store.findAnalysisViewById
+    ? await context.store.findAnalysisViewById(analysisViewId)
+    : null;
+  if (!analysisView) {
+    sendError(res, 404, "analysis_view_not_found", "AnalysisView was not found.");
+    return;
+  }
+  requireLabRole(auth, analysisView.labId, "editor");
+  const project = await context.store.findProjectById(analysisView.projectId);
+  if (!project) {
+    sendError(res, 404, "project_not_found", "Project not found.");
+    return;
+  }
+  if (!project.currentDatasetCommitId || analysisView.datasetCommitId !== project.currentDatasetCommitId) {
+    sendError(res, 409, "analysis_view_stale", "AnalysisView is not based on the current dataset commit.", {
+      analysisViewDatasetCommitId: analysisView.datasetCommitId || null,
+      currentDatasetCommitId: project.currentDatasetCommitId || null,
+    });
+    return;
+  }
+  const currentDatasetCommit = await context.store.findDatasetCommitById(project.currentDatasetCommitId);
+  const observationSeries = await observationSeriesForProject(context, project, currentDatasetCommit);
+  const proposal = chartProposalFromAnalysisView({
+    analysisView,
+    datasetCommit: currentDatasetCommit,
+    observationSeries,
+  });
+  const chartProposalSet = await context.store.createChartProposalSet({
+    labId: analysisView.labId,
+    projectId: analysisView.projectId,
+    datasetCommitId: analysisView.datasetCommitId,
+    mappingSetId: null,
+    schemaVersion: "labrat.chartProposalSet.v1",
+    status: "proposed",
+    payload: {
+      proposalSetId: `chart_proposal_set_analysis_view_${sha256Hex(analysisView.id).slice(0, 16)}`,
+      schemaVersion: "labrat.chartProposalSet.v1",
+      sourceImportIds: proposal.sourceImportIds || [],
+      proposals: [proposal],
+      warnings: proposal.warnings || [],
+      origin: "analysis_view",
+      analysisViewId: analysisView.id,
+      analysisViewType: analysisView.viewType,
+    },
+    decisionSummary: { accepted: 0, rejected: 0, proposalCount: 1 },
+    createdBy: auth.user.id,
+  });
+  await context.store.recordAuditEvent({
+    labId: analysisView.labId,
+    projectId: analysisView.projectId,
+    actorUserId: auth.user.id,
+    action: "chart_proposal_set.create",
+    targetType: "chart_proposal_set",
+    targetId: chartProposalSet.id,
+    summary: "Created chart proposal set from AnalysisView.",
+    metadata: { analysisViewId: analysisView.id },
+  });
+  sendJson(res, 201, {
+    analysisView: analysisViewSummary(analysisView),
+    chartProposalSet: chartProposalSetSummary(chartProposalSet),
   });
 }
 
@@ -1797,6 +1951,10 @@ async function dispatch(req, res, context) {
   if (datasetCommitsMatch && req.method === "GET") return handleProjectDatasetCommits(req, res, context, datasetCommitsMatch[1]);
   const observationSeriesMatch = pathName.match(/^\/api\/projects\/([^/]+)\/observation-series$/);
   if (observationSeriesMatch && req.method === "GET") return handleProjectObservationSeries(req, res, context, observationSeriesMatch[1]);
+  const analysisViewsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/analysis-views$/);
+  if (analysisViewsMatch && (req.method === "GET" || req.method === "POST")) return handleProjectAnalysisViews(req, res, context, analysisViewsMatch[1]);
+  const analysisViewChartProposalMatch = pathName.match(/^\/api\/analysis-views\/([^/]+)\/chart-proposal$/);
+  if (analysisViewChartProposalMatch && req.method === "POST") return handleAnalysisViewChartProposal(req, res, context, analysisViewChartProposalMatch[1]);
   const mappingSetsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/mapping-sets$/);
   if (mappingSetsMatch && (req.method === "GET" || req.method === "POST")) return handleProjectMappingSets(req, res, context, mappingSetsMatch[1]);
   const mappingSetMatch = pathName.match(/^\/api\/mapping-sets\/([^/]+)$/);
@@ -1829,6 +1987,7 @@ export async function handleSaasRoutes(req, res, context) {
     && !req.url?.startsWith("/api/admin")
     && !req.url?.startsWith("/api/labs")
     && !req.url?.startsWith("/api/projects")
+    && !req.url?.startsWith("/api/analysis-views")
     && !req.url?.startsWith("/api/import-runs")
     && !req.url?.startsWith("/api/mapping-sets")
     && !req.url?.startsWith("/api/chart-proposal-sets")

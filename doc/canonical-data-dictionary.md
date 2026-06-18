@@ -404,7 +404,7 @@ Observation series are the preferred substrate for cross-experiment supplemental
 
 ## Analysis View
 
-A planned reviewable analysis intent between evidence retrieval and chart/table output.
+A reviewable analysis intent between evidence retrieval and chart/table output. The first implemented subtype is `series_compare` over reaction-rate ObservationSeries; the other subtype names remain planned.
 
 Analysis view types include:
 

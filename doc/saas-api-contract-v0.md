@@ -789,7 +789,7 @@ Purpose: create a reviewable AnalysisView draft such as `series_compare`, `sourc
 
 Required role: `editor` or above.
 
-Status: planned.
+Status: implemented for `series_compare` drafts over active reaction-rate ObservationSeries.
 
 Request:
 
@@ -819,11 +819,15 @@ Purpose: list project AnalysisView drafts and review states.
 
 Required role: `viewer` or above.
 
+Status: implemented.
+
 ### `POST /api/analysis-views/:analysisViewId/chart-proposal`
 
 Purpose: derive a chart proposal set from a validated AnalysisView.
 
 Required role: `editor` or above.
+
+Status: implemented for `series_compare` AnalysisViews. The response contains a normal `chartProposalSet`; it does not create a ChartSpec.
 
 Rules:
 

@@ -524,7 +524,7 @@ Notes:
 - Reaction-rate supplemental workbooks should derive `reaction_rate_time_series` records first.
 - APIs may decorate series as stale when `dataset_commit_id` no longer matches the current project dataset commit.
 
-## `analysis_views` Planned
+## `analysis_views`
 
 Persists reviewable table/chart-ready analysis intents.
 
@@ -549,7 +549,7 @@ updated_by text references users(id)
 
 Notes:
 
-- V1 view types include `series_compare`, `source_range_extract`, `data_table`, and `chart_ready`.
+- Implemented for `series_compare`; `source_range_extract`, `data_table`, and `chart_ready` remain planned view types.
 - Analysis views are drafts/proposals; they do not mutate dataset commits.
 
 ## `mapping_sets`

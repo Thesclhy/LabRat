@@ -818,6 +818,95 @@ test("relationship preview and supplement apply attach a detailed workbook to an
   assert.equal(auditEvents.some((event) => event.action === "import.supplement_apply"), true);
 });
 
+test("series compare AnalysisView drafts a reviewable chart proposal set", async () => {
+  const labs = await (await jsonFetch("/api/labs")).json();
+  const labId = labs.labs[0].labId;
+  const project = await (await jsonFetch("/api/projects", {
+    method: "POST",
+    body: { labId, name: "AnalysisView Compare Project" },
+  })).json();
+
+  const master = await uploadAndCreateImportRun(project.project.id, makeWorkbookBlob([
+    ["Exp30", 250, 14, 0.28],
+    ["Exp31", 260, 10, 0.44],
+  ]), "MasterTable.xlsx");
+  const masterApply = await normalizeAndApplyImportRun(master.importRun);
+  const parentCommit = masterApply.apply.datasetCommit;
+  const exp30 = parentCommit.datasetPayload.genericImports[0].experiments.find((experiment) => experiment.label === "Exp30");
+  const exp31 = parentCommit.datasetPayload.genericImports[0].experiments.find((experiment) => experiment.label === "Exp31");
+
+  for (const [filename, rows, reviewNote] of [
+    ["Reaction_Rate_Exp30.xlsx", [[0, 0], [15, 3.1], [30, 2.4]], "Attach reaction rate detail to Exp30."],
+    ["Reaction_Rate_Exp31.xlsx", [[0, 0], [12, 2.8], [24, 2.1]], "Attach reaction rate detail to Exp31."],
+  ]) {
+    const supplement = await uploadAndCreateImportRun(
+      project.project.id,
+      makeReactionRateWorkbookBlob(rows),
+      filename,
+    );
+    await normalizeImportRun(supplement.importRun);
+    const relationshipBody = await (await jsonFetch(`/api/import-runs/${supplement.importRun.id}/relationship-preview`, {
+      method: "POST",
+      body: {},
+    })).json();
+    const relationship = relationshipBody.proposals[0];
+    const applyResponse = await jsonFetch(`/api/import-runs/${supplement.importRun.id}/apply`, {
+      method: "POST",
+      body: {
+        applyMode: "supplement_import",
+        relationshipDecision: relationship,
+        reviewNote,
+      },
+    });
+    assert.equal(applyResponse.status, 200);
+  }
+
+  const viewResponse = await jsonFetch(`/api/projects/${project.project.id}/analysis-views`, {
+    method: "POST",
+    body: {
+      viewType: "series_compare",
+      title: "Reaction Rate comparison",
+      spec: {
+        seriesKind: "reaction_rate_time_series",
+        experimentIds: [exp30.experimentId, exp31.experimentId],
+        xField: "reaction_time_min",
+        yField: "reaction_rate_mol_g_h",
+        groupBy: "experiment",
+      },
+    },
+  });
+  assert.equal(viewResponse.status, 201);
+  const viewBody = await viewResponse.json();
+  assert.equal(viewBody.analysisView.viewType, "series_compare");
+  assert.equal(viewBody.analysisView.datasetCommitId.length > 0, true);
+  assert.deepEqual(viewBody.analysisView.spec.experimentIds, [exp30.experimentId, exp31.experimentId]);
+  assert.equal(viewBody.analysisView.spec.seriesIds.length, 2);
+
+  const listBody = await (await jsonFetch(`/api/projects/${project.project.id}/analysis-views`)).json();
+  assert.equal(listBody.analysisViews.some((view) => view.id === viewBody.analysisView.id), true);
+  const state = await (await jsonFetch(`/api/projects/${project.project.id}/state`)).json();
+  assert.equal(state.analysisViews.some((view) => view.id === viewBody.analysisView.id), true);
+
+  const chartResponse = await jsonFetch(`/api/analysis-views/${viewBody.analysisView.id}/chart-proposal`, {
+    method: "POST",
+    body: {},
+  });
+  const chartBody = await chartResponse.json();
+  assert.equal(chartResponse.status, 201, JSON.stringify(chartBody));
+  assert.equal(chartBody.chartProposalSet.payload.origin, "analysis_view");
+  assert.equal(chartBody.chartProposalSet.payload.analysisViewId, viewBody.analysisView.id);
+  const proposal = chartBody.chartProposalSet.payload.proposals[0];
+  assert.equal(proposal.origin, "analysis_view");
+  assert.equal(proposal.analysisViewId, viewBody.analysisView.id);
+  assert.equal(proposal.series.length, 2);
+  assert.equal(proposal.selectedExperimentIds.includes(exp30.experimentId), true);
+  assert.equal(proposal.selectedExperimentIds.includes(exp31.experimentId), true);
+  assert.equal(proposal.x.sourceIds.length > 0, true);
+  assert.equal(proposal.y.sourceIds.length > 0, true);
+  assert.equal(proposal.groupBy.sourceIds.includes(exp30.experimentId), true);
+  assert.equal(proposal.groupBy.sourceIds.includes(exp31.experimentId), true);
+});
+
 test("supplemental import batch processes multiple workbooks to review and streams status", async () => {
   const labs = await (await jsonFetch("/api/labs")).json();
   const labId = labs.labs[0].labId;

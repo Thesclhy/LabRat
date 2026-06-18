@@ -4,6 +4,8 @@ Use this file to record user requests, meaningful changes, verification results,
 
 ## 2026-06-18
 
+- Implemented Phase 2 Series Compare AnalysisViews for the Agent-first evidence workflow. Added persisted Memory/Postgres `analysis_views`, `POST/GET /api/projects/:projectId/analysis-views`, `POST /api/analysis-views/:analysisViewId/chart-proposal`, resolver validation over active ObservationSeries, AnalysisView summaries in project state, and chart proposal sets with `origin: "analysis_view"` plus multi-series metadata while preserving the normal proposal review boundary. Updated SaaS API/schema/canonical dictionary docs. Verification: `node --test backend/src/saas/routes/saasRoutes.test.js` and `npm run codex:verify` passed.
+
 - Implemented Phase 1 ObservationSeries registry for the Agent-first evidence workflow. Reaction-rate supplemental observation sets now derive first-class `observationSeries` records with source refs, experiment links, stale-state metadata, project state/list API exposure, Memory/Postgres store support, and a Postgres migration; lightweight reaction-rate two-column supplements now normalize into observation sets instead of pseudo experiments. Updated ObservationSeries API/schema docs and targeted tests. Verification: `node --test backend/src/import/services/normalizer.test.js`, `node --test backend/src/saas/observationSeries.test.js`, `node --test backend/src/saas/routes/saasRoutes.test.js`, and `npm run codex:verify` passed.
 
 - Added durable Codex long-task execution loop environment Files: AGENTS.md, doc/decisions.md, doc/task-checklist.md, doc/code-review.md, scripts/codex-preflight.mjs, scripts/codex-checkpoint.mjs, scripts/codex-verify.mjs, package.json. Verification: npm run codex:preflight; npm run codex:verify.
