@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import * as XLSX from "xlsx";
 import {
   createAmbiguousSparseSheetWorkbook,
   createCleanStandardTableWorkbook,
@@ -223,6 +224,41 @@ test("normalizeApprovedScan converts reaction-rate supplements to observation se
   assert.equal(source.blockId, block.blockId);
   assert.equal(response.summary.createdExperiments, 0);
   assert.equal(response.summary.createdMeasurements > 0, true);
+});
+
+test("normalizeApprovedScan converts lightweight reaction-rate tables to observation sets", () => {
+  const workbook = XLSX.utils.book_new();
+  const worksheet = XLSX.utils.aoa_to_sheet([
+    ["Time (min)", "Reaction Rate (mol/g/h)"],
+    [0, 0],
+    [15, 3.1],
+  ]);
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Reaction Rate");
+  const scanResult = runImportScan({
+    filename: "Reaction_Rate_Exp31.xlsx",
+    buffer: XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }),
+  });
+  const block = scanResult.sheets[0].blocks[0];
+  assert.equal(block.detectedSupplementType, "reaction_rate_time_series");
+  assert.equal(block.observationSetPreview.inferredExperimentLabel, "Exp31");
+
+  const response = normalizeApprovedScan({
+    scanResult,
+    approvedBlockIds: [block.blockId],
+    userEdits: { createdAt: "2026-06-16T00:00:00.000Z" },
+  });
+
+  const genericImport = response.datasetPatch.genericImports[0];
+  assert.equal(genericImport.experiments.length, 0);
+  assert.equal(genericImport.observationSets.length, 1);
+  assert.equal(genericImport.observationSets[0].xField, "reaction_time_min");
+  assert.equal(genericImport.observationSets[0].yFields.includes("reaction_rate_mol_g_h"), true);
+  assert.equal(genericImport.observationSets[0].observations.length, 2);
+  assert.equal(genericImport.observationSets[0].observations[1].reactionTimeMin, 15);
+  assert.equal(genericImport.observationSets[0].observations[1].reactionRateMolPerGHour, 3.1);
+  const rateField = genericImport.fields.find((field) => field.field === "reaction_rate_mol_g_h");
+  assert.equal(rateField.recordKind, "observation");
+  assert.equal(rateField.unit, "mol/g/h");
 });
 
 test("normalizeApprovedScan applies mapping overrides without mutating HDPE experiments", () => {

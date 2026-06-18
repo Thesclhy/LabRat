@@ -775,6 +775,33 @@ test("relationship preview and supplement apply attach a detailed workbook to an
   const historicalParent = state.datasetCommits.find((commit) => commit.id === parentCommit.id);
   assert.equal(historicalParent.datasetPayload.genericImports.length, 1);
   assert.equal(state.currentDatasetCommit.id, secondSupplementCommit.id);
+  assert.ok(Array.isArray(state.observationSeries));
+
+  const observationSeriesResponse = await jsonFetch(`/api/projects/${project.project.id}/observation-series`);
+  assert.equal(observationSeriesResponse.status, 200);
+  const observationSeriesBody = await observationSeriesResponse.json();
+  assert.equal(observationSeriesBody.schemaVersion, "labrat.observationSeriesList.v1");
+  assert.equal(observationSeriesBody.currentDatasetCommitId, secondSupplementCommit.id);
+  const activeSeries = observationSeriesBody.observationSeries.filter((series) => !series.isStale);
+  const staleSeries = observationSeriesBody.observationSeries.filter((series) => series.isStale);
+  assert.equal(activeSeries.every((series) => series.datasetCommitId === secondSupplementCommit.id), true);
+  assert.equal(activeSeries.some((series) => (
+    series.experimentId === exp30.experimentId
+    && series.seriesKind === "reaction_rate_time_series"
+    && series.yField === "adjusted_rate_m_s"
+    && series.summary.pointCount > 0
+  )), true);
+  assert.equal(activeSeries.some((series) => (
+    series.experimentId === exp31.experimentId
+    && series.seriesKind === "reaction_rate_time_series"
+    && series.summary.pointCount > 0
+  )), true);
+  assert.equal(staleSeries.some((series) => series.datasetCommitId === supplementCommit.id), true);
+  assert.equal(state.observationSeries.some((series) => (
+    series.experimentId === exp30.experimentId
+    && series.yField === "adjusted_rate_m_s"
+    && !series.isStale
+  )), true);
 
   const query = await jsonFetch(`/api/projects/${project.project.id}/data/resolve-query`, {
     method: "POST",

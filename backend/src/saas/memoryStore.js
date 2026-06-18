@@ -30,6 +30,7 @@ export class MemorySaasStore {
     this.supplementalImportBatches = new Map();
     this.supplementalImportBatchItems = new Map();
     this.datasetCommits = new Map();
+    this.observationSeries = new Map();
     this.mappingSets = new Map();
     this.chartProposalSets = new Map();
     this.chartSpecs = new Map();
@@ -494,6 +495,39 @@ export class MemorySaasStore {
   async listDatasetCommits({ projectId }) {
     return [...this.datasetCommits.values()]
       .filter((commit) => commit.projectId === projectId)
+      .map(copy);
+  }
+
+  async replaceObservationSeriesForDatasetCommit(input) {
+    const createdAt = nowIso();
+    for (const [id, series] of this.observationSeries.entries()) {
+      if (series.projectId === input.projectId && series.datasetCommitId === input.datasetCommitId) {
+        this.observationSeries.delete(id);
+      }
+    }
+    for (const item of input.series || []) {
+      const id = item.id || makeId("observation_series");
+      const series = {
+        ...copy(item),
+        id,
+        seriesId: item.seriesId || id,
+        labId: item.labId || input.labId,
+        projectId: item.projectId || input.projectId,
+        datasetCommitId: item.datasetCommitId || input.datasetCommitId,
+        status: item.status || "active",
+        createdAt,
+        updatedAt: createdAt,
+        createdBy: input.updatedBy,
+        updatedBy: input.updatedBy,
+      };
+      this.observationSeries.set(id, series);
+    }
+    return this.listObservationSeries({ projectId: input.projectId });
+  }
+
+  async listObservationSeries({ projectId }) {
+    return [...this.observationSeries.values()]
+      .filter((series) => series.projectId === projectId)
       .map(copy);
   }
 

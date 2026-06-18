@@ -170,6 +170,32 @@ function datasetCommitFromRow(row) {
   };
 }
 
+function observationSeriesFromRow(row) {
+  if (!row) return null;
+  return {
+    ...(row.payload || {}),
+    id: row.id,
+    seriesId: row.payload?.seriesId || row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    datasetCommitId: row.dataset_commit_id,
+    sourceImportId: row.source_import_id,
+    observationSetId: row.observation_set_id,
+    experimentId: row.experiment_id,
+    experimentLabel: row.experiment_label,
+    seriesKind: row.series_kind,
+    xField: row.x_field,
+    yField: row.y_field,
+    sourceRefs: row.source_refs || [],
+    summary: row.summary || {},
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    createdBy: row.created_by,
+    updatedBy: row.updated_by,
+  };
+}
+
 function mappingSetFromRow(row) {
   if (!row) return null;
   return {
@@ -747,6 +773,48 @@ export class PostgresSaasStore {
   async listDatasetCommits({ projectId }) {
     const result = await this.query("select * from dataset_commits where project_id = $1 order by created_at desc", [projectId]);
     return result.rows.map(datasetCommitFromRow);
+  }
+
+  async replaceObservationSeriesForDatasetCommit(input) {
+    await this.query(
+      "delete from observation_series where project_id = $1 and dataset_commit_id = $2",
+      [input.projectId, input.datasetCommitId],
+    );
+    for (const item of input.series || []) {
+      const id = item.id || makeId("observation_series");
+      await this.query(
+        `insert into observation_series
+         (id, lab_id, project_id, dataset_commit_id, source_import_id, observation_set_id, experiment_id, experiment_label, series_kind, x_field, y_field, source_refs, summary, status, payload, created_at, updated_at, created_by, updated_by)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, now(), now(), $16, $16)`,
+        [
+          id,
+          item.labId || input.labId,
+          item.projectId || input.projectId,
+          item.datasetCommitId || input.datasetCommitId,
+          item.sourceImportId || null,
+          item.observationSetId || null,
+          item.experimentId || null,
+          item.experimentLabel || null,
+          item.seriesKind,
+          item.xField,
+          item.yField,
+          jsonb(item.sourceRefs || [], []),
+          jsonb(item.summary || {}),
+          item.status || "active",
+          jsonb({ ...item, id, seriesId: item.seriesId || id }),
+          input.updatedBy,
+        ],
+      );
+    }
+    return this.listObservationSeries({ projectId: input.projectId });
+  }
+
+  async listObservationSeries({ projectId }) {
+    const result = await this.query(
+      "select * from observation_series where project_id = $1 order by updated_at desc, experiment_label asc, y_field asc",
+      [projectId],
+    );
+    return result.rows.map(observationSeriesFromRow);
   }
 
   async createMappingSet(input) {

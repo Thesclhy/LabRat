@@ -41,6 +41,16 @@ function columnText(column) {
 
 const COLUMN_SPECS = [
   {
+    key: "reactionTimeMin",
+    field: "reaction_time_min",
+    displayName: "Reaction Time (min)",
+    unit: "min",
+    role: "condition",
+    match: (text) => /\btime\b/.test(text)
+      && /\bmin\b/.test(text)
+      && !/\b(start|end|mean|span|sweep|hours?)\b/.test(text),
+  },
+  {
     key: "startTimeMin",
     field: "start_time_min",
     displayName: "Start Time (min)",
@@ -73,6 +83,19 @@ const COLUMN_SPECS = [
     match: (text) => /\brate\b/.test(text)
       && /\bmol\b/.test(text)
       && /\bs\b/.test(text)
+      && !/\badjusted\b/.test(text)
+      && !/\baverage\b/.test(text),
+  },
+  {
+    key: "reactionRateMolPerGHour",
+    field: "reaction_rate_mol_g_h",
+    displayName: "Reaction Rate (mol/g/h)",
+    unit: "mol/g/h",
+    role: "measurement",
+    match: (text) => /\brate\b/.test(text)
+      && /\bmol\b/.test(text)
+      && /\bg\b/.test(text)
+      && /\bh\b/.test(text)
       && !/\badjusted\b/.test(text)
       && !/\baverage\b/.test(text),
   },
@@ -172,6 +195,13 @@ const REQUIRED_KEYS = [
   "concentrationMolPerL",
 ];
 
+const LIGHTWEIGHT_RATE_KEYS = [
+  "rateMolPerS",
+  "reactionRateMolPerGHour",
+  "adjustedRateMPerS",
+  "averageRateMPerS",
+];
+
 export function inferExperimentLabelFromReactionRateContext({ fileName, sheetName, block } = {}) {
   const text = [
     fileName,
@@ -197,13 +227,25 @@ export function detectReactionRateObservationSet({ fileName, sheetName, block } 
     });
   });
   const requiredFound = REQUIRED_KEYS.filter((key) => matches.has(key));
-  if (requiredFound.length < REQUIRED_KEYS.length) return null;
+  const hasFullSchema = requiredFound.length >= REQUIRED_KEYS.length;
+  const hasLightweightSchema = matches.has("reactionTimeMin")
+    && LIGHTWEIGHT_RATE_KEYS.some((key) => matches.has(key));
+  const contextText = normalizedText([
+    fileName,
+    sheetName,
+    block?.title?.value,
+    block?.title?.rawValue,
+  ].filter(Boolean).join(" "));
+  const hasReactionRateContext = /\breaction\b/.test(contextText) && /\brate\b/.test(contextText);
+  if (!hasFullSchema && !(hasLightweightSchema && hasReactionRateContext)) return null;
   const inferredExperimentLabel = inferExperimentLabelFromReactionRateContext({ fileName, sheetName, block });
   return {
     kind: REACTION_RATE_OBSERVATION_SET_KIND,
     schemaVersion: OBSERVATION_SET_SCHEMA_VERSION,
     inferredExperimentLabel,
-    confidence: inferredExperimentLabel ? 0.94 : 0.88,
+    confidence: hasFullSchema
+      ? (inferredExperimentLabel ? 0.94 : 0.88)
+      : (inferredExperimentLabel ? 0.86 : 0.78),
     columns: [...matches.values()].map(({ spec, column }) => ({
       key: spec.key,
       field: spec.field,
@@ -278,7 +320,9 @@ export function normalizeReactionRateObservationSetBlock({ sheet, block }, conte
     sourceBlockId: block.blockId,
     sourceSheetName: sheet?.name || context.sheetName || null,
     xField: "reaction_time_min",
-    yFields: ["rate_mol_s", "adjusted_rate_m_s", "concentration_mol_l", "average_rate_m_s"],
+    yFields: activeDetection.columns
+      .filter((item) => item.role === "measurement" && !/(?:std_dev|standard_deviation)$/.test(item.field))
+      .map((item) => item.field),
     fields: activeDetection.columns.map((item) => ({
       key: item.key,
       field: item.field,

@@ -490,9 +490,11 @@ Notes:
 - V1 source extracts can draft source-backed chart proposals.
 - Promotion into dataset commits is deferred.
 
-## `observation_series` Planned
+## `observation_series`
 
 Persists comparable series derived from supplemental observation sets or reviewed source extracts.
+
+Status: implemented for reaction-rate supplemental series.
 
 Columns:
 

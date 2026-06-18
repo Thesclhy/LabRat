@@ -25,6 +25,11 @@ import {
   subscribeSupplementalImportBatchEvents,
 } from "../supplementalImportBatches.js";
 import {
+  decorateObservationSeriesStaleness,
+  deriveObservationSeriesFromDatasetCommit,
+  mergePersistedAndDerivedObservationSeries,
+} from "../observationSeries.js";
+import {
   annotateSupplementDatasetPatch,
   buildImportRelationshipPreview,
 } from "../importRelationshipResolver.js";
@@ -197,6 +202,30 @@ function importRunSummary(run) {
 
 function supplementalImportBatchSummary(batch) {
   return publicSupplementalImportBatch(batch);
+}
+
+async function observationSeriesForProject(context, project, currentDatasetCommit = null) {
+  const persisted = context.store.listObservationSeries
+    ? await context.store.listObservationSeries({ projectId: project.id })
+    : [];
+  const derivedCurrent = currentDatasetCommit
+    ? deriveObservationSeriesFromDatasetCommit({ project, datasetCommit: currentDatasetCommit })
+    : [];
+  const merged = mergePersistedAndDerivedObservationSeries(persisted, derivedCurrent);
+  return decorateObservationSeriesStaleness(merged, project.currentDatasetCommitId);
+}
+
+async function rebuildObservationSeriesForDatasetCommit(context, project, datasetCommit, updatedBy) {
+  if (!context.store.replaceObservationSeriesForDatasetCommit || !datasetCommit?.id) return [];
+  const series = deriveObservationSeriesFromDatasetCommit({ project, datasetCommit });
+  await context.store.replaceObservationSeriesForDatasetCommit({
+    labId: datasetCommit.labId || project.labId,
+    projectId: project.id,
+    datasetCommitId: datasetCommit.id,
+    series,
+    updatedBy,
+  });
+  return series;
 }
 
 function mappingSetSummary(set) {
@@ -709,6 +738,7 @@ async function handleProjectState(req, res, context, projectId) {
     ? await context.store.findDatasetCommitById(project.currentDatasetCommitId)
     : null;
   const decoratedChartSpecs = decorateChartSpecsStaleness(chartSpecs, project.currentDatasetCommitId);
+  const observationSeries = await observationSeriesForProject(context, project, currentDatasetCommit);
   sendJson(res, 200, {
     project: projectSummary(project),
     projectProfile: projectProfileFor(project),
@@ -719,6 +749,7 @@ async function handleProjectState(req, res, context, projectId) {
     mappingSets: mappingSets.map(mappingSetSummary),
     chartProposalSets: chartProposalSets.map(chartProposalSetSummary),
     chartSpecs: decoratedChartSpecs,
+    observationSeries,
     manuscripts,
     supplementalImportBatches: supplementalImportBatches.map(supplementalImportBatchSummary),
   });
@@ -939,6 +970,25 @@ async function handleProjectImportRunsList(req, res, context, projectId) {
 async function handleProjectDatasetCommits(req, res, context, projectId) {
   await projectAuth(req, context, projectId, "viewer");
   sendJson(res, 200, { datasetCommits: await context.store.listDatasetCommits({ projectId }) });
+}
+
+async function handleProjectObservationSeries(req, res, context, projectId) {
+  const { project } = await projectAuth(req, context, projectId, "viewer");
+  const currentDatasetCommit = project.currentDatasetCommitId
+    ? await context.store.findDatasetCommitById(project.currentDatasetCommitId)
+    : null;
+  const observationSeries = await observationSeriesForProject(context, project, currentDatasetCommit);
+  sendJson(res, 200, {
+    schemaVersion: "labrat.observationSeriesList.v1",
+    projectId: project.id,
+    currentDatasetCommitId: project.currentDatasetCommitId || null,
+    observationSeries,
+    summary: {
+      total: observationSeries.length,
+      active: observationSeries.filter((series) => !series.isStale && series.status !== "stale").length,
+      stale: observationSeries.filter((series) => series.isStale || series.status === "stale").length,
+    },
+  });
 }
 
 async function verifyProjectScopedRef(context, projectId, kind, id) {
@@ -1551,6 +1601,7 @@ async function handleApplyImportRun(req, res, context, importRunId) {
     warnings: importRun.normalizePreview.warnings || [],
     createdBy: auth.user.id,
   });
+  await rebuildObservationSeriesForDatasetCommit(context, project, datasetCommit, auth.user.id);
   await context.store.updateImportRun(importRun.id, {
     status: "applied",
     appliedDatasetCommitId: datasetCommit.id,
@@ -1744,6 +1795,8 @@ async function dispatch(req, res, context) {
   if (supplementalBatchMatch && req.method === "GET") return handleProjectSupplementalImportBatchById(req, res, context, supplementalBatchMatch[1], supplementalBatchMatch[2]);
   const datasetCommitsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/dataset-commits$/);
   if (datasetCommitsMatch && req.method === "GET") return handleProjectDatasetCommits(req, res, context, datasetCommitsMatch[1]);
+  const observationSeriesMatch = pathName.match(/^\/api\/projects\/([^/]+)\/observation-series$/);
+  if (observationSeriesMatch && req.method === "GET") return handleProjectObservationSeries(req, res, context, observationSeriesMatch[1]);
   const mappingSetsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/mapping-sets$/);
   if (mappingSetsMatch && (req.method === "GET" || req.method === "POST")) return handleProjectMappingSets(req, res, context, mappingSetsMatch[1]);
   const mappingSetMatch = pathName.match(/^\/api\/mapping-sets\/([^/]+)$/);

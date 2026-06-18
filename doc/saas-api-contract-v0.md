@@ -746,13 +746,15 @@ Rules:
 - Cancellation must not mutate project state.
 - Preserve the run trace and cancellation timestamp.
 
-## Observation Series And Analysis Views Planned
+## Observation Series And Analysis Views
 
 ### `GET /api/projects/:projectId/observation-series`
 
 Purpose: list comparable series derived from current dataset commits and supplemental observation sets.
 
 Required role: `viewer` or above.
+
+Status: implemented for reaction-rate supplemental `ObservationSeries`.
 
 Response:
 
@@ -786,6 +788,8 @@ Rules:
 Purpose: create a reviewable AnalysisView draft such as `series_compare`, `source_range_extract`, or `data_table`.
 
 Required role: `editor` or above.
+
+Status: planned.
 
 Request:
 
