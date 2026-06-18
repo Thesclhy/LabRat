@@ -124,7 +124,16 @@ const conversionChartSpecFixture = {
   },
 };
 
-function Harness({ initialBlocks, initialPages, initialCanvasHeight = 900, initialOrientation = "landscape", dataset = { experiments: [] }, chartSpecs = [] }) {
+function Harness({
+  initialBlocks,
+  initialPages,
+  initialCanvasHeight = 900,
+  initialOrientation = "landscape",
+  dataset = { experiments: [] },
+  chartSpecs = [],
+  chartSpecInsertRequest = null,
+  onChartSpecInsertRequestHandled = () => {},
+}) {
   const [blocks, setBlocks] = useState(initialBlocks);
   const [pages, setPages] = useState(initialPages);
   const [canvasHeight, setCanvasHeight] = useState(initialCanvasHeight);
@@ -150,6 +159,8 @@ function Harness({ initialBlocks, initialPages, initialCanvasHeight = 900, initi
         setCanvasHeight={setCanvasHeight}
         pageOrientationPreference={pageOrientationPreference}
         setPageOrientationPreference={setPageOrientationPreference}
+        chartSpecInsertRequest={chartSpecInsertRequest}
+        onChartSpecInsertRequestHandled={onChartSpecInsertRequestHandled}
         onSelectedChartContextChange={() => {}}
         onRequestChartAnalysis={() => {}}
         onSaveProject={() => {}}
@@ -319,6 +330,59 @@ async function openTextEditor(text = "Hello") {
 }
 
 describe("ManuscriptCanvas chart specs", () => {
+  it("opens the insert modal from a chart spec insert request", async () => {
+    const onHandled = vi.fn();
+    render(
+      <Harness
+        initialBlocks={[]}
+        initialPages={[createPage("page-1")]}
+        dataset={genericDatasetFixture}
+        chartSpecs={[chartSpecFixture, conversionChartSpecFixture]}
+        chartSpecInsertRequest={{ chartSpecId: "chart_spec_2", requestId: "insert_request_1" }}
+        onChartSpecInsertRequestHandled={onHandled}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "Insert chart" })).toBeTruthy());
+    expect(onHandled).toHaveBeenCalledWith("insert_request_1");
+    const conversionChoices = screen.getAllByRole("button", { name: /Conversion vs Temperature/i });
+    expect(conversionChoices.some((button) => button.className.includes("active"))).toBe(true);
+    expect(screen.getByText("0 of 2 experiments selected")).toBeTruthy();
+  });
+
+  it("waits for chart specs before opening a requested insert modal", async () => {
+    const onHandled = vi.fn();
+    function DelayedInsertHarness() {
+      const [chartSpecs, setChartSpecs] = useState([]);
+      const [request, setRequest] = useState({ chartSpecId: "chart_spec_2", requestId: "delayed_request_1" });
+      return (
+        <>
+          <button type="button" onClick={() => setChartSpecs([conversionChartSpecFixture])}>Load chart specs</button>
+          <Harness
+            initialBlocks={[]}
+            initialPages={[createPage("page-1")]}
+            dataset={genericDatasetFixture}
+            chartSpecs={chartSpecs}
+            chartSpecInsertRequest={request}
+            onChartSpecInsertRequestHandled={(requestId) => {
+              onHandled(requestId);
+              setRequest(null);
+            }}
+          />
+        </>
+      );
+    }
+
+    render(<DelayedInsertHarness />);
+
+    expect(screen.queryByRole("dialog", { name: "Insert chart" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Load chart specs" }));
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "Insert chart" })).toBeTruthy());
+    expect(onHandled).toHaveBeenCalledWith("delayed_request_1");
+    const conversionChoices = screen.getAllByRole("button", { name: /Conversion vs Temperature/i });
+    expect(conversionChoices.some((button) => button.className.includes("active"))).toBe(true);
+  });
+
   it("hides stale chart specs from approved chart insertion choices", () => {
     render(
       <Harness

@@ -27,6 +27,8 @@ export class MemorySaasStore {
     this.projects = new Map();
     this.fileObjects = new Map();
     this.importRuns = new Map();
+    this.supplementalImportBatches = new Map();
+    this.supplementalImportBatchItems = new Map();
     this.datasetCommits = new Map();
     this.mappingSets = new Map();
     this.chartProposalSets = new Map();
@@ -378,6 +380,87 @@ export class MemorySaasStore {
     if (!run) return null;
     Object.assign(run, copy(changes), { updatedAt: nowIso() });
     return copy(run);
+  }
+
+  async createSupplementalImportBatch(input) {
+    const createdAt = nowIso();
+    const batch = {
+      id: input.id || makeId("supplement_batch"),
+      labId: input.labId,
+      projectId: input.projectId,
+      status: input.status || "queued",
+      summary: copy(input.summary) || {},
+      createdAt,
+      updatedAt: createdAt,
+      createdBy: input.createdBy,
+      updatedBy: input.createdBy,
+    };
+    this.supplementalImportBatches.set(batch.id, batch);
+    for (const fileObject of input.fileObjects || []) {
+      const item = {
+        id: makeId("supplement_batch_item"),
+        batchId: batch.id,
+        labId: batch.labId,
+        projectId: batch.projectId,
+        fileObjectId: fileObject.id,
+        importRunId: null,
+        fileName: fileObject.originalName || fileObject.id,
+        status: "queued",
+        progressMessage: "Queued for supplemental relationship review.",
+        summary: {},
+        relationshipPreview: null,
+        warnings: [],
+        error: null,
+        createdAt,
+        updatedAt: createdAt,
+        createdBy: input.createdBy,
+        updatedBy: input.createdBy,
+      };
+      this.supplementalImportBatchItems.set(item.id, item);
+    }
+    return this.findSupplementalImportBatchById(batch.id);
+  }
+
+  async findSupplementalImportBatchById(batchId) {
+    const batch = this.supplementalImportBatches.get(batchId);
+    if (!batch) return null;
+    const items = [...this.supplementalImportBatchItems.values()]
+      .filter((item) => item.batchId === batchId)
+      .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))
+      .map(copy);
+    return copy({ ...batch, items });
+  }
+
+  async listSupplementalImportBatches({ projectId }) {
+    const batches = [...this.supplementalImportBatches.values()]
+      .filter((batch) => batch.projectId === projectId)
+      .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+    return Promise.all(batches.map((batch) => this.findSupplementalImportBatchById(batch.id)));
+  }
+
+  async updateSupplementalImportBatch(batchId, changes) {
+    const batch = this.supplementalImportBatches.get(batchId);
+    if (!batch) return null;
+    if (changes.status != null) batch.status = String(changes.status);
+    if (changes.summary != null) batch.summary = copy(changes.summary) || {};
+    batch.updatedAt = nowIso();
+    batch.updatedBy = changes.updatedBy || batch.updatedBy;
+    return this.findSupplementalImportBatchById(batchId);
+  }
+
+  async updateSupplementalImportBatchItem(batchId, itemId, changes) {
+    const item = this.supplementalImportBatchItems.get(itemId);
+    if (!item || item.batchId !== batchId) return null;
+    if (changes.importRunId !== undefined) item.importRunId = changes.importRunId || null;
+    if (changes.status != null) item.status = String(changes.status);
+    if (changes.progressMessage !== undefined) item.progressMessage = changes.progressMessage || null;
+    if (changes.summary != null) item.summary = copy(changes.summary) || {};
+    if (changes.relationshipPreview !== undefined) item.relationshipPreview = copy(changes.relationshipPreview) || null;
+    if (changes.warnings != null) item.warnings = copy(changes.warnings) || [];
+    if (changes.error !== undefined) item.error = copy(changes.error) || null;
+    item.updatedAt = nowIso();
+    item.updatedBy = changes.updatedBy || item.updatedBy;
+    return copy(item);
   }
 
   async createDatasetCommit(input) {

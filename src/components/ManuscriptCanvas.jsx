@@ -43,7 +43,7 @@ const TOOLBAR_TRANSITION = {
   BLOCK_SWITCH: "block-switch",
 };
 
-export function ManuscriptCanvas({ dataset, blocks, setBlocks, staged, setStaged, references, chartTemplates, setChartTemplates, chartSpecs, pages, setPages, canvasHeight, setCanvasHeight, pageOrientationPreference, setPageOrientationPreference, onSelectedChartContextChange, onRequestChartAnalysis, onSaveProject }) {
+export function ManuscriptCanvas({ dataset, blocks, setBlocks, staged, setStaged, references, chartTemplates, setChartTemplates, chartSpecs, pages, setPages, canvasHeight, setCanvasHeight, pageOrientationPreference, setPageOrientationPreference, chartSpecInsertRequest = null, onChartSpecInsertRequestHandled, onSelectedChartContextChange, onRequestChartAnalysis, onSaveProject }) {
   const [selected, setSelected] = useState(null);
   const [editingTextBoxId, setEditingTextBoxId] = useState(null);
   const [textToolbarState, setTextToolbarState] = useState(null);
@@ -405,6 +405,13 @@ export function ManuscriptCanvas({ dataset, blocks, setBlocks, staged, setStaged
   const closeInsertChartModal = () => {
     setChartDraft(null);
   };
+  useEffect(() => {
+    const chartSpecId = chartSpecInsertRequest?.chartSpecId;
+    if (!chartSpecId) return;
+    if (!safeChartSpecs.some((spec) => spec.id === chartSpecId)) return;
+    openInsertChartModal(null, chartSpecId);
+    onChartSpecInsertRequestHandled?.(chartSpecInsertRequest.requestId);
+  }, [chartSpecInsertRequest?.requestId, chartSpecInsertRequest?.chartSpecId, safeChartSpecs, genericImports, onChartSpecInsertRequestHandled]);
   const insertChartFromDraft = () => {
     if (!chartDraft) return;
     const chartSpec = safeChartSpecs.find((spec) => spec.id === chartDraft.chartSpecId);

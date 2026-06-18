@@ -20,6 +20,11 @@ import { buildProjectAiContext } from "../projectAiContext.js";
 import { resolveProjectDataQuery } from "../dataResolveQuery.js";
 import { createProjectAgentPlan } from "../projectAgentPlanner.js";
 import {
+  publicSupplementalImportBatch,
+  startSupplementalImportBatchProcessing,
+  subscribeSupplementalImportBatchEvents,
+} from "../supplementalImportBatches.js";
+import {
   annotateSupplementDatasetPatch,
   buildImportRelationshipPreview,
 } from "../importRelationshipResolver.js";
@@ -188,6 +193,10 @@ function importRunSummary(run) {
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
   };
+}
+
+function supplementalImportBatchSummary(batch) {
+  return publicSupplementalImportBatch(batch);
 }
 
 function mappingSetSummary(set) {
@@ -685,6 +694,7 @@ async function handleProjectState(req, res, context, projectId) {
     chartProposalSets,
     chartSpecs,
     manuscripts,
+    supplementalImportBatches,
   ] = await Promise.all([
     context.store.listDatasetCommits({ projectId }),
     context.store.listFileObjects({ projectId }),
@@ -693,6 +703,7 @@ async function handleProjectState(req, res, context, projectId) {
     context.store.listChartProposalSets({ projectId }),
     context.store.listChartSpecs({ projectId }),
     context.store.listManuscripts({ projectId }),
+    context.store.listSupplementalImportBatches ? context.store.listSupplementalImportBatches({ projectId }) : [],
   ]);
   const currentDatasetCommit = project.currentDatasetCommitId
     ? await context.store.findDatasetCommitById(project.currentDatasetCommitId)
@@ -709,6 +720,7 @@ async function handleProjectState(req, res, context, projectId) {
     chartProposalSets: chartProposalSets.map(chartProposalSetSummary),
     chartSpecs: decoratedChartSpecs,
     manuscripts,
+    supplementalImportBatches: supplementalImportBatches.map(supplementalImportBatchSummary),
   });
 }
 
@@ -1208,6 +1220,74 @@ async function handleProjectImportRuns(req, res, context, projectId) {
   sendJson(res, 201, { importRun: importRunSummary(importRun) });
 }
 
+async function handleProjectSupplementalImportBatches(req, res, context, projectId) {
+  const { auth, project } = await projectAuth(req, context, projectId, "editor");
+  if (req.method === "GET") {
+    const batches = context.store.listSupplementalImportBatches
+      ? await context.store.listSupplementalImportBatches({ projectId: project.id })
+      : [];
+    sendJson(res, 200, { batches: batches.map(supplementalImportBatchSummary) });
+    return;
+  }
+  const body = await readJsonBody(req);
+  const fileObjectIds = asArray(body.fileObjectIds).map((id) => String(id || "").trim()).filter(Boolean);
+  if (!fileObjectIds.length) {
+    sendError(res, 400, "invalid_supplemental_batch_request", "fileObjectIds must include at least one uploaded workbook.");
+    return;
+  }
+  const uniqueFileObjectIds = [...new Set(fileObjectIds)];
+  const fileObjects = [];
+  for (const fileObjectId of uniqueFileObjectIds) {
+    const fileObject = await context.store.findFileObjectById(fileObjectId);
+    if (!fileObject || fileObject.projectId !== project.id) {
+      sendError(res, 404, "file_object_not_found", `File object ${fileObjectId} was not found for this project.`);
+      return;
+    }
+    fileObjects.push(fileObject);
+  }
+  if (!context.store.createSupplementalImportBatch) {
+    sendError(res, 500, "supplemental_batch_unavailable", "Supplemental batch store is unavailable.");
+    return;
+  }
+  const batch = await context.store.createSupplementalImportBatch({
+    labId: project.labId,
+    projectId: project.id,
+    fileObjects,
+    createdBy: auth.user.id,
+  });
+  await context.store.recordAuditEvent({
+    labId: project.labId,
+    projectId: project.id,
+    actorUserId: auth.user.id,
+    action: "import.supplement_batch_create",
+    targetType: "supplemental_import_batch",
+    targetId: batch.id,
+    summary: `Created supplemental import batch with ${fileObjects.length} workbook(s).`,
+    metadata: { fileObjectIds: uniqueFileObjectIds },
+  });
+  startSupplementalImportBatchProcessing(context, batch.id, auth.user.id);
+  sendJson(res, 201, { batch: supplementalImportBatchSummary(batch) });
+}
+
+async function handleProjectSupplementalImportBatchById(req, res, context, projectId, batchId, eventStream = false) {
+  const { auth, project } = await projectAuth(req, context, projectId, "editor");
+  const batch = context.store.findSupplementalImportBatchById
+    ? await context.store.findSupplementalImportBatchById(batchId)
+    : null;
+  if (!batch || batch.projectId !== project.id) {
+    sendError(res, 404, "supplemental_batch_not_found", "Supplemental import batch was not found for this project.");
+    return;
+  }
+  if (["queued", "processing"].includes(batch.status)) {
+    startSupplementalImportBatchProcessing(context, batch.id, auth.user.id);
+  }
+  if (eventStream) {
+    subscribeSupplementalImportBatchEvents(batch, res);
+    return;
+  }
+  sendJson(res, 200, { batch: supplementalImportBatchSummary(batch) });
+}
+
 async function handleNormalizePreview(req, res, context, importRunId) {
   const auth = requireAuth(await authFor(req, context));
   const importRun = await context.store.findImportRunById(importRunId);
@@ -1656,6 +1736,12 @@ async function dispatch(req, res, context) {
   const importRunsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/import-runs$/);
   if (importRunsMatch && req.method === "GET") return handleProjectImportRunsList(req, res, context, importRunsMatch[1]);
   if (importRunsMatch && req.method === "POST") return handleProjectImportRuns(req, res, context, importRunsMatch[1]);
+  const supplementalBatchesMatch = pathName.match(/^\/api\/projects\/([^/]+)\/supplemental-import-batches$/);
+  if (supplementalBatchesMatch && (req.method === "GET" || req.method === "POST")) return handleProjectSupplementalImportBatches(req, res, context, supplementalBatchesMatch[1]);
+  const supplementalBatchEventsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/supplemental-import-batches\/([^/]+)\/events$/);
+  if (supplementalBatchEventsMatch && req.method === "GET") return handleProjectSupplementalImportBatchById(req, res, context, supplementalBatchEventsMatch[1], supplementalBatchEventsMatch[2], true);
+  const supplementalBatchMatch = pathName.match(/^\/api\/projects\/([^/]+)\/supplemental-import-batches\/([^/]+)$/);
+  if (supplementalBatchMatch && req.method === "GET") return handleProjectSupplementalImportBatchById(req, res, context, supplementalBatchMatch[1], supplementalBatchMatch[2]);
   const datasetCommitsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/dataset-commits$/);
   if (datasetCommitsMatch && req.method === "GET") return handleProjectDatasetCommits(req, res, context, datasetCommitsMatch[1]);
   const mappingSetsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/mapping-sets$/);

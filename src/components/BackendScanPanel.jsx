@@ -2,6 +2,7 @@ import React from "react";
 import { makeGenericChartPreview } from "../charts/genericChartPreview.js";
 import { Plot } from "../charts/Plot.jsx";
 import { blockReviewDecision } from "../data/importBlockReviewState.js";
+import { ThinkingIndicator } from "./ThinkingIndicator.jsx";
 
 function warningCount(result) {
   return result?.summary?.warningCount ?? result?.warnings?.length ?? 0;
@@ -196,7 +197,13 @@ function RefreshDiffPreview({ refreshDraft, onReloadProjectState }) {
 
 function RelationshipPreview({ relationshipDraft, selectedProposalId, onRelationshipProposalSelect }) {
   const draft = relationshipDraft || {};
-  if (draft.loading) return <div className="import-review-empty is-loading">Resolving supplemental workbook relationship...</div>;
+  if (draft.loading) {
+    return (
+      <div className="import-review-empty is-loading">
+        <ThinkingIndicator text="AI is resolving experiment links..." />
+      </div>
+    );
+  }
   if (draft.error) return <p className="import-review-error">{draft.error}</p>;
   const preview = draft.preview || null;
   if (!preview) return <div className="import-review-empty">Supplement relationship preview will appear after normalized preview.</div>;
@@ -449,11 +456,32 @@ function MappingProposalReview({ genericImports, mappingState, onProposeMappings
   );
 }
 
-function ChartProposalCard({ proposal, genericImports, chartProposalSetId, chartSpecs, onChartProposalDecision, onCreateChartSpec }) {
+function chartSpecMatchesProposal(chartSpec, chartProposalSetId, proposalId) {
+  if (!chartSpec || chartSpec.sourceProposalId !== proposalId) return false;
+  if (chartProposalSetId) return chartSpec.sourceChartProposalSetId === chartProposalSetId;
+  return true;
+}
+
+function chartProposalStatus(proposal) {
+  return proposal?.status || "proposed";
+}
+
+function proposalMatchesStatusFilter(proposal, statusFilter) {
+  if (statusFilter !== "active") return true;
+  const status = chartProposalStatus(proposal);
+  return status === "accepted" || status === "proposed";
+}
+
+function ChartProposalCard({ proposal, genericImports, chartProposalSetId, chartSpecs, focusProposalId, onChartProposalDecision, onCreateChartSpec }) {
   const preview = makeGenericChartPreview(proposal, genericImports);
-  const existingSpec = (chartSpecs || []).find((spec) => spec.sourceProposalId === proposal.proposalId);
+  const existingSpec = (chartSpecs || []).find((spec) => chartSpecMatchesProposal(spec, chartProposalSetId, proposal.proposalId));
+  const focused = !!focusProposalId && focusProposalId === proposal.proposalId;
+  const cardRef = React.useRef(null);
+  React.useEffect(() => {
+    if (focused) cardRef.current?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+  }, [focused]);
   return (
-    <article className="backend-proposal-card backend-chart-proposal-card">
+    <article ref={cardRef} className={`backend-proposal-card backend-chart-proposal-card ${focused ? "is-focused-proposal" : ""}`}>
       <div className="backend-scan-block-head">
         <strong>{proposal.title || proposal.proposalId}</strong>
         <span>{proposal.chartType} - {formatConfidence(proposal.confidence)}</span>
@@ -502,19 +530,24 @@ function ChartProposalCard({ proposal, genericImports, chartProposalSetId, chart
   );
 }
 
-function ChartProposalReview({ genericImports, mappingState, chartProposalState, chartSpecs, onProposeCharts, onChartProposalDecision, onCreateChartSpec }) {
+function ChartProposalReview({ genericImports, mappingState, chartProposalState, chartSpecs, focusProposalId, statusFilter, onProposeCharts, onChartProposalDecision, onCreateChartSpec }) {
   const state = chartProposalState || {};
   const proposalSet = state.result?.proposalSet || null;
   const proposals = proposalSet?.proposals || [];
+  const visibleProposals = proposals.filter((proposal) => proposalMatchesStatusFilter(proposal, statusFilter));
   const chartProposalSetId = state.result?.chartProposalSet?.id || proposalSet?.serverId || state.result?.chartProposalSetId || null;
   const canPropose = genericImports.length > 0 && !state.loading;
+  const acceptedCount = proposals.filter((proposal) => chartProposalStatus(proposal) === "accepted").length;
+  const pendingCount = proposals.filter((proposal) => chartProposalStatus(proposal) === "proposed").length;
+  const rejectedCount = proposals.filter((proposal) => chartProposalStatus(proposal) === "rejected").length;
+  const activeOnly = statusFilter === "active";
 
   return (
     <section className="backend-proposal-section">
       <WorkflowPanelHeader
-        title="Chart proposals"
-        detail="Accept proposed charts, then create ChartSpecs for Manuscript insertion."
-        meta={`${proposals.length} proposals`}
+        title={activeOnly ? "Accepted + pending charts" : "Chart proposals"}
+        detail={activeOnly ? "Review proposals that are still active for ChartSpec creation." : "Accept proposed charts, then create ChartSpecs for Manuscript insertion."}
+        meta={activeOnly ? `${visibleProposals.length} active` : `${proposals.length} proposals`}
       />
       <div className="backend-normalize-toolbar workflow-action-row">
         <button
@@ -525,24 +558,28 @@ function ChartProposalReview({ genericImports, mappingState, chartProposalState,
         >
           {state.loading ? "Proposing charts..." : "Propose charts"}
         </button>
+        {state.loading && <ThinkingIndicator text="Drafting chart proposals..." />}
       </div>
       {state.error && <p className="import-review-error">{state.error}</p>}
       {!proposalSet && !state.loading && <div className="import-review-empty">No chart proposals yet.</div>}
       {proposalSet && (
         <div className="backend-proposal-grid">
           <div className="backend-scan-stats">
-            <span>{proposals.length} charts</span>
-            <span>{proposals.filter((proposal) => proposal.status === "accepted").length} accepted</span>
-            <span>{proposals.filter((proposal) => proposal.status === "rejected").length} rejected</span>
+            <span>{activeOnly ? `${visibleProposals.length} active` : `${proposals.length} charts`}</span>
+            <span>{acceptedCount} accepted</span>
+            <span>{pendingCount} pending</span>
+            {!activeOnly && <span>{rejectedCount} rejected</span>}
             <span>{proposalSet.warnings?.length || 0} warnings</span>
           </div>
-          {proposals.map((proposal) => (
+          {activeOnly && !visibleProposals.length && <div className="import-review-empty">No accepted or pending chart proposals.</div>}
+          {visibleProposals.map((proposal) => (
             <ChartProposalCard
               key={proposal.proposalId}
               proposal={proposal}
               genericImports={genericImports}
               chartProposalSetId={chartProposalSetId}
               chartSpecs={chartSpecs}
+              focusProposalId={focusProposalId}
               onChartProposalDecision={onChartProposalDecision}
               onCreateChartSpec={onCreateChartSpec}
             />
@@ -587,6 +624,7 @@ function ChartInterpretReview({ genericImports, chartInterpretState, onInterpret
         >
           {state.loading ? "Drafting chart..." : "Draft chart proposal"}
         </button>
+        {state.loading && <ThinkingIndicator text="Drafting chart proposal..." />}
       </div>
       {state.error && <p className="import-review-error">{state.error}</p>}
       {!state.result && !state.loading && <div className="import-review-empty">No one-chart prompt yet.</div>}
@@ -738,6 +776,8 @@ export function ChartReviewPanel({
   chartProposalState,
   chartInterpretState,
   chartSpecs,
+  focusProposalId,
+  statusFilter,
   onProposeCharts,
   onChartProposalDecision,
   onInterpretChart,
@@ -755,6 +795,8 @@ export function ChartReviewPanel({
         mappingState={mappingState}
         chartProposalState={chartProposalState}
         chartSpecs={chartSpecs}
+        focusProposalId={focusProposalId}
+        statusFilter={statusFilter}
         onProposeCharts={onProposeCharts}
         onChartProposalDecision={onChartProposalDecision}
         onCreateChartSpec={onCreateChartSpec}

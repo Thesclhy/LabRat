@@ -506,6 +506,54 @@ describe("BackendScanPanel", () => {
     expect(screen.getByText("X: Time (min) - Y: Conversion (%)")).toBeTruthy();
   });
 
+  it("marks the focused chart proposal card for edit review", () => {
+    render(
+      <ChartReviewPanel
+        genericImports={normalizeResult().datasetPatch.genericImports}
+        mappingState={{ result: mappingResult() }}
+        chartProposalState={{ result: chartProposalResult() }}
+        focusProposalId="chart_1"
+      />,
+    );
+
+    const proposalCard = screen.getByText("Conversion vs Time").closest(".backend-chart-proposal-card");
+    expect(proposalCard?.className).toContain("is-focused-proposal");
+  });
+
+  it("filters chart proposals to accepted and pending in active review mode", () => {
+    const result = chartProposalResult();
+    result.proposalSet.proposals = [
+      result.proposalSet.proposals[0],
+      {
+        ...result.proposalSet.proposals[0],
+        proposalId: "chart_accepted",
+        status: "accepted",
+        title: "Accepted Chart",
+      },
+      {
+        ...result.proposalSet.proposals[0],
+        proposalId: "chart_rejected",
+        status: "rejected",
+        title: "Rejected Chart",
+      },
+    ];
+
+    render(
+      <ChartReviewPanel
+        genericImports={normalizeResult().datasetPatch.genericImports}
+        mappingState={{ result: mappingResult() }}
+        chartProposalState={{ result }}
+        statusFilter="active"
+      />,
+    );
+
+    expect(screen.getByText("Accepted + pending charts")).toBeTruthy();
+    expect(screen.getAllByText("2 active").length).toBeGreaterThan(0);
+    expect(screen.getByText("Conversion vs Time")).toBeTruthy();
+    expect(screen.getByText("Accepted Chart")).toBeTruthy();
+    expect(screen.queryByText("Rejected Chart")).toBeNull();
+  });
+
   it("sends one-sentence chart prompts and shows ChartSpec drafts", () => {
     const onInterpretChart = vi.fn();
     render(
@@ -567,6 +615,30 @@ describe("BackendScanPanel", () => {
     );
 
     fireEvent.click(screen.getByText("Create chart spec"));
+
+    expect(onCreateChartSpec).toHaveBeenCalledWith("chart_proposal_set_interpret_1", "chart_interpret_1");
+  });
+
+  it("does not treat the same proposal id from another proposal set as an existing chart spec", () => {
+    const onCreateChartSpec = vi.fn();
+    const interpretedResult = persistedChartInterpretResult("accepted");
+    render(
+      <ChartReviewPanel
+        genericImports={normalizeResult().datasetPatch.genericImports}
+        chartInterpretState={{ result: interpretedResult }}
+        chartProposalState={chartProposalStateFromInterpret(interpretedResult)}
+        chartSpecs={[{
+          id: "chart_spec_old",
+          sourceChartProposalSetId: "chart_proposal_set_interpret_old",
+          sourceProposalId: "chart_interpret_1",
+        }]}
+        onCreateChartSpec={onCreateChartSpec}
+      />,
+    );
+
+    const createButton = screen.getByText("Create chart spec");
+    expect(createButton.disabled).toBe(false);
+    fireEvent.click(createButton);
 
     expect(onCreateChartSpec).toHaveBeenCalledWith("chart_proposal_set_interpret_1", "chart_interpret_1");
   });

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { after, before, test } from "node:test";
 import * as XLSX from "xlsx";
 import { createServer } from "../../server.js";
@@ -12,6 +14,19 @@ let server;
 let baseUrl;
 let cookie;
 let store;
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const REAL_SUPPLEMENT_FIXTURE_DIR = path.resolve(__dirname, "../../import/fixtures/real-workbooks");
+const REAL_SUPPLEMENT_FIXTURE_FILES = [
+  "MasterTable_updated.xlsx",
+  "Reaction_Rate_Exp33.xlsx",
+  "Reaction_Rate_Exp34.xlsx",
+  "Reaction_Rate_Exp35.xlsx",
+];
+const hasRealSupplementFixtures = REAL_SUPPLEMENT_FIXTURE_FILES.every((filename) =>
+  fs.existsSync(path.join(REAL_SUPPLEMENT_FIXTURE_DIR, filename)),
+);
+const realSupplementFixtureTest = hasRealSupplementFixtures ? test : test.skip;
 
 function makeWorkbookBlob(rows = [
   ["Exp1", 250, 5, 0.35],
@@ -68,6 +83,12 @@ function fixtureBlob(file) {
   });
 }
 
+function workbookFixtureBlob(filename) {
+  return new Blob([fs.readFileSync(path.join(REAL_SUPPLEMENT_FIXTURE_DIR, filename))], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+}
+
 async function uploadAndCreateImportRun(projectId, blob = makeWorkbookBlob(), filename = "MasterTable_updated.xlsx") {
   const { response: upload, body: uploadBody } = await uploadProjectFile(projectId, blob, filename);
   assert.equal(upload.status, 201);
@@ -113,6 +134,40 @@ async function normalizeImportRun(importRun, approvedBlockIds = null) {
   });
   assert.equal(preview.status, 200);
   return preview.json();
+}
+
+async function waitForSupplementalBatch(projectId, batchId, predicate, timeoutMs = 5000) {
+  const start = Date.now();
+  let latest = null;
+  while (Date.now() - start < timeoutMs) {
+    const response = await jsonFetch(`/api/projects/${projectId}/supplemental-import-batches/${batchId}`);
+    assert.equal(response.status, 200);
+    latest = (await response.json()).batch;
+    if (predicate(latest)) return latest;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.fail(`Timed out waiting for supplemental batch ${batchId}. Latest: ${JSON.stringify(latest)}`);
+}
+
+async function readSupplementalBatchSse(projectId, batchId) {
+  const controller = new AbortController();
+  const response = await fetch(`${baseUrl}/api/projects/${projectId}/supplemental-import-batches/${batchId}/events`, {
+    headers: { cookie },
+    signal: controller.signal,
+  });
+  assert.equal(response.status, 200);
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    text += decoder.decode(value, { stream: true });
+    if (text.includes("event: complete")) break;
+  }
+  controller.abort();
+  return text;
 }
 
 function cookieFrom(response) {
@@ -313,6 +368,17 @@ test("viewer can read project state but cannot update project profile", async ()
     method: "POST",
     body: { labId, name: "Viewer State Project" },
   })).json();
+  const mappingCreate = await jsonFetch(`/api/projects/${project.project.id}/mapping-sets`, {
+    method: "POST",
+    body: {
+      schemaVersion: "labrat.semanticMappingResponse.v1",
+      status: "proposed",
+      payload: { mappings: [{ mappingId: "map_viewer_guard", canonicalField: "temperature" }] },
+      decisionSummary: { accepted: 0, rejected: 0 },
+    },
+  });
+  assert.equal(mappingCreate.status, 201);
+  const mappingBody = await mappingCreate.json();
   const username = `viewer_${Date.now()}`;
   const createUser = await jsonFetch("/api/admin/users", {
     method: "POST",
@@ -349,6 +415,15 @@ test("viewer can read project state but cannot update project profile", async ()
     body: { status: "deleted" },
   });
   assert.equal(deletePatch.status, 403);
+
+  const mappingPatch = await jsonFetch(`/api/mapping-sets/${mappingBody.mappingSet.id}`, {
+    method: "PATCH",
+    body: {
+      payload: { mappings: [{ mappingId: "map_viewer_guard", canonicalField: "pressure" }] },
+      decisionSummary: { accepted: 1, rejected: 0 },
+    },
+  });
+  assert.equal(mappingPatch.status, 403);
   cookie = ownerCookie;
 });
 
@@ -595,7 +670,9 @@ test("relationship preview and supplement apply attach a detailed workbook to an
   const masterApply = await normalizeAndApplyImportRun(master.importRun);
   const parentCommit = masterApply.apply.datasetCommit;
   const exp30 = parentCommit.datasetPayload.genericImports[0].experiments.find((experiment) => experiment.label === "Exp30");
+  const exp31 = parentCommit.datasetPayload.genericImports[0].experiments.find((experiment) => experiment.label === "Exp31");
   assert.ok(exp30?.experimentId);
+  assert.ok(exp31?.experimentId);
 
   const supplement = await uploadAndCreateImportRun(
     project.project.id,
@@ -645,7 +722,7 @@ test("relationship preview and supplement apply attach a detailed workbook to an
   const secondSupplement = await uploadAndCreateImportRun(
     project.project.id,
     makeReactionRateWorkbookBlob([[0, 0], [15, 3.1]]),
-    "Reaction_Rate_Exp30_repeat.xlsx",
+    "Reaction_Rate_Exp31.xlsx",
   );
   await normalizeImportRun(secondSupplement.importRun);
   const secondRelationshipPreview = await (await jsonFetch(`/api/import-runs/${secondSupplement.importRun.id}/relationship-preview`, {
@@ -654,7 +731,7 @@ test("relationship preview and supplement apply attach a detailed workbook to an
   })).json();
   const secondProposal = secondRelationshipPreview.proposals[0];
   assert.equal(secondProposal.proposedRelationship, "supplement");
-  assert.equal(secondProposal.targetExperimentIds.includes(exp30.experimentId), true);
+  assert.equal(secondProposal.targetExperimentIds.includes(exp31.experimentId), true);
   const secondSupplementApply = await jsonFetch(`/api/import-runs/${secondSupplement.importRun.id}/apply`, {
     method: "POST",
     body: {
@@ -667,6 +744,32 @@ test("relationship preview and supplement apply attach a detailed workbook to an
   const secondSupplementCommit = (await secondSupplementApply.json()).datasetCommit;
   assert.equal(secondSupplementCommit.datasetPayload.genericImports.length, 3);
   assert.equal(secondSupplementCommit.summary.applyMode, "supplement_import");
+  const secondLinkedImport = secondSupplementCommit.datasetPayload.genericImports.find((item) => item.fileName === "Reaction_Rate_Exp31.xlsx");
+  assert.ok(secondLinkedImport?.importId);
+
+  const chartResponse = await jsonFetch(`/api/projects/${project.project.id}/charts/propose`, {
+    method: "POST",
+    body: {
+      selectedImportIds: [secondLinkedImport.importId],
+      chartConstraints: { maxProposals: 4 },
+    },
+  });
+  assert.equal(chartResponse.status, 200);
+  const chartBody = await chartResponse.json();
+  const secondImportProposal = chartBody.chartProposalSet.payload.proposals.find((proposal) => {
+    const sourceIds = [
+      ...(proposal.x?.sourceIds || []),
+      ...(proposal.y?.sourceIds || []),
+      ...(proposal.yFields || []).flatMap((field) => field.sourceIds || []),
+    ];
+    return sourceIds.length && sourceIds.every((sourceId) => sourceId.startsWith(secondLinkedImport.importId));
+  });
+  assert.ok(secondImportProposal);
+  assert.equal(secondImportProposal.sourceImportIds.includes(secondLinkedImport.importId), true);
+  assert.equal(secondImportProposal.x.sourceIds.every((sourceId) => sourceId.startsWith(secondLinkedImport.importId)), true);
+  assert.equal(secondImportProposal.y.sourceIds.every((sourceId) => sourceId.startsWith(secondLinkedImport.importId)), true);
+  assert.equal(secondImportProposal.x.sourceIds.some((sourceId) => sourceId.startsWith(linkedImport.importId)), false);
+  assert.equal(secondImportProposal.y.sourceIds.some((sourceId) => sourceId.startsWith(linkedImport.importId)), false);
 
   const state = await (await jsonFetch(`/api/projects/${project.project.id}/state`)).json();
   const historicalParent = state.datasetCommits.find((commit) => commit.id === parentCommit.id);
@@ -686,6 +789,211 @@ test("relationship preview and supplement apply attach a detailed workbook to an
 
   const auditEvents = await store.listAuditEvents({ projectId: project.project.id });
   assert.equal(auditEvents.some((event) => event.action === "import.supplement_apply"), true);
+});
+
+test("supplemental import batch processes multiple workbooks to review and streams status", async () => {
+  const labs = await (await jsonFetch("/api/labs")).json();
+  const labId = labs.labs[0].labId;
+  const ownerCookie = cookie;
+  const project = await (await jsonFetch("/api/projects", {
+    method: "POST",
+    body: { labId, name: "Batch Supplemental Project" },
+  })).json();
+
+  const master = await uploadAndCreateImportRun(project.project.id, makeWorkbookBlob([
+    ["Exp30", 250, 14, 0.28],
+    ["Exp31", 260, 10, 0.44],
+  ]), "MasterTable.xlsx");
+  const masterApply = await normalizeAndApplyImportRun(master.importRun);
+  const parentCommitId = masterApply.apply.datasetCommit.id;
+
+  const firstUpload = await uploadProjectFile(
+    project.project.id,
+    fixtureBlob(createReactionRateSupplementWorkbook()),
+    "Reaction_Rate_Exp30.xlsx",
+  );
+  assert.equal(firstUpload.response.status, 201);
+  const secondUpload = await uploadProjectFile(
+    project.project.id,
+    makeReactionRateWorkbookBlob([[0, 0], [15, 3.1]]),
+    "Reaction_Rate_Exp31.xlsx",
+  );
+  assert.equal(secondUpload.response.status, 201);
+  const badUpload = await uploadProjectFile(
+    project.project.id,
+    new Blob([], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
+    "Reaction_Rate_ExpBad.xlsx",
+  );
+  assert.equal(badUpload.response.status, 201);
+
+  const createBatch = await jsonFetch(`/api/projects/${project.project.id}/supplemental-import-batches`, {
+    method: "POST",
+    body: {
+      fileObjectIds: [
+        firstUpload.body.fileObject.id,
+        secondUpload.body.fileObject.id,
+        badUpload.body.fileObject.id,
+      ],
+    },
+  });
+  assert.equal(createBatch.status, 201);
+  const batchBody = await createBatch.json();
+  assert.equal(batchBody.batch.items.length, 3);
+
+  const ssePromise = readSupplementalBatchSse(project.project.id, batchBody.batch.id);
+  const completed = await waitForSupplementalBatch(project.project.id, batchBody.batch.id, (batch) => batch.summary.completed === 3);
+  assert.equal(completed.summary.ready, 2);
+  assert.equal(completed.summary.failed, 1);
+  assert.equal(completed.items.filter((item) => item.status === "ready_for_review").every((item) => item.importRunId), true);
+  assert.equal(completed.items.some((item) => item.status === "failed" && item.error?.message), true);
+  const readyItem = completed.items.find((item) => item.status === "ready_for_review");
+  assert.equal(readyItem.relationshipPreview.schemaVersion, "labrat.importRelationshipPreview.v1");
+  assert.equal(readyItem.relationshipPreview.proposals.some((proposal) => proposal.proposedRelationship === "supplement"), true);
+
+  const sseText = await ssePromise;
+  assert.match(sseText, /event: snapshot/);
+  assert.match(sseText, /event: complete|event: item_ready/);
+
+  const state = await (await jsonFetch(`/api/projects/${project.project.id}/state`)).json();
+  assert.equal(state.supplementalImportBatches.some((batch) => batch.id === completed.id), true);
+  assert.equal(state.importRuns.filter((run) => completed.items.some((item) => item.importRunId === run.id)).length, 3);
+  assert.equal(state.currentDatasetCommit.id, parentCommitId);
+  assert.equal(state.currentDatasetCommit.datasetPayload.genericImports.length, 1);
+
+  const username = `batch_viewer_${Date.now()}`;
+  const createUser = await jsonFetch("/api/admin/users", {
+    method: "POST",
+    body: {
+      username,
+      displayName: "Batch Viewer User",
+      temporaryPassword: "ViewerPass123!",
+      labId,
+      role: "viewer",
+    },
+  });
+  assert.equal(createUser.status, 201);
+  const viewerLogin = await jsonFetch("/api/auth/login", {
+    method: "POST",
+    body: { username, password: "ViewerPass123!" },
+  });
+  assert.equal(viewerLogin.status, 200);
+  cookie = cookieFrom(viewerLogin);
+  const viewerStatus = await jsonFetch(`/api/projects/${project.project.id}/supplemental-import-batches/${completed.id}`);
+  assert.equal(viewerStatus.status, 403);
+  cookie = ownerCookie;
+});
+
+realSupplementFixtureTest("real workbook fixtures link Exp33-35 supplements and chart from their own source ids", async () => {
+  const labs = await (await jsonFetch("/api/labs")).json();
+  const labId = labs.labs[0].labId;
+  const project = await (await jsonFetch("/api/projects", {
+    method: "POST",
+    body: { labId, name: "Real Supplement Fixture Project" },
+  })).json();
+
+  const master = await uploadAndCreateImportRun(
+    project.project.id,
+    workbookFixtureBlob("MasterTable_updated.xlsx"),
+    "MasterTable_updated.xlsx",
+  );
+  const masterApply = await normalizeAndApplyImportRun(master.importRun);
+  const masterImport = masterApply.apply.datasetCommit.datasetPayload.genericImports[0];
+  assert.equal(masterImport.experiments.length, 61);
+
+  const expected = [
+    { exp: "Exp33", fileName: "Reaction_Rate_Exp33.xlsx", observationCount: 36, pointCount: 35 },
+    { exp: "Exp34", fileName: "Reaction_Rate_Exp34.xlsx", observationCount: 65, pointCount: 63 },
+    { exp: "Exp35", fileName: "Reaction_Rate_Exp35.xlsx", observationCount: 61, pointCount: 60 },
+  ];
+  const linkedImportsByExp = new Map();
+
+  for (const fixture of expected) {
+    const targetExperiment = masterImport.experiments.find((experiment) => experiment.label === fixture.exp);
+    assert.ok(targetExperiment?.experimentId);
+
+    const supplement = await uploadAndCreateImportRun(
+      project.project.id,
+      workbookFixtureBlob(fixture.fileName),
+      fixture.fileName,
+    );
+    const normalizePreview = await normalizeImportRun(supplement.importRun);
+    const supplementImport = normalizePreview.importRun.normalizePreview.datasetPatch.genericImports[0];
+    assert.equal(supplementImport.observationSets.length, 1);
+    assert.equal(supplementImport.observationSets[0].inferredExperimentLabel, fixture.exp);
+    assert.equal(supplementImport.observationSets[0].summary.observationCount, fixture.observationCount);
+
+    const relationshipPreview = await (await jsonFetch(`/api/import-runs/${supplement.importRun.id}/relationship-preview`, {
+      method: "POST",
+      body: {},
+    })).json();
+    const relationship = relationshipPreview.proposals[0];
+    assert.equal(relationship.proposedRelationship, "supplement");
+    assert.equal(relationship.supplementType, "reaction_rate_time_series");
+    assert.equal(relationship.targetExperimentIds.includes(targetExperiment.experimentId), true);
+
+    const supplementApply = await jsonFetch(`/api/import-runs/${supplement.importRun.id}/apply`, {
+      method: "POST",
+      body: {
+        applyMode: "supplement_import",
+        relationshipDecision: relationship,
+        reviewNote: `Attach real ${fixture.exp} reaction-rate workbook.`,
+      },
+    });
+    assert.equal(supplementApply.status, 200);
+    const supplementCommit = (await supplementApply.json()).datasetCommit;
+    const linkedImport = supplementCommit.datasetPayload.genericImports.find((item) => item.fileName === fixture.fileName);
+    assert.ok(linkedImport?.importId);
+    linkedImportsByExp.set(fixture.exp, linkedImport);
+
+    const chartResponse = await jsonFetch(`/api/projects/${project.project.id}/charts/interpret`, {
+      method: "POST",
+      body: {
+        prompt: `plot adjusted rate vs reaction time for ${fixture.exp} with log base 10 y-axis and no connecting lines`,
+        selectedImportIds: [linkedImport.importId],
+        persistAsProposal: false,
+      },
+    });
+    assert.equal(chartResponse.status, 200);
+    const chartBody = await chartResponse.json();
+    const draft = chartBody.chartSpecDraft;
+    assert.equal(chartBody.clarification, null);
+    assert.equal(draft.x.label, "Reaction Time (min)");
+    assert.equal(draft.y.label, "Adjusted Rate (M/s)");
+    assert.equal(draft.axisOptions.y.scale, "log10");
+    assert.equal(draft.renderStyle.traceMode, "markers");
+    assert.deepEqual(draft.sourceImportIds, [linkedImport.importId]);
+    assert.equal(draft.x.sourceIds.length, fixture.pointCount);
+    assert.equal(draft.y.sourceIds.length, fixture.pointCount);
+    assert.equal(draft.x.sourceIds.every((sourceId) => sourceId.startsWith(linkedImport.importId)), true);
+    assert.equal(draft.y.sourceIds.every((sourceId) => sourceId.startsWith(linkedImport.importId)), true);
+  }
+
+  const exp35Import = linkedImportsByExp.get("Exp35");
+  const unscopedChartResponse = await jsonFetch(`/api/projects/${project.project.id}/charts/interpret`, {
+    method: "POST",
+    body: {
+      prompt: "plot adjusted rate vs reaction time for Exp35",
+      persistAsProposal: false,
+    },
+  });
+  assert.equal(unscopedChartResponse.status, 200);
+  const unscopedChartBody = await unscopedChartResponse.json();
+  assert.equal(unscopedChartBody.clarification, null);
+  assert.deepEqual(unscopedChartBody.chartSpecDraft.sourceImportIds, [exp35Import.importId]);
+  assert.equal(unscopedChartBody.chartSpecDraft.x.sourceIds.every((sourceId) => sourceId.startsWith(exp35Import.importId)), true);
+  assert.equal(unscopedChartBody.chartSpecDraft.y.sourceIds.every((sourceId) => sourceId.startsWith(exp35Import.importId)), true);
+
+  const missingExperimentResponse = await jsonFetch(`/api/projects/${project.project.id}/charts/interpret`, {
+    method: "POST",
+    body: {
+      prompt: "plot adjusted rate vs reaction time for Exp999",
+      persistAsProposal: false,
+    },
+  });
+  assert.equal(missingExperimentResponse.status, 200);
+  const missingExperimentBody = await missingExperimentResponse.json();
+  assert.equal(missingExperimentBody.chartSpecDraft, null);
+  assert.match(missingExperimentBody.clarification.message, /No imported data matched the requested experiment exp999/);
 });
 
 test("refresh rejects no-op replacement, missing target, stale parent, and repeated apply", async () => {
@@ -885,13 +1193,25 @@ test("mapping sets and chart proposal sets persist review decisions", async () =
     method: "PATCH",
     body: {
       status: "accepted",
-      decisionSummary: { accepted: 1, rejected: 0 },
+      payload: {
+        mappings: [{
+          mappingId: "map_1",
+          sourceFieldId: "field_temperature",
+          canonicalField: "temperature_C",
+          semanticRole: "condition",
+          valueType: "numeric",
+          unit: "C",
+          status: "accepted",
+        }],
+      },
+      decisionSummary: { accepted: 1, rejected: 0, proposed: 0 },
     },
   });
   assert.equal(mappingPatch.status, 200);
   const mappingPatchBody = await mappingPatch.json();
   assert.equal(mappingPatchBody.mappingSet.status, "accepted");
   assert.equal(mappingPatchBody.mappingSet.decisionSummary.accepted, 1);
+  assert.equal(mappingPatchBody.mappingSet.payload.mappings[0].canonicalField, "temperature_C");
 
   const chartCreate = await jsonFetch(`/api/projects/${project.project.id}/chart-proposal-sets`, {
     method: "POST",
@@ -919,6 +1239,10 @@ test("mapping sets and chart proposal sets persist review decisions", async () =
 
   const state = await (await jsonFetch(`/api/projects/${project.project.id}/state`)).json();
   assert.equal(state.mappingSets.some((set) => set.id === mappingBody.mappingSet.id && set.status === "accepted"), true);
+  const stateMappingSet = state.mappingSets.find((set) => set.id === mappingBody.mappingSet.id);
+  assert.equal(stateMappingSet.payload.mappings[0].canonicalField, "temperature_C");
+  assert.equal(stateMappingSet.payload.mappings[0].status, "accepted");
+  assert.equal(stateMappingSet.decisionSummary.accepted, 1);
   assert.equal(state.chartProposalSets.some((set) => set.id === chartBody.chartProposalSet.id && set.status === "accepted"), true);
 
   const auditEvents = await store.listAuditEvents({ projectId: project.project.id });

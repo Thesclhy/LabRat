@@ -114,6 +114,45 @@ function importRunFromRow(row) {
   };
 }
 
+function supplementalImportBatchFromRow(row, items = []) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    status: row.status,
+    summary: row.summary || {},
+    items,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    createdBy: row.created_by,
+    updatedBy: row.updated_by,
+  };
+}
+
+function supplementalImportBatchItemFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    batchId: row.batch_id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    fileObjectId: row.file_object_id,
+    importRunId: row.import_run_id,
+    fileName: row.file_name,
+    status: row.status,
+    progressMessage: row.progress_message,
+    summary: row.summary || {},
+    relationshipPreview: row.relationship_preview,
+    warnings: row.warnings || [],
+    error: row.error,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    createdBy: row.created_by,
+    updatedBy: row.updated_by,
+  };
+}
+
 function datasetCommitFromRow(row) {
   if (!row) return null;
   return {
@@ -563,6 +602,118 @@ export class PostgresSaasStore {
       ],
     );
     return importRunFromRow(result.rows[0]);
+  }
+
+  async createSupplementalImportBatch(input) {
+    const batchId = input.id || makeId("supplement_batch");
+    await this.query(
+      `insert into supplemental_import_batches
+       (id, lab_id, project_id, status, summary, created_at, updated_at, created_by, updated_by)
+       values ($1, $2, $3, $4, $5, now(), now(), $6, $6)`,
+      [
+        batchId,
+        input.labId,
+        input.projectId,
+        input.status || "queued",
+        jsonb(input.summary || {}),
+        input.createdBy,
+      ],
+    );
+    for (const fileObject of input.fileObjects || []) {
+      await this.query(
+        `insert into supplemental_import_batch_items
+         (id, batch_id, lab_id, project_id, file_object_id, import_run_id, file_name, status, progress_message, summary, relationship_preview, warnings, error, created_at, updated_at, created_by, updated_by)
+         values ($1, $2, $3, $4, $5, null, $6, 'queued', $7, '{}', null, '[]', null, now(), now(), $8, $8)`,
+        [
+          makeId("supplement_batch_item"),
+          batchId,
+          input.labId,
+          input.projectId,
+          fileObject.id,
+          fileObject.originalName || fileObject.id,
+          "Queued for supplemental relationship review.",
+          input.createdBy,
+        ],
+      );
+    }
+    return this.findSupplementalImportBatchById(batchId);
+  }
+
+  async findSupplementalImportBatchById(batchId) {
+    const batchResult = await this.query("select * from supplemental_import_batches where id = $1", [batchId]);
+    const batch = batchResult.rows[0];
+    if (!batch) return null;
+    const itemResult = await this.query(
+      "select * from supplemental_import_batch_items where batch_id = $1 order by created_at asc",
+      [batchId],
+    );
+    return supplementalImportBatchFromRow(batch, itemResult.rows.map(supplementalImportBatchItemFromRow));
+  }
+
+  async listSupplementalImportBatches({ projectId }) {
+    const result = await this.query(
+      "select * from supplemental_import_batches where project_id = $1 order by updated_at desc",
+      [projectId],
+    );
+    const batches = [];
+    for (const row of result.rows) {
+      batches.push(await this.findSupplementalImportBatchById(row.id));
+    }
+    return batches;
+  }
+
+  async updateSupplementalImportBatch(batchId, changes) {
+    const current = await this.findSupplementalImportBatchById(batchId);
+    if (!current) return null;
+    const result = await this.query(
+      `update supplemental_import_batches
+       set status = $2,
+           summary = $3,
+           updated_by = coalesce($4, updated_by),
+           updated_at = now()
+       where id = $1
+       returning *`,
+      [
+        batchId,
+        changes.status ?? current.status,
+        jsonb(changes.summary ?? current.summary ?? {}),
+        changes.updatedBy || null,
+      ],
+    );
+    return this.findSupplementalImportBatchById(result.rows[0].id);
+  }
+
+  async updateSupplementalImportBatchItem(batchId, itemId, changes) {
+    const currentBatch = await this.findSupplementalImportBatchById(batchId);
+    const current = currentBatch?.items?.find((item) => item.id === itemId);
+    if (!current) return null;
+    const result = await this.query(
+      `update supplemental_import_batch_items
+       set import_run_id = $3,
+           status = $4,
+           progress_message = $5,
+           summary = $6,
+           relationship_preview = $7,
+           warnings = $8,
+           error = $9,
+           updated_by = coalesce($10, updated_by),
+           updated_at = now()
+       where batch_id = $1 and id = $2
+       returning *`,
+      [
+        batchId,
+        itemId,
+        changes.importRunId !== undefined ? changes.importRunId || null : current.importRunId,
+        changes.status ?? current.status,
+        changes.progressMessage !== undefined ? changes.progressMessage || null : current.progressMessage,
+        jsonb(changes.summary ?? current.summary ?? {}),
+        nullableJsonb(changes.relationshipPreview !== undefined ? changes.relationshipPreview : current.relationshipPreview),
+        jsonb(changes.warnings ?? current.warnings ?? [], []),
+        nullableJsonb(changes.error !== undefined ? changes.error : current.error),
+        changes.updatedBy || null,
+      ],
+    );
+    return supplementalImportBatchItemFromRow(result.rows[0]);
   }
 
   async createDatasetCommit(input) {

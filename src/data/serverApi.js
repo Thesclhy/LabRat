@@ -119,6 +119,23 @@ export function createServerImportRun(projectId, fileObjectId, options = {}) {
   return serverJson(`/api/projects/${encodeURIComponent(projectId)}/import-runs`, { fileObjectId }, options);
 }
 
+export function createServerSupplementalImportBatch(projectId, request = {}, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before creating a supplemental batch.");
+  const fileObjectIds = Array.isArray(request.fileObjectIds) ? request.fileObjectIds.filter(Boolean) : [];
+  if (!fileObjectIds.length) throw new ServerApiError("Choose one or more supplemental workbooks before creating a batch.");
+  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/supplemental-import-batches`, { fileObjectIds }, options);
+}
+
+export function getServerSupplementalImportBatch(projectId, batchId, options = {}) {
+  if (!projectId || !batchId) throw new ServerApiError("Select a supplemental batch before loading progress.");
+  return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/supplemental-import-batches/${encodeURIComponent(batchId)}`, options);
+}
+
+export function supplementalImportBatchEventsUrl(projectId, batchId) {
+  if (!projectId || !batchId) throw new ServerApiError("Select a supplemental batch before streaming progress.");
+  return `/api/projects/${encodeURIComponent(projectId)}/supplemental-import-batches/${encodeURIComponent(batchId)}/events`;
+}
+
 export function previewServerImportRunNormalization(importRunId, request = {}, options = {}) {
   if (!importRunId) throw new ServerApiError("Create an import run before normalizing.");
   return serverJson(`/api/import-runs/${encodeURIComponent(importRunId)}/normalize-preview`, {

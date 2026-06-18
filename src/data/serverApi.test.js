@@ -6,10 +6,12 @@ import {
   createServerImportRun,
   createServerManuscript,
   createServerProject,
+  createServerSupplementalImportBatch,
   deleteServerProject,
   createServerMappingSet,
   getServerProjectState,
   getServerSession,
+  getServerSupplementalImportBatch,
   interpretServerProjectChart,
   listServerProjects,
   loginToServer,
@@ -23,6 +25,7 @@ import {
   previewServerImportRunNormalization,
   proposeServerProjectCharts,
   resolveServerProjectDataQuery,
+  supplementalImportBatchEventsUrl,
   uploadServerProjectFile,
 } from "./serverApi.js";
 
@@ -123,6 +126,20 @@ describe("serverApi", () => {
       applyMode: "append",
       reviewNote: "Approved",
     });
+  });
+
+  it("creates and loads supplemental import batches", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ batch: { id: "batch_1" } }, { status: 201 }))
+      .mockResolvedValueOnce(jsonResponse({ batch: { id: "batch_1", status: "ready_for_review" } }));
+
+    await createServerSupplementalImportBatch("project_1", { fileObjectIds: ["file_1", "file_2"] }, { fetch: fetchImpl });
+    await getServerSupplementalImportBatch("project_1", "batch_1", { fetch: fetchImpl });
+
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects/project_1/supplemental-import-batches");
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({ fileObjectIds: ["file_1", "file_2"] });
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/projects/project_1/supplemental-import-batches/batch_1");
+    expect(supplementalImportBatchEventsUrl("project_1", "batch_1")).toBe("/api/projects/project_1/supplemental-import-batches/batch_1/events");
   });
 
   it("applies a server import run as a replace refresh", async () => {
