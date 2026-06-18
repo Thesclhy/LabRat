@@ -116,11 +116,52 @@ describe("GenericImportBrowser", () => {
     expect(screen.getAllByText("-").length).toBeGreaterThan(0);
   });
 
+  it("formats accepted Date mapping cells instead of showing Excel serial numbers", () => {
+    const dataset = datasetFixture();
+    dataset.genericImports[0].fields = [{
+      fieldValueId: "field_date",
+      experimentId: "exp_generic_1",
+      field: "date",
+      displayName: "Date",
+      value: 45733,
+      rawValue: "45733",
+      formattedValue: "3/17/2025",
+      role: "metadata",
+      sourceRef: "src_date",
+      confidence: 0.9,
+      warnings: [],
+    }];
+    dataset.genericImports[0].sources.push({ sourceRef: "src_date", fileName: "runs.xlsx", sheet: "Runs", range: "B2" });
+    dataset.genericMappingSets[0].mappings.push({
+      mappingId: "mapping_date",
+      status: "accepted",
+      sourceIds: ["field_date"],
+      rawLabel: "Date",
+      canonicalField: "date",
+      semanticRole: "metadata",
+    });
+
+    render(<GenericImportBrowser dataset={dataset} sourceName="project" />);
+
+    expect(screen.getByRole("columnheader", { name: /date/i })).toBeTruthy();
+    expect(screen.getByText("2025-03-17")).toBeTruthy();
+    expect(screen.queryByText("45733")).toBeNull();
+  });
+
   it("shows guidance when no accepted mappings are available", () => {
     render(<GenericImportBrowser dataset={datasetWithoutAcceptedMappings()} sourceName="project" />);
 
-    expect(screen.getByText("Accept semantic mappings in Import Review to turn reviewed fields into Experiment Browser columns.")).toBeTruthy();
+    expect(screen.getByText("Accept semantic mappings to turn reviewed fields into Experiment Browser columns.")).toBeTruthy();
     expect(screen.queryByRole("columnheader", { name: /conversion/i })).toBeNull();
+  });
+
+  it("offers a mapping editor entry from the imported browser", () => {
+    const onOpenMappingReview = vi.fn();
+    render(<GenericImportBrowser dataset={datasetFixture()} sourceName="project" onOpenMappingReview={onOpenMappingReview} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit mappings" }));
+
+    expect(onOpenMappingReview).toHaveBeenCalledTimes(1);
   });
 
   it("opens source-backed generic detail from a row", () => {

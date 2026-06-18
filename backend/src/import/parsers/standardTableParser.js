@@ -117,10 +117,13 @@ function tableRange(headerRows, columns, rows) {
 }
 
 function valueForCell(cell, columnId, sourceContext) {
+  const rawValue = cell?.rawValue ?? null;
+  const formattedValue = cell?.formattedValue ?? (rawValue == null ? "" : String(rawValue));
   return {
     columnId,
-    value: cell?.rawValue ?? null,
-    rawValue: cell?.rawValue == null ? "" : String(cell.rawValue),
+    value: rawValue,
+    rawValue: rawValue == null ? "" : String(rawValue),
+    formattedValue,
     source: cell ? cellSource(cell, sourceContext) : null,
   };
 }

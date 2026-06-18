@@ -28,6 +28,7 @@ function sourceKey(source, blockId) {
     range: source?.range || source?.cell || null,
     blockId: source?.blockId || blockId || null,
     rawValue: source?.rawValue ?? null,
+    ...(source?.formattedValue != null ? { formattedValue: source.formattedValue } : {}),
   });
 }
 
@@ -50,6 +51,7 @@ function createSourceRegistry() {
         range: source.range || source.cell || null,
         blockId: source.blockId || blockId || null,
         rawValue: source.rawValue ?? null,
+        ...(source.formattedValue != null ? { formattedValue: source.formattedValue } : {}),
       });
       return sourceRef;
     },
@@ -118,6 +120,7 @@ function buildFieldValue({ context, experimentId, cellValue, column, displayName
     canonicalField: override.canonicalField || null,
     value: cellValue.value ?? null,
     rawValue: cellValue.rawValue ?? "",
+    ...(cellValue.formattedValue != null ? { formattedValue: cellValue.formattedValue } : {}),
     unit: override.unit || column.unit || null,
     rowIndex: cellValue.rowIndex ?? null,
     columnId: cellValue.columnId || null,
@@ -134,6 +137,7 @@ function fieldToMetadata(fieldValue, metadataId) {
     displayName: fieldValue.displayName,
     value: fieldValue.value,
     rawValue: fieldValue.rawValue,
+    ...(fieldValue.formattedValue != null ? { formattedValue: fieldValue.formattedValue } : {}),
     unit: fieldValue.unit,
     sourceRef: fieldValue.sourceRef,
     confidence: fieldValue.confidence,
@@ -151,6 +155,7 @@ function fieldToMeasurement(fieldValue, measurementId) {
     displayName: fieldValue.displayName,
     value: fieldValue.value,
     rawValue: fieldValue.rawValue,
+    ...(fieldValue.formattedValue != null ? { formattedValue: fieldValue.formattedValue } : {}),
     unit: fieldValue.unit,
     rowIndex: fieldValue.rowIndex,
     columnId: fieldValue.columnId,
@@ -271,6 +276,7 @@ function normalizeBlockTableBlock({ block }, context) {
         displayName: override.displayName || displayName,
         value: metadata.parsedValue ?? metadata.rawValue ?? null,
         rawValue: metadata.rawValue ?? "",
+        ...(metadata.formattedValue != null ? { formattedValue: metadata.formattedValue } : {}),
         unit: override.unit || metadata.unit || null,
         sourceRef: context.sources.add(metadata.source, block.blockId),
         confidence: metadata.confidence ?? block.confidence ?? null,
@@ -294,6 +300,7 @@ function normalizeBlockTableBlock({ block }, context) {
       canonicalField: null,
       value: metadata.value,
       rawValue: metadata.rawValue,
+      ...(metadata.formattedValue != null ? { formattedValue: metadata.formattedValue } : {}),
       unit: metadata.unit,
       rowIndex: null,
       columnId: null,

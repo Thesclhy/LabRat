@@ -3,9 +3,9 @@ import { test } from "node:test";
 import { detectHeaderRows } from "../utils/headerDetector.js";
 import { parseStandardTable } from "./standardTableParser.js";
 
-function cell(row, col, rawValue, type = "string") {
+function cell(row, col, rawValue, type = "string", formattedValue = String(rawValue)) {
   const letter = String.fromCharCode(64 + col);
-  return { row, col, address: `${letter}${row}`, rawValue, type, formattedValue: String(rawValue), formula: null };
+  return { row, col, address: `${letter}${row}`, rawValue, type, formattedValue, formula: null };
 }
 
 test("parseStandardTable extracts columns, rows, and value provenance", () => {
@@ -118,7 +118,7 @@ test("parseStandardTable flattens grouped multi-row headers and classifies field
     cell(2, 13, "Liquid"),
     cell(2, 14, "Gas"),
     cell(3, 1, "Exp1"),
-    cell(3, 2, "2025/3/17"),
+    cell(3, 2, 45733, "number", "3/17/2025"),
     cell(3, 3, "Ru/TiO2"),
     cell(3, 4, 0.2009, "number"),
     cell(3, 5, "HDPE"),
@@ -158,10 +158,17 @@ test("parseStandardTable flattens grouped multi-row headers and classifies field
     "Selectivity Gas (%)",
   ]);
   assert.equal(columns[0].role, "identifier");
+  assert.equal(columns[1].role, "metadata");
+  assert.equal(columns[1].valueType, "date");
   assert.equal(columns[2].role, "material");
   assert.equal(columns[6].role, "condition");
   assert.equal(columns[11].role, "measurement");
   assert.equal(columns[11].unit, "%");
   assert.deepEqual(parsed.structureProposals[0].headerRows, [1, 2]);
   assert.deepEqual(parsed.structureProposals[0].labelColumns, ["col_1"]);
+  const dateValue = parsed.blocks[0].table.rows[0].values[1];
+  assert.equal(dateValue.value, 45733);
+  assert.equal(dateValue.rawValue, "45733");
+  assert.equal(dateValue.formattedValue, "3/17/2025");
+  assert.equal(dateValue.source.formattedValue, "3/17/2025");
 });

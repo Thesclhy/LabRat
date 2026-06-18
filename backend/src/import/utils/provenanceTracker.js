@@ -7,6 +7,7 @@ export function cellSource(cell, context = {}) {
     range: cell?.address || null,
     blockId: context.blockId || null,
     rawValue: cell?.rawValue ?? null,
+    ...(cell?.formattedValue != null ? { formattedValue: cell.formattedValue } : {}),
   };
 }
 
@@ -19,6 +20,7 @@ export function rangeSource(range, context = {}, rawValue = null) {
     range,
     blockId: context.blockId || null,
     rawValue,
+    ...(rawValue != null ? { formattedValue: String(rawValue) } : {}),
   };
 }
 
@@ -34,5 +36,6 @@ export function keyValueSource(keyCell, valueCell, context = {}) {
     range: context.range || (sameCell ? keyCell?.address || null : null),
     blockId: context.blockId || null,
     rawValue: valueCell?.rawValue ?? null,
+    ...(valueCell?.formattedValue != null ? { formattedValue: valueCell.formattedValue } : {}),
   };
 }

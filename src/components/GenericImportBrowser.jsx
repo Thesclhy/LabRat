@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { buildAcceptedMappingColumns, buildGenericBrowserRows, getGenericExperimentDetail } from "../data/experimentBrowserRows.js";
+import { buildAcceptedMappingColumns, buildGenericBrowserRows, formatGenericFieldValue, getGenericExperimentDetail } from "../data/experimentBrowserRows.js";
 import { getProjectStars, setNote as persistNote, toggleStar as persistToggleStar } from "../data/experimentStars.js";
 import { getColumnPrefs, hideColumn as persistHideColumn, renameColumn as persistRenameColumn, setColumnWidth as persistColumnWidth, showColumn as persistShowColumn } from "../data/experimentColumnPrefs.js";
 import { StarCell } from "./StarCell.jsx";
@@ -10,9 +10,7 @@ function formatConfidence(value) {
 }
 
 function formatValue(item) {
-  const value = item?.value ?? item?.rawValue;
-  if (value == null || value === "") return "-";
-  return item.unit ? `${value} ${item.unit}` : String(value);
+  return formatGenericFieldValue(item) || "-";
 }
 
 function sourceLabel(source) {
@@ -157,7 +155,7 @@ function GenericDetailModal({ dataset, row, onClose }) {
   );
 }
 
-export function GenericImportBrowser({ dataset, sourceName, onOpenImportReview, viewSwitch = null, projectId = null }) {
+export function GenericImportBrowser({ dataset, sourceName, onOpenImportReview, onOpenMappingReview, viewSwitch = null, projectId = null }) {
   const [search, setSearch] = useState("");
   const [selectedRow, setSelectedRow] = useState(null);
   const [starredOnly, setStarredOnly] = useState(false);
@@ -255,7 +253,10 @@ export function GenericImportBrowser({ dataset, sourceName, onOpenImportReview, 
             <h1>Imported experiments</h1>
             <p>{filteredRows.length} of {rows.length} imported records - source: {sourceName} - click a row for source-backed detail.</p>
           </div>
-          <button type="button" className="compact-action primary" onClick={onOpenImportReview}>Import workbook</button>
+          <div className="page-head-actions">
+            <button type="button" className="compact-action" onClick={onOpenMappingReview}>Edit mappings</button>
+            <button type="button" className="compact-action primary" onClick={onOpenImportReview}>Import workbook</button>
+          </div>
         </div>
         {!rows.length ? (
           <div className="card generic-empty-state">
@@ -266,7 +267,7 @@ export function GenericImportBrowser({ dataset, sourceName, onOpenImportReview, 
           <div className="card table-wrap generic-browser-table">
             {!acceptedMappingColumns.length && (
               <div className="generic-browser-mapping-guidance">
-                Accept semantic mappings in Import Review to turn reviewed fields into Experiment Browser columns.
+                Accept semantic mappings to turn reviewed fields into Experiment Browser columns.
               </div>
             )}
             <table>

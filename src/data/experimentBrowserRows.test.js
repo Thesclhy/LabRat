@@ -154,6 +154,37 @@ describe("experiment browser generic rows", () => {
     expect(detail.mappedFields.map((field) => field.key)).toEqual(["time"]);
   });
 
+  it("formats accepted date mappings from Excel serial values", () => {
+    const dataset = datasetFixture();
+    dataset.genericImports[0].fields = [{
+      fieldValueId: "field_date",
+      experimentId: "generic_exp_1",
+      field: "date",
+      displayName: "Date",
+      value: 45733,
+      rawValue: "45733",
+      formattedValue: "3/17/2025",
+      role: "metadata",
+      sourceRef: "src_date",
+      confidence: 0.9,
+      warnings: [],
+    }];
+    dataset.genericImports[0].sources.push({ sourceRef: "src_date", fileName: "runs.xlsx", sheet: "Runs", cell: "B2", range: "B2" });
+    dataset.genericMappingSets[0].mappings.push({
+      mappingId: "mapping_date",
+      status: "accepted",
+      targetKind: "metadata",
+      sourceIds: ["field_date"],
+      rawLabel: "Date",
+      canonicalField: "date",
+      semanticRole: "metadata",
+    });
+
+    const [row] = buildGenericBrowserRows(dataset);
+
+    expect(row.acceptedMappingValues.date.value).toBe("2025-03-17");
+  });
+
   it("does not derive browser rows from supplemental imports", () => {
     const dataset = datasetFixture();
     dataset.genericImports.push({

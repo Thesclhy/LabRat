@@ -37,6 +37,7 @@ function normalizeSource(source) {
     cell: source.cell || null,
     range: source.range || source.cell || null,
     rawValue: source.rawValue ?? null,
+    ...(source.formattedValue != null ? { formattedValue: source.formattedValue } : {}),
   };
 }
 
@@ -86,6 +87,7 @@ function normalizeValue(value) {
     columnId: value.columnId || null,
     value: value.value ?? null,
     rawValue: value.rawValue ?? "",
+    ...(value.formattedValue != null ? { formattedValue: value.formattedValue } : {}),
     source: normalizeSource(value.source),
   };
 }

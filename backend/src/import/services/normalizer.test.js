@@ -96,6 +96,63 @@ test("normalizeApprovedScan converts approved standard table rows to generic exp
   });
 });
 
+test("normalizeApprovedScan preserves formatted date values for browser display", () => {
+  const scanResult = {
+    schemaVersion: "labrat.importScan.v1",
+    file: { fileId: "upload_dates", name: "dates.xlsx", type: "xlsx" },
+    sheets: [{
+      sheetId: "sheet_1",
+      name: "Runs",
+      blocks: [{
+        blockId: "sheet_1_table_1",
+        type: "standard_table",
+        range: "A1:B2",
+        confidence: 0.9,
+        table: {
+          source: { fileId: "upload_dates", fileName: "dates.xlsx", sheet: "Runs", range: "A1:B2" },
+          columns: [
+            { columnId: "col_1", fieldId: "col_1", rawName: "Experiment", label: "Experiment", role: "identifier", confidence: 0.9 },
+            { columnId: "col_2", fieldId: "col_2", rawName: "Date", label: "Date", role: "metadata", valueType: "date", confidence: 0.9 },
+          ],
+          rows: [{
+            rowIndex: 2,
+            values: [
+              {
+                columnId: "col_1",
+                value: "Exp1",
+                rawValue: "Exp1",
+                formattedValue: "Exp1",
+                source: { fileId: "upload_dates", fileName: "dates.xlsx", sheet: "Runs", cell: "A2", range: "A2", rawValue: "Exp1", formattedValue: "Exp1" },
+              },
+              {
+                columnId: "col_2",
+                value: 45733,
+                rawValue: "45733",
+                formattedValue: "3/17/2025",
+                source: { fileId: "upload_dates", fileName: "dates.xlsx", sheet: "Runs", cell: "B2", range: "B2", rawValue: 45733, formattedValue: "3/17/2025" },
+              },
+            ],
+          }],
+        },
+      }],
+    }],
+  };
+  const response = normalizeApprovedScan({
+    scanResult,
+    approvedBlockIds: ["sheet_1_table_1"],
+  });
+
+  const genericImport = response.datasetPatch.genericImports[0];
+  const dateField = genericImport.fields.find((field) => field.displayName === "Date");
+  assert.equal(dateField.value, 45733);
+  assert.equal(dateField.rawValue, "45733");
+  assert.equal(dateField.formattedValue, "3/17/2025");
+  const source = genericImport.sources.find((item) => item.sourceRef === dateField.sourceRef);
+  assert.equal(source.rawValue, 45733);
+  assert.equal(source.formattedValue, "3/17/2025");
+  assert.equal(genericImport.experiments[0].metadata[0].formattedValue, "3/17/2025");
+});
+
 test("normalizeApprovedScan preserves grouped MasterTable fields with roles and experiment labels", () => {
   const scanResult = runImportScan(createGroupedMasterTableWorkbook());
   const block = scanResult.sheets[0].blocks[0];

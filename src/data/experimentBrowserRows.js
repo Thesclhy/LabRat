@@ -1,4 +1,5 @@
 import { getMasterImports } from "./genericImportRelationships.js";
+import { formatExperimentDateForDisplay } from "../utils/date.js";
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -17,10 +18,27 @@ function sourceLabel(source) {
   return [source.sheet, source.range || source.cell].filter(Boolean).join(" ");
 }
 
-function displayValue(item) {
+function isDateLikeField(item) {
+  const text = [
+    item?.field,
+    item?.fieldId,
+    item?.canonicalField,
+    item?.displayName,
+    item?.rawLabel,
+  ].filter(Boolean).join(" ").toLowerCase();
+  return item?.valueType === "date" || /(^|[^a-z])date([^a-z]|$)/.test(text) || text.includes("_date");
+}
+
+export function formatGenericFieldValue(item) {
   const value = item?.value ?? item?.rawValue;
   if (value == null || value === "") return "";
-  return item.unit ? `${value} ${item.unit}` : String(value);
+  if (isDateLikeField(item)) return formatExperimentDateForDisplay(value);
+  const display = item?.formattedValue || value;
+  return item.unit ? `${display} ${item.unit}` : String(display);
+}
+
+function displayValue(item) {
+  return formatGenericFieldValue(item);
 }
 
 function compactValues(items) {

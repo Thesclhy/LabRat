@@ -11,6 +11,10 @@ function cleanLabel(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
 
+function isDateLabel(value) {
+  return /(^|[^a-z])date([^a-z]|$)/i.test(String(value || ""));
+}
+
 function numberValue(value) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   const parsed = Number(String(value ?? "").trim());
@@ -96,7 +100,7 @@ export function fieldDescriptorFromHeader({ columnId, displayName, rawHeaderPath
   const unitInfo = detectUnitFromLabel(displayName);
   const resolvedUnit = unit || unitInfo.unit || null;
   const label = cleanLabel(unitInfo.rawLabel || displayName);
-  const valueType = inferValueType(values);
+  const valueType = isDateLabel(label) ? "date" : inferValueType(values);
   const role = classifyFieldRole(label, { valueType });
   return {
     fieldId: columnId,
