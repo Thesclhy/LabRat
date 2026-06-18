@@ -19,15 +19,15 @@ Use this file as the working checklist for long Codex tasks. Update it before st
 
 Objective: Implement `doc/plan.md` Agent-first evidence workflow vertical slice on `feature/agent-first-evidence-workflow`.
 
-Milestone: Phase 3 Dynamic Series Chart Rendering implemented and under commit. The cross-experiment compare vertical slice is complete through ObservationSeries -> AnalysisView -> proposal -> ChartSpec v1.4 -> Manuscript selectedExperimentIds.
+Milestone: Frontend `Compare series` entrypoint implemented. Users can select compatible ObservationSeries/experiments, create a `series_compare` AnalysisView, derive a chart proposal, and continue through the existing proposal review -> ChartSpec -> Manuscript path.
 
-Relevant docs read: `AGENTS.md`, `doc/plan.md`, `doc/PROGRESS.md`, `doc/saas-api-contract-v0.md`, `doc/saas-database-schema-v0.md`, `doc/canonical-data-dictionary.md`, `doc/backend-api-contract.md`, `doc/ai-boundaries.md`, `doc/source-understanding-long-term-plan.md`.
+Relevant docs read: `AGENTS.md`, `doc/plan.md`, `doc/PROGRESS.md`, `doc/saas-api-contract-v0.md`, `doc/canonical-data-dictionary.md`, `doc/backend-api-contract.md`, `doc/ai-boundaries.md`.
 
-Touched areas: SaaS store/routes/migrations, observation-series derivation, chart proposal/ChartSpec validation, generic chart rendering, manuscript chart selection, server API helpers, tests, progress log.
+Touched areas: frontend server API helpers, Project Overview/Supplemental Workbooks/Browser entrypoints, chart proposal review state wiring, tests, progress log.
 
-Verification plan: targeted backend AnalysisView/route tests for Phase 2, targeted frontend chart/manuscript tests for rendering work, `npm run codex:verify` before each commit when feasible.
+Verification plan: targeted frontend API/helper and UI tests for compare-series creation, then `npm run codex:verify` before commit when feasible.
 
-Open risks: ChartSpec v1.4 must stay additive and must not bypass accepted proposal -> ChartSpec -> Manuscript review; source evidence and AgentRun stretch work should stop if the compare-chart slice is not clean.
+Open risks: Source Explorer, Source Extract Proposal, full AgentRun, and Anthropic integration remain intentionally unimplemented. Manual QA with real Exp1/Exp2/Exp3 reaction-rate supplements should still verify the end-to-end button flow in the browser.
 
 ## Milestone Checklist Template
 
@@ -46,8 +46,11 @@ Open risks: ChartSpec v1.4 must stay additive and must not bypass accepted propo
 - [x] Preserve source refs and stale-state metadata across derived views, proposals, ChartSpecs, and manuscript snapshots.
 - [x] Add or update API/schema/data-dictionary docs in the same change when persisted shapes change.
 - [ ] Record token/cost/latency assumptions for new AI-backed flows.
+- [x] Keep this milestone deterministic and do not add Anthropic or AgentRun behavior.
 
 ## Recent Checkpoints
+
+- 2026-06-18: Implemented frontend Compare series entrypoint milestone. Overview, Supplemental Workbooks manager, and Imported Browser can open a deterministic Compare series modal; the modal creates a `series_compare` AnalysisView, derives a normal chart proposal set, and opens existing Chart Review. Verification: targeted frontend tests and full `npm run codex:verify` passed.
 
 - 2026-06-18: Implemented Phase 3 Dynamic Series Chart Rendering with ChartSpec v1.4 `seriesScope`, series-backed validation, multi-trace frontend rendering, Manuscript selectedExperimentIds coverage, docs, targeted tests, and full `npm run codex:verify`.
 

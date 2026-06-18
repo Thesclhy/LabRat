@@ -155,7 +155,7 @@ function GenericDetailModal({ dataset, row, onClose }) {
   );
 }
 
-export function GenericImportBrowser({ dataset, sourceName, onOpenImportReview, onOpenMappingReview, viewSwitch = null, projectId = null }) {
+export function GenericImportBrowser({ dataset, sourceName, onOpenImportReview, onOpenMappingReview, onCompareSeries, compareSeriesEnabled = false, compareSeriesTitle = "", viewSwitch = null, projectId = null }) {
   const [search, setSearch] = useState("");
   const [selectedRow, setSelectedRow] = useState(null);
   const [starredOnly, setStarredOnly] = useState(false);
@@ -254,6 +254,17 @@ export function GenericImportBrowser({ dataset, sourceName, onOpenImportReview, 
             <p>{filteredRows.length} of {rows.length} imported records - source: {sourceName} - click a row for source-backed detail.</p>
           </div>
           <div className="page-head-actions">
+            {onCompareSeries && (
+              <button
+                type="button"
+                className="compact-action"
+                disabled={!compareSeriesEnabled}
+                title={compareSeriesTitle}
+                onClick={onCompareSeries}
+              >
+                Compare series
+              </button>
+            )}
             <button type="button" className="compact-action" onClick={onOpenMappingReview}>Edit mappings</button>
             <button type="button" className="compact-action primary" onClick={onOpenImportReview}>Import workbook</button>
           </div>

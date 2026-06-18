@@ -164,6 +164,23 @@ describe("GenericImportBrowser", () => {
     expect(onOpenMappingReview).toHaveBeenCalledTimes(1);
   });
 
+  it("offers a compare series entry from the imported browser", () => {
+    const onCompareSeries = vi.fn();
+    render(
+      <GenericImportBrowser
+        dataset={datasetFixture()}
+        sourceName="project"
+        onCompareSeries={onCompareSeries}
+        compareSeriesEnabled
+        compareSeriesTitle="Create compare chart"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Compare series" }));
+
+    expect(onCompareSeries).toHaveBeenCalledTimes(1);
+  });
+
   it("opens source-backed generic detail from a row", () => {
     render(<GenericImportBrowser dataset={datasetFixture()} sourceName="project" />);
 

@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   ServerApiError,
   applyServerImportRun,
+  createServerAnalysisView,
+  createServerAnalysisViewChartProposal,
   createServerChartSpecFromProposal,
   createServerImportRun,
   createServerManuscript,
@@ -237,6 +239,39 @@ describe("serverApi", () => {
       "/api/projects/project_1/chart-specs/from-proposal",
     ]);
     expect(JSON.parse(fetchImpl.mock.calls[3][1].body).persistAsProposal).toBe(true);
+  });
+
+  it("creates analysis views and chart proposals through project-scoped APIs", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ analysisView: { id: "analysis_view_1" } }, { status: 201 }))
+      .mockResolvedValueOnce(jsonResponse({ chartProposalSet: { id: "chart_set_compare" } }, { status: 201 }));
+
+    await createServerAnalysisView("project_1", {
+      viewType: "series_compare",
+      title: "Reaction rate comparison",
+      spec: {
+        seriesKind: "reaction_rate_time_series",
+        experimentIds: ["exp_30", "exp_31"],
+        xField: "reaction_time_min",
+        yField: "adjusted_rate_m_s",
+        groupBy: "experiment",
+      },
+    }, { fetch: fetchImpl });
+    await createServerAnalysisViewChartProposal("analysis_view_1", { fetch: fetchImpl });
+
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects/project_1/analysis-views");
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
+      viewType: "series_compare",
+      title: "Reaction rate comparison",
+      spec: {
+        seriesKind: "reaction_rate_time_series",
+        experimentIds: ["exp_30", "exp_31"],
+        xField: "reaction_time_min",
+        yField: "adjusted_rate_m_s",
+        groupBy: "experiment",
+      },
+    });
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/analysis-views/analysis_view_1/chart-proposal");
   });
 
   it("creates and patches project manuscripts", async () => {

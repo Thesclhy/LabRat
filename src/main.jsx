@@ -28,6 +28,8 @@ import { uploadSupplementalFilesAsBatch } from "./data/supplementalBatchUpload.j
 import { scanExcelFolder } from "./data/workbookScanner.js";
 import {
   applyServerImportRun,
+  createServerAnalysisView,
+  createServerAnalysisViewChartProposal,
   createServerChartSpecFromProposal,
   createServerImportRun,
   createServerManuscript,
@@ -343,6 +345,55 @@ function isActiveChartSpecForProject(chartSpec, projectState) {
 
 export function activeChartSpecsForProject(projectState) {
   return asArray(projectState?.chartSpecs).filter((chartSpec) => isActiveChartSpecForProject(chartSpec, projectState));
+}
+
+export function activeObservationSeriesForProject(projectState) {
+  const currentCommitId = projectCurrentDatasetCommitId(projectState);
+  return asArray(projectState?.observationSeries).filter((series) => (
+    series?.experimentId
+    && series?.datasetCommitId
+    && (!currentCommitId || series.datasetCommitId === currentCommitId)
+    && !series.isStale
+    && series.status !== "stale"
+  ));
+}
+
+function seriesAxisLabel(series, axis) {
+  const label = axis === "x" ? series?.xLabel : series?.yLabel;
+  const field = axis === "x" ? series?.xField : series?.yField;
+  const unit = axis === "x" ? series?.xUnit : series?.yUnit;
+  return [label || field || "field", unit ? `(${unit})` : ""].filter(Boolean).join(" ");
+}
+
+export function buildCompareSeriesGroups(projectState) {
+  const groups = new Map();
+  activeObservationSeriesForProject(projectState).forEach((series) => {
+    if (!series.seriesKind || !series.xField || !series.yField) return;
+    const key = [series.seriesKind, series.xField, series.yField].join("|");
+    const group = groups.get(key) || {
+      key,
+      seriesKind: series.seriesKind,
+      xField: series.xField,
+      yField: series.yField,
+      xLabel: seriesAxisLabel(series, "x"),
+      yLabel: seriesAxisLabel(series, "y"),
+      series: [],
+    };
+    if (!group.series.some((item) => item.experimentId === series.experimentId)) {
+      group.series.push(series);
+    }
+    groups.set(key, group);
+  });
+  return [...groups.values()]
+    .map((group) => ({
+      ...group,
+      series: group.series.sort((a, b) => {
+        const byNumber = expNo(a.experimentLabel) - expNo(b.experimentLabel);
+        if (Number.isFinite(byNumber) && byNumber !== 0) return byNumber;
+        return String(a.experimentLabel || a.experimentId).localeCompare(String(b.experimentLabel || b.experimentId));
+      }),
+    }))
+    .sort((a, b) => b.series.length - a.series.length || a.yLabel.localeCompare(b.yLabel));
 }
 
 function staleChartSpecCountForProject(projectState) {
@@ -702,11 +753,12 @@ function ProjectFlowItem({ done, label, detail }) {
   );
 }
 
-export function ProjectOverview({ projectState, dataset, onOpenProfile, onOpenImportReview, onOpenRefreshWorkbook, onOpenSupplementWorkbook, onOpenSupplementManager, onOpenMappingReview, onOpenChartReview, onGoManuscript }) {
+export function ProjectOverview({ projectState, dataset, onOpenProfile, onOpenImportReview, onOpenRefreshWorkbook, onOpenSupplementWorkbook, onOpenSupplementManager, onOpenCompareSeries, onOpenMappingReview, onOpenChartReview, onGoManuscript }) {
   const summary = projectWorkflowSummary(projectState?.project, projectState);
   const masterImports = getMasterImports(dataset);
   const supplementalImports = getSupplementalImports(dataset);
   const supplementalSummaries = supplementalWorkbookSummariesForProject(projectState, dataset);
+  const compareSeriesGroups = buildCompareSeriesGroups(projectState);
   const hasMaster = masterImports.length > 0;
   const currentCommitId = projectState?.currentDatasetCommit?.id || projectState?.project?.currentDatasetCommitId || "";
   const mappingSet = mappingSetForDatasetCommit(projectState, currentCommitId);
@@ -771,7 +823,9 @@ export function ProjectOverview({ projectState, dataset, onOpenProfile, onOpenIm
           onSecondaryClick={onOpenSupplementManager}
           secondaryDisabled={!hasMaster && !supplementalSummaries.length}
           secondaryTitle={hasMaster || supplementalSummaries.length ? "Browse supplemental workbook details and review/edit options" : "Supplemental workbooks require a committed master table"}
-        />
+        >
+          <CompareSeriesOverviewAction groups={compareSeriesGroups} onClick={onOpenCompareSeries} />
+        </ProjectOverviewCard>
         <ProjectOverviewCard
           title="Semantic mappings"
           value={mappingSet ? `${mappingStats.accepted}/${mappingStats.total} accepted` : "No mappings"}
@@ -913,11 +967,13 @@ function SupplementalBatchPanel({ batches, selectedItemIds, onSelectionChange, o
   );
 }
 
-export function SupplementalWorkbooksModal({ open, projectState, dataset, activeBatch, batchUploading = false, batchApplying = false, batchError = "", onAddSupplemental, onContinueReview, onRetryBatchItem, onApplyBatchItems, onClose }) {
+export function SupplementalWorkbooksModal({ open, projectState, dataset, activeBatch, batchUploading = false, batchApplying = false, batchError = "", onAddSupplemental, onCompareSeries, onContinueReview, onRetryBatchItem, onApplyBatchItems, onClose }) {
   const summaries = supplementalWorkbookSummariesForProject(projectState, dataset);
   const summaryIds = summaries.map((item) => item.id).join("|");
   const [selectedId, setSelectedId] = useState("");
   const batches = mergeSupplementalBatches(projectState, activeBatch);
+  const compareGroups = buildCompareSeriesGroups(projectState);
+  const canCompareSeries = compareGroups.some((group) => group.series.length >= 2);
   const readyItemIds = batches.flatMap((batch) => asArray(batch.items).filter(batchItemReadyForApply).map((item) => item.id)).join("|");
   const [selectedBatchItemIds, setSelectedBatchItemIds] = useState(() => new Set());
   useEffect(() => {
@@ -956,7 +1012,17 @@ export function SupplementalWorkbooksModal({ open, projectState, dataset, active
               <strong>{summaries.length} supplemental files</strong>
               <span>Applied files stay immutable; edits go through reviewed supplemental import.</span>
             </div>
-            <button type="button" className="primary" onClick={onAddSupplemental}>Add supplemental workbook</button>
+            <div className="supplemental-manager-toolbar-actions">
+              <button
+                type="button"
+                disabled={!canCompareSeries}
+                title={canCompareSeries ? "Select compatible observation series and draft a compare chart proposal" : "Need at least two compatible active observation series"}
+                onClick={onCompareSeries}
+              >
+                Compare series
+              </button>
+              <button type="button" className="primary" onClick={onAddSupplemental}>Add supplemental workbook</button>
+            </div>
           </div>
           {batchUploading && (
             <div className="supplemental-batch-message">
@@ -1103,6 +1169,28 @@ function PendingChartProposalList({ proposals = [], remaining = 0, onEditProposa
         </div>
       ))}
       {remaining > 0 && <span className="pending-chart-more">+{remaining} more pending</span>}
+    </div>
+  );
+}
+
+function CompareSeriesOverviewAction({ groups = [], onClick }) {
+  const comparableGroups = groups.filter((group) => group.series.length >= 2);
+  const seriesCount = comparableGroups.reduce((total, group) => total + group.series.length, 0);
+  if (!groups.length) return null;
+  return (
+    <div className="compare-series-entry-row">
+      <div>
+        <strong>{seriesCount || groups.length} comparable series</strong>
+        <small>{comparableGroups.length ? `${comparableGroups.length} compatible group${comparableGroups.length === 1 ? "" : "s"}` : "Need at least two matching experiments"}</small>
+      </div>
+      <button
+        type="button"
+        disabled={!comparableGroups.length}
+        title={comparableGroups.length ? "Create a cross-experiment compare chart" : "Need at least two compatible active observation series"}
+        onClick={onClick}
+      >
+        Compare series
+      </button>
     </div>
   );
 }
@@ -1272,7 +1360,169 @@ export function RefreshWorkbookModal({ open, imports = [], defaultImportId = "",
   );
 }
 
-function Browser({ dataset, setSelected, sourceName, blankMode, onOpenImportReview, onOpenMappingReview, onOpenProfile, projectProfile, templateLinks, projectId }) {
+export function CompareSeriesModal({ open, projectState, loading = false, error = "", clarification = null, onCreateCompare, onClose }) {
+  const groups = useMemo(() => buildCompareSeriesGroups(projectState), [projectState]);
+  const comparableGroups = groups.filter((group) => group.series.length >= 2);
+  const groupKeys = groups.map((group) => group.key).join("|");
+  const [selectedGroupKey, setSelectedGroupKey] = useState("");
+  const [selectedExperimentIds, setSelectedExperimentIds] = useState(() => new Set());
+  const [search, setSearch] = useState("");
+  const [titleDraft, setTitleDraft] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    const fallbackGroup = comparableGroups[0] || groups[0] || null;
+    setSelectedGroupKey((current) => groups.some((group) => group.key === current) ? current : fallbackGroup?.key || "");
+  }, [open, groupKeys]);
+
+  const selectedGroup = groups.find((group) => group.key === selectedGroupKey) || comparableGroups[0] || groups[0] || null;
+  const selectedSeriesKey = selectedGroup?.series.map((series) => series.experimentId).join("|") || "";
+
+  useEffect(() => {
+    if (!open || !selectedGroup) return;
+    setSelectedExperimentIds(new Set(selectedGroup.series.map((series) => series.experimentId).filter(Boolean)));
+    setTitleDraft(`${selectedGroup.yLabel} comparison`);
+  }, [open, selectedGroup?.key, selectedSeriesKey]);
+
+  if (!open) return null;
+
+  const query = search.toLowerCase().trim();
+  const visibleSeries = selectedGroup
+    ? selectedGroup.series.filter((series) => !query || [
+      series.experimentLabel,
+      series.experimentId,
+      series.summary?.sourceFileName,
+      series.yLabel,
+      series.xLabel,
+    ].join(" ").toLowerCase().includes(query))
+    : [];
+  const selectedCount = selectedExperimentIds.size;
+  const canSubmit = !!selectedGroup && selectedCount >= 2 && !loading;
+  const closeFromBackdrop = (event) => {
+    if (event.target === event.currentTarget && !loading) onClose?.();
+  };
+  const toggleExperiment = (experimentId, checked) => {
+    setSelectedExperimentIds((current) => {
+      const next = new Set(current);
+      if (checked) next.add(experimentId);
+      else next.delete(experimentId);
+      return next;
+    });
+  };
+  const submit = (event) => {
+    event.preventDefault();
+    if (!selectedGroup || selectedCount < 2) return;
+    onCreateCompare?.({
+      title: titleDraft.trim() || `${selectedGroup.yLabel} comparison`,
+      seriesKind: selectedGroup.seriesKind,
+      experimentIds: selectedGroup.series
+        .map((series) => series.experimentId)
+        .filter((experimentId) => selectedExperimentIds.has(experimentId)),
+      xField: selectedGroup.xField,
+      yField: selectedGroup.yField,
+      groupBy: "experiment",
+    });
+  };
+
+  return (
+    <div className="modal-backdrop" onMouseDown={closeFromBackdrop}>
+      <form className="modal wide compare-series-modal" role="dialog" aria-modal="true" aria-label="Compare series" onSubmit={submit}>
+        <div className="modal-head">
+          <div>
+            <h2>Compare series</h2>
+            <p>Select compatible supplemental observation series, then draft a reviewable chart proposal.</p>
+          </div>
+          <button type="button" aria-label="Close compare series" disabled={loading} onClick={onClose}>x</button>
+        </div>
+        <div className="modal-body compare-series-body">
+          {!groups.length ? (
+            <div className="import-review-empty">
+              Apply at least two compatible supplemental workbooks before creating a compare chart.
+            </div>
+          ) : (
+            <>
+              <section className="compare-series-groups" aria-label="Compatible series groups">
+                {groups.map((group) => (
+                  <label className={`compare-series-group ${group.key === selectedGroup?.key ? "active" : ""}`} key={group.key}>
+                    <input
+                      type="radio"
+                      name="compare-series-group"
+                      value={group.key}
+                      checked={group.key === selectedGroup?.key}
+                      onChange={() => setSelectedGroupKey(group.key)}
+                    />
+                    <span>
+                      <strong>{group.yLabel} vs {group.xLabel}</strong>
+                      <small>{group.series.length} experiment{group.series.length === 1 ? "" : "s"} - {group.seriesKind}</small>
+                    </span>
+                  </label>
+                ))}
+              </section>
+              {selectedGroup && (
+                <section className="compare-series-selection">
+                  <div className="compare-series-selection-head">
+                    <div>
+                      <strong>{selectedCount} of {selectedGroup.series.length} selected</strong>
+                      <small>{selectedGroup.yLabel} vs {selectedGroup.xLabel}</small>
+                    </div>
+                    <div className="compare-series-selection-actions">
+                      <button type="button" onClick={() => setSelectedExperimentIds(new Set(selectedGroup.series.map((series) => series.experimentId).filter(Boolean)))}>Select all</button>
+                      <button type="button" onClick={() => setSelectedExperimentIds(new Set())}>Clear</button>
+                    </div>
+                  </div>
+                  <label className="compare-series-title">
+                    Chart title
+                    <input value={titleDraft} onChange={(event) => setTitleDraft(event.target.value)} />
+                  </label>
+                  <input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Search experiment label or source file..."
+                    aria-label="Search compare series"
+                  />
+                  <div className="compare-series-list">
+                    {visibleSeries.map((series) => {
+                      const experimentId = series.experimentId;
+                      return (
+                        <label className="compare-series-row" key={series.id || series.seriesId || experimentId}>
+                          <input
+                            type="checkbox"
+                            checked={selectedExperimentIds.has(experimentId)}
+                            onChange={(event) => toggleExperiment(experimentId, event.target.checked)}
+                          />
+                          <span>
+                            <strong>{series.experimentLabel || experimentId}</strong>
+                            <small>{series.summary?.pointCount || 0} points - {series.summary?.sourceFileName || series.sourceImportId || "source n/a"}</small>
+                          </span>
+                        </label>
+                      );
+                    })}
+                    {!visibleSeries.length && <div className="import-review-empty">No series match the current search.</div>}
+                  </div>
+                </section>
+              )}
+            </>
+          )}
+          {clarification && (
+            <div className="import-review-error">
+              <strong>{clarification.message || "Need clarification"}</strong>
+              {asArray(clarification.options).length ? (
+                <span>{asArray(clarification.options).map((option) => option.label || option.field || option.experimentId || option.alias).filter(Boolean).join(", ")}</span>
+              ) : null}
+            </div>
+          )}
+          {error && <p className="import-review-error">{error}</p>}
+          <div className="modal-actions">
+            <button type="button" disabled={loading} onClick={onClose}>Cancel</button>
+            <button type="submit" className="primary" disabled={!canSubmit}>{loading ? "Drafting..." : "Draft compare proposal"}</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function Browser({ dataset, setSelected, sourceName, blankMode, onOpenImportReview, onOpenMappingReview, onOpenCompareSeries, compareSeriesEnabled = false, compareSeriesTitle = "", onOpenProfile, projectProfile, templateLinks, projectId }) {
   const [filters, setFilters] = useState({ search: "", cat: [], impeller: [], rpm: [], cb95: false, hasPostGc: false, hasSweep: false, hasrate: false });
   const [sort, setSort] = useState(["date", -1]);
   const [browserView, setBrowserView] = useState("curated");
@@ -1354,6 +1604,9 @@ function Browser({ dataset, setSelected, sourceName, blankMode, onOpenImportRevi
           sourceName={sourceName}
           onOpenImportReview={onOpenImportReview}
           onOpenMappingReview={onOpenMappingReview}
+          onCompareSeries={onOpenCompareSeries}
+          compareSeriesEnabled={compareSeriesEnabled}
+          compareSeriesTitle={compareSeriesTitle}
           viewSwitch={viewSwitch}
           projectId={projectId}
         />
@@ -2689,6 +2942,7 @@ function App() {
   const [focusedChartProposalId, setFocusedChartProposalId] = useState("");
   const [chartReviewStatusFilter, setChartReviewStatusFilter] = useState("");
   const [supplementManagerOpen, setSupplementManagerOpen] = useState(false);
+  const [compareSeriesState, setCompareSeriesState] = useState({ open: false, loading: false, error: "", clarification: null });
   const [supplementalBatchState, setSupplementalBatchState] = useState(() => emptySupplementalBatchState());
   const [importReviewMode, setImportReviewMode] = useState("append");
   const [refreshDraft, setRefreshDraft] = useState(() => emptyRefreshDraft());
@@ -2718,6 +2972,7 @@ function App() {
     setChartReviewOpen(false);
     setFocusedChartProposalId("");
     setChartReviewStatusFilter("");
+    setCompareSeriesState({ open: false, loading: false, error: "", clarification: null });
   };
   const resetImportReviewState = () => {
     setBackendScanState({ loading: false, result: null, error: "", fileName: "" });
@@ -3250,10 +3505,85 @@ function App() {
     setChartReviewStatusFilter(isOptionsObject && options.statusFilter === "active" ? "active" : "");
     setChartReviewOpen(true);
   };
+  const openCompareSeries = () => {
+    setSupplementManagerOpen(false);
+    setCompareSeriesState({ open: true, loading: false, error: "", clarification: null });
+  };
+  const closeCompareSeries = () => {
+    if (compareSeriesState.loading) return;
+    setCompareSeriesState({ open: false, loading: false, error: "", clarification: null });
+  };
   const closeChartReview = () => {
     setChartReviewOpen(false);
     setFocusedChartProposalId("");
     setChartReviewStatusFilter("");
+  };
+  const createCompareSeriesProposal = async (request) => {
+    if (!activeProjectId || !currentDatasetCommitId()) {
+      setCompareSeriesState((current) => ({
+        ...current,
+        loading: false,
+        error: "Open a server project with a committed dataset before comparing series.",
+      }));
+      return;
+    }
+    setCompareSeriesState((current) => ({ ...current, loading: true, error: "", clarification: null }));
+    try {
+      const viewResult = await createServerAnalysisView(activeProjectId, {
+        viewType: "series_compare",
+        title: request.title,
+        spec: {
+          seriesKind: request.seriesKind,
+          experimentIds: request.experimentIds || [],
+          xField: request.xField,
+          yField: request.yField,
+          groupBy: request.groupBy || "experiment",
+        },
+      });
+      if (viewResult.clarification) {
+        setCompareSeriesState((current) => ({
+          ...current,
+          loading: false,
+          clarification: viewResult.clarification,
+          error: "",
+        }));
+        return;
+      }
+      const analysisView = viewResult.analysisView;
+      if (!analysisView?.id) throw new Error("The server did not return an AnalysisView.");
+      const chartResult = await createServerAnalysisViewChartProposal(analysisView.id);
+      const chartProposalSet = chartResult.chartProposalSet || chartResult.proposalSet || null;
+      const proposalSet = chartProposalSet?.payload
+        ? payloadWithServerId(chartProposalSet, "proposalSetId")
+        : chartResult.proposalSet;
+      if (!proposalSet) throw new Error("The server did not return a chart proposal set.");
+      setBackendChartProposalState({
+        loading: false,
+        result: { ...chartResult, analysisView, chartProposalSet, proposalSet },
+        error: "",
+      });
+      setDataset((current) => upsertGenericChartProposalSet(current, proposalSet));
+      setProjectState((current) => current ? {
+        ...current,
+        analysisViews: upsertServerRecordById(current.analysisViews, analysisView),
+        chartProposalSets: chartProposalSet?.id
+          ? upsertServerRecordById(current.chartProposalSets, chartProposalSet)
+          : asArray(current.chartProposalSets),
+      } : current);
+      const firstProposalId = asArray(proposalSet.proposals)[0]?.proposalId || "";
+      setCompareSeriesState({ open: false, loading: false, error: "", clarification: null });
+      setFocusedChartProposalId(firstProposalId);
+      setChartReviewStatusFilter("");
+      setChartReviewOpen(true);
+      setDirty(true);
+    } catch (err) {
+      setCompareSeriesState((current) => ({
+        ...current,
+        loading: false,
+        error: err.message || String(err),
+        clarification: null,
+      }));
+    }
   };
   const saveMappingReviewDraft = async (mappingSetRecord, mappingPayload) => {
     if (!mappingSetRecord?.id) throw new Error("Generate mappings before saving changes.");
@@ -3953,6 +4283,11 @@ function App() {
       setBackendChartProposalState((current) => ({ ...current, error: err.message || String(err) }));
     }
   };
+  const compareSeriesGroups = buildCompareSeriesGroups(projectState);
+  const compareSeriesEnabled = compareSeriesGroups.some((group) => group.series.length >= 2);
+  const compareSeriesTitle = compareSeriesEnabled
+    ? "Create a reviewable cross-experiment compare chart from active supplemental observation series"
+    : "Need at least two compatible active supplemental observation series";
   if (authState.checking) {
     return (
       <main className="server-login">
@@ -4059,6 +4394,7 @@ function App() {
         onOpenRefreshWorkbook={openRefreshWorkbook}
         onOpenSupplementWorkbook={openSupplementWorkbook}
         onOpenSupplementManager={() => setSupplementManagerOpen(true)}
+        onOpenCompareSeries={openCompareSeries}
         onOpenMappingReview={openMappingReview}
         onOpenChartReview={openChartReview}
         onGoManuscript={() => setTab("manuscript")}
@@ -4070,6 +4406,9 @@ function App() {
         blankMode={BLANK_MODE}
         onOpenImportReview={openAppendImportReview}
         onOpenMappingReview={openMappingReview}
+        onOpenCompareSeries={openCompareSeries}
+        compareSeriesEnabled={compareSeriesEnabled}
+        compareSeriesTitle={compareSeriesTitle}
         onOpenProfile={() => setProfileChatOpen(true)}
         projectProfile={projectState?.projectProfile}
         templateLinks={blankTemplateLinks()}
@@ -4148,10 +4487,20 @@ function App() {
         onAddSupplemental={() => {
           openSupplementWorkbook();
         }}
+        onCompareSeries={openCompareSeries}
         onContinueReview={openSupplementImportRunReview}
         onRetryBatchItem={retrySupplementalBatchItem}
         onApplyBatchItems={applySelectedSupplementalBatchItems}
         onClose={() => setSupplementManagerOpen(false)}
+      />
+      <CompareSeriesModal
+        open={compareSeriesState.open}
+        projectState={projectState}
+        loading={compareSeriesState.loading}
+        error={compareSeriesState.error}
+        clarification={compareSeriesState.clarification}
+        onCreateCompare={createCompareSeriesProposal}
+        onClose={closeCompareSeries}
       />
       <input
         ref={supplementFileInputRef}

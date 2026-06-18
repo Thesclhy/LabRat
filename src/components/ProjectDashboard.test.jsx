@@ -1,7 +1,7 @@
 import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { AgentPanel, ChartReviewModal, DeleteProjectModal, MappingReviewModal, NewProjectModal, ProjectDashboard, ProjectOverview, RefreshWorkbookModal, SupplementalWorkbooksModal, Topbar, activeChartSpecsForProject, latestItem, mergeProjectStateForWorkspaceRefresh } from "../main.jsx";
+import { AgentPanel, ChartReviewModal, CompareSeriesModal, DeleteProjectModal, MappingReviewModal, NewProjectModal, ProjectDashboard, ProjectOverview, RefreshWorkbookModal, SupplementalWorkbooksModal, Topbar, activeChartSpecsForProject, buildCompareSeriesGroups, latestItem, mergeProjectStateForWorkspaceRefresh } from "../main.jsx";
 
 const project = {
   id: "project_1",
@@ -60,6 +60,62 @@ const projectState = {
   }],
   chartSpecs: [{ id: "chart_spec_1", title: "Gas vs Temperature" }],
   manuscripts: [{ id: "manuscript_1", updatedAt: "2026-06-15T12:00:00.000Z" }],
+};
+
+const compareSeries = [
+  {
+    id: "series_exp30_adjusted",
+    datasetCommitId: "commit_1",
+    experimentId: "exp_30",
+    experimentLabel: "Exp30",
+    seriesKind: "reaction_rate_time_series",
+    xField: "reaction_time_min",
+    xLabel: "Reaction Time",
+    xUnit: "min",
+    yField: "adjusted_rate_m_s",
+    yLabel: "Adjusted Rate",
+    yUnit: "M/s",
+    summary: { pointCount: 62, sourceFileName: "Reaction_Rate_Exp30.xlsx" },
+    status: "active",
+    isStale: false,
+  },
+  {
+    id: "series_exp31_adjusted",
+    datasetCommitId: "commit_1",
+    experimentId: "exp_31",
+    experimentLabel: "Exp31",
+    seriesKind: "reaction_rate_time_series",
+    xField: "reaction_time_min",
+    xLabel: "Reaction Time",
+    xUnit: "min",
+    yField: "adjusted_rate_m_s",
+    yLabel: "Adjusted Rate",
+    yUnit: "M/s",
+    summary: { pointCount: 60, sourceFileName: "Reaction_Rate_Exp31.xlsx" },
+    status: "active",
+    isStale: false,
+  },
+  {
+    id: "series_exp30_rate",
+    datasetCommitId: "commit_1",
+    experimentId: "exp_30",
+    experimentLabel: "Exp30",
+    seriesKind: "reaction_rate_time_series",
+    xField: "reaction_time_min",
+    xLabel: "Reaction Time",
+    xUnit: "min",
+    yField: "reaction_rate_mol_g_h",
+    yLabel: "Reaction Rate",
+    yUnit: "mol/g/h",
+    summary: { pointCount: 62, sourceFileName: "Reaction_Rate_Exp30.xlsx" },
+    status: "active",
+    isStale: false,
+  },
+];
+
+const projectStateWithCompareSeries = {
+  ...projectState,
+  observationSeries: compareSeries,
 };
 
 function jsonResponse(body, init = {}) {
@@ -288,6 +344,62 @@ describe("ProjectOverview", () => {
     expect(onOpenImportReview).not.toHaveBeenCalled();
   });
 
+  it("shows a compare series entry when compatible observation series exist", () => {
+    const onOpenCompareSeries = vi.fn();
+
+    render(
+      <ProjectOverview
+        projectState={projectStateWithCompareSeries}
+        dataset={{ genericImports: [{ importId: "master", fileName: "master.xlsx" }] }}
+        onOpenProfile={() => {}}
+        onOpenImportReview={() => {}}
+        onOpenRefreshWorkbook={() => {}}
+        onOpenSupplementWorkbook={() => {}}
+        onOpenSupplementManager={() => {}}
+        onOpenCompareSeries={onOpenCompareSeries}
+        onOpenMappingReview={() => {}}
+        onOpenChartReview={() => {}}
+        onGoManuscript={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("2 comparable series")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Compare series" }));
+    expect(onOpenCompareSeries).toHaveBeenCalledTimes(1);
+  });
+
+  it("groups compatible series and submits a series compare AnalysisView request", () => {
+    const onCreateCompare = vi.fn();
+    const groups = buildCompareSeriesGroups(projectStateWithCompareSeries);
+
+    expect(groups).toHaveLength(2);
+    expect(groups[0].yField).toBe("adjusted_rate_m_s");
+    expect(groups[0].series.map((series) => series.experimentLabel)).toEqual(["Exp30", "Exp31"]);
+
+    render(
+      <CompareSeriesModal
+        open
+        projectState={projectStateWithCompareSeries}
+        onCreateCompare={onCreateCompare}
+        onClose={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("dialog", { name: "Compare series" })).toBeTruthy();
+    expect(screen.getAllByText("Adjusted Rate (M/s) vs Reaction Time (min)").length).toBeGreaterThan(0);
+    expect(screen.getByText("2 of 2 selected")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Draft compare proposal" }));
+
+    expect(onCreateCompare).toHaveBeenCalledWith({
+      title: "Adjusted Rate (M/s) comparison",
+      seriesKind: "reaction_rate_time_series",
+      experimentIds: ["exp_30", "exp_31"],
+      xField: "reaction_time_min",
+      yField: "adjusted_rate_m_s",
+      groupBy: "experiment",
+    });
+  });
+
   it("disables master refresh and supplemental uploads without a committed master import", () => {
     const onOpenImportReview = vi.fn();
     render(
@@ -499,6 +611,24 @@ describe("ProjectOverview", () => {
     expect(screen.getByText(/Applied scientific values are immutable/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Replace / edit via reviewed import" }));
     expect(onAddSupplemental).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens compare series from the supplemental manager when compatible series exist", () => {
+    const onCompareSeries = vi.fn();
+
+    render(
+      <SupplementalWorkbooksModal
+        open
+        projectState={projectStateWithCompareSeries}
+        dataset={{ genericImports: [{ importId: "master", fileName: "master.xlsx" }] }}
+        onAddSupplemental={() => {}}
+        onCompareSeries={onCompareSeries}
+        onClose={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Compare series" }));
+    expect(onCompareSeries).toHaveBeenCalledTimes(1);
   });
 
   it("shows supplemental batch progress and selected ready apply actions", () => {

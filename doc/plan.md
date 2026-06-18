@@ -436,6 +436,8 @@ UI states:
 
 Add a `Compare series` action to Supplemental Workbooks manager.
 
+Interim implementation note: until full controlled AgentRun is implemented, direct UI entrypoints may create a validated `series_compare` AnalysisView and derive a normal chart proposal set through the existing review flow. This preserves the AnalysisView -> ChartProposal -> Accept -> ChartSpec -> Manuscript boundary and should later converge with AgentRun rather than become a separate scientific mutation path.
+
 Interaction:
 
 1. User opens Supplemental Workbooks.

@@ -225,6 +225,20 @@ export function planServerProjectAgent(projectId, request = {}, options = {}) {
   }, options);
 }
 
+export function createServerAnalysisView(projectId, request = {}, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before creating an analysis view.");
+  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/analysis-views`, {
+    viewType: request.viewType || "series_compare",
+    title: request.title || "",
+    spec: request.spec || {},
+  }, options);
+}
+
+export function createServerAnalysisViewChartProposal(analysisViewId, options = {}) {
+  if (!analysisViewId) throw new ServerApiError("Create an analysis view before drafting a chart proposal.");
+  return serverJson(`/api/analysis-views/${encodeURIComponent(analysisViewId)}/chart-proposal`, {}, options);
+}
+
 export function patchServerChartProposalSet(chartProposalSetId, request = {}, options = {}) {
   if (!chartProposalSetId) throw new ServerApiError("Select a chart proposal set before updating decisions.");
   return serverJson(`/api/chart-proposal-sets/${encodeURIComponent(chartProposalSetId)}`, request, {
