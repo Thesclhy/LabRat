@@ -1,11 +1,13 @@
 node_modules/
 dist/
 .vite/
+artifacts/
 original/
 extra data/
 .vitest/
 backend/.labrat-files/
 **/.labrat-files/
+backend/src/import/fixtures/real-workbooks/
 public/labratData.json
 src/data/labratData.json
 .env
