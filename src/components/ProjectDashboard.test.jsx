@@ -984,6 +984,131 @@ describe("AgentPanel", () => {
     }
   });
 
+  it("creates a compare series chart proposal from a chat action", async () => {
+    localStorage.removeItem("labrat_blank_chat_history_v1_react");
+    const onProjectStateLoaded = vi.fn();
+    const fetchMock = vi.fn(async (url, init = {}) => {
+      if (url === "/api/projects/project_1/agent/plan") {
+        return jsonResponse({
+          schemaVersion: "labrat.agentPlan.v1",
+          reply: "I prepared a compare action.",
+          actions: [{
+            actionId: "agent_compare_1",
+            type: "compare_series",
+            status: "requires_confirmation",
+            label: "Compare reaction-rate series",
+            description: "Create a reviewed AnalysisView, then queue one chart proposal.",
+            requiresFile: false,
+            requiresReview: true,
+            params: {
+              prompt: "compare reaction rate for Exp30 and Exp31",
+              viewType: "series_compare",
+              title: "Reaction rate comparison",
+              seriesKind: "reaction_rate_time_series",
+              targetExperimentAliases: ["Exp30", "Exp31"],
+              experimentIds: ["exp_30", "exp_31"],
+              xField: "reaction_time_min",
+              yField: "adjusted_rate_m_s",
+              groupBy: "experiment",
+            },
+            warnings: [],
+          }],
+        });
+      }
+      if (url === "/api/projects/project_1/analysis-views") {
+        expect(JSON.parse(init.body)).toEqual({
+          viewType: "series_compare",
+          title: "Reaction rate comparison",
+          spec: {
+            seriesKind: "reaction_rate_time_series",
+            experimentIds: ["exp_30", "exp_31"],
+            xField: "reaction_time_min",
+            yField: "adjusted_rate_m_s",
+            groupBy: "experiment",
+          },
+        });
+        return jsonResponse({
+          analysisView: {
+            id: "analysis_view_compare_1",
+            viewType: "series_compare",
+            title: "Reaction rate comparison",
+            spec: { experimentIds: ["exp_30", "exp_31"] },
+          },
+        }, { status: 201 });
+      }
+      if (url === "/api/analysis-views/analysis_view_compare_1/chart-proposal") {
+        return jsonResponse({
+          chartProposalSet: {
+            id: "chart_set_compare_1",
+            datasetCommitId: "commit_1",
+            payload: {
+              proposalSetId: "chart_set_compare_1",
+              schemaVersion: "labrat.chartProposalSet.v1",
+              proposals: [{
+                proposalId: "chart_compare_1",
+                status: "proposed",
+                title: "Reaction rate comparison",
+              }],
+              warnings: [],
+            },
+          },
+        }, { status: 201 });
+      }
+      if (url === "/api/projects/project_1/state") {
+        return jsonResponse({
+          ...projectStateWithCompareSeries,
+          chartProposalSets: [{
+            id: "chart_set_compare_1",
+            datasetCommitId: "commit_1",
+            payload: {
+              proposalSetId: "chart_set_compare_1",
+              schemaVersion: "labrat.chartProposalSet.v1",
+              proposals: [{ proposalId: "chart_compare_1", status: "proposed", title: "Reaction rate comparison" }],
+            },
+          }],
+        });
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+
+    try {
+      render(
+        <AgentPanel
+          open
+          setOpen={() => {}}
+          dataset={{ metadata: {}, experiments: [], genericImports: [{ importId: "import_1" }] }}
+          blocks={[]}
+          setBlocks={() => {}}
+          references={[]}
+          selected={null}
+          selectedChartContext={null}
+          pendingChartAnalysis={null}
+          activeProjectId="project_1"
+          projectState={projectStateWithCompareSeries}
+          onProjectStateLoaded={onProjectStateLoaded}
+        />,
+      );
+
+      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
+      fireEvent.change(promptInput, { target: { value: "compare reaction rate for Exp30 and Exp31" } });
+      fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
+
+      await waitFor(() => expect(screen.getByText("Compare reaction-rate series")).toBeTruthy());
+      expect(screen.getByText("Target: Exp30, Exp31")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Prepare" }));
+
+      await waitFor(() => expect(screen.getByRole("button", { name: "Accept proposal" })).toBeTruthy());
+      expect(screen.getByText("Chart: Reaction rate comparison")).toBeTruthy();
+      expect(screen.getByText(/Queued chart proposal set chart_set_compare_1/)).toBeTruthy();
+      expect(onProjectStateLoaded).toHaveBeenCalledTimes(1);
+    } finally {
+      global.fetch = originalFetch;
+      localStorage.removeItem("labrat_blank_chat_history_v1_react");
+    }
+  });
+
   it("accepts an interpreted chart proposal and creates a ChartSpec inside chat", async () => {
     localStorage.removeItem("labrat_blank_chat_history_v1_react");
     const onProjectStateLoaded = vi.fn();

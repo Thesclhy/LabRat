@@ -842,6 +842,7 @@ async function handleProjectAgentPlan(req, res, context, projectId) {
     project,
     projectProfile: projectProfileFor(project),
     currentDatasetCommit,
+    observationSeries: await observationSeriesForProject(context, project, currentDatasetCommit),
     fileObjects: fileObjects.map(fileObjectSummary),
     importRuns: importRuns.map(importRunSummary),
     mappingSets: mappingSets.map(mappingSetSummary),

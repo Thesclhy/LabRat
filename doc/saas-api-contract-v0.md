@@ -650,6 +650,7 @@ Supported first action types:
 upload_master_table
 refresh_master_table
 upload_supplement
+compare_series
 propose_charts
 interpret_chart
 create_chart_spec_from_proposal
@@ -661,6 +662,7 @@ Rules:
 - This endpoint plans only; it must not mutate project state.
 - Mutating actions require a frontend confirmation card and then call existing project APIs.
 - Upload actions require file selection before import run creation.
+- `compare_series` is an interim compatibility action for prompts such as `compare reaction rate for Exp30 and Exp31`; it must resolve active compatible ObservationSeries and return AnalysisView params, but the frontend must still create the AnalysisView, derive a chart proposal, and require Chart Review / ChartSpec confirmation before manuscript insertion.
 - The planner may use deterministic parsing and optional AI, but it returns action plans, not final scientific values.
 - Context must be compact and must not include raw workbook cell grids.
 - Cross-lab access is forbidden.

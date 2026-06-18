@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { resolveSeriesCompareAnalysisView } from "./analysisViews.js";
 import { buildProjectDataCatalog, searchProjectDataCatalog, slug } from "./projectDataCatalog.js";
 
 export const PROJECT_AGENT_PLAN_VERSION = "labrat.agentPlan.v1";
@@ -79,10 +80,78 @@ function dataQueryAction(projectId, message) {
   });
 }
 
+function isReactionRateCompareRequest(message) {
+  const text = String(message || "").toLowerCase();
+  return /\b(compare|overlay|cross[-\s]?compare|contrast)\b/.test(text)
+    && /\b(reaction\s*rate|rate\s*(curve|series|profile|trend|trace)?|kinetic\s*(curve|series)?)\b/.test(text)
+    && /\bexp(?:eriment)?\s*0*[0-9]+\b/i.test(message);
+}
+
+function compareSeriesAction({ project, datasetCommit, observationSeries, message }) {
+  const aliases = experimentAliases(message);
+  const resolved = resolveSeriesCompareAnalysisView({
+    project,
+    datasetCommit,
+    observationSeries,
+    request: {
+      viewType: "series_compare",
+      title: "Reaction rate comparison",
+      prompt: message,
+      spec: {
+        seriesKind: "reaction_rate_time_series",
+        experimentAliases: aliases,
+        groupBy: "experiment",
+      },
+    },
+  });
+  if (resolved.error) {
+    return {
+      clarification: {
+        code: resolved.error.code || "compare_series_unavailable",
+        message: resolved.error.message || "Reaction-rate comparison is not available for this project yet.",
+        options: [],
+      },
+    };
+  }
+  if (resolved.clarification) return { clarification: resolved.clarification };
+
+  const view = resolved.analysisView || {};
+  const spec = view.spec || {};
+  const labels = asArray(resolved.selectedSeries)
+    .map((series) => series.experimentLabel || series.experimentId)
+    .filter(Boolean);
+  return {
+    action: action({
+      projectId: project?.id || "project",
+      message,
+      type: "compare_series",
+      label: "Compare reaction-rate series",
+      description: "Create a reviewed AnalysisView from compatible reaction-rate ObservationSeries, then queue one chart proposal for review.",
+      requiresFile: false,
+      requiresReview: true,
+      params: {
+        prompt: message,
+        viewType: "series_compare",
+        title: view.title || "Reaction rate comparison",
+        seriesKind: spec.seriesKind || "reaction_rate_time_series",
+        experimentAliases: aliases,
+        targetExperimentAliases: aliases,
+        experimentIds: asArray(spec.experimentIds),
+        seriesIds: asArray(spec.seriesIds),
+        xField: spec.xField || "reaction_time_min",
+        yField: spec.yField || "",
+        groupBy: spec.groupBy || "experiment",
+        experimentLabels: labels,
+      },
+    }),
+  };
+}
+
 export function createProjectAgentPlan({
   project,
   projectProfile = {},
   currentDatasetCommit = null,
+  observationSeries = [],
   fileObjects = [],
   importRuns = [],
   mappingSets = [],
@@ -105,6 +174,7 @@ export function createProjectAgentPlan({
   });
   const targetExperimentAliases = experimentAliases(text);
   const actions = [];
+  let clarification = null;
 
   if (/\b(master|mastertable|main table|main workbook|主表)\b/.test(normalized)
     && /\b(upload|import|add|导入|上传)\b/.test(normalized)) {
@@ -178,6 +248,15 @@ export function createProjectAgentPlan({
         severity: "warning",
       }],
     }));
+  } else if (isReactionRateCompareRequest(text)) {
+    const planned = compareSeriesAction({
+      project,
+      datasetCommit: currentDatasetCommit,
+      observationSeries,
+      message: text,
+    });
+    if (planned.action) actions.push(planned.action);
+    if (planned.clarification) clarification = planned.clarification;
   } else if (/\b(propose|recommend|suggest|推荐)\b/.test(normalized) && /\b(chart|plot|figure|图)\b/.test(normalized)) {
     actions.push(action({
       projectId,
@@ -210,11 +289,11 @@ export function createProjectAgentPlan({
     }));
   }
 
-  if (!actions.length && /\b(show|find|search|query|filter|compare|table|data|显示|查找|比较|表格|数据)\b/.test(normalized)) {
+  if (!actions.length && !clarification && /\b(show|find|search|query|filter|compare|table|data|显示|查找|比较|表格|数据)\b/.test(normalized)) {
     actions.push(dataQueryAction(projectId, text));
   }
 
-  if (!actions.length) {
+  if (!actions.length && !clarification) {
     const matches = searchProjectDataCatalog(catalog, text, { limit: 5 });
     actions.push(dataQueryAction(projectId, text));
     if (!matches.length) {
@@ -229,7 +308,9 @@ export function createProjectAgentPlan({
   const actionLabels = actions.map((item) => item.label).join(", ");
   return {
     schemaVersion: PROJECT_AGENT_PLAN_VERSION,
-    reply: actionLabels
+    reply: clarification
+      ? `I need clarification before comparing reaction-rate series: ${clarification.message}`
+      : actionLabels
       ? `I prepared ${actions.length === 1 ? "an action" : "actions"} for: ${actionLabels}. Review the card before anything changes.`
       : "I can help, but I need a more specific project action.",
     actions,
@@ -248,6 +329,14 @@ export function createProjectAgentPlan({
       conversationMessageCount: asArray(conversation).length,
       selectedContextKeys: Object.keys(selectedContext || {}),
     },
-    warnings: asArray(catalog.warnings),
+    warnings: [
+      ...asArray(catalog.warnings),
+      ...(clarification ? [{
+        code: clarification.code || "compare_series_clarification",
+        message: clarification.message,
+        severity: "info",
+        options: asArray(clarification.options),
+      }] : []),
+    ],
   };
 }

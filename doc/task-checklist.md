@@ -19,15 +19,15 @@ Use this file as the working checklist for long Codex tasks. Update it before st
 
 Objective: Implement `doc/plan.md` Agent-first evidence workflow vertical slice on `feature/agent-first-evidence-workflow`.
 
-Milestone: Frontend `Compare series` entrypoint implemented. Users can select compatible ObservationSeries/experiments, create a `series_compare` AnalysisView, derive a chart proposal, and continue through the existing proposal review -> ChartSpec -> Manuscript path.
+Milestone: Add a lightweight natural-language compare command to the existing project chat planner. A prompt like `compare reaction rate for Exp1, Exp2, Exp3` should route to the implemented ObservationSeries -> `series_compare` AnalysisView -> chart proposal -> existing Chart Review/action-card flow.
 
 Relevant docs read: `AGENTS.md`, `doc/plan.md`, `doc/PROGRESS.md`, `doc/saas-api-contract-v0.md`, `doc/canonical-data-dictionary.md`, `doc/backend-api-contract.md`, `doc/ai-boundaries.md`.
 
-Touched areas: frontend server API helpers, Project Overview/Supplemental Workbooks/Browser entrypoints, chart proposal review state wiring, tests, progress log.
+Touched areas: backend `/agent/plan` deterministic routing, frontend AgentPanel action execution, existing AnalysisView/chart proposal API helpers, tests, progress log.
 
-Verification plan: targeted frontend API/helper and UI tests for compare-series creation, then `npm run codex:verify` before commit when feasible.
+Verification plan: targeted backend SaaS route tests for planner behavior, targeted frontend AgentPanel tests for action-card execution, then `npm run codex:verify` before commit when feasible.
 
-Open risks: Source Explorer, Source Extract Proposal, full AgentRun, and Anthropic integration remain intentionally unimplemented. Manual QA with real Exp1/Exp2/Exp3 reaction-rate supplements should still verify the end-to-end button flow in the browser.
+Open risks: Keep this as deterministic planner compatibility only; do not implement full AgentRun, Anthropic, Source Explorer, or Source Extract Proposals. Existing unrelated `package-lock.json` metadata remains unstaged.
 
 ## Milestone Checklist Template
 
@@ -49,6 +49,10 @@ Open risks: Source Explorer, Source Extract Proposal, full AgentRun, and Anthrop
 - [x] Keep this milestone deterministic and do not add Anthropic or AgentRun behavior.
 
 ## Recent Checkpoints
+
+- 2026-06-18: Implemented lightweight natural-language compare command in the existing chat planner. Backend `/agent/plan` now returns `compare_series` actions for simple reaction-rate compare prompts after resolving active compatible ObservationSeries, and the frontend action card creates the AnalysisView plus chart proposal through existing APIs. Targeted backend/frontend tests and full `npm run codex:verify` passed.
+
+- 2026-06-18: Started lightweight natural-language compare command milestone. Scope is deterministic `/agent/plan` recognition and confirmable frontend execution through the already implemented AnalysisView -> chart proposal -> Chart Review flow; no full AgentRun, Anthropic, Source Explorer, or Source Extract Proposal.
 
 - 2026-06-18: Implemented frontend Compare series entrypoint milestone. Overview, Supplemental Workbooks manager, and Imported Browser can open a deterministic Compare series modal; the modal creates a `series_compare` AnalysisView, derives a normal chart proposal set, and opens existing Chart Review. Verification: targeted frontend tests and full `npm run codex:verify` passed.
 

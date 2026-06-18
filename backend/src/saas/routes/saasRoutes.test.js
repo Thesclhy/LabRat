@@ -861,6 +861,30 @@ test("series compare AnalysisView drafts a reviewable chart proposal set", async
     assert.equal(applyResponse.status, 200);
   }
 
+  const planResponse = await jsonFetch(`/api/projects/${project.project.id}/agent/plan`, {
+    method: "POST",
+    body: { message: "compare reaction rate for Exp30 and Exp31" },
+  });
+  assert.equal(planResponse.status, 200);
+  const planBody = await planResponse.json();
+  assert.equal(planBody.actions[0].type, "compare_series");
+  assert.equal(planBody.actions[0].requiresReview, true);
+  assert.deepEqual(planBody.actions[0].params.experimentAliases, ["Exp30", "Exp31"]);
+  assert.deepEqual(planBody.actions[0].params.experimentIds, [exp30.experimentId, exp31.experimentId]);
+  assert.equal(planBody.actions[0].params.xField, "reaction_time_min");
+  assert.equal(planBody.actions[0].params.yField, "reaction_rate_mol_g_h");
+  assert.equal(JSON.stringify(planBody).includes("cellGrid"), false);
+
+  const missingPlanResponse = await jsonFetch(`/api/projects/${project.project.id}/agent/plan`, {
+    method: "POST",
+    body: { message: "compare reaction rate for Exp30 and Exp999" },
+  });
+  assert.equal(missingPlanResponse.status, 200);
+  const missingPlanBody = await missingPlanResponse.json();
+  assert.equal(missingPlanBody.actions.length, 0);
+  assert.match(missingPlanBody.reply, /clarification/i);
+  assert.equal(missingPlanBody.warnings.some((warning) => warning.code === "experiment_not_found"), true);
+
   const viewResponse = await jsonFetch(`/api/projects/${project.project.id}/analysis-views`, {
     method: "POST",
     body: {

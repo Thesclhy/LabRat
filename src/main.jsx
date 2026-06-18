@@ -2112,7 +2112,7 @@ function AgentActionCard({ action, projectState, busyActionId, onChooseFile, onU
   const fileOptions = asArray(params.existingFiles);
   const isBusy = busyActionId === action.actionId || ["previewing", "executing", "accepting_proposal", "creating_chart_spec"].includes(action.status);
   const canConfirm = ["ready_to_apply", "ready_to_persist", "ready_to_create"].includes(action.status);
-  const hasChatChartProposal = action.type === "interpret_chart" && action.chartProposalSetId && action.proposalId;
+  const hasChatChartProposal = ["interpret_chart", "compare_series"].includes(action.type) && action.chartProposalSetId && action.proposalId;
   const proposalAccepted = action.proposalStatus === "accepted" || ["proposal_accepted", "chart_spec_created"].includes(action.status);
   const chartSpecCreated = action.status === "chart_spec_created" || Boolean(action.chartSpecId);
   const warnings = [...asArray(action.warnings), ...asArray(preview?.warnings)];
@@ -2546,6 +2546,52 @@ export function AgentPanel({
             warnings: response.warnings,
           },
           error: chartProposalSet ? "" : response.clarification?.message || "Chart draft requires clarification.",
+        });
+        if (chartProposalSet) await reloadProjectAfterAgentAction();
+      } else if (action.type === "compare_series") {
+        const params = action.params || {};
+        const viewResponse = await createServerAnalysisView(activeProjectId, {
+          viewType: params.viewType || "series_compare",
+          title: params.title || "Reaction rate comparison",
+          spec: {
+            seriesKind: params.seriesKind || "reaction_rate_time_series",
+            experimentIds: asArray(params.experimentIds),
+            xField: params.xField || "reaction_time_min",
+            yField: params.yField || "",
+            groupBy: params.groupBy || "experiment",
+          },
+        });
+        if (viewResponse.clarification) {
+          updateActionInHistory(actionId, {
+            status: "failed",
+            preview: {
+              message: viewResponse.clarification.message || "Compare request needs clarification.",
+              warnings: viewResponse.warnings,
+            },
+            error: viewResponse.clarification.message || "Compare request needs clarification.",
+          });
+          return;
+        }
+        const analysisView = viewResponse.analysisView;
+        if (!analysisView?.id) throw new Error("The server did not return an AnalysisView.");
+        const chartResponse = await createServerAnalysisViewChartProposal(analysisView.id);
+        const chartProposalSet = chartResponse.chartProposalSet || chartResponse.proposalSet || null;
+        const proposalPayload = chartProposalSet?.payload || chartResponse.proposalSet || null;
+        const proposal = asArray(proposalPayload?.proposals)[0] || null;
+        updateActionInHistory(actionId, {
+          status: chartProposalSet ? "completed" : "failed",
+          analysisViewId: analysisView.id,
+          analysisView,
+          chartProposalSetId: chartProposalSet?.id || "",
+          chartProposalSetPayload: chartProposalSet?.payload ? payloadWithServerId(chartProposalSet, "proposalSetId") : proposalPayload,
+          proposalId: proposal?.proposalId || "",
+          proposalStatus: proposal?.status || "proposed",
+          preview: {
+            chartTitle: proposal?.title || analysisView.title,
+            message: chartProposalSet ? `Queued chart proposal set ${chartProposalSet.id}.` : "Compare chart proposal could not be created.",
+            warnings: chartResponse.warnings,
+          },
+          error: chartProposalSet ? "" : "Compare chart proposal could not be created.",
         });
         if (chartProposalSet) await reloadProjectAfterAgentAction();
       } else if (action.type === "create_chart_spec_from_proposal") {
