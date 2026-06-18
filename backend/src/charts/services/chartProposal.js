@@ -23,6 +23,14 @@ function proposalSetId(sourceImportIds) {
   return `chart_proposal_set_${slug(sourceImportIds.join("_") || "generic_import")}`;
 }
 
+function proposalScopeToken(sourceImportIds, fields = []) {
+  const sourceTokens = asArray(fields).flatMap((field) => [
+    field?.fieldId,
+    ...asArray(field?.sourceIds).slice(0, 3),
+  ]);
+  return slug([...asArray(sourceImportIds), ...sourceTokens].join("_"), "sources").slice(0, 64);
+}
+
 function statusFromPrior(priorDecisions, proposalId) {
   const decision = asArray(priorDecisions).find((item) => item?.proposalId === proposalId);
   return decision?.status === "accepted" || decision?.status === "rejected" ? decision.status : "proposed";
@@ -125,7 +133,7 @@ function pairCount(xField, yField, genericImports) {
 
 function makeScatterProposal({ sourceImportIds, xField, yField, groupByField, index, genericImports, priorDecisions }) {
   const pairs = pairCount(xField, yField, genericImports);
-  const proposalId = `chart_proposal_${index + 1}_${slug(yField.canonicalField || yField.field)}_vs_${slug(xField.canonicalField || xField.field)}`;
+  const proposalId = `chart_proposal_${index + 1}_${proposalScopeToken(sourceImportIds, [xField, yField])}_${slug(yField.canonicalField || yField.field)}_vs_${slug(xField.canonicalField || xField.field)}`;
   if (shouldSkipRejected(priorDecisions, proposalId)) return null;
   const spec = compileChartSpec({
     chartType: "scatter",
@@ -165,7 +173,7 @@ function makeScatterProposal({ sourceImportIds, xField, yField, groupByField, in
 }
 
 function makeBarProposal({ sourceImportIds, xField, yField, index, priorDecisions }) {
-  const proposalId = `chart_proposal_${index + 1}_${slug(yField.canonicalField || yField.field)}_by_${slug(xField.canonicalField || xField.field)}`;
+  const proposalId = `chart_proposal_${index + 1}_${proposalScopeToken(sourceImportIds, [xField, yField])}_${slug(yField.canonicalField || yField.field)}_by_${slug(xField.canonicalField || xField.field)}`;
   if (shouldSkipRejected(priorDecisions, proposalId)) return null;
   const spec = compileChartSpec({
     chartType: "bar",
@@ -201,7 +209,7 @@ function orderedSelectivityFields(fields) {
 }
 
 function makeSelectivityFamilyProposal({ sourceImportIds, chartType, xField, yFields, index, priorDecisions, normalized = false }) {
-  const proposalId = `chart_proposal_${index + 1}_${normalized ? "normalized_" : ""}selectivity_${chartType}_by_${slug(xField.canonicalField || xField.field)}`;
+  const proposalId = `chart_proposal_${index + 1}_${proposalScopeToken(sourceImportIds, [xField, ...yFields])}_${normalized ? "normalized_" : ""}selectivity_${chartType}_by_${slug(xField.canonicalField || xField.field)}`;
   if (shouldSkipRejected(priorDecisions, proposalId)) return null;
   const spec = compileChartSpec({
     chartType,
@@ -247,7 +255,7 @@ function orderedCarbonDistributionFields(fields) {
 }
 
 function makeCarbonDistributionProposal({ sourceImportIds, yFields, index, priorDecisions, normalized = false }) {
-  const proposalId = `chart_proposal_${index + 1}_${normalized ? "normalized_" : ""}c_number_distribution`;
+  const proposalId = `chart_proposal_${index + 1}_${proposalScopeToken(sourceImportIds, yFields)}_${normalized ? "normalized_" : ""}c_number_distribution`;
   if (shouldSkipRejected(priorDecisions, proposalId)) return null;
   const sourceFieldIds = yFields.flatMap((field) => field.sourceIds);
   const spec = compileChartSpec({

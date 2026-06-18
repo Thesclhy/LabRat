@@ -77,6 +77,7 @@ function buildChartFieldInventory(options) {
     .map((field) => enrichField(field, mappingBySourceId));
   return {
     ...context,
+    selectedExperimentIds: asArray(options.selectedExperimentIds),
     fields,
     measurements: fields.filter((field) => field.role === "measurement"),
     conditions: fields.filter((field) => field.role === "condition"),
@@ -566,6 +567,117 @@ function fieldOptions(fields, roles = null) {
     }));
 }
 
+function experimentTokensFromText(value) {
+  const text = normalizeText(value);
+  if (!text) return [];
+  const tokens = [];
+  const pattern = /\b(?:exp|experiment)\s*0*([0-9]+)\b/g;
+  let match = pattern.exec(text);
+  while (match) {
+    tokens.push(`exp${Number(match[1])}`);
+    match = pattern.exec(text);
+  }
+  return unique(tokens);
+}
+
+function requestedExperimentTokens(prompt, inventory) {
+  const tokens = [...experimentTokensFromText(prompt)];
+  asArray(inventory?.selectedExperimentIds).forEach((experimentId) => {
+    tokens.push(...experimentTokensFromText(experimentId));
+    const experiment = inventory.experimentsById?.get?.(experimentId);
+    tokens.push(...experimentTokensFromText(experiment?.label));
+    tokens.push(...experimentTokensFromText(experiment?.name));
+  });
+  return unique(tokens);
+}
+
+function fieldExperimentTokens(field, inventory) {
+  const tokens = [
+    ...experimentTokensFromText(field?.fieldId),
+    ...experimentTokensFromText(field?.importId),
+    ...asArray(field?.sourceIds).flatMap(experimentTokensFromText),
+    ...asArray(field?.inferredExperimentLabels).flatMap(experimentTokensFromText),
+    ...asArray(field?.relatedExperimentIds).flatMap((experimentId) => {
+      const experiment = inventory.experimentsById?.get?.(experimentId);
+      return [
+        ...experimentTokensFromText(experimentId),
+        ...experimentTokensFromText(experiment?.label),
+        ...experimentTokensFromText(experiment?.name),
+      ];
+    }),
+    ...asArray(field?.experimentIds).flatMap((experimentId) => {
+      const experiment = inventory.experimentsById?.get?.(experimentId);
+      return [
+        ...experimentTokensFromText(experimentId),
+        ...experimentTokensFromText(experiment?.label),
+        ...experimentTokensFromText(experiment?.name),
+      ];
+    }),
+  ];
+  return unique(tokens);
+}
+
+function experimentOptions(inventory) {
+  const experiments = inventory.experimentsById?.values ? [...inventory.experimentsById.values()] : [];
+  const labels = [
+    ...experiments.flatMap((experiment) => [experiment?.label, experiment?.name]),
+    ...asArray(inventory.fields).flatMap((field) => asArray(field.inferredExperimentLabels)),
+  ];
+  return unique(labels)
+    .sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" }))
+    .slice(0, 12)
+    .map((label) => ({
+      fieldId: String(label),
+      label: String(label),
+      role: "identifier",
+      valueType: "categorical",
+    }));
+}
+
+function scopedInventoryForPrompt(inventory, prompt) {
+  const tokens = requestedExperimentTokens(prompt, inventory);
+  if (!tokens.length) return { inventory, requestedExperimentTokens: [], matched: true };
+  const requested = new Set(tokens);
+  const fields = asArray(inventory.fields).filter((field) => (
+    fieldExperimentTokens(field, inventory).some((token) => requested.has(token))
+  ));
+  if (!fields.length) {
+    return {
+      inventory: {
+        ...inventory,
+        fields: [],
+        measurements: [],
+        conditions: [],
+        materials: [],
+        identifiers: [],
+        metadata: [],
+        sourceImportIds: [],
+      },
+      requestedExperimentTokens: tokens,
+      matched: false,
+    };
+  }
+  return {
+    inventory: {
+      ...inventory,
+      fields,
+      measurements: fields.filter((field) => field.role === "measurement"),
+      conditions: fields.filter((field) => field.role === "condition"),
+      materials: fields.filter((field) => field.role === "material"),
+      identifiers: fields.filter((field) => field.role === "identifier"),
+      metadata: fields.filter((field) => !["measurement", "condition", "material", "identifier"].includes(field.role)),
+      sourceImportIds: unique(fields.map((field) => field.importId).filter(Boolean)),
+    },
+    requestedExperimentTokens: tokens,
+    matched: true,
+  };
+}
+
+function sourceImportIdsForFields(fields, fallback = []) {
+  const ids = unique(asArray(fields).map((field) => field?.importId).filter(Boolean));
+  return ids.length ? ids : asArray(fallback);
+}
+
 function wantsTransform(intent, prompt, type) {
   const values = [
     intent?.transformIntent,
@@ -637,7 +749,7 @@ function compileDistributionIntent(intent, inventory, prompt, warnings) {
         sourceRefs: [],
       },
       yFields,
-      sourceImportIds: inventory.sourceImportIds,
+      sourceImportIds: sourceImportIdsForFields(yFields, inventory.sourceImportIds),
       sourceRefs,
       confidence: Number(Math.min(0.96, Math.max(0.5, yFields.reduce((total, field) => total + (field.confidence || 0.7), 0) / yFields.length)).toFixed(3)),
       transforms: [
@@ -694,6 +806,17 @@ function titleFor(intent, xField, yFields, groupBy) {
 
 function compileIntent(intent, inventory, prompt, warnings) {
   intent = normalizeIntent(intent);
+  const scope = scopedInventoryForPrompt(inventory, prompt);
+  inventory = scope.inventory;
+  if (scope.requestedExperimentTokens.length && !scope.matched) {
+    return {
+      chartSpecDraft: null,
+      clarification: {
+        message: `No imported data matched the requested experiment ${scope.requestedExperimentTokens.join(", ")}.`,
+        options: experimentOptions(inventory),
+      },
+    };
+  }
   const fields = inventory.fields;
   if (isDistributionIntent(intent, prompt)) {
     return compileDistributionIntent(intent, inventory, prompt, warnings);
@@ -794,7 +917,7 @@ function compileIntent(intent, inventory, prompt, warnings) {
       yFields,
       groupBy,
       filters: asArray(intent.filters),
-      sourceImportIds: inventory.sourceImportIds,
+      sourceImportIds: sourceImportIdsForFields([xField, ...yFields, groupBy], inventory.sourceImportIds),
       sourceRefs,
       confidence,
       warnings: [

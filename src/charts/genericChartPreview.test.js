@@ -43,27 +43,31 @@ function familyImport() {
   }];
 }
 
-function observationImport() {
+function observationImport(options = {}) {
+  const prefix = options.prefix ? `${options.prefix}_` : "";
+  const importId = options.importId || "import_reaction_rate";
+  const experimentId = options.experimentId || "exp_30";
+  const experimentLabel = options.experimentLabel || "Exp30";
+  const observationSetId = options.observationSetId || "obsset_1";
+  const points = options.points || [[0, 0.001], [10, 0.002]];
   return [{
-    importId: "import_reaction_rate",
-    relatedExperimentIds: ["exp_30"],
+    importId,
+    relatedExperimentIds: [experimentId],
     observationSets: [{
-      observationSetId: "obsset_1",
+      observationSetId,
       kind: "reaction_rate_time_series",
-      inferredExperimentLabel: "Exp30",
-      targetExperimentIds: ["exp_30"],
-      observations: [
-        { observationId: "obs_1", rowIndex: 3 },
-        { observationId: "obs_2", rowIndex: 4 },
-      ],
-      summary: { observationCount: 2 },
+      inferredExperimentLabel: experimentLabel,
+      targetExperimentIds: [experimentId],
+      observations: points.map((point, index) => ({ observationId: `${prefix}obs_${index + 1}`, rowIndex: index + 3 })),
+      summary: { observationCount: points.length },
     }],
-    fields: [
-      { fieldValueId: "rt_1", recordKind: "observation", observationSetId: "obsset_1", observationId: "obs_1", relatedExperimentIds: ["exp_30"], inferredExperimentLabel: "Exp30", rowIndex: 3, field: "reaction_time_min", role: "condition", value: 0, rawValue: "0" },
-      { fieldValueId: "ar_1", recordKind: "observation", observationSetId: "obsset_1", observationId: "obs_1", relatedExperimentIds: ["exp_30"], inferredExperimentLabel: "Exp30", rowIndex: 3, field: "adjusted_rate_m_s", role: "measurement", value: 0.001, rawValue: "0.001" },
-      { fieldValueId: "rt_2", recordKind: "observation", observationSetId: "obsset_1", observationId: "obs_2", relatedExperimentIds: ["exp_30"], inferredExperimentLabel: "Exp30", rowIndex: 4, field: "reaction_time_min", role: "condition", value: 10, rawValue: "10" },
-      { fieldValueId: "ar_2", recordKind: "observation", observationSetId: "obsset_1", observationId: "obs_2", relatedExperimentIds: ["exp_30"], inferredExperimentLabel: "Exp30", rowIndex: 4, field: "adjusted_rate_m_s", role: "measurement", value: 0.002, rawValue: "0.002" },
-    ],
+    fields: points.flatMap(([time, rate], index) => {
+      const observationId = `${prefix}obs_${index + 1}`;
+      return [
+        { fieldValueId: `${prefix}rt_${index + 1}`, recordKind: "observation", observationSetId, observationId, relatedExperimentIds: [experimentId], inferredExperimentLabel: experimentLabel, rowIndex: index + 3, field: "reaction_time_min", role: "condition", value: time, rawValue: String(time) },
+        { fieldValueId: `${prefix}ar_${index + 1}`, recordKind: "observation", observationSetId, observationId, relatedExperimentIds: [experimentId], inferredExperimentLabel: experimentLabel, rowIndex: index + 3, field: "adjusted_rate_m_s", role: "measurement", value: rate, rawValue: String(rate) },
+      ];
+    }),
   }];
 }
 
@@ -155,6 +159,31 @@ describe("makeGenericChartPreview", () => {
     expect(preview.traces[0].x).toEqual([0, 10]);
     expect(preview.traces[0].y).toEqual([0.001, 0.002]);
     expect(options).toEqual([{ id: "exp_30", label: "Exp30", detail: "" }]);
+  });
+
+  it("uses source ids to preview the requested supplemental observation set when multiple Exp supplements exist", () => {
+    const imports = [
+      ...observationImport(),
+      ...observationImport({
+        importId: "import_reaction_rate_exp31",
+        experimentId: "exp_31",
+        experimentLabel: "Exp31",
+        observationSetId: "obsset_31",
+        prefix: "exp31",
+        points: [[1, 0.01], [2, 0.02]],
+      }),
+    ];
+    const preview = makeGenericChartPreview({
+      chartType: "scatter",
+      title: "Adjusted rate vs reaction time",
+      x: { label: "Reaction Time", unit: "min", sourceIds: ["exp31_rt_1", "exp31_rt_2"] },
+      y: { label: "Adjusted Rate", unit: "M/s", sourceIds: ["exp31_ar_1", "exp31_ar_2"] },
+    }, imports);
+
+    expect(preview.traces).toHaveLength(1);
+    expect(preview.traces[0].name).toBe("Exp31");
+    expect(preview.traces[0].x).toEqual([1, 2]);
+    expect(preview.traces[0].y).toEqual([0.01, 0.02]);
   });
 
   it("projects ChartSpec v1.3 log axes and Excel-like trace style into Plotly preview", () => {
