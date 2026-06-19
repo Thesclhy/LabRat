@@ -693,7 +693,7 @@ Rules:
 
 Purpose: start a controlled Agent-first workflow that retrieves evidence, drafts an AnalysisView or proposal, records visible trace steps, and waits for user confirmation before mutations.
 
-Status: Phase 7 backend foundation implemented for deterministic `series_compare` and source extract proof cases. Full frontend drawer convergence, Anthropic-backed planning, Source Explorer UI, and arbitrary source extract promotion remain planned.
+Status: Phase 7 backend foundation and minimal Phase 8 chat routing are implemented for deterministic `series_compare` and source extract proof cases. Full frontend drawer convergence, Anthropic-backed planning, Source Explorer UI, and arbitrary source extract promotion remain planned.
 
 Required role: `viewer` or above for read-only planning; mutating confirmations require the role of the underlying action.
 
@@ -714,13 +714,13 @@ Response:
   "agentRun": {
     "id": "agent_run_...",
     "projectId": "project_...",
-      "status": "waiting_for_user",
-      "mode": "series_compare",
-      "visibleSteps": [],
-      "toolTrace": [],
-      "actions": [],
-      "usage": {},
-      "warnings": []
+    "status": "waiting_for_user",
+    "mode": "series_compare",
+    "visibleSteps": [],
+    "toolTrace": [],
+    "actions": [],
+    "usage": {},
+    "warnings": []
   }
 }
 ```
@@ -742,6 +742,64 @@ Rules:
 - Context must be compact; source tools may return selected bounded ranges, but not full workbook cell grids.
 - Store provider/model/token/cost usage when available; deterministic v1 uses `{ "provider": "deterministic" }`.
 - Cross-lab access is forbidden.
+
+Example compare run response:
+
+```json
+{
+  "agentRun": {
+    "id": "agent_run_compare_...",
+    "mode": "series_compare",
+    "status": "waiting_for_user",
+    "visibleSteps": [
+      { "label": "Resolved compatible observation series" },
+      { "label": "Prepared confirmable compare action" }
+    ],
+    "actions": [
+      {
+        "actionId": "agent_run_action_...",
+        "type": "create_compare_chart_proposal",
+        "status": "requires_confirmation",
+        "label": "Create compare AnalysisView and chart proposal",
+        "params": {
+          "experimentAliases": ["Exp1", "Exp2", "Exp3"],
+          "xField": "reaction_time_min",
+          "yField": "reaction_rate_mol_g_h"
+        }
+      }
+    ],
+    "usage": { "provider": "deterministic" }
+  }
+}
+```
+
+Example source extract run response:
+
+```json
+{
+  "agentRun": {
+    "id": "agent_run_source_...",
+    "mode": "source_extract",
+    "status": "waiting_for_user",
+    "visibleSteps": [
+      { "label": "Searched indexed source documents" },
+      { "label": "Read bounded source range" },
+      { "label": "Validated source extract preview" }
+    ],
+    "actions": [
+      {
+        "actionId": "agent_run_action_...",
+        "type": "create_source_extract_proposal",
+        "status": "requires_confirmation",
+        "params": {
+          "extractType": "component_distribution",
+          "range": "A68:E69"
+        }
+      }
+    ]
+  }
+}
+```
 
 ### `GET /api/agent-runs/:agentRunId`
 
@@ -773,10 +831,10 @@ Response:
 
 ```json
 {
-  "agentRun": {},
+  "agentRun": { "status": "completed" },
   "analysisView": {},
   "chartProposalSet": {},
-  "sourceExtractProposal": {}
+  "sourceExtractProposal": null
 }
 ```
 
@@ -785,6 +843,8 @@ Rules:
 - Reject confirmation if the referenced proposal/view/action is stale or missing.
 - Write both the underlying action audit event and `agent_run.confirm`.
 - Mutations must still preserve import review, proposal review, ChartSpec validation, and manuscript save boundaries.
+- Confirming `create_compare_chart_proposal` returns a new `analysisView` and `chartProposalSet`; the user must still accept/reject proposals and create a ChartSpec before Manuscript insertion.
+- Confirming `create_source_extract_proposal` returns a new `sourceExtractProposal`; the user must still accept/reject it before any source-backed chart proposal is drafted.
 
 ### `POST /api/agent-runs/:agentRunId/cancel`
 

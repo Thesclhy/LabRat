@@ -2,6 +2,10 @@
 
 Use this file to record user requests, meaningful changes, verification results, and notable follow-up items. Keep entries concise, newest first, and include dates.
 
+## 2026-06-19
+
+- Performed Phase 9 hardening for the Agent-first evidence workflow branch. Re-ran `npm run codex:preflight`, full `npm run codex:verify`, `docker compose config` without printing expanded config, and `npm --prefix backend run test:postgres`; verification passed, with the optional Postgres route test skipped because no Postgres test database URL was configured. Updated `doc/plan.md` with current phase status, added AgentRun examples to `doc/saas-api-contract-v0.md`, added `doc/manual-qa-agent-first-workflow.md`, and linked it from README. `package-lock.json` had no remaining metadata diff.
+
 ## 2026-06-18
 
 - Added a minimal Phase 8 Agent-first frontend integration. In server project mode, the existing Lab Rat chat now creates durable `/agent/runs` instead of only calling `/agent/plan`, displays AgentRun visible trace steps, and lets backend-executable AgentRun actions be confirmed through `/api/agent-runs/:id/confirm`; confirmed compare actions reuse the existing chart proposal acceptance and ChartSpec creation path. Legacy `/agent/plan` remains as a fallback for compatibility. Updated frontend server API helpers and focused AgentPanel coverage. Verification: targeted `npm test -- src/data/serverApi.test.js`, targeted `npm test -- src/components/ProjectDashboard.test.jsx`, and full `npm run codex:verify` passed.

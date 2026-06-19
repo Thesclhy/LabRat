@@ -19,15 +19,15 @@ Use this file as the working checklist for long Codex tasks. Update it before st
 
 Objective: Implement `doc/plan.md` Agent-first evidence workflow on `feature/agent-first-evidence-workflow`.
 
-Milestone: Phase 8 minimal Agent-first frontend integration. Existing AgentPanel should use durable AgentRun records for server project chat, display visible trace steps, and confirm AgentRun actions through `/api/agent-runs/:id/confirm` while reusing the existing Chart Review / ChartSpec flow.
+Milestone: Phase 9 documentation and hardening. Stop adding major product features; verify the branch, document current phase status, add manual QA guidance, and leave the working tree clean.
 
 Relevant docs read: `AGENTS.md`, `doc/plan.md`, `doc/PROGRESS.md`, `doc/saas-api-contract-v0.md`, `doc/saas-database-schema-v0.md`, `doc/canonical-data-dictionary.md`, `doc/backend-api-contract.md`, `doc/ai-boundaries.md`, `doc/source-understanding-long-term-plan.md`.
 
-Touched areas: frontend server API helpers, AgentPanel action rendering/execution, focused frontend tests, progress/checklist docs.
+Touched areas: `doc/plan.md`, `doc/PROGRESS.md`, `doc/saas-api-contract-v0.md`, README documentation map, and manual QA checklist.
 
-Verification plan: targeted `serverApi` and `ProjectDashboard` tests for AgentRun helper/confirm flow, then full `npm run codex:verify` before commit when feasible.
+Verification plan: `npm run codex:preflight`, full `npm run codex:verify`, `docker compose config`, and `npm --prefix backend run test:postgres` when feasible.
 
-Open risks: Minimal AgentPanel convergence slice is implemented and verified. Source Explorer, full drawer redesign, Anthropic integration, dataset promotion, arbitrary code execution, direct AI Plotly JSON, and hidden chain-of-thought remain out of scope. Confirmed actions may create reviewable proposals/views only.
+Open risks: This is a hardening/documentation pass only. Source Explorer, full drawer redesign, Anthropic integration, dataset promotion, arbitrary code execution, direct AI Plotly JSON, and hidden chain-of-thought remain out of scope. Confirmed actions may create reviewable proposals/views only.
 
 ## Milestone Checklist Template
 
@@ -45,10 +45,12 @@ Open risks: Minimal AgentPanel convergence slice is implemented and verified. So
 - [x] Keep AI/tool actions proposal-first until explicit user confirmation.
 - [x] Preserve source refs and stale-state metadata across derived views, proposals, ChartSpecs, and manuscript snapshots.
 - [x] Add or update API/schema/data-dictionary docs in the same change when persisted shapes change.
-- [x] Record token/cost/latency assumptions for new AI-backed flows. Anthropic is not planned for this deterministic milestone; usage should remain `{ provider: "deterministic" }`.
-- [x] Keep this milestone deterministic and do not add Anthropic or AgentRun behavior.
+- [x] Record token/cost/latency assumptions for new AI-backed flows. Anthropic is not planned for this deterministic branch slice; usage should remain `{ provider: "deterministic" }`.
+- [x] Keep this milestone deterministic and do not add Anthropic behavior.
 
 ## Recent Checkpoints
+
+- 2026-06-19: Performed Phase 9 hardening pass. Verification passed with preflight, full codex verify, Docker config, and optional Postgres test skip; docs now include phase status and manual QA checklist.
 
 - 2026-06-18: Implemented Phase 8 minimal Agent-first frontend integration. Server project chat now creates durable AgentRuns, shows visible trace steps, confirms backend AgentRun actions, and keeps compare chart review/ChartSpec creation on the existing reviewed path. Verification passed with targeted frontend tests and full `npm run codex:verify`.
 

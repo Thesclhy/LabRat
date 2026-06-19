@@ -118,6 +118,7 @@ The backend scan, normalize, semantic mapping, and chart proposal endpoints are 
 - `doc/ARCHITECTURE.md`: current server-first architecture and compatibility boundaries.
 - `doc/ROADMAP.md`: product roadmap led by the Agent-first evidence workflow.
 - `doc/plan.md`: active Agent-first evidence workflow execution plan.
+- `doc/manual-qa-agent-first-workflow.md`: manual QA checklist for the Agent-first evidence workflow branch.
 - `doc/source-understanding-long-term-plan.md`: long-term source-aware workbook/document understanding architecture.
 - `doc/decisions.md`: durable product and architecture decisions.
 - `doc/task-checklist.md`: working checklist template for long Codex milestones.

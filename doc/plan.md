@@ -4,7 +4,7 @@ This is the active execution plan for the current repository state. Historical c
 
 ## Current Focus
 
-LabRat Blank has moved beyond a button-first import/chart app. The next active milestone is:
+LabRat Blank has moved beyond a button-first import/chart app. The active branch has implemented the first backend/frontend vertical slices of:
 
 ```text
 Agent-first evidence workflow
@@ -21,7 +21,7 @@ The product goal is an AI workflow agent for lab data:
 
 > LabRat should inspect evidence, draft auditable analysis views, propose charts/data actions, and execute only after human confirmation.
 
-This plan supersedes the previous "server workflow hardening" active milestone. Server reliability, Docker/Postgres readiness, and audit/admin usability remain guardrails and verification requirements, but the main product implementation target is now the agent-first evidence workflow.
+This plan supersedes the previous "server workflow hardening" active milestone. Server reliability, Docker/Postgres readiness, and audit/admin usability remain guardrails and verification requirements. The current branch is in Phase 9 hardening: no major new product features should be added until the implemented Phase 1-8 slices are manually QA'd.
 
 For the deeper long-term source architecture, also read `doc/source-understanding-long-term-plan.md`.
 
@@ -40,15 +40,37 @@ Already implemented:
 - Chart Proposal v2 and ChartSpec v1.3 with validated backend field resolution, transforms, axis options, and render style hints.
 - Manuscript chart insertion from durable ChartSpecs, with chart snapshots and `chartView.selectedExperimentIds`.
 - Server-backed project chat planner that returns safe action cards for uploads, supplements, chart proposals, chart interpretation, ChartSpec creation, and data queries.
+- ObservationSeries registry for reaction-rate supplemental observation sets.
+- Series Compare AnalysisViews and AnalysisView-derived chart proposal sets.
+- ChartSpec v1.4 rendering for analysis-view-backed multi-series compare charts.
+- Compare series UI entrypoints and lightweight natural-language compare routing.
+- Source Document Index for uploaded Excel workbook metadata, regions, bounded query, and bounded range reads.
+- Source Extract Proposals for generic ranges and C-number/component distributions with exact source refs.
+- Controlled AgentRun backend foundation with visible trace steps and confirmable deterministic actions.
+- Minimal AgentPanel routing through durable AgentRuns for server project chat.
 
-Main missing pieces:
+Main partial or missing pieces:
 
-- Raw workbook source evidence is not persistently queryable after scan.
-- Supplemental `observationSets` are not yet normalized into a first-class cross-experiment series registry.
-- There is no persisted `AnalysisView` layer between evidence and chart proposals.
-- The project chat planner is still a deterministic action-card router, not a controlled evidence/tool workflow.
-- Anthropic usage/cost is not recorded.
-- Manuscript compare UI exists in seed form, but does not yet provide a polished searchable multi-experiment compare interaction.
+- Phase 8 is only partially complete: the Agent drawer is not fully redesigned, Supplemental Manager direct compare still has a direct path, Source Explorer UI is not implemented, Chart Review origin badges are incomplete, and Overview AgentRun/source evidence cards are not complete.
+- Source extracts can draft source-backed chart proposals after acceptance, but source extract promotion into dataset commits remains deferred.
+- Anthropic integration for AgentRun intent/ranking is intentionally not implemented; deterministic usage is recorded as `{ provider: "deterministic" }`.
+- Anthropic token/cost recording exists only as a contract expectation for future provider-backed runs.
+- Manuscript compare UI exists in seed form, but still needs a polished searchable multi-experiment inspector experience.
+
+## Phase Status
+
+| Phase | Status | Notes |
+| --- | --- | --- |
+| Phase 0 Contracts / Guardrails | Complete for v1 slice | Contracts and guardrail docs describe Source, ObservationSeries, AnalysisView, AgentRun, and ChartSpec v1.4 boundaries. |
+| Phase 1 ObservationSeries Registry | Complete | Reaction-rate supplemental observation sets derive active/stale ObservationSeries. |
+| Phase 2 Series Compare AnalysisViews | Complete | `series_compare` AnalysisViews persist and derive chart proposal sets. |
+| Phase 3 Dynamic Series Chart Rendering | Complete | ChartSpec v1.4 multi-series compare charts render through the generic renderer. |
+| Phase 4 Manuscript Compare UI | Partial | ChartSpec insertion and selected experiment ids work; polished searchable controls remain. |
+| Phase 5 Source Document Index | Complete backend foundation | Excel workbooks persist source docs/regions/index blobs and bounded query/range APIs. |
+| Phase 6 Source Extract Proposals | Complete backend foundation | Source extract proposals preserve source refs and can draft source-backed chart proposals after acceptance. |
+| Phase 7 Controlled AgentRun | Complete backend foundation | Durable AgentRuns support visible deterministic traces and confirmable compare/source-extract actions. |
+| Phase 8 Agent-First Frontend Integration | Partial | Server chat creates AgentRuns and confirms backend actions; broader UI convergence remains. |
+| Phase 9 Documentation And Hardening | Complete for this hardening pass | Verification, documentation cleanup, and manual QA checklist are complete for the current branch review. |
 
 ## Architecture Design
 
