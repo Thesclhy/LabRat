@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import {
   ServerApiError,
   applyServerImportRun,
+  cancelServerAgentRun,
+  confirmServerAgentRun,
+  createServerAgentRun,
   createServerAnalysisView,
   createServerAnalysisViewChartProposal,
   createServerChartSpecFromProposal,
@@ -167,7 +170,10 @@ describe("serverApi", () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ datasetCommit: { id: "commit_supplement" } }))
       .mockResolvedValueOnce(jsonResponse({ schemaVersion: "labrat.dataResolveQuery.v1", viewIntentDraft: {} }))
-      .mockResolvedValueOnce(jsonResponse({ schemaVersion: "labrat.agentPlan.v1", actions: [] }));
+      .mockResolvedValueOnce(jsonResponse({ schemaVersion: "labrat.agentPlan.v1", actions: [] }))
+      .mockResolvedValueOnce(jsonResponse({ agentRun: { id: "agent_run_1", actions: [] } }, { status: 201 }))
+      .mockResolvedValueOnce(jsonResponse({ agentRun: { id: "agent_run_1", status: "completed" } }))
+      .mockResolvedValueOnce(jsonResponse({ agentRun: { id: "agent_run_2", status: "cancelled" } }));
 
     await applyServerImportRun("import_run_2", {
       applyMode: "supplement_import",
@@ -188,6 +194,13 @@ describe("serverApi", () => {
       conversation: [{ role: "user", text: "hello" }],
       selectedContext: { tab: "overview" },
     }, { fetch: fetchImpl });
+    await createServerAgentRun("project_1", {
+      message: "compare reaction rate for Exp1 and Exp2",
+      conversation: [{ role: "user", text: "hello" }],
+      selectedContext: { tab: "overview" },
+    }, { fetch: fetchImpl });
+    await confirmServerAgentRun("agent_run_1", "agent_run_action_1", { fetch: fetchImpl });
+    await cancelServerAgentRun("agent_run_2", { fetch: fetchImpl });
 
     expect(fetchImpl.mock.calls[0][0]).toBe("/api/import-runs/import_run_2/apply");
     expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
@@ -212,6 +225,16 @@ describe("serverApi", () => {
       conversation: [{ role: "user", text: "hello" }],
       selectedContext: { tab: "overview" },
     });
+    expect(fetchImpl.mock.calls[3][0]).toBe("/api/projects/project_1/agent/runs");
+    expect(JSON.parse(fetchImpl.mock.calls[3][1].body)).toEqual({
+      message: "compare reaction rate for Exp1 and Exp2",
+      conversation: [{ role: "user", text: "hello" }],
+      selectedContext: { tab: "overview" },
+      modeHint: "auto",
+    });
+    expect(fetchImpl.mock.calls[4][0]).toBe("/api/agent-runs/agent_run_1/confirm");
+    expect(JSON.parse(fetchImpl.mock.calls[4][1].body)).toEqual({ actionId: "agent_run_action_1" });
+    expect(fetchImpl.mock.calls[5][0]).toBe("/api/agent-runs/agent_run_2/cancel");
   });
 
   it("routes mapping and chart proposal persistence", async () => {

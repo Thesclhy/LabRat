@@ -225,6 +225,27 @@ export function planServerProjectAgent(projectId, request = {}, options = {}) {
   }, options);
 }
 
+export function createServerAgentRun(projectId, request = {}, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before asking LabRat to run a project workflow.");
+  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/agent/runs`, {
+    message: request.message || "",
+    conversation: request.conversation || [],
+    selectedContext: request.selectedContext || {},
+    modeHint: request.modeHint || "auto",
+  }, options);
+}
+
+export function confirmServerAgentRun(agentRunId, actionId, options = {}) {
+  if (!agentRunId) throw new ServerApiError("Select an AgentRun before confirming an action.");
+  if (!actionId) throw new ServerApiError("Select an AgentRun action before confirming it.");
+  return serverJson(`/api/agent-runs/${encodeURIComponent(agentRunId)}/confirm`, { actionId }, options);
+}
+
+export function cancelServerAgentRun(agentRunId, options = {}) {
+  if (!agentRunId) throw new ServerApiError("Select an AgentRun before cancelling it.");
+  return serverJson(`/api/agent-runs/${encodeURIComponent(agentRunId)}/cancel`, {}, options);
+}
+
 export function createServerAnalysisView(projectId, request = {}, options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before creating an analysis view.");
   return serverJson(`/api/projects/${encodeURIComponent(projectId)}/analysis-views`, {

@@ -929,23 +929,29 @@ describe("RefreshWorkbookModal", () => {
 });
 
 describe("AgentPanel", () => {
-  it("plans server-backed project actions and renders a confirmable action card", async () => {
+  it("creates server-backed AgentRuns and renders a confirmable action card", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        schemaVersion: "labrat.agentPlan.v1",
-        reply: "I can add a supplemental workbook after you choose a file.",
-        actions: [{
-          actionId: "agent_action_1",
-          type: "upload_supplement",
-          status: "requires_confirmation",
-          label: "Add supplemental workbook",
-          description: "Choose a workbook and review its relationship to existing experiments.",
-          requiresFile: true,
-          requiresReview: true,
-          params: { targetExperimentAliases: ["Exp30"] },
+        agentRun: {
+          id: "agent_run_1",
+          schemaVersion: "labrat.agentRun.v1",
+          status: "waiting_for_user",
+          mode: "action_plan",
+          visibleSteps: [{ stepId: "step_1", label: "Created compatibility action plan", details: { actionCount: 1 } }],
+          actions: [{
+            actionId: "agent_action_1",
+            type: "upload_supplement",
+            status: "requires_confirmation",
+            label: "Add supplemental workbook",
+            description: "Choose a workbook and review its relationship to existing experiments.",
+            requiresFile: true,
+            requiresReview: true,
+            params: { targetExperimentAliases: ["Exp30"] },
+            warnings: [],
+          }],
           warnings: [],
-        }],
+        },
       }),
     });
     const originalFetch = global.fetch;
@@ -976,9 +982,10 @@ describe("AgentPanel", () => {
       fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
 
       await waitFor(() => expect(screen.getByText("Add supplemental workbook")).toBeTruthy());
+      expect(screen.getByText("Created compatibility action plan")).toBeTruthy();
       expect(screen.getByText("Target: Exp30")).toBeTruthy();
       expect(screen.getByRole("button", { name: "Choose file" })).toBeTruthy();
-      expect(fetchMock).toHaveBeenCalledWith("/api/projects/project_1/agent/plan", expect.objectContaining({ method: "POST" }));
+      expect(fetchMock).toHaveBeenCalledWith("/api/projects/project_1/agent/runs", expect.objectContaining({ method: "POST" }));
     } finally {
       global.fetch = originalFetch;
     }
@@ -988,56 +995,50 @@ describe("AgentPanel", () => {
     localStorage.removeItem("labrat_blank_chat_history_v1_react");
     const onProjectStateLoaded = vi.fn();
     const fetchMock = vi.fn(async (url, init = {}) => {
-      if (url === "/api/projects/project_1/agent/plan") {
+      if (url === "/api/projects/project_1/agent/runs") {
         return jsonResponse({
-          schemaVersion: "labrat.agentPlan.v1",
-          reply: "I prepared a compare action.",
-          actions: [{
-            actionId: "agent_compare_1",
-            type: "compare_series",
-            status: "requires_confirmation",
-            label: "Compare reaction-rate series",
-            description: "Create a reviewed AnalysisView, then queue one chart proposal.",
-            requiresFile: false,
-            requiresReview: true,
-            params: {
-              prompt: "compare reaction rate for Exp30 and Exp31",
-              viewType: "series_compare",
-              title: "Reaction rate comparison",
-              seriesKind: "reaction_rate_time_series",
-              targetExperimentAliases: ["Exp30", "Exp31"],
-              experimentIds: ["exp_30", "exp_31"],
-              xField: "reaction_time_min",
-              yField: "adjusted_rate_m_s",
-              groupBy: "experiment",
-            },
+          agentRun: {
+            id: "agent_run_compare_1",
+            schemaVersion: "labrat.agentRun.v1",
+            status: "waiting_for_user",
+            mode: "series_compare",
+            visibleSteps: [
+              { stepId: "step_series", label: "Resolved compatible observation series", details: { experimentLabels: ["Exp30", "Exp31"] } },
+              { stepId: "step_action", label: "Prepared confirmable compare action", details: { actionType: "create_compare_chart_proposal" } },
+            ],
+            actions: [{
+              actionId: "agent_compare_1",
+              type: "create_compare_chart_proposal",
+              status: "requires_confirmation",
+              label: "Compare reaction-rate series",
+              description: "Create a reviewed AnalysisView, then queue one chart proposal.",
+              requiresReview: true,
+              params: {
+                prompt: "compare reaction rate for Exp30 and Exp31",
+                title: "Reaction rate comparison",
+                seriesKind: "reaction_rate_time_series",
+                experimentAliases: ["Exp30", "Exp31"],
+                experimentIds: ["exp_30", "exp_31"],
+                xField: "reaction_time_min",
+                yField: "adjusted_rate_m_s",
+                groupBy: "experiment",
+              },
+              warnings: [],
+            }],
             warnings: [],
-          }],
-        });
-      }
-      if (url === "/api/projects/project_1/analysis-views") {
-        expect(JSON.parse(init.body)).toEqual({
-          viewType: "series_compare",
-          title: "Reaction rate comparison",
-          spec: {
-            seriesKind: "reaction_rate_time_series",
-            experimentIds: ["exp_30", "exp_31"],
-            xField: "reaction_time_min",
-            yField: "adjusted_rate_m_s",
-            groupBy: "experiment",
           },
         });
+      }
+      if (url === "/api/agent-runs/agent_run_compare_1/confirm") {
+        expect(JSON.parse(init.body)).toEqual({ actionId: "agent_compare_1" });
         return jsonResponse({
+          agentRun: { id: "agent_run_compare_1", status: "completed" },
           analysisView: {
             id: "analysis_view_compare_1",
             viewType: "series_compare",
             title: "Reaction rate comparison",
             spec: { experimentIds: ["exp_30", "exp_31"] },
           },
-        }, { status: 201 });
-      }
-      if (url === "/api/analysis-views/analysis_view_compare_1/chart-proposal") {
-        return jsonResponse({
           chartProposalSet: {
             id: "chart_set_compare_1",
             datasetCommitId: "commit_1",
@@ -1052,7 +1053,8 @@ describe("AgentPanel", () => {
               warnings: [],
             },
           },
-        }, { status: 201 });
+          sourceExtractProposal: null,
+        });
       }
       if (url === "/api/projects/project_1/state") {
         return jsonResponse({
@@ -1096,8 +1098,9 @@ describe("AgentPanel", () => {
       fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
 
       await waitFor(() => expect(screen.getByText("Compare reaction-rate series")).toBeTruthy());
+      expect(screen.getByText("Resolved compatible observation series")).toBeTruthy();
       expect(screen.getByText("Target: Exp30, Exp31")).toBeTruthy();
-      fireEvent.click(screen.getByRole("button", { name: "Prepare" }));
+      fireEvent.click(screen.getByRole("button", { name: "Confirm agent action" }));
 
       await waitFor(() => expect(screen.getByRole("button", { name: "Accept proposal" })).toBeTruthy());
       expect(screen.getByText("Chart: Reaction rate comparison")).toBeTruthy();

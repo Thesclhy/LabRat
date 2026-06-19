@@ -28,6 +28,8 @@ import { uploadSupplementalFilesAsBatch } from "./data/supplementalBatchUpload.j
 import { scanExcelFolder } from "./data/workbookScanner.js";
 import {
   applyServerImportRun,
+  confirmServerAgentRun,
+  createServerAgentRun,
   createServerAnalysisView,
   createServerAnalysisViewChartProposal,
   createServerChartSpecFromProposal,
@@ -2111,11 +2113,17 @@ function AgentActionCard({ action, projectState, busyActionId, onChooseFile, onU
   const preview = action.preview || null;
   const fileOptions = asArray(params.existingFiles);
   const isBusy = busyActionId === action.actionId || ["previewing", "executing", "accepting_proposal", "creating_chart_spec"].includes(action.status);
-  const canConfirm = ["ready_to_apply", "ready_to_persist", "ready_to_create"].includes(action.status);
-  const hasChatChartProposal = ["interpret_chart", "compare_series"].includes(action.type) && action.chartProposalSetId && action.proposalId;
+  const isAgentRunConfirmable = Boolean(action.agentRunId)
+    && ["create_compare_chart_proposal", "create_source_extract_proposal"].includes(action.type)
+    && action.status === "requires_confirmation";
+  const canConfirm = isAgentRunConfirmable || ["ready_to_apply", "ready_to_persist", "ready_to_create"].includes(action.status);
+  const hasChatChartProposal = ["interpret_chart", "compare_series", "create_compare_chart_proposal"].includes(action.type) && action.chartProposalSetId && action.proposalId;
   const proposalAccepted = action.proposalStatus === "accepted" || ["proposal_accepted", "chart_spec_created"].includes(action.status);
   const chartSpecCreated = action.status === "chart_spec_created" || Boolean(action.chartSpecId);
   const warnings = [...asArray(action.warnings), ...asArray(preview?.warnings)];
+  const targetAliases = asArray(params.targetExperimentAliases).length
+    ? asArray(params.targetExperimentAliases)
+    : asArray(params.experimentAliases);
   return (
     <div className={`agent-action-card is-${action.status || "proposed"}`}>
       <div className="agent-action-head">
@@ -2123,7 +2131,7 @@ function AgentActionCard({ action, projectState, busyActionId, onChooseFile, onU
         <span>{action.status || "proposed"}</span>
       </div>
       {action.description && <p>{action.description}</p>}
-      {params.targetExperimentAliases?.length > 0 && <small>Target: {params.targetExperimentAliases.join(", ")}</small>}
+      {targetAliases.length > 0 && <small>Target: {targetAliases.join(", ")}</small>}
       {params.prompt && <small>Prompt: {params.prompt}</small>}
       {preview?.summary && (
         <div className="agent-action-summary">
@@ -2179,7 +2187,7 @@ function AgentActionCard({ action, projectState, busyActionId, onChooseFile, onU
         )}
         {canConfirm && (
           <button type="button" className="primary" disabled={isBusy} onClick={() => onConfirm?.(action.actionId)}>
-            {isBusy ? "Applying..." : action.type === "create_chart_spec_from_proposal" ? "Create ChartSpec" : action.type?.includes("chart") ? "Confirm chart action" : "Confirm apply"}
+            {isBusy ? "Applying..." : isAgentRunConfirmable ? "Confirm agent action" : action.type === "create_chart_spec_from_proposal" ? "Create ChartSpec" : action.type?.includes("chart") ? "Confirm chart action" : "Confirm apply"}
           </button>
         )}
         {hasChatChartProposal && !chartSpecCreated && (
@@ -2610,6 +2618,41 @@ export function AgentPanel({
     setBusyActionId(actionId);
     updateActionInHistory(actionId, { status: "executing", error: "" });
     try {
+      if (action.agentRunId) {
+        const response = await confirmServerAgentRun(action.agentRunId, actionId);
+        const chartProposalSet = response.chartProposalSet || null;
+        const proposalPayload = chartProposalSet?.payload || null;
+        const proposal = asArray(proposalPayload?.proposals)[0] || null;
+        const sourceExtractProposal = response.sourceExtractProposal || null;
+        updateActionInHistory(actionId, {
+          status: "completed",
+          analysisViewId: response.analysisView?.id || action.analysisViewId || "",
+          analysisView: response.analysisView || action.analysisView || null,
+          chartProposalSetId: chartProposalSet?.id || "",
+          chartProposalSetPayload: chartProposalSet?.payload ? payloadWithServerId(chartProposalSet, "proposalSetId") : null,
+          proposalId: proposal?.proposalId || "",
+          proposalStatus: proposal?.status || "proposed",
+          sourceExtractProposalId: sourceExtractProposal?.id || "",
+          preview: {
+            ...(action.preview || {}),
+            chartTitle: proposal?.title || response.analysisView?.title || sourceExtractProposal?.preview?.chartIntentDraft?.title || "",
+            message: chartProposalSet?.id
+              ? `Queued chart proposal set ${chartProposalSet.id}.`
+              : sourceExtractProposal?.id
+                ? `Created source extract proposal ${sourceExtractProposal.id}.`
+                : "AgentRun action completed.",
+            warnings: [
+              ...asArray(response.agentRun?.warnings),
+              ...asArray(response.chartProposalSet?.payload?.warnings),
+              ...asArray(sourceExtractProposal?.warnings),
+            ],
+          },
+          error: "",
+        });
+        await reloadProjectAfterAgentAction();
+        return;
+      }
+
       if (action.type === "upload_master_table") {
         await applyServerImportRun(action.importRunId, {
           applyMode: "append",
@@ -2708,7 +2751,7 @@ export function AgentPanel({
     if (serverAgentEnabled && !meta?.source) {
       setBusy(true);
       try {
-        const plan = await planServerProjectAgent(activeProjectId, {
+        const response = await createServerAgentRun(activeProjectId, {
           message: text,
           conversation: next.slice(-10).map((message) => ({
             role: message.role === "assistant" ? "assistant" : "user",
@@ -2720,14 +2763,44 @@ export function AgentPanel({
             selectedChartTitle: selectedChartContext?.title || "",
           },
         });
-        const actions = asArray(plan.actions);
+        const agentRun = response.agentRun || {};
+        const actions = asArray(agentRun.actions).map((action) => ({
+          ...action,
+          agentRunId: agentRun.id,
+        }));
+        const warningText = asArray(agentRun.warnings).map((warning) => warning.message || warning.code).filter(Boolean).join(" ");
+        const reply = actions.length
+          ? "I prepared an AgentRun action. Review the trace and confirm before anything changes."
+          : warningText || "I recorded an AgentRun, but I need more detail before preparing an action.";
         setHistory([...next, {
           role: "assistant",
-          text: plan.reply || (actions.length ? "I prepared a project action for review." : "I could not identify a project action yet."),
+          text: reply,
+          agentRun,
           actions,
         }]);
       } catch (err) {
-        setHistory([...next, { role: "assistant", text: `Project agent failed: ${err.message || String(err)}` }]);
+        try {
+          const plan = await planServerProjectAgent(activeProjectId, {
+            message: text,
+            conversation: next.slice(-10).map((message) => ({
+              role: message.role === "assistant" ? "assistant" : "user",
+              text: message.text,
+            })),
+            selectedContext: {
+              tab: selectedChartContext ? "manuscript_chart" : "project",
+              selectedExperimentLabel: selected?.label || "",
+              selectedChartTitle: selectedChartContext?.title || "",
+            },
+          });
+          const actions = asArray(plan.actions);
+          setHistory([...next, {
+            role: "assistant",
+            text: plan.reply || (actions.length ? "I prepared a project action for review." : "I could not identify a project action yet."),
+            actions,
+          }]);
+        } catch (fallbackErr) {
+          setHistory([...next, { role: "assistant", text: `Project agent failed: ${fallbackErr.message || err.message || String(fallbackErr || err)}` }]);
+        }
       } finally {
         setBusy(false);
       }
@@ -2861,6 +2934,18 @@ export function AgentPanel({
         <div className="msg-body">
           <span>{m.role === "user" ? "You" : "the lab rat"}</span>
           <p>{m.text}</p>
+          {m.agentRun?.visibleSteps?.length > 0 && (
+            <div className="backend-workflow-steps agent-run-steps">
+              {m.agentRun.visibleSteps.map((step, stepIndex) => (
+                <div className="backend-workflow-step is-done" key={step.stepId || `${step.label}-${stepIndex}`}>
+                  <span>{step.label}</span>
+                  {step.details && Object.keys(step.details).length > 0 && (
+                    <small>{Object.entries(step.details).slice(0, 3).map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(", ") : String(value ?? "")}`).join(" | ")}</small>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
           {asArray(m.actions).map((action) => (
             <AgentActionCard
               key={action.actionId}
