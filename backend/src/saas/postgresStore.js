@@ -309,6 +309,32 @@ function sourceExtractProposalFromRow(row) {
   };
 }
 
+function agentRunFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    schemaVersion: row.schema_version || "labrat.agentRun.v1",
+    status: row.status,
+    mode: row.mode,
+    userMessage: row.user_message || "",
+    selectedContext: row.selected_context || {},
+    visibleSteps: row.visible_steps || [],
+    toolTrace: row.tool_trace || [],
+    analysisViewId: row.analysis_view_id,
+    proposalRefs: row.proposal_refs || [],
+    actions: row.actions || [],
+    usage: row.usage || {},
+    warnings: row.warnings || [],
+    error: row.error,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    createdBy: row.created_by,
+    updatedBy: row.updated_by,
+  };
+}
+
 function mappingSetFromRow(row) {
   if (!row) return null;
   return {
@@ -1167,6 +1193,87 @@ export class PostgresSaasStore {
       ],
     );
     return sourceExtractProposalFromRow(result.rows[0]);
+  }
+
+  async createAgentRun(input) {
+    const result = await this.query(
+      `insert into agent_runs
+       (id, lab_id, project_id, schema_version, status, mode, user_message, selected_context, visible_steps, tool_trace, analysis_view_id, proposal_refs, actions, usage, warnings, error, created_at, updated_at, created_by, updated_by)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, now(), now(), $17, $17)
+       returning *`,
+      [
+        input.id || makeId("agent_run"),
+        input.labId,
+        input.projectId,
+        input.schemaVersion || "labrat.agentRun.v1",
+        input.status || "waiting_for_user",
+        input.mode || null,
+        input.userMessage || "",
+        jsonb(input.selectedContext || {}),
+        jsonb(input.visibleSteps || [], []),
+        jsonb(input.toolTrace || [], []),
+        input.analysisViewId || null,
+        jsonb(input.proposalRefs || [], []),
+        jsonb(input.actions || [], []),
+        jsonb(input.usage || {}),
+        jsonb(input.warnings || [], []),
+        nullableJsonb(input.error || null),
+        input.createdBy,
+      ],
+    );
+    return agentRunFromRow(result.rows[0]);
+  }
+
+  async findAgentRunById(id) {
+    const result = await this.query("select * from agent_runs where id = $1", [id]);
+    return agentRunFromRow(result.rows[0]);
+  }
+
+  async listAgentRuns({ projectId }) {
+    const result = await this.query(
+      "select * from agent_runs where project_id = $1 order by updated_at desc",
+      [projectId],
+    );
+    return result.rows.map(agentRunFromRow);
+  }
+
+  async updateAgentRun(id, changes) {
+    const current = await this.findAgentRunById(id);
+    if (!current) return null;
+    const result = await this.query(
+      `update agent_runs
+       set status = $2,
+           mode = $3,
+           selected_context = $4,
+           visible_steps = $5,
+           tool_trace = $6,
+           analysis_view_id = $7,
+           proposal_refs = $8,
+           actions = $9,
+           usage = $10,
+           warnings = $11,
+           error = $12,
+           updated_by = coalesce($13, updated_by),
+           updated_at = now()
+       where id = $1
+       returning *`,
+      [
+        id,
+        changes.status ?? current.status,
+        changes.mode ?? current.mode,
+        jsonb(changes.selectedContext ?? current.selectedContext ?? {}),
+        jsonb(changes.visibleSteps ?? current.visibleSteps ?? [], []),
+        jsonb(changes.toolTrace ?? current.toolTrace ?? [], []),
+        changes.analysisViewId !== undefined ? changes.analysisViewId : current.analysisViewId,
+        jsonb(changes.proposalRefs ?? current.proposalRefs ?? [], []),
+        jsonb(changes.actions ?? current.actions ?? [], []),
+        jsonb(changes.usage ?? current.usage ?? {}),
+        jsonb(changes.warnings ?? current.warnings ?? [], []),
+        nullableJsonb(changes.error !== undefined ? changes.error : current.error),
+        changes.updatedBy || null,
+      ],
+    );
+    return agentRunFromRow(result.rows[0]);
   }
 
   async createMappingSet(input) {

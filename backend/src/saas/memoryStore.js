@@ -36,6 +36,7 @@ export class MemorySaasStore {
     this.sourceRegions = new Map();
     this.sourceIndexBlobs = new Map();
     this.sourceExtractProposals = new Map();
+    this.agentRuns = new Map();
     this.mappingSets = new Map();
     this.chartProposalSets = new Map();
     this.chartSpecs = new Map();
@@ -724,6 +725,64 @@ export class MemorySaasStore {
     proposal.updatedAt = nowIso();
     proposal.updatedBy = changes.updatedBy || proposal.updatedBy;
     return copy(proposal);
+  }
+
+  async createAgentRun(input) {
+    const createdAt = nowIso();
+    const run = {
+      id: input.id || makeId("agent_run"),
+      labId: input.labId,
+      projectId: input.projectId,
+      schemaVersion: input.schemaVersion || "labrat.agentRun.v1",
+      status: input.status || "waiting_for_user",
+      mode: input.mode || null,
+      userMessage: input.userMessage || "",
+      selectedContext: copy(input.selectedContext) || {},
+      visibleSteps: copy(input.visibleSteps) || [],
+      toolTrace: copy(input.toolTrace) || [],
+      analysisViewId: input.analysisViewId || null,
+      proposalRefs: copy(input.proposalRefs) || [],
+      actions: copy(input.actions) || [],
+      usage: copy(input.usage) || {},
+      warnings: copy(input.warnings) || [],
+      error: copy(input.error) || null,
+      createdAt,
+      updatedAt: createdAt,
+      createdBy: input.createdBy,
+      updatedBy: input.createdBy,
+    };
+    this.agentRuns.set(run.id, run);
+    return copy(run);
+  }
+
+  async findAgentRunById(id) {
+    return copy(this.agentRuns.get(id) || null);
+  }
+
+  async listAgentRuns({ projectId }) {
+    return [...this.agentRuns.values()]
+      .filter((run) => run.projectId === projectId)
+      .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
+      .map(copy);
+  }
+
+  async updateAgentRun(id, changes) {
+    const run = this.agentRuns.get(id);
+    if (!run) return null;
+    if (changes.status != null) run.status = String(changes.status);
+    if (changes.mode != null) run.mode = changes.mode;
+    if (changes.selectedContext != null) run.selectedContext = copy(changes.selectedContext) || {};
+    if (changes.visibleSteps != null) run.visibleSteps = copy(changes.visibleSteps) || [];
+    if (changes.toolTrace != null) run.toolTrace = copy(changes.toolTrace) || [];
+    if (changes.analysisViewId !== undefined) run.analysisViewId = changes.analysisViewId || null;
+    if (changes.proposalRefs != null) run.proposalRefs = copy(changes.proposalRefs) || [];
+    if (changes.actions != null) run.actions = copy(changes.actions) || [];
+    if (changes.usage != null) run.usage = copy(changes.usage) || {};
+    if (changes.warnings != null) run.warnings = copy(changes.warnings) || [];
+    if (changes.error !== undefined) run.error = copy(changes.error) || null;
+    run.updatedAt = nowIso();
+    run.updatedBy = changes.updatedBy || run.updatedBy;
+    return copy(run);
   }
 
   async createMappingSet(input) {

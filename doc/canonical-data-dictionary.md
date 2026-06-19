@@ -440,7 +440,7 @@ Analysis Views are drafts/proposals; they do not mutate dataset commits.
 
 ## Agent Run
 
-A planned controlled workflow trace from a user goal to retrieved evidence, drafted views/proposals, and user-confirmed execution.
+A controlled workflow trace from a user goal to retrieved evidence, drafted views/proposals, and user-confirmed execution. The Phase 7 backend foundation persists deterministic AgentRuns and supports confirmable actions for reaction-rate series comparison and source extract proposal creation.
 
 Agent runs preserve:
 
@@ -452,7 +452,7 @@ Agent runs preserve:
 - warnings and errors
 - AI provider/model/token/cost metadata when available
 
-AgentRun traces are visible audit/workflow records, not hidden chain-of-thought.
+AgentRun traces are visible audit/workflow records, not hidden chain-of-thought. Planning may record the AgentRun and audit trace, but it must not create AnalysisViews, chart proposal sets, source extract proposals, dataset commits, ChartSpecs, or manuscript blocks until the user confirms a listed action. Confirmed actions still create reviewable artifacts and must not bypass Chart Review, Source Extract review, ChartSpec validation, or Manuscript save boundaries.
 
 ## Semantic Mapping
 

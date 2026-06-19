@@ -77,13 +77,15 @@ function makeReactionRateWorkbookBlob(rows = [
   });
 }
 
-function makeComponentDistributionWorkbookBlob() {
+function makeComponentDistributionWorkbookBlob({ headerRowNumber = 1 } = {}) {
   const workbook = XLSX.utils.book_new();
-  const worksheet = XLSX.utils.aoa_to_sheet([
+  const rows = Array.from({ length: Math.max(0, headerRowNumber - 1) }, () => []);
+  rows.push(
     ["Label", "C1", "C2", "C3", "C4"],
     ["Overall tots", 5, 12.5, 21, 9.5],
     ["Light fraction", 1, 2, 3, 4],
-  ]);
+  );
+  const worksheet = XLSX.utils.aoa_to_sheet(rows);
   XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
   const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
   return new Blob([buffer], {
@@ -1196,6 +1198,165 @@ test("series compare AnalysisView drafts a reviewable chart proposal set", async
   assert.equal(chartSpecBody.chartSpec.spec.seriesScope.yField, "reaction_rate_mol_g_h");
   assert.deepEqual(chartSpecBody.chartSpec.spec.compatibleExperimentIds, [exp30.experimentId, exp31.experimentId]);
   assert.equal(chartSpecBody.chartSpec.spec.series.length, 2);
+});
+
+test("AgentRun compare action stays confirmable until it creates an AnalysisView chart proposal", async () => {
+  const labs = await (await jsonFetch("/api/labs")).json();
+  const labId = labs.labs[0].labId;
+  const project = await (await jsonFetch("/api/projects", {
+    method: "POST",
+    body: { labId, name: "AgentRun Compare Project" },
+  })).json();
+
+  const master = await uploadAndCreateImportRun(project.project.id, makeWorkbookBlob([
+    ["Exp1", 250, 14, 0.28],
+    ["Exp2", 260, 10, 0.44],
+    ["Exp3", 270, 12, 0.31],
+  ]), "MasterTable.xlsx");
+  const masterApply = await normalizeAndApplyImportRun(master.importRun);
+  const experiments = masterApply.apply.datasetCommit.datasetPayload.genericImports[0].experiments;
+  const experimentIds = experiments.map((experiment) => experiment.experimentId);
+
+  for (const [filename, rows] of [
+    ["Reaction_Rate_Exp1.xlsx", [[0, 0], [10, 1.1], [20, 1.7]]],
+    ["Reaction_Rate_Exp2.xlsx", [[0, 0], [10, 1.3], [20, 1.9]]],
+    ["Reaction_Rate_Exp3.xlsx", [[0, 0], [10, 0.9], [20, 1.4]]],
+  ]) {
+    const supplement = await uploadAndCreateImportRun(project.project.id, makeReactionRateWorkbookBlob(rows), filename);
+    await normalizeImportRun(supplement.importRun);
+    const relationshipBody = await (await jsonFetch(`/api/import-runs/${supplement.importRun.id}/relationship-preview`, {
+      method: "POST",
+      body: {},
+    })).json();
+    const applyResponse = await jsonFetch(`/api/import-runs/${supplement.importRun.id}/apply`, {
+      method: "POST",
+      body: {
+        applyMode: "supplement_import",
+        relationshipDecision: relationshipBody.proposals[0],
+        reviewNote: `Attach ${filename}.`,
+      },
+    });
+    assert.equal(applyResponse.status, 200);
+  }
+
+  const runResponse = await jsonFetch(`/api/projects/${project.project.id}/agent/runs`, {
+    method: "POST",
+    body: { message: "compare reaction rate for Exp1, Exp2, Exp3" },
+  });
+  assert.equal(runResponse.status, 201);
+  const runBody = await runResponse.json();
+  assert.equal(runBody.agentRun.schemaVersion, "labrat.agentRun.v1");
+  assert.equal(runBody.agentRun.mode, "series_compare");
+  assert.equal(runBody.agentRun.status, "waiting_for_user");
+  assert.equal(runBody.agentRun.usage.provider, "deterministic");
+  assert.equal(JSON.stringify(runBody).includes("cellGrid"), false);
+  assert.equal(runBody.agentRun.actions.length, 1);
+  const action = runBody.agentRun.actions[0];
+  assert.equal(action.type, "create_compare_chart_proposal");
+  assert.equal(action.status, "requires_confirmation");
+  assert.deepEqual(action.params.experimentAliases, ["Exp1", "Exp2", "Exp3"]);
+  assert.deepEqual(action.params.experimentIds, experimentIds);
+
+  const preConfirmState = await (await jsonFetch(`/api/projects/${project.project.id}/state`)).json();
+  assert.equal(preConfirmState.agentRuns.some((run) => run.id === runBody.agentRun.id), true);
+  assert.equal(preConfirmState.analysisViews.some((view) => view.spec?.experimentIds?.length === 3), false);
+  assert.equal(preConfirmState.chartProposalSets.some((set) => set.payload?.origin === "agent_run"), false);
+
+  const fetched = await (await jsonFetch(`/api/agent-runs/${runBody.agentRun.id}`)).json();
+  assert.equal(fetched.agentRun.id, runBody.agentRun.id);
+  assert.equal(fetched.agentRun.visibleSteps.some((step) => /Prepared/.test(step.label)), true);
+
+  const confirmResponse = await jsonFetch(`/api/agent-runs/${runBody.agentRun.id}/confirm`, {
+    method: "POST",
+    body: { actionId: action.actionId },
+  });
+  assert.equal(confirmResponse.status, 200);
+  const confirmBody = await confirmResponse.json();
+  assert.equal(confirmBody.agentRun.status, "completed");
+  assert.equal(confirmBody.agentRun.actions[0].status, "completed");
+  assert.equal(confirmBody.analysisView.viewType, "series_compare");
+  assert.deepEqual(confirmBody.analysisView.spec.experimentIds, experimentIds);
+  assert.equal(confirmBody.chartProposalSet.payload.origin, "agent_run");
+  assert.equal(confirmBody.chartProposalSet.payload.agentRunId, runBody.agentRun.id);
+  assert.equal(confirmBody.chartProposalSet.payload.analysisViewId, confirmBody.analysisView.id);
+  assert.equal(confirmBody.chartProposalSet.payload.proposals[0].series.length, 3);
+
+  const secondConfirm = await jsonFetch(`/api/agent-runs/${runBody.agentRun.id}/confirm`, {
+    method: "POST",
+    body: { actionId: action.actionId },
+  });
+  assert.equal(secondConfirm.status, 409);
+
+  const auditEvents = await store.listAuditEvents({ projectId: project.project.id });
+  assert.equal(auditEvents.some((event) => event.action === "agent_run.create"), true);
+  assert.equal(auditEvents.some((event) => event.action === "agent_run.confirm"), true);
+  assert.equal(auditEvents.some((event) => event.action === "chart_proposal_set.create" && event.metadata?.agentRunId === runBody.agentRun.id), true);
+});
+
+test("AgentRun source extract action proposes bounded source evidence without charting directly", async () => {
+  const labs = await (await jsonFetch("/api/labs")).json();
+  const labId = labs.labs[0].labId;
+  const ownerCookie = cookie;
+  const project = await (await jsonFetch("/api/projects", {
+    method: "POST",
+    body: { labId, name: "AgentRun Source Project" },
+  })).json();
+  await uploadAndCreateImportRun(
+    project.project.id,
+    makeComponentDistributionWorkbookBlob({ headerRowNumber: 68 }),
+    "Calculation_Exp30.xlsx",
+  );
+
+  const runResponse = await jsonFetch(`/api/projects/${project.project.id}/agent/runs`, {
+    method: "POST",
+    body: { message: "use Overall tots row 69 to plot Exp30 carbon number distribution" },
+  });
+  assert.equal(runResponse.status, 201);
+  const runBody = await runResponse.json();
+  assert.equal(runBody.agentRun.mode, "source_extract");
+  assert.equal(runBody.agentRun.status, "waiting_for_user");
+  assert.equal(runBody.agentRun.actions.length, 1);
+  assert.equal(JSON.stringify(runBody).includes("cellGrid"), false);
+  const action = runBody.agentRun.actions[0];
+  assert.equal(action.type, "create_source_extract_proposal");
+  assert.equal(action.params.extractType, "component_distribution");
+  assert.match(action.params.range, /68:.*69|A68:E69/);
+
+  cookie = "";
+  const unauthenticatedRead = await jsonFetch(`/api/agent-runs/${runBody.agentRun.id}`);
+  assert.equal(unauthenticatedRead.status, 401);
+  cookie = ownerCookie;
+
+  const confirmResponse = await jsonFetch(`/api/agent-runs/${runBody.agentRun.id}/confirm`, {
+    method: "POST",
+    body: { actionId: action.actionId },
+  });
+  assert.equal(confirmResponse.status, 200);
+  const confirmBody = await confirmResponse.json();
+  assert.equal(confirmBody.agentRun.status, "completed");
+  assert.equal(confirmBody.sourceExtractProposal.status, "proposed");
+  assert.equal(confirmBody.sourceExtractProposal.extractType, "component_distribution");
+  assert.deepEqual(confirmBody.sourceExtractProposal.preview.rows.map((row) => row.values.carbon_number), [1, 2, 3, 4]);
+  assert.equal(confirmBody.chartProposalSet, null);
+
+  const cancelableResponse = await jsonFetch(`/api/projects/${project.project.id}/agent/runs`, {
+    method: "POST",
+    body: { message: "show project status" },
+  });
+  assert.equal(cancelableResponse.status, 201);
+  const cancelableBody = await cancelableResponse.json();
+  const cancelResponse = await jsonFetch(`/api/agent-runs/${cancelableBody.agentRun.id}/cancel`, {
+    method: "POST",
+    body: {},
+  });
+  assert.equal(cancelResponse.status, 200);
+  const cancelBody = await cancelResponse.json();
+  assert.equal(cancelBody.agentRun.status, "cancelled");
+
+  const listBody = await (await jsonFetch(`/api/projects/${project.project.id}/agent/runs`)).json();
+  assert.equal(listBody.schemaVersion, "labrat.agentRunList.v1");
+  assert.equal(listBody.agentRuns.some((run) => run.id === runBody.agentRun.id), true);
+  assert.equal(listBody.agentRuns.some((run) => run.id === cancelableBody.agentRun.id && run.status === "cancelled"), true);
 });
 
 test("supplemental import batch processes multiple workbooks to review and streams status", async () => {

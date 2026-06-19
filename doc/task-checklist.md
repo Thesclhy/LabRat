@@ -19,15 +19,15 @@ Use this file as the working checklist for long Codex tasks. Update it before st
 
 Objective: Implement `doc/plan.md` Agent-first evidence workflow on `feature/agent-first-evidence-workflow`.
 
-Milestone: Phase 6 Source Extract Proposals backend foundation. Source regions/ranges should produce reviewable structured extract previews with exact source refs, persist source extract proposals, record accept/reject decisions, and let accepted extracts draft source-backed chart proposal sets without mutating dataset commits.
+Milestone: Phase 7 Controlled AgentRun backend foundation. Project chat goals should create durable AgentRun records with visible trace steps and confirmable actions, while planning remains read-only and mutations happen only through confirm endpoints.
 
 Relevant docs read: `AGENTS.md`, `doc/plan.md`, `doc/PROGRESS.md`, `doc/saas-api-contract-v0.md`, `doc/saas-database-schema-v0.md`, `doc/canonical-data-dictionary.md`, `doc/backend-api-contract.md`, `doc/ai-boundaries.md`, `doc/source-understanding-long-term-plan.md`.
 
-Touched areas: backend SaaS store persistence, Postgres migration, source extract preview/proposal routes, source-backed chart proposal draft route, backend tests, API/schema/data dictionary docs, progress log.
+Touched areas: backend SaaS store persistence, Postgres migration, AgentRun route handlers, deterministic workflow planner/executor, backend tests, API/schema/data dictionary docs, progress log.
 
-Verification plan: targeted SaaS route tests for source extract preview/proposal/review/chart-proposal behavior passed; full `npm run codex:verify` passed; `docker compose config` completed with existing Docker config warning; optional Postgres route test skipped because no test database URL was configured.
+Verification plan: targeted SaaS route tests for AgentRun creation/get/confirm/cancel and proof-case actions, then full `npm run codex:verify` before commit when feasible.
 
-Open risks: Keep this as backend-only Phase 6 foundation; do not add Source Explorer UI, Controlled AgentRun, Anthropic calls, dataset promotion, arbitrary code execution, direct AI Plotly JSON, or source-backed ChartSpec creation unless the review boundary is already satisfied.
+Open risks: Phase 7 backend foundation is implemented and verified. Frontend drawer convergence, Anthropic integration, dataset promotion, arbitrary code execution, direct AI Plotly JSON, and hidden chain-of-thought remain explicitly out of scope. Confirmed actions may create reviewable proposals/views only.
 
 ## Milestone Checklist Template
 
@@ -45,10 +45,14 @@ Open risks: Keep this as backend-only Phase 6 foundation; do not add Source Expl
 - [x] Keep AI/tool actions proposal-first until explicit user confirmation.
 - [x] Preserve source refs and stale-state metadata across derived views, proposals, ChartSpecs, and manuscript snapshots.
 - [x] Add or update API/schema/data-dictionary docs in the same change when persisted shapes change.
-- [x] Record token/cost/latency assumptions for new AI-backed flows. Not applicable for this deterministic backend-only milestone; no model calls are planned.
+- [x] Record token/cost/latency assumptions for new AI-backed flows. Anthropic is not planned for this deterministic milestone; usage should remain `{ provider: "deterministic" }`.
 - [x] Keep this milestone deterministic and do not add Anthropic or AgentRun behavior.
 
 ## Recent Checkpoints
+
+- 2026-06-18: Implemented Phase 7 Controlled AgentRun backend foundation. AgentRuns now persist visible trace steps and confirmable deterministic actions; confirmation can create a `series_compare` AnalysisView plus chart proposal set or a source extract proposal without bypassing review boundaries. Verification passed with targeted SaaS route tests and full `npm run codex:verify`.
+
+- 2026-06-18: Started Phase 7 Controlled AgentRun backend foundation. Scope is durable deterministic AgentRun records, visible trace steps, confirmable actions for compare-series and source-extract proof cases, and no Anthropic/frontend drawer rewrite.
 
 - 2026-06-18: Implemented Phase 6 Source Extract Proposals backend foundation. Source regions/ranges now produce deterministic extract previews, source extract proposals can be accepted/rejected, and accepted extracts can draft source-backed chart proposal sets while preserving dataset commits. Verification passed with targeted SaaS route tests, full `npm run codex:verify`, Docker config, and optional Postgres route test skip.
 

@@ -667,9 +667,33 @@ Rules:
 - Context must be compact and must not include raw workbook cell grids.
 - Cross-lab access is forbidden.
 
-### `POST /api/projects/:projectId/agent/runs` Planned
+### `GET /api/projects/:projectId/agent/runs`
+
+Purpose: list durable controlled AgentRun workflow traces for a project.
+
+Required role: `viewer` or above.
+
+Response:
+
+```json
+{
+  "schemaVersion": "labrat.agentRunList.v1",
+  "projectId": "project_...",
+  "agentRuns": []
+}
+```
+
+Rules:
+
+- Return only runs owned by the requested project.
+- Return visible trace steps and summarized tool observations only.
+- Do not return hidden chain-of-thought or full source cell grids.
+
+### `POST /api/projects/:projectId/agent/runs`
 
 Purpose: start a controlled Agent-first workflow that retrieves evidence, drafts an AnalysisView or proposal, records visible trace steps, and waits for user confirmation before mutations.
+
+Status: Phase 7 backend foundation implemented for deterministic `series_compare` and source extract proof cases. Full frontend drawer convergence, Anthropic-backed planning, Source Explorer UI, and arbitrary source extract promotion remain planned.
 
 Required role: `viewer` or above for read-only planning; mutating confirmations require the role of the underlying action.
 
@@ -690,30 +714,36 @@ Response:
   "agentRun": {
     "id": "agent_run_...",
     "projectId": "project_...",
-    "status": "waiting_for_user",
-    "mode": "series_compare",
-    "visibleSteps": [],
-    "usage": {},
-    "warnings": []
-  },
-  "visibleSteps": [],
-  "analysisView": {},
-  "proposals": [],
-  "actions": [],
-  "warnings": []
+      "status": "waiting_for_user",
+      "mode": "series_compare",
+      "visibleSteps": [],
+      "toolTrace": [],
+      "actions": [],
+      "usage": {},
+      "warnings": []
+  }
 }
+```
+
+Currently supported confirmable action types:
+
+```text
+create_compare_chart_proposal
+create_source_extract_proposal
 ```
 
 Rules:
 
-- Planning must not mutate project state.
+- Planning records an AgentRun/audit trace but must not create AnalysisViews, chart proposals, source extract proposals, dataset commits, ChartSpecs, or manuscript blocks.
+- `create_compare_chart_proposal` confirmation creates a `series_compare` AnalysisView and queues a normal chart proposal set for Chart Review.
+- `create_source_extract_proposal` confirmation creates a reviewable source extract proposal only; it does not create a chart proposal, ChartSpec, manuscript block, or dataset commit.
 - Visible steps are concise workflow/audit summaries, not hidden chain-of-thought.
 - Agent tools are allowlisted and split into read-only evidence tools, proposal tools, and user-confirmed execution tools.
 - Context must be compact; source tools may return selected bounded ranges, but not full workbook cell grids.
-- Store provider/model/token/cost usage when available.
+- Store provider/model/token/cost usage when available; deterministic v1 uses `{ "provider": "deterministic" }`.
 - Cross-lab access is forbidden.
 
-### `GET /api/agent-runs/:agentRunId` Planned
+### `GET /api/agent-runs/:agentRunId`
 
 Purpose: read an AgentRun trace and linked draft/proposal/action refs.
 
@@ -725,11 +755,30 @@ Rules:
 - Return visible trace steps and summarized tool observations.
 - Do not return hidden chain-of-thought.
 
-### `POST /api/agent-runs/:agentRunId/confirm` Planned
+### `POST /api/agent-runs/:agentRunId/confirm`
 
 Purpose: execute one user-confirmed AgentRun action through existing reviewed backend APIs.
 
-Required role: depends on the underlying action; editor or above for scientific mutations.
+Required role: `editor` or above for current implemented actions.
+
+Request:
+
+```json
+{
+  "actionId": "agent_run_action_..."
+}
+```
+
+Response:
+
+```json
+{
+  "agentRun": {},
+  "analysisView": {},
+  "chartProposalSet": {},
+  "sourceExtractProposal": {}
+}
+```
 
 Rules:
 
@@ -737,7 +786,7 @@ Rules:
 - Write both the underlying action audit event and `agent_run.confirm`.
 - Mutations must still preserve import review, proposal review, ChartSpec validation, and manuscript save boundaries.
 
-### `POST /api/agent-runs/:agentRunId/cancel` Planned
+### `POST /api/agent-runs/:agentRunId/cancel`
 
 Purpose: cancel a running or waiting AgentRun.
 

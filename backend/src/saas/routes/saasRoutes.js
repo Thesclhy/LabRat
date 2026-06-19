@@ -40,6 +40,12 @@ import {
   sourceExtractProposalSummary,
 } from "../sourceExtracts.js";
 import {
+  agentRunSummary,
+  buildAgentRunDraft,
+  executeAgentRunAction,
+  markActionCompleted,
+} from "../agentRuns.js";
+import {
   decorateObservationSeriesStaleness,
   deriveObservationSeriesFromDatasetCommit,
   mergePersistedAndDerivedObservationSeries,
@@ -466,6 +472,19 @@ async function sourceExtractProposalAuth(req, context, proposalId, role = "viewe
   return { auth, sourceExtractProposal };
 }
 
+async function agentRunAuth(req, context, agentRunId, role = "viewer") {
+  const auth = requireAuth(await authFor(req, context));
+  const agentRun = await context.store.findAgentRunById?.(agentRunId);
+  if (!agentRun) {
+    throw Object.assign(new Error("AgentRun not found."), {
+      statusCode: 404,
+      code: "agent_run_not_found",
+    });
+  }
+  requireLabRole(auth, agentRun.labId, role);
+  return { auth, agentRun };
+}
+
 async function handleLogin(req, res, context) {
   const body = await readJsonBody(req);
   const username = String(body.username || "").trim();
@@ -804,6 +823,7 @@ async function handleProjectState(req, res, context, projectId) {
     chartSpecs,
     manuscripts,
     supplementalImportBatches,
+    agentRuns,
   ] = await Promise.all([
     context.store.listDatasetCommits({ projectId }),
     context.store.listFileObjects({ projectId }),
@@ -814,6 +834,7 @@ async function handleProjectState(req, res, context, projectId) {
     context.store.listChartSpecs({ projectId }),
     context.store.listManuscripts({ projectId }),
     context.store.listSupplementalImportBatches ? context.store.listSupplementalImportBatches({ projectId }) : [],
+    context.store.listAgentRuns ? context.store.listAgentRuns({ projectId }) : [],
   ]);
   const currentDatasetCommit = project.currentDatasetCommitId
     ? await context.store.findDatasetCommitById(project.currentDatasetCommitId)
@@ -834,6 +855,7 @@ async function handleProjectState(req, res, context, projectId) {
     observationSeries,
     manuscripts,
     supplementalImportBatches: supplementalImportBatches.map(supplementalImportBatchSummary),
+    agentRuns: agentRuns.map(agentRunSummary),
   });
 }
 
@@ -908,6 +930,214 @@ async function handleProjectAgentPlan(req, res, context, projectId) {
     selectedContext: isObject(body.selectedContext) ? body.selectedContext : {},
   });
   sendJson(res, 200, plan);
+}
+
+async function handleProjectAgentRuns(req, res, context, projectId) {
+  const { auth, project } = await projectAuth(req, context, projectId, "viewer");
+  if (req.method === "GET") {
+    const agentRuns = context.store.listAgentRuns
+      ? await context.store.listAgentRuns({ projectId: project.id })
+      : [];
+    sendJson(res, 200, {
+      schemaVersion: "labrat.agentRunList.v1",
+      projectId: project.id,
+      agentRuns: agentRuns.map(agentRunSummary),
+    });
+    return;
+  }
+
+  const body = await readJsonBody(req);
+  const [
+    currentDatasetCommit,
+    fileObjects,
+    importRuns,
+    mappingSets,
+    chartProposalSets,
+    chartSpecs,
+    manuscripts,
+  ] = await Promise.all([
+    project.currentDatasetCommitId ? context.store.findDatasetCommitById(project.currentDatasetCommitId) : null,
+    context.store.listFileObjects({ projectId: project.id }),
+    context.store.listImportRuns({ projectId: project.id }),
+    context.store.listMappingSets({ projectId: project.id }),
+    context.store.listChartProposalSets({ projectId: project.id }),
+    context.store.listChartSpecs({ projectId: project.id }),
+    context.store.listManuscripts({ projectId: project.id }),
+  ]);
+  const draft = await buildAgentRunDraft({
+    context,
+    project,
+    projectProfile: projectProfileFor(project),
+    currentDatasetCommit,
+    observationSeries: await observationSeriesForProject(context, project, currentDatasetCommit),
+    fileObjects: fileObjects.map(fileObjectSummary),
+    importRuns: importRuns.map(importRunSummary),
+    mappingSets: mappingSets.map(mappingSetSummary),
+    chartProposalSets: chartProposalSets.map(chartProposalSetSummary),
+    chartSpecs: decorateChartSpecsStaleness(chartSpecs, project.currentDatasetCommitId),
+    manuscripts,
+    message: body.message || "",
+    conversation: Array.isArray(body.conversation) ? body.conversation : [],
+    selectedContext: isObject(body.selectedContext) ? body.selectedContext : {},
+  });
+  const agentRun = await context.store.createAgentRun({
+    labId: project.labId,
+    projectId: project.id,
+    status: draft.status || "waiting_for_user",
+    mode: draft.mode || null,
+    userMessage: body.message || "",
+    selectedContext: isObject(body.selectedContext) ? body.selectedContext : {},
+    visibleSteps: draft.visibleSteps || [],
+    toolTrace: draft.toolTrace || [],
+    proposalRefs: draft.proposalRefs || [],
+    actions: draft.actions || [],
+    usage: draft.usage || {},
+    warnings: draft.warnings || [],
+    createdBy: auth.user.id,
+  });
+  await context.store.recordAuditEvent({
+    labId: project.labId,
+    projectId: project.id,
+    actorUserId: auth.user.id,
+    action: "agent_run.create",
+    targetType: "agent_run",
+    targetId: agentRun.id,
+    summary: `Created AgentRun ${agentRun.id}.`,
+    metadata: { mode: agentRun.mode, actionCount: asArray(agentRun.actions).length },
+  });
+  sendJson(res, 201, { agentRun: agentRunSummary(agentRun) });
+}
+
+async function handleAgentRunById(req, res, context, agentRunId) {
+  const { agentRun } = await agentRunAuth(req, context, agentRunId, "viewer");
+  sendJson(res, 200, { agentRun: agentRunSummary(agentRun) });
+}
+
+async function handleAgentRunConfirm(req, res, context, agentRunId) {
+  const { auth, agentRun } = await agentRunAuth(req, context, agentRunId, "editor");
+  if (agentRun.status === "completed" || agentRun.status === "cancelled") {
+    throw Object.assign(new Error(`AgentRun is already ${agentRun.status}.`), {
+      statusCode: 409,
+      code: "agent_run_closed",
+    });
+  }
+  const body = await readJsonBody(req);
+  const actionId = String(body.actionId || "");
+  const requestedAction = asArray(agentRun.actions).find((candidate) => candidate.actionId === actionId);
+  if (!requestedAction) {
+    throw Object.assign(new Error("AgentRun action not found."), {
+      statusCode: 404,
+      code: "agent_run_action_not_found",
+    });
+  }
+  if (requestedAction.status !== "requires_confirmation") {
+    throw Object.assign(new Error("AgentRun action is not waiting for confirmation."), {
+      statusCode: 409,
+      code: "agent_run_action_not_confirmable",
+    });
+  }
+  const result = await executeAgentRunAction({
+    context,
+    run: agentRun,
+    action: requestedAction,
+    actorUserId: auth.user.id,
+  });
+  const proposalRefs = [
+    ...asArray(agentRun.proposalRefs),
+    ...asArray(result.proposalRefs),
+  ];
+  const visibleSteps = [
+    ...asArray(agentRun.visibleSteps),
+    ...asArray(result.visibleSteps),
+  ];
+  const updated = await context.store.updateAgentRun(agentRun.id, {
+    status: "completed",
+    visibleSteps,
+    actions: markActionCompleted(agentRun.actions, actionId, {
+      analysisViewId: result.analysisView?.id || null,
+      chartProposalSetId: result.chartProposalSet?.id || null,
+      sourceExtractProposalId: result.sourceExtractProposal?.id || null,
+    }),
+    analysisViewId: result.analysisViewId || result.analysisView?.id || agentRun.analysisViewId || null,
+    proposalRefs,
+    updatedBy: auth.user.id,
+  });
+  if (result.analysisView) {
+    await context.store.recordAuditEvent({
+      labId: agentRun.labId,
+      projectId: agentRun.projectId,
+      actorUserId: auth.user.id,
+      action: "analysis_view.create",
+      targetType: "analysis_view",
+      targetId: result.analysisView.id,
+      summary: `Created AnalysisView ${result.analysisView.title || result.analysisView.id} from AgentRun.`,
+      metadata: { agentRunId: agentRun.id },
+    });
+  }
+  if (result.chartProposalSet) {
+    await context.store.recordAuditEvent({
+      labId: agentRun.labId,
+      projectId: agentRun.projectId,
+      actorUserId: auth.user.id,
+      action: "chart_proposal_set.create",
+      targetType: "chart_proposal_set",
+      targetId: result.chartProposalSet.id,
+      summary: "Created chart proposal set from AgentRun.",
+      metadata: { agentRunId: agentRun.id, analysisViewId: result.analysisView?.id || null },
+    });
+  }
+  if (result.sourceExtractProposal) {
+    await context.store.recordAuditEvent({
+      labId: agentRun.labId,
+      projectId: agentRun.projectId,
+      actorUserId: auth.user.id,
+      action: "source.extract.propose",
+      targetType: "source_extract_proposal",
+      targetId: result.sourceExtractProposal.id,
+      summary: "Created source extract proposal from AgentRun.",
+      metadata: { agentRunId: agentRun.id },
+    });
+  }
+  await context.store.recordAuditEvent({
+    labId: agentRun.labId,
+    projectId: agentRun.projectId,
+    actorUserId: auth.user.id,
+    action: "agent_run.confirm",
+    targetType: "agent_run",
+    targetId: agentRun.id,
+    summary: `Confirmed AgentRun action ${requestedAction.type}.`,
+    metadata: { actionId, actionType: requestedAction.type },
+  });
+  sendJson(res, 200, {
+    agentRun: agentRunSummary(updated),
+    analysisView: result.analysisView ? analysisViewSummary(result.analysisView) : null,
+    chartProposalSet: result.chartProposalSet ? chartProposalSetSummary(result.chartProposalSet) : null,
+    sourceExtractProposal: result.sourceExtractProposal ? sourceExtractProposalSummary(result.sourceExtractProposal) : null,
+  });
+}
+
+async function handleAgentRunCancel(req, res, context, agentRunId) {
+  const { auth, agentRun } = await agentRunAuth(req, context, agentRunId, "viewer");
+  if (agentRun.status === "completed") {
+    throw Object.assign(new Error("Completed AgentRuns cannot be cancelled."), {
+      statusCode: 409,
+      code: "agent_run_completed",
+    });
+  }
+  const updated = await context.store.updateAgentRun(agentRun.id, {
+    status: "cancelled",
+    updatedBy: auth.user.id,
+  });
+  await context.store.recordAuditEvent({
+    labId: agentRun.labId,
+    projectId: agentRun.projectId,
+    actorUserId: auth.user.id,
+    action: "agent_run.cancel",
+    targetType: "agent_run",
+    targetId: agentRun.id,
+    summary: `Cancelled AgentRun ${agentRun.id}.`,
+  });
+  sendJson(res, 200, { agentRun: agentRunSummary(updated) });
 }
 
 async function handleProjectChartInterpret(req, res, context, projectId) {
@@ -2231,6 +2461,8 @@ async function dispatch(req, res, context) {
   if (projectDataResolveQueryMatch && req.method === "POST") return handleProjectDataResolveQuery(req, res, context, projectDataResolveQueryMatch[1]);
   const projectAgentPlanMatch = pathName.match(/^\/api\/projects\/([^/]+)\/agent\/plan$/);
   if (projectAgentPlanMatch && req.method === "POST") return handleProjectAgentPlan(req, res, context, projectAgentPlanMatch[1]);
+  const projectAgentRunsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/agent\/runs$/);
+  if (projectAgentRunsMatch && (req.method === "GET" || req.method === "POST")) return handleProjectAgentRuns(req, res, context, projectAgentRunsMatch[1]);
   const projectChartInterpretMatch = pathName.match(/^\/api\/projects\/([^/]+)\/charts\/interpret$/);
   if (projectChartInterpretMatch && req.method === "POST") return handleProjectChartInterpret(req, res, context, projectChartInterpretMatch[1]);
   const projectChartProposeMatch = pathName.match(/^\/api\/projects\/([^/]+)\/charts\/propose$/);
@@ -2275,6 +2507,12 @@ async function dispatch(req, res, context) {
   if (sourceExtractProposalChartMatch && req.method === "POST") return handleSourceExtractChartProposal(req, res, context, sourceExtractProposalChartMatch[1]);
   const sourceExtractProposalMatch = pathName.match(/^\/api\/source-extract-proposals\/([^/]+)$/);
   if (sourceExtractProposalMatch && req.method === "PATCH") return handleSourceExtractProposalPatch(req, res, context, sourceExtractProposalMatch[1]);
+  const agentRunConfirmMatch = pathName.match(/^\/api\/agent-runs\/([^/]+)\/confirm$/);
+  if (agentRunConfirmMatch && req.method === "POST") return handleAgentRunConfirm(req, res, context, agentRunConfirmMatch[1]);
+  const agentRunCancelMatch = pathName.match(/^\/api\/agent-runs\/([^/]+)\/cancel$/);
+  if (agentRunCancelMatch && req.method === "POST") return handleAgentRunCancel(req, res, context, agentRunCancelMatch[1]);
+  const agentRunMatch = pathName.match(/^\/api\/agent-runs\/([^/]+)$/);
+  if (agentRunMatch && req.method === "GET") return handleAgentRunById(req, res, context, agentRunMatch[1]);
   const mappingSetsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/mapping-sets$/);
   if (mappingSetsMatch && (req.method === "GET" || req.method === "POST")) return handleProjectMappingSets(req, res, context, mappingSetsMatch[1]);
   const mappingSetMatch = pathName.match(/^\/api\/mapping-sets\/([^/]+)$/);
@@ -2311,6 +2549,7 @@ export async function handleSaasRoutes(req, res, context) {
     && !req.url?.startsWith("/api/source-documents")
     && !req.url?.startsWith("/api/source-regions")
     && !req.url?.startsWith("/api/source-extract-proposals")
+    && !req.url?.startsWith("/api/agent-runs")
     && !req.url?.startsWith("/api/import-runs")
     && !req.url?.startsWith("/api/mapping-sets")
     && !req.url?.startsWith("/api/chart-proposal-sets")

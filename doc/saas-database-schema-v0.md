@@ -683,9 +683,9 @@ Notes:
 - Chart blocks should reference `chart_specs.id`.
 - Preserve existing text/image/chart block shapes through migration helpers.
 
-## `agent_runs` Planned
+## `agent_runs`
 
-Persists controlled agent workflow traces.
+Persists controlled agent workflow traces. Implemented by `007_agent_runs.sql`.
 
 Columns:
 
@@ -693,7 +693,8 @@ Columns:
 id text primary key
 lab_id text not null references labs(id)
 project_id text not null references projects(id)
-status text not null default 'created'
+schema_version text not null default 'labrat.agentRun.v1'
+status text not null default 'waiting_for_user'
 mode text
 user_message text not null
 selected_context jsonb not null default '{}'
@@ -729,8 +730,10 @@ cancelled
 Notes:
 
 - `visible_steps` are audit/workflow summaries, not hidden chain-of-thought.
-- Planning must not mutate project state.
+- Phase 7 deterministic planning records an AgentRun/audit trace but does not create AnalysisViews, chart proposals, source extract proposals, dataset commits, ChartSpecs, or manuscript blocks until confirmation.
+- Current confirmed actions create reviewable artifacts only: a `series_compare` AnalysisView plus chart proposal set, or a source extract proposal.
 - Confirmed execution should use existing reviewed APIs and write audit events.
+- Full Anthropic-backed planning, Source Explorer UI, dataset promotion from source extracts, and arbitrary tool execution remain out of scope.
 
 ## `audit_events`
 
@@ -816,7 +819,7 @@ mapping_sets(lab_id, project_id)
 chart_proposal_sets(lab_id, project_id)
 chart_specs(lab_id, project_id)
 manuscripts(lab_id, project_id)
-agent_runs(lab_id, project_id, created_at)
+agent_runs(lab_id, project_id, updated_at)
 audit_events(lab_id, project_id, created_at)
 audit_events(actor_user_id, created_at)
 ```
