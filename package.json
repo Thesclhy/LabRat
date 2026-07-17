@@ -1,45 +1,46 @@
 {
-    "name":  "labrat-blank",
-    "version":  "1.0.0",
-    "private":  true,
-    "type":  "module",
-    "homepage":  "https://Thesclhy.github.io/LabRat",
-    "engines":  {
-                    "node":  ">=22.12.0"
-                },
-    "scripts":  {
-                    "dev":  "vite --mode blank --host 0.0.0.0",
-                    "dev:blank":  "vite --mode blank --host 0.0.0.0",
-                    "dev:docker":  "docker compose up",
-                    "dev:docker:detached":  "docker compose up -d",
-                    "dev:docker:down":  "docker compose down",
-                    "dev:postgres":  "docker compose up -d postgres",
-                    "dev:backend:docker":  "docker compose up backend",
-                    "codex:preflight":  "node scripts/codex-preflight.mjs",
-                    "codex:checkpoint":  "node scripts/codex-checkpoint.mjs",
-                    "codex:verify":  "node scripts/codex-verify.mjs",
-                    "build":  "vite build --mode blank",
-                    "build:blank":  "vite build --mode blank",
-                    "test":  "vitest run --config vitest.config.js --configLoader runner",
-                    "preview":  "vite preview --host 0.0.0.0",
-                    "predeploy":  "npm run build",
-                    "deploy":  "gh-pages -d dist"
-                },
-    "dependencies":  {
-                         "@vitejs/plugin-react":  "^5.0.0",
-                         "jszip":  "^3.10.1",
-                         "plotly.js-dist-min":  "^3.6.0",
-                         "pptxgenjs":  "^4.0.1",
-                         "react":  "^19.0.0",
-                         "react-dom":  "^19.0.0",
-                         "vite":  "^6.0.0",
-                         "xlsx":  "^0.18.5"
-                     },
-    "devDependencies":  {
-                            "@testing-library/react":  "^16.3.2",
-                            "@testing-library/user-event":  "^14.6.1",
-                            "gh-pages":  "^6.3.0",
-                            "jsdom":  "^29.1.1",
-                            "vitest":  "^4.1.8"
-                        }
+    "name": "labrat-blank",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "homepage": "https://Thesclhy.github.io/LabRat",
+    "engines": {
+        "node": ">=22.12.0"
+    },
+    "scripts": {
+        "dev": "vite --mode blank --host 0.0.0.0",
+        "dev:blank": "vite --mode blank --host 0.0.0.0",
+        "dev:docker": "docker compose up",
+        "dev:docker:detached": "docker compose up -d",
+        "dev:docker:down": "docker compose down",
+        "dev:postgres": "docker compose up -d postgres",
+        "dev:backend:docker": "docker compose up backend",
+        "codex:preflight": "node scripts/codex-preflight.mjs",
+        "codex:checkpoint": "node scripts/codex-checkpoint.mjs",
+        "codex:verify": "node scripts/codex-verify.mjs",
+        "build": "vite build --mode blank",
+        "build:blank": "vite build --mode blank",
+        "test": "vitest run --config vitest.config.js --configLoader runner",
+        "preview": "vite preview --host 0.0.0.0",
+        "predeploy": "npm run build",
+        "deploy": "gh-pages -d dist"
+    },
+    "dependencies": {
+        "@vitejs/plugin-react": "^5.0.0",
+        "jszip": "^3.10.1",
+        "plotly.js-dist-min": "^3.6.0",
+        "pptxgenjs": "^4.0.1",
+        "react": "^19.0.0",
+        "react-data-grid": "^7.0.0-beta.59",
+        "react-dom": "^19.0.0",
+        "vite": "^6.0.0",
+        "xlsx": "^0.18.5"
+    },
+    "devDependencies": {
+        "@testing-library/react": "^16.3.2",
+        "@testing-library/user-event": "^14.6.1",
+        "gh-pages": "^6.3.0",
+        "jsdom": "^29.1.1",
+        "vitest": "^4.1.8"
+    }
 }

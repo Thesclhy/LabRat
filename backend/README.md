@@ -1,10 +1,12 @@
 # LabRat Backend
 
-This folder contains the current LabRat backend. It provides local/dev workbook scan, approved normalization, semantic mapping proposals, generic chart proposals, and the first SaaS Auth v0 API foundation for accounts, labs, projects, files, import runs, dataset commits, chart specs, manuscripts, and audit events.
+The backend provides authenticated lab/project APIs for workbook evidence indexing, conversational WorkbookUnderstanding review, deterministic DataPlan/DataSnapshot publication, Experiment Browser projection, source-backed chart review, AgentRuns, manuscripts, and audit events.
 
-The existing import/chart endpoints remain stateless compatibility endpoints. New SaaS endpoints wrap those services in authenticated project-scoped APIs instead of replacing the parser first.
+The active contracts are:
 
-The active product direction is the Agent-first evidence workflow in `../doc/plan.md`. Planned AgentRun, Source Workspace, ObservationSeries, and AnalysisView endpoints are documented in `../doc/saas-api-contract-v0.md`, but should not be listed below as current endpoints until implemented.
+- `../doc/contracts/saas-api-contract-v0.md`
+- `../doc/contracts/saas-database-schema-v0.md`
+- `../doc/contracts/canonical-data-dictionary.md`
 
 ## Commands
 
@@ -14,9 +16,7 @@ Recommended local stack:
 npm run dev:docker
 ```
 
-This uses `docker-compose.yml` to start Postgres, run backend migrations, seed development accounts, start the backend on `8787`, and start the frontend on `5173`.
-
-Backend-only/manual commands:
+Backend-only commands:
 
 ```bash
 npm --prefix backend run dev
@@ -26,97 +26,46 @@ npm --prefix backend test
 npm --prefix backend run test:postgres
 ```
 
-For local seeded account testing without Postgres:
+For local in-memory development with seeded accounts:
 
-```bash
+```powershell
 $env:LABRAT_SEED_DEV_ACCOUNTS="true"
 $env:SESSION_SECRET="dev-secret"
 npm --prefix backend run dev
 ```
 
-Seeded accounts:
+The backend-only `dev` command intentionally runs without automatic file watching. The default local store is in memory, so a watch restart would silently discard login sessions and review state; restart the command manually after backend source edits.
+
+Seeded development accounts:
 
 ```text
 admin / LabRatAdmin123!
 labuser / LabRatLab123!
 ```
 
-For manual Postgres mode, set `DATABASE_URL`, install backend dependencies, run `npm --prefix backend run migrate`, then start the backend with the same env. Docker Compose sets these automatically:
+Production must provide `DATABASE_URL`, a non-default `SESSION_SECRET`, durable file storage, and disabled development seed accounts.
 
-```text
-DATABASE_URL=postgres://labrat:labrat_dev@postgres:5432/labrat
-SESSION_SECRET=dev-secret
-LABRAT_SEED_DEV_ACCOUNTS=true
-PORT=8787
-```
+## Endpoint Families
 
-## Current Endpoints
+- health, authentication, admin, labs, projects, and project profile/state
+- file upload, import-run scan, SourceDocument/SourceRegion bounded evidence reads
+- WorkbookReviewSession revision/confirmation and accepted WorkbookUnderstanding
+- evidence retrieval, DataPlan draft/publish, DataSnapshot summaries
+- Experiment Browser list/detail and owner-scoped BrowserViews
+- Agent planning/runs and review-gated confirmation
+- SourceExtractProposal, source-backed chart proposals/ChartSpecs
+- Manuscript create/update/list
 
-- `GET /health`
-- `POST /api/import/scan`
-- `POST /api/import/normalize`
-- `POST /api/import/semantic-map`
-- `POST /api/charts/propose`
-- `POST /api/charts/interpret`
-- `POST /api/auth/login`
-- `POST /api/auth/logout`
-- `GET /api/auth/me`
-- `GET /api/admin/labs`
-- `POST /api/admin/labs`
-- `GET /api/admin/users`
-- `POST /api/admin/users`
-- `PATCH /api/admin/users/:userId`
-- `POST /api/admin/users/:userId/reset-password`
-- `GET /api/labs`
-- `GET /api/projects`
-- `POST /api/projects`
-- `GET /api/projects/:projectId`
-- `PATCH /api/projects/:projectId`
-- `PATCH /api/projects/:projectId/profile`
-- `GET /api/projects/:projectId/state`
-- `POST /api/projects/:projectId/ai/context`
-- `POST /api/projects/:projectId/data/resolve-query`
-- `POST /api/projects/:projectId/charts/interpret`
-- `POST /api/projects/:projectId/charts/propose`
-- `GET /api/projects/:projectId/files`
-- `POST /api/projects/:projectId/files`
-- `GET /api/projects/:projectId/import-runs`
-- `POST /api/projects/:projectId/import-runs`
-- `GET /api/projects/:projectId/dataset-commits`
-- `GET /api/projects/:projectId/mapping-sets`
-- `POST /api/projects/:projectId/mapping-sets`
-- `PATCH /api/mapping-sets/:mappingSetId`
-- `GET /api/projects/:projectId/chart-proposal-sets`
-- `POST /api/projects/:projectId/chart-proposal-sets`
-- `PATCH /api/chart-proposal-sets/:chartProposalSetId`
-- `POST /api/import-runs/:id/normalize-preview`
-- `POST /api/import-runs/:id/relationship-preview`
-- `POST /api/import-runs/:id/apply`
-- `POST /api/projects/:projectId/chart-specs/from-proposal`
-- `GET /api/projects/:projectId/chart-specs`
-- `GET /api/projects/:projectId/manuscripts`
-- `POST /api/projects/:projectId/manuscripts`
-- `PATCH /api/manuscripts/:manuscriptId`
+Exact paths and payload rules live in the SaaS API contract.
 
-## Current Boundary
+## Boundaries
 
-- Preserve existing endpoint paths and schema envelopes.
-- Return generic normalized data under `datasetPatch.genericImports[]`.
-- Do not return direct HDPE `dataset.experiments[]` mutations for generic imports.
-- Keep semantic mapping and chart output as proposals until a user reviews them.
-- Do not send full raw workbooks to AI services; use compact summaries only.
-- Keep Agent-first workflows controlled: the backend may retrieve evidence and draft proposals, but mutations still require explicit user confirmation.
-- Keep stateless import/chart endpoints available while adding and hardening SaaS project-scoped APIs.
-- Import-run apply now creates full merged dataset commits and rejects duplicate committed import ids.
-- Chart spec creation validates source-backed fields against the referenced dataset commit before persistence.
-- Postgres migrations are in `backend/migrations/`.
-- `npm --prefix backend run test:postgres` is optional and skips unless `LABRAT_TEST_DATABASE_URL` points at a disposable Postgres test database.
-- Auth v0 uses admin-created `username + password` users and httpOnly sessions.
-- Local no-Postgres development can use the in-memory store; production should use Postgres.
-
-See these docs before changing backend architecture:
-
-- `../doc/backend-api-contract.md`: current local/dev endpoint contracts.
-- `../doc/saas-database-schema-v0.md`: Postgres schema target.
-- `../doc/saas-api-contract-v0.md`: authenticated SaaS API contract.
-- `../doc/server-project-state-plan.md`: server project state notes; old local-data migration is not in scope.
+- Raw files and source indexes are immutable.
+- Accepted scientific values come only from deterministic publish into immutable DataSnapshots.
+- Experiment Browser reads active experiment snapshot heads.
+- AI/tools draft and explain; explicit user confirmation and backend validation own mutations.
+- Durable charts currently require exact source refs and immutable source snapshots.
+- DataSnapshot-backed chart planning is not implemented yet.
+- Retired unscoped normalize/semantic-map/generic chart and aggregate dataset endpoints must remain absent.
+- Postgres migrations live in `backend/migrations/`; migration 011 removes retired development-schema artifacts.
+- `test:postgres` is optional and skips unless `LABRAT_TEST_DATABASE_URL` points to a disposable database.

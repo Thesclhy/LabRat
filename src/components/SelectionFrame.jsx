@@ -24,6 +24,8 @@ export function SelectionFrame({
   className = "",
   style,
   activation = "single",
+  canActivateOnDoubleClick,
+  onMouseDownCapture,
   disableKeyboardDelete = false,
   onSelect,
   onChange,
@@ -103,11 +105,13 @@ export function SelectionFrame({
       tabIndex={0}
       className={`selection-frame ${selected ? "is-selected" : ""} ${className}`}
       style={{ ...style, left: x, top: y, width, height }}
+      onMouseDownCapture={onMouseDownCapture}
       onMouseDown={beginDrag}
       onDoubleClickCapture={(ev) => {
         if (activation !== "double" || selected) return;
         ev.preventDefault();
         ev.stopPropagation();
+        if (canActivateOnDoubleClick && !canActivateOnDoubleClick(ev)) return;
         onSelect?.();
         ref.current?.focus();
       }}

@@ -1,36 +1,39 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   ServerApiError,
-  applyServerImportRun,
   cancelServerAgentRun,
   confirmServerAgentRun,
+  confirmServerWorkbookReviewSession,
   createServerAgentRun,
-  createServerAnalysisView,
-  createServerAnalysisViewChartProposal,
   createServerChartSpecFromProposal,
-  createServerImportRun,
   createServerManuscript,
   createServerProject,
-  createServerSupplementalImportBatch,
+  createServerWorkbookReviewSession,
   deleteServerProject,
-  createServerMappingSet,
+  draftServerProjectDataPlan,
+  publishServerProjectDataPlan,
+  getServerAgentRun,
   getServerProjectState,
   getServerSession,
-  getServerSupplementalImportBatch,
-  interpretServerProjectChart,
+  getServerWorkbookReviewSession,
+  interpretServerProjectChartIntent,
+  listServerSourceDocumentRegions,
+  listServerSourceDocuments,
+  listServerWorkbookUnderstandings,
+  listServerWorkbookReviewSessions,
   listServerProjects,
   loginToServer,
   patchServerChartProposalSet,
   patchServerManuscript,
-  patchServerMappingSet,
   patchServerProjectProfile,
+  patchServerSourceExtractProposal,
   planServerProjectAgent,
-  previewServerImportRelationship,
-  previewServerImportRefresh,
-  previewServerImportRunNormalization,
-  proposeServerProjectCharts,
-  resolveServerProjectDataQuery,
-  supplementalImportBatchEventsUrl,
+  previewServerSourceDocumentExtract,
+  previewServerSourceRegionExtract,
+  readServerSourceDocumentRange,
+  reviseServerWorkbookReviewSession,
+  retrieveProjectEvidence,
+  createServerSourceExtractChartProposal,
   uploadServerProjectFile,
 } from "./serverApi.js";
 
@@ -97,98 +100,202 @@ describe("serverApi", () => {
     expect(JSON.parse(fetchImpl.mock.calls[2][1].body)).toEqual({ status: "deleted" });
   });
 
-  it("loads project state and routes import run operations", async () => {
+  it("loads project state, uploads files, and routes workbook review sessions", async () => {
     const fetchImpl = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({ project: { id: "project_1" }, currentDatasetCommit: null }))
+      .mockResolvedValueOnce(jsonResponse({ project: { id: "project_1" } }))
       .mockResolvedValueOnce(jsonResponse({ fileObject: { id: "file_1" } }, { status: 201 }))
-      .mockResolvedValueOnce(jsonResponse({ importRun: { id: "import_run_1" } }, { status: 201 }))
-      .mockResolvedValueOnce(jsonResponse({ importRun: { normalizePreview: {} } }))
-      .mockResolvedValueOnce(jsonResponse({ schemaVersion: "labrat.importRefreshPreview.v1", hasChanges: true }))
-      .mockResolvedValueOnce(jsonResponse({ schemaVersion: "labrat.importRelationshipPreview.v1", proposals: [] }))
-      .mockResolvedValueOnce(jsonResponse({ datasetCommit: { id: "commit_1" } }));
+      .mockResolvedValueOnce(jsonResponse({ workbookReviewSession: { id: "session_1" }, sourceDocument: { id: "source_doc_1" }, regions: [] }, { status: 201 }))
+      .mockResolvedValueOnce(jsonResponse({ workbookReviewSessions: [{ id: "session_1" }] }))
+      .mockResolvedValueOnce(jsonResponse({ workbookReviewSession: { id: "session_1" }, sourceDocument: { id: "source_doc_1" }, regions: [] }));
 
     await getServerProjectState("project_1", { fetch: fetchImpl });
     await uploadServerProjectFile("project_1", new File(["x"], "runs.xlsx"), { fetch: fetchImpl });
-    await createServerImportRun("project_1", "file_1", { fetch: fetchImpl });
-    await previewServerImportRunNormalization("import_run_1", { approvedBlockIds: ["block_1"] }, { fetch: fetchImpl });
-    await previewServerImportRefresh("import_run_1", { replaceImportId: "import_old", expectedParentDatasetCommitId: "commit_parent" }, { fetch: fetchImpl });
-    await previewServerImportRelationship("import_run_1", {}, { fetch: fetchImpl });
-    await applyServerImportRun("import_run_1", { reviewNote: "Approved" }, { fetch: fetchImpl });
+    await createServerWorkbookReviewSession("project_1", { fileObjectId: "file_1" }, { fetch: fetchImpl });
+    await listServerWorkbookReviewSessions("project_1", { fetch: fetchImpl });
+    await getServerWorkbookReviewSession("session_1", { fetch: fetchImpl });
 
     expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects/project_1/state");
     expect(fetchImpl.mock.calls[1][0]).toBe("/api/projects/project_1/files");
     expect(fetchImpl.mock.calls[1][1].body).toBeInstanceOf(FormData);
-    expect(fetchImpl.mock.calls[2][0]).toBe("/api/projects/project_1/import-runs");
-    expect(fetchImpl.mock.calls[3][0]).toBe("/api/import-runs/import_run_1/normalize-preview");
-    expect(fetchImpl.mock.calls[4][0]).toBe("/api/import-runs/import_run_1/refresh-preview");
-    expect(JSON.parse(fetchImpl.mock.calls[4][1].body)).toEqual({
-      replaceImportId: "import_old",
-      expectedParentDatasetCommitId: "commit_parent",
+    expect(fetchImpl.mock.calls[2][0]).toBe("/api/projects/project_1/workbook-review-sessions");
+    expect(JSON.parse(fetchImpl.mock.calls[2][1].body)).toEqual({
+      fileObjectId: "file_1",
+      sourceDocumentId: null,
     });
-    expect(fetchImpl.mock.calls[5][0]).toBe("/api/import-runs/import_run_1/relationship-preview");
-    expect(fetchImpl.mock.calls[6][0]).toBe("/api/import-runs/import_run_1/apply");
-    expect(JSON.parse(fetchImpl.mock.calls[6][1].body)).toEqual({
-      applyMode: "append",
-      reviewNote: "Approved",
-    });
+    expect(fetchImpl.mock.calls[3][0]).toBe("/api/projects/project_1/workbook-review-sessions");
+    expect(fetchImpl.mock.calls[3][1].method).toBe("GET");
+    expect(fetchImpl.mock.calls[4][0]).toBe("/api/workbook-review-sessions/session_1");
   });
 
-  it("creates and loads supplemental import batches", async () => {
+  it("routes workbook understanding revision and confirmation helpers", async () => {
     const fetchImpl = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({ batch: { id: "batch_1" } }, { status: 201 }))
-      .mockResolvedValueOnce(jsonResponse({ batch: { id: "batch_1", status: "ready_for_review" } }));
+      .mockResolvedValueOnce(jsonResponse({ workbookReviewSession: { id: "session_1" }, workbookUnderstandingDraft: { id: "draft_1" } }))
+      .mockResolvedValueOnce(jsonResponse({ workbookReviewSession: { id: "session_1", status: "accepted" }, workbookUnderstanding: { id: "understanding_1" } }))
+      .mockResolvedValueOnce(jsonResponse({ workbookUnderstandings: [{ id: "understanding_1" }] }));
 
-    await createServerSupplementalImportBatch("project_1", { fileObjectIds: ["file_1", "file_2"] }, { fetch: fetchImpl });
-    await getServerSupplementalImportBatch("project_1", "batch_1", { fetch: fetchImpl });
+    await reviseServerWorkbookReviewSession("session_1", {
+      message: "This is the experiment table.",
+      previousUnderstandingId: "draft_previous",
+      revisionMode: "replace_current",
+      activeDraftRegionId: "draft_region_1",
+      redBoxUpdates: [{
+        clientRegionId: "draft_region_1",
+        sourceDocumentId: "source_doc_1",
+        sheetName: "Runs",
+        range: "A1:D3",
+      }],
+      interpretationPatches: [{
+        draftRegionId: "draft_region_1",
+        experimentAxis: "rows",
+        experimentIdColumn: "A",
+      }],
+    }, { fetch: fetchImpl });
+    await confirmServerWorkbookReviewSession("session_1", {
+      workbookUnderstandingId: "draft_1",
+      decisionSummary: { acceptedByUser: true },
+    }, { fetch: fetchImpl });
+    await listServerWorkbookUnderstandings("project_1", { fetch: fetchImpl });
 
-    expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects/project_1/supplemental-import-batches");
-    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({ fileObjectIds: ["file_1", "file_2"] });
-    expect(fetchImpl.mock.calls[1][0]).toBe("/api/projects/project_1/supplemental-import-batches/batch_1");
-    expect(supplementalImportBatchEventsUrl("project_1", "batch_1")).toBe("/api/projects/project_1/supplemental-import-batches/batch_1/events");
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/workbook-review-sessions/session_1/revisions");
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
+      message: "This is the experiment table.",
+      previousUnderstandingId: "draft_previous",
+      revisionMode: "replace_current",
+      activeDraftRegionId: "draft_region_1",
+      redBoxUpdates: [{
+        clientRegionId: "draft_region_1",
+        sourceDocumentId: "source_doc_1",
+        sheetName: "Runs",
+        range: "A1:D3",
+      }],
+      interpretationPatches: [{
+        draftRegionId: "draft_region_1",
+        experimentAxis: "rows",
+        experimentIdColumn: "A",
+      }],
+    });
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/workbook-review-sessions/session_1/confirm");
+    expect(JSON.parse(fetchImpl.mock.calls[1][1].body)).toEqual({
+      workbookUnderstandingId: "draft_1",
+      decisionSummary: { acceptedByUser: true },
+    });
+    expect(fetchImpl.mock.calls[2][0]).toBe("/api/projects/project_1/workbook-understandings");
   });
 
-  it("applies a server import run as a replace refresh", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ datasetCommit: { id: "commit_2" } }));
+  it("routes project evidence retrieval helper", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({
+      schemaVersion: "labrat.evidenceRetrieval.toolAgent.v1",
+      results: [],
+      suggestions: [],
+    }));
 
-    await applyServerImportRun("import_run_1", {
-      applyMode: "replace_import",
-      replaceImportId: "import_old",
-      expectedParentDatasetCommitId: "commit_parent",
-      reviewNote: "Applied workbook refresh.",
+    await retrieveProjectEvidence("project_1", {
+      query: "experiment 33 reaction rate",
+      mode: "tool_agent",
+      includePreview: true,
+      includeUnconfirmedSuggestions: true,
+      maxResults: 5,
     }, { fetch: fetchImpl });
 
-    expect(fetchImpl.mock.calls[0][0]).toBe("/api/import-runs/import_run_1/apply");
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects/project_1/evidence/retrieve");
+    expect(fetchImpl.mock.calls[0][1].method).toBe("POST");
     expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
-      applyMode: "replace_import",
-      replaceImportId: "import_old",
-      expectedParentDatasetCommitId: "commit_parent",
-      reviewNote: "Applied workbook refresh.",
+      query: "experiment 33 reaction rate",
+      mode: "tool_agent",
+      includePreview: true,
+      includeUnconfirmedSuggestions: true,
+      maxResults: 5,
+    });
+    expect(() => retrieveProjectEvidence("", { query: "x" }, { fetch: fetchImpl }))
+      .toThrow(/project/i);
+  });
+
+  it("routes project data plan draft helper", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({
+      resultKind: "data_plan_review",
+      dataPlan: { id: "data_plan_preview_1" },
+    }));
+
+    await draftServerProjectDataPlan("project_1", {
+      intent: "experiment_browser_publish",
+      workbookUnderstandingIds: ["workbook_understanding_1"],
+      identityDecisions: [{ sourceAlias: "Exp1", action: "create" }],
+    }, { fetch: fetchImpl });
+
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects/project_1/data-plans/draft");
+    expect(fetchImpl.mock.calls[0][1].method).toBe("POST");
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
+      intent: "experiment_browser_publish",
+      workbookUnderstandingIds: ["workbook_understanding_1"],
+      identityDecisions: [{ sourceAlias: "Exp1", action: "create" }],
+    });
+    expect(() => draftServerProjectDataPlan("", { query: "x" }, { fetch: fetchImpl }))
+      .toThrow(/project/i);
+
+    const clarificationFetch = vi.fn().mockResolvedValue(jsonResponse({
+      resultKind: "clarification",
+      clarification: { code: "workbook_understanding_incomplete", message: "Review experiment identity first." },
+    }));
+    await expect(draftServerProjectDataPlan("project_1", {
+      workbookUnderstandingIds: ["workbook_understanding_1"],
+    }, { fetch: clarificationFetch })).rejects.toMatchObject({
+      code: "workbook_understanding_incomplete",
+      message: "Review experiment identity first.",
     });
   });
 
-  it("applies a server import run as a supplement and resolves project data queries", async () => {
+  it("publishes a reviewed data plan with stale-preview details intact", async () => {
     const fetchImpl = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({ datasetCommit: { id: "commit_supplement" } }))
-      .mockResolvedValueOnce(jsonResponse({ schemaVersion: "labrat.dataResolveQuery.v1", viewIntentDraft: {} }))
+      .mockResolvedValueOnce(jsonResponse({
+        dataPlan: { id: "data_plan_accepted_1", status: "accepted" },
+        dataSnapshot: { id: "data_snapshot_1", status: "accepted" },
+        idempotentReplay: false,
+      }, { status: 201 }))
+      .mockResolvedValueOnce(jsonResponse({
+        error: {
+          code: "preview_stale",
+          message: "The preview changed.",
+          details: {
+            currentReview: {
+              dataPlan: { id: "data_plan_preview_2" },
+              snapshotPreview: { previewHash: "sha256_current" },
+            },
+          },
+        },
+      }, { status: 409 }));
+    const request = {
+      dataPlan: { id: "data_plan_preview_1", sourceEvidence: [{ workbookUnderstandingId: "wu_1" }] },
+      identityDecisions: [{ sourceAlias: "Exp1", action: "create" }],
+      expectedPreviewHash: "sha256_preview",
+      expectedDependencyHash: "sha256_dependency",
+      idempotencyKey: "publish_client_1",
+    };
+
+    const published = await publishServerProjectDataPlan("project_1", request, { fetch: fetchImpl });
+    expect(published.dataSnapshot.id).toBe("data_snapshot_1");
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects/project_1/data-plans/publish");
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual(request);
+    expect(() => publishServerProjectDataPlan("", request, { fetch: fetchImpl })).toThrow(/project/i);
+
+    await expect(publishServerProjectDataPlan("project_1", request, { fetch: fetchImpl })).rejects.toMatchObject({
+      status: 409,
+      code: "preview_stale",
+      details: {
+        currentReview: {
+          snapshotPreview: { previewHash: "sha256_current" },
+        },
+      },
+    });
+  });
+
+  it("routes AgentRun operations", async () => {
+    const fetchImpl = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ schemaVersion: "labrat.agentPlan.v1", actions: [] }))
       .mockResolvedValueOnce(jsonResponse({ agentRun: { id: "agent_run_1", actions: [] } }, { status: 201 }))
       .mockResolvedValueOnce(jsonResponse({ agentRun: { id: "agent_run_1", status: "completed" } }))
+      .mockResolvedValueOnce(jsonResponse({ agentRun: { id: "agent_run_1", status: "completed" } }))
       .mockResolvedValueOnce(jsonResponse({ agentRun: { id: "agent_run_2", status: "cancelled" } }));
 
-    await applyServerImportRun("import_run_2", {
-      applyMode: "supplement_import",
-      relationshipDecision: {
-        relationshipProposalId: "relationship_1",
-        targetExperimentIds: ["exp_30"],
-        supplementType: "reaction_rate_time_series",
-      },
-      reviewNote: "Attach rate details.",
-    }, { fetch: fetchImpl });
-    await resolveServerProjectDataQuery("project_1", {
-      prompt: "show Exp30 reaction rate",
-      selectedExperimentIds: ["exp_30"],
-      maxResults: 12,
-    }, { fetch: fetchImpl });
     await planServerProjectAgent("project_1", {
       message: "upload supplement for Exp30",
       conversation: [{ role: "user", text: "hello" }],
@@ -199,102 +306,135 @@ describe("serverApi", () => {
       conversation: [{ role: "user", text: "hello" }],
       selectedContext: { tab: "overview" },
     }, { fetch: fetchImpl });
+    await getServerAgentRun("agent_run_1", { fetch: fetchImpl });
     await confirmServerAgentRun("agent_run_1", "agent_run_action_1", { fetch: fetchImpl });
     await cancelServerAgentRun("agent_run_2", { fetch: fetchImpl });
 
-    expect(fetchImpl.mock.calls[0][0]).toBe("/api/import-runs/import_run_2/apply");
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects/project_1/agent/plan");
     expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
-      applyMode: "supplement_import",
-      reviewNote: "Attach rate details.",
-      relationshipDecision: {
-        relationshipProposalId: "relationship_1",
-        targetExperimentIds: ["exp_30"],
-        supplementType: "reaction_rate_time_series",
-      },
-    });
-    expect(fetchImpl.mock.calls[1][0]).toBe("/api/projects/project_1/data/resolve-query");
-    expect(JSON.parse(fetchImpl.mock.calls[1][1].body)).toEqual({
-      prompt: "show Exp30 reaction rate",
-      selectedImportIds: [],
-      selectedExperimentIds: ["exp_30"],
-      maxResults: 12,
-    });
-    expect(fetchImpl.mock.calls[2][0]).toBe("/api/projects/project_1/agent/plan");
-    expect(JSON.parse(fetchImpl.mock.calls[2][1].body)).toEqual({
       message: "upload supplement for Exp30",
       conversation: [{ role: "user", text: "hello" }],
       selectedContext: { tab: "overview" },
     });
-    expect(fetchImpl.mock.calls[3][0]).toBe("/api/projects/project_1/agent/runs");
-    expect(JSON.parse(fetchImpl.mock.calls[3][1].body)).toEqual({
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/projects/project_1/agent/runs");
+    expect(JSON.parse(fetchImpl.mock.calls[1][1].body)).toEqual({
       message: "compare reaction rate for Exp1 and Exp2",
       conversation: [{ role: "user", text: "hello" }],
       selectedContext: { tab: "overview" },
       modeHint: "auto",
     });
-    expect(fetchImpl.mock.calls[4][0]).toBe("/api/agent-runs/agent_run_1/confirm");
-    expect(JSON.parse(fetchImpl.mock.calls[4][1].body)).toEqual({ actionId: "agent_run_action_1" });
-    expect(fetchImpl.mock.calls[5][0]).toBe("/api/agent-runs/agent_run_2/cancel");
+    expect(fetchImpl.mock.calls[2][0]).toBe("/api/agent-runs/agent_run_1");
+    expect(fetchImpl.mock.calls[3][0]).toBe("/api/agent-runs/agent_run_1/confirm");
+    expect(JSON.parse(fetchImpl.mock.calls[3][1].body)).toEqual({ actionId: "agent_run_action_1" });
+    expect(fetchImpl.mock.calls[4][0]).toBe("/api/agent-runs/agent_run_2/cancel");
   });
 
-  it("routes mapping and chart proposal persistence", async () => {
+  it("routes source chart proposal persistence", async () => {
     const fetchImpl = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({ mappingSet: { id: "mapping_set_1" } }, { status: 201 }))
-      .mockResolvedValueOnce(jsonResponse({ mappingSet: { id: "mapping_set_1", status: "accepted" } }))
-      .mockResolvedValueOnce(jsonResponse({ proposalSet: { proposals: [] } }))
-      .mockResolvedValueOnce(jsonResponse({ chartSpecDraft: { title: "Draft" }, chartProposalSet: { id: "chart_set_1" } }))
       .mockResolvedValueOnce(jsonResponse({ chartProposalSet: { id: "chart_set_1", status: "accepted" } }))
       .mockResolvedValueOnce(jsonResponse({ chartSpec: { id: "chart_spec_1" } }, { status: 201 }));
 
-    await createServerMappingSet("project_1", { datasetCommitId: "commit_1", payload: {} }, { fetch: fetchImpl });
-    await patchServerMappingSet("mapping_set_1", { status: "accepted" }, { fetch: fetchImpl });
-    await proposeServerProjectCharts("project_1", { userGoal: "screen selectivity" }, { fetch: fetchImpl });
-    await interpretServerProjectChart("project_1", { prompt: "plot conversion vs time" }, { fetch: fetchImpl });
     await patchServerChartProposalSet("chart_set_1", { status: "accepted" }, { fetch: fetchImpl });
     await createServerChartSpecFromProposal("project_1", { chartProposalSetId: "chart_set_1", proposalId: "chart_1" }, { fetch: fetchImpl });
 
     expect(fetchImpl.mock.calls.map((call) => call[0])).toEqual([
-      "/api/projects/project_1/mapping-sets",
-      "/api/mapping-sets/mapping_set_1",
-      "/api/projects/project_1/charts/propose",
-      "/api/projects/project_1/charts/interpret",
       "/api/chart-proposal-sets/chart_set_1",
       "/api/projects/project_1/chart-specs/from-proposal",
     ]);
-    expect(JSON.parse(fetchImpl.mock.calls[3][1].body).persistAsProposal).toBe(true);
   });
 
-  it("creates analysis views and chart proposals through project-scoped APIs", async () => {
+  it("routes project chart intent gateway requests with frontend entrypoint metadata", async () => {
     const fetchImpl = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({ analysisView: { id: "analysis_view_1" } }, { status: 201 }))
-      .mockResolvedValueOnce(jsonResponse({ chartProposalSet: { id: "chart_set_compare" } }, { status: 201 }));
+      .mockResolvedValueOnce(jsonResponse({ sourceExtractProposal: { id: "source_extract_1" } }));
 
-    await createServerAnalysisView("project_1", {
-      viewType: "series_compare",
-      title: "Reaction rate comparison",
-      spec: {
-        seriesKind: "reaction_rate_time_series",
-        experimentIds: ["exp_30", "exp_31"],
-        xField: "reaction_time_min",
-        yField: "adjusted_rate_m_s",
-        groupBy: "experiment",
-      },
+    await interpretServerProjectChartIntent("project_1", {
+      prompt: "draw carbon distribution from P31 to BA32",
+      entrypoint: "chart_review",
+      context: { selectedWorkbookId: "file_1" },
     }, { fetch: fetchImpl });
-    await createServerAnalysisViewChartProposal("analysis_view_1", { fetch: fetchImpl });
 
-    expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects/project_1/analysis-views");
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects/project_1/charts/interpret");
     expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
-      viewType: "series_compare",
-      title: "Reaction rate comparison",
-      spec: {
-        seriesKind: "reaction_rate_time_series",
-        experimentIds: ["exp_30", "exp_31"],
-        xField: "reaction_time_min",
-        yField: "adjusted_rate_m_s",
-        groupBy: "experiment",
-      },
+      prompt: "draw carbon distribution from P31 to BA32",
+      persistAsProposal: true,
+      entrypoint: "chart_review",
+      context: { selectedWorkbookId: "file_1" },
     });
-    expect(fetchImpl.mock.calls[1][0]).toBe("/api/analysis-views/analysis_view_1/chart-proposal");
+  });
+
+  it("updates source extract proposals and creates chart proposals from accepted extracts", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ sourceExtractProposal: { id: "source_extract_1", status: "accepted" } }))
+      .mockResolvedValueOnce(jsonResponse({ chartProposalSet: { id: "chart_set_source_1" } }, { status: 201 }));
+
+    await patchServerSourceExtractProposal("source_extract_1", {
+      status: "accepted",
+      decisionSummary: { acceptedByUser: true },
+    }, { fetch: fetchImpl });
+    await createServerSourceExtractChartProposal("source_extract_1", { fetch: fetchImpl });
+
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/source-extract-proposals/source_extract_1");
+    expect(fetchImpl.mock.calls[0][1].method).toBe("PATCH");
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
+      status: "accepted",
+      decisionSummary: { acceptedByUser: true },
+    });
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/source-extract-proposals/source_extract_1/chart-proposal");
+    expect(JSON.parse(fetchImpl.mock.calls[1][1].body)).toEqual({});
+  });
+
+  it("routes read-only source document inspection helpers", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ sourceDocuments: [{ id: "source_doc_1" }] }))
+      .mockResolvedValueOnce(jsonResponse({ regions: [] }))
+      .mockResolvedValueOnce(jsonResponse({ schemaVersion: "labrat.sourceRange.v1", rows: [] }))
+      .mockResolvedValueOnce(jsonResponse({ preview: { extractType: "table_range" } }))
+      .mockResolvedValueOnce(jsonResponse({ preview: { extractType: "generic_table" } }));
+
+    await listServerSourceDocuments("project_1", { fetch: fetchImpl });
+    await listServerSourceDocumentRegions("source_doc_1", { fetch: fetchImpl });
+    await readServerSourceDocumentRange("source_doc_1", { sheetName: "Runs", range: "A1:B2" }, { fetch: fetchImpl });
+    await previewServerSourceDocumentExtract("source_doc_1", {
+      sheetName: "Runs",
+      range: "B2:C3",
+      extractType: "table_range",
+    }, { fetch: fetchImpl });
+    await previewServerSourceRegionExtract("source_region_1", {
+      extractType: "component_distribution",
+      intent: { title: "Carbon distribution" },
+    }, { fetch: fetchImpl });
+
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects/project_1/source-documents");
+    expect(fetchImpl.mock.calls[0][1].method).toBe("GET");
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/source-documents/source_doc_1/regions");
+    expect(fetchImpl.mock.calls[2][0]).toBe("/api/source-documents/source_doc_1/range");
+    expect(JSON.parse(fetchImpl.mock.calls[2][1].body)).toEqual({ sheetName: "Runs", range: "A1:B2" });
+    expect(fetchImpl.mock.calls[3][0]).toBe("/api/source-documents/source_doc_1/extract-preview");
+    expect(JSON.parse(fetchImpl.mock.calls[3][1].body)).toEqual({
+      sheetName: "Runs",
+      range: "B2:C3",
+      extractType: "table_range",
+      intent: {},
+    });
+    expect(fetchImpl.mock.calls[4][0]).toBe("/api/source-regions/source_region_1/extract-preview");
+    expect(JSON.parse(fetchImpl.mock.calls[4][1].body)).toEqual({
+      extractType: "component_distribution",
+      intent: { title: "Carbon distribution" },
+    });
+  });
+
+  it("surfaces source range backend errors", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({
+      error: { code: "source_range_too_large", message: "Requested range contains too many cells." },
+    }, { status: 400 }));
+
+    await expect(readServerSourceDocumentRange("source_doc_1", {
+      sheetName: "Runs",
+      range: "A1:ZZ100",
+    }, { fetch: fetchImpl })).rejects.toMatchObject({
+      code: "source_range_too_large",
+      status: 400,
+    });
   });
 
   it("creates and patches project manuscripts", async () => {

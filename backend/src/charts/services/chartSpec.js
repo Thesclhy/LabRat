@@ -1,4 +1,3 @@
-import { slug } from "../../import/services/genericImportContext.js";
 import { normalizeChartTransforms } from "./chartTransforms.js";
 
 export const CHART_SPEC_VERSION = "labrat.chartSpec.v1.3";
@@ -13,8 +12,27 @@ function unique(values) {
   return [...new Set(values.filter((value) => value != null && String(value).trim()).map((value) => String(value)))];
 }
 
+function uniqueSourceRefs(values) {
+  const seen = new Set();
+  return asArray(values).filter((value) => {
+    if (value == null) return false;
+    const key = isObject(value) ? JSON.stringify(value) : String(value);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function isObject(value) {
   return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function slug(value, fallback = "field") {
+  const text = String(value || "").trim().toLowerCase()
+    .replace(/[%]/g, " pct ")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return text || fallback;
 }
 
 export function normalizeText(value) {
@@ -282,8 +300,7 @@ export function normalizeChartSpecShape(spec = {}) {
     yFields,
     groupBy: spec.groupBy || null,
     filters: asArray(spec.filters),
-    sourceImportIds: unique(asArray(spec.sourceImportIds)),
-    sourceRefs: unique([
+    sourceRefs: uniqueSourceRefs([
       ...asArray(spec.sourceRefs),
       ...axisSourceRefs(spec.x),
       ...yFields.flatMap(axisSourceRefs),
@@ -310,13 +327,13 @@ export function normalizeChartSpecShape(spec = {}) {
 }
 
 export function compileChartSpec({
+  schemaVersion = CHART_SPEC_VERSION,
   chartType = "scatter",
   title = "",
   xField = null,
   yFields = [],
   groupBy = null,
   filters = [],
-  sourceImportIds = [],
   sourceRefs = [],
   transforms = [],
   series = [],
@@ -333,7 +350,7 @@ export function compileChartSpec({
   const axes = asArray(yFields).filter(Boolean).map(chartAxis);
   const spec = {
     ...extra,
-    schemaVersion: CHART_SPEC_VERSION,
+    schemaVersion: schemaVersion === CHART_SPEC_V14_VERSION ? CHART_SPEC_V14_VERSION : CHART_SPEC_VERSION,
     status,
     chartType: normalizeChartType(chartType),
     title,
@@ -347,7 +364,6 @@ export function compileChartSpec({
     axisOptions,
     renderStyle,
     calculationWarnings: asArray(calculationWarnings),
-    sourceImportIds,
     sourceRefs,
     confidence,
     warnings,

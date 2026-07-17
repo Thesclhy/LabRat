@@ -1,14 +1,30 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import * as XLSX from "xlsx";
 import { runImportScan } from "../services/importPipeline.js";
 import {
   ambiguousSparseSheetFixture,
+  ambiguousSourceRangeFixture,
   cleanStandardTableFixture,
+  createAmbiguousSourceRangeWorkbook,
   createAmbiguousSparseSheetWorkbook,
   createCleanStandardTableWorkbook,
+  createHighConfidenceAutoBoxWorkbook,
+  createLowConfidenceManualBoxWorkbook,
+  createMultiSheetOneValidSourceRangeWorkbook,
+  createReactionRateSupplementWorkbookForExperiment,
   createRepeatedBlockTableWorkbook,
+  highConfidenceAutoBoxFixture,
+  lowConfidenceManualBoxFixture,
+  multiSheetOneValidSourceRangeFixture,
   repeatedBlockTableFixture,
 } from "./workbookFixtures.js";
+import {
+  chartLocalAcceptedSourceExtractScenario,
+  importCorrectionExamples,
+  missingExperimentPromptScenario,
+  syntheticWorkflowScenarios,
+} from "./workflowScenarioFixtures.js";
 
 test("clean standard table fixture scans as one standard table block", () => {
   const result = runImportScan(createCleanStandardTableWorkbook());
@@ -89,4 +105,66 @@ test("ambiguous sparse sheet fixture scans as unknown without invented table row
   assert.equal(block.candidateMetadata.length, 0);
   assert.equal(sheet.warnings[0].code, "unknown_layout");
   assert.equal(block.warnings[0].code, "unknown_layout");
+});
+
+test("multi-sheet source range fixture has exactly one valid carbon distribution sheet", () => {
+  const workbook = XLSX.read(createMultiSheetOneValidSourceRangeWorkbook().buffer, { type: "buffer" });
+  const validSheet = workbook.Sheets[multiSheetOneValidSourceRangeFixture.validSheetName];
+  const invalidSheet = workbook.Sheets[multiSheetOneValidSourceRangeFixture.invalidSheetName];
+
+  assert.equal(workbook.SheetNames.includes(multiSheetOneValidSourceRangeFixture.validSheetName), true);
+  assert.equal(validSheet.Q31.v, "C1");
+  assert.equal(validSheet.Q32.v, multiSheetOneValidSourceRangeFixture.expectedValues[0]);
+  assert.notEqual(invalidSheet.Q31.v, "C1");
+});
+
+test("ambiguous source range fixture has two valid candidate sheets", () => {
+  const workbook = XLSX.read(createAmbiguousSourceRangeWorkbook().buffer, { type: "buffer" });
+
+  assert.deepEqual(workbook.SheetNames, ambiguousSourceRangeFixture.validSheetNames);
+  ambiguousSourceRangeFixture.validSheetNames.forEach((sheetName) => {
+    const sheet = workbook.Sheets[sheetName];
+    assert.equal(sheet.Q31.v, "C1");
+    assert.equal(typeof sheet.Q32.v, "number");
+  });
+});
+
+test("high-confidence auto-box fixture scans as a regular table candidate", () => {
+  const result = runImportScan(createHighConfidenceAutoBoxWorkbook());
+  const sheet = result.sheets[0];
+
+  assert.equal(result.file.name, highConfidenceAutoBoxFixture.filename);
+  assert.equal(sheet.layout.type, "standard_table");
+  assert.equal(sheet.layout.confidence >= highConfidenceAutoBoxFixture.expectedDraftRegions[0].confidenceAtLeast, true);
+  assert.equal(sheet.blocks[0].range, highConfidenceAutoBoxFixture.expectedDraftRegions[0].range);
+});
+
+test("low-confidence manual-box fixture keeps user-selected source ranges available", () => {
+  const workbook = XLSX.read(createLowConfidenceManualBoxWorkbook().buffer, { type: "buffer" });
+  const sheet = workbook.Sheets[lowConfidenceManualBoxFixture.sheetName];
+
+  assert.equal(sheet.Q31.v, "C1?");
+  assert.equal(sheet.Q32.v, 0.1);
+  assert.equal(lowConfidenceManualBoxFixture.manualSelections.length, 2);
+  assert.equal(lowConfidenceManualBoxFixture.manualSelections[0].range, "P31:BA32");
+  assert.equal(lowConfidenceManualBoxFixture.manualSelections[1].expectedClarification, "region_description_required");
+});
+
+test("reaction-rate supplement fixtures can be generated for multiple experiments", () => {
+  const exp33 = createReactionRateSupplementWorkbookForExperiment({ expNumber: 33, rateScale: 1 });
+  const exp34 = createReactionRateSupplementWorkbookForExperiment({ expNumber: 34, rateScale: 1.2 });
+  const exp35 = createReactionRateSupplementWorkbookForExperiment({ expNumber: 35, rateScale: 1.4 });
+
+  assert.equal(exp33.filename, "Reaction_Rate_Exp33.xlsx");
+  assert.equal(exp34.filename, "Reaction_Rate_Exp34.xlsx");
+  assert.equal(exp35.filename, "Reaction_Rate_Exp35.xlsx");
+  assert.equal(XLSX.read(exp35.buffer, { type: "buffer" }).SheetNames[0], "Exp35");
+});
+
+test("synthetic workflow scenarios cover source-backed charts and missing experiment expectations", () => {
+  assert.equal(chartLocalAcceptedSourceExtractScenario.expectedNext.dataPlanInputType, "accepted_source_extract");
+  assert.equal(missingExperimentPromptScenario.expected.mustNotUseExperimentAliases.includes("Exp33"), true);
+  assert.equal(importCorrectionExamples.some((example) => example.expectedPatchType === "experiment_binding"), true);
+  assert.equal(JSON.stringify(syntheticWorkflowScenarios).includes("DatasetCommit"), false);
+  assert.equal(syntheticWorkflowScenarios.length >= 6, true);
 });

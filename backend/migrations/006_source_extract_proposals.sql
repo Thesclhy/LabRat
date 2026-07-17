@@ -4,7 +4,6 @@ create table if not exists source_extract_proposals (
   project_id text not null references projects(id) on delete cascade,
   source_document_id text references source_documents(id) on delete set null,
   source_region_id text references source_regions(id) on delete set null,
-  dataset_commit_id text references dataset_commits(id) on delete set null,
   schema_version text not null default 'labrat.sourceExtractProposal.v1',
   status text not null default 'proposed',
   purpose text,

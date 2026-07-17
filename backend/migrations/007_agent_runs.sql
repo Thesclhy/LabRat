@@ -9,7 +9,6 @@ create table if not exists agent_runs (
   selected_context jsonb not null default '{}'::jsonb,
   visible_steps jsonb not null default '[]'::jsonb,
   tool_trace jsonb not null default '[]'::jsonb,
-  analysis_view_id text references analysis_views(id) on delete set null,
   proposal_refs jsonb not null default '[]'::jsonb,
   actions jsonb not null default '[]'::jsonb,
   usage jsonb not null default '{}'::jsonb,
@@ -23,7 +22,3 @@ create table if not exists agent_runs (
 
 create index if not exists agent_runs_project_idx
   on agent_runs(project_id, updated_at desc);
-
-create index if not exists agent_runs_analysis_view_idx
-  on agent_runs(analysis_view_id)
-  where analysis_view_id is not null;

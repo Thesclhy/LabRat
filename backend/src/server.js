@@ -1,8 +1,6 @@
 import http from "node:http";
 import { fileURLToPath } from "node:url";
 import { sendJson } from "./http/json.js";
-import { handleChartRoutes } from "./charts/routes/chartRoutes.js";
-import { handleImportRoutes } from "./import/routes/importRoutes.js";
 import { loadSaasConfig } from "./saas/config.js";
 import { createSaasStore } from "./saas/store.js";
 import { handleSaasRoutes } from "./saas/routes/saasRoutes.js";
@@ -23,8 +21,6 @@ export function createServer(options = {}) {
       }
 
       if (await handleSaasRoutes(req, res, saasContext)) return;
-      if (await handleImportRoutes(req, res)) return;
-      if (await handleChartRoutes(req, res)) return;
 
       sendJson(res, 404, {
         error: {

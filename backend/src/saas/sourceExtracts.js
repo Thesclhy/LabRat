@@ -290,7 +290,6 @@ export function sourceExtractProposalSummary(proposal) {
     projectId: proposal.projectId,
     sourceDocumentId: proposal.sourceDocumentId || null,
     sourceRegionId: proposal.sourceRegionId || null,
-    datasetCommitId: proposal.datasetCommitId || null,
     schemaVersion: proposal.schemaVersion || SOURCE_EXTRACT_PROPOSAL_SCHEMA_VERSION,
     status: proposal.status || "proposed",
     purpose: proposal.purpose || null,
@@ -306,9 +305,122 @@ export function sourceExtractProposalSummary(proposal) {
   };
 }
 
+function chartProposalFromSourceExtractSeries(proposal, preview, fields) {
+  const seriesRows = asArray(preview.series);
+  const xField = fields.find((field) => field.fieldId === "carbon_number") || fields[0] || null;
+  const yField = fields.find((field) => field.fieldId === "percentage") || fields[1] || null;
+  if (!xField || !yField || !seriesRows.length) {
+    const error = new Error("Source extract series does not contain enough rows/fields to draft a chart proposal.");
+    error.statusCode = 400;
+    error.code = "source_extract_not_chartable";
+    throw error;
+  }
+  const proposalId = `source_extract_chart_${sha256Hex(proposal.id).slice(0, 16)}`;
+  const title = preview.chartIntentDraft?.title || preview.title || "Source-backed cross-compare chart";
+  const chartType = preview.chartIntentDraft?.chartType || "distribution_bar";
+  const series = seriesRows.map((item, index) => ({
+    seriesId: item.seriesId || `series_${index + 1}`,
+    label: item.experimentLabel || item.experimentAlias || item.experimentId || `Series ${index + 1}`,
+    experimentId: item.experimentId || item.experimentAlias || `series_${index + 1}`,
+    experimentLabel: item.experimentLabel || item.experimentAlias || item.experimentId || `Series ${index + 1}`,
+    sourceDocumentId: item.sourceDocumentId || item.range?.sourceDocumentId || null,
+    sourceRegionId: item.sourceRegionId || null,
+    range: item.range?.range || null,
+    sheetName: item.range?.sheetName || null,
+    xField: xField.fieldId,
+    yField: yField.fieldId,
+    pointCount: asArray(item.rows).length,
+  }));
+  const sourceRefs = [
+    ...asArray(preview.sourceRefs),
+    ...seriesRows.flatMap((item) => asArray(item.sourceRefs)),
+  ];
+  const sourceSnapshot = {
+    schemaVersion: SOURCE_EXTRACT_PREVIEW_SCHEMA_VERSION,
+    fields,
+    series: seriesRows.map((item) => ({
+      seriesId: item.seriesId,
+      experimentId: item.experimentId || null,
+      experimentAlias: item.experimentAlias || null,
+      experimentLabel: item.experimentLabel || item.experimentAlias || null,
+      range: item.range || null,
+      rows: asArray(item.rows),
+      sourceRefs: asArray(item.sourceRefs),
+      summary: item.summary || {},
+    })),
+    summary: preview.summary || {},
+    sourceRefs: asArray(preview.sourceRefs),
+  };
+  const seriesScope = {
+    seriesKind: "component_distribution",
+    xField: xField.fieldId,
+    yField: yField.fieldId,
+    groupBy: "experiment",
+  };
+  const compatibleExperimentIds = series.map((item) => item.experimentId);
+  return {
+    proposalId,
+    status: "proposed",
+    origin: "source_extract",
+    sourceExtractProposalId: proposal.id,
+    chartType,
+    title,
+    x: {
+      fieldId: xField.fieldId,
+      field: xField.fieldId,
+      label: xField.label,
+      unit: xField.unit || null,
+    },
+    y: {
+      fieldId: yField.fieldId,
+      field: yField.fieldId,
+      label: yField.label,
+      unit: yField.unit || null,
+    },
+    seriesScope,
+    compatibleExperimentIds,
+    selectedExperimentIds: compatibleExperimentIds,
+    series,
+    sourceSnapshot,
+    chartSpecDraft: {
+      schemaVersion: "labrat.chartSpec.v1.4",
+      origin: "source_extract",
+      sourceExtractProposalId: proposal.id,
+      chartType,
+      title,
+      x: {
+        fieldId: xField.fieldId,
+        field: xField.fieldId,
+        label: xField.label,
+        unit: xField.unit || null,
+      },
+      y: {
+        fieldId: yField.fieldId,
+        field: yField.fieldId,
+        label: yField.label,
+        unit: yField.unit || null,
+      },
+      seriesScope,
+      compatibleExperimentIds,
+      selectedExperimentIds: compatibleExperimentIds,
+      series,
+      sourceSnapshot,
+      sourceRefs,
+    },
+    sourceRefs,
+    confidence: 0.86,
+    rationale: "Drafted from an accepted multi-source extract proposal with cell-level source refs.",
+    warnings: asArray(proposal.warnings),
+    requiresReview: true,
+  };
+}
+
 export function chartProposalFromSourceExtract(proposal) {
   const preview = proposal.preview || {};
   const fields = asArray(preview.fields);
+  if (asArray(preview.series).length) {
+    return chartProposalFromSourceExtractSeries(proposal, preview, fields);
+  }
   const rows = asArray(preview.rows);
   const xField = fields.find((field) => field.fieldId === "carbon_number") || fields[0] || null;
   const yField = fields.find((field) => field.fieldId === "percentage") || fields[1] || null;
@@ -357,7 +469,6 @@ export function chartProposalFromSourceExtract(proposal) {
       schemaVersion: "labrat.chartSpec.v1.4",
       origin: "source_extract",
       sourceExtractProposalId: proposal.id,
-      datasetCommitId: null,
       chartType,
       title,
       x: {
@@ -375,6 +486,7 @@ export function chartProposalFromSourceExtract(proposal) {
       sourceSnapshot: {
         fields,
         rows,
+        sourceRefs,
       },
       sourceRefs,
     },

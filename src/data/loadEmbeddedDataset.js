@@ -10,9 +10,6 @@ const EMPTY_DATASET = {
   experiments: [],
   sources: [],
   files: [],
-  genericImports: [],
-  genericMappingSets: [],
-  genericChartProposals: [],
   warnings: [],
 };
 

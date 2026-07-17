@@ -1,0 +1,1066 @@
+{
+  "info": {
+    "_postman_id": "20d0f3c5-f737-44e0-8e56-7f5e1a0cfb44",
+    "name": "LabRat Workbook Review API",
+    "description": "Local API smoke tests for LabRat's server-first workbook review, SourceDocument, SourceExtract, ChartSpec, and planned WorkbookUnderstanding endpoints. Import `postman/labrat-workbook-review.postman_environment.json` with this collection.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.request.headers.upsert({ key: 'Accept', value: 'application/json' });"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "01 Auth and Project",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Creates the httpOnly session cookie. Postman will store it automatically for the base URL."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('login succeeded', function () { pm.expect(pm.response.code).to.be.oneOf([200]); });",
+                  "const json = pm.response.json();",
+                  "if (json.user && json.user.id) pm.environment.set('userId', json.user.id);",
+                  "if (Array.isArray(json.labs) && json.labs[0] && json.labs[0].labId) pm.environment.set('labId', json.labs[0].labId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Current Session",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('session is authenticated', function () { pm.expect(pm.response.code).to.equal(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Labs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/labs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "labs"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('labs listed', function () { pm.expect(pm.response.code).to.equal(200); });",
+                  "const json = pm.response.json();",
+                  "if (Array.isArray(json.labs) && json.labs[0] && json.labs[0].labId) pm.environment.set('labId', json.labs[0].labId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Projects",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/projects?labId={{labId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "projects"
+              ],
+              "query": [
+                {
+                  "key": "labId",
+                  "value": "{{labId}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('projects listed', function () { pm.expect(pm.response.code).to.equal(200); });",
+                  "const json = pm.response.json();",
+                  "if (!pm.environment.get('projectId') && Array.isArray(json.projects) && json.projects[0]) pm.environment.set('projectId', json.projects[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Project",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"labId\": \"{{labId}}\",\n  \"name\": \"{{projectName}} {{$timestamp}}\",\n  \"description\": \"Created from Postman smoke collection.\",\n  \"projectProfile\": {\n    \"researchGoal\": \"API smoke test for workbook review.\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/projects",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "projects"
+              ]
+            },
+            "description": "Creates a new server project and stores projectId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('project created', function () { pm.expect(pm.response.code).to.equal(201); });",
+                  "const json = pm.response.json();",
+                  "if (json.project && json.project.id) pm.environment.set('projectId', json.project.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Project State",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}/state",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "{{projectId}}",
+                "state"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('project state loaded', function () { pm.expect(pm.response.code).to.equal(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 Workbook Upload and Review",
+      "item": [
+        {
+          "name": "Upload Workbook File",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "{{workbookFilePath}}"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}/files",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "{{projectId}}",
+                "files"
+              ]
+            },
+            "description": "Postman GUI may require selecting the file manually if it does not expand workbookFilePath in file inputs."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('workbook uploaded', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });",
+                  "const json = pm.response.json();",
+                  "if (json.fileObject && json.fileObject.id) pm.environment.set('fileObjectId', json.fileObject.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Workbook Review Session From File",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fileObjectId\": \"{{fileObjectId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}/workbook-review-sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "{{projectId}}",
+                "workbook-review-sessions"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('workbook review session created', function () { pm.expect(pm.response.code).to.equal(201); });",
+                  "const json = pm.response.json();",
+                  "if (json.workbookReviewSession && json.workbookReviewSession.id) pm.environment.set('workbookReviewSessionId', json.workbookReviewSession.id);",
+                  "if (json.sourceDocument && json.sourceDocument.id) pm.environment.set('sourceDocumentId', json.sourceDocument.id);",
+                  "if (json.importRun && json.importRun.id) pm.environment.set('importRunId', json.importRun.id);",
+                  "if (Array.isArray(json.regions) && json.regions[0] && json.regions[0].id) pm.environment.set('sourceRegionId', json.regions[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Workbook Review Sessions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}/workbook-review-sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "{{projectId}}",
+                "workbook-review-sessions"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('workbook review sessions listed', function () { pm.expect(pm.response.code).to.equal(200); });",
+                  "const json = pm.response.json();",
+                  "if (!pm.environment.get('workbookReviewSessionId') && Array.isArray(json.workbookReviewSessions) && json.workbookReviewSessions[0]) pm.environment.set('workbookReviewSessionId', json.workbookReviewSessions[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Workbook Review Session",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/workbook-review-sessions/{{workbookReviewSessionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "workbook-review-sessions",
+                "{{workbookReviewSessionId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('workbook review session loaded', function () { pm.expect(pm.response.code).to.equal(200); });",
+                  "const json = pm.response.json();",
+                  "if (json.sourceDocument && json.sourceDocument.id) pm.environment.set('sourceDocumentId', json.sourceDocument.id);",
+                  "if (Array.isArray(json.regions) && json.regions[0] && json.regions[0].id) pm.environment.set('sourceRegionId', json.regions[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Workbook Review Session From Existing SourceDocument",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceDocumentId\": \"{{sourceDocumentId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}/workbook-review-sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "{{projectId}}",
+                "workbook-review-sessions"
+              ]
+            },
+            "description": "Creates another review session around an already indexed source document. Response importRun should be null."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('source-document session created', function () { pm.expect(pm.response.code).to.equal(201); });",
+                  "const json = pm.response.json();",
+                  "if (json.workbookReviewSession && json.workbookReviewSession.id) pm.environment.set('workbookReviewSessionId', json.workbookReviewSession.id);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 Source Document Inspection",
+      "item": [
+        {
+          "name": "List Source Documents",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}/source-documents",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "{{projectId}}",
+                "source-documents"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('source documents listed', function () { pm.expect(pm.response.code).to.equal(200); });",
+                  "const json = pm.response.json();",
+                  "if (Array.isArray(json.sourceDocuments) && json.sourceDocuments[0] && json.sourceDocuments[0].id) pm.environment.set('sourceDocumentId', json.sourceDocuments[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Source Document Regions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/source-documents/{{sourceDocumentId}}/regions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "source-documents",
+                "{{sourceDocumentId}}",
+                "regions"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('source regions listed', function () { pm.expect(pm.response.code).to.equal(200); });",
+                  "const json = pm.response.json();",
+                  "if (Array.isArray(json.regions) && json.regions[0] && json.regions[0].id) pm.environment.set('sourceRegionId', json.regions[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Query Source Document",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"{{sourceQuery}}\",\n  \"limit\": 20\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/source-documents/{{sourceDocumentId}}/query",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "source-documents",
+                "{{sourceDocumentId}}",
+                "query"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('source query completed', function () { pm.expect(pm.response.code).to.equal(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read Source Range",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sheetName\": \"{{sheetName}}\",\n  \"range\": \"{{range}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/source-documents/{{sourceDocumentId}}/range",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "source-documents",
+                "{{sourceDocumentId}}",
+                "range"
+              ]
+            },
+            "description": "If this fails with source_sheet_not_found, copy a real sheet name from the workbook review/source document response into the sheetName environment variable."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('range read succeeded', function () { pm.expect(pm.response.code).to.equal(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Preview Source Document Extract",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sheetName\": \"{{sheetName}}\",\n  \"range\": \"{{range}}\",\n  \"extractType\": \"{{extractType}}\",\n  \"intent\": {\n    \"title\": \"Postman selected range preview\",\n    \"chartTitle\": \"Postman source-backed chart\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/source-documents/{{sourceDocumentId}}/extract-preview",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "source-documents",
+                "{{sourceDocumentId}}",
+                "extract-preview"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('source document extract preview succeeded', function () { pm.expect(pm.response.code).to.equal(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Preview Source Region Extract",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"extractType\": \"{{extractType}}\",\n  \"intent\": {\n    \"title\": \"Postman detected region preview\",\n    \"chartTitle\": \"Postman detected-region chart\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/source-regions/{{sourceRegionId}}/extract-preview",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "source-regions",
+                "{{sourceRegionId}}",
+                "extract-preview"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('source region extract preview completed', function () { pm.expect(pm.response.code).to.be.oneOf([200, 400]); });",
+                  "if (pm.response.code === 400) console.warn('Detected region may not match extractType. Try table_range or component_distribution.');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 Source Extract to ChartSpec",
+      "item": [
+        {
+          "name": "List Source Extract Proposals",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}/source-extract-proposals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "{{projectId}}",
+                "source-extract-proposals"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('source extract proposals listed', function () { pm.expect(pm.response.code).to.equal(200); });",
+                  "const json = pm.response.json();",
+                  "if (!pm.environment.get('sourceExtractProposalId') && Array.isArray(json.sourceExtractProposals) && json.sourceExtractProposals[0]) pm.environment.set('sourceExtractProposalId', json.sourceExtractProposals[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Source Extract Proposal From Source Range",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceDocumentId\": \"{{sourceDocumentId}}\",\n  \"sheetName\": \"{{sheetName}}\",\n  \"range\": \"{{range}}\",\n  \"extractType\": \"{{extractType}}\",\n  \"purpose\": \"chart_source\",\n  \"intent\": {\n    \"title\": \"Postman source extract\",\n    \"chartTitle\": \"Postman source-backed chart\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}/source-extract-proposals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "{{projectId}}",
+                "source-extract-proposals"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('source extract proposal created', function () { pm.expect(pm.response.code).to.equal(201); });",
+                  "const json = pm.response.json();",
+                  "if (json.sourceExtractProposal && json.sourceExtractProposal.id) pm.environment.set('sourceExtractProposalId', json.sourceExtractProposal.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Accept Source Extract Proposal",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"accepted\",\n  \"decisionSummary\": {\n    \"acceptedByUser\": true,\n    \"note\": \"Accepted through Postman smoke collection.\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/source-extract-proposals/{{sourceExtractProposalId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "source-extract-proposals",
+                "{{sourceExtractProposalId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('source extract proposal accepted', function () { pm.expect(pm.response.code).to.equal(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Chart Proposal From Accepted Source Extract",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/source-extract-proposals/{{sourceExtractProposalId}}/chart-proposal",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "source-extract-proposals",
+                "{{sourceExtractProposalId}}",
+                "chart-proposal"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('chart proposal created from source extract', function () { pm.expect(pm.response.code).to.equal(201); });",
+                  "const json = pm.response.json();",
+                  "const set = json.chartProposalSet;",
+                  "if (set && set.id) pm.environment.set('chartProposalSetId', set.id);",
+                  "const proposal = set && set.payload && Array.isArray(set.payload.proposals) ? set.payload.proposals[0] : null;",
+                  "if (proposal && proposal.proposalId) pm.environment.set('proposalId', proposal.proposalId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create ChartSpec From Proposal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"chartProposalSetId\": \"{{chartProposalSetId}}\",\n  \"proposalId\": \"{{proposalId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}/chart-specs/from-proposal",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "{{projectId}}",
+                "chart-specs",
+                "from-proposal"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('chart spec created', function () { pm.expect(pm.response.code).to.equal(201); });",
+                  "const json = pm.response.json();",
+                  "if (json.chartSpec && json.chartSpec.id) pm.environment.set('chartSpecId', json.chartSpec.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List ChartSpecs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}/chart-specs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "{{projectId}}",
+                "chart-specs"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('chart specs listed', function () { pm.expect(pm.response.code).to.equal(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 Search and Chart Intent",
+      "item": [
+        {
+          "name": "Project Evidence Search",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"{{sourceQuery}}\",\n  \"limit\": 10\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}/search",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "{{projectId}}",
+                "search"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('project evidence search completed', function () { pm.expect(pm.response.code).to.equal(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Interpret Chart Prompt",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prompt\": \"{{chartPrompt}}\",\n  \"persistAsProposal\": true,\n  \"entrypoint\": \"postman_smoke\",\n  \"context\": {}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{projectId}}/charts/interpret",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "projects",
+                "{{projectId}}",
+                "charts",
+                "interpret"
+              ]
+            },
+            "description": "This may return clarification if the uploaded workbook does not contain the prompt's requested source evidence."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('chart interpretation returned a review result or clarification', function () { pm.expect(pm.response.code).to.equal(200); });",
+                  "const json = pm.response.json();",
+                  "if (json.sourceExtractProposal && json.sourceExtractProposal.id) pm.environment.set('sourceExtractProposalId', json.sourceExtractProposal.id);",
+                  "if (json.chartProposalSet && json.chartProposalSet.id) pm.environment.set('chartProposalSetId', json.chartProposalSet.id);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 Planned WorkbookUnderstanding APIs",
+      "description": "These endpoints are documented as planned. Until implemented, 404 is expected and treated as non-failing in tests.",
+      "item": [
+        {
+          "name": "Revise Workbook Understanding (planned)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"This selected range is a useful table. Treat it as the main reviewed data region.\",\n  \"redBoxUpdates\": [\n    {\n      \"clientRegionId\": \"draft_region_postman_1\",\n      \"operation\": \"upsert\",\n      \"sourceDocumentId\": \"{{sourceDocumentId}}\",\n      \"sheetName\": \"{{sheetName}}\",\n      \"range\": \"{{range}}\",\n      \"selectionMethod\": \"postman_manual\",\n      \"description\": \"Postman-selected range\"\n    }\n  ],\n  \"previousUnderstandingId\": \"{{workbookUnderstandingId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/workbook-review-sessions/{{workbookReviewSessionId}}/revisions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "workbook-review-sessions",
+                "{{workbookReviewSessionId}}",
+                "revisions"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('planned endpoint is either implemented or not yet routed', function () { pm.expect([200, 201, 404]).to.include(pm.response.code); });",
+                  "if (pm.response.code !== 404) {",
+                  "  const json = pm.response.json();",
+                  "  if (json.workbookUnderstandingDraft && json.workbookUnderstandingDraft.id) pm.environment.set('workbookUnderstandingId', json.workbookUnderstandingDraft.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Confirm Workbook Understanding (planned)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"workbookUnderstandingId\": \"{{workbookUnderstandingId}}\",\n  \"decisionSummary\": {\n    \"acceptedByUser\": true,\n    \"note\": \"Confirmed through Postman planned API smoke request.\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/workbook-review-sessions/{{workbookReviewSessionId}}/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "workbook-review-sessions",
+                "{{workbookReviewSessionId}}",
+                "confirm"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('planned endpoint is either implemented or not yet routed', function () { pm.expect([200, 201, 404]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

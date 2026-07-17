@@ -35,13 +35,14 @@ async function applyMigrations(databaseUrl) {
   }
 }
 
-function workbookBlob(rows) {
+function componentDistributionWorkbookBlob() {
   const workbook = XLSX.utils.book_new();
   const worksheet = XLSX.utils.aoa_to_sheet([
-    ["Label", "Temperature (C)", "Reaction Time (hrs)", "Selectivity Gas (%)"],
-    ...rows,
+    ["Label", "C1", "C2", "C3", "C4"],
+    ["Overall tots", 5, 12.5, 21, 9.5],
+    ["Light fraction", 1, 2, 3, 4],
   ]);
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Runs");
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
   return new Blob([XLSX.write(workbook, { type: "buffer", bookType: "xlsx" })], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
@@ -57,7 +58,7 @@ async function closeServer(server) {
   });
 }
 
-test("Postgres SaaS routes preserve import lifecycle, merged commits, and chart spec validation", {
+test("Postgres SaaS routes preserve workbook review, source documents, and source-backed chart specs", {
   skip: !process.env.LABRAT_TEST_DATABASE_URL,
 }, async () => {
   const rawUrl = process.env.LABRAT_TEST_DATABASE_URL;
@@ -107,30 +108,6 @@ test("Postgres SaaS routes preserve import lifecycle, merged commits, and chart 
       });
       return { response: upload, body: await upload.json() };
     };
-    const uploadAndRun = async (projectId, blob, filename) => {
-      const { response: upload, body: uploadBody } = await uploadFile(projectId, blob, filename);
-      assert.equal(upload.status, 201);
-      const run = await jsonFetch(`/api/projects/${projectId}/import-runs`, {
-        method: "POST",
-        body: { fileObjectId: uploadBody.fileObject.id },
-      });
-      assert.equal(run.status, 201);
-      return (await run.json()).importRun;
-    };
-    const previewAndApply = async (run) => {
-      const blockId = run.scanResult.sheets[0].blocks[0].blockId;
-      const preview = await jsonFetch(`/api/import-runs/${run.id}/normalize-preview`, {
-        method: "POST",
-        body: { approvedBlockIds: [blockId] },
-      });
-      assert.equal(preview.status, 200);
-      const apply = await jsonFetch(`/api/import-runs/${run.id}/apply`, {
-        method: "POST",
-        body: {},
-      });
-      assert.equal(apply.status, 200);
-      return apply.json();
-    };
 
     const login = await jsonFetch("/api/auth/login", {
       method: "POST",
@@ -141,66 +118,175 @@ test("Postgres SaaS routes preserve import lifecycle, merged commits, and chart 
     const labId = (await (await jsonFetch("/api/labs")).json()).labs[0].labId;
     const project = await (await jsonFetch("/api/projects", {
       method: "POST",
-      body: { labId, name: "Postgres Parity Project" },
+      body: { labId, name: "Postgres Source Review Project" },
     })).json();
 
-    const duplicateWorkbook = workbookBlob([["Exp0", 225, 3, 0.15]]);
-    const firstUpload = await uploadFile(project.project.id, duplicateWorkbook, "duplicate.xlsx");
+    const workbook = componentDistributionWorkbookBlob();
+    const firstUpload = await uploadFile(project.project.id, workbook, "Calculation_Exp30.xlsx");
     assert.equal(firstUpload.response.status, 201);
-    const reusedUpload = await uploadFile(project.project.id, duplicateWorkbook, "duplicate.xlsx");
+    const reusedUpload = await uploadFile(project.project.id, workbook, "Calculation_Exp30.xlsx");
     assert.equal(reusedUpload.response.status, 200);
     assert.equal(reusedUpload.body.reused, true);
     assert.equal(reusedUpload.body.fileObject.id, firstUpload.body.fileObject.id);
-    const reusedRun = await jsonFetch(`/api/projects/${project.project.id}/import-runs`, {
+
+    const review = await jsonFetch(`/api/projects/${project.project.id}/workbook-review-sessions`, {
       method: "POST",
-      body: { fileObjectId: reusedUpload.body.fileObject.id },
+      body: { fileObjectId: firstUpload.body.fileObject.id },
     });
-    assert.equal(reusedRun.status, 201);
+    assert.equal(review.status, 201);
+    const reviewBody = await review.json();
+    assert.match(reviewBody.workbookReviewSession.id, /^workbook_review_session_/);
+    assert.equal(reviewBody.importRun.status, "source_review_ready");
+    assert.equal(reviewBody.sourceDocument.fileObjectId, firstUpload.body.fileObject.id);
+    assert.equal(reviewBody.regions.length > 0, true);
 
-    const firstRun = await uploadAndRun(project.project.id, workbookBlob([["Exp1", 250, 5, 0.35]]), "first.xlsx");
-    const firstApply = await previewAndApply(firstRun);
-    const secondRun = await uploadAndRun(project.project.id, workbookBlob([["Exp2", 275, 8, 0.24]]), "second.xlsx");
-    const secondApply = await previewAndApply(secondRun);
-    assert.equal(secondApply.datasetCommit.parentCommitId, firstApply.datasetCommit.id);
-    assert.equal(secondApply.datasetCommit.datasetPayload.genericImports.length, 2);
-
-    const repeatApply = await jsonFetch(`/api/import-runs/${firstRun.id}/apply`, { method: "POST", body: {} });
-    assert.equal(repeatApply.status, 409);
-    assert.equal((await repeatApply.json()).error.code, "import_run_already_applied");
-
-    const interpreted = await jsonFetch(`/api/projects/${project.project.id}/charts/interpret`, {
+    const oldNormalize = await jsonFetch(`/api/import-runs/${reviewBody.importRun.id}/normalize-preview`, {
       method: "POST",
-      body: { prompt: "plot gas selectivity vs temperature", persistAsProposal: true },
+      body: {},
     });
-    assert.equal(interpreted.status, 200);
-    const interpretedBody = await interpreted.json();
-    const proposal = interpretedBody.chartProposalSet.payload.proposals[0];
+    assert.equal(oldNormalize.status, 404);
+
+    const range = await jsonFetch(`/api/source-documents/${reviewBody.sourceDocument.id}/range`, {
+      method: "POST",
+      body: { sheetName: "Sheet1", range: "A1:E3" },
+    });
+    assert.equal(range.status, 200);
+    const rangeBody = await range.json();
+    assert.equal(rangeBody.cells.find((cell) => cell.address === "B2").rawValue, 5);
+
+    const revision = await jsonFetch(`/api/workbook-review-sessions/${reviewBody.workbookReviewSession.id}/revisions`, {
+      method: "POST",
+      body: {
+        message: "This red box is the Exp30 carbon number distribution.",
+        redBoxUpdates: [{
+          clientRegionId: "draft_region_pg_1",
+          operation: "upsert",
+          sourceDocumentId: reviewBody.sourceDocument.id,
+          sheetName: "Sheet1",
+          range: "A1:E3",
+          selectionMethod: "drag_select",
+          description: "Exp30 carbon number distribution",
+        }],
+      },
+    });
+    assert.equal(revision.status, 200);
+    const revisionBody = await revision.json();
+    assert.equal(revisionBody.workbookUnderstandingDraft.facts[0].semanticType, "component_distribution");
+
+    const confirmedUnderstanding = await jsonFetch(`/api/workbook-review-sessions/${reviewBody.workbookReviewSession.id}/confirm`, {
+      method: "POST",
+      body: {
+        workbookUnderstandingId: revisionBody.workbookUnderstandingDraft.id,
+        decisionSummary: { acceptedByUser: true },
+      },
+    });
+    assert.equal(confirmedUnderstanding.status, 200);
+    const confirmedUnderstandingBody = await confirmedUnderstanding.json();
+    assert.equal(confirmedUnderstandingBody.workbookUnderstanding.status, "accepted");
+
+    const listedUnderstandings = await jsonFetch(`/api/projects/${project.project.id}/workbook-understandings`);
+    assert.equal(listedUnderstandings.status, 200);
+    const listedUnderstandingsBody = await listedUnderstandings.json();
+    assert.equal(listedUnderstandingsBody.workbookUnderstandings.some((item) => item.id === confirmedUnderstandingBody.workbookUnderstanding.id), true);
+
+    const dataPlanDraft = await jsonFetch(`/api/projects/${project.project.id}/data-plans/draft`, {
+      method: "POST",
+      body: {
+        intent: "experiment_browser_publish",
+        workbookUnderstandingIds: [confirmedUnderstandingBody.workbookUnderstanding.id],
+        identityDecisions: [],
+      },
+    });
+    assert.equal(dataPlanDraft.status, 200);
+    const dataPlanDraftBody = await dataPlanDraft.json();
+    assert.equal(dataPlanDraftBody.resultKind, "data_plan_review");
+    const experimentAlias = dataPlanDraftBody.identityCandidates[0].sourceAlias;
+    const reviewedDataPlan = await jsonFetch(`/api/projects/${project.project.id}/data-plans/draft`, {
+      method: "POST",
+      body: {
+        intent: "experiment_browser_publish",
+        workbookUnderstandingIds: [confirmedUnderstandingBody.workbookUnderstanding.id],
+        identityDecisions: [{ sourceAlias: experimentAlias, action: "create" }],
+      },
+    });
+    assert.equal(reviewedDataPlan.status, 200);
+    const reviewedDataPlanBody = await reviewedDataPlan.json();
+    assert.deepEqual(reviewedDataPlanBody.reviewSummary.blockers, []);
+    const publish = await jsonFetch(`/api/projects/${project.project.id}/data-plans/publish`, {
+      method: "POST",
+      body: {
+        dataPlan: reviewedDataPlanBody.dataPlan,
+        identityDecisions: [{ sourceAlias: experimentAlias, action: "create" }],
+        expectedPreviewHash: reviewedDataPlanBody.snapshotPreview.previewHash,
+        expectedDependencyHash: reviewedDataPlanBody.dataPlan.dependencyHash,
+        idempotencyKey: "postgres_publish_1",
+      },
+    });
+    assert.equal(publish.status, 201);
+    const publishBody = await publish.json();
+    assert.equal(publishBody.dataSnapshot.status, "accepted");
+    const publishRetry = await jsonFetch(`/api/projects/${project.project.id}/data-plans/publish`, {
+      method: "POST",
+      body: {
+        dataPlan: reviewedDataPlanBody.dataPlan,
+        identityDecisions: [{ sourceAlias: experimentAlias, action: "create" }],
+        expectedPreviewHash: reviewedDataPlanBody.snapshotPreview.previewHash,
+        expectedDependencyHash: reviewedDataPlanBody.dataPlan.dependencyHash,
+        idempotencyKey: "postgres_publish_1",
+      },
+    });
+    assert.equal(publishRetry.status, 200);
+    assert.equal((await publishRetry.json()).dataSnapshot.id, publishBody.dataSnapshot.id);
+    assert.equal((await store.listDataPlans({ projectId: project.project.id })).length, 1);
+    assert.equal((await store.listDataSnapshots({ projectId: project.project.id })).length, 1);
+    assert.equal((await store.listExperimentIdentities({ projectId: project.project.id })).length, 1);
+    assert.equal((await store.listExperimentSnapshotHeads({ projectId: project.project.id })).length, 1);
+
+    const sourceExtract = await jsonFetch(`/api/projects/${project.project.id}/source-extract-proposals`, {
+      method: "POST",
+      body: {
+        sourceDocumentId: reviewBody.sourceDocument.id,
+        sheetName: "Sheet1",
+        range: "A1:E3",
+        extractType: "component_distribution",
+        purpose: "chart_source",
+      },
+    });
+    assert.equal(sourceExtract.status, 201);
+    const sourceExtractProposal = (await sourceExtract.json()).sourceExtractProposal;
+    assert.equal(sourceExtractProposal.preview.rows.length, 4);
+
+    const accepted = await jsonFetch(`/api/source-extract-proposals/${sourceExtractProposal.id}`, {
+      method: "PATCH",
+      body: { status: "accepted", decisionSummary: { acceptedByUser: true } },
+    });
+    assert.equal(accepted.status, 200);
+
+    const chartProposal = await jsonFetch(`/api/source-extract-proposals/${sourceExtractProposal.id}/chart-proposal`, {
+      method: "POST",
+      body: {},
+    });
+    assert.equal(chartProposal.status, 201);
+    const chartProposalSet = (await chartProposal.json()).chartProposalSet;
+    const proposal = chartProposalSet.payload.proposals[0];
+    assert.equal(proposal.origin, "source_extract");
+
     const chartSpec = await jsonFetch(`/api/projects/${project.project.id}/chart-specs/from-proposal`, {
       method: "POST",
       body: {
-        chartProposalSetId: interpretedBody.chartProposalSet.id,
+        chartProposalSetId: chartProposalSet.id,
         proposalId: proposal.proposalId,
       },
     });
     assert.equal(chartSpec.status, 201);
-
-    const badChart = await jsonFetch(`/api/projects/${project.project.id}/chart-specs/from-proposal`, {
-      method: "POST",
-      body: {
-        proposalId: "bad_chart",
-        proposal: {
-          proposalId: "bad_chart",
-          chartType: "scatter",
-          x: { label: "Temperature", sourceIds: ["missing_x"] },
-          y: { label: "Gas", sourceIds: ["missing_y"] },
-        },
-      },
-    });
-    assert.equal(badChart.status, 400);
-    assert.equal((await badChart.json()).error.code, "chart_source_unresolved");
+    const chartSpecBody = await chartSpec.json();
+    assert.equal(chartSpecBody.chartSpec.datasetCommitId, undefined);
+    assert.equal(chartSpecBody.chartSpec.spec.sourceSnapshot.rows.length, 4);
 
     const auditEvents = await store.listAuditEvents({ projectId: project.project.id });
-    assert.equal(auditEvents.some((event) => event.action === "import.apply"), true);
+    assert.equal(auditEvents.some((event) => event.action === "file.reuse"), true);
+    assert.equal(auditEvents.some((event) => event.action === "workbook_review_session.create"), true);
+    assert.equal(auditEvents.some((event) => event.action === "workbook_review.confirm_understanding"), true);
     assert.equal(auditEvents.some((event) => event.action === "chart_spec.create"), true);
   } finally {
     if (server) await closeServer(server);

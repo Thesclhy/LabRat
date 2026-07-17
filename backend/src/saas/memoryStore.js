@@ -18,6 +18,10 @@ function copy(value) {
   return value;
 }
 
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
 export class MemorySaasStore {
   constructor(options = {}) {
     this.users = new Map();
@@ -27,17 +31,19 @@ export class MemorySaasStore {
     this.projects = new Map();
     this.fileObjects = new Map();
     this.importRuns = new Map();
-    this.supplementalImportBatches = new Map();
-    this.supplementalImportBatchItems = new Map();
-    this.datasetCommits = new Map();
-    this.observationSeries = new Map();
-    this.analysisViews = new Map();
     this.sourceDocuments = new Map();
     this.sourceRegions = new Map();
     this.sourceIndexBlobs = new Map();
     this.sourceExtractProposals = new Map();
+    this.workbookReviewSessions = new Map();
+    this.workbookUnderstandings = new Map();
+    this.dataPlans = new Map();
+    this.dataSnapshots = new Map();
+    this.experimentIdentities = new Map();
+    this.experimentSnapshotHeads = new Map();
+    this.experimentSnapshotPublishes = new Map();
+    this.browserViews = new Map();
     this.agentRuns = new Map();
-    this.mappingSets = new Map();
     this.chartProposalSets = new Map();
     this.chartSpecs = new Map();
     this.manuscripts = new Map();
@@ -280,7 +286,6 @@ export class MemorySaasStore {
       name,
       description,
       status: "active",
-      currentDatasetCommitId: null,
       metadata: copy(metadata) || {},
       createdAt,
       updatedAt: createdAt,
@@ -302,7 +307,6 @@ export class MemorySaasStore {
     if (changes.description != null) project.description = String(changes.description);
     if (changes.status != null) project.status = String(changes.status);
     if (changes.metadata != null) project.metadata = copy(changes.metadata) || {};
-    if (changes.currentDatasetCommitId !== undefined) project.currentDatasetCommitId = changes.currentDatasetCommitId;
     project.updatedAt = nowIso();
     project.updatedBy = changes.updatedBy || project.updatedBy;
     return copy(project);
@@ -362,7 +366,6 @@ export class MemorySaasStore {
       reviewDecisions: {},
       warnings: input.warnings || [],
       error: null,
-      appliedDatasetCommitId: null,
       createdAt,
       updatedAt: createdAt,
       createdBy: input.createdBy,
@@ -387,187 +390,6 @@ export class MemorySaasStore {
     if (!run) return null;
     Object.assign(run, copy(changes), { updatedAt: nowIso() });
     return copy(run);
-  }
-
-  async createSupplementalImportBatch(input) {
-    const createdAt = nowIso();
-    const batch = {
-      id: input.id || makeId("supplement_batch"),
-      labId: input.labId,
-      projectId: input.projectId,
-      status: input.status || "queued",
-      summary: copy(input.summary) || {},
-      createdAt,
-      updatedAt: createdAt,
-      createdBy: input.createdBy,
-      updatedBy: input.createdBy,
-    };
-    this.supplementalImportBatches.set(batch.id, batch);
-    for (const fileObject of input.fileObjects || []) {
-      const item = {
-        id: makeId("supplement_batch_item"),
-        batchId: batch.id,
-        labId: batch.labId,
-        projectId: batch.projectId,
-        fileObjectId: fileObject.id,
-        importRunId: null,
-        fileName: fileObject.originalName || fileObject.id,
-        status: "queued",
-        progressMessage: "Queued for supplemental relationship review.",
-        summary: {},
-        relationshipPreview: null,
-        warnings: [],
-        error: null,
-        createdAt,
-        updatedAt: createdAt,
-        createdBy: input.createdBy,
-        updatedBy: input.createdBy,
-      };
-      this.supplementalImportBatchItems.set(item.id, item);
-    }
-    return this.findSupplementalImportBatchById(batch.id);
-  }
-
-  async findSupplementalImportBatchById(batchId) {
-    const batch = this.supplementalImportBatches.get(batchId);
-    if (!batch) return null;
-    const items = [...this.supplementalImportBatchItems.values()]
-      .filter((item) => item.batchId === batchId)
-      .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))
-      .map(copy);
-    return copy({ ...batch, items });
-  }
-
-  async listSupplementalImportBatches({ projectId }) {
-    const batches = [...this.supplementalImportBatches.values()]
-      .filter((batch) => batch.projectId === projectId)
-      .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
-    return Promise.all(batches.map((batch) => this.findSupplementalImportBatchById(batch.id)));
-  }
-
-  async updateSupplementalImportBatch(batchId, changes) {
-    const batch = this.supplementalImportBatches.get(batchId);
-    if (!batch) return null;
-    if (changes.status != null) batch.status = String(changes.status);
-    if (changes.summary != null) batch.summary = copy(changes.summary) || {};
-    batch.updatedAt = nowIso();
-    batch.updatedBy = changes.updatedBy || batch.updatedBy;
-    return this.findSupplementalImportBatchById(batchId);
-  }
-
-  async updateSupplementalImportBatchItem(batchId, itemId, changes) {
-    const item = this.supplementalImportBatchItems.get(itemId);
-    if (!item || item.batchId !== batchId) return null;
-    if (changes.importRunId !== undefined) item.importRunId = changes.importRunId || null;
-    if (changes.status != null) item.status = String(changes.status);
-    if (changes.progressMessage !== undefined) item.progressMessage = changes.progressMessage || null;
-    if (changes.summary != null) item.summary = copy(changes.summary) || {};
-    if (changes.relationshipPreview !== undefined) item.relationshipPreview = copy(changes.relationshipPreview) || null;
-    if (changes.warnings != null) item.warnings = copy(changes.warnings) || [];
-    if (changes.error !== undefined) item.error = copy(changes.error) || null;
-    item.updatedAt = nowIso();
-    item.updatedBy = changes.updatedBy || item.updatedBy;
-    return copy(item);
-  }
-
-  async createDatasetCommit(input) {
-    const commit = {
-      id: makeId("commit"),
-      labId: input.labId,
-      projectId: input.projectId,
-      parentCommitId: input.parentCommitId || null,
-      sourceImportRunIds: input.sourceImportRunIds || [],
-      sourceMappingSetIds: input.sourceMappingSetIds || [],
-      datasetPayload: input.datasetPayload || {},
-      summary: input.summary || {},
-      warnings: input.warnings || [],
-      createdAt: nowIso(),
-      createdBy: input.createdBy,
-    };
-    this.datasetCommits.set(commit.id, commit);
-    const project = this.projects.get(commit.projectId);
-    if (project) {
-      project.currentDatasetCommitId = commit.id;
-      project.updatedAt = nowIso();
-      project.updatedBy = input.createdBy;
-    }
-    return copy(commit);
-  }
-
-  async findDatasetCommitById(commitId) {
-    return copy(this.datasetCommits.get(commitId) || null);
-  }
-
-  async listDatasetCommits({ projectId }) {
-    return [...this.datasetCommits.values()]
-      .filter((commit) => commit.projectId === projectId)
-      .map(copy);
-  }
-
-  async replaceObservationSeriesForDatasetCommit(input) {
-    const createdAt = nowIso();
-    for (const [id, series] of this.observationSeries.entries()) {
-      if (series.projectId === input.projectId && series.datasetCommitId === input.datasetCommitId) {
-        this.observationSeries.delete(id);
-      }
-    }
-    for (const item of input.series || []) {
-      const id = item.id || makeId("observation_series");
-      const series = {
-        ...copy(item),
-        id,
-        seriesId: item.seriesId || id,
-        labId: item.labId || input.labId,
-        projectId: item.projectId || input.projectId,
-        datasetCommitId: item.datasetCommitId || input.datasetCommitId,
-        status: item.status || "active",
-        createdAt,
-        updatedAt: createdAt,
-        createdBy: input.updatedBy,
-        updatedBy: input.updatedBy,
-      };
-      this.observationSeries.set(id, series);
-    }
-    return this.listObservationSeries({ projectId: input.projectId });
-  }
-
-  async listObservationSeries({ projectId }) {
-    return [...this.observationSeries.values()]
-      .filter((series) => series.projectId === projectId)
-      .map(copy);
-  }
-
-  async createAnalysisView(input) {
-    const createdAt = nowIso();
-    const view = {
-      id: input.id || makeId("analysis_view"),
-      labId: input.labId,
-      projectId: input.projectId,
-      datasetCommitId: input.datasetCommitId || null,
-      schemaVersion: input.schemaVersion || "labrat.analysisView.v1",
-      viewType: input.viewType,
-      status: input.status || "draft",
-      title: input.title || null,
-      spec: copy(input.spec) || {},
-      sourceRefs: copy(input.sourceRefs) || [],
-      warnings: copy(input.warnings) || [],
-      createdAt,
-      updatedAt: createdAt,
-      createdBy: input.createdBy,
-      updatedBy: input.createdBy,
-    };
-    this.analysisViews.set(view.id, view);
-    return copy(view);
-  }
-
-  async findAnalysisViewById(id) {
-    return copy(this.analysisViews.get(id) || null);
-  }
-
-  async listAnalysisViews({ projectId }) {
-    return [...this.analysisViews.values()]
-      .filter((view) => view.projectId === projectId)
-      .map(copy);
   }
 
   async replaceSourceDocumentIndex(input) {
@@ -678,6 +500,285 @@ export class MemorySaasStore {
       .map(copy);
   }
 
+  async createWorkbookReviewSession(input) {
+    const createdAt = nowIso();
+    const session = {
+      id: input.id || makeId("workbook_review_session"),
+      labId: input.labId,
+      projectId: input.projectId,
+      sourceDocumentId: input.sourceDocumentId,
+      schemaVersion: input.schemaVersion || "labrat.workbookReviewSession.v1",
+      status: input.status || "needs_user_review",
+      version: input.version || 1,
+      workbookSummary: copy(input.workbookSummary) || {},
+      currentUnderstanding: copy(input.currentUnderstanding) || {},
+      regions: copy(input.regions) || [],
+      messages: copy(input.messages) || [],
+      warnings: copy(input.warnings) || [],
+      createdAt,
+      updatedAt: createdAt,
+      createdBy: input.createdBy,
+      updatedBy: input.createdBy,
+    };
+    this.workbookReviewSessions.set(session.id, session);
+    return copy(session);
+  }
+
+  async findWorkbookReviewSessionById(id) {
+    return copy(this.workbookReviewSessions.get(id) || null);
+  }
+
+  async updateWorkbookReviewSession(id, patch = {}) {
+    const existing = this.workbookReviewSessions.get(id);
+    if (!existing) return null;
+    const updatedAt = nowIso();
+    const next = {
+      ...existing,
+      ...copy(patch),
+      id: existing.id,
+      labId: existing.labId,
+      projectId: existing.projectId,
+      sourceDocumentId: existing.sourceDocumentId,
+      createdAt: existing.createdAt,
+      createdBy: existing.createdBy,
+      updatedAt,
+      updatedBy: patch.updatedBy || existing.updatedBy,
+    };
+    this.workbookReviewSessions.set(id, next);
+    return copy(next);
+  }
+
+  async listWorkbookReviewSessions({ projectId }) {
+    return [...this.workbookReviewSessions.values()]
+      .filter((session) => session.projectId === projectId)
+      .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
+      .map(copy);
+  }
+
+  async createWorkbookUnderstanding(input) {
+    const createdAt = nowIso();
+    const understanding = {
+      id: input.id || makeId("workbook_understanding"),
+      labId: input.labId,
+      projectId: input.projectId,
+      sourceDocumentId: input.sourceDocumentId,
+      workbookReviewSessionId: input.workbookReviewSessionId,
+      schemaVersion: input.schemaVersion || "labrat.workbookUnderstanding.v1",
+      status: input.status || "accepted",
+      version: input.version || 1,
+      understanding: copy(input.understanding) || {},
+      facts: copy(input.facts) || [],
+      regionSummaries: copy(input.regionSummaries) || [],
+      warnings: copy(input.warnings) || [],
+      decisionSummary: copy(input.decisionSummary) || {},
+      createdAt,
+      updatedAt: createdAt,
+      createdBy: input.createdBy,
+      updatedBy: input.createdBy,
+    };
+    this.workbookUnderstandings.set(understanding.id, understanding);
+    return copy(understanding);
+  }
+
+  async listWorkbookUnderstandings({ projectId }) {
+    return [...this.workbookUnderstandings.values()]
+      .filter((understanding) => understanding.projectId === projectId)
+      .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
+      .map(copy);
+  }
+
+  async findDataPlanById(id) {
+    return copy(this.dataPlans.get(id) || null);
+  }
+
+  async listDataPlans({ projectId }) {
+    return [...this.dataPlans.values()]
+      .filter((plan) => plan.projectId === projectId)
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+      .map(copy);
+  }
+
+  async findDataSnapshotById(id) {
+    return copy(this.dataSnapshots.get(id) || null);
+  }
+
+  async listDataSnapshots({ projectId }) {
+    return [...this.dataSnapshots.values()]
+      .filter((snapshot) => snapshot.projectId === projectId)
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+      .map(copy);
+  }
+
+  async findExperimentIdentityById(id) {
+    return copy(this.experimentIdentities.get(id) || null);
+  }
+
+  async listExperimentIdentities({ projectId }) {
+    return [...this.experimentIdentities.values()]
+      .filter((identity) => identity.projectId === projectId)
+      .sort((a, b) => String(a.canonicalLabel).localeCompare(String(b.canonicalLabel)) || a.id.localeCompare(b.id))
+      .map(copy);
+  }
+
+  async listExperimentSnapshotHeads({ projectId }) {
+    return [...this.experimentSnapshotHeads.values()]
+      .filter((head) => head.projectId === projectId)
+      .sort((a, b) => a.experimentId.localeCompare(b.experimentId))
+      .map(copy);
+  }
+
+  async findExperimentSnapshotPublish({ projectId, idempotencyKey }) {
+    return copy(this.experimentSnapshotPublishes.get(`${projectId}:${idempotencyKey}`) || null);
+  }
+
+  async publishExperimentSnapshot(input) {
+    const publishKey = `${input.projectId}:${input.idempotencyKey}`;
+    const prior = this.experimentSnapshotPublishes.get(publishKey);
+    if (prior) {
+      if (prior.requestHash !== input.requestHash) {
+        throw Object.assign(new Error("This idempotency key was already used for a different publish request."), {
+          statusCode: 409,
+          code: "idempotency_key_conflict",
+        });
+      }
+      return { ...copy(prior.response), idempotentReplay: true };
+    }
+
+    const dataPlan = copy(input.dataPlan);
+    const dataSnapshot = copy(input.dataSnapshot);
+    const identities = copy(input.experimentIdentities) || [];
+    const heads = copy(input.experimentSnapshotHeads) || [];
+    const records = Array.isArray(dataSnapshot?.experimentRecords) ? dataSnapshot.experimentRecords : [];
+    const invalid = (
+      !input.idempotencyKey
+      || !input.requestHash
+      || !dataPlan?.id
+      || !dataSnapshot?.id
+      || dataPlan.projectId !== input.projectId
+      || dataSnapshot.projectId !== input.projectId
+      || dataSnapshot.dataPlanId !== dataPlan.id
+      || this.dataPlans.has(dataPlan.id)
+      || this.dataSnapshots.has(dataSnapshot.id)
+      || identities.some((identity) => !identity?.id || identity.projectId !== input.projectId)
+      || heads.some((head) => {
+        const record = records[Number(head?.recordIndex)];
+        return !head?.id
+          || head.projectId !== input.projectId
+          || head.dataSnapshotId !== dataSnapshot.id
+          || !record
+          || record.experimentId !== head.experimentId
+          || !identities.some((identity) => identity.id === head.experimentId)
+            && !this.experimentIdentities.has(head.experimentId);
+      })
+    );
+    if (invalid) {
+      throw Object.assign(new Error("The experiment snapshot publish package is invalid."), {
+        statusCode: 400,
+        code: "invalid_publish_package",
+      });
+    }
+
+    const nextDataPlans = new Map(this.dataPlans);
+    const nextDataSnapshots = new Map(this.dataSnapshots);
+    const nextIdentities = new Map(this.experimentIdentities);
+    const nextHeads = new Map(this.experimentSnapshotHeads);
+    const nextPublishes = new Map(this.experimentSnapshotPublishes);
+    const nextAuditEvents = new Map(this.auditEvents);
+    nextDataPlans.set(dataPlan.id, dataPlan);
+    nextDataSnapshots.set(dataSnapshot.id, dataSnapshot);
+    identities.forEach((identity) => nextIdentities.set(identity.id, identity));
+    heads.forEach((head) => {
+      const existing = [...nextHeads.values()].find((candidate) => (
+        candidate.projectId === input.projectId && candidate.experimentId === head.experimentId
+      ));
+      if (existing) nextHeads.delete(existing.id);
+      nextHeads.set(head.id, head);
+    });
+    asArray(input.auditEvents).forEach((auditInput) => {
+      const event = {
+        id: auditInput.id || makeId("audit"),
+        labId: auditInput.labId || input.labId || null,
+        projectId: auditInput.projectId || input.projectId || null,
+        actorUserId: auditInput.actorUserId || input.actorUserId || null,
+        action: auditInput.action,
+        targetType: auditInput.targetType || null,
+        targetId: auditInput.targetId || null,
+        summary: auditInput.summary || null,
+        metadata: copy(auditInput.metadata) || {},
+        createdAt: auditInput.createdAt || nowIso(),
+        ipAddress: auditInput.ipAddress || null,
+        userAgent: auditInput.userAgent || null,
+      };
+      nextAuditEvents.set(event.id, event);
+    });
+    const response = { ...copy(input.response), idempotentReplay: false };
+    nextPublishes.set(publishKey, {
+      projectId: input.projectId,
+      idempotencyKey: input.idempotencyKey,
+      requestHash: input.requestHash,
+      dataPlanId: dataPlan.id,
+      dataSnapshotId: dataSnapshot.id,
+      response,
+      createdAt: nowIso(),
+    });
+
+    this.dataPlans = nextDataPlans;
+    this.dataSnapshots = nextDataSnapshots;
+    this.experimentIdentities = nextIdentities;
+    this.experimentSnapshotHeads = nextHeads;
+    this.experimentSnapshotPublishes = nextPublishes;
+    this.auditEvents = nextAuditEvents;
+    return copy(response);
+  }
+
+  async createBrowserView(input) {
+    const createdAt = nowIso();
+    const view = {
+      id: input.id || makeId("browser_view"),
+      labId: input.labId,
+      projectId: input.projectId,
+      ownerUserId: input.ownerUserId,
+      schemaVersion: input.schemaVersion || "labrat.browserView.v1",
+      name: String(input.name || "Untitled view"),
+      payload: copy(input.payload) || {},
+      isDefault: Boolean(input.isDefault),
+      createdAt,
+      updatedAt: createdAt,
+    };
+    this.browserViews.set(view.id, view);
+    return copy(view);
+  }
+
+  async findBrowserViewById(id) {
+    return copy(this.browserViews.get(id) || null);
+  }
+
+  async listBrowserViews({ projectId, ownerUserId = null }) {
+    return [...this.browserViews.values()]
+      .filter((view) => view.projectId === projectId)
+      .filter((view) => !ownerUserId || view.ownerUserId === ownerUserId)
+      .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
+      .map(copy);
+  }
+
+  async updateBrowserView(id, changes = {}) {
+    const existing = this.browserViews.get(id);
+    if (!existing) return null;
+    const updated = {
+      ...existing,
+      ...(changes.name !== undefined ? { name: String(changes.name) } : {}),
+      ...(changes.payload !== undefined ? { payload: copy(changes.payload) || {} } : {}),
+      ...(changes.isDefault !== undefined ? { isDefault: Boolean(changes.isDefault) } : {}),
+      updatedAt: nowIso(),
+    };
+    this.browserViews.set(id, updated);
+    return copy(updated);
+  }
+
+  async deleteBrowserView(id) {
+    return this.browserViews.delete(id);
+  }
+
   async createSourceExtractProposal(input) {
     const createdAt = nowIso();
     const proposal = {
@@ -686,7 +787,6 @@ export class MemorySaasStore {
       projectId: input.projectId,
       sourceDocumentId: input.sourceDocumentId || null,
       sourceRegionId: input.sourceRegionId || null,
-      datasetCommitId: input.datasetCommitId || null,
       schemaVersion: input.schemaVersion || "labrat.sourceExtractProposal.v1",
       status: input.status || "proposed",
       purpose: input.purpose || null,
@@ -740,7 +840,6 @@ export class MemorySaasStore {
       selectedContext: copy(input.selectedContext) || {},
       visibleSteps: copy(input.visibleSteps) || [],
       toolTrace: copy(input.toolTrace) || [],
-      analysisViewId: input.analysisViewId || null,
       proposalRefs: copy(input.proposalRefs) || [],
       actions: copy(input.actions) || [],
       usage: copy(input.usage) || {},
@@ -774,7 +873,6 @@ export class MemorySaasStore {
     if (changes.selectedContext != null) run.selectedContext = copy(changes.selectedContext) || {};
     if (changes.visibleSteps != null) run.visibleSteps = copy(changes.visibleSteps) || [];
     if (changes.toolTrace != null) run.toolTrace = copy(changes.toolTrace) || [];
-    if (changes.analysisViewId !== undefined) run.analysisViewId = changes.analysisViewId || null;
     if (changes.proposalRefs != null) run.proposalRefs = copy(changes.proposalRefs) || [];
     if (changes.actions != null) run.actions = copy(changes.actions) || [];
     if (changes.usage != null) run.usage = copy(changes.usage) || {};
@@ -785,56 +883,12 @@ export class MemorySaasStore {
     return copy(run);
   }
 
-  async createMappingSet(input) {
-    const createdAt = nowIso();
-    const set = {
-      id: input.id || makeId("mapping_set"),
-      labId: input.labId,
-      projectId: input.projectId,
-      importRunId: input.importRunId || null,
-      datasetCommitId: input.datasetCommitId || null,
-      schemaVersion: input.schemaVersion || "labrat.semanticMappingResponse.v1",
-      status: input.status || "proposed",
-      payload: copy(input.payload) || {},
-      decisionSummary: copy(input.decisionSummary) || {},
-      createdAt,
-      updatedAt: createdAt,
-      createdBy: input.createdBy,
-      updatedBy: input.createdBy,
-    };
-    this.mappingSets.set(set.id, set);
-    return copy(set);
-  }
-
-  async findMappingSetById(id) {
-    return copy(this.mappingSets.get(id) || null);
-  }
-
-  async listMappingSets({ projectId }) {
-    return [...this.mappingSets.values()]
-      .filter((set) => set.projectId === projectId)
-      .map(copy);
-  }
-
-  async updateMappingSet(id, changes) {
-    const set = this.mappingSets.get(id);
-    if (!set) return null;
-    if (changes.status != null) set.status = String(changes.status);
-    if (changes.payload != null) set.payload = copy(changes.payload) || {};
-    if (changes.decisionSummary != null) set.decisionSummary = copy(changes.decisionSummary) || {};
-    set.updatedAt = nowIso();
-    set.updatedBy = changes.updatedBy || set.updatedBy;
-    return copy(set);
-  }
-
   async createChartProposalSet(input) {
     const createdAt = nowIso();
     const set = {
       id: input.id || makeId("chart_proposal_set"),
       labId: input.labId,
       projectId: input.projectId,
-      datasetCommitId: input.datasetCommitId || null,
-      mappingSetId: input.mappingSetId || null,
       schemaVersion: input.schemaVersion || "labrat.chartProposalSet.v1",
       status: input.status || "proposed",
       payload: input.payload || {},
@@ -875,8 +929,6 @@ export class MemorySaasStore {
       id: makeId("chart_spec"),
       labId: input.labId,
       projectId: input.projectId,
-      datasetCommitId: input.datasetCommitId || null,
-      mappingSetId: input.mappingSetId || null,
       sourceChartProposalSetId: input.sourceChartProposalSetId || null,
       sourceProposalId: input.sourceProposalId || null,
       title: input.title || null,

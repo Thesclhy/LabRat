@@ -1,29 +1,26 @@
 import path from "node:path";
 import { sendJson } from "../../http/json.js";
 import { readRequestBody } from "../../http/body.js";
-import { validateChartInterpretRequest } from "../../charts/schemas/chartInterpretSchemas.js";
-import { validateChartProposalRequest } from "../../charts/schemas/chartProposalSchemas.js";
-import { createChartInterpretResponse } from "../../charts/services/chartIntent.js";
-import { createChartProposalResponse } from "../../charts/services/chartProposal.js";
+import { shapeChartInterpretResponse } from "../../charts/schemas/chartInterpretSchemas.js";
+import { parseChartEvidenceIntent } from "../../charts/services/chartEvidenceIntent.js";
 import { parseMultipartFormData } from "../../http/multipart.js";
 import { runImportScan } from "../../import/services/importPipeline.js";
-import { normalizeApprovedScan } from "../../import/services/normalizer.js";
-import { validateNormalizeRequest } from "../../import/schemas/normalizationSchemas.js";
 import { getAuthContext, publicUser, requireAuth, requireLabRole, requireSuperAdmin } from "../authz.js";
-import { activeChartSpecs, decorateChartSpecsStaleness } from "../chartSpecStaleness.js";
 import { clearSessionCookie, setSessionCookie } from "../cookies.js";
 import { deleteUploadedFile, persistUploadedFile, readFileObjectBuffer } from "../fileStorage.js";
 import { makeId, makeSessionToken, sha256Hex } from "../ids.js";
 import { isJsonContentType, readJsonBody, routeUrl, sendError } from "../http.js";
 import { verifyPassword } from "../passwords.js";
-import { buildProjectAiContext } from "../projectAiContext.js";
-import { resolveProjectDataQuery } from "../dataResolveQuery.js";
 import { createProjectAgentPlan } from "../projectAgentPlanner.js";
+import { runEvidenceRetrievalAgent } from "../evidenceAgentRetrieval.js";
 import {
-  publicSupplementalImportBatch,
-  startSupplementalImportBatchProcessing,
-  subscribeSupplementalImportBatchEvents,
-} from "../supplementalImportBatches.js";
+  loadExperimentDataPlanReview,
+  publishExperimentBrowserData,
+} from "../experimentBrowserPublish.js";
+import {
+  buildExperimentProjection,
+  getExperimentProjectionDetail,
+} from "../experimentProjection.js";
 import {
   SOURCE_DOCUMENT_LIST_SCHEMA_VERSION,
   SOURCE_REGION_LIST_SCHEMA_VERSION,
@@ -40,34 +37,23 @@ import {
   sourceExtractProposalSummary,
 } from "../sourceExtracts.js";
 import {
+  applyWorkbookReviewRevision,
+  buildWorkbookUnderstandingForConfirmation,
+  buildWorkbookReviewSessionDraft,
+  workbookUnderstandingSummary,
+  workbookReviewSessionSummary,
+} from "../workbookReviewSessions.js";
+import {
   agentRunSummary,
   buildAgentRunDraft,
   executeAgentRunAction,
   markActionCompleted,
 } from "../agentRuns.js";
-import {
-  decorateObservationSeriesStaleness,
-  deriveObservationSeriesFromDatasetCommit,
-  mergePersistedAndDerivedObservationSeries,
-} from "../observationSeries.js";
-import {
-  ANALYSIS_VIEW_SCHEMA_VERSION,
-  chartProposalFromAnalysisView,
-  resolveSeriesCompareAnalysisView,
-} from "../analysisViews.js";
-import {
-  annotateSupplementDatasetPatch,
-  buildImportRelationshipPreview,
-} from "../importRelationshipResolver.js";
 import { validateChartSpecProposal } from "../chartSpecValidation.js";
 import {
-  assertExpectedParentDatasetCommit,
-  buildDatasetCommitSummary,
-  buildImportRefreshPreview,
-  buildNextDatasetCommitPayload,
-  buildRefreshDatasetCommitPayload,
-} from "../datasetCommits.js";
-import { assertCanApplyImportRun, assertCanNormalizeImportRun } from "../importRunLifecycle.js";
+  createSourceExtractProposalFromEvidence,
+  resolveChartEvidenceIntent,
+} from "../chartEvidenceResolver.js";
 
 const PROJECT_PROFILE_SCHEMA_VERSION = "labrat.projectProfile.v1";
 const PROJECT_PROFILE_TEXT_FIELDS = [
@@ -86,12 +72,6 @@ function asArray(value) {
 
 function isObject(value) {
   return !!value && typeof value === "object" && !Array.isArray(value);
-}
-
-function hasCommittedMasterImport(datasetPayload = {}) {
-  return asArray(datasetPayload.genericImports).some((genericImport) => (
-    genericImport?.relationship?.relationship !== "supplement"
-  ));
 }
 
 function clientIp(req) {
@@ -183,7 +163,6 @@ function projectSummary(project) {
     name: project.name,
     description: project.description || "",
     status: project.status,
-    currentDatasetCommitId: project.currentDatasetCommitId || null,
     metadata: project.metadata || {},
     projectProfile: projectProfileFor(project),
     createdAt: project.createdAt,
@@ -220,75 +199,47 @@ function importRunSummary(run) {
     reviewDecisions: run.reviewDecisions || {},
     warnings: run.warnings || [],
     error: run.error,
-    appliedDatasetCommitId: run.appliedDatasetCommitId,
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
   };
 }
 
-function supplementalImportBatchSummary(batch) {
-  return publicSupplementalImportBatch(batch);
-}
-
-async function observationSeriesForProject(context, project, currentDatasetCommit = null) {
-  const persisted = context.store.listObservationSeries
-    ? await context.store.listObservationSeries({ projectId: project.id })
-    : [];
-  const derivedCurrent = currentDatasetCommit
-    ? deriveObservationSeriesFromDatasetCommit({ project, datasetCommit: currentDatasetCommit })
-    : [];
-  const merged = mergePersistedAndDerivedObservationSeries(persisted, derivedCurrent);
-  return decorateObservationSeriesStaleness(merged, project.currentDatasetCommitId);
-}
-
-async function rebuildObservationSeriesForDatasetCommit(context, project, datasetCommit, updatedBy) {
-  if (!context.store.replaceObservationSeriesForDatasetCommit || !datasetCommit?.id) return [];
-  const series = deriveObservationSeriesFromDatasetCommit({ project, datasetCommit });
-  await context.store.replaceObservationSeriesForDatasetCommit({
-    labId: datasetCommit.labId || project.labId,
-    projectId: project.id,
-    datasetCommitId: datasetCommit.id,
-    series,
-    updatedBy,
-  });
-  return series;
-}
-
-function mappingSetSummary(set) {
+function dataPlanSummary(plan) {
   return {
-    id: set.id,
-    labId: set.labId,
-    projectId: set.projectId,
-    importRunId: set.importRunId || null,
-    datasetCommitId: set.datasetCommitId || null,
-    schemaVersion: set.schemaVersion,
-    status: set.status,
-    payload: set.payload || {},
-    decisionSummary: set.decisionSummary || {},
-    createdAt: set.createdAt,
-    updatedAt: set.updatedAt,
-    createdBy: set.createdBy,
-    updatedBy: set.updatedBy,
+    id: plan.id,
+    labId: plan.labId,
+    projectId: plan.projectId,
+    schemaVersion: plan.schemaVersion,
+    status: plan.status,
+    task: plan.task,
+    outputShape: plan.outputShape,
+    dependencyHash: plan.dependencyHash,
+    warnings: plan.warnings || [],
+    acceptedAt: plan.acceptedAt || null,
+    acceptedBy: plan.acceptedBy || null,
+    createdAt: plan.createdAt,
+    updatedAt: plan.updatedAt,
   };
 }
 
-function analysisViewSummary(view) {
+function dataSnapshotSummary(snapshot) {
   return {
-    id: view.id,
-    labId: view.labId,
-    projectId: view.projectId,
-    datasetCommitId: view.datasetCommitId || null,
-    schemaVersion: view.schemaVersion || ANALYSIS_VIEW_SCHEMA_VERSION,
-    viewType: view.viewType,
-    status: view.status || "draft",
-    title: view.title || null,
-    spec: view.spec || {},
-    sourceRefs: view.sourceRefs || [],
-    warnings: view.warnings || [],
-    createdAt: view.createdAt,
-    updatedAt: view.updatedAt,
-    createdBy: view.createdBy,
-    updatedBy: view.updatedBy,
+    id: snapshot.id,
+    labId: snapshot.labId,
+    projectId: snapshot.projectId,
+    dataPlanId: snapshot.dataPlanId,
+    schemaVersion: snapshot.schemaVersion,
+    status: snapshot.status,
+    outputShape: snapshot.outputShape,
+    contentHash: snapshot.contentHash,
+    dependencyHash: snapshot.dependencyHash,
+    experimentRecordCount: Number(snapshot.summary?.experimentRecordCount) || asArray(snapshot.experimentRecords).length,
+    includedRowCount: Number(snapshot.summary?.includedRowCount) || 0,
+    skippedRowCount: Number(snapshot.summary?.skippedRowCount) || 0,
+    warningCount: asArray(snapshot.warnings).length,
+    acceptedAt: snapshot.acceptedAt,
+    acceptedBy: snapshot.acceptedBy,
+    createdAt: snapshot.createdAt,
   };
 }
 
@@ -297,8 +248,6 @@ function chartProposalSetSummary(set) {
     id: set.id,
     labId: set.labId,
     projectId: set.projectId,
-    datasetCommitId: set.datasetCommitId || null,
-    mappingSetId: set.mappingSetId || null,
     schemaVersion: set.schemaVersion,
     status: set.status,
     payload: set.payload || {},
@@ -308,15 +257,6 @@ function chartProposalSetSummary(set) {
     createdBy: set.createdBy,
     updatedBy: set.updatedBy,
   };
-}
-
-function publicProjectAiContext(aiContext) {
-  const { serviceInput, ...safeContext } = aiContext;
-  return safeContext;
-}
-
-function datasetCommitRequired(res) {
-  sendError(res, 409, "dataset_commit_required", "Project must have a current dataset commit before chart AI can use project data.");
 }
 
 async function readOptionalJsonBody(req) {
@@ -343,61 +283,6 @@ async function readOptionalJsonBody(req) {
   }
 }
 
-async function buildProjectAiContextForRequest(context, project, options = {}) {
-  const [
-    currentDatasetCommit,
-    mappingSets,
-    chartProposalSets,
-    chartSpecs,
-    manuscripts,
-  ] = await Promise.all([
-    project.currentDatasetCommitId ? context.store.findDatasetCommitById(project.currentDatasetCommitId) : null,
-    context.store.listMappingSets({ projectId: project.id }),
-    context.store.listChartProposalSets({ projectId: project.id }),
-    context.store.listChartSpecs({ projectId: project.id }),
-    context.store.listManuscripts({ projectId: project.id }),
-  ]);
-  const activeSpecs = activeChartSpecs(chartSpecs, project.currentDatasetCommitId);
-  return buildProjectAiContext({
-    project,
-    projectProfile: projectProfileFor(project),
-    currentDatasetCommit,
-    mappingSets,
-    chartProposalSets,
-    chartSpecs: activeSpecs,
-    manuscripts,
-    selectedImportIds: options.selectedImportIds || [],
-    selectedExperimentIds: options.selectedExperimentIds || [],
-  });
-}
-
-function proposalFromChartSpecDraft(chartSpecDraft, prompt) {
-  return {
-    proposalId: `chart_interpret_${sha256Hex(prompt).slice(0, 16)}`,
-    status: "proposed",
-    chartType: chartSpecDraft.chartType || "scatter",
-    title: chartSpecDraft.title || "Interpreted chart",
-    x: chartSpecDraft.x || null,
-    y: chartSpecDraft.y || null,
-    yFields: chartSpecDraft.yFields || [],
-    groupBy: chartSpecDraft.groupBy || null,
-    filters: chartSpecDraft.filters || [],
-    transforms: chartSpecDraft.transforms || [],
-    series: chartSpecDraft.series || [],
-    axisOptions: chartSpecDraft.axisOptions || {},
-    renderStyle: chartSpecDraft.renderStyle || {},
-    calculationWarnings: chartSpecDraft.calculationWarnings || [],
-    sourceImportIds: chartSpecDraft.sourceImportIds || [],
-    sourceRefs: chartSpecDraft.sourceRefs || [],
-    confidence: chartSpecDraft.confidence || null,
-    warnings: chartSpecDraft.warnings || [],
-    rationale: chartSpecDraft.rationale || "Interpreted from user prompt.",
-    prompt,
-    chartSpecDraft,
-    requiresReview: true,
-  };
-}
-
 function chartSpecProposalPayload(proposal = {}) {
   const draft = isObject(proposal.chartSpecDraft) ? proposal.chartSpecDraft : {};
   return {
@@ -412,15 +297,31 @@ function chartSpecProposalPayload(proposal = {}) {
     filters: asArray(proposal.filters).length ? proposal.filters : asArray(draft.filters),
     transforms: asArray(proposal.transforms).length ? proposal.transforms : asArray(draft.transforms),
     series: asArray(proposal.series).length ? proposal.series : asArray(draft.series),
+    seriesScope: proposal.seriesScope || draft.seriesScope || null,
+    compatibleExperimentIds: asArray(proposal.compatibleExperimentIds).length ? proposal.compatibleExperimentIds : asArray(draft.compatibleExperimentIds),
+    selectedExperimentIds: asArray(proposal.selectedExperimentIds).length ? proposal.selectedExperimentIds : asArray(draft.selectedExperimentIds),
+    seriesKind: proposal.seriesKind || draft.seriesKind || proposal.seriesScope?.seriesKind || draft.seriesScope?.seriesKind || null,
     axisOptions: isObject(proposal.axisOptions) && Object.keys(proposal.axisOptions).length ? proposal.axisOptions : draft.axisOptions || {},
     renderStyle: isObject(proposal.renderStyle) && Object.keys(proposal.renderStyle).length ? proposal.renderStyle : draft.renderStyle || {},
     calculationWarnings: asArray(proposal.calculationWarnings).length ? proposal.calculationWarnings : asArray(draft.calculationWarnings),
-    sourceImportIds: asArray(proposal.sourceImportIds).length ? proposal.sourceImportIds : asArray(draft.sourceImportIds),
     sourceRefs: asArray(proposal.sourceRefs).length ? proposal.sourceRefs : asArray(draft.sourceRefs),
     warnings: asArray(proposal.warnings).length ? proposal.warnings : asArray(draft.warnings),
     confidence: proposal.confidence ?? draft.confidence ?? null,
     rationale: proposal.rationale || draft.rationale || "Interpreted from user prompt.",
   };
+}
+
+function isSourceBackedChartProposal(proposal = {}) {
+  const draft = isObject(proposal.chartSpecDraft) ? proposal.chartSpecDraft : {};
+  return proposal.origin === "source_extract"
+    || draft.origin === "source_extract"
+    || isObject(proposal.sourceSnapshot)
+    || isObject(draft.sourceSnapshot);
+}
+
+function isSourceBackedChartSpec(chartSpec = {}) {
+  const spec = isObject(chartSpec.spec) ? chartSpec.spec : chartSpec;
+  return spec.origin === "source_extract" || isObject(spec.sourceSnapshot);
 }
 
 async function projectAuth(req, context, projectId, role = "viewer") {
@@ -470,6 +371,19 @@ async function sourceExtractProposalAuth(req, context, proposalId, role = "viewe
   }
   requireLabRole(auth, sourceExtractProposal.labId, role);
   return { auth, sourceExtractProposal };
+}
+
+async function workbookReviewSessionAuth(req, context, sessionId, role = "viewer") {
+  const auth = requireAuth(await authFor(req, context));
+  const workbookReviewSession = await context.store.findWorkbookReviewSessionById?.(sessionId);
+  if (!workbookReviewSession) {
+    throw Object.assign(new Error("Workbook review session not found."), {
+      statusCode: 404,
+      code: "workbook_review_session_not_found",
+    });
+  }
+  requireLabRole(auth, workbookReviewSession.labId, role);
+  return { auth, workbookReviewSession };
 }
 
 async function agentRunAuth(req, context, agentRunId, role = "viewer") {
@@ -751,10 +665,7 @@ async function handleProjects(req, res, context) {
 async function handleProjectById(req, res, context, projectId) {
   const { auth, project } = await projectAuth(req, context, projectId, req.method === "PATCH" ? "editor" : "viewer");
   if (req.method === "GET") {
-    const currentDatasetCommit = project.currentDatasetCommitId
-      ? await context.store.findDatasetCommitById(project.currentDatasetCommitId)
-      : null;
-    sendJson(res, 200, { project: projectSummary(project), currentDatasetCommit });
+    sendJson(res, 200, { project: projectSummary(project) });
     return;
   }
   const body = await readJsonBody(req);
@@ -812,119 +723,366 @@ async function handleProjectProfile(req, res, context, projectId) {
 }
 
 async function handleProjectState(req, res, context, projectId) {
-  const { project } = await projectAuth(req, context, projectId, "viewer");
+  const { auth, project } = await projectAuth(req, context, projectId, "viewer");
   const [
-    datasetCommits,
     fileObjects,
     importRuns,
-    mappingSets,
-    analysisViews,
     chartProposalSets,
     chartSpecs,
     manuscripts,
-    supplementalImportBatches,
+    workbookReviewSessions,
+    workbookUnderstandings,
     agentRuns,
+    dataPlans,
+    dataSnapshots,
+    experimentSnapshotHeads,
+    browserViews,
+    sourceDocuments,
   ] = await Promise.all([
-    context.store.listDatasetCommits({ projectId }),
     context.store.listFileObjects({ projectId }),
     context.store.listImportRuns({ projectId }),
-    context.store.listMappingSets({ projectId }),
-    context.store.listAnalysisViews ? context.store.listAnalysisViews({ projectId }) : [],
     context.store.listChartProposalSets({ projectId }),
     context.store.listChartSpecs({ projectId }),
     context.store.listManuscripts({ projectId }),
-    context.store.listSupplementalImportBatches ? context.store.listSupplementalImportBatches({ projectId }) : [],
+    context.store.listWorkbookReviewSessions ? context.store.listWorkbookReviewSessions({ projectId }) : [],
+    context.store.listWorkbookUnderstandings ? context.store.listWorkbookUnderstandings({ projectId }) : [],
     context.store.listAgentRuns ? context.store.listAgentRuns({ projectId }) : [],
+    context.store.listDataPlans ? context.store.listDataPlans({ projectId }) : [],
+    context.store.listDataSnapshots ? context.store.listDataSnapshots({ projectId }) : [],
+    context.store.listExperimentSnapshotHeads ? context.store.listExperimentSnapshotHeads({ projectId }) : [],
+    context.store.listBrowserViews ? context.store.listBrowserViews({ projectId, ownerUserId: auth.user.id }) : [],
+    context.store.listSourceDocuments ? context.store.listSourceDocuments({ projectId }) : [],
   ]);
-  const currentDatasetCommit = project.currentDatasetCommitId
-    ? await context.store.findDatasetCommitById(project.currentDatasetCommitId)
-    : null;
-  const decoratedChartSpecs = decorateChartSpecsStaleness(chartSpecs, project.currentDatasetCommitId);
-  const observationSeries = await observationSeriesForProject(context, project, currentDatasetCommit);
+  const sourceBackedChartSpecs = chartSpecs.filter(isSourceBackedChartSpec);
   sendJson(res, 200, {
     project: projectSummary(project),
     projectProfile: projectProfileFor(project),
-    currentDatasetCommit,
-    datasetCommits,
     fileObjects: fileObjects.map(fileObjectSummary),
     importRuns: importRuns.map(importRunSummary),
-    mappingSets: mappingSets.map(mappingSetSummary),
-    analysisViews: analysisViews.map(analysisViewSummary),
     chartProposalSets: chartProposalSets.map(chartProposalSetSummary),
-    chartSpecs: decoratedChartSpecs,
-    observationSeries,
+    chartSpecs: sourceBackedChartSpecs,
     manuscripts,
-    supplementalImportBatches: supplementalImportBatches.map(supplementalImportBatchSummary),
+    workbookReviewSessions: workbookReviewSessions.map(workbookReviewSessionSummary),
+    workbookUnderstandings: workbookUnderstandings.map(workbookUnderstandingSummary),
     agentRuns: agentRuns.map(agentRunSummary),
+    dataPlans: dataPlans.map(dataPlanSummary),
+    dataSnapshots: dataSnapshots.map(dataSnapshotSummary),
+    experimentSnapshotHeads,
+    browserViews,
+    sourceDocuments: sourceDocuments.map(sourceDocumentSummary),
   });
 }
 
-async function handleProjectAiContext(req, res, context, projectId) {
-  const { project } = await projectAuth(req, context, projectId, "viewer");
-  const body = await readJsonBody(req);
-  const aiContext = await buildProjectAiContextForRequest(context, project, {
-    selectedImportIds: Array.isArray(body.selectedImportIds) ? body.selectedImportIds : [],
-    selectedExperimentIds: Array.isArray(body.selectedExperimentIds) ? body.selectedExperimentIds : [],
+async function readProjectSourceRangePreview(context, project, { sourceDocumentId, sheetName, range, maxCells = 240 }) {
+  const sourceDocument = await context.store.findSourceDocumentById?.(sourceDocumentId);
+  if (!sourceDocument || sourceDocument.projectId !== project.id) {
+    return null;
+  }
+  const indexBlobs = context.store.listSourceIndexBlobs
+    ? await context.store.listSourceIndexBlobs({ sourceDocumentId: sourceDocument.id })
+    : [];
+  return readSourceDocumentRange({
+    sourceDocument,
+    indexBlobs,
+    sheetName,
+    range,
+    maxCells,
   });
-  sendJson(res, 200, publicProjectAiContext(aiContext));
 }
 
-async function handleProjectDataResolveQuery(req, res, context, projectId) {
+async function handleProjectEvidenceRetrieve(req, res, context, projectId) {
   const { project } = await projectAuth(req, context, projectId, "viewer");
   const body = await readJsonBody(req);
   const [
-    currentDatasetCommit,
-    mappingSets,
-    chartSpecs,
+    workbookUnderstandings,
+    sourceDocuments,
   ] = await Promise.all([
-    project.currentDatasetCommitId ? context.store.findDatasetCommitById(project.currentDatasetCommitId) : null,
-    context.store.listMappingSets({ projectId: project.id }),
-    context.store.listChartSpecs({ projectId: project.id }),
+    context.store.listWorkbookUnderstandings ? context.store.listWorkbookUnderstandings({ projectId: project.id }) : [],
+    context.store.listSourceDocuments ? context.store.listSourceDocuments({ projectId: project.id }) : [],
   ]);
-  const response = resolveProjectDataQuery({
+  const sourceRegions = (await Promise.all(sourceDocuments.map((sourceDocument) => (
+    context.store.listSourceRegions
+      ? context.store.listSourceRegions({ sourceDocumentId: sourceDocument.id })
+      : []
+  )))).flat();
+  const acceptedUnderstandings = workbookUnderstandings.filter((understanding) => (
+    understanding.status === "accepted"
+    || understanding.understanding?.status === "accepted"
+  ));
+  const response = await runEvidenceRetrievalAgent({
     project,
-    datasetCommit: currentDatasetCommit,
-    mappingSets,
-    chartSpecs: activeChartSpecs(chartSpecs, project.currentDatasetCommitId),
-    prompt: body.prompt || "",
-    selectedImportIds: Array.isArray(body.selectedImportIds) ? body.selectedImportIds : [],
-    selectedExperimentIds: Array.isArray(body.selectedExperimentIds) ? body.selectedExperimentIds : [],
-    maxResults: Number.isFinite(Number(body.maxResults)) ? Number(body.maxResults) : 50,
+    query: body.query || body.prompt || "",
+    acceptedUnderstandings,
+    sourceDocuments,
+    sourceRegions,
+    includePreview: body.includePreview !== false,
+    includeUnconfirmedSuggestions: body.includeUnconfirmedSuggestions === true,
+    readRangePreview: (request) => readProjectSourceRangePreview(context, project, {
+      ...request,
+      maxCells: 240,
+    }),
   });
   sendJson(res, 200, response);
+}
+
+async function handleProjectDataPlanDraft(req, res, context, projectId) {
+  const { project } = await projectAuth(req, context, projectId, "editor");
+  const body = await readJsonBody(req);
+  if (body.intent !== "experiment_browser_publish") {
+    sendJson(res, 200, {
+      projectId: project.id,
+      resultKind: "clarification",
+      clarification: {
+        code: "invalid_data_plan_intent",
+        message: "This endpoint drafts only experiment_browser_publish DataPlans from accepted workbook understanding.",
+      },
+    });
+    return;
+  }
+  const response = await loadExperimentDataPlanReview({
+    store: context.store,
+    project,
+    workbookUnderstandingIds: body.workbookUnderstandingIds,
+    identityDecisions: body.identityDecisions,
+  });
+  sendJson(res, 200, {
+    ...response,
+    projectId: project.id,
+  });
+}
+
+async function handleProjectDataPlanPublish(req, res, context, projectId) {
+  const { auth, project } = await projectAuth(req, context, projectId, "editor");
+  const body = await readJsonBody(req);
+  const response = await publishExperimentBrowserData({
+    store: context.store,
+    project,
+    actorUserId: auth.user.id,
+    dataPlan: body.dataPlan,
+    identityDecisions: body.identityDecisions,
+    expectedPreviewHash: body.expectedPreviewHash,
+    expectedDependencyHash: body.expectedDependencyHash,
+    idempotencyKey: body.idempotencyKey,
+    ipAddress: clientIp(req),
+    userAgent: userAgent(req),
+  });
+  sendJson(res, response.idempotentReplay ? 200 : 201, response);
+}
+
+async function handleProjectDataPlans(req, res, context, projectId) {
+  await projectAuth(req, context, projectId, "viewer");
+  const dataPlans = context.store.listDataPlans
+    ? await context.store.listDataPlans({ projectId })
+    : [];
+  sendJson(res, 200, { dataPlans: dataPlans.map(dataPlanSummary) });
+}
+
+async function handleProjectDataSnapshots(req, res, context, projectId) {
+  await projectAuth(req, context, projectId, "viewer");
+  const dataSnapshots = context.store.listDataSnapshots
+    ? await context.store.listDataSnapshots({ projectId })
+    : [];
+  sendJson(res, 200, { dataSnapshots: dataSnapshots.map(dataSnapshotSummary) });
+}
+
+function parseBrowserQueryList(url, name) {
+  const raw = url.searchParams.get(name);
+  if (!raw) return [];
+  try {
+    const value = JSON.parse(raw);
+    if (!Array.isArray(value)) throw new Error("Expected an array.");
+    return value;
+  } catch {
+    throw Object.assign(new Error(`Experiment Browser query parameter ${name} must be a JSON array.`), {
+      statusCode: 400,
+      code: "invalid_browser_query",
+      details: { parameter: name },
+    });
+  }
+}
+
+async function loadExperimentProjectionState(context, projectId) {
+  const [dataSnapshots, experimentIdentities, experimentSnapshotHeads] = await Promise.all([
+    context.store.listDataSnapshots ? context.store.listDataSnapshots({ projectId }) : [],
+    context.store.listExperimentIdentities ? context.store.listExperimentIdentities({ projectId }) : [],
+    context.store.listExperimentSnapshotHeads ? context.store.listExperimentSnapshotHeads({ projectId }) : [],
+  ]);
+  return { dataSnapshots, experimentIdentities, experimentSnapshotHeads };
+}
+
+async function handleProjectExperimentBrowser(req, res, context, projectId, url) {
+  await projectAuth(req, context, projectId, "viewer");
+  const state = await loadExperimentProjectionState(context, projectId);
+  const projection = buildExperimentProjection({
+    projectId,
+    ...state,
+    search: url.searchParams.get("search") || "",
+    filters: parseBrowserQueryList(url, "filters"),
+    sort: parseBrowserQueryList(url, "sort"),
+    cursor: url.searchParams.get("cursor"),
+    limit: url.searchParams.get("limit"),
+  });
+  sendJson(res, 200, projection);
+}
+
+async function handleProjectExperimentDetail(req, res, context, projectId, experimentId) {
+  await projectAuth(req, context, projectId, "viewer");
+  const state = await loadExperimentProjectionState(context, projectId);
+  const detail = getExperimentProjectionDetail({ projectId, experimentId, ...state });
+  if (!detail) {
+    sendError(res, 404, "experiment_not_found", "Experiment was not found in this project's active snapshots.");
+    return;
+  }
+  sendJson(res, 200, detail);
+}
+
+const BROWSER_VIEW_PAYLOAD_KEYS = new Set(["columns", "filters", "sort", "groupBy", "selectedExperimentIds"]);
+const BROWSER_VIEW_FILTER_OPERATORS = new Set(["contains", "eq", "neq", "gt", "gte", "lt", "lte", "is_empty", "not_empty"]);
+
+function browserViewText(value) {
+  return String(value ?? "").trim();
+}
+
+function invalidBrowserView(message, details = undefined) {
+  throw Object.assign(new Error(message), { statusCode: 400, code: "invalid_browser_view", details });
+}
+
+function normalizeBrowserViewPayload(value) {
+  if (!isObject(value)) invalidBrowserView("BrowserView payload must be an object.");
+  const unknownKeys = Object.keys(value).filter((key) => !BROWSER_VIEW_PAYLOAD_KEYS.has(key));
+  if (unknownKeys.length) invalidBrowserView("BrowserView payload contains unsupported keys.", { unknownKeys });
+  const rawColumns = value.columns ?? [];
+  const rawFilters = value.filters ?? [];
+  const rawSort = value.sort ?? [];
+  const rawSelectedIds = value.selectedExperimentIds ?? [];
+  if (!Array.isArray(rawColumns) || rawColumns.length > 100) invalidBrowserView("BrowserView columns must be an array of at most 100 items.");
+  if (!Array.isArray(rawFilters) || rawFilters.length > 20) invalidBrowserView("BrowserView filters must be an array of at most 20 items.");
+  if (!Array.isArray(rawSort) || rawSort.length > 3) invalidBrowserView("BrowserView sort must be an array of at most 3 items.");
+  if (!Array.isArray(rawSelectedIds) || rawSelectedIds.length > 500) invalidBrowserView("BrowserView selectedExperimentIds must be an array of at most 500 ids.");
+
+  const columns = rawColumns.map((column, index) => {
+    if (!isObject(column) || !browserViewText(column.columnId)) invalidBrowserView("Every BrowserView column requires columnId.");
+    const width = column.width == null ? null : Number(column.width);
+    if (width != null && (!Number.isFinite(width) || width < 60 || width > 800)) {
+      invalidBrowserView("BrowserView column widths must be between 60 and 800 pixels.");
+    }
+    return {
+      columnId: browserViewText(column.columnId),
+      order: Number.isInteger(Number(column.order)) ? Number(column.order) : index,
+      width,
+      hidden: Boolean(column.hidden),
+    };
+  });
+  if (new Set(columns.map((column) => column.columnId)).size !== columns.length) {
+    invalidBrowserView("BrowserView columns cannot contain duplicate column ids.");
+  }
+
+  const filters = rawFilters.map((filter) => {
+    if (!isObject(filter) || !browserViewText(filter.columnId)) invalidBrowserView("Every BrowserView filter requires columnId.");
+    const operator = browserViewText(filter.operator).toLowerCase();
+    if (!BROWSER_VIEW_FILTER_OPERATORS.has(operator)) invalidBrowserView("BrowserView filter operator is unsupported.");
+    return { columnId: browserViewText(filter.columnId), operator, value: filter.value ?? null };
+  });
+  const sort = rawSort.map((item) => {
+    if (!isObject(item) || !browserViewText(item.columnId)) invalidBrowserView("Every BrowserView sort item requires columnId.");
+    return { columnId: browserViewText(item.columnId), direction: browserViewText(item.direction).toLowerCase() === "desc" ? "desc" : "asc" };
+  });
+  const selectedExperimentIds = [...new Set(rawSelectedIds.map(browserViewText).filter(Boolean))];
+  return {
+    columns,
+    filters,
+    sort,
+    groupBy: value.groupBy == null ? null : browserViewText(value.groupBy) || null,
+    selectedExperimentIds,
+  };
+}
+
+function normalizeBrowserViewRequest(body, { partial = false } = {}) {
+  if (!isObject(body)) invalidBrowserView("BrowserView request must be an object.");
+  const result = {};
+  if (!partial || body.name !== undefined) {
+    const name = browserViewText(body.name);
+    if (!name || name.length > 80) invalidBrowserView("BrowserView name must contain 1 to 80 characters.");
+    result.name = name;
+  }
+  if (!partial || body.payload !== undefined) result.payload = normalizeBrowserViewPayload(body.payload ?? {});
+  if (!partial || body.isDefault !== undefined) {
+    if (body.isDefault !== undefined && typeof body.isDefault !== "boolean") invalidBrowserView("BrowserView isDefault must be boolean.");
+    result.isDefault = Boolean(body.isDefault);
+  }
+  return result;
+}
+
+async function clearOtherDefaultBrowserViews(context, projectId, ownerUserId, exceptId = null) {
+  const views = await context.store.listBrowserViews({ projectId, ownerUserId });
+  await Promise.all(views
+    .filter((view) => view.isDefault && view.id !== exceptId)
+    .map((view) => context.store.updateBrowserView(view.id, { isDefault: false })));
+}
+
+async function handleProjectBrowserViews(req, res, context, projectId) {
+  const { auth, project } = await projectAuth(req, context, projectId, "viewer");
+  if (req.method === "GET") {
+    const browserViews = await context.store.listBrowserViews({ projectId, ownerUserId: auth.user.id });
+    sendJson(res, 200, { browserViews });
+    return;
+  }
+  const body = normalizeBrowserViewRequest(await readJsonBody(req));
+  if (body.isDefault) await clearOtherDefaultBrowserViews(context, projectId, auth.user.id);
+  const browserView = await context.store.createBrowserView({
+    ...body,
+    labId: project.labId,
+    projectId,
+    ownerUserId: auth.user.id,
+  });
+  sendJson(res, 201, { browserView });
+}
+
+async function handleProjectBrowserViewById(req, res, context, projectId, browserViewId) {
+  const { auth } = await projectAuth(req, context, projectId, "viewer");
+  const browserView = await context.store.findBrowserViewById(browserViewId);
+  if (!browserView || browserView.projectId !== projectId || browserView.ownerUserId !== auth.user.id) {
+    sendError(res, 404, "browser_view_not_found", "Browser view was not found.");
+    return;
+  }
+  if (req.method === "DELETE") {
+    const deleted = await context.store.deleteBrowserView(browserView.id);
+    sendJson(res, 200, { deleted });
+    return;
+  }
+  const changes = normalizeBrowserViewRequest(await readJsonBody(req), { partial: true });
+  if (changes.isDefault) await clearOtherDefaultBrowserViews(context, projectId, auth.user.id, browserView.id);
+  const updated = await context.store.updateBrowserView(browserView.id, changes);
+  sendJson(res, 200, { browserView: updated });
 }
 
 async function handleProjectAgentPlan(req, res, context, projectId) {
   const { project } = await projectAuth(req, context, projectId, "viewer");
   const body = await readJsonBody(req);
   const [
-    currentDatasetCommit,
     fileObjects,
-    importRuns,
-    mappingSets,
     chartProposalSets,
     chartSpecs,
     manuscripts,
+    experimentSnapshotHeads,
+    sourceDocuments,
   ] = await Promise.all([
-    project.currentDatasetCommitId ? context.store.findDatasetCommitById(project.currentDatasetCommitId) : null,
     context.store.listFileObjects({ projectId: project.id }),
-    context.store.listImportRuns({ projectId: project.id }),
-    context.store.listMappingSets({ projectId: project.id }),
     context.store.listChartProposalSets({ projectId: project.id }),
     context.store.listChartSpecs({ projectId: project.id }),
     context.store.listManuscripts({ projectId: project.id }),
+    context.store.listExperimentSnapshotHeads({ projectId: project.id }),
+    context.store.listSourceDocuments({ projectId: project.id }),
   ]);
   const plan = createProjectAgentPlan({
     project,
     projectProfile: projectProfileFor(project),
-    currentDatasetCommit,
-    observationSeries: await observationSeriesForProject(context, project, currentDatasetCommit),
     fileObjects: fileObjects.map(fileObjectSummary),
-    importRuns: importRuns.map(importRunSummary),
-    mappingSets: mappingSets.map(mappingSetSummary),
     chartProposalSets: chartProposalSets.map(chartProposalSetSummary),
-    chartSpecs: decorateChartSpecsStaleness(chartSpecs, project.currentDatasetCommitId),
+    chartSpecs: chartSpecs.filter(isSourceBackedChartSpec),
     manuscripts,
+    experimentSnapshotHeads,
+    sourceDocuments: sourceDocuments.map(sourceDocumentSummary),
     message: body.message || "",
     conversation: Array.isArray(body.conversation) ? body.conversation : [],
     selectedContext: isObject(body.selectedContext) ? body.selectedContext : {},
@@ -948,34 +1106,30 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
 
   const body = await readJsonBody(req);
   const [
-    currentDatasetCommit,
     fileObjects,
-    importRuns,
-    mappingSets,
     chartProposalSets,
     chartSpecs,
     manuscripts,
+    experimentSnapshotHeads,
+    sourceDocuments,
   ] = await Promise.all([
-    project.currentDatasetCommitId ? context.store.findDatasetCommitById(project.currentDatasetCommitId) : null,
     context.store.listFileObjects({ projectId: project.id }),
-    context.store.listImportRuns({ projectId: project.id }),
-    context.store.listMappingSets({ projectId: project.id }),
     context.store.listChartProposalSets({ projectId: project.id }),
     context.store.listChartSpecs({ projectId: project.id }),
     context.store.listManuscripts({ projectId: project.id }),
+    context.store.listExperimentSnapshotHeads({ projectId: project.id }),
+    context.store.listSourceDocuments({ projectId: project.id }),
   ]);
   const draft = await buildAgentRunDraft({
     context,
     project,
     projectProfile: projectProfileFor(project),
-    currentDatasetCommit,
-    observationSeries: await observationSeriesForProject(context, project, currentDatasetCommit),
     fileObjects: fileObjects.map(fileObjectSummary),
-    importRuns: importRuns.map(importRunSummary),
-    mappingSets: mappingSets.map(mappingSetSummary),
     chartProposalSets: chartProposalSets.map(chartProposalSetSummary),
-    chartSpecs: decorateChartSpecsStaleness(chartSpecs, project.currentDatasetCommitId),
+    chartSpecs: chartSpecs.filter(isSourceBackedChartSpec),
     manuscripts,
+    experimentSnapshotHeads,
+    sourceDocuments: sourceDocuments.map(sourceDocumentSummary),
     message: body.message || "",
     conversation: Array.isArray(body.conversation) ? body.conversation : [],
     selectedContext: isObject(body.selectedContext) ? body.selectedContext : {},
@@ -1054,26 +1208,12 @@ async function handleAgentRunConfirm(req, res, context, agentRunId) {
     status: "completed",
     visibleSteps,
     actions: markActionCompleted(agentRun.actions, actionId, {
-      analysisViewId: result.analysisView?.id || null,
       chartProposalSetId: result.chartProposalSet?.id || null,
       sourceExtractProposalId: result.sourceExtractProposal?.id || null,
     }),
-    analysisViewId: result.analysisViewId || result.analysisView?.id || agentRun.analysisViewId || null,
     proposalRefs,
     updatedBy: auth.user.id,
   });
-  if (result.analysisView) {
-    await context.store.recordAuditEvent({
-      labId: agentRun.labId,
-      projectId: agentRun.projectId,
-      actorUserId: auth.user.id,
-      action: "analysis_view.create",
-      targetType: "analysis_view",
-      targetId: result.analysisView.id,
-      summary: `Created AnalysisView ${result.analysisView.title || result.analysisView.id} from AgentRun.`,
-      metadata: { agentRunId: agentRun.id },
-    });
-  }
   if (result.chartProposalSet) {
     await context.store.recordAuditEvent({
       labId: agentRun.labId,
@@ -1083,7 +1223,7 @@ async function handleAgentRunConfirm(req, res, context, agentRunId) {
       targetType: "chart_proposal_set",
       targetId: result.chartProposalSet.id,
       summary: "Created chart proposal set from AgentRun.",
-      metadata: { agentRunId: agentRun.id, analysisViewId: result.analysisView?.id || null },
+      metadata: { agentRunId: agentRun.id },
     });
   }
   if (result.sourceExtractProposal) {
@@ -1110,7 +1250,6 @@ async function handleAgentRunConfirm(req, res, context, agentRunId) {
   });
   sendJson(res, 200, {
     agentRun: agentRunSummary(updated),
-    analysisView: result.analysisView ? analysisViewSummary(result.analysisView) : null,
     chartProposalSet: result.chartProposalSet ? chartProposalSetSummary(result.chartProposalSet) : null,
     sourceExtractProposal: result.sourceExtractProposal ? sourceExtractProposalSummary(result.sourceExtractProposal) : null,
   });
@@ -1144,134 +1283,55 @@ async function handleProjectChartInterpret(req, res, context, projectId) {
   const { auth, project } = await projectAuth(req, context, projectId, "viewer");
   const body = await readJsonBody(req);
   if (body.persistAsProposal) requireLabRole(auth, project.labId, "editor");
-  const aiContext = await buildProjectAiContextForRequest(context, project, {
-    selectedImportIds: Array.isArray(body.selectedImportIds) ? body.selectedImportIds : [],
-    selectedExperimentIds: Array.isArray(body.selectedExperimentIds) ? body.selectedExperimentIds : [],
-  });
-  if (!aiContext.currentDatasetCommitId || !aiContext.serviceInput.genericImports.length) {
-    datasetCommitRequired(res);
+  const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+  if (!prompt) {
+    sendError(res, 400, "invalid_chart_interpret_request", "A chart prompt is required.", ["A chart prompt is required."]);
     return;
   }
-  const validation = validateChartInterpretRequest({
-    prompt: body.prompt,
-    genericImports: aiContext.serviceInput.genericImports,
-    selectedImportIds: body.selectedImportIds || [],
-    selectedExperimentIds: body.selectedExperimentIds || [],
-    mappingSets: aiContext.serviceInput.mappingSets,
-    chartConstraints: body.chartConstraints || {},
-    priorDecisions: aiContext.serviceInput.priorDecisions,
-  });
-  if (!validation.ok) {
-    sendError(res, 400, "invalid_chart_interpret_request", validation.errors.join(" "), validation.errors);
+  const evidenceIntent = parseChartEvidenceIntent(prompt);
+  if (evidenceIntent) {
+    const resolvedEvidence = await resolveChartEvidenceIntent({
+      context,
+      project,
+      evidenceIntent,
+    });
+    const baseResponse = shapeChartInterpretResponse({
+      chartSpecDraft: null,
+      clarification: resolvedEvidence.clarification,
+      warnings: resolvedEvidence.sourceExtractPreview?.warnings || [],
+      evidenceIntent,
+      evidenceResolution: resolvedEvidence.evidenceResolution,
+      sourceExtractPreview: resolvedEvidence.sourceExtractPreview,
+    });
+    if (resolvedEvidence.clarification || !resolvedEvidence.sourceExtractPreview || !body.persistAsProposal) {
+      sendJson(res, 200, {
+        ...baseResponse,
+        chartProposalSet: null,
+      });
+      return;
+    }
+    const sourceExtractProposal = await createSourceExtractProposalFromEvidence({
+      context,
+      project,
+      sourceDocument: resolvedEvidence.sourceDocument,
+      sourceRegion: resolvedEvidence.sourceRegion,
+      sourceExtractPreview: resolvedEvidence.sourceExtractPreview,
+      evidenceIntent,
+      createdBy: auth.user.id,
+    });
+    sendJson(res, 200, {
+      ...baseResponse,
+      sourceExtractProposal,
+      chartProposalSet: null,
+    });
     return;
   }
-  const response = await createChartInterpretResponse(validation.value);
-  if (!body.persistAsProposal || !response.chartSpecDraft) {
-    sendJson(res, 200, response);
-    return;
-  }
-  const proposal = proposalFromChartSpecDraft(response.chartSpecDraft, validation.value.prompt);
-  const chartProposalSet = await context.store.createChartProposalSet({
-    labId: project.labId,
-    projectId: project.id,
-    datasetCommitId: aiContext.currentDatasetCommitId,
-    mappingSetId: null,
-    schemaVersion: "labrat.chartProposalSet.v1",
-    status: "proposed",
-    payload: {
-      proposalSetId: `chart_proposal_set_interpret_${sha256Hex(`${project.id}:${validation.value.prompt}`).slice(0, 16)}`,
-      schemaVersion: "labrat.chartProposalSet.v1",
-      sourceImportIds: proposal.sourceImportIds,
-      proposals: [proposal],
-      warnings: response.chartSpecDraft.warnings || [],
-      origin: "project_chart_interpret",
-    },
-    decisionSummary: { accepted: 0, rejected: 0 },
-    createdBy: auth.user.id,
-  });
-  await context.store.recordAuditEvent({
-    labId: project.labId,
-    projectId: project.id,
-    actorUserId: auth.user.id,
-    action: "chart_proposal_set.create",
-    targetType: "chart_proposal_set",
-    targetId: chartProposalSet.id,
-    summary: "Created chart proposal set from interpreted chart prompt.",
-  });
-  sendJson(res, 200, {
-    ...response,
-    chartProposalSet: chartProposalSetSummary(chartProposalSet),
-  });
-}
-
-async function handleProjectChartPropose(req, res, context, projectId) {
-  const { auth, project } = await projectAuth(req, context, projectId, "editor");
-  const body = await readJsonBody(req);
-  const aiContext = await buildProjectAiContextForRequest(context, project, {
-    selectedImportIds: Array.isArray(body.selectedImportIds) ? body.selectedImportIds : [],
-    selectedExperimentIds: Array.isArray(body.selectedExperimentIds) ? body.selectedExperimentIds : [],
-  });
-  if (!aiContext.currentDatasetCommitId || !aiContext.serviceInput.genericImports.length) {
-    datasetCommitRequired(res);
-    return;
-  }
-  const validation = validateChartProposalRequest({
-    genericImports: aiContext.serviceInput.genericImports,
-    selectedImportIds: body.selectedImportIds || [],
-    mappingSets: aiContext.serviceInput.mappingSets,
-    userGoal: body.userGoal || "",
-    chartConstraints: body.chartConstraints || {},
-    priorDecisions: aiContext.serviceInput.priorDecisions,
-  });
-  if (!validation.ok) {
-    sendError(res, 400, "invalid_chart_proposal_request", validation.errors.join(" "), validation.errors);
-    return;
-  }
-  const response = await createChartProposalResponse({
-    ...validation.value,
-    projectProfile: aiContext.projectProfile,
-    existingCharts: aiContext.existingCharts,
-    fieldInventory: aiContext.fieldInventory,
-  });
-  const chartProposalSet = await context.store.createChartProposalSet({
-    labId: project.labId,
-    projectId: project.id,
-    datasetCommitId: aiContext.currentDatasetCommitId,
-    mappingSetId: null,
-    schemaVersion: response.proposalSet.schemaVersion || "labrat.chartProposalSet.v1",
-    status: "proposed",
-    payload: {
-      ...response.proposalSet,
-      origin: "project_chart_propose",
-    },
-    decisionSummary: {
-      accepted: response.summary?.acceptedCount || 0,
-      rejected: response.summary?.rejectedCount || 0,
-      proposalCount: response.summary?.proposalCount || 0,
-    },
-    createdBy: auth.user.id,
-  });
-  await context.store.recordAuditEvent({
-    labId: project.labId,
-    projectId: project.id,
-    actorUserId: auth.user.id,
-    action: "chart_proposal_set.create",
-    targetType: "chart_proposal_set",
-    targetId: chartProposalSet.id,
-    summary: "Created chart proposal set from project data.",
-  });
-  sendJson(res, 200, {
-    chartProposalSet: chartProposalSetSummary(chartProposalSet),
-    proposalSet: response.proposalSet,
-    summary: response.summary,
-    warnings: response.warnings,
-  });
-}
-
-async function handleProjectFiles(req, res, context, projectId) {
-  await projectAuth(req, context, projectId, "viewer");
-  const files = await context.store.listFileObjects({ projectId });
-  sendJson(res, 200, { fileObjects: files.map(fileObjectSummary) });
+  sendError(
+    res,
+    409,
+    "data_snapshot_chart_not_implemented",
+    "Charting accepted experiment snapshots is not implemented yet. Select explicit workbook source evidence for source-backed charting.",
+  );
 }
 
 async function handleProjectImportRunsList(req, res, context, projectId) {
@@ -1364,6 +1424,13 @@ async function buildExtractPreviewForRoute(context, { sourceDocument, sourceRegi
   });
 }
 
+async function handleSourceDocumentExtractPreview(req, res, context, sourceDocumentId) {
+  const { sourceDocument } = await sourceDocumentAuth(req, context, sourceDocumentId, "viewer");
+  const body = await readJsonBody(req);
+  const preview = await buildExtractPreviewForRoute(context, { sourceDocument, body });
+  sendJson(res, 200, { preview });
+}
+
 async function handleSourceRegionExtractPreview(req, res, context, sourceRegionId) {
   const { sourceRegion } = await sourceRegionAuth(req, context, sourceRegionId, "viewer");
   const sourceDocument = await sourceDocumentForRegion(context, sourceRegion);
@@ -1420,7 +1487,6 @@ async function handleProjectSourceExtractProposals(req, res, context, projectId)
     projectId: project.id,
     sourceDocumentId: sourceDocument.id,
     sourceRegionId: sourceRegion?.id || null,
-    datasetCommitId: body.datasetCommitId || null,
     status: body.status || "proposed",
     purpose: body.purpose || preview.purpose || "chart_source",
     extractType: body.extractType || preview.extractType || "table_range",
@@ -1488,14 +1554,11 @@ async function handleSourceExtractChartProposal(req, res, context, proposalId) {
   const chartProposalSet = await context.store.createChartProposalSet({
     labId: sourceExtractProposal.labId,
     projectId: sourceExtractProposal.projectId,
-    datasetCommitId: null,
-    mappingSetId: null,
     schemaVersion: "labrat.chartProposalSet.v1",
     status: "proposed",
     payload: {
       proposalSetId: `chart_proposal_set_source_extract_${sha256Hex(sourceExtractProposal.id).slice(0, 16)}`,
       schemaVersion: "labrat.chartProposalSet.v1",
-      sourceImportIds: [],
       proposals: [proposal],
       warnings: proposal.warnings || [],
       origin: "source_extract",
@@ -1520,273 +1583,10 @@ async function handleSourceExtractChartProposal(req, res, context, proposalId) {
   });
 }
 
-async function handleProjectDatasetCommits(req, res, context, projectId) {
-  await projectAuth(req, context, projectId, "viewer");
-  sendJson(res, 200, { datasetCommits: await context.store.listDatasetCommits({ projectId }) });
-}
-
-async function handleProjectObservationSeries(req, res, context, projectId) {
-  const { project } = await projectAuth(req, context, projectId, "viewer");
-  const currentDatasetCommit = project.currentDatasetCommitId
-    ? await context.store.findDatasetCommitById(project.currentDatasetCommitId)
-    : null;
-  const observationSeries = await observationSeriesForProject(context, project, currentDatasetCommit);
-  sendJson(res, 200, {
-    schemaVersion: "labrat.observationSeriesList.v1",
-    projectId: project.id,
-    currentDatasetCommitId: project.currentDatasetCommitId || null,
-    observationSeries,
-    summary: {
-      total: observationSeries.length,
-      active: observationSeries.filter((series) => !series.isStale && series.status !== "stale").length,
-      stale: observationSeries.filter((series) => series.isStale || series.status === "stale").length,
-    },
-  });
-}
-
-async function handleProjectAnalysisViews(req, res, context, projectId) {
-  const { auth, project } = await projectAuth(req, context, projectId, req.method === "POST" ? "editor" : "viewer");
-  if (req.method === "GET") {
-    const analysisViews = context.store.listAnalysisViews
-      ? await context.store.listAnalysisViews({ projectId })
-      : [];
-    sendJson(res, 200, { analysisViews: analysisViews.map(analysisViewSummary) });
-    return;
-  }
-  const body = await readJsonBody(req);
-  const currentDatasetCommit = project.currentDatasetCommitId
-    ? await context.store.findDatasetCommitById(project.currentDatasetCommitId)
-    : null;
-  if (!currentDatasetCommit) {
-    datasetCommitRequired(res);
-    return;
-  }
-  const observationSeries = await observationSeriesForProject(context, project, currentDatasetCommit);
-  const resolved = resolveSeriesCompareAnalysisView({
-    project,
-    datasetCommit: currentDatasetCommit,
-    observationSeries,
-    request: body,
-  });
-  if (resolved.error) {
-    sendError(res, resolved.error.statusCode || 400, resolved.error.code, resolved.error.message, resolved.error);
-    return;
-  }
-  if (resolved.clarification) {
-    sendJson(res, 200, {
-      schemaVersion: "labrat.analysisViewDraft.v1",
-      clarification: resolved.clarification,
-    });
-    return;
-  }
-  const draft = resolved.analysisView;
-  const analysisView = await context.store.createAnalysisView({
-    labId: project.labId,
-    projectId: project.id,
-    datasetCommitId: currentDatasetCommit.id,
-    schemaVersion: ANALYSIS_VIEW_SCHEMA_VERSION,
-    viewType: draft.viewType,
-    status: draft.status || "draft",
-    title: draft.title,
-    spec: draft.spec,
-    sourceRefs: draft.sourceRefs,
-    warnings: draft.warnings,
-    createdBy: auth.user.id,
-  });
-  await context.store.recordAuditEvent({
-    labId: project.labId,
-    projectId: project.id,
-    actorUserId: auth.user.id,
-    action: "analysis_view.create",
-    targetType: "analysis_view",
-    targetId: analysisView.id,
-    summary: `Created AnalysisView ${analysisView.title || analysisView.id}.`,
-  });
-  sendJson(res, 201, { analysisView: analysisViewSummary(analysisView) });
-}
-
-async function handleAnalysisViewChartProposal(req, res, context, analysisViewId) {
-  const auth = requireAuth(await authFor(req, context));
-  const analysisView = context.store.findAnalysisViewById
-    ? await context.store.findAnalysisViewById(analysisViewId)
-    : null;
-  if (!analysisView) {
-    sendError(res, 404, "analysis_view_not_found", "AnalysisView was not found.");
-    return;
-  }
-  requireLabRole(auth, analysisView.labId, "editor");
-  const project = await context.store.findProjectById(analysisView.projectId);
-  if (!project) {
-    sendError(res, 404, "project_not_found", "Project not found.");
-    return;
-  }
-  if (!project.currentDatasetCommitId || analysisView.datasetCommitId !== project.currentDatasetCommitId) {
-    sendError(res, 409, "analysis_view_stale", "AnalysisView is not based on the current dataset commit.", {
-      analysisViewDatasetCommitId: analysisView.datasetCommitId || null,
-      currentDatasetCommitId: project.currentDatasetCommitId || null,
-    });
-    return;
-  }
-  const currentDatasetCommit = await context.store.findDatasetCommitById(project.currentDatasetCommitId);
-  const observationSeries = await observationSeriesForProject(context, project, currentDatasetCommit);
-  const proposal = chartProposalFromAnalysisView({
-    analysisView,
-    datasetCommit: currentDatasetCommit,
-    observationSeries,
-  });
-  const chartProposalSet = await context.store.createChartProposalSet({
-    labId: analysisView.labId,
-    projectId: analysisView.projectId,
-    datasetCommitId: analysisView.datasetCommitId,
-    mappingSetId: null,
-    schemaVersion: "labrat.chartProposalSet.v1",
-    status: "proposed",
-    payload: {
-      proposalSetId: `chart_proposal_set_analysis_view_${sha256Hex(analysisView.id).slice(0, 16)}`,
-      schemaVersion: "labrat.chartProposalSet.v1",
-      sourceImportIds: proposal.sourceImportIds || [],
-      proposals: [proposal],
-      warnings: proposal.warnings || [],
-      origin: "analysis_view",
-      analysisViewId: analysisView.id,
-      analysisViewType: analysisView.viewType,
-    },
-    decisionSummary: { accepted: 0, rejected: 0, proposalCount: 1 },
-    createdBy: auth.user.id,
-  });
-  await context.store.recordAuditEvent({
-    labId: analysisView.labId,
-    projectId: analysisView.projectId,
-    actorUserId: auth.user.id,
-    action: "chart_proposal_set.create",
-    targetType: "chart_proposal_set",
-    targetId: chartProposalSet.id,
-    summary: "Created chart proposal set from AnalysisView.",
-    metadata: { analysisViewId: analysisView.id },
-  });
-  sendJson(res, 201, {
-    analysisView: analysisViewSummary(analysisView),
-    chartProposalSet: chartProposalSetSummary(chartProposalSet),
-  });
-}
-
-async function verifyProjectScopedRef(context, projectId, kind, id) {
-  if (!id) return null;
-  if (kind === "import_run") {
-    const run = await context.store.findImportRunById(id);
-    if (!run || run.projectId !== projectId) {
-      throw Object.assign(new Error("Import run not found for this project."), { statusCode: 404, code: "import_run_not_found" });
-    }
-    return run;
-  }
-  if (kind === "dataset_commit") {
-    const commit = await context.store.findDatasetCommitById(id);
-    if (!commit || commit.projectId !== projectId) {
-      throw Object.assign(new Error("Dataset commit not found for this project."), { statusCode: 404, code: "dataset_commit_not_found" });
-    }
-    return commit;
-  }
-  if (kind === "mapping_set") {
-    const set = await context.store.findMappingSetById(id);
-    if (!set || set.projectId !== projectId) {
-      throw Object.assign(new Error("Mapping set not found for this project."), { statusCode: 404, code: "mapping_set_not_found" });
-    }
-    return set;
-  }
-  return null;
-}
-
-async function handleProjectMappingSets(req, res, context, projectId) {
-  const { auth, project } = await projectAuth(req, context, projectId, req.method === "POST" ? "editor" : "viewer");
-  if (req.method === "GET") {
-    const mappingSets = await context.store.listMappingSets({ projectId });
-    sendJson(res, 200, { mappingSets: mappingSets.map(mappingSetSummary) });
-    return;
-  }
-  const body = await readJsonBody(req);
-  await verifyProjectScopedRef(context, projectId, "import_run", body.importRunId);
-  await verifyProjectScopedRef(context, projectId, "dataset_commit", body.datasetCommitId);
-  const mappingSet = await context.store.createMappingSet({
-    labId: project.labId,
-    projectId: project.id,
-    importRunId: body.importRunId || null,
-    datasetCommitId: body.datasetCommitId || null,
-    schemaVersion: body.schemaVersion || "labrat.semanticMappingResponse.v1",
-    status: body.status || "proposed",
-    payload: body.payload || {},
-    decisionSummary: body.decisionSummary || {},
-    createdBy: auth.user.id,
-  });
-  await context.store.recordAuditEvent({
-    labId: project.labId,
-    projectId: project.id,
-    actorUserId: auth.user.id,
-    action: "mapping_set.create",
-    targetType: "mapping_set",
-    targetId: mappingSet.id,
-    summary: "Created mapping set.",
-  });
-  sendJson(res, 201, { mappingSet: mappingSetSummary(mappingSet) });
-}
-
-async function handleMappingSetPatch(req, res, context, mappingSetId) {
-  const auth = requireAuth(await authFor(req, context));
-  const mappingSet = await context.store.findMappingSetById(mappingSetId);
-  if (!mappingSet) {
-    sendError(res, 404, "mapping_set_not_found", "Mapping set not found.");
-    return;
-  }
-  requireLabRole(auth, mappingSet.labId, "editor");
-  const body = await readJsonBody(req);
-  const updated = await context.store.updateMappingSet(mappingSet.id, {
-    status: body.status,
-    payload: body.payload,
-    decisionSummary: body.decisionSummary,
-    updatedBy: auth.user.id,
-  });
-  await context.store.recordAuditEvent({
-    labId: mappingSet.labId,
-    projectId: mappingSet.projectId,
-    actorUserId: auth.user.id,
-    action: "mapping_set.update_decision",
-    targetType: "mapping_set",
-    targetId: mappingSet.id,
-    summary: "Updated mapping set.",
-  });
-  sendJson(res, 200, { mappingSet: mappingSetSummary(updated) });
-}
-
 async function handleProjectChartProposalSets(req, res, context, projectId) {
-  const { auth, project } = await projectAuth(req, context, projectId, req.method === "POST" ? "editor" : "viewer");
-  if (req.method === "GET") {
-    const chartProposalSets = await context.store.listChartProposalSets({ projectId });
-    sendJson(res, 200, { chartProposalSets: chartProposalSets.map(chartProposalSetSummary) });
-    return;
-  }
-  const body = await readJsonBody(req);
-  await verifyProjectScopedRef(context, projectId, "dataset_commit", body.datasetCommitId);
-  await verifyProjectScopedRef(context, projectId, "mapping_set", body.mappingSetId);
-  const chartProposalSet = await context.store.createChartProposalSet({
-    labId: project.labId,
-    projectId: project.id,
-    datasetCommitId: body.datasetCommitId || null,
-    mappingSetId: body.mappingSetId || null,
-    schemaVersion: body.schemaVersion || "labrat.chartProposalSet.v1",
-    status: body.status || "proposed",
-    payload: body.payload || {},
-    decisionSummary: body.decisionSummary || {},
-    createdBy: auth.user.id,
-  });
-  await context.store.recordAuditEvent({
-    labId: project.labId,
-    projectId: project.id,
-    actorUserId: auth.user.id,
-    action: "chart_proposal_set.create",
-    targetType: "chart_proposal_set",
-    targetId: chartProposalSet.id,
-    summary: "Created chart proposal set.",
-  });
-  sendJson(res, 201, { chartProposalSet: chartProposalSetSummary(chartProposalSet) });
+  await projectAuth(req, context, projectId, "viewer");
+  const chartProposalSets = await context.store.listChartProposalSets({ projectId });
+  sendJson(res, 200, { chartProposalSets: chartProposalSets.map(chartProposalSetSummary) });
 }
 
 async function handleChartProposalSetPatch(req, res, context, chartProposalSetId) {
@@ -1956,371 +1756,261 @@ async function handleProjectImportRuns(req, res, context, projectId) {
   sendJson(res, 201, { importRun: importRunSummary(importRun) });
 }
 
-async function handleProjectSupplementalImportBatches(req, res, context, projectId) {
-  const { auth, project } = await projectAuth(req, context, projectId, "editor");
-  if (req.method === "GET") {
-    const batches = context.store.listSupplementalImportBatches
-      ? await context.store.listSupplementalImportBatches({ projectId: project.id })
-      : [];
-    sendJson(res, 200, { batches: batches.map(supplementalImportBatchSummary) });
-    return;
-  }
-  const body = await readJsonBody(req);
-  const fileObjectIds = asArray(body.fileObjectIds).map((id) => String(id || "").trim()).filter(Boolean);
-  if (!fileObjectIds.length) {
-    sendError(res, 400, "invalid_supplemental_batch_request", "fileObjectIds must include at least one uploaded workbook.");
-    return;
-  }
-  const uniqueFileObjectIds = [...new Set(fileObjectIds)];
-  const fileObjects = [];
-  for (const fileObjectId of uniqueFileObjectIds) {
-    const fileObject = await context.store.findFileObjectById(fileObjectId);
-    if (!fileObject || fileObject.projectId !== project.id) {
-      sendError(res, 404, "file_object_not_found", `File object ${fileObjectId} was not found for this project.`);
-      return;
-    }
-    fileObjects.push(fileObject);
-  }
-  if (!context.store.createSupplementalImportBatch) {
-    sendError(res, 500, "supplemental_batch_unavailable", "Supplemental batch store is unavailable.");
-    return;
-  }
-  const batch = await context.store.createSupplementalImportBatch({
+async function scanFileObjectForSourceReview(context, { auth, project, fileObject }) {
+  const buffer = await readFileObjectBuffer(context.config, fileObject);
+  const scanFileId = fileObject.checksumSha256
+    ? `upload_${String(fileObject.checksumSha256).slice(0, 16)}`
+    : fileObject.id;
+  const scanResult = runImportScan({
+    fileId: scanFileId,
+    checksumSha256: fileObject.checksumSha256,
+    filename: fileObject.originalName,
+    contentType: fileObject.mimeType,
+    sizeBytes: fileObject.sizeBytes,
+    buffer,
+  });
+  const importRun = await context.store.createImportRun({
     labId: project.labId,
     projectId: project.id,
-    fileObjects,
+    fileObjectId: fileObject.id,
+    status: "source_review_ready",
+    scanResult,
+    warnings: scanResult.warnings || [],
     createdBy: auth.user.id,
   });
-  await context.store.recordAuditEvent({
-    labId: project.labId,
-    projectId: project.id,
-    actorUserId: auth.user.id,
-    action: "import.supplement_batch_create",
-    targetType: "supplemental_import_batch",
-    targetId: batch.id,
-    summary: `Created supplemental import batch with ${fileObjects.length} workbook(s).`,
-    metadata: { fileObjectIds: uniqueFileObjectIds },
-  });
-  startSupplementalImportBatchProcessing(context, batch.id, auth.user.id);
-  sendJson(res, 201, { batch: supplementalImportBatchSummary(batch) });
-}
-
-async function handleProjectSupplementalImportBatchById(req, res, context, projectId, batchId, eventStream = false) {
-  const { auth, project } = await projectAuth(req, context, projectId, "editor");
-  const batch = context.store.findSupplementalImportBatchById
-    ? await context.store.findSupplementalImportBatchById(batchId)
-    : null;
-  if (!batch || batch.projectId !== project.id) {
-    sendError(res, 404, "supplemental_batch_not_found", "Supplemental import batch was not found for this project.");
-    return;
-  }
-  if (["queued", "processing"].includes(batch.status)) {
-    startSupplementalImportBatchProcessing(context, batch.id, auth.user.id);
-  }
-  if (eventStream) {
-    subscribeSupplementalImportBatchEvents(batch, res);
-    return;
-  }
-  sendJson(res, 200, { batch: supplementalImportBatchSummary(batch) });
-}
-
-async function handleNormalizePreview(req, res, context, importRunId) {
-  const auth = requireAuth(await authFor(req, context));
-  const importRun = await context.store.findImportRunById(importRunId);
-  if (!importRun) {
-    sendError(res, 404, "import_run_not_found", "Import run not found.");
-    return;
-  }
-  requireLabRole(auth, importRun.labId, "editor");
-  assertCanNormalizeImportRun(importRun);
-  const body = await readJsonBody(req);
-  const request = {
-    scanResult: importRun.scanResult,
-    approvedBlockIds: body.approvedBlockIds || [],
-    approvedStructures: body.approvedStructures || {},
-    fieldRoleOverrides: body.fieldRoleOverrides || {},
-    mappingOverrides: body.mappingOverrides || {},
-    templateId: body.templateId || null,
-  };
-  const validation = validateNormalizeRequest(request);
-  if (!validation.ok) {
-    sendError(res, 400, "invalid_normalize_request", validation.errors.join(" "), validation.errors);
-    return;
-  }
-  let normalizePreview;
-  try {
-    normalizePreview = normalizeApprovedScan(validation.value);
-  } catch (error) {
-    await context.store.updateImportRun(importRun.id, {
-      status: "failed",
-      error: {
-        code: "normalize_preview_failed",
-        message: error.message || "Normalize preview failed.",
-      },
-      updatedBy: auth.user.id,
-    });
-    await context.store.recordAuditEvent({
-      labId: importRun.labId,
-      projectId: importRun.projectId,
-      actorUserId: auth.user.id,
-      action: "import.failed",
-      targetType: "import_run",
-      targetId: importRun.id,
-      summary: "Import normalize preview failed.",
-      metadata: { code: "normalize_preview_failed" },
-    });
-    throw error;
-  }
-  const updated = await context.store.updateImportRun(importRun.id, {
-    status: "normalized_preview",
-    normalizePreview,
-    reviewDecisions: {
-      approvedBlockIds: request.approvedBlockIds,
-      approvedStructures: request.approvedStructures,
-      fieldRoleOverrides: request.fieldRoleOverrides,
-      mappingOverrides: request.mappingOverrides,
-      templateId: request.templateId,
-    },
-    warnings: normalizePreview.warnings || [],
-    updatedBy: auth.user.id,
-  });
-  await context.store.recordAuditEvent({
-    labId: importRun.labId,
-    projectId: importRun.projectId,
-    actorUserId: auth.user.id,
-    action: "import.normalize_preview",
-    targetType: "import_run",
-    targetId: importRun.id,
-    summary: "Created normalized import preview.",
-  });
-  sendJson(res, 200, { importRun: importRunSummary(updated) });
-}
-
-async function handleRefreshPreview(req, res, context, importRunId) {
-  const auth = requireAuth(await authFor(req, context));
-  const importRun = await context.store.findImportRunById(importRunId);
-  if (!importRun) {
-    sendError(res, 404, "import_run_not_found", "Import run not found.");
-    return;
-  }
-  requireLabRole(auth, importRun.labId, "editor");
-  assertCanApplyImportRun(importRun);
-  const body = await readJsonBody(req);
-  const project = await context.store.findProjectById(importRun.projectId);
-  const parentCommit = project?.currentDatasetCommitId
-    ? await context.store.findDatasetCommitById(project.currentDatasetCommitId)
-    : null;
-  const refreshPreview = buildImportRefreshPreview({
-    parentCommit,
-    datasetPatch: importRun.normalizePreview.datasetPatch || {},
-    replaceImportId: body.replaceImportId,
-    expectedParentDatasetCommitId: body.expectedParentDatasetCommitId,
-  });
-  sendJson(res, 200, refreshPreview);
-}
-
-async function handleRelationshipPreview(req, res, context, importRunId) {
-  const auth = requireAuth(await authFor(req, context));
-  const importRun = await context.store.findImportRunById(importRunId);
-  if (!importRun) {
-    sendError(res, 404, "import_run_not_found", "Import run not found.");
-    return;
-  }
-  requireLabRole(auth, importRun.labId, "editor");
-  assertCanApplyImportRun(importRun);
-  const project = await context.store.findProjectById(importRun.projectId);
-  const parentCommit = project?.currentDatasetCommitId
-    ? await context.store.findDatasetCommitById(project.currentDatasetCommitId)
-    : null;
-  const [mappingSets, chartSpecs] = await Promise.all([
-    context.store.listMappingSets({ projectId: importRun.projectId }),
-    context.store.listChartSpecs({ projectId: importRun.projectId }),
-  ]);
-  const relationshipPreview = buildImportRelationshipPreview({
+  const sourceDocument = await persistSourceIndexForImportRun(context, {
     project,
-    parentCommit,
-    datasetPatch: importRun.normalizePreview.datasetPatch || {},
-    importRunId: importRun.id,
-    mappingSets,
-    chartSpecs: activeChartSpecs(chartSpecs, project?.currentDatasetCommitId),
-  });
-  sendJson(res, 200, relationshipPreview);
-}
-
-async function handleApplyImportRun(req, res, context, importRunId) {
-  const auth = requireAuth(await authFor(req, context));
-  const importRun = await context.store.findImportRunById(importRunId);
-  if (!importRun) {
-    sendError(res, 404, "import_run_not_found", "Import run not found.");
-    return;
-  }
-  requireLabRole(auth, importRun.labId, "editor");
-  assertCanApplyImportRun(importRun);
-  const project = await context.store.findProjectById(importRun.projectId);
-  const parentCommit = project?.currentDatasetCommitId
-    ? await context.store.findDatasetCommitById(project.currentDatasetCommitId)
-    : null;
-  const body = await readOptionalJsonBody(req);
-  const applyMode = body.applyMode || "append";
-  if (!["append", "replace_import", "supplement_import"].includes(applyMode)) {
-    sendError(res, 400, "invalid_import_apply_request", "applyMode must be append, replace_import, or supplement_import.");
-    return;
-  }
-  const datasetPatch = importRun.normalizePreview.datasetPatch || {};
-  const reviewNote = body.reviewNote != null ? String(body.reviewNote) : null;
-  let datasetPayload;
-  let summary;
-  let refreshDecision = null;
-  let auditAction = "import.apply";
-  let auditSummary = "Applied import run.";
-  if (applyMode === "replace_import") {
-    assertExpectedParentDatasetCommit(parentCommit, body.expectedParentDatasetCommitId);
-    const appliedAt = new Date().toISOString();
-    const refreshed = buildRefreshDatasetCommitPayload({
-      parentCommit,
-      datasetPatch,
-      replaceImportId: body.replaceImportId,
-      importRunId: importRun.id,
-      appliedAt,
-    });
-    datasetPayload = refreshed.datasetPayload;
-    refreshDecision = {
-      applyMode,
-      replaceImportId: refreshed.replacedImportId,
-      replacementImportId: refreshed.replacementImportId,
-      expectedParentDatasetCommitId: body.expectedParentDatasetCommitId,
-      refreshSummary: refreshed.refreshSummary,
-      reviewNote,
-      appliedAt,
-    };
-    summary = {
-      ...(importRun.normalizePreview.summary || {}),
-      applyMode,
-      parentCommitId: parentCommit?.id || null,
-      sourceImportRunIds: [importRun.id],
-      replacedImportId: refreshed.replacedImportId,
-      replacementImportId: refreshed.replacementImportId,
-      refreshSummary: refreshed.refreshSummary,
-      reviewNote,
-      addedImportIds: [],
-      addedGenericImportCount: 0,
-      addedExperimentCount: 0,
-      addedFieldCount: 0,
-      addedMeasurementCount: 0,
-      totalGenericImportCount: refreshed.counts.genericImportCount,
-      totalExperimentCount: refreshed.counts.experimentCount,
-      totalFieldCount: refreshed.counts.fieldCount,
-      totalMeasurementCount: refreshed.counts.measurementCount,
-      warningCount: refreshed.counts.warningCount,
-    };
-    auditAction = "import.refresh_apply";
-    auditSummary = "Applied import refresh.";
-  } else if (applyMode === "supplement_import") {
-    const relationshipDecision = body.relationshipDecision || {};
-    const targetExperimentIds = Array.isArray(relationshipDecision.targetExperimentIds)
-      ? relationshipDecision.targetExperimentIds
-      : Array.isArray(body.targetExperimentIds) ? body.targetExperimentIds : [];
-    if (!targetExperimentIds.length) {
-      sendError(res, 400, "invalid_import_apply_request", "supplement_import requires targetExperimentIds.");
-      return;
-    }
-    const annotatedPatch = annotateSupplementDatasetPatch(datasetPatch, {
-      ...relationshipDecision,
-      targetExperimentIds,
-    });
-    const nextDataset = buildNextDatasetCommitPayload({
-      parentDatasetPayload: parentCommit?.datasetPayload || {},
-      datasetPatch: annotatedPatch,
-    });
-    datasetPayload = nextDataset.datasetPayload;
-    summary = {
-      ...buildDatasetCommitSummary({
-        parentCommit,
-        datasetPatch: annotatedPatch,
-        datasetPayload,
-        normalizeSummary: importRun.normalizePreview.summary || {},
-        sourceImportRunIds: [importRun.id],
-      }),
-      applyMode,
-      relationship: "supplement",
-      supplementType: relationshipDecision.supplementType || "supplemental_data",
-      targetExperimentIds,
-      relationshipProposalId: relationshipDecision.relationshipProposalId || null,
-      reviewNote,
-    };
-    auditAction = "import.supplement_apply";
-    auditSummary = "Applied supplemental import.";
-  } else {
-    if (hasCommittedMasterImport(parentCommit?.datasetPayload)) {
-      sendError(
-        res,
-        409,
-        "master_table_already_exists",
-        "This project already has an active master table. Use refresh for the master table or supplement_import for extra workbooks.",
-      );
-      return;
-    }
-    const nextDataset = buildNextDatasetCommitPayload({
-      parentDatasetPayload: parentCommit?.datasetPayload || {},
-      datasetPatch,
-    });
-    datasetPayload = nextDataset.datasetPayload;
-    summary = {
-      ...buildDatasetCommitSummary({
-        parentCommit,
-        datasetPatch,
-        datasetPayload,
-        normalizeSummary: importRun.normalizePreview.summary || {},
-        sourceImportRunIds: [importRun.id],
-      }),
-      applyMode,
-      reviewNote,
-    };
-  }
-  const datasetCommit = await context.store.createDatasetCommit({
-    labId: importRun.labId,
-    projectId: importRun.projectId,
-    parentCommitId: parentCommit?.id || null,
-    sourceImportRunIds: [importRun.id],
-    datasetPayload,
-    summary,
-    warnings: importRun.normalizePreview.warnings || [],
-    createdBy: auth.user.id,
-  });
-  await rebuildObservationSeriesForDatasetCommit(context, project, datasetCommit, auth.user.id);
-  await context.store.updateImportRun(importRun.id, {
-    status: "applied",
-    appliedDatasetCommitId: datasetCommit.id,
-    reviewDecisions: {
-      ...(importRun.reviewDecisions || {}),
-      applyMode,
-      reviewNote,
-      ...(refreshDecision || {}),
-    },
-    updatedBy: auth.user.id,
+    fileObject,
+    importRun,
+    scanResult,
+    actorUserId: auth.user.id,
   });
   await context.store.recordAuditEvent({
-    labId: importRun.labId,
-    projectId: importRun.projectId,
+    labId: project.labId,
+    projectId: project.id,
     actorUserId: auth.user.id,
-    action: auditAction,
+    action: "import.scan",
     targetType: "import_run",
     targetId: importRun.id,
-    summary: auditSummary,
-    metadata: refreshDecision || { applyMode, reviewNote },
+    summary: `Created source review scan for ${fileObject.originalName}.`,
+  });
+  return { importRun, sourceDocument };
+}
+
+async function sourceDocumentFromWorkbookReviewRequest(context, { auth, project, body }) {
+  if (body.sourceDocumentId) {
+    const sourceDocument = await context.store.findSourceDocumentById?.(body.sourceDocumentId);
+    if (!sourceDocument || sourceDocument.projectId !== project.id) {
+      throw Object.assign(new Error("Source document not found for this project."), {
+        statusCode: 404,
+        code: "source_document_not_found",
+      });
+    }
+    return { sourceDocument, importRun: null };
+  }
+  if (!body.fileObjectId) {
+    throw Object.assign(new Error("fileObjectId or sourceDocumentId is required."), {
+      statusCode: 400,
+      code: "invalid_workbook_review_session_request",
+    });
+  }
+  const fileObject = await context.store.findFileObjectById(body.fileObjectId);
+  if (!fileObject || fileObject.projectId !== project.id) {
+    throw Object.assign(new Error("File object not found."), {
+      statusCode: 404,
+      code: "file_object_not_found",
+    });
+  }
+  const existingDocuments = context.store.listSourceDocuments
+    ? await context.store.listSourceDocuments({ projectId: project.id })
+    : [];
+  const existing = existingDocuments.find((document) => document.fileObjectId === fileObject.id);
+  if (existing) return { sourceDocument: existing, importRun: null };
+  return scanFileObjectForSourceReview(context, { auth, project, fileObject });
+}
+
+async function handleProjectWorkbookReviewSessions(req, res, context, projectId) {
+  const { auth, project } = await projectAuth(req, context, projectId, req.method === "POST" ? "editor" : "viewer");
+  if (req.method === "GET") {
+    const sessions = context.store.listWorkbookReviewSessions
+      ? await context.store.listWorkbookReviewSessions({ projectId: project.id })
+      : [];
+    sendJson(res, 200, { workbookReviewSessions: sessions.map(workbookReviewSessionSummary) });
+    return;
+  }
+  const body = await readJsonBody(req);
+  if (!context.store.createWorkbookReviewSession) {
+    sendError(res, 500, "workbook_review_session_unavailable", "Workbook review session store is unavailable.");
+    return;
+  }
+  const { sourceDocument, importRun } = await sourceDocumentFromWorkbookReviewRequest(context, {
+    auth,
+    project,
+    body,
+  });
+  const regions = context.store.listSourceRegions
+    ? await context.store.listSourceRegions({ sourceDocumentId: sourceDocument.id })
+    : [];
+  const indexBlobs = context.store.listSourceIndexBlobs
+    ? await context.store.listSourceIndexBlobs({ sourceDocumentId: sourceDocument.id })
+    : [];
+  const draft = buildWorkbookReviewSessionDraft({ sourceDocument, regions, indexBlobs });
+  const session = await context.store.createWorkbookReviewSession({
+    labId: project.labId,
+    projectId: project.id,
+    sourceDocumentId: sourceDocument.id,
+    ...draft,
+    regions: regions.map(sourceRegionSummary),
+    createdBy: auth.user.id,
   });
   await context.store.recordAuditEvent({
-    labId: importRun.labId,
-    projectId: importRun.projectId,
+    labId: project.labId,
+    projectId: project.id,
     actorUserId: auth.user.id,
-    action: "dataset_commit.create",
-    targetType: "dataset_commit",
-    targetId: datasetCommit.id,
-    summary: "Created dataset commit from import run.",
+    action: "workbook_review_session.create",
+    targetType: "workbook_review_session",
+    targetId: session.id,
+    summary: `Created workbook review session for ${draft.workbookSummary.workbookName}.`,
+    metadata: { sourceDocumentId: sourceDocument.id, importRunId: importRun?.id || null },
+  });
+  sendJson(res, 201, {
+    workbookReviewSession: workbookReviewSessionSummary(session),
+    session: workbookReviewSessionSummary(session),
+    sourceDocument: sourceDocumentSummary(sourceDocument),
+    regions: regions.map(sourceRegionSummary),
+    importRun: importRun ? importRunSummary(importRun) : null,
+  });
+}
+
+async function handleProjectWorkbookUnderstandings(req, res, context, projectId) {
+  const { project } = await projectAuth(req, context, projectId, "viewer");
+  const understandings = context.store.listWorkbookUnderstandings
+    ? await context.store.listWorkbookUnderstandings({ projectId: project.id })
+    : [];
+  sendJson(res, 200, { workbookUnderstandings: understandings.map(workbookUnderstandingSummary) });
+}
+
+async function handleWorkbookReviewSessionById(req, res, context, sessionId) {
+  const { workbookReviewSession } = await workbookReviewSessionAuth(req, context, sessionId, "viewer");
+  const sourceDocument = await context.store.findSourceDocumentById?.(workbookReviewSession.sourceDocumentId);
+  const regions = sourceDocument && context.store.listSourceRegions
+    ? await context.store.listSourceRegions({ sourceDocumentId: sourceDocument.id })
+    : [];
+  sendJson(res, 200, {
+    workbookReviewSession: workbookReviewSessionSummary(workbookReviewSession),
+    session: workbookReviewSessionSummary(workbookReviewSession),
+    sourceDocument: sourceDocument ? sourceDocumentSummary(sourceDocument) : null,
+    regions: regions.map(sourceRegionSummary),
+  });
+}
+
+function sendWorkbookReviewClarification(res, statusCode, error, workbookReviewSession) {
+  sendJson(res, statusCode || 400, {
+    workbookReviewSession: workbookReviewSessionSummary(workbookReviewSession),
+    session: workbookReviewSessionSummary(workbookReviewSession),
+    workbookUnderstandingDraft: workbookReviewSession?.currentUnderstanding || null,
+    messages: [],
+    clarification: error.details?.clarification || {
+      code: error.code || "workbook_review_revision_failed",
+      message: error.message || "Workbook review revision failed.",
+    },
+    validation: error.details?.validation || {
+      status: "invalid",
+      code: error.code || "workbook_review_revision_failed",
+    },
+  });
+}
+
+async function handleWorkbookReviewSessionRevision(req, res, context, sessionId) {
+  const { auth, workbookReviewSession } = await workbookReviewSessionAuth(req, context, sessionId, "editor");
+  const body = await readJsonBody(req);
+  const sourceDocument = await context.store.findSourceDocumentById?.(workbookReviewSession.sourceDocumentId);
+  const indexBlobs = sourceDocument && context.store.listSourceIndexBlobs
+    ? await context.store.listSourceIndexBlobs({ sourceDocumentId: sourceDocument.id })
+    : [];
+  if (!context.store.updateWorkbookReviewSession) {
+    sendError(res, 500, "workbook_review_session_unavailable", "Workbook review session store is unavailable.");
+    return;
+  }
+  let revision;
+  try {
+    revision = applyWorkbookReviewRevision({
+      workbookReviewSession,
+      sourceDocument,
+      indexBlobs,
+      body,
+      actorUserId: auth.user.id,
+    });
+  } catch (error) {
+    sendWorkbookReviewClarification(res, error.statusCode || 400, error, workbookReviewSession);
+    return;
+  }
+  const updated = await context.store.updateWorkbookReviewSession(workbookReviewSession.id, revision.sessionPatch);
+  await context.store.recordAuditEvent({
+    labId: workbookReviewSession.labId,
+    projectId: workbookReviewSession.projectId,
+    actorUserId: auth.user.id,
+    action: "workbook_review.revise",
+    targetType: "workbook_review_session",
+    targetId: workbookReviewSession.id,
+    summary: "Updated workbook understanding draft from user correction.",
+    metadata: {
+      sourceDocumentId: workbookReviewSession.sourceDocumentId,
+      redBoxUpdateCount: revision.validation.redBoxUpdateCount,
+      understandingDraftId: revision.workbookUnderstandingDraft.id,
+    },
   });
   sendJson(res, 200, {
-    datasetCommit,
-    project: projectSummary(await context.store.findProjectById(importRun.projectId)),
+    workbookReviewSession: workbookReviewSessionSummary(updated),
+    session: workbookReviewSessionSummary(updated),
+    workbookUnderstandingDraft: revision.workbookUnderstandingDraft,
+    messages: revision.messages,
+    clarification: null,
+    validation: revision.validation,
+    changedRegions: revision.changedRegions,
+    revisionMode: revision.revisionMode,
+    activeDraftRegionId: revision.activeDraftRegionId,
+  });
+}
+
+async function handleWorkbookReviewSessionConfirm(req, res, context, sessionId) {
+  const { auth, workbookReviewSession } = await workbookReviewSessionAuth(req, context, sessionId, "editor");
+  const body = await readJsonBody(req);
+  if (!context.store.createWorkbookUnderstanding || !context.store.updateWorkbookReviewSession) {
+    sendError(res, 500, "workbook_understanding_unavailable", "Workbook understanding store is unavailable.");
+    return;
+  }
+  let confirmation;
+  try {
+    confirmation = buildWorkbookUnderstandingForConfirmation({
+      workbookReviewSession,
+      body,
+      actorUserId: auth.user.id,
+    });
+  } catch (error) {
+    sendError(res, error.statusCode || 400, error.code || "workbook_understanding_confirm_failed", error.message, error.details);
+    return;
+  }
+  const workbookUnderstanding = await context.store.createWorkbookUnderstanding(confirmation.understandingInput);
+  const updated = await context.store.updateWorkbookReviewSession(workbookReviewSession.id, confirmation.sessionPatch);
+  await context.store.recordAuditEvent({
+    labId: workbookReviewSession.labId,
+    projectId: workbookReviewSession.projectId,
+    actorUserId: auth.user.id,
+    action: "workbook_review.confirm_understanding",
+    targetType: "workbook_understanding",
+    targetId: workbookUnderstanding.id,
+    summary: "Confirmed workbook understanding.",
+    metadata: {
+      sourceDocumentId: workbookReviewSession.sourceDocumentId,
+      workbookReviewSessionId: workbookReviewSession.id,
+      factCount: asArray(workbookUnderstanding.facts).length,
+    },
+  });
+  sendJson(res, 200, {
+    workbookReviewSession: workbookReviewSessionSummary(updated),
+    session: workbookReviewSessionSummary(updated),
+    workbookUnderstanding: workbookUnderstandingSummary(workbookUnderstanding),
   });
 }
 
@@ -2340,26 +2030,21 @@ async function handleChartSpecFromProposal(req, res, context, projectId) {
     sendError(res, 404, "chart_proposal_not_found", "Chart proposal was not found.");
     return;
   }
-  const datasetCommitId = body.datasetCommitId || proposalSet?.datasetCommitId || project.currentDatasetCommitId || null;
-  if (!datasetCommitId) {
-    datasetCommitRequired(res);
+  const sourceBacked = isSourceBackedChartProposal(proposal);
+  if (!sourceBacked) {
+    sendError(
+      res,
+      409,
+      "data_snapshot_chart_not_implemented",
+      "Only source-backed chart proposals can create ChartSpecs until accepted DataSnapshot charting is implemented.",
+    );
     return;
   }
-  if (proposalSet?.datasetCommitId && body.datasetCommitId && proposalSet.datasetCommitId !== body.datasetCommitId) {
-    sendError(res, 400, "invalid_chart_spec", "Chart proposal set and requested dataset commit do not match.", {
-      chartProposalSetDatasetCommitId: proposalSet.datasetCommitId,
-      datasetCommitId: body.datasetCommitId,
-    });
-    return;
-  }
-  const datasetCommit = await verifyProjectScopedRef(context, projectId, "dataset_commit", datasetCommitId);
-  const chartValidation = validateChartSpecProposal({ proposal: chartSpecProposalPayload(proposal), datasetCommit });
+  const chartValidation = validateChartSpecProposal({ proposal: chartSpecProposalPayload(proposal) });
   const chartSpecPayload = chartValidation.chartSpec;
   const chartSpec = await context.store.createChartSpec({
     labId: project.labId,
     projectId: project.id,
-    datasetCommitId,
-    mappingSetId: proposalSet?.mappingSetId || null,
     sourceChartProposalSetId: body.chartProposalSetId || null,
     sourceProposalId: body.proposalId || proposal.proposalId || null,
     title: chartSpecPayload.title || "Untitled chart",
@@ -2382,9 +2067,9 @@ async function handleChartSpecFromProposal(req, res, context, projectId) {
 }
 
 async function handleChartSpecs(req, res, context, projectId) {
-  const { project } = await projectAuth(req, context, projectId, "viewer");
+  await projectAuth(req, context, projectId, "viewer");
   const chartSpecs = await context.store.listChartSpecs({ projectId });
-  sendJson(res, 200, { chartSpecs: decorateChartSpecsStaleness(chartSpecs, project.currentDatasetCommitId) });
+  sendJson(res, 200, { chartSpecs: chartSpecs.filter(isSourceBackedChartSpec) });
 }
 
 async function handleManuscripts(req, res, context, projectId) {
@@ -2455,18 +2140,38 @@ async function dispatch(req, res, context) {
   if (projectProfileMatch && req.method === "PATCH") return handleProjectProfile(req, res, context, projectProfileMatch[1]);
   const projectStateMatch = pathName.match(/^\/api\/projects\/([^/]+)\/state$/);
   if (projectStateMatch && req.method === "GET") return handleProjectState(req, res, context, projectStateMatch[1]);
-  const projectAiContextMatch = pathName.match(/^\/api\/projects\/([^/]+)\/ai\/context$/);
-  if (projectAiContextMatch && req.method === "POST") return handleProjectAiContext(req, res, context, projectAiContextMatch[1]);
-  const projectDataResolveQueryMatch = pathName.match(/^\/api\/projects\/([^/]+)\/data\/resolve-query$/);
-  if (projectDataResolveQueryMatch && req.method === "POST") return handleProjectDataResolveQuery(req, res, context, projectDataResolveQueryMatch[1]);
+  const projectEvidenceRetrieveMatch = pathName.match(/^\/api\/projects\/([^/]+)\/evidence\/retrieve$/);
+  if (projectEvidenceRetrieveMatch && req.method === "POST") return handleProjectEvidenceRetrieve(req, res, context, projectEvidenceRetrieveMatch[1]);
+  const projectDataPlanDraftMatch = pathName.match(/^\/api\/projects\/([^/]+)\/data-plans\/draft$/);
+  if (projectDataPlanDraftMatch && req.method === "POST") return handleProjectDataPlanDraft(req, res, context, projectDataPlanDraftMatch[1]);
+  const projectDataPlanPublishMatch = pathName.match(/^\/api\/projects\/([^/]+)\/data-plans\/publish$/);
+  if (projectDataPlanPublishMatch && req.method === "POST") return handleProjectDataPlanPublish(req, res, context, projectDataPlanPublishMatch[1]);
+  const projectDataPlansMatch = pathName.match(/^\/api\/projects\/([^/]+)\/data-plans$/);
+  if (projectDataPlansMatch && req.method === "GET") return handleProjectDataPlans(req, res, context, projectDataPlansMatch[1]);
+  const projectDataSnapshotsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/data-snapshots$/);
+  if (projectDataSnapshotsMatch && req.method === "GET") return handleProjectDataSnapshots(req, res, context, projectDataSnapshotsMatch[1]);
+  const projectExperimentBrowserMatch = pathName.match(/^\/api\/projects\/([^/]+)\/experiment-browser$/);
+  if (projectExperimentBrowserMatch && req.method === "GET") {
+    return handleProjectExperimentBrowser(req, res, context, projectExperimentBrowserMatch[1], url);
+  }
+  const projectExperimentDetailMatch = pathName.match(/^\/api\/projects\/([^/]+)\/experiments\/([^/]+)$/);
+  if (projectExperimentDetailMatch && req.method === "GET") {
+    return handleProjectExperimentDetail(req, res, context, projectExperimentDetailMatch[1], projectExperimentDetailMatch[2]);
+  }
+  const projectBrowserViewsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/browser-views$/);
+  if (projectBrowserViewsMatch && (req.method === "GET" || req.method === "POST")) {
+    return handleProjectBrowserViews(req, res, context, projectBrowserViewsMatch[1]);
+  }
+  const projectBrowserViewMatch = pathName.match(/^\/api\/projects\/([^/]+)\/browser-views\/([^/]+)$/);
+  if (projectBrowserViewMatch && (req.method === "PATCH" || req.method === "DELETE")) {
+    return handleProjectBrowserViewById(req, res, context, projectBrowserViewMatch[1], projectBrowserViewMatch[2]);
+  }
   const projectAgentPlanMatch = pathName.match(/^\/api\/projects\/([^/]+)\/agent\/plan$/);
   if (projectAgentPlanMatch && req.method === "POST") return handleProjectAgentPlan(req, res, context, projectAgentPlanMatch[1]);
   const projectAgentRunsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/agent\/runs$/);
   if (projectAgentRunsMatch && (req.method === "GET" || req.method === "POST")) return handleProjectAgentRuns(req, res, context, projectAgentRunsMatch[1]);
   const projectChartInterpretMatch = pathName.match(/^\/api\/projects\/([^/]+)\/charts\/interpret$/);
   if (projectChartInterpretMatch && req.method === "POST") return handleProjectChartInterpret(req, res, context, projectChartInterpretMatch[1]);
-  const projectChartProposeMatch = pathName.match(/^\/api\/projects\/([^/]+)\/charts\/propose$/);
-  if (projectChartProposeMatch && req.method === "POST") return handleProjectChartPropose(req, res, context, projectChartProposeMatch[1]);
   const projectMatch = pathName.match(/^\/api\/projects\/([^/]+)$/);
   if (projectMatch && (req.method === "GET" || req.method === "PATCH")) return handleProjectById(req, res, context, projectMatch[1]);
   const fileMatch = pathName.match(/^\/api\/projects\/([^/]+)\/files$/);
@@ -2477,32 +2182,32 @@ async function dispatch(req, res, context) {
   if (importRunsMatch && req.method === "POST") return handleProjectImportRuns(req, res, context, importRunsMatch[1]);
   const sourceDocumentsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/source-documents$/);
   if (sourceDocumentsMatch && req.method === "GET") return handleProjectSourceDocuments(req, res, context, sourceDocumentsMatch[1]);
+  const workbookReviewSessionsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/workbook-review-sessions$/);
+  if (workbookReviewSessionsMatch && (req.method === "GET" || req.method === "POST")) {
+    return handleProjectWorkbookReviewSessions(req, res, context, workbookReviewSessionsMatch[1]);
+  }
+  const workbookUnderstandingsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/workbook-understandings$/);
+  if (workbookUnderstandingsMatch && req.method === "GET") return handleProjectWorkbookUnderstandings(req, res, context, workbookUnderstandingsMatch[1]);
   const sourceExtractProposalsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/source-extract-proposals$/);
   if (sourceExtractProposalsMatch && (req.method === "GET" || req.method === "POST")) {
     return handleProjectSourceExtractProposals(req, res, context, sourceExtractProposalsMatch[1]);
   }
-  const supplementalBatchesMatch = pathName.match(/^\/api\/projects\/([^/]+)\/supplemental-import-batches$/);
-  if (supplementalBatchesMatch && (req.method === "GET" || req.method === "POST")) return handleProjectSupplementalImportBatches(req, res, context, supplementalBatchesMatch[1]);
-  const supplementalBatchEventsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/supplemental-import-batches\/([^/]+)\/events$/);
-  if (supplementalBatchEventsMatch && req.method === "GET") return handleProjectSupplementalImportBatchById(req, res, context, supplementalBatchEventsMatch[1], supplementalBatchEventsMatch[2], true);
-  const supplementalBatchMatch = pathName.match(/^\/api\/projects\/([^/]+)\/supplemental-import-batches\/([^/]+)$/);
-  if (supplementalBatchMatch && req.method === "GET") return handleProjectSupplementalImportBatchById(req, res, context, supplementalBatchMatch[1], supplementalBatchMatch[2]);
-  const datasetCommitsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/dataset-commits$/);
-  if (datasetCommitsMatch && req.method === "GET") return handleProjectDatasetCommits(req, res, context, datasetCommitsMatch[1]);
-  const observationSeriesMatch = pathName.match(/^\/api\/projects\/([^/]+)\/observation-series$/);
-  if (observationSeriesMatch && req.method === "GET") return handleProjectObservationSeries(req, res, context, observationSeriesMatch[1]);
-  const analysisViewsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/analysis-views$/);
-  if (analysisViewsMatch && (req.method === "GET" || req.method === "POST")) return handleProjectAnalysisViews(req, res, context, analysisViewsMatch[1]);
-  const analysisViewChartProposalMatch = pathName.match(/^\/api\/analysis-views\/([^/]+)\/chart-proposal$/);
-  if (analysisViewChartProposalMatch && req.method === "POST") return handleAnalysisViewChartProposal(req, res, context, analysisViewChartProposalMatch[1]);
   const sourceDocumentRegionsMatch = pathName.match(/^\/api\/source-documents\/([^/]+)\/regions$/);
   if (sourceDocumentRegionsMatch && req.method === "GET") return handleSourceDocumentRegions(req, res, context, sourceDocumentRegionsMatch[1]);
   const sourceDocumentQueryMatch = pathName.match(/^\/api\/source-documents\/([^/]+)\/query$/);
   if (sourceDocumentQueryMatch && req.method === "POST") return handleSourceDocumentQuery(req, res, context, sourceDocumentQueryMatch[1]);
   const sourceDocumentRangeMatch = pathName.match(/^\/api\/source-documents\/([^/]+)\/range$/);
   if (sourceDocumentRangeMatch && req.method === "POST") return handleSourceDocumentRange(req, res, context, sourceDocumentRangeMatch[1]);
+  const sourceDocumentExtractPreviewMatch = pathName.match(/^\/api\/source-documents\/([^/]+)\/extract-preview$/);
+  if (sourceDocumentExtractPreviewMatch && req.method === "POST") return handleSourceDocumentExtractPreview(req, res, context, sourceDocumentExtractPreviewMatch[1]);
   const sourceRegionExtractPreviewMatch = pathName.match(/^\/api\/source-regions\/([^/]+)\/extract-preview$/);
   if (sourceRegionExtractPreviewMatch && req.method === "POST") return handleSourceRegionExtractPreview(req, res, context, sourceRegionExtractPreviewMatch[1]);
+  const workbookReviewSessionMatch = pathName.match(/^\/api\/workbook-review-sessions\/([^/]+)$/);
+  if (workbookReviewSessionMatch && req.method === "GET") return handleWorkbookReviewSessionById(req, res, context, workbookReviewSessionMatch[1]);
+  const workbookReviewSessionRevisionMatch = pathName.match(/^\/api\/workbook-review-sessions\/([^/]+)\/revisions$/);
+  if (workbookReviewSessionRevisionMatch && req.method === "POST") return handleWorkbookReviewSessionRevision(req, res, context, workbookReviewSessionRevisionMatch[1]);
+  const workbookReviewSessionConfirmMatch = pathName.match(/^\/api\/workbook-review-sessions\/([^/]+)\/confirm$/);
+  if (workbookReviewSessionConfirmMatch && req.method === "POST") return handleWorkbookReviewSessionConfirm(req, res, context, workbookReviewSessionConfirmMatch[1]);
   const sourceExtractProposalChartMatch = pathName.match(/^\/api\/source-extract-proposals\/([^/]+)\/chart-proposal$/);
   if (sourceExtractProposalChartMatch && req.method === "POST") return handleSourceExtractChartProposal(req, res, context, sourceExtractProposalChartMatch[1]);
   const sourceExtractProposalMatch = pathName.match(/^\/api\/source-extract-proposals\/([^/]+)$/);
@@ -2513,22 +2218,10 @@ async function dispatch(req, res, context) {
   if (agentRunCancelMatch && req.method === "POST") return handleAgentRunCancel(req, res, context, agentRunCancelMatch[1]);
   const agentRunMatch = pathName.match(/^\/api\/agent-runs\/([^/]+)$/);
   if (agentRunMatch && req.method === "GET") return handleAgentRunById(req, res, context, agentRunMatch[1]);
-  const mappingSetsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/mapping-sets$/);
-  if (mappingSetsMatch && (req.method === "GET" || req.method === "POST")) return handleProjectMappingSets(req, res, context, mappingSetsMatch[1]);
-  const mappingSetMatch = pathName.match(/^\/api\/mapping-sets\/([^/]+)$/);
-  if (mappingSetMatch && req.method === "PATCH") return handleMappingSetPatch(req, res, context, mappingSetMatch[1]);
   const chartProposalSetsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/chart-proposal-sets$/);
-  if (chartProposalSetsMatch && (req.method === "GET" || req.method === "POST")) return handleProjectChartProposalSets(req, res, context, chartProposalSetsMatch[1]);
+  if (chartProposalSetsMatch && req.method === "GET") return handleProjectChartProposalSets(req, res, context, chartProposalSetsMatch[1]);
   const chartProposalSetMatch = pathName.match(/^\/api\/chart-proposal-sets\/([^/]+)$/);
   if (chartProposalSetMatch && req.method === "PATCH") return handleChartProposalSetPatch(req, res, context, chartProposalSetMatch[1]);
-  const normalizeMatch = pathName.match(/^\/api\/import-runs\/([^/]+)\/normalize-preview$/);
-  if (normalizeMatch && req.method === "POST") return handleNormalizePreview(req, res, context, normalizeMatch[1]);
-  const refreshPreviewMatch = pathName.match(/^\/api\/import-runs\/([^/]+)\/refresh-preview$/);
-  if (refreshPreviewMatch && req.method === "POST") return handleRefreshPreview(req, res, context, refreshPreviewMatch[1]);
-  const relationshipPreviewMatch = pathName.match(/^\/api\/import-runs\/([^/]+)\/relationship-preview$/);
-  if (relationshipPreviewMatch && req.method === "POST") return handleRelationshipPreview(req, res, context, relationshipPreviewMatch[1]);
-  const applyMatch = pathName.match(/^\/api\/import-runs\/([^/]+)\/apply$/);
-  if (applyMatch && req.method === "POST") return handleApplyImportRun(req, res, context, applyMatch[1]);
   const chartFromProposalMatch = pathName.match(/^\/api\/projects\/([^/]+)\/chart-specs\/from-proposal$/);
   if (chartFromProposalMatch && req.method === "POST") return handleChartSpecFromProposal(req, res, context, chartFromProposalMatch[1]);
   const chartSpecsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/chart-specs$/);
@@ -2545,13 +2238,12 @@ export async function handleSaasRoutes(req, res, context) {
     && !req.url?.startsWith("/api/admin")
     && !req.url?.startsWith("/api/labs")
     && !req.url?.startsWith("/api/projects")
-    && !req.url?.startsWith("/api/analysis-views")
     && !req.url?.startsWith("/api/source-documents")
     && !req.url?.startsWith("/api/source-regions")
+    && !req.url?.startsWith("/api/workbook-review-sessions")
     && !req.url?.startsWith("/api/source-extract-proposals")
     && !req.url?.startsWith("/api/agent-runs")
     && !req.url?.startsWith("/api/import-runs")
-    && !req.url?.startsWith("/api/mapping-sets")
     && !req.url?.startsWith("/api/chart-proposal-sets")
     && !req.url?.startsWith("/api/manuscripts")) {
     return false;

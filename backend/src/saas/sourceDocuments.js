@@ -9,7 +9,7 @@ export const SOURCE_RANGE_SCHEMA_VERSION = "labrat.sourceRange.v1";
 
 const DEFAULT_QUERY_LIMIT = 25;
 const MAX_QUERY_LIMIT = 100;
-const DEFAULT_RANGE_MAX_CELLS = 500;
+export const SOURCE_RANGE_MAX_CELLS = 500;
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -543,7 +543,7 @@ export function readSourceDocumentRange({
   indexBlobs = [],
   sheetName,
   range,
-  maxCells = DEFAULT_RANGE_MAX_CELLS,
+  maxCells = SOURCE_RANGE_MAX_CELLS,
 }) {
   const sheet = findSheet(indexBlobs, sheetName);
   if (!sheet) {
@@ -566,7 +566,7 @@ export function readSourceDocumentRange({
   const rowCount = decoded.e.r - decoded.s.r + 1;
   const columnCount = decoded.e.c - decoded.s.c + 1;
   const cellCount = rowCount * columnCount;
-  const cappedMaxCells = limitNumber(maxCells, DEFAULT_RANGE_MAX_CELLS, 1, DEFAULT_RANGE_MAX_CELLS);
+  const cappedMaxCells = limitNumber(maxCells, SOURCE_RANGE_MAX_CELLS, 1, SOURCE_RANGE_MAX_CELLS);
   if (cellCount > cappedMaxCells) {
     const error = new Error(`Requested range contains ${cellCount} cells; maximum is ${cappedMaxCells}.`);
     error.statusCode = 400;

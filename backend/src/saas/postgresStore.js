@@ -65,7 +65,6 @@ function projectFromRow(row) {
     name: row.name,
     description: row.description,
     status: row.status,
-    currentDatasetCommitId: row.current_dataset_commit_id,
     metadata: row.metadata || {},
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -106,110 +105,6 @@ function importRunFromRow(row) {
     reviewDecisions: row.review_decisions || {},
     warnings: row.warnings || [],
     error: row.error,
-    appliedDatasetCommitId: row.applied_dataset_commit_id,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    createdBy: row.created_by,
-    updatedBy: row.updated_by,
-  };
-}
-
-function supplementalImportBatchFromRow(row, items = []) {
-  if (!row) return null;
-  return {
-    id: row.id,
-    labId: row.lab_id,
-    projectId: row.project_id,
-    status: row.status,
-    summary: row.summary || {},
-    items,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    createdBy: row.created_by,
-    updatedBy: row.updated_by,
-  };
-}
-
-function supplementalImportBatchItemFromRow(row) {
-  if (!row) return null;
-  return {
-    id: row.id,
-    batchId: row.batch_id,
-    labId: row.lab_id,
-    projectId: row.project_id,
-    fileObjectId: row.file_object_id,
-    importRunId: row.import_run_id,
-    fileName: row.file_name,
-    status: row.status,
-    progressMessage: row.progress_message,
-    summary: row.summary || {},
-    relationshipPreview: row.relationship_preview,
-    warnings: row.warnings || [],
-    error: row.error,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    createdBy: row.created_by,
-    updatedBy: row.updated_by,
-  };
-}
-
-function datasetCommitFromRow(row) {
-  if (!row) return null;
-  return {
-    id: row.id,
-    labId: row.lab_id,
-    projectId: row.project_id,
-    parentCommitId: row.parent_commit_id,
-    sourceImportRunIds: row.source_import_run_ids || [],
-    sourceMappingSetIds: row.source_mapping_set_ids || [],
-    datasetPayload: row.dataset_payload || {},
-    summary: row.summary || {},
-    warnings: row.warnings || [],
-    createdAt: row.created_at,
-    createdBy: row.created_by,
-  };
-}
-
-function observationSeriesFromRow(row) {
-  if (!row) return null;
-  return {
-    ...(row.payload || {}),
-    id: row.id,
-    seriesId: row.payload?.seriesId || row.id,
-    labId: row.lab_id,
-    projectId: row.project_id,
-    datasetCommitId: row.dataset_commit_id,
-    sourceImportId: row.source_import_id,
-    observationSetId: row.observation_set_id,
-    experimentId: row.experiment_id,
-    experimentLabel: row.experiment_label,
-    seriesKind: row.series_kind,
-    xField: row.x_field,
-    yField: row.y_field,
-    sourceRefs: row.source_refs || [],
-    summary: row.summary || {},
-    status: row.status,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    createdBy: row.created_by,
-    updatedBy: row.updated_by,
-  };
-}
-
-function analysisViewFromRow(row) {
-  if (!row) return null;
-  return {
-    id: row.id,
-    labId: row.lab_id,
-    projectId: row.project_id,
-    datasetCommitId: row.dataset_commit_id,
-    schemaVersion: row.schema_version || "labrat.analysisView.v1",
-    viewType: row.view_type,
-    status: row.status,
-    title: row.title,
-    spec: row.spec || {},
-    sourceRefs: row.source_refs || [],
-    warnings: row.warnings || [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     createdBy: row.created_by,
@@ -293,7 +188,6 @@ function sourceExtractProposalFromRow(row) {
     projectId: row.project_id,
     sourceDocumentId: row.source_document_id,
     sourceRegionId: row.source_region_id,
-    datasetCommitId: row.dataset_commit_id,
     schemaVersion: row.schema_version || "labrat.sourceExtractProposal.v1",
     status: row.status,
     purpose: row.purpose,
@@ -306,6 +200,161 @@ function sourceExtractProposalFromRow(row) {
     updatedAt: row.updated_at,
     createdBy: row.created_by,
     updatedBy: row.updated_by,
+  };
+}
+
+function workbookReviewSessionFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    sourceDocumentId: row.source_document_id,
+    schemaVersion: row.schema_version || "labrat.workbookReviewSession.v1",
+    status: row.status,
+    version: row.version || 1,
+    workbookSummary: row.workbook_summary || {},
+    currentUnderstanding: row.current_understanding || {},
+    regions: row.regions || [],
+    messages: row.messages || [],
+    warnings: row.warnings || [],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    createdBy: row.created_by,
+    updatedBy: row.updated_by,
+  };
+}
+
+function workbookUnderstandingFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    sourceDocumentId: row.source_document_id,
+    workbookReviewSessionId: row.workbook_review_session_id,
+    schemaVersion: row.schema_version || "labrat.workbookUnderstanding.v1",
+    status: row.status,
+    version: row.version || 1,
+    understanding: row.understanding || {},
+    facts: row.facts || [],
+    regionSummaries: row.region_summaries || [],
+    warnings: row.warnings || [],
+    decisionSummary: row.decision_summary || {},
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    createdBy: row.created_by,
+    updatedBy: row.updated_by,
+  };
+}
+
+function dataPlanFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    schemaVersion: row.schema_version,
+    status: row.status,
+    task: row.task,
+    outputShape: row.output_shape,
+    plan: row.plan || {},
+    sourceEvidence: row.source_evidence || [],
+    operations: row.operations || [],
+    identityBindings: row.identity_bindings || [],
+    dependencyHash: row.dependency_hash,
+    validation: row.validation || {},
+    warnings: row.warnings || [],
+    acceptedAt: row.accepted_at,
+    acceptedBy: row.accepted_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    createdBy: row.created_by,
+    updatedBy: row.updated_by,
+  };
+}
+
+function dataSnapshotFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    dataPlanId: row.data_plan_id,
+    schemaVersion: row.schema_version,
+    status: row.status,
+    outputShape: row.output_shape,
+    contentHash: row.content_hash,
+    dependencyHash: row.dependency_hash,
+    snapshot: row.snapshot || {},
+    experimentRecords: row.experiment_records || [],
+    sourceRefs: row.source_refs || [],
+    summary: row.summary || {},
+    warnings: row.warnings || [],
+    acceptedAt: row.accepted_at,
+    acceptedBy: row.accepted_by,
+    createdAt: row.created_at,
+    createdBy: row.created_by,
+  };
+}
+
+function experimentIdentityFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    canonicalLabel: row.canonical_label,
+    normalizedLabel: row.normalized_label,
+    aliases: row.aliases || [],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    createdBy: row.created_by,
+    updatedBy: row.updated_by,
+  };
+}
+
+function experimentSnapshotHeadFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    experimentId: row.experiment_id,
+    dataSnapshotId: row.data_snapshot_id,
+    recordIndex: Number(row.record_index),
+    updatedAt: row.updated_at,
+    updatedBy: row.updated_by,
+  };
+}
+
+function browserViewFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    ownerUserId: row.owner_user_id,
+    schemaVersion: row.schema_version,
+    name: row.name,
+    payload: row.payload || {},
+    isDefault: Boolean(row.is_default),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function experimentSnapshotPublishFromRow(row) {
+  if (!row) return null;
+  return {
+    projectId: row.project_id,
+    labId: row.lab_id,
+    idempotencyKey: row.idempotency_key,
+    requestHash: row.request_hash,
+    dataPlanId: row.data_plan_id,
+    dataSnapshotId: row.data_snapshot_id,
+    response: row.response || {},
+    createdAt: row.created_at,
   };
 }
 
@@ -322,31 +371,11 @@ function agentRunFromRow(row) {
     selectedContext: row.selected_context || {},
     visibleSteps: row.visible_steps || [],
     toolTrace: row.tool_trace || [],
-    analysisViewId: row.analysis_view_id,
     proposalRefs: row.proposal_refs || [],
     actions: row.actions || [],
     usage: row.usage || {},
     warnings: row.warnings || [],
     error: row.error,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    createdBy: row.created_by,
-    updatedBy: row.updated_by,
-  };
-}
-
-function mappingSetFromRow(row) {
-  if (!row) return null;
-  return {
-    id: row.id,
-    labId: row.lab_id,
-    projectId: row.project_id,
-    importRunId: row.import_run_id,
-    datasetCommitId: row.dataset_commit_id,
-    schemaVersion: row.schema_version,
-    status: row.status,
-    payload: row.payload || {},
-    decisionSummary: row.decision_summary || {},
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     createdBy: row.created_by,
@@ -360,8 +389,6 @@ function chartProposalSetFromRow(row) {
     id: row.id,
     labId: row.lab_id,
     projectId: row.project_id,
-    datasetCommitId: row.dataset_commit_id,
-    mappingSetId: row.mapping_set_id,
     schemaVersion: row.schema_version,
     status: row.status,
     payload: row.payload || {},
@@ -379,8 +406,6 @@ function chartSpecFromRow(row) {
     id: row.id,
     labId: row.lab_id,
     projectId: row.project_id,
-    datasetCommitId: row.dataset_commit_id,
-    mappingSetId: row.mapping_set_id,
     sourceChartProposalSetId: row.source_chart_proposal_set_id,
     sourceProposalId: row.source_proposal_id,
     title: row.title,
@@ -652,8 +677,7 @@ export class PostgresSaasStore {
            description = $3,
            status = $4,
            metadata = $5,
-           current_dataset_commit_id = $6,
-           updated_by = coalesce($7, updated_by),
+           updated_by = coalesce($6, updated_by),
            updated_at = now()
        where id = $1
        returning *`,
@@ -663,7 +687,6 @@ export class PostgresSaasStore {
         changes.description ?? current.description,
         changes.status ?? current.status,
         jsonb(changes.metadata ?? current.metadata ?? {}),
-        changes.currentDatasetCommitId !== undefined ? changes.currentDatasetCommitId : current.currentDatasetCommitId,
         changes.updatedBy ?? null,
       ],
     );
@@ -752,7 +775,7 @@ export class PostgresSaasStore {
     const result = await this.query(
       `update import_runs
        set status = $2, normalize_preview = $3, review_decisions = $4, warnings = $5,
-           error = $6, applied_dataset_commit_id = $7, updated_by = coalesce($8, updated_by), updated_at = now()
+           error = $6, updated_by = coalesce($7, updated_by), updated_at = now()
        where id = $1
        returning *`,
       [
@@ -762,231 +785,10 @@ export class PostgresSaasStore {
         jsonb(changes.reviewDecisions ?? current.reviewDecisions ?? {}),
         jsonb(changes.warnings ?? current.warnings ?? [], []),
         nullableJsonb(changes.error ?? current.error),
-        changes.appliedDatasetCommitId ?? current.appliedDatasetCommitId,
         changes.updatedBy || null,
       ],
     );
     return importRunFromRow(result.rows[0]);
-  }
-
-  async createSupplementalImportBatch(input) {
-    const batchId = input.id || makeId("supplement_batch");
-    await this.query(
-      `insert into supplemental_import_batches
-       (id, lab_id, project_id, status, summary, created_at, updated_at, created_by, updated_by)
-       values ($1, $2, $3, $4, $5, now(), now(), $6, $6)`,
-      [
-        batchId,
-        input.labId,
-        input.projectId,
-        input.status || "queued",
-        jsonb(input.summary || {}),
-        input.createdBy,
-      ],
-    );
-    for (const fileObject of input.fileObjects || []) {
-      await this.query(
-        `insert into supplemental_import_batch_items
-         (id, batch_id, lab_id, project_id, file_object_id, import_run_id, file_name, status, progress_message, summary, relationship_preview, warnings, error, created_at, updated_at, created_by, updated_by)
-         values ($1, $2, $3, $4, $5, null, $6, 'queued', $7, '{}', null, '[]', null, now(), now(), $8, $8)`,
-        [
-          makeId("supplement_batch_item"),
-          batchId,
-          input.labId,
-          input.projectId,
-          fileObject.id,
-          fileObject.originalName || fileObject.id,
-          "Queued for supplemental relationship review.",
-          input.createdBy,
-        ],
-      );
-    }
-    return this.findSupplementalImportBatchById(batchId);
-  }
-
-  async findSupplementalImportBatchById(batchId) {
-    const batchResult = await this.query("select * from supplemental_import_batches where id = $1", [batchId]);
-    const batch = batchResult.rows[0];
-    if (!batch) return null;
-    const itemResult = await this.query(
-      "select * from supplemental_import_batch_items where batch_id = $1 order by created_at asc",
-      [batchId],
-    );
-    return supplementalImportBatchFromRow(batch, itemResult.rows.map(supplementalImportBatchItemFromRow));
-  }
-
-  async listSupplementalImportBatches({ projectId }) {
-    const result = await this.query(
-      "select * from supplemental_import_batches where project_id = $1 order by updated_at desc",
-      [projectId],
-    );
-    const batches = [];
-    for (const row of result.rows) {
-      batches.push(await this.findSupplementalImportBatchById(row.id));
-    }
-    return batches;
-  }
-
-  async updateSupplementalImportBatch(batchId, changes) {
-    const current = await this.findSupplementalImportBatchById(batchId);
-    if (!current) return null;
-    const result = await this.query(
-      `update supplemental_import_batches
-       set status = $2,
-           summary = $3,
-           updated_by = coalesce($4, updated_by),
-           updated_at = now()
-       where id = $1
-       returning *`,
-      [
-        batchId,
-        changes.status ?? current.status,
-        jsonb(changes.summary ?? current.summary ?? {}),
-        changes.updatedBy || null,
-      ],
-    );
-    return this.findSupplementalImportBatchById(result.rows[0].id);
-  }
-
-  async updateSupplementalImportBatchItem(batchId, itemId, changes) {
-    const currentBatch = await this.findSupplementalImportBatchById(batchId);
-    const current = currentBatch?.items?.find((item) => item.id === itemId);
-    if (!current) return null;
-    const result = await this.query(
-      `update supplemental_import_batch_items
-       set import_run_id = $3,
-           status = $4,
-           progress_message = $5,
-           summary = $6,
-           relationship_preview = $7,
-           warnings = $8,
-           error = $9,
-           updated_by = coalesce($10, updated_by),
-           updated_at = now()
-       where batch_id = $1 and id = $2
-       returning *`,
-      [
-        batchId,
-        itemId,
-        changes.importRunId !== undefined ? changes.importRunId || null : current.importRunId,
-        changes.status ?? current.status,
-        changes.progressMessage !== undefined ? changes.progressMessage || null : current.progressMessage,
-        jsonb(changes.summary ?? current.summary ?? {}),
-        nullableJsonb(changes.relationshipPreview !== undefined ? changes.relationshipPreview : current.relationshipPreview),
-        jsonb(changes.warnings ?? current.warnings ?? [], []),
-        nullableJsonb(changes.error !== undefined ? changes.error : current.error),
-        changes.updatedBy || null,
-      ],
-    );
-    return supplementalImportBatchItemFromRow(result.rows[0]);
-  }
-
-  async createDatasetCommit(input) {
-    const result = await this.query(
-      `insert into dataset_commits
-       (id, lab_id, project_id, parent_commit_id, source_import_run_ids, source_mapping_set_ids, dataset_payload, summary, warnings, created_at, created_by)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, now(), $10)
-       returning *`,
-      [
-        makeId("commit"),
-        input.labId,
-        input.projectId,
-        input.parentCommitId || null,
-        jsonb(input.sourceImportRunIds || [], []),
-        jsonb(input.sourceMappingSetIds || [], []),
-        jsonb(input.datasetPayload || {}),
-        jsonb(input.summary || {}),
-        jsonb(input.warnings || [], []),
-        input.createdBy,
-      ],
-    );
-    await this.updateProject(input.projectId, { currentDatasetCommitId: result.rows[0].id, updatedBy: input.createdBy });
-    return datasetCommitFromRow(result.rows[0]);
-  }
-
-  async findDatasetCommitById(commitId) {
-    const result = await this.query("select * from dataset_commits where id = $1", [commitId]);
-    return datasetCommitFromRow(result.rows[0]);
-  }
-
-  async listDatasetCommits({ projectId }) {
-    const result = await this.query("select * from dataset_commits where project_id = $1 order by created_at desc", [projectId]);
-    return result.rows.map(datasetCommitFromRow);
-  }
-
-  async replaceObservationSeriesForDatasetCommit(input) {
-    await this.query(
-      "delete from observation_series where project_id = $1 and dataset_commit_id = $2",
-      [input.projectId, input.datasetCommitId],
-    );
-    for (const item of input.series || []) {
-      const id = item.id || makeId("observation_series");
-      await this.query(
-        `insert into observation_series
-         (id, lab_id, project_id, dataset_commit_id, source_import_id, observation_set_id, experiment_id, experiment_label, series_kind, x_field, y_field, source_refs, summary, status, payload, created_at, updated_at, created_by, updated_by)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, now(), now(), $16, $16)`,
-        [
-          id,
-          item.labId || input.labId,
-          item.projectId || input.projectId,
-          item.datasetCommitId || input.datasetCommitId,
-          item.sourceImportId || null,
-          item.observationSetId || null,
-          item.experimentId || null,
-          item.experimentLabel || null,
-          item.seriesKind,
-          item.xField,
-          item.yField,
-          jsonb(item.sourceRefs || [], []),
-          jsonb(item.summary || {}),
-          item.status || "active",
-          jsonb({ ...item, id, seriesId: item.seriesId || id }),
-          input.updatedBy,
-        ],
-      );
-    }
-    return this.listObservationSeries({ projectId: input.projectId });
-  }
-
-  async listObservationSeries({ projectId }) {
-    const result = await this.query(
-      "select * from observation_series where project_id = $1 order by updated_at desc, experiment_label asc, y_field asc",
-      [projectId],
-    );
-    return result.rows.map(observationSeriesFromRow);
-  }
-
-  async createAnalysisView(input) {
-    const result = await this.query(
-      `insert into analysis_views
-       (id, lab_id, project_id, dataset_commit_id, view_type, status, title, spec, source_refs, warnings, created_at, updated_at, created_by, updated_by)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(), now(), $11, $11)
-       returning *`,
-      [
-        input.id || makeId("analysis_view"),
-        input.labId,
-        input.projectId,
-        input.datasetCommitId || null,
-        input.viewType,
-        input.status || "draft",
-        input.title || null,
-        jsonb(input.spec || {}),
-        jsonb(input.sourceRefs || []),
-        jsonb(input.warnings || []),
-        input.createdBy,
-      ],
-    );
-    return analysisViewFromRow(result.rows[0]);
-  }
-
-  async findAnalysisViewById(id) {
-    const result = await this.query("select * from analysis_views where id = $1", [id]);
-    return analysisViewFromRow(result.rows[0]);
-  }
-
-  async listAnalysisViews({ projectId }) {
-    const result = await this.query("select * from analysis_views where project_id = $1 order by updated_at desc", [projectId]);
-    return result.rows.map(analysisViewFromRow);
   }
 
   async replaceSourceDocumentIndex(input) {
@@ -1128,11 +930,436 @@ export class PostgresSaasStore {
     return result.rows.map(sourceIndexBlobFromRow);
   }
 
+  async createWorkbookReviewSession(input) {
+    const result = await this.query(
+      `insert into workbook_review_sessions
+       (id, lab_id, project_id, source_document_id, schema_version, status, version, workbook_summary, current_understanding, regions, messages, warnings, created_at, updated_at, created_by, updated_by)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now(), now(), $13, $13)
+       returning *`,
+      [
+        input.id || makeId("workbook_review_session"),
+        input.labId,
+        input.projectId,
+        input.sourceDocumentId,
+        input.schemaVersion || "labrat.workbookReviewSession.v1",
+        input.status || "needs_user_review",
+        input.version || 1,
+        jsonb(input.workbookSummary || {}),
+        jsonb(input.currentUnderstanding || {}),
+        jsonb(input.regions || [], []),
+        jsonb(input.messages || [], []),
+        jsonb(input.warnings || [], []),
+        input.createdBy,
+      ],
+    );
+    return workbookReviewSessionFromRow(result.rows[0]);
+  }
+
+  async findWorkbookReviewSessionById(id) {
+    const result = await this.query("select * from workbook_review_sessions where id = $1", [id]);
+    return workbookReviewSessionFromRow(result.rows[0]);
+  }
+
+  async updateWorkbookReviewSession(id, patch = {}) {
+    const result = await this.query(
+      `update workbook_review_sessions
+       set status = coalesce($2, status),
+           version = coalesce($3, version),
+           workbook_summary = coalesce($4, workbook_summary),
+           current_understanding = coalesce($5, current_understanding),
+           regions = coalesce($6, regions),
+           messages = coalesce($7, messages),
+           warnings = coalesce($8, warnings),
+           updated_at = now(),
+           updated_by = coalesce($9, updated_by)
+       where id = $1
+       returning *`,
+      [
+        id,
+        patch.status ?? null,
+        patch.version ?? null,
+        patch.workbookSummary === undefined ? null : jsonb(patch.workbookSummary),
+        patch.currentUnderstanding === undefined ? null : jsonb(patch.currentUnderstanding),
+        patch.regions === undefined ? null : jsonb(patch.regions, []),
+        patch.messages === undefined ? null : jsonb(patch.messages, []),
+        patch.warnings === undefined ? null : jsonb(patch.warnings, []),
+        patch.updatedBy ?? null,
+      ],
+    );
+    return workbookReviewSessionFromRow(result.rows[0]);
+  }
+
+  async listWorkbookReviewSessions({ projectId }) {
+    const result = await this.query(
+      "select * from workbook_review_sessions where project_id = $1 order by updated_at desc",
+      [projectId],
+    );
+    return result.rows.map(workbookReviewSessionFromRow);
+  }
+
+  async createWorkbookUnderstanding(input) {
+    const result = await this.query(
+      `insert into workbook_understandings
+       (id, lab_id, project_id, source_document_id, workbook_review_session_id, schema_version, status, version, understanding, facts, region_summaries, warnings, decision_summary, created_at, updated_at, created_by, updated_by)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now(), now(), $14, $14)
+       returning *`,
+      [
+        input.id || makeId("workbook_understanding"),
+        input.labId,
+        input.projectId,
+        input.sourceDocumentId,
+        input.workbookReviewSessionId,
+        input.schemaVersion || "labrat.workbookUnderstanding.v1",
+        input.status || "accepted",
+        input.version || 1,
+        jsonb(input.understanding || {}),
+        jsonb(input.facts || [], []),
+        jsonb(input.regionSummaries || [], []),
+        jsonb(input.warnings || [], []),
+        jsonb(input.decisionSummary || {}),
+        input.createdBy,
+      ],
+    );
+    return workbookUnderstandingFromRow(result.rows[0]);
+  }
+
+  async listWorkbookUnderstandings({ projectId }) {
+    const result = await this.query(
+      "select * from workbook_understandings where project_id = $1 order by updated_at desc",
+      [projectId],
+    );
+    return result.rows.map(workbookUnderstandingFromRow);
+  }
+
+  async findDataPlanById(id) {
+    const result = await this.query("select * from data_plans where id = $1", [id]);
+    return dataPlanFromRow(result.rows[0]);
+  }
+
+  async listDataPlans({ projectId }) {
+    const result = await this.query(
+      "select * from data_plans where project_id = $1 order by created_at desc",
+      [projectId],
+    );
+    return result.rows.map(dataPlanFromRow);
+  }
+
+  async findDataSnapshotById(id) {
+    const result = await this.query("select * from data_snapshots where id = $1", [id]);
+    return dataSnapshotFromRow(result.rows[0]);
+  }
+
+  async listDataSnapshots({ projectId }) {
+    const result = await this.query(
+      "select * from data_snapshots where project_id = $1 order by created_at desc",
+      [projectId],
+    );
+    return result.rows.map(dataSnapshotFromRow);
+  }
+
+  async findExperimentIdentityById(id) {
+    const result = await this.query("select * from experiment_identities where id = $1", [id]);
+    return experimentIdentityFromRow(result.rows[0]);
+  }
+
+  async listExperimentIdentities({ projectId }) {
+    const result = await this.query(
+      "select * from experiment_identities where project_id = $1 order by canonical_label, id",
+      [projectId],
+    );
+    return result.rows.map(experimentIdentityFromRow);
+  }
+
+  async listExperimentSnapshotHeads({ projectId }) {
+    const result = await this.query(
+      "select * from experiment_snapshot_heads where project_id = $1 order by experiment_id",
+      [projectId],
+    );
+    return result.rows.map(experimentSnapshotHeadFromRow);
+  }
+
+  async findExperimentSnapshotPublish({ projectId, idempotencyKey }) {
+    const result = await this.query(
+      "select * from experiment_snapshot_publishes where project_id = $1 and idempotency_key = $2",
+      [projectId, idempotencyKey],
+    );
+    return experimentSnapshotPublishFromRow(result.rows[0]);
+  }
+
+  async publishExperimentSnapshot(input) {
+    const records = Array.isArray(input.dataSnapshot?.experimentRecords) ? input.dataSnapshot.experimentRecords : [];
+    const identities = Array.isArray(input.experimentIdentities) ? input.experimentIdentities : [];
+    const heads = Array.isArray(input.experimentSnapshotHeads) ? input.experimentSnapshotHeads : [];
+    const invalid = (
+      !input.idempotencyKey
+      || !input.requestHash
+      || !input.dataPlan?.id
+      || !input.dataSnapshot?.id
+      || input.dataPlan.projectId !== input.projectId
+      || input.dataSnapshot.projectId !== input.projectId
+      || input.dataSnapshot.dataPlanId !== input.dataPlan.id
+      || identities.some((identity) => !identity?.id || identity.projectId !== input.projectId)
+      || heads.some((head) => {
+        const record = records[Number(head?.recordIndex)];
+        return !head?.id
+          || head.projectId !== input.projectId
+          || head.dataSnapshotId !== input.dataSnapshot.id
+          || !record
+          || record.experimentId !== head.experimentId
+          || !identities.some((identity) => identity.id === head.experimentId);
+      })
+    );
+    if (invalid) {
+      throw Object.assign(new Error("The experiment snapshot publish package is invalid."), {
+        statusCode: 400,
+        code: "invalid_publish_package",
+      });
+    }
+
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      await client.query(
+        "select pg_advisory_xact_lock(hashtext($1), hashtext($2))",
+        [input.projectId, input.idempotencyKey],
+      );
+      const priorResult = await client.query(
+        "select * from experiment_snapshot_publishes where project_id = $1 and idempotency_key = $2",
+        [input.projectId, input.idempotencyKey],
+      );
+      const prior = experimentSnapshotPublishFromRow(priorResult.rows[0]);
+      if (prior) {
+        if (prior.requestHash !== input.requestHash) {
+          throw Object.assign(new Error("This idempotency key was already used for a different publish request."), {
+            statusCode: 409,
+            code: "idempotency_key_conflict",
+          });
+        }
+        await client.query("commit");
+        return { ...prior.response, idempotentReplay: true };
+      }
+
+      const plan = input.dataPlan;
+      await client.query(
+        `insert into data_plans
+         (id, lab_id, project_id, schema_version, status, task, output_shape, plan, source_evidence, operations, identity_bindings, dependency_hash, validation, warnings, accepted_at, accepted_by, created_at, updated_at, created_by, updated_by)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
+        [
+          plan.id,
+          plan.labId,
+          plan.projectId,
+          plan.schemaVersion,
+          plan.status,
+          plan.task,
+          plan.outputShape,
+          jsonb(plan.plan || {}),
+          jsonb(plan.sourceEvidence || [], []),
+          jsonb(plan.operations || [], []),
+          jsonb(plan.identityBindings || [], []),
+          plan.dependencyHash,
+          jsonb(plan.validation || {}),
+          jsonb(plan.warnings || [], []),
+          plan.acceptedAt,
+          plan.acceptedBy,
+          plan.createdAt,
+          plan.updatedAt,
+          plan.createdBy,
+          plan.updatedBy,
+        ],
+      );
+
+      for (const identity of identities) {
+        const existing = await client.query("select project_id from experiment_identities where id = $1", [identity.id]);
+        if (existing.rows[0] && existing.rows[0].project_id !== input.projectId) {
+          throw Object.assign(new Error("Experiment identity belongs to another project."), {
+            statusCode: 422,
+            code: "identity_reuse_not_found",
+          });
+        }
+        await client.query(
+          `insert into experiment_identities
+           (id, lab_id, project_id, canonical_label, normalized_label, aliases, created_at, updated_at, created_by, updated_by)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           on conflict (id) do update
+           set aliases = excluded.aliases,
+               updated_at = excluded.updated_at,
+               updated_by = excluded.updated_by`,
+          [
+            identity.id,
+            identity.labId,
+            identity.projectId,
+            identity.canonicalLabel,
+            identity.normalizedLabel,
+            jsonb(identity.aliases || [], []),
+            identity.createdAt,
+            identity.updatedAt,
+            identity.createdBy,
+            identity.updatedBy,
+          ],
+        );
+      }
+
+      const snapshot = input.dataSnapshot;
+      await client.query(
+        `insert into data_snapshots
+         (id, lab_id, project_id, data_plan_id, schema_version, status, output_shape, content_hash, dependency_hash, snapshot, experiment_records, source_refs, summary, warnings, accepted_at, accepted_by, created_at, created_by)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+        [
+          snapshot.id,
+          snapshot.labId,
+          snapshot.projectId,
+          snapshot.dataPlanId,
+          snapshot.schemaVersion,
+          snapshot.status,
+          snapshot.outputShape,
+          snapshot.contentHash,
+          snapshot.dependencyHash,
+          jsonb(snapshot.snapshot || {}),
+          jsonb(snapshot.experimentRecords || [], []),
+          jsonb(snapshot.sourceRefs || [], []),
+          jsonb(snapshot.summary || {}),
+          jsonb(snapshot.warnings || [], []),
+          snapshot.acceptedAt,
+          snapshot.acceptedBy,
+          snapshot.createdAt,
+          snapshot.createdBy,
+        ],
+      );
+
+      for (const head of heads) {
+        await client.query(
+          `insert into experiment_snapshot_heads
+           (id, lab_id, project_id, experiment_id, data_snapshot_id, record_index, updated_at, updated_by)
+           values ($1, $2, $3, $4, $5, $6, $7, $8)
+           on conflict (project_id, experiment_id) do update
+           set data_snapshot_id = excluded.data_snapshot_id,
+               record_index = excluded.record_index,
+               updated_at = excluded.updated_at,
+               updated_by = excluded.updated_by`,
+          [
+            head.id,
+            head.labId,
+            head.projectId,
+            head.experimentId,
+            head.dataSnapshotId,
+            head.recordIndex,
+            head.updatedAt,
+            head.updatedBy,
+          ],
+        );
+      }
+
+      for (const event of Array.isArray(input.auditEvents) ? input.auditEvents : []) {
+        await client.query(
+          `insert into audit_events
+           (id, lab_id, project_id, actor_user_id, action, target_type, target_id, summary, metadata, created_at, ip_address, user_agent)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+          [
+            event.id || makeId("audit"),
+            event.labId || input.labId || null,
+            event.projectId || input.projectId || null,
+            event.actorUserId || input.actorUserId || null,
+            event.action,
+            event.targetType || null,
+            event.targetId || null,
+            event.summary || null,
+            jsonb(event.metadata || {}),
+            event.createdAt || nowIso(),
+            event.ipAddress || null,
+            event.userAgent || null,
+          ],
+        );
+      }
+
+      const response = { ...input.response, idempotentReplay: false };
+      await client.query(
+        `insert into experiment_snapshot_publishes
+         (project_id, lab_id, idempotency_key, request_hash, data_plan_id, data_snapshot_id, response, created_at)
+         values ($1, $2, $3, $4, $5, $6, $7, now())`,
+        [
+          input.projectId,
+          input.labId,
+          input.idempotencyKey,
+          input.requestHash,
+          plan.id,
+          snapshot.id,
+          jsonb(response),
+        ],
+      );
+      await client.query("commit");
+      return response;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async createBrowserView(input) {
+    const result = await this.query(
+      `insert into browser_views
+       (id, lab_id, project_id, owner_user_id, schema_version, name, payload, is_default, created_at, updated_at)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, now(), now())
+       returning *`,
+      [
+        input.id || makeId("browser_view"),
+        input.labId,
+        input.projectId,
+        input.ownerUserId,
+        input.schemaVersion || "labrat.browserView.v1",
+        input.name || "Untitled view",
+        jsonb(input.payload || {}),
+        Boolean(input.isDefault),
+      ],
+    );
+    return browserViewFromRow(result.rows[0]);
+  }
+
+  async findBrowserViewById(id) {
+    const result = await this.query("select * from browser_views where id = $1", [id]);
+    return browserViewFromRow(result.rows[0]);
+  }
+
+  async listBrowserViews({ projectId, ownerUserId = null }) {
+    const result = await this.query(
+      `select * from browser_views
+       where project_id = $1 and ($2::text is null or owner_user_id = $2)
+       order by updated_at desc`,
+      [projectId, ownerUserId],
+    );
+    return result.rows.map(browserViewFromRow);
+  }
+
+  async updateBrowserView(id, changes = {}) {
+    const result = await this.query(
+      `update browser_views
+       set name = coalesce($2, name),
+           payload = coalesce($3, payload),
+           is_default = coalesce($4, is_default),
+           updated_at = now()
+       where id = $1
+       returning *`,
+      [
+        id,
+        changes.name === undefined ? null : String(changes.name),
+        changes.payload === undefined ? null : jsonb(changes.payload || {}),
+        changes.isDefault === undefined ? null : Boolean(changes.isDefault),
+      ],
+    );
+    return browserViewFromRow(result.rows[0]);
+  }
+
+  async deleteBrowserView(id) {
+    const result = await this.query("delete from browser_views where id = $1", [id]);
+    return result.rowCount > 0;
+  }
+
   async createSourceExtractProposal(input) {
     const result = await this.query(
       `insert into source_extract_proposals
-       (id, lab_id, project_id, source_document_id, source_region_id, dataset_commit_id, schema_version, status, purpose, extract_type, intent, preview, warnings, decision_summary, created_at, updated_at, created_by, updated_by)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, now(), now(), $15, $15)
+       (id, lab_id, project_id, source_document_id, source_region_id, schema_version, status, purpose, extract_type, intent, preview, warnings, decision_summary, created_at, updated_at, created_by, updated_by)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now(), now(), $14, $14)
        returning *`,
       [
         input.id || makeId("source_extract_proposal"),
@@ -1140,7 +1367,6 @@ export class PostgresSaasStore {
         input.projectId,
         input.sourceDocumentId || null,
         input.sourceRegionId || null,
-        input.datasetCommitId || null,
         input.schemaVersion || "labrat.sourceExtractProposal.v1",
         input.status || "proposed",
         input.purpose || null,
@@ -1198,8 +1424,8 @@ export class PostgresSaasStore {
   async createAgentRun(input) {
     const result = await this.query(
       `insert into agent_runs
-       (id, lab_id, project_id, schema_version, status, mode, user_message, selected_context, visible_steps, tool_trace, analysis_view_id, proposal_refs, actions, usage, warnings, error, created_at, updated_at, created_by, updated_by)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, now(), now(), $17, $17)
+       (id, lab_id, project_id, schema_version, status, mode, user_message, selected_context, visible_steps, tool_trace, proposal_refs, actions, usage, warnings, error, created_at, updated_at, created_by, updated_by)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, now(), now(), $16, $16)
        returning *`,
       [
         input.id || makeId("agent_run"),
@@ -1212,7 +1438,6 @@ export class PostgresSaasStore {
         jsonb(input.selectedContext || {}),
         jsonb(input.visibleSteps || [], []),
         jsonb(input.toolTrace || [], []),
-        input.analysisViewId || null,
         jsonb(input.proposalRefs || [], []),
         jsonb(input.actions || [], []),
         jsonb(input.usage || {}),
@@ -1247,13 +1472,12 @@ export class PostgresSaasStore {
            selected_context = $4,
            visible_steps = $5,
            tool_trace = $6,
-           analysis_view_id = $7,
-           proposal_refs = $8,
-           actions = $9,
-           usage = $10,
-           warnings = $11,
-           error = $12,
-           updated_by = coalesce($13, updated_by),
+           proposal_refs = $7,
+           actions = $8,
+           usage = $9,
+           warnings = $10,
+           error = $11,
+           updated_by = coalesce($12, updated_by),
            updated_at = now()
        where id = $1
        returning *`,
@@ -1264,7 +1488,6 @@ export class PostgresSaasStore {
         jsonb(changes.selectedContext ?? current.selectedContext ?? {}),
         jsonb(changes.visibleSteps ?? current.visibleSteps ?? [], []),
         jsonb(changes.toolTrace ?? current.toolTrace ?? [], []),
-        changes.analysisViewId !== undefined ? changes.analysisViewId : current.analysisViewId,
         jsonb(changes.proposalRefs ?? current.proposalRefs ?? [], []),
         jsonb(changes.actions ?? current.actions ?? [], []),
         jsonb(changes.usage ?? current.usage ?? {}),
@@ -1276,73 +1499,16 @@ export class PostgresSaasStore {
     return agentRunFromRow(result.rows[0]);
   }
 
-  async createMappingSet(input) {
-    const result = await this.query(
-      `insert into mapping_sets
-       (id, lab_id, project_id, import_run_id, dataset_commit_id, schema_version, status, payload, decision_summary, created_at, updated_at, created_by, updated_by)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, now(), now(), $10, $10)
-       returning *`,
-      [
-        input.id || makeId("mapping_set"),
-        input.labId,
-        input.projectId,
-        input.importRunId || null,
-        input.datasetCommitId || null,
-        input.schemaVersion || "labrat.semanticMappingResponse.v1",
-        input.status || "proposed",
-        jsonb(input.payload || {}),
-        jsonb(input.decisionSummary || {}),
-        input.createdBy,
-      ],
-    );
-    return mappingSetFromRow(result.rows[0]);
-  }
-
-  async findMappingSetById(id) {
-    const result = await this.query("select * from mapping_sets where id = $1", [id]);
-    return mappingSetFromRow(result.rows[0]);
-  }
-
-  async listMappingSets({ projectId }) {
-    const result = await this.query("select * from mapping_sets where project_id = $1 order by updated_at desc", [projectId]);
-    return result.rows.map(mappingSetFromRow);
-  }
-
-  async updateMappingSet(id, changes) {
-    const current = await this.findMappingSetById(id);
-    if (!current) return null;
-    const result = await this.query(
-      `update mapping_sets
-       set status = $2,
-           payload = $3,
-           decision_summary = $4,
-           updated_by = coalesce($5, updated_by),
-           updated_at = now()
-       where id = $1
-       returning *`,
-      [
-        id,
-        changes.status ?? current.status,
-        jsonb(changes.payload ?? current.payload ?? {}),
-        jsonb(changes.decisionSummary ?? current.decisionSummary ?? {}),
-        changes.updatedBy || null,
-      ],
-    );
-    return mappingSetFromRow(result.rows[0]);
-  }
-
   async createChartProposalSet(input) {
     const result = await this.query(
       `insert into chart_proposal_sets
-       (id, lab_id, project_id, dataset_commit_id, mapping_set_id, schema_version, status, payload, decision_summary, created_at, updated_at, created_by, updated_by)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, now(), now(), $10, $10)
+       (id, lab_id, project_id, schema_version, status, payload, decision_summary, created_at, updated_at, created_by, updated_by)
+       values ($1, $2, $3, $4, $5, $6, $7, now(), now(), $8, $8)
        returning *`,
       [
         input.id || makeId("chart_proposal_set"),
         input.labId,
         input.projectId,
-        input.datasetCommitId || null,
-        input.mappingSetId || null,
         input.schemaVersion || "labrat.chartProposalSet.v1",
         input.status || "proposed",
         jsonb(input.payload || {}),
@@ -1389,15 +1555,13 @@ export class PostgresSaasStore {
   async createChartSpec(input) {
     const result = await this.query(
       `insert into chart_specs
-       (id, lab_id, project_id, dataset_commit_id, mapping_set_id, source_chart_proposal_set_id, source_proposal_id, title, chart_type, spec, layout, warnings, created_at, updated_at, created_by, updated_by)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now(), now(), $13, $13)
+       (id, lab_id, project_id, source_chart_proposal_set_id, source_proposal_id, title, chart_type, spec, layout, warnings, created_at, updated_at, created_by, updated_by)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(), now(), $11, $11)
        returning *`,
       [
         makeId("chart_spec"),
         input.labId,
         input.projectId,
-        input.datasetCommitId || null,
-        input.mappingSetId || null,
         input.sourceChartProposalSetId || null,
         input.sourceProposalId || null,
         input.title || null,

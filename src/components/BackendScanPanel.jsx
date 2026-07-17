@@ -1,21 +1,24 @@
-import React from "react";
-import { makeGenericChartPreview } from "../charts/genericChartPreview.js";
+﻿import React from "react";
+import { makeSourceChartPreview } from "../charts/sourceChartPreview.js";
 import { Plot } from "../charts/Plot.jsx";
-import { blockReviewDecision } from "../data/importBlockReviewState.js";
+import {
+  listServerSourceDocumentRegions,
+  listServerSourceDocuments,
+  previewServerSourceDocumentExtract,
+  previewServerSourceRegionExtract,
+  readServerSourceDocumentRange,
+} from "../data/serverApi.js";
 import { ThinkingIndicator } from "./ThinkingIndicator.jsx";
 
-function warningCount(result) {
-  return result?.summary?.warningCount ?? result?.warnings?.length ?? 0;
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
 }
+
 
 function formatConfidence(value) {
   return typeof value === "number" ? `${Math.round(value * 100)}%` : "n/a";
 }
 
-function sourceLabel(source) {
-  if (!source) return "source n/a";
-  return [source.sheet, source.range || source.cell].filter(Boolean).join(" ") || "source n/a";
-}
 
 function WarningList({ warnings }) {
   const items = Array.isArray(warnings) ? warnings : [];
@@ -33,19 +36,6 @@ function WarningList({ warnings }) {
   );
 }
 
-function WorkflowStepStrip({ steps }) {
-  return (
-    <ol className="backend-workflow-steps" aria-label="Import review workflow">
-      {steps.map((step) => (
-        <li className={`backend-workflow-step is-${step.status}`} key={step.label}>
-          <span>{step.label}</span>
-          <small>{step.detail}</small>
-        </li>
-      ))}
-    </ol>
-  );
-}
-
 function WorkflowPanelHeader({ title, detail, meta }) {
   return (
     <div className="workflow-panel-head">
@@ -55,404 +45,6 @@ function WorkflowPanelHeader({ title, detail, meta }) {
       </div>
       {meta && <span>{meta}</span>}
     </div>
-  );
-}
-
-function StructureProposalList({ structureProposals }) {
-  const proposals = Array.isArray(structureProposals) ? structureProposals : [];
-  if (!proposals.length) return <span className="backend-scan-muted">No structure proposals</span>;
-  return (
-    <div className="backend-structure-list">
-      {proposals.map((proposal) => (
-        <article className="backend-structure-card" key={proposal.tableId || proposal.regionId}>
-          <div className="backend-scan-block-head">
-            <strong>{proposal.tableId || proposal.regionId}</strong>
-            <span>{formatConfidence(proposal.confidence)}</span>
-          </div>
-          <p className="backend-scan-muted">
-            Header rows: {(proposal.headerRows || []).join(", ") || "n/a"} - Data rows: {(proposal.dataRows || []).length || 0}
-          </p>
-          {proposal.observationSetPreview && (
-            <p className="backend-scan-muted">
-              Detected supplemental time series: {proposal.observationSetPreview.inferredExperimentLabel || "unknown experiment"} - {proposal.observationSetPreview.kind}
-            </p>
-          )}
-          <div className="generic-field-list">
-            {(proposal.columns || []).map((column) => (
-              <div key={column.fieldId || column.columnId || column.displayName} className="generic-field-row">
-                <span>{column.displayName || column.rawName || column.fieldId}</span>
-                <strong>{column.role || "field"}{column.unit ? ` - ${column.unit}` : ""}</strong>
-                <small>{formatConfidence(column.confidence)}</small>
-              </div>
-            ))}
-          </div>
-          <WarningList warnings={proposal.warnings} />
-        </article>
-      ))}
-    </div>
-  );
-}
-
-function FieldReviewEditor({ scanResult, fieldRoleOverrides, onFieldRoleOverride }) {
-  const proposals = (scanResult?.sheets || []).flatMap((sheet) => (
-    (sheet.structureProposals || []).flatMap((proposal) => (
-      (proposal.columns || []).map((column) => ({ sheet, proposal, column }))
-    ))
-  ));
-  if (!proposals.length) return null;
-  const overrideFor = (fieldId) => fieldRoleOverrides?.[fieldId] || {};
-  return (
-    <section className="backend-field-review">
-      <div className="backend-scan-block-head">
-        <strong>Field review</strong>
-        <span>{proposals.length} proposed fields</span>
-      </div>
-      <div className="backend-field-review-grid">
-        {proposals.map(({ sheet, proposal, column }) => {
-          const fieldId = column.fieldId || column.columnId || `${proposal.tableId}-${column.displayName}`;
-          const override = overrideFor(fieldId);
-          return (
-            <div className="backend-field-review-row" key={`${sheet.sheetId}-${proposal.tableId}-${fieldId}`}>
-              <label>
-                <span>Name</span>
-                <input
-                  value={override.displayName ?? column.displayName ?? column.rawName ?? ""}
-                  onChange={(event) => onFieldRoleOverride?.(fieldId, { displayName: event.target.value })}
-                />
-              </label>
-              <label>
-                <span>Role</span>
-                <select
-                  value={override.role ?? column.role ?? "measurement"}
-                  onChange={(event) => onFieldRoleOverride?.(fieldId, { role: event.target.value })}
-                >
-                  <option value="identifier">identifier</option>
-                  <option value="material">material</option>
-                  <option value="condition">condition</option>
-                  <option value="measurement">measurement</option>
-                  <option value="metadata">metadata</option>
-                  <option value="note">note</option>
-                </select>
-              </label>
-              <label>
-                <span>Unit</span>
-                <input
-                  value={override.unit ?? column.unit ?? ""}
-                  onChange={(event) => onFieldRoleOverride?.(fieldId, { unit: event.target.value })}
-                />
-              </label>
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function refreshDiffStats(summary = {}) {
-  return [
-    ["Experiments added", summary.experimentsAdded || 0],
-    ["Experiments removed", summary.experimentsRemoved || 0],
-    ["Experiments changed", summary.experimentsChanged || 0],
-    ["Fields added", summary.fieldsAdded || 0],
-    ["Fields removed", summary.fieldsRemoved || 0],
-    ["Values changed", summary.valuesChanged || 0],
-    ["Warnings changed", summary.warningsChanged || 0],
-  ];
-}
-
-function RefreshDiffPreview({ refreshDraft, onReloadProjectState }) {
-  const draft = refreshDraft || {};
-  if (draft.loading) return <div className="import-review-empty is-loading">Preparing refresh diff...</div>;
-  if (draft.error) {
-    const canReload = draft.error.includes("Project data changed");
-    return (
-      <div className="refresh-diff-error">
-        <p className="import-review-error">{draft.error}</p>
-        {canReload && <button type="button" onClick={() => onReloadProjectState?.()}>Reload project state</button>}
-      </div>
-    );
-  }
-  const preview = draft.preview || null;
-  if (!preview) return <div className="import-review-empty">Refresh diff will appear after normalized preview.</div>;
-  const stats = refreshDiffStats(preview.summary);
-  return (
-    <section className={`refresh-diff-panel ${preview.hasChanges ? "" : "no-changes"}`}>
-      <WorkflowPanelHeader
-        title="Refresh diff"
-        detail={preview.hasChanges ? "Review the detected changes before replacing the committed import." : "No changes detected in the replacement workbook."}
-        meta={preview.hasChanges ? "changes found" : "no changes"}
-      />
-      <div className="backend-scan-stats">
-        {stats.map(([label, value]) => <span key={label}>{value} {label.toLowerCase()}</span>)}
-      </div>
-      <p className="backend-scan-muted">
-        Target: {preview.targetImportId || "n/a"} - Replacement: {preview.replacementImportId || "n/a"} - Parent commit: {preview.parentDatasetCommitId || "n/a"}
-      </p>
-      {!preview.hasChanges && <p className="import-review-error">No changes detected. Apply refresh is disabled.</p>}
-      <WarningList warnings={preview.warnings} />
-    </section>
-  );
-}
-
-function RelationshipPreview({ relationshipDraft, selectedProposalId, onRelationshipProposalSelect }) {
-  const draft = relationshipDraft || {};
-  if (draft.loading) {
-    return (
-      <div className="import-review-empty is-loading">
-        <ThinkingIndicator text="AI is resolving experiment links..." />
-      </div>
-    );
-  }
-  if (draft.error) return <p className="import-review-error">{draft.error}</p>;
-  const preview = draft.preview || null;
-  if (!preview) return <div className="import-review-empty">Supplement relationship preview will appear after normalized preview.</div>;
-  const proposals = Array.isArray(preview.proposals) ? preview.proposals : [];
-  const selectable = proposals.filter((proposal) => (
-    proposal?.proposedRelationship === "supplement"
-    && Array.isArray(proposal.targetExperimentIds)
-    && proposal.targetExperimentIds.length
-  ));
-  return (
-    <section className="refresh-diff-panel relationship-preview-panel">
-      <WorkflowPanelHeader
-        title="Supplement relationship"
-        detail={selectable.length ? "Choose the detected relationship before attaching this workbook." : "No supplement target was confidently detected."}
-        meta={`${proposals.length} proposals`}
-      />
-      <div className="backend-scan-stats">
-        <span>{preview.summary?.supplementCount || 0} supplement</span>
-        <span>{preview.summary?.standaloneCount || 0} standalone</span>
-        <span>{preview.summary?.replaceCount || 0} replace-like</span>
-      </div>
-      {!selectable.length && <p className="import-review-error">No existing experiment target was found. Apply is disabled for supplemental mode.</p>}
-      <div className="backend-proposal-grid">
-        {proposals.map((proposal) => {
-          const canSelect = proposal.proposedRelationship === "supplement"
-            && Array.isArray(proposal.targetExperimentIds)
-            && proposal.targetExperimentIds.length;
-          const active = selectedProposalId === proposal.relationshipProposalId;
-          return (
-            <article className={`backend-proposal-card ${active ? "is-selected" : ""}`} key={proposal.relationshipProposalId || proposal.importId}>
-              <div className="backend-scan-block-head">
-                <strong>{proposal.proposedRelationship || "relationship"}</strong>
-                <span>{formatConfidence(proposal.confidence)}</span>
-              </div>
-              <p className="backend-scan-muted">
-                Type: {proposal.supplementType || "n/a"} - Targets: {(proposal.targetExperimentIds || []).join(", ") || "none"}
-              </p>
-              <ul className="backend-scan-list">
-                {(proposal.evidence || []).map((item, index) => (
-                  <li key={`${proposal.relationshipProposalId || "evidence"}-${index}`}>
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-              <WarningList warnings={proposal.warnings} />
-              <div className="import-review-actions">
-                <button
-                  type="button"
-                  className={active ? "primary" : ""}
-                  disabled={!canSelect}
-                  onClick={() => onRelationshipProposalSelect?.(proposal.relationshipProposalId)}
-                >
-                  {active ? "Selected" : "Use this relationship"}
-                </button>
-              </div>
-            </article>
-          );
-        })}
-      </div>
-      <WarningList warnings={preview.warnings} />
-    </section>
-  );
-}
-
-function observationSetSummary(observationSet) {
-  const summary = observationSet?.summary || {};
-  const timeRange = summary.timeMin != null && summary.timeMax != null
-    ? `${Number(summary.timeMin).toFixed(2)} to ${Number(summary.timeMax).toFixed(2)} min`
-    : "time range n/a";
-  return [
-    observationSet?.inferredExperimentLabel || "unknown experiment",
-    `${summary.observationCount ?? (observationSet?.observations || []).length} observations`,
-    timeRange,
-  ].join(" - ");
-}
-
-function ObservationSetList({ observationSets }) {
-  const sets = Array.isArray(observationSets) ? observationSets : [];
-  if (!sets.length) return null;
-  return (
-    <div className="observation-set-list">
-      {sets.map((set) => (
-        <article className="observation-set-card" key={set.observationSetId}>
-          <div className="backend-scan-block-head">
-            <strong>{set.kind || "observation_set"}</strong>
-            <span>{set.inferredExperimentLabel || "target pending"}</span>
-          </div>
-          <p className="backend-scan-muted">{observationSetSummary(set)}</p>
-          <p className="backend-scan-muted">
-            Fields: {(set.fields || []).slice(0, 5).map((field) => field.displayName || field.field).join(", ") || "None"}
-          </p>
-        </article>
-      ))}
-    </div>
-  );
-}
-
-function NormalizedPreview({ normalizeState, onApplyNormalize, mode = "append", refreshDraft, relationshipDraft, onRelationshipProposalSelect, onReloadProjectState }) {
-  const state = normalizeState || {};
-  const result = state.result || null;
-  if (state.loading) return <div className="import-review-empty is-loading">Preparing normalized preview...</div>;
-  if (state.error) return <p className="import-review-error">{state.error}</p>;
-  if (!result) return <div className="import-review-empty">No normalized preview yet.</div>;
-
-  const genericImports = result.datasetPatch?.genericImports || [];
-  const experimentCount = result.summary?.createdExperiments ?? genericImports.reduce((total, item) => total + (item.experiments?.length || 0), 0);
-  const fieldCount = result.summary?.createdFields ?? genericImports.reduce((total, item) => {
-    const fields = item.fields?.length ? item.fields : item.measurements;
-    return total + (fields?.length || 0);
-  }, 0);
-  const measurementCount = result.summary?.createdMeasurements ?? genericImports.reduce((total, item) => total + (item.measurements?.length || 0), 0);
-  const observationSetCount = genericImports.reduce((total, item) => total + (item.observationSets?.length || 0), 0);
-  const observationCount = genericImports.reduce((total, item) => (
-    total + (item.observationSets || []).reduce((setTotal, set) => setTotal + (set.summary?.observationCount ?? (set.observations?.length || 0)), 0)
-  ), 0);
-  const warningCountValue = result.summary?.warningCount ?? genericImports.reduce((total, item) => total + (item.warnings?.length || 0), 0);
-  const isRefreshMode = mode === "refresh";
-  const isSupplementMode = mode === "supplement";
-  const selectedRelationship = (relationshipDraft?.preview?.proposals || []).find((proposal) => (
-    proposal.relationshipProposalId === relationshipDraft?.selectedProposalId
-  ));
-  const canApply = genericImports.length > 0
-    && (!isRefreshMode || (!!refreshDraft?.preview?.hasChanges && !refreshDraft?.loading && !refreshDraft?.error))
-    && (!isSupplementMode || (
-      !!selectedRelationship
-      && selectedRelationship.proposedRelationship === "supplement"
-      && Array.isArray(selectedRelationship.targetExperimentIds)
-      && selectedRelationship.targetExperimentIds.length > 0
-      && !relationshipDraft?.loading
-      && !relationshipDraft?.error
-    ));
-  const applyLabel = isRefreshMode ? "Apply refresh" : isSupplementMode ? "Apply supplemental import" : "Apply normalized data";
-
-  return (
-    <div className="backend-normalize-preview">
-      <div className="backend-scan-stats">
-        <span>{genericImports.length} generic imports</span>
-        <span>{experimentCount} experiments</span>
-        <span>{fieldCount} fields</span>
-        <span>{measurementCount} measurements</span>
-        {observationSetCount > 0 && <span>{observationSetCount} observation sets</span>}
-        {observationCount > 0 && <span>{observationCount} observations</span>}
-        <span>{warningCountValue} warnings</span>
-      </div>
-      <div className="backend-normalize-toolbar workflow-action-row">
-        <button
-          type="button"
-          className="primary"
-          disabled={!canApply}
-          onClick={() => onApplyNormalize?.()}
-        >
-          {applyLabel}
-        </button>
-        {state.applied && <span className="workflow-status is-applied">{isRefreshMode ? "Refresh applied to project" : isSupplementMode ? "Supplemental import applied to project" : "Normalized data applied to project"}</span>}
-      </div>
-      {isRefreshMode && <RefreshDiffPreview refreshDraft={refreshDraft} onReloadProjectState={onReloadProjectState} />}
-      {isSupplementMode && (
-        <RelationshipPreview
-          relationshipDraft={relationshipDraft}
-          selectedProposalId={relationshipDraft?.selectedProposalId}
-          onRelationshipProposalSelect={onRelationshipProposalSelect}
-        />
-      )}
-      {genericImports.map((item) => (
-        <article className="backend-normalize-card" key={item.importId}>
-          <div className="backend-scan-block-head">
-            <strong>{item.fileName || item.importId}</strong>
-            <span>{item.approvedBlockIds?.length || 0} approved blocks</span>
-          </div>
-          <p className="backend-scan-muted">
-            Sources: {item.sources?.length || 0} - Files: {item.files?.length || 0}
-          </p>
-          <ObservationSetList observationSets={item.observationSets} />
-          <p className="backend-scan-muted">
-            Fields: {((item.fields?.length ? item.fields : item.measurements) || []).slice(0, 4).map((field) => `${field.displayName}${field.role ? ` (${field.role})` : ""}`).join(", ") || "None"}
-          </p>
-        </article>
-      ))}
-      <pre>{JSON.stringify(result, null, 2)}</pre>
-    </div>
-  );
-}
-
-function MappingProposalReview({ genericImports, mappingState, onProposeMappings, onMappingDecision }) {
-  const state = mappingState || {};
-  const mappingSet = state.result?.mappingSet || null;
-  const mappings = mappingSet?.mappings || [];
-  const warningCountValue = mappingSet?.warnings?.length || 0;
-  const canPropose = genericImports.length > 0 && !state.loading;
-
-  return (
-    <section className="backend-proposal-section">
-      <WorkflowPanelHeader
-        title="Semantic mappings"
-        detail="Review accepted fields before they become Browser columns and chart inputs."
-        meta={`${mappings.length} proposals`}
-      />
-      <div className="backend-normalize-toolbar">
-        <button
-          type="button"
-          className="primary"
-          disabled={!canPropose}
-          onClick={() => onProposeMappings?.()}
-        >
-          {state.loading ? "Proposing mappings..." : "Propose mappings"}
-        </button>
-      </div>
-      {state.error && <p className="import-review-error">{state.error}</p>}
-      {!mappingSet && !state.loading && <div className="import-review-empty">No semantic mapping proposals yet.</div>}
-      {mappingSet && (
-        <div className="backend-proposal-grid">
-          <div className="backend-scan-stats">
-            <span>{mappings.length} mappings</span>
-            <span>{mappings.filter((mapping) => mapping.status === "accepted").length} accepted</span>
-            <span>{mappings.filter((mapping) => mapping.status === "rejected").length} rejected</span>
-            <span>{warningCountValue} warnings</span>
-          </div>
-          {mappings.map((mapping) => (
-            <article className="backend-proposal-card" key={mapping.mappingId}>
-              <div className="backend-scan-block-head">
-                <strong>{mapping.rawLabel || mapping.mappingId}</strong>
-                <span>{mapping.semanticRole} - {formatConfidence(mapping.confidence)}</span>
-              </div>
-              <p className="backend-scan-muted">
-                {mapping.canonicalField} - {mapping.valueType}{mapping.unit ? ` - ${mapping.unit}` : ""}
-              </p>
-              <p className="backend-scan-muted">{mapping.rationale}</p>
-              <WarningList warnings={mapping.warnings} />
-              <div className="import-review-actions decision-actions">
-                <button
-                  type="button"
-                  className={mapping.status === "accepted" ? "primary" : ""}
-                  onClick={() => onMappingDecision?.(mapping.mappingId, "accepted")}
-                >
-                  Accept
-                </button>
-                <button
-                  type="button"
-                  className={mapping.status === "rejected" ? "primary" : ""}
-                  onClick={() => onMappingDecision?.(mapping.mappingId, "rejected")}
-                >
-                  Reject
-                </button>
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
-    </section>
   );
 }
 
@@ -466,25 +58,38 @@ function chartProposalStatus(proposal) {
   return proposal?.status || "proposed";
 }
 
+function chartProposalAxisSummary(proposal) {
+  const xLabel = proposal?.x?.label || proposal?.x?.field || "n/a";
+  const yLabel = proposal?.y?.label || proposal?.y?.field || "n/a";
+  const xUnit = proposal?.x?.unit ? ` (${proposal.x.unit})` : "";
+  const yUnit = proposal?.y?.unit ? ` (${proposal.y.unit})` : "";
+  return `X: ${xLabel}${xUnit} - Y: ${yLabel}${yUnit}`;
+}
+
 function proposalMatchesStatusFilter(proposal, statusFilter) {
   if (statusFilter !== "active") return true;
   const status = chartProposalStatus(proposal);
   return status === "accepted" || status === "proposed";
 }
 
-function ChartProposalCard({ proposal, genericImports, chartProposalSetId, chartSpecs, focusProposalId, onChartProposalDecision, onCreateChartSpec }) {
-  const preview = makeGenericChartPreview(proposal, genericImports);
+function ChartProposalCard({ proposal, chartProposalSetId, chartSpecs, focusProposalId, viewMode = "review", onChartProposalDecision, onChartProposalDelete, onCreateChartSpec }) {
+  const preview = makeSourceChartPreview(proposal);
   const existingSpec = (chartSpecs || []).find((spec) => chartSpecMatchesProposal(spec, chartProposalSetId, proposal.proposalId));
+  const status = chartProposalStatus(proposal);
+  const editMode = viewMode === "editSpecs";
   const focused = !!focusProposalId && focusProposalId === proposal.proposalId;
   const cardRef = React.useRef(null);
   React.useEffect(() => {
     if (focused) cardRef.current?.scrollIntoView?.({ block: "center", behavior: "smooth" });
   }, [focused]);
   return (
-    <article ref={cardRef} className={`backend-proposal-card backend-chart-proposal-card ${focused ? "is-focused-proposal" : ""}`}>
+    <article ref={cardRef} className={`backend-proposal-card backend-chart-proposal-card ${editMode ? "chart-spec-row-card" : ""} ${focused ? "is-focused-proposal" : ""}`}>
       <div className="backend-scan-block-head">
-        <strong>{proposal.title || proposal.proposalId}</strong>
-        <span>{proposal.chartType} - {formatConfidence(proposal.confidence)}</span>
+        <div>
+          <strong>{proposal.title || proposal.proposalId}</strong>
+          {editMode && <small>{chartProposalAxisSummary(proposal)}</small>}
+        </div>
+        <span>{proposal.chartType} - {formatConfidence(proposal.confidence)}{editMode ? ` - ${status}` : ""}</span>
       </div>
       <div className="generic-chart-preview">
         <Plot
@@ -496,27 +101,26 @@ function ChartProposalCard({ proposal, genericImports, chartProposalSetId, chart
       </div>
       <p className="backend-scan-muted">{proposal.rationale || proposal.reason}</p>
       <p className="backend-scan-muted">
-        X: {proposal.x?.label || proposal.x?.field || "n/a"}{proposal.x?.unit ? ` (${proposal.x.unit})` : ""}
-        {" - "}
-        Y: {proposal.y?.label || proposal.y?.field || "n/a"}{proposal.y?.unit ? ` (${proposal.y.unit})` : ""}
+        {chartProposalAxisSummary(proposal)}
       </p>
       <WarningList warnings={proposal.warnings} />
       <div className="import-review-actions">
+        {status !== "accepted" && (
+          <button
+            type="button"
+            onClick={() => onChartProposalDecision?.(proposal.proposalId, "accepted")}
+          >
+            Accept
+          </button>
+        )}
         <button
           type="button"
-          className={proposal.status === "accepted" ? "primary" : ""}
-          onClick={() => onChartProposalDecision?.(proposal.proposalId, "accepted")}
-        >
-          Accept
-        </button>
-        <button
-          type="button"
-          className={proposal.status === "rejected" ? "primary" : ""}
+          className={status === "rejected" ? "primary" : ""}
           onClick={() => onChartProposalDecision?.(proposal.proposalId, "rejected")}
         >
           Reject
         </button>
-        {proposal.status === "accepted" && (
+        {status === "accepted" && (
           <button
             type="button"
             disabled={!!existingSpec || !chartProposalSetId}
@@ -525,18 +129,27 @@ function ChartProposalCard({ proposal, genericImports, chartProposalSetId, chart
             {existingSpec ? "Chart spec created" : "Create chart spec"}
           </button>
         )}
+        {editMode && (
+          <button
+            type="button"
+            className="danger"
+            onClick={() => onChartProposalDelete?.(proposal.proposalId)}
+          >
+            Delete
+          </button>
+        )}
       </div>
     </article>
   );
 }
 
-function ChartProposalReview({ genericImports, mappingState, chartProposalState, chartSpecs, focusProposalId, statusFilter, onProposeCharts, onChartProposalDecision, onCreateChartSpec }) {
+function ChartProposalReview({ chartProposalState, chartSpecs, focusProposalId, statusFilter, viewMode = "review", onChartProposalDecision, onChartProposalDelete, onCreateChartSpec }) {
   const state = chartProposalState || {};
   const proposalSet = state.result?.proposalSet || null;
   const proposals = proposalSet?.proposals || [];
-  const visibleProposals = proposals.filter((proposal) => proposalMatchesStatusFilter(proposal, statusFilter));
+  const editMode = viewMode === "editSpecs";
+  const visibleProposals = proposals.filter((proposal) => proposalMatchesStatusFilter(proposal, editMode ? "active" : statusFilter));
   const chartProposalSetId = state.result?.chartProposalSet?.id || proposalSet?.serverId || state.result?.chartProposalSetId || null;
-  const canPropose = genericImports.length > 0 && !state.loading;
   const acceptedCount = proposals.filter((proposal) => chartProposalStatus(proposal) === "accepted").length;
   const pendingCount = proposals.filter((proposal) => chartProposalStatus(proposal) === "proposed").length;
   const rejectedCount = proposals.filter((proposal) => chartProposalStatus(proposal) === "rejected").length;
@@ -545,42 +158,33 @@ function ChartProposalReview({ genericImports, mappingState, chartProposalState,
   return (
     <section className="backend-proposal-section">
       <WorkflowPanelHeader
-        title={activeOnly ? "Accepted + pending charts" : "Chart proposals"}
-        detail={activeOnly ? "Review proposals that are still active for ChartSpec creation." : "Accept proposed charts, then create ChartSpecs for Manuscript insertion."}
-        meta={activeOnly ? `${visibleProposals.length} active` : `${proposals.length} proposals`}
+        title={editMode ? "Edit specs" : activeOnly ? "Accepted + pending charts" : "Chart proposals"}
+        detail={editMode ? "Manage active chart proposals before creating durable ChartSpecs." : activeOnly ? "Review proposals that are still active for ChartSpec creation." : "Accept proposed charts, then create ChartSpecs for Manuscript insertion."}
+        meta={editMode || activeOnly ? `${visibleProposals.length} active` : `${proposals.length} proposals`}
       />
-      <div className="backend-normalize-toolbar workflow-action-row">
-        <button
-          type="button"
-          className="primary"
-          disabled={!canPropose}
-          onClick={() => onProposeCharts?.()}
-        >
-          {state.loading ? "Proposing charts..." : "Propose charts"}
-        </button>
-        {state.loading && <ThinkingIndicator text="Drafting chart proposals..." />}
-      </div>
+      {state.loading && <ThinkingIndicator text="Loading chart proposals..." />}
       {state.error && <p className="import-review-error">{state.error}</p>}
       {!proposalSet && !state.loading && <div className="import-review-empty">No chart proposals yet.</div>}
       {proposalSet && (
-        <div className="backend-proposal-grid">
+        <div className={`backend-proposal-grid ${editMode ? "chart-spec-edit-list" : ""}`}>
           <div className="backend-scan-stats">
-            <span>{activeOnly ? `${visibleProposals.length} active` : `${proposals.length} charts`}</span>
+            <span>{editMode || activeOnly ? `${visibleProposals.length} active` : `${proposals.length} charts`}</span>
             <span>{acceptedCount} accepted</span>
             <span>{pendingCount} pending</span>
-            {!activeOnly && <span>{rejectedCount} rejected</span>}
+            {!activeOnly && !editMode && <span>{rejectedCount} rejected</span>}
             <span>{proposalSet.warnings?.length || 0} warnings</span>
           </div>
-          {activeOnly && !visibleProposals.length && <div className="import-review-empty">No accepted or pending chart proposals.</div>}
+          {(editMode || activeOnly) && !visibleProposals.length && <div className="import-review-empty">No accepted or pending chart proposals.</div>}
           {visibleProposals.map((proposal) => (
             <ChartProposalCard
               key={proposal.proposalId}
               proposal={proposal}
-              genericImports={genericImports}
               chartProposalSetId={chartProposalSetId}
               chartSpecs={chartSpecs}
               focusProposalId={focusProposalId}
+              viewMode={editMode ? "editSpecs" : "review"}
               onChartProposalDecision={onChartProposalDecision}
+              onChartProposalDelete={onChartProposalDelete}
               onCreateChartSpec={onCreateChartSpec}
             />
           ))}
@@ -590,14 +194,163 @@ function ChartProposalReview({ genericImports, mappingState, chartProposalState,
   );
 }
 
-function ChartInterpretReview({ genericImports, chartInterpretState, onInterpretChart }) {
+function warningKey(warning) {
+  if (!warning || typeof warning !== "object") return String(warning || "");
+  return [warning.code, warning.message, warning.range].filter(Boolean).join("|");
+}
+
+function uniqueWarnings(...warningGroups) {
+  const seen = new Set();
+  return warningGroups.flatMap(asArray).filter((warning) => {
+    const key = warningKey(warning);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function valueText(value) {
+  if (value == null) return "";
+  if (typeof value === "number") return Number.isFinite(value) ? String(value) : "";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function sourceExtractFields(preview = {}) {
+  const fields = asArray(preview.fields);
+  const fieldIds = fields.map((field) => field.fieldId).filter(Boolean);
+  const rows = asArray(preview.rows);
+  rows.forEach((row) => {
+    Object.keys(row?.values || {}).forEach((fieldId) => {
+      if (!fieldIds.includes(fieldId)) fieldIds.push(fieldId);
+    });
+  });
+  return fieldIds.map((fieldId) => fields.find((field) => field.fieldId === fieldId) || { fieldId, label: fieldId });
+}
+
+function SourceExtractRowsPreview({ proposal }) {
+  const preview = proposal?.preview || {};
+  const rows = asArray(preview.rows);
+  const series = asArray(preview.series);
+  if (!rows.length && !series.length) return <p className="backend-scan-muted">No extracted row preview available.</p>;
+  if (series.length) {
+    return (
+      <div className="source-extract-preview-list">
+        {series.map((item, index) => (
+          <div className="source-extract-preview-row" key={item.seriesId || item.experimentId || item.experimentAlias || index}>
+            <strong>{item.experimentLabel || item.experimentAlias || item.experimentId || `Series ${index + 1}`}</strong>
+            <span>{asArray(item.rows).length} rows</span>
+            <small>{[item.range?.sheetName, item.range?.range].filter(Boolean).join(" - ")}</small>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  const fields = sourceExtractFields(preview);
+  return (
+    <div className="source-extract-preview-list">
+      {rows.slice(0, 8).map((row, index) => {
+        const label = row.label || row.values?.component || row.values?.carbon_label || row.rowId || `Row ${index + 1}`;
+        const cells = Object.entries(row.cells || {})
+          .map(([fieldId, cell]) => `${fieldId}: ${cell}`)
+          .join(", ");
+        return (
+          <div className="source-extract-preview-row" key={row.rowId || label || index}>
+            <strong>{label}</strong>
+            <span>
+              {fields.map((field) => `${field.label || field.fieldId}: ${valueText(row.values?.[field.fieldId])}${field.unit ? ` ${field.unit}` : ""}`).join(" / ")}
+            </span>
+            {cells && <small>Cells: {cells}</small>}
+          </div>
+        );
+      })}
+      {rows.length > 8 && <small className="backend-scan-muted">+{rows.length - 8} more rows</small>}
+    </div>
+  );
+}
+
+function SourceExtractReviewCard({
+  sourceExtractProposal,
+  warnings = [],
+  busy = "",
+  onSourceExtractDecision,
+  onCreateChartProposalFromSourceExtract,
+}) {
+  if (!sourceExtractProposal) return null;
+  const status = sourceExtractProposal.status || "proposed";
+  const accepted = status === "accepted";
+  const rejected = status === "rejected";
+  const isBusy = !!busy;
+  const allWarnings = uniqueWarnings(warnings, sourceExtractProposal.warnings, sourceExtractProposal.preview?.warnings);
+  return (
+    <article className="backend-inline-status source-extract-review-card">
+      <div className="backend-scan-block-head">
+        <strong>Source extract proposal created</strong>
+        <span>{sourceExtractProposal.extractType || "source_extract"} - {status}</span>
+      </div>
+      <p className="backend-scan-muted">
+        Review the extracted source data before charting. Accepted source extracts can then create chart proposals.
+      </p>
+      {sourceExtractProposal.preview?.range && (
+        <p className="backend-scan-muted">
+          Source: {[
+            sourceExtractProposal.preview.range.sheetName,
+            sourceExtractProposal.preview.range.range,
+          ].filter(Boolean).join(" - ")}
+        </p>
+      )}
+      <SourceExtractRowsPreview proposal={sourceExtractProposal} />
+      <WarningList warnings={allWarnings} />
+      <div className="import-review-actions">
+        {!accepted && (
+          <button
+            type="button"
+            disabled={isBusy || rejected}
+            onClick={() => onSourceExtractDecision?.(sourceExtractProposal.id, "accepted")}
+          >
+            {busy === "accepting_source_extract" ? "Accepting..." : "Accept source extract"}
+          </button>
+        )}
+        {!rejected && (
+          <button
+            type="button"
+            disabled={isBusy || accepted}
+            onClick={() => onSourceExtractDecision?.(sourceExtractProposal.id, "rejected")}
+          >
+            {busy === "rejecting_source_extract" ? "Rejecting..." : "Reject"}
+          </button>
+        )}
+        {accepted && <span className="workflow-status is-applied">Source extract accepted</span>}
+        {rejected && <span className="workflow-status">Source extract rejected</span>}
+        <button
+          type="button"
+          className="primary"
+          disabled={isBusy || !accepted}
+          title={accepted ? "Create a reviewable chart proposal from this source extract" : "Accept the source extract before creating a chart proposal"}
+          onClick={() => onCreateChartProposalFromSourceExtract?.(sourceExtractProposal.id)}
+        >
+          {busy === "creating_source_chart_proposal" ? "Creating..." : "Create chart proposal"}
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function ChartInterpretReview({
+  allowSourcePrompt = false,
+  chartInterpretState,
+  onInterpretChart,
+  onSourceExtractDecision,
+  onCreateChartProposalFromSourceExtract,
+}) {
   const [prompt, setPrompt] = React.useState("");
   const state = chartInterpretState || {};
   const draft = state.result?.chartSpecDraft || null;
   const clarification = state.result?.clarification || null;
   const persistedProposalSet = state.result?.chartProposalSet || null;
-  const canInterpret = genericImports.length > 0 && prompt.trim() && !state.loading;
-  const preview = draft && !persistedProposalSet ? makeGenericChartPreview(draft, genericImports) : null;
+  const sourceExtractProposal = state.result?.sourceExtractProposal || null;
+  const canInterpret = allowSourcePrompt && prompt.trim() && !state.loading;
+  const preview = draft && !persistedProposalSet ? makeSourceChartPreview(draft) : null;
   const persistedProposalCount = persistedProposalSet?.payload?.proposals?.length || 0;
 
   return (
@@ -613,7 +366,7 @@ function ChartInterpretReview({ genericImports, chartInterpretState, onInterpret
           <input
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
-            placeholder="e.g. plot gas selectivity vs temperature grouped by catalyst"
+            placeholder="e.g. plot carbon distribution from Sheet1!P31:BA32 in Calculation_Exp33.xlsx"
           />
         </label>
         <button
@@ -653,6 +406,15 @@ function ChartInterpretReview({ genericImports, chartInterpretState, onInterpret
           </p>
         </article>
       )}
+      {sourceExtractProposal && (
+        <SourceExtractReviewCard
+          sourceExtractProposal={sourceExtractProposal}
+          warnings={state.result?.warnings}
+          busy={state.sourceExtractBusy}
+          onSourceExtractDecision={onSourceExtractDecision}
+          onCreateChartProposalFromSourceExtract={onCreateChartProposalFromSourceExtract}
+        />
+      )}
       {draft && !persistedProposalSet && (
         <article className="backend-proposal-card backend-chart-proposal-card">
           <div className="backend-scan-block-head">
@@ -678,7 +440,7 @@ function ChartInterpretReview({ genericImports, chartInterpretState, onInterpret
           {draft.groupBy && <p className="backend-scan-muted">Group by: {draft.groupBy.label || draft.groupBy.field}</p>}
           <WarningList warnings={draft.warnings} />
           <p className="backend-scan-muted">
-            Preview-only draft. Use a server project with a dataset commit to accept this chart, create a chart spec, and insert it into Manuscript.
+            Preview-only source draft. Confirm the source extract before creating a chart spec or inserting it into Manuscript.
           </p>
         </article>
       )}
@@ -686,302 +448,910 @@ function ChartInterpretReview({ genericImports, chartInterpretState, onInterpret
   );
 }
 
-function MetadataList({ metadata }) {
-  const items = Array.isArray(metadata) ? metadata : [];
-  if (!items.length) return <span className="backend-scan-muted">No metadata</span>;
-  return (
-    <ul className="backend-scan-list">
-      {items.map((item, index) => (
-        <li key={`${item.rawKey || "metadata"}-${index}`}>
-          <strong>{item.rawKey || "Metadata"}</strong>
-          <span>{item.rawValue ?? ""}{item.unit ? ` (${item.unit})` : ""}</span>
-          <em>{sourceLabel(item.source)}</em>
-        </li>
-      ))}
-    </ul>
-  );
+function normalizeName(value) {
+  return String(value || "").trim().toLowerCase();
 }
 
-function HeaderList({ headers }) {
-  const items = Array.isArray(headers) ? headers : [];
-  if (!items.length) return <span className="backend-scan-muted">No headers</span>;
-  return (
-    <ul className="backend-scan-list">
-      {items.map((header, index) => (
-        <li key={`${header.range || "header"}-${index}`}>
-          <strong>{header.range || `row ${header.row}`}</strong>
-          <span>{(header.columns || []).map((column) => `${column.rawName || column.label || column.address}${column.unit ? ` [${column.unit}]` : ""}`).join(", ")}</span>
-          <em>{formatConfidence(header.confidence)}</em>
-        </li>
-      ))}
-    </ul>
-  );
+function workbookNameForDocument(document) {
+  return document?.metadata?.workbookName || document?.fileName || document?.originalName || document?.id || "";
 }
 
-function BlockList({ blocks, blockReview, onBlockReviewDecision }) {
-  const items = Array.isArray(blocks) ? blocks : [];
-  if (!items.length) return <span className="backend-scan-muted">No blocks</span>;
+function sheetSummaries(document) {
+  const sheets = asArray(document?.metadata?.sheets);
+  if (sheets.length) return sheets;
+  return asArray(document?.metadata?.sheetNames).map((name) => ({ name }));
+}
+
+function sourceDocumentMatchScore(document, fileName) {
+  const target = normalizeName(fileName);
+  const workbook = normalizeName(workbookNameForDocument(document));
+  if (!target || !workbook) return 0;
+  if (target === workbook) return 4;
+  if (target.includes(workbook) || workbook.includes(target)) return 3;
+  const targetStem = target.replace(/\.[^.]+$/, "");
+  const workbookStem = workbook.replace(/\.[^.]+$/, "");
+  if (targetStem && targetStem === workbookStem) return 2;
+  if (targetStem && workbookStem && (targetStem.includes(workbookStem) || workbookStem.includes(targetStem))) return 1;
+  return 0;
+}
+
+function pickSourceDocument(documents, fileName) {
+  const items = asArray(documents);
+  if (!items.length) return null;
+  return [...items].sort((a, b) => (
+    sourceDocumentMatchScore(b, fileName) - sourceDocumentMatchScore(a, fileName)
+  ))[0] || null;
+}
+
+function sheetRangeFor(document, sheetName, regions = []) {
+  const sheet = sheetSummaries(document).find((item) => item.name === sheetName) || sheetSummaries(document)[0] || null;
+  return sheet?.usedRange || asArray(regions).find((region) => region.sheetName === sheetName)?.rangeRef || "";
+}
+
+const SOURCE_SHEET_CELL_WIDTH = 120;
+const SOURCE_SHEET_ROW_HEIGHT = 30;
+const SOURCE_SHEET_HEADER_WIDTH = 58;
+const SOURCE_SHEET_HEADER_HEIGHT = 30;
+const SOURCE_SHEET_MAX_WINDOW_CELLS = 480;
+const SOURCE_EXTRACT_MAX_PREVIEW_CELLS = 500;
+const SOURCE_SHEET_FALLBACK_WIDTH = 980;
+const SOURCE_SHEET_FALLBACK_HEIGHT = 360;
+const SOURCE_SHEET_OVERSCAN_ROWS = 4;
+const SOURCE_SHEET_OVERSCAN_COLS = 2;
+
+function columnLabelToIndex(label) {
+  const text = String(label || "").trim().toUpperCase();
+  if (!/^[A-Z]+$/.test(text)) return null;
+  let index = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    index = index * 26 + (text.charCodeAt(i) - 64);
+  }
+  return index - 1;
+}
+
+function indexToColumnLabel(index) {
+  let value = Number(index) + 1;
+  if (!Number.isFinite(value) || value <= 0) return "";
+  let label = "";
+  while (value > 0) {
+    const remainder = (value - 1) % 26;
+    label = String.fromCharCode(65 + remainder) + label;
+    value = Math.floor((value - 1) / 26);
+  }
+  return label;
+}
+
+function parseCellAddress(address) {
+  const match = String(address || "").trim().match(/^([A-Z]+)(\d+)$/i);
+  if (!match) return null;
+  const col = columnLabelToIndex(match[1]);
+  const row = Number(match[2]) - 1;
+  if (col == null || !Number.isInteger(row) || row < 0) return null;
+  return { row, col };
+}
+
+function normalizeBounds(bounds) {
+  if (!bounds) return null;
+  const startRow = Math.min(bounds.startRow, bounds.endRow);
+  const endRow = Math.max(bounds.startRow, bounds.endRow);
+  const startCol = Math.min(bounds.startCol, bounds.endCol);
+  const endCol = Math.max(bounds.startCol, bounds.endCol);
+  if ([startRow, endRow, startCol, endCol].some((value) => !Number.isInteger(value) || value < 0)) return null;
+  return { startRow, endRow, startCol, endCol };
+}
+
+function parseA1Range(range) {
+  const text = String(range || "").trim();
+  if (!text) return null;
+  const plainRange = text.includes("!") ? text.slice(text.lastIndexOf("!") + 1) : text;
+  const [startText, endText = startText] = plainRange.split(":").map((part) => part.trim());
+  const start = parseCellAddress(startText);
+  const end = parseCellAddress(endText);
+  if (!start || !end) return null;
+  return normalizeBounds({
+    startRow: start.row,
+    endRow: end.row,
+    startCol: start.col,
+    endCol: end.col,
+  });
+}
+
+function formatA1Range(bounds) {
+  const normalized = normalizeBounds(bounds);
+  if (!normalized) return "";
+  const start = `${indexToColumnLabel(normalized.startCol)}${normalized.startRow + 1}`;
+  const end = `${indexToColumnLabel(normalized.endCol)}${normalized.endRow + 1}`;
+  return start === end ? start : `${start}:${end}`;
+}
+
+function boundsCellCount(bounds) {
+  const normalized = normalizeBounds(bounds);
+  if (!normalized) return 0;
+  return (normalized.endRow - normalized.startRow + 1) * (normalized.endCol - normalized.startCol + 1);
+}
+
+function mergeBounds(...boundsList) {
+  const validBounds = boundsList.map(normalizeBounds).filter(Boolean);
+  if (!validBounds.length) return null;
+  return validBounds.reduce((merged, bounds) => ({
+    startRow: Math.min(merged.startRow, bounds.startRow),
+    endRow: Math.max(merged.endRow, bounds.endRow),
+    startCol: Math.min(merged.startCol, bounds.startCol),
+    endCol: Math.max(merged.endCol, bounds.endCol),
+  }));
+}
+
+function sheetBoundsFor(sheet, focusRange, regions = [], localDraft = null, sheetName = "") {
+  const usedRangeBounds = parseA1Range(sheet?.usedRange);
+  const rowCount = Number(sheet?.rowCount);
+  const columnCount = Number(sheet?.columnCount);
+  const dimensionBounds = Number.isFinite(rowCount) && rowCount > 0 && Number.isFinite(columnCount) && columnCount > 0
+    ? {
+      startRow: usedRangeBounds?.startRow || 0,
+      endRow: (usedRangeBounds?.startRow || 0) + rowCount - 1,
+      startCol: usedRangeBounds?.startCol || 0,
+      endCol: (usedRangeBounds?.startCol || 0) + columnCount - 1,
+    }
+    : null;
+  const focusBounds = parseA1Range(focusRange);
+  const regionBounds = asArray(regions)
+    .filter((region) => !sheetName || region.sheetName === sheetName)
+    .map((region) => parseA1Range(region.rangeRef));
+  const draftBounds = localDraft?.sheetName === sheetName ? parseA1Range(localDraft.range) : null;
+  return mergeBounds(dimensionBounds, usedRangeBounds, focusBounds, draftBounds, ...regionBounds)
+    || { startRow: 0, endRow: 24, startCol: 0, endCol: 7 };
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function sourceSheetWindowFromScroll(sheetBounds, scrollState) {
+  const totalRows = sheetBounds.endRow - sheetBounds.startRow + 1;
+  const totalCols = sheetBounds.endCol - sheetBounds.startCol + 1;
+  const viewportRows = Math.max(1, Math.ceil((scrollState.height || SOURCE_SHEET_FALLBACK_HEIGHT) / SOURCE_SHEET_ROW_HEIGHT) + SOURCE_SHEET_OVERSCAN_ROWS);
+  const viewportCols = Math.max(1, Math.ceil((scrollState.width || SOURCE_SHEET_FALLBACK_WIDTH) / SOURCE_SHEET_CELL_WIDTH) + SOURCE_SHEET_OVERSCAN_COLS);
+  const startRowOffset = clamp(Math.floor(Math.max(0, (scrollState.top || 0) - SOURCE_SHEET_HEADER_HEIGHT) / SOURCE_SHEET_ROW_HEIGHT), 0, Math.max(totalRows - 1, 0));
+  const startColOffset = clamp(Math.floor(Math.max(0, (scrollState.left || 0) - SOURCE_SHEET_HEADER_WIDTH) / SOURCE_SHEET_CELL_WIDTH), 0, Math.max(totalCols - 1, 0));
+  let rowCount = Math.min(viewportRows, totalRows - startRowOffset);
+  let colCount = Math.min(viewportCols, totalCols - startColOffset);
+  if (rowCount * colCount > SOURCE_SHEET_MAX_WINDOW_CELLS) {
+    rowCount = Math.max(1, Math.floor(SOURCE_SHEET_MAX_WINDOW_CELLS / Math.max(colCount, 1)));
+  }
+  return {
+    startRow: sheetBounds.startRow + startRowOffset,
+    endRow: sheetBounds.startRow + startRowOffset + rowCount - 1,
+    startCol: sheetBounds.startCol + startColOffset,
+    endCol: sheetBounds.startCol + startColOffset + colCount - 1,
+  };
+}
+
+function sourceSheetBoundsStyle(bounds, sheetBounds, inset = 0) {
+  const normalized = normalizeBounds(bounds);
+  if (!normalized) return {};
+  return {
+    left: SOURCE_SHEET_HEADER_WIDTH + (normalized.startCol - sheetBounds.startCol) * SOURCE_SHEET_CELL_WIDTH + inset,
+    top: SOURCE_SHEET_HEADER_HEIGHT + (normalized.startRow - sheetBounds.startRow) * SOURCE_SHEET_ROW_HEIGHT + inset,
+    width: (normalized.endCol - normalized.startCol + 1) * SOURCE_SHEET_CELL_WIDTH - inset * 2,
+    height: (normalized.endRow - normalized.startRow + 1) * SOURCE_SHEET_ROW_HEIGHT - inset * 2,
+  };
+}
+
+function flattenSourceRangeCells(rangeResult) {
+  const fromRows = asArray(rangeResult?.rows).flatMap((row) => asArray(row));
+  const fromCells = asArray(rangeResult?.cells);
+  return [...fromRows, ...fromCells].filter((cell) => Number.isInteger(cell?.row) && Number.isInteger(cell?.col));
+}
+
+function SourceSheetWindowViewer({
+  sourceDocumentId,
+  sheet,
+  sheetName,
+  focusRange,
+  regions = [],
+  localDraft,
+  onLocalDraftChange,
+}) {
+  const scrollRef = React.useRef(null);
+  const dragSelectionRef = React.useRef(null);
+  const [scrollState, setScrollState] = React.useState({
+    top: 0,
+    left: 0,
+    width: SOURCE_SHEET_FALLBACK_WIDTH,
+    height: SOURCE_SHEET_FALLBACK_HEIGHT,
+  });
+  const [windowState, setWindowState] = React.useState({ loading: false, error: "", result: null, range: "" });
+  const [dragSelection, setDragSelection] = React.useState(null);
+  const sheetBounds = React.useMemo(
+    () => sheetBoundsFor(sheet, focusRange, regions, localDraft, sheetName),
+    [sheet, focusRange, regions, localDraft, sheetName],
+  );
+  const focusBounds = parseA1Range(focusRange);
+  const windowBounds = React.useMemo(() => sourceSheetWindowFromScroll(sheetBounds, scrollState), [sheetBounds, scrollState]);
+  const windowRange = formatA1Range(windowBounds);
+  const targetRangeLabel = focusBounds ? formatA1Range(focusBounds) : focusRange || sheet?.usedRange || "";
+  const totalRows = sheetBounds.endRow - sheetBounds.startRow + 1;
+  const totalCols = sheetBounds.endCol - sheetBounds.startCol + 1;
+
+  const updateScrollState = React.useCallback((element) => {
+    if (!element) return;
+    setScrollState({
+      top: element.scrollTop || 0,
+      left: element.scrollLeft || 0,
+      width: element.clientWidth || SOURCE_SHEET_FALLBACK_WIDTH,
+      height: element.clientHeight || SOURCE_SHEET_FALLBACK_HEIGHT,
+    });
+  }, []);
+
+  React.useEffect(() => {
+    const element = scrollRef.current;
+    if (!element || !focusBounds) return;
+    element.scrollTop = Math.max(0, SOURCE_SHEET_HEADER_HEIGHT + (focusBounds.startRow - sheetBounds.startRow) * SOURCE_SHEET_ROW_HEIGHT);
+    element.scrollLeft = Math.max(0, SOURCE_SHEET_HEADER_WIDTH + (focusBounds.startCol - sheetBounds.startCol) * SOURCE_SHEET_CELL_WIDTH);
+    updateScrollState(element);
+  }, [sourceDocumentId, sheetName, targetRangeLabel, sheetBounds.startRow, sheetBounds.startCol, updateScrollState]);
+
+  React.useEffect(() => {
+    if (!sourceDocumentId || !sheetName || !windowRange) {
+      setWindowState({ loading: false, error: "", result: null, range: "" });
+      return undefined;
+    }
+    let cancelled = false;
+    setWindowState((current) => ({ ...current, loading: true, error: "", range: windowRange }));
+    readServerSourceDocumentRange(sourceDocumentId, { sheetName, range: windowRange })
+      .then((result) => {
+        if (cancelled) return;
+        setWindowState({ loading: false, error: "", result, range: windowRange });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setWindowState({ loading: false, error: err.message || String(err), result: null, range: windowRange });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sourceDocumentId, sheetName, windowRange]);
+
+  const cellFromPointerEvent = (event) => {
+    const element = scrollRef.current;
+    if (!element) return null;
+    const rect = element.getBoundingClientRect();
+    const x = event.clientX - rect.left + element.scrollLeft - SOURCE_SHEET_HEADER_WIDTH;
+    const y = event.clientY - rect.top + element.scrollTop - SOURCE_SHEET_HEADER_HEIGHT;
+    if (x < 0 || y < 0) return null;
+    const col = sheetBounds.startCol + Math.floor(x / SOURCE_SHEET_CELL_WIDTH);
+    const row = sheetBounds.startRow + Math.floor(y / SOURCE_SHEET_ROW_HEIGHT);
+    if (row < sheetBounds.startRow || row > sheetBounds.endRow || col < sheetBounds.startCol || col > sheetBounds.endCol) return null;
+    return { row, col };
+  };
+
+  const autoScrollNearEdge = (event) => {
+    const element = scrollRef.current;
+    if (!element) return;
+    const rect = element.getBoundingClientRect();
+    const edge = 34;
+    let dx = 0;
+    let dy = 0;
+    if (event.clientX > rect.right - edge) dx = 36;
+    if (event.clientX < rect.left + edge) dx = -36;
+    if (event.clientY > rect.bottom - edge) dy = 36;
+    if (event.clientY < rect.top + edge) dy = -36;
+    if (dx || dy) {
+      element.scrollLeft += dx;
+      element.scrollTop += dy;
+      updateScrollState(element);
+    }
+  };
+
+  const startDraftSelection = (event) => {
+    if (event.button !== 2 && event.buttons !== 2) return;
+    const cell = cellFromPointerEvent(event);
+    if (!cell) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const nextSelection = { active: true, anchor: cell, current: cell };
+    dragSelectionRef.current = nextSelection;
+    setDragSelection(nextSelection);
+  };
+
+  const moveDraftSelection = (event) => {
+    const currentSelection = dragSelectionRef.current;
+    if (!currentSelection?.active) return;
+    const cell = cellFromPointerEvent(event);
+    autoScrollNearEdge(event);
+    if (!cell) return;
+    event.preventDefault();
+    const nextSelection = { ...currentSelection, current: cell };
+    dragSelectionRef.current = nextSelection;
+    setDragSelection(nextSelection);
+  };
+
+  const finishDraftSelection = (event) => {
+    const currentSelection = dragSelectionRef.current;
+    if (!currentSelection?.active) return;
+    event.preventDefault();
+    const releaseCell = cellFromPointerEvent(event);
+    const bounds = normalizeBounds({
+      startRow: currentSelection.anchor.row,
+      endRow: (releaseCell || currentSelection.current).row,
+      startCol: currentSelection.anchor.col,
+      endCol: (releaseCell || currentSelection.current).col,
+    });
+    const range = formatA1Range(bounds);
+    if (range) onLocalDraftChange?.({ sheetName, range });
+    dragSelectionRef.current = null;
+    setDragSelection(null);
+  };
+
+  const cellMap = React.useMemo(() => {
+    const map = new Map();
+    flattenSourceRangeCells(windowState.result).forEach((cell) => {
+      map.set(`${cell.row}:${cell.col}`, cell);
+    });
+    return map;
+  }, [windowState.result]);
+
+  const visibleRows = [];
+  for (let row = windowBounds.startRow; row <= windowBounds.endRow; row += 1) visibleRows.push(row);
+  const visibleCols = [];
+  for (let col = windowBounds.startCol; col <= windowBounds.endCol; col += 1) visibleCols.push(col);
+
+  const sameSheetRegions = asArray(regions).filter((region) => region.sheetName === sheetName);
+  const dragBounds = dragSelection?.active ? normalizeBounds({
+    startRow: dragSelection.anchor.row,
+    endRow: dragSelection.current.row,
+    startCol: dragSelection.anchor.col,
+    endCol: dragSelection.current.col,
+  }) : null;
+  const localDraftBounds = localDraft?.sheetName === sheetName ? parseA1Range(localDraft.range) : null;
+  const activeDraftBounds = dragBounds || localDraftBounds;
+
   return (
-    <div className="backend-scan-blocks">
-      {items.map((block) => {
-        const decision = blockReviewDecision(blockReview, block.blockId);
-        return (
-          <article className="backend-scan-block" key={block.blockId}>
-            <div className="backend-scan-block-head">
-              <strong>{block.blockId}</strong>
-              <span>{block.type} - {formatConfidence(block.confidence)}</span>
+    <div className="source-sheet-viewer">
+      <div className="source-sheet-viewer-head">
+        <span>Selected range: {targetRangeLabel || "n/a"}</span>
+        <span>{windowState.loading ? `Loading ${windowRange}...` : `Loaded window: ${windowState.range || windowRange}`}</span>
+        <span>{totalRows} rows x {totalCols} columns</span>
+      </div>
+      {!focusBounds && focusRange && <p className="import-review-error">Enter a valid Excel range such as A1:D20.</p>}
+      {windowState.error && <p className="import-review-error">{windowState.error}</p>}
+      <div
+        ref={scrollRef}
+        className="source-sheet-scroll"
+        aria-label="Source range grid"
+        onScroll={(event) => updateScrollState(event.currentTarget)}
+        onContextMenu={(event) => event.preventDefault()}
+        onPointerDown={startDraftSelection}
+        onPointerMove={moveDraftSelection}
+        onPointerUp={finishDraftSelection}
+        onPointerCancel={() => {
+          dragSelectionRef.current = null;
+          setDragSelection(null);
+        }}
+        onMouseDown={startDraftSelection}
+        onMouseMove={moveDraftSelection}
+        onMouseUp={finishDraftSelection}
+      >
+        <div
+          className="source-sheet-canvas"
+          style={{
+            width: SOURCE_SHEET_HEADER_WIDTH + totalCols * SOURCE_SHEET_CELL_WIDTH,
+            height: SOURCE_SHEET_HEADER_HEIGHT + totalRows * SOURCE_SHEET_ROW_HEIGHT,
+          }}
+        >
+          <div className="source-sheet-corner" style={{ width: SOURCE_SHEET_HEADER_WIDTH, height: SOURCE_SHEET_HEADER_HEIGHT }} />
+          {sameSheetRegions.map((region) => {
+            const bounds = parseA1Range(region.rangeRef);
+            if (!bounds) return null;
+            return (
+              <div
+                className="source-region-overlay"
+                key={region.id || `${region.sheetName}-${region.rangeRef}`}
+                style={sourceSheetBoundsStyle(bounds, sheetBounds, 2)}
+                title={`${region.label || region.kind || "Detected source region"} ${region.rangeRef}`}
+              />
+            );
+          })}
+          {activeDraftBounds && (
+            <div
+              className="source-draft-overlay"
+              style={sourceSheetBoundsStyle(activeDraftBounds, sheetBounds, 3)}
+              title={`Local draft selection ${formatA1Range(activeDraftBounds)}`}
+            />
+          )}
+          {visibleCols.map((col) => (
+            <div
+              className="source-sheet-cell source-sheet-col-header"
+              key={`col-${col}`}
+              style={{
+                left: SOURCE_SHEET_HEADER_WIDTH + (col - sheetBounds.startCol) * SOURCE_SHEET_CELL_WIDTH,
+                top: 0,
+                width: SOURCE_SHEET_CELL_WIDTH,
+                height: SOURCE_SHEET_HEADER_HEIGHT,
+              }}
+            >
+              {indexToColumnLabel(col)}
             </div>
-            <div className="backend-scan-review-actions decision-actions" aria-label={`Review ${block.blockId}`}>
-              <span>Review: {decision}</span>
-              <button
-                type="button"
-                className={decision === "approved" ? "active" : ""}
-                onClick={() => onBlockReviewDecision?.(block.blockId, "approved")}
+          ))}
+          {visibleRows.map((row) => (
+            <div
+              className="source-sheet-cell source-sheet-row-header"
+              key={`row-${row}`}
+              style={{
+                left: 0,
+                top: SOURCE_SHEET_HEADER_HEIGHT + (row - sheetBounds.startRow) * SOURCE_SHEET_ROW_HEIGHT,
+                width: SOURCE_SHEET_HEADER_WIDTH,
+                height: SOURCE_SHEET_ROW_HEIGHT,
+              }}
+            >
+              {row + 1}
+            </div>
+          ))}
+          {visibleRows.flatMap((row) => visibleCols.map((col) => {
+            const cell = cellMap.get(`${row}:${col}`);
+            const text = valueText(cell?.formattedValue ?? cell?.rawValue);
+            return (
+              <div
+                className={`source-sheet-cell source-sheet-data-cell ${text ? "" : "is-empty"}`}
+                key={`${row}-${col}`}
+                style={{
+                  left: SOURCE_SHEET_HEADER_WIDTH + (col - sheetBounds.startCol) * SOURCE_SHEET_CELL_WIDTH,
+                  top: SOURCE_SHEET_HEADER_HEIGHT + (row - sheetBounds.startRow) * SOURCE_SHEET_ROW_HEIGHT,
+                  width: SOURCE_SHEET_CELL_WIDTH,
+                  height: SOURCE_SHEET_ROW_HEIGHT,
+                }}
+                title={cell?.formula ? `Formula: ${cell.formula}` : `${indexToColumnLabel(col)}${row + 1}`}
               >
-                Approve
-              </button>
-              <button
-                type="button"
-                className={decision === "ignored" ? "active" : ""}
-                onClick={() => onBlockReviewDecision?.(block.blockId, "ignored")}
-              >
-                Ignore
-              </button>
-            </div>
-            <div className="backend-scan-kv">
-              <span>Range</span><strong>{block.range || sourceLabel(block.source)}</strong>
-              <span>Rows</span><strong>{block.table?.rows?.length ?? 0}</strong>
-              <span>Source</span><strong>{sourceLabel(block.source)}</strong>
-            </div>
-            {block.observationSetPreview && (
-              <p className="backend-scan-muted">
-                Detected supplemental time series: {block.observationSetPreview.inferredExperimentLabel || "unknown experiment"} - {block.observationSetPreview.kind}
-              </p>
-            )}
-            {block.title && <p className="backend-scan-muted">Title: {block.title.value || block.title.rawValue} - {sourceLabel(block.title.source)}</p>}
-            <div className="backend-scan-subgrid">
-              <div><h5>Metadata</h5><MetadataList metadata={block.metadata || block.candidateMetadata} /></div>
-              <div><h5>Warnings</h5><WarningList warnings={block.warnings} /></div>
-            </div>
-          </article>
-        );
-      })}
+                {text}
+              </div>
+            );
+          }))}
+        </div>
+      </div>
+      <small className="source-sheet-help">Right-click and drag across cells to create a local draft red box. Drag near an edge to scroll while extending the selection.</small>
     </div>
   );
 }
 
+function SourceRegionCard({ region, active, busy, preview, onReadRange, onPreviewExtract }) {
+  const confidence = typeof region.confidence === "number" ? region.confidence : 0;
+  const highConfidence = confidence >= 0.75;
+  const regionCellCount = boundsCellCount(parseA1Range(region.rangeRef));
+  const extractDisabledReason = regionCellCount > SOURCE_EXTRACT_MAX_PREVIEW_CELLS
+    ? `Detected source region has ${regionCellCount} cells; select a smaller local draft range before previewing extract.`
+    : "";
+  return (
+    <article className={`source-region-card ${active ? "is-active" : ""}`}>
+      <div className="backend-scan-block-head">
+        <strong>{region.label || region.kind || "Source region"}</strong>
+        <span>{highConfidence ? "detected source region" : "low-confidence source region"}</span>
+      </div>
+      <p className="backend-scan-muted">
+        {[region.sheetName, region.rangeRef].filter(Boolean).join(" - ") || "range n/a"} - {region.kind || "unknown"} - {formatConfidence(region.confidence)}
+      </p>
+      {!!asArray(region.candidateFields).length && (
+        <p className="backend-scan-muted">
+          Fields: {asArray(region.candidateFields).slice(0, 5).map((field) => field.displayName || field.rawName || field.fieldId).join(", ")}
+        </p>
+      )}
+      <WarningList warnings={region.warnings} />
+      <div className="import-review-actions">
+        <button type="button" onClick={() => onReadRange?.(region)} disabled={!region.sheetName || !region.rangeRef || busy}>
+          {busy === "range" ? "Reading..." : "Read detected range"}
+        </button>
+        <button
+          type="button"
+          onClick={() => onPreviewExtract?.(region)}
+          disabled={busy || !region.id || !!extractDisabledReason}
+          title={extractDisabledReason || undefined}
+        >
+          {busy === "extract" ? "Previewing..." : "Preview extract"}
+        </button>
+      </div>
+      {extractDisabledReason && <small className="backend-scan-muted">{extractDisabledReason}</small>}
+      {preview && <SourceExtractRowsPreview proposal={{ preview }} />}
+    </article>
+  );
+}
+
+function makeClientDraftRegionId() {
+  return `draft_region_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function SourceWorkbookReview({
+  projectId,
+  scanFileName,
+  draftRegions = [],
+  onDraftRegionsChange,
+  focusSelection = null,
+}) {
+  const [documentsState, setDocumentsState] = React.useState({ loading: false, error: "", items: [] });
+  const [selectedDocumentId, setSelectedDocumentId] = React.useState("");
+  const [regionsState, setRegionsState] = React.useState({ loading: false, error: "", items: [] });
+  const [activeSheetName, setActiveSheetName] = React.useState("");
+  const [rangeInput, setRangeInput] = React.useState("");
+  const [rangeState, setRangeState] = React.useState({ localDraft: null });
+  const [extractState, setExtractState] = React.useState({ targetKey: "", loading: false, error: "", preview: null });
+  const appliedFocusKeyRef = React.useRef("");
+  const rangeInputDirtyRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (!projectId) {
+      setDocumentsState({ loading: false, error: "", items: [] });
+      setSelectedDocumentId("");
+      return undefined;
+    }
+    let cancelled = false;
+    setDocumentsState({ loading: true, error: "", items: [] });
+    listServerSourceDocuments(projectId)
+      .then((body) => {
+        if (cancelled) return;
+        const items = asArray(body?.sourceDocuments);
+        const selected = pickSourceDocument(items, scanFileName) || items[0] || null;
+        setDocumentsState({ loading: false, error: "", items });
+        setSelectedDocumentId(selected?.id || "");
+        onDraftRegionsChange?.([]);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setDocumentsState({ loading: false, error: err.message || String(err), items: [] });
+        setSelectedDocumentId("");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, scanFileName]);
+
+  const selectedDocument = documentsState.items.find((document) => document.id === selectedDocumentId) || null;
+  const sheets = sheetSummaries(selectedDocument);
+
+  React.useEffect(() => {
+    rangeInputDirtyRef.current = false;
+    if (!selectedDocumentId) {
+      setRegionsState({ loading: false, error: "", items: [] });
+      setActiveSheetName("");
+      setRangeInput("");
+      return undefined;
+    }
+    let cancelled = false;
+    setRegionsState({ loading: true, error: "", items: [] });
+    setRangeState({ localDraft: null });
+    setExtractState({ targetKey: "", loading: false, error: "", preview: null });
+    listServerSourceDocumentRegions(selectedDocumentId)
+      .then((body) => {
+        if (cancelled) return;
+        const items = asArray(body?.regions);
+        const firstSheet = sheets[0]?.name || items[0]?.sheetName || "";
+        const firstRange = sheetRangeFor(selectedDocument, firstSheet, items);
+        setRegionsState({ loading: false, error: "", items });
+        setActiveSheetName(firstSheet);
+        if (!rangeInputDirtyRef.current) setRangeInput(firstRange);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        const firstSheet = sheets[0]?.name || "";
+        setRegionsState({ loading: false, error: err.message || String(err), items: [] });
+        setActiveSheetName(firstSheet);
+        setRangeInput(sheetRangeFor(selectedDocument, firstSheet, []));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDocumentId]);
+
+  if (!projectId) return null;
+
+  const readRegionRange = (region) => {
+    rangeInputDirtyRef.current = false;
+    setActiveSheetName(region.sheetName || "");
+    setRangeInput(region.rangeRef || "");
+    setRangeState({ localDraft: null });
+  };
+
+  const previewLocalDraftRange = () => {
+    if (!activeSheetName || !rangeInput) return;
+    const bounds = parseA1Range(rangeInput);
+    const normalizedRange = formatA1Range(bounds) || rangeInput;
+    const draftRange = {
+      sheetName: activeSheetName,
+      range: normalizedRange,
+      selectionMethod: "manual_range_input",
+    };
+    setRangeState({ localDraft: draftRange });
+    upsertDraftRegion(draftRange);
+  };
+
+  const handleViewerDraftRange = (draftRange) => {
+    if (!draftRange?.sheetName || !draftRange?.range) return;
+    setActiveSheetName(draftRange.sheetName);
+    setRangeInput(draftRange.range);
+    setRangeState({ localDraft: draftRange });
+    upsertDraftRegion({ ...draftRange, selectionMethod: "drag_select" });
+  };
+
+  const upsertDraftRegion = (draftRange) => {
+    if (!selectedDocumentId || !draftRange?.sheetName || !draftRange?.range) return;
+    const bounds = parseA1Range(draftRange.range);
+    const normalizedRange = formatA1Range(bounds) || draftRange.range;
+    const key = `${selectedDocumentId}:${draftRange.sheetName}:${normalizedRange}`;
+    const existing = asArray(draftRegions).find((region) => (
+      `${region.sourceDocumentId}:${region.sheetName}:${region.range}` === key
+    ));
+    const nextRegion = {
+      clientRegionId: existing?.clientRegionId || makeClientDraftRegionId(),
+      operation: "upsert",
+      sourceDocumentId: selectedDocumentId,
+      sheetName: draftRange.sheetName,
+      range: normalizedRange,
+      selectionMethod: draftRange.selectionMethod || "manual",
+      description: draftRange.description || existing?.description || "",
+    };
+    const nextRegions = existing
+      ? asArray(draftRegions).map((region) => (region.clientRegionId === existing.clientRegionId ? nextRegion : region))
+      : [...asArray(draftRegions), nextRegion];
+    onDraftRegionsChange?.(nextRegions);
+  };
+
+  React.useEffect(() => {
+    if (!focusSelection?.sourceDocumentId || !focusSelection?.sheetName || !focusSelection?.range) return;
+    if (documentsState.loading || regionsState.loading) return;
+    const focusKey = `${focusSelection.requestId || ""}:${focusSelection.sourceDocumentId}:${focusSelection.sheetName}:${focusSelection.range}`;
+    if (appliedFocusKeyRef.current === focusKey) return;
+    const targetDocument = documentsState.items.find((document) => document.id === focusSelection.sourceDocumentId);
+    if (!targetDocument) return;
+    if (selectedDocumentId !== focusSelection.sourceDocumentId) {
+      setSelectedDocumentId(focusSelection.sourceDocumentId);
+      return;
+    }
+    const bounds = parseA1Range(focusSelection.range);
+    const normalizedRange = formatA1Range(bounds) || focusSelection.range;
+    const draftRange = {
+      sheetName: focusSelection.sheetName,
+      range: normalizedRange,
+      selectionMethod: focusSelection.selectionMethod || "suggestion_click",
+      description: focusSelection.description || focusSelection.label || "",
+    };
+    setActiveSheetName(focusSelection.sheetName);
+    setRangeInput(normalizedRange);
+    setRangeState({ localDraft: draftRange });
+    upsertDraftRegion(draftRange);
+    appliedFocusKeyRef.current = focusKey;
+  }, [documentsState.items, documentsState.loading, regionsState.loading, selectedDocumentId, focusSelection]);
+
+  const previewExtract = async (region) => {
+    if (!region?.id) return;
+    setExtractState({ targetKey: `region:${region.id}`, loading: true, error: "", preview: null });
+    try {
+      const body = await previewServerSourceRegionExtract(region.id, { extractType: region.kind || "generic_table" });
+      setExtractState({ targetKey: `region:${region.id}`, loading: false, error: "", preview: body?.preview || null });
+    } catch (err) {
+      setExtractState({ targetKey: `region:${region.id}`, loading: false, error: err.message || String(err), preview: null });
+    }
+  };
+
+  const previewSelectedRangeExtract = async () => {
+    const selectedRange = rangeState.localDraft?.range || rangeInput;
+    const selectedSheetName = rangeState.localDraft?.sheetName || activeSheetName;
+    const bounds = parseA1Range(selectedRange);
+    if (!selectedDocumentId || !selectedSheetName || !bounds) {
+      setExtractState({ targetKey: "draft", loading: false, error: "Select a valid source range before previewing an extract.", preview: null });
+      return;
+    }
+    const cellCount = boundsCellCount(bounds);
+    if (cellCount > SOURCE_EXTRACT_MAX_PREVIEW_CELLS) {
+      setExtractState({
+        targetKey: "draft",
+        loading: false,
+        error: `Selected range has ${cellCount} cells; source extract preview is capped at ${SOURCE_EXTRACT_MAX_PREVIEW_CELLS}. Select a smaller range.`,
+        preview: null,
+      });
+      return;
+    }
+    setExtractState({ targetKey: "draft", loading: true, error: "", preview: null });
+    try {
+      const body = await previewServerSourceDocumentExtract(selectedDocumentId, {
+        sheetName: selectedSheetName,
+        range: formatA1Range(bounds),
+        extractType: activeRegion?.kind || "generic_table",
+      });
+      setExtractState({ targetKey: "draft", loading: false, error: "", preview: body?.preview || null });
+    } catch (err) {
+      setExtractState({ targetKey: "draft", loading: false, error: err.message || String(err), preview: null });
+    }
+  };
+
+  const activeSheet = sheets.find((sheet) => sheet.name === activeSheetName) || sheets[0] || null;
+  const activeRegion = regionsState.items.find((region) => (
+    region.sheetName === activeSheetName && formatA1Range(parseA1Range(region.rangeRef)) === formatA1Range(parseA1Range(rangeInput))
+  )) || null;
+
+  return (
+    <section className="source-workbook-review">
+      <WorkflowPanelHeader
+        title="Source workbook"
+        detail="Inspect indexed workbook evidence before creating DataPlans or charting from source ranges."
+        meta={documentsState.loading ? "loading" : `${documentsState.items.length} documents`}
+      />
+      {documentsState.loading && <div className="import-review-empty is-loading">Loading indexed source documents...</div>}
+      {documentsState.error && <p className="import-review-error">{documentsState.error}</p>}
+      {!documentsState.loading && !documentsState.items.length && !documentsState.error && (
+        <div className="import-review-empty">No indexed source document is available for this project yet.</div>
+      )}
+      {!!documentsState.items.length && (
+        <>
+          <div className="source-workbook-toolbar workflow-action-row">
+            <label>
+              <span>Source document</span>
+              <select value={selectedDocumentId} onChange={(event) => {
+                rangeInputDirtyRef.current = false;
+                setSelectedDocumentId(event.target.value);
+                onDraftRegionsChange?.([]);
+              }}>
+                {documentsState.items.map((document) => (
+                  <option value={document.id} key={document.id}>{workbookNameForDocument(document)}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Sheet</span>
+              <select value={activeSheetName} onChange={(event) => {
+                const nextSheet = event.target.value;
+                rangeInputDirtyRef.current = false;
+                setActiveSheetName(nextSheet);
+                setRangeInput(sheetRangeFor(selectedDocument, nextSheet, regionsState.items));
+              }}>
+                {sheets.map((sheet) => <option value={sheet.name} key={sheet.name}>{sheet.name}</option>)}
+              </select>
+            </label>
+            <label>
+              <span>Range</span>
+              <input value={rangeInput} onChange={(event) => {
+                rangeInputDirtyRef.current = true;
+                setRangeInput(event.target.value);
+              }} placeholder="A1:D20" />
+            </label>
+            <button
+              type="button"
+              onClick={previewLocalDraftRange}
+              disabled={!selectedDocumentId || !activeSheetName || !rangeInput}
+            >
+              Preview local draft range
+            </button>
+          </div>
+          {selectedDocument && (
+            <div className="backend-scan-stats">
+              <span>{selectedDocument.summary?.sheetCount ?? sheets.length} sheets</span>
+              <span>{selectedDocument.summary?.regionCount ?? regionsState.items.length} regions</span>
+              <span>{selectedDocument.summary?.nonEmptyCellCount ?? 0} non-empty cells</span>
+            </div>
+          )}
+          {rangeState.localDraft && (
+            <article className="source-draft-selection">
+              <div>
+                <strong>local draft selection</strong>
+                <span>{rangeState.localDraft.sheetName} - {rangeState.localDraft.range}</span>
+                <small>Draft red box. Describe it in the workbook review chat before confirming understanding.</small>
+              </div>
+              <button type="button" onClick={previewSelectedRangeExtract} disabled={extractState.loading}>
+                {extractState.targetKey === "draft" && extractState.loading ? "Previewing..." : "Preview selected range extract"}
+              </button>
+              {extractState.targetKey === "draft" && extractState.error && <p className="import-review-error">{extractState.error}</p>}
+              {extractState.targetKey === "draft" && extractState.preview && <SourceExtractRowsPreview proposal={{ preview: extractState.preview }} />}
+            </article>
+          )}
+          <SourceSheetWindowViewer
+            sourceDocumentId={selectedDocumentId}
+            sheet={activeSheet}
+            sheetName={activeSheetName}
+            focusRange={rangeInput}
+            regions={regionsState.items}
+            localDraft={rangeState.localDraft}
+            onLocalDraftChange={handleViewerDraftRange}
+          />
+          <div className="source-region-list">
+            <div className="backend-scan-block-head">
+              <strong>Detected source regions</strong>
+              <span>{regionsState.loading ? "loading" : `${regionsState.items.length} regions`}</span>
+            </div>
+            {regionsState.error && <p className="import-review-error">{regionsState.error}</p>}
+            {!regionsState.loading && !regionsState.items.length && !regionsState.error && (
+              <div className="import-review-empty">No source regions were detected for this workbook.</div>
+            )}
+            {regionsState.items.map((region) => {
+              const targetKey = `region:${region.id}`;
+              const busy = extractState.targetKey === targetKey && extractState.loading ? "extract" : "";
+              const preview = extractState.targetKey === targetKey ? extractState.preview : null;
+              return (
+                <SourceRegionCard
+                  key={region.id}
+                  region={region}
+                  active={activeRegion?.id === region.id}
+                  busy={busy}
+                  preview={preview}
+                  onReadRange={readRegionRange}
+                  onPreviewExtract={previewExtract}
+                />
+              );
+            })}
+            {extractState.targetKey !== "draft" && extractState.error && <p className="import-review-error">{extractState.error}</p>}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 export function ChartReviewPanel({
-  genericImports = [],
-  mappingState,
   chartProposalState,
   chartInterpretState,
   chartSpecs,
   focusProposalId,
   statusFilter,
-  onProposeCharts,
+  viewMode = "review",
   onChartProposalDecision,
+  onChartProposalDelete,
   onInterpretChart,
+  onSourceExtractDecision,
+  onCreateChartProposalFromSourceExtract,
   onCreateChartSpec,
+  allowSourcePrompt = false,
 }) {
+  if (viewMode === "edit") {
+    return (
+      <div className="chart-review-panel">
+        <ChartProposalReview
+          chartProposalState={chartProposalState}
+          chartSpecs={chartSpecs}
+          focusProposalId={focusProposalId}
+          statusFilter={statusFilter}
+          viewMode="editSpecs"
+          onChartProposalDecision={onChartProposalDecision}
+          onChartProposalDelete={onChartProposalDelete}
+          onCreateChartSpec={onCreateChartSpec}
+        />
+      </div>
+    );
+  }
   return (
     <div className="chart-review-panel">
       <ChartInterpretReview
-        genericImports={genericImports}
+        allowSourcePrompt={allowSourcePrompt}
         chartInterpretState={chartInterpretState}
         onInterpretChart={onInterpretChart}
+        onSourceExtractDecision={onSourceExtractDecision}
+        onCreateChartProposalFromSourceExtract={onCreateChartProposalFromSourceExtract}
       />
       <ChartProposalReview
-        genericImports={genericImports}
-        mappingState={mappingState}
         chartProposalState={chartProposalState}
         chartSpecs={chartSpecs}
         focusProposalId={focusProposalId}
         statusFilter={statusFilter}
-        onProposeCharts={onProposeCharts}
         onChartProposalDecision={onChartProposalDecision}
+        onChartProposalDelete={onChartProposalDelete}
         onCreateChartSpec={onCreateChartSpec}
       />
     </div>
   );
 }
 
-function SheetDetails({ sheet, blockReview, onBlockReviewDecision }) {
-  return (
-    <article className="backend-scan-sheet">
-      <div className="backend-scan-sheet-head">
-        <div>
-          <strong>{sheet.name || sheet.sheetId}</strong>
-          <span>{sheet.usedRange || "no used range"}</span>
-        </div>
-        <span>{sheet.layout?.type || "unknown"} - {formatConfidence(sheet.layout?.confidence)}</span>
-      </div>
-      <div className="backend-scan-stats">
-        <span>{sheet.rowCount ?? sheet.cellGrid?.rowCount ?? 0} rows</span>
-        <span>{sheet.columnCount ?? sheet.cellGrid?.columnCount ?? 0} columns</span>
-        <span>{sheet.blocks?.length || 0} blocks</span>
-        <span>{sheet.warnings?.length || 0} warnings</span>
-      </div>
-      <div className="backend-scan-subgrid">
-        <div><h5>Headers</h5><HeaderList headers={sheet.candidateHeaders} /></div>
-        <div><h5>Metadata</h5><MetadataList metadata={sheet.candidateMetadata} /></div>
-      </div>
-      <div><h5>Structure proposals</h5><StructureProposalList structureProposals={sheet.structureProposals} /></div>
-      <div className="backend-scan-subgrid">
-        <div><h5>Blocks</h5><BlockList blocks={sheet.blocks} blockReview={blockReview} onBlockReviewDecision={onBlockReviewDecision} /></div>
-        <div><h5>Warnings</h5><WarningList warnings={sheet.warnings} /></div>
-      </div>
-    </article>
-  );
-}
-
 export function BackendScanPanel({
-  mode = "append",
-  refreshDraft,
-  relationshipDraft,
+  projectId = "",
   scanState,
-  blockReview,
-  normalizeState,
-  mappingState,
-  genericImports: genericImportsOverride,
-  fieldRoleOverrides,
-  onScanFile,
-  onBlockReviewDecision,
-  onFieldRoleOverride,
-  onPreviewNormalize,
-  onApplyNormalize,
-  onRelationshipProposalSelect,
-  onProposeMappings,
-  onMappingDecision,
-  onReloadProjectState,
+  draftRegions = [],
+  onDraftRegionsChange,
+  focusSelection = null,
 }) {
   const state = scanState || {};
-  const isRefreshMode = mode === "refresh";
-  const isSupplementMode = mode === "supplement";
-  const result = state.result || null;
-  const sheetCount = result?.summary?.sheetCount ?? result?.sheets?.length ?? 0;
-  const blockCount = result?.summary?.blockCount ?? result?.sheets?.reduce((total, sheet) => total + (sheet.blocks?.length || 0), 0) ?? 0;
-  const approvedCount = blockReview?.approvedBlockIds?.length || 0;
-  const previewImports = normalizeState?.result?.datasetPatch?.genericImports || [];
-  const genericImports = previewImports.length ? previewImports : (genericImportsOverride || []);
-  const mappingSet = mappingState?.result?.mappingSet || null;
-  const workflowSteps = [
-    {
-      label: "Scan workbook",
-      detail: result ? `${sheetCount} sheets` : "choose .xlsx",
-      status: state.loading ? "active" : result ? "done" : "pending",
-    },
-    {
-      label: "Review blocks/fields",
-      detail: result ? `${approvedCount} approved` : "after scan",
-      status: result ? (approvedCount ? "done" : "active") : "pending",
-    },
-    {
-      label: "Preview/apply data",
-      detail: normalizeState?.applied
-        ? "applied"
-        : isRefreshMode && refreshDraft?.preview
-          ? "diff ready"
-          : isSupplementMode && relationshipDraft?.preview
-            ? "relationship ready"
-            : normalizeState?.result ? "preview ready" : "review first",
-      status: normalizeState?.loading ? "active" : normalizeState?.applied ? "done" : normalizeState?.result ? "active" : "pending",
-    },
-    {
-      label: "Semantic mappings",
-      detail: mappingSet ? `${mappingSet.mappings?.length || 0} proposals` : "after data",
-      status: mappingState?.loading ? "active" : mappingSet ? "done" : "pending",
-    },
-  ];
-
+  const scanFileName = state.fileName || state.result?.file?.name || "";
   return (
-    <section className="import-review-section backend-scan-panel">
-      <div className="import-review-section-head">
-        <h3>Backend scan</h3>
-        <span>{state.loading ? "scanning" : result ? "ready" : "idle"}</span>
-      </div>
-      <WorkflowStepStrip steps={workflowSteps} />
-      <div className="backend-scan-toolbar workflow-action-row">
-        <label className={`folder-btn backend-scan-upload ${state.loading ? "disabled" : ""}`}>
-          {state.loading ? "Scanning..." : isRefreshMode ? "Scan replacement workbook" : isSupplementMode ? "Scan supplemental workbook" : "Scan workbook"}
-          <input
-            type="file"
-            accept=".xlsx,.xls"
-            disabled={state.loading}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) onScanFile?.(file);
-              event.target.value = "";
-            }}
-          />
-        </label>
-        {state.fileName && <span className="backend-scan-file">{state.fileName}</span>}
-      </div>
-      {state.error && <p className="import-review-error">{state.error}</p>}
-      {result ? (
-        <div className="backend-scan-debug">
-          <div className="backend-scan-stats">
-            <span>{sheetCount} sheets</span>
-            <span>{blockCount} blocks</span>
-            <span>{warningCount(result)} warnings</span>
-          </div>
-          <div className="backend-scan-sheets">
-            {(result.sheets || []).map((sheet) => (
-              <SheetDetails
-                key={sheet.sheetId || sheet.name}
-                sheet={sheet}
-                blockReview={blockReview}
-                onBlockReviewDecision={onBlockReviewDecision}
-              />
-            ))}
-          </div>
-          <FieldReviewEditor
-            scanResult={result}
-            fieldRoleOverrides={fieldRoleOverrides}
-            onFieldRoleOverride={onFieldRoleOverride}
-          />
-          <div className="backend-normalize-toolbar">
-            <button
-              type="button"
-              className="primary"
-              disabled={!approvedCount || normalizeState?.loading}
-              onClick={() => onPreviewNormalize?.()}
-            >
-              {normalizeState?.loading ? "Previewing..." : "Preview normalized output"}
-            </button>
-            <span>{approvedCount} approved blocks</span>
-          </div>
-          <NormalizedPreview
-            normalizeState={normalizeState}
-            onApplyNormalize={onApplyNormalize}
-            mode={mode}
-            refreshDraft={refreshDraft}
-            relationshipDraft={relationshipDraft}
-            onRelationshipProposalSelect={onRelationshipProposalSelect}
-            onReloadProjectState={onReloadProjectState}
-          />
-          <MappingProposalReview
-            genericImports={genericImports}
-            mappingState={mappingState}
-            onProposeMappings={onProposeMappings}
-            onMappingDecision={onMappingDecision}
-          />
-          <pre>{JSON.stringify(result, null, 2)}</pre>
-        </div>
-      ) : (
-        <div>
-          <div className="import-review-empty">No backend scan yet.</div>
-          {genericImports.length > 0 && (
-            <>
-              <MappingProposalReview
-                genericImports={genericImports}
-                mappingState={mappingState}
-                onProposeMappings={onProposeMappings}
-                onMappingDecision={onMappingDecision}
-              />
-            </>
-          )}
-        </div>
-      )}
+    <section className="import-review-section backend-scan-panel source-only">
+      <SourceWorkbookReview
+        projectId={projectId}
+        scanFileName={scanFileName}
+        draftRegions={draftRegions}
+        onDraftRegionsChange={onDraftRegionsChange}
+        focusSelection={focusSelection}
+      />
     </section>
   );
 }

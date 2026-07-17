@@ -7,19 +7,20 @@ const root = process.cwd();
 const requiredDocs = [
   "AGENTS.md",
   "README.md",
+  "doc/START_HERE.md",
   "doc/plan.md",
+  "doc/current-milestone.md",
   "doc/PROGRESS.md",
-  "doc/ARCHITECTURE.md",
-  "doc/ROADMAP.md",
-  "doc/saas-api-contract-v0.md",
-  "doc/saas-database-schema-v0.md",
-  "doc/server-project-state-plan.md",
-  "doc/backend-api-contract.md",
-  "doc/canonical-data-dictionary.md",
-  "doc/ai-boundaries.md",
-  "doc/decisions.md",
+  "doc/arch/architecture.md",
+  "doc/arch/ai-boundaries.md",
+  "doc/contracts/saas-api-contract-v0.md",
+  "doc/contracts/saas-database-schema-v0.md",
+  "doc/contracts/server-project-state-plan.md",
+  "doc/contracts/backend-api-contract.md",
+  "doc/contracts/canonical-data-dictionary.md",
+  "doc/reports/decisions.md",
   "doc/task-checklist.md",
-  "doc/code-review.md",
+  "doc/qa/code-review.md",
 ];
 
 function readJson(relativePath) {
@@ -60,12 +61,12 @@ if (missingDocs.length || missingScripts.length) {
 
 console.log("");
 console.log("Required long-task loop:");
-console.log("1. Read doc/plan.md.");
-console.log("2. Read relevant API/data-model docs before routes, schemas, persistence, or frontend API usage.");
-console.log("3. Create or update doc/task-checklist.md.");
+console.log("1. Read doc/START_HERE.md, doc/plan.md, doc/current-milestone.md, and doc/task-checklist.md.");
+console.log("2. Read relevant docs under doc/contracts and doc/arch before routes, schemas, persistence, or frontend API usage.");
+console.log("3. Confirm the active milestone in doc/current-milestone.md and use doc/task-checklist.md as the execution checklist.");
 console.log("4. Implement one milestone.");
 console.log("5. Run targeted tests and npm run codex:verify when feasible.");
-console.log("6. Update doc/PROGRESS.md.");
+console.log("6. Update doc/PROGRESS.md and doc/current-milestone.md when milestone status changes.");
 console.log("7. Re-read docs before continuing.");
 console.log("");
 console.log("Canonical progress log: doc/PROGRESS.md");

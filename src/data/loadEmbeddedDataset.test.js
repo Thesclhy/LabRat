@@ -2,14 +2,11 @@ import { describe, expect, it } from "vitest";
 import { emptyDataset } from "./loadEmbeddedDataset.js";
 
 describe("emptyDataset", () => {
-  it("returns a stable blank dataset shape with no active import data", () => {
+  it("returns a stable blank compatibility shape without persisted scientific rows", () => {
     expect(emptyDataset()).toMatchObject({
       experiments: [],
       sources: [],
       files: [],
-      genericImports: [],
-      genericMappingSets: [],
-      genericChartProposals: [],
       warnings: [],
     });
   });

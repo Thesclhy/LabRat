@@ -5,7 +5,7 @@
   "type": "module",
   "description": "LabRat backend import pipeline and SaaS Auth v0 foundation",
   "scripts": {
-    "dev": "node --watch src/server.js",
+    "dev": "node src/server.js",
     "start": "node src/server.js",
     "migrate": "node src/saas/migrate.js",
     "test": "node --test",

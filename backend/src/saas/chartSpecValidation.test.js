@@ -2,113 +2,100 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { validateChartSpecProposal } from "./chartSpecValidation.js";
 
-function datasetCommit() {
+function sourceRowsProposal(overrides = {}) {
   return {
-    id: "commit_1",
-    datasetPayload: {
-      genericImports: [{
-        importId: "import_1",
-        sources: [
-          { sourceRef: "src_label_1" },
-          { sourceRef: "src_temp_1" },
-          { sourceRef: "src_solid_1" },
-          { sourceRef: "src_liquid_1" },
-          { sourceRef: "src_gas_1" },
-          { sourceRef: "src_c7_1" },
-          { sourceRef: "src_c8_1" },
-        ],
-        fields: [
-          { fieldValueId: "label_1", sourceRef: "src_label_1" },
-          { fieldValueId: "temp_1", sourceRef: "src_temp_1" },
-          { fieldValueId: "solid_1", sourceRef: "src_solid_1" },
-          { fieldValueId: "liquid_1", sourceRef: "src_liquid_1" },
-          { fieldValueId: "gas_1", sourceRef: "src_gas_1" },
-          { fieldValueId: "c7_1", sourceRef: "src_c7_1" },
-          { fieldValueId: "c8_1", sourceRef: "src_c8_1" },
-        ],
+    origin: "source_extract",
+    chartType: "bar",
+    title: "Carbon number distribution",
+    x: { field: "carbon_number", label: "Carbon number" },
+    y: { field: "percentage", label: "Percentage" },
+    sourceSnapshot: {
+      fields: [
+        { fieldId: "carbon_number", label: "Carbon number" },
+        { fieldId: "percentage", label: "Percentage" },
+      ],
+      rows: [{
+        rowId: "row_1",
+        values: { carbon_number: 1, percentage: 12.5 },
+        sourceRefs: [{ sourceDocumentId: "source_1", sheetName: "Sheet1", cell: "B2" }],
       }],
     },
+    ...overrides,
   };
 }
 
-test("validateChartSpecProposal accepts point ChartSpec v1.3", () => {
-  const result = validateChartSpecProposal({
-    datasetCommit: datasetCommit(),
-    proposal: {
-      chartType: "point",
-      title: "Gas Selectivity vs Temperature",
-      x: { label: "Temperature", sourceIds: ["temp_1"], sourceRefs: ["src_temp_1"] },
-      y: { label: "Gas Selectivity", sourceIds: ["gas_1"], sourceRefs: ["src_gas_1"] },
-      axisOptions: { y: { scale: "log10", title: "Gas Selectivity" } },
-      renderStyle: { preset: "excel_like", traceMode: "lines+markers", showLegend: false },
-    },
-  });
+test("validateChartSpecProposal accepts immutable source row snapshots", () => {
+  const result = validateChartSpecProposal({ proposal: sourceRowsProposal() });
 
   assert.equal(result.ok, true);
-  assert.equal(result.chartSpec.schemaVersion, "labrat.chartSpec.v1.3");
-  assert.equal(result.chartSpec.chartType, "point");
-  assert.equal(result.chartSpec.axisOptions.y.scale, "log10");
-  assert.equal(result.chartSpec.renderStyle.preset, "excel_like");
+  assert.equal(result.chartSpec.origin, "source_extract");
+  assert.equal(result.chartSpec.sourceSnapshot.rows.length, 1);
+  assert.equal(result.chartSpec.datasetCommitId, undefined);
 });
 
-test("validateChartSpecProposal accepts distribution charts with transform inputs", () => {
+test("validateChartSpecProposal accepts source-backed cross-experiment series", () => {
   const result = validateChartSpecProposal({
-    datasetCommit: datasetCommit(),
-    proposal: {
+    proposal: sourceRowsProposal({
       chartType: "distribution_bar",
-      x: { label: "Carbon number", field: "carbon_number" },
-      yFields: [
-        { label: "C7", sourceIds: ["c7_1"], sourceRefs: ["src_c7_1"] },
-        { label: "C8", sourceIds: ["c8_1"], sourceRefs: ["src_c8_1"] },
-      ],
-      transforms: [
-        { type: "pivot_longer", inputFieldIds: ["c7_1", "c8_1"] },
-        { type: "normalize_sum_to_percent", inputFieldIds: ["c7_1", "c8_1"] },
-      ],
-    },
+      seriesScope: { seriesKind: "component_distribution", xField: "carbon_number", yField: "percentage" },
+      compatibleExperimentIds: ["experiment_1"],
+      series: [{
+        seriesId: "series_1",
+        experimentId: "experiment_1",
+        xField: "carbon_number",
+        yField: "percentage",
+      }],
+      sourceSnapshot: {
+        fields: [],
+        series: [{
+          seriesId: "series_1",
+          experimentId: "experiment_1",
+          rows: [{ values: { carbon_number: 1, percentage: 12.5 } }],
+        }],
+      },
+    }),
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.chartSpec.chartType, "distribution_bar");
-  assert.equal(result.chartSpec.transforms.some((transform) => transform.type === "normalize_sum_to_percent"), true);
+  assert.equal(result.chartSpec.series.length, 1);
 });
 
-test("validateChartSpecProposal rejects unresolved transform inputs", () => {
+test("validateChartSpecProposal rejects proposals without source evidence", () => {
   assert.throws(() => validateChartSpecProposal({
-    datasetCommit: datasetCommit(),
     proposal: {
-      chartType: "stacked_bar",
-      x: { label: "Label", sourceIds: ["label_1"], sourceRefs: ["src_label_1"] },
-      yFields: [
-        { label: "Solid", sourceIds: ["solid_1"], sourceRefs: ["src_solid_1"] },
-        { label: "Gas", sourceIds: ["gas_1"], sourceRefs: ["src_gas_1"] },
-      ],
-      transforms: [{ type: "normalize_sum_to_percent", inputFieldIds: ["solid_1", "missing"] }],
+      chartType: "scatter",
+      x: { field: "temperature" },
+      y: { field: "conversion" },
     },
-  }), (error) => error.code === "chart_source_unresolved");
+  }), (error) => error.code === "source_snapshot_required");
 });
 
-test("validateChartSpecProposal rejects grouped and stacked bars with fewer than two yFields", () => {
+test("validateChartSpecProposal rejects empty source snapshots", () => {
   assert.throws(() => validateChartSpecProposal({
-    datasetCommit: datasetCommit(),
-    proposal: {
-      chartType: "grouped_bar",
-      x: { label: "Label", sourceIds: ["label_1"], sourceRefs: ["src_label_1"] },
-      yFields: [{ label: "Gas", sourceIds: ["gas_1"], sourceRefs: ["src_gas_1"] }],
-    },
+    proposal: sourceRowsProposal({ sourceSnapshot: { rows: [], series: [] } }),
   }), (error) => error.code === "invalid_chart_spec");
 });
 
-test("validateChartSpecProposal rejects unresolved yField sources", () => {
+test("validateChartSpecProposal rejects unsupported source chart types", () => {
   assert.throws(() => validateChartSpecProposal({
-    datasetCommit: datasetCommit(),
-    proposal: {
-      chartType: "stacked_bar",
-      x: { label: "Label", sourceIds: ["label_1"], sourceRefs: ["src_label_1"] },
-      yFields: [
-        { label: "Gas", sourceIds: ["gas_1"], sourceRefs: ["src_gas_1"] },
-        { label: "Missing", sourceIds: ["missing_y"], sourceRefs: ["src_gas_1"] },
-      ],
-    },
+    proposal: sourceRowsProposal({ chartType: "radar" }),
+  }), (error) => error.code === "invalid_chart_spec");
+});
+
+test("validateChartSpecProposal rejects source series without snapshot rows", () => {
+  assert.throws(() => validateChartSpecProposal({
+    proposal: sourceRowsProposal({
+      seriesScope: { seriesKind: "component_distribution" },
+      compatibleExperimentIds: ["experiment_1"],
+      series: [{
+        seriesId: "series_1",
+        experimentId: "experiment_1",
+        xField: "carbon_number",
+        yField: "percentage",
+      }],
+      sourceSnapshot: {
+        series: [{ seriesId: "series_1", experimentId: "experiment_1", rows: [] }],
+      },
+    }),
   }), (error) => error.code === "chart_source_unresolved");
 });

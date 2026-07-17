@@ -1,7 +1,7 @@
 import PptxGenJS from "pptxgenjs";
 import JSZip from "jszip";
 import { applyChartLayout, resolveChartLayout, defaultFontFamily } from "../charts/chartLayout.js";
-import { chartSpecToProposal, makeGenericChartPreview } from "../charts/genericChartPreview.js";
+import { chartSpecToProposal, makeSourceChartPreview } from "../charts/sourceChartPreview.js";
 import { defineLabRatDefaultSlideMasters, LABRAT_FIGURE_MASTER } from "./pptxTemplate.js";
 
 const SLIDE_WIDTH_IN = 13.333333;
@@ -17,13 +17,13 @@ function loadPlotly() {
   return plotlyLoader;
 }
 
-export async function exportManuscriptPagesToPptx({ pages, blocks, experiments, genericImports = [], chartSpecs = [], startPage, endPage, filename = "labrat-manuscript-pages.pptx" }) {
-  const buffer = await buildManuscriptPagesPptxBuffer({ pages, blocks, experiments, genericImports, chartSpecs, startPage, endPage });
+export async function exportManuscriptPagesToPptx({ pages, blocks, chartSpecs = [], startPage, endPage, filename = "labrat-manuscript-pages.pptx" }) {
+  const buffer = await buildManuscriptPagesPptxBuffer({ pages, blocks, chartSpecs, startPage, endPage });
   savePptxBuffer(buffer, filename);
 }
 
-export async function buildManuscriptPagesPptxBuffer({ pages, blocks, experiments, genericImports = [], chartSpecs = [], startPage, endPage }) {
-  const { pptx, slideWidth, slideHeight } = await buildManuscriptPresentation({ pages, blocks, experiments, genericImports, chartSpecs, startPage, endPage });
+export async function buildManuscriptPagesPptxBuffer({ pages, blocks, chartSpecs = [], startPage, endPage }) {
+  const { pptx, slideWidth, slideHeight } = await buildManuscriptPresentation({ pages, blocks, chartSpecs, startPage, endPage });
   const generatedBuffer = await pptx.write({ outputType: "arraybuffer", compression: true });
   try {
     return await applyDefaultTemplateToGeneratedDeck(generatedBuffer, { slideWidth, slideHeight });
@@ -33,7 +33,7 @@ export async function buildManuscriptPagesPptxBuffer({ pages, blocks, experiment
   }
 }
 
-async function buildManuscriptPresentation({ pages, blocks, experiments, genericImports = [], chartSpecs = [], startPage, endPage }) {
+async function buildManuscriptPresentation({ pages, blocks, chartSpecs = [], startPage, endPage }) {
   const selectedPages = selectedPageRange(pages, startPage, endPage);
   if (!selectedPages.length) throw new Error("Select at least one manuscript page to export.");
 
@@ -66,7 +66,7 @@ async function buildManuscriptPresentation({ pages, blocks, experiments, generic
       } else if (block.kind === "image" && block.dataUrl) {
         slide.addImage({ data: block.dataUrl, ...box, sizingCrop: false });
       } else if (block.kind === "chart") {
-        await addChartBlock(slide, box, block, genericImports, chartSpecs);
+        await addChartBlock(slide, box, block, chartSpecs);
       }
     }
   }
@@ -248,12 +248,12 @@ function firstParagraphAlign(block) {
   return ["left", "center", "right"].includes(align) ? align : "left";
 }
 
-async function addChartBlock(slide, box, block, genericImports, chartSpecs) {
+async function addChartBlock(slide, box, block, chartSpecs) {
   const chartSpec = resolveBlockChartSpec(block, chartSpecs);
   if (!chartSpec) return;
   const chartLayout = resolveExportChartLayout(block, chartSpec);
   const plotArea = chartLayout.plotArea || {};
-  const plot = makeGenericChartPreview(chartSpec, genericImports, {
+  const plot = makeSourceChartPreview(chartSpec, {
     width: Math.max(1, Math.round(Number(plotArea.width) || Number(block.w) || 580)),
     height: Math.max(1, Math.round(Number(plotArea.height) || Number(block.h) || 380)),
     chartView: normalizeChartView(block.chartView),

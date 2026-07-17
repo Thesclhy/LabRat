@@ -64,52 +64,36 @@ function createPage(id, y = 0) {
   };
 }
 
-const genericImportFixture = {
-  importId: "import_1",
-  experiments: [
-    { experimentId: "exp_1", name: "Run 1" },
-    { experimentId: "exp_2", name: "Run 2" },
-    { experimentId: "exp_3", name: "Run 3" },
-  ],
-  fields: [
-    { fieldValueId: "temp_1", measurementId: "temp_1", experimentId: "exp_1", rowIndex: 0, label: "Temperature", value: 250, rawValue: "250" },
-    { fieldValueId: "sel_1", measurementId: "sel_1", experimentId: "exp_1", rowIndex: 0, label: "Selectivity", value: 82, rawValue: "82" },
-    { fieldValueId: "temp_2", measurementId: "temp_2", experimentId: "exp_2", rowIndex: 0, label: "Temperature", value: 275, rawValue: "275" },
-    { fieldValueId: "sel_2", measurementId: "sel_2", experimentId: "exp_2", rowIndex: 0, label: "Selectivity", value: 88, rawValue: "88" },
-    { fieldValueId: "temp_3", measurementId: "temp_3", experimentId: "exp_3", rowIndex: 0, label: "Temperature", value: 300, rawValue: "300" },
-    { fieldValueId: "sel_3", measurementId: "sel_3", experimentId: "exp_3", rowIndex: 0, label: "Selectivity", value: 91, rawValue: "91" },
-  ],
-};
-
-const genericDatasetFixture = {
-  experiments: [],
-  genericImports: [genericImportFixture],
-  genericMappingSets: [{
-    mappingSetId: "mapping_set_1",
-    mappings: [{
-      mappingId: "mapping_temp",
-      status: "accepted",
-      sourceIds: ["temp_1", "temp_2", "temp_3"],
-      rawLabel: "Temperature",
-      canonicalField: "temperature",
-      semanticRole: "condition",
-      unit: "C",
-    }],
-  }],
-};
+const scalarSourceSeries = [
+  {
+    seriesId: "series_exp1",
+    experimentId: "exp_1",
+    experimentLabel: "Run 1",
+    rows: [{ values: { temperature: 250, selectivity: 82, conversion: 62 } }],
+  },
+  {
+    seriesId: "series_exp2",
+    experimentId: "exp_2",
+    experimentLabel: "Run 2",
+    rows: [{ values: { temperature: 275, selectivity: 88, conversion: 69 } }],
+  },
+];
 
 const chartSpecFixture = {
   id: "chart_spec_1",
   title: "Selectivity vs Temperature",
   chartType: "scatter",
-  datasetCommitId: "commit_1",
+  origin: "source_extract",
   spec: {
+    origin: "source_extract",
     chartType: "scatter",
     title: "Selectivity vs Temperature",
-    x: { label: "Temperature", sourceIds: ["temp_1", "temp_2"] },
-    y: { label: "Selectivity", sourceIds: ["sel_1", "sel_2"] },
-    sourceImportIds: ["import_1"],
-    sourceRefs: ["src_1"],
+    x: { field: "temperature", label: "Temperature", unit: "C" },
+    y: { field: "selectivity", label: "Selectivity", unit: "%" },
+    compatibleExperimentIds: ["exp_1", "exp_2"],
+    series: scalarSourceSeries.map(({ rows, ...series }) => series),
+    sourceSnapshot: { series: scalarSourceSeries },
+    sourceRefs: [{ sourceDocumentId: "source_document_1", sheetName: "Summary", range: "A1:C3" }],
   },
 };
 
@@ -120,46 +104,22 @@ const conversionChartSpecFixture = {
   spec: {
     ...chartSpecFixture.spec,
     title: "Conversion vs Temperature",
-    y: { label: "Conversion", sourceIds: ["sel_1", "sel_2"] },
+    y: { field: "conversion", label: "Conversion", unit: "%" },
   },
-};
-
-const seriesObservationImportFixture = {
-  importId: "import_series_exp1",
-  relatedExperimentIds: ["exp_1"],
-  observationSets: [{ observationSetId: "obsset_exp1", kind: "reaction_rate_time_series", inferredExperimentLabel: "Run 1", targetExperimentIds: ["exp_1"] }],
-  fields: [
-    { fieldValueId: "rt_exp1_1", recordKind: "observation", observationSetId: "obsset_exp1", observationId: "obs_exp1_1", relatedExperimentIds: ["exp_1"], inferredExperimentLabel: "Run 1", field: "reaction_time_min", value: 0, rawValue: "0" },
-    { fieldValueId: "rate_exp1_1", recordKind: "observation", observationSetId: "obsset_exp1", observationId: "obs_exp1_1", relatedExperimentIds: ["exp_1"], inferredExperimentLabel: "Run 1", field: "reaction_rate_mol_g_h", value: 1.1, rawValue: "1.1" },
-  ],
-};
-
-const seriesObservationImportFixture2 = {
-  importId: "import_series_exp2",
-  relatedExperimentIds: ["exp_2"],
-  observationSets: [{ observationSetId: "obsset_exp2", kind: "reaction_rate_time_series", inferredExperimentLabel: "Run 2", targetExperimentIds: ["exp_2"] }],
-  fields: [
-    { fieldValueId: "rt_exp2_1", recordKind: "observation", observationSetId: "obsset_exp2", observationId: "obs_exp2_1", relatedExperimentIds: ["exp_2"], inferredExperimentLabel: "Run 2", field: "reaction_time_min", value: 0, rawValue: "0" },
-    { fieldValueId: "rate_exp2_1", recordKind: "observation", observationSetId: "obsset_exp2", observationId: "obs_exp2_1", relatedExperimentIds: ["exp_2"], inferredExperimentLabel: "Run 2", field: "reaction_rate_mol_g_h", value: 1.4, rawValue: "1.4" },
-  ],
-};
-
-const seriesDatasetFixture = {
-  ...genericDatasetFixture,
-  genericImports: [genericImportFixture, seriesObservationImportFixture, seriesObservationImportFixture2],
 };
 
 const seriesChartSpecFixture = {
   id: "chart_spec_series",
   title: "Reaction rate comparison",
   chartType: "scatter",
-  datasetCommitId: "commit_1",
+  origin: "source_extract",
   spec: {
     schemaVersion: "labrat.chartSpec.v1.4",
+    origin: "source_extract",
     chartType: "scatter",
     title: "Reaction rate comparison",
-    x: { label: "Reaction Time", unit: "min" },
-    y: { label: "Reaction Rate", unit: "mol/g/h" },
+    x: { field: "reaction_time_min", label: "Reaction Time", unit: "min" },
+    y: { field: "reaction_rate_mol_g_h", label: "Reaction Rate", unit: "mol/g/h" },
     seriesScope: {
       seriesKind: "reaction_rate_time_series",
       xField: "reaction_time_min",
@@ -168,9 +128,31 @@ const seriesChartSpecFixture = {
     },
     compatibleExperimentIds: ["exp_1", "exp_2"],
     series: [
-      { seriesId: "series_exp1", experimentId: "exp_1", experimentLabel: "Run 1", sourceImportId: "import_series_exp1", observationSetId: "obsset_exp1", xField: "reaction_time_min", yField: "reaction_rate_mol_g_h" },
-      { seriesId: "series_exp2", experimentId: "exp_2", experimentLabel: "Run 2", sourceImportId: "import_series_exp2", observationSetId: "obsset_exp2", xField: "reaction_time_min", yField: "reaction_rate_mol_g_h" },
+      { seriesId: "series_exp1", experimentId: "exp_1", experimentLabel: "Run 1" },
+      { seriesId: "series_exp2", experimentId: "exp_2", experimentLabel: "Run 2" },
     ],
+    sourceSnapshot: {
+      series: [
+        {
+          seriesId: "series_exp1",
+          experimentId: "exp_1",
+          experimentLabel: "Run 1",
+          rows: [
+            { values: { reaction_time_min: 0, reaction_rate_mol_g_h: 1.1 } },
+            { values: { reaction_time_min: 10, reaction_rate_mol_g_h: 1.25 } },
+          ],
+        },
+        {
+          seriesId: "series_exp2",
+          experimentId: "exp_2",
+          experimentLabel: "Run 2",
+          rows: [
+            { values: { reaction_time_min: 0, reaction_rate_mol_g_h: 1.4 } },
+            { values: { reaction_time_min: 10, reaction_rate_mol_g_h: 1.55 } },
+          ],
+        },
+      ],
+    },
   },
 };
 
@@ -179,7 +161,6 @@ function Harness({
   initialPages,
   initialCanvasHeight = 900,
   initialOrientation = "landscape",
-  dataset = { experiments: [] },
   chartSpecs = [],
   chartSpecInsertRequest = null,
   onChartSpecInsertRequestHandled = () => {},
@@ -194,7 +175,6 @@ function Harness({
   return (
     <>
       <ManuscriptCanvas
-        dataset={dataset}
         blocks={blocks}
         setBlocks={setBlocks}
         staged={staged}
@@ -257,6 +237,14 @@ function resizeFromHandle(frame, handleSelector, dx, dy, start = { x: 280, y: 17
   fireEvent.mouseDown(handle, { button: 0, clientX: start.x, clientY: start.y });
   fireEvent.mouseMove(window, { clientX: start.x + dx, clientY: start.y + dy });
   fireEvent.mouseUp(window);
+}
+
+function doubleClickLayer(target) {
+  fireEvent.mouseDown(target, { button: 0, detail: 1, clientX: 160, clientY: 110 });
+  fireEvent.mouseUp(window);
+  fireEvent.mouseDown(target, { button: 0, detail: 2, clientX: 160, clientY: 110 });
+  fireEvent.mouseUp(window);
+  fireEvent.doubleClick(target, { detail: 2, clientX: 160, clientY: 110 });
 }
 
 function clickUndo() {
@@ -386,7 +374,6 @@ describe("ManuscriptCanvas chart specs", () => {
       <Harness
         initialBlocks={[]}
         initialPages={[createPage("page-1")]}
-        dataset={genericDatasetFixture}
         chartSpecs={[chartSpecFixture, conversionChartSpecFixture]}
         chartSpecInsertRequest={{ chartSpecId: "chart_spec_2", requestId: "insert_request_1" }}
         onChartSpecInsertRequestHandled={onHandled}
@@ -411,7 +398,6 @@ describe("ManuscriptCanvas chart specs", () => {
           <Harness
             initialBlocks={[]}
             initialPages={[createPage("page-1")]}
-            dataset={genericDatasetFixture}
             chartSpecs={chartSpecs}
             chartSpecInsertRequest={request}
             onChartSpecInsertRequestHandled={(requestId) => {
@@ -438,17 +424,15 @@ describe("ManuscriptCanvas chart specs", () => {
       <Harness
         initialBlocks={[]}
         initialPages={[createPage("page-1")]}
-        dataset={{ experiments: [], genericImports: [genericImportFixture] }}
         chartSpecs={[
           chartSpecFixture,
           {
             ...chartSpecFixture,
             id: "chart_spec_stale",
             title: "Old Selectivity Chart",
-            datasetCommitId: "commit_old",
             status: "stale",
             isStale: true,
-            staleReason: "dataset_commit_replaced",
+            staleReason: "source_snapshot_replaced",
           },
         ]}
       />,
@@ -468,11 +452,9 @@ describe("ManuscriptCanvas chart specs", () => {
           id: "chart-block-1",
           kind: "chart",
           chartSpecId: "chart_spec_stale",
-          datasetCommitId: "commit_old",
           chartSpecSnapshot: {
             ...chartSpecFixture,
             id: "chart_spec_stale",
-            datasetCommitId: "commit_old",
             status: "stale",
             isStale: true,
           },
@@ -484,7 +466,6 @@ describe("ManuscriptCanvas chart specs", () => {
           h: 420,
         }]}
         initialPages={[createPage("page-1")]}
-        dataset={genericDatasetFixture}
         chartSpecs={[]}
       />,
     );
@@ -498,7 +479,6 @@ describe("ManuscriptCanvas chart specs", () => {
       <Harness
         initialBlocks={[]}
         initialPages={[createPage("page-1")]}
-        dataset={genericDatasetFixture}
         chartSpecs={[chartSpecFixture]}
       />,
     );
@@ -511,9 +491,10 @@ describe("ManuscriptCanvas chart specs", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Select experiments" }));
     expect(screen.getByRole("dialog", { name: "Select experiments" })).not.toBeNull();
-    expect(screen.getByRole("columnheader", { name: /temperature/i })).toBeTruthy();
-    expect(screen.getByLabelText("Select Run 3").disabled).toBe(true);
-    expect(screen.getByText("Not in this chart spec")).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Label" })).toBeTruthy();
+    expect(screen.getByLabelText("Select Run 1")).toBeTruthy();
+    expect(screen.getByLabelText("Select Run 2")).toBeTruthy();
+    expect(screen.queryByLabelText("Select Run 3")).toBeNull();
     fireEvent.click(screen.getByLabelText("Select Run 1"));
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
@@ -527,7 +508,6 @@ describe("ManuscriptCanvas chart specs", () => {
       expect(state.blocks[0]).toMatchObject({
         kind: "chart",
         chartSpecId: "chart_spec_1",
-        datasetCommitId: "commit_1",
         chartView: {
           selectedExperimentIds: ["exp_1"],
           excludedExperimentIds: [],
@@ -540,6 +520,7 @@ describe("ManuscriptCanvas chart specs", () => {
       expect(state.blocks[0].chartLayout.xAxisTitle.visible).toBe(true);
       expect(state.blocks[0].chartKind).toBeUndefined();
       expect(state.blocks[0].labels).toBeUndefined();
+      expect(state.blocks[0].datasetCommitId).toBeUndefined();
     });
   });
 
@@ -548,7 +529,6 @@ describe("ManuscriptCanvas chart specs", () => {
       <Harness
         initialBlocks={[]}
         initialPages={[createPage("page-1")]}
-        dataset={seriesDatasetFixture}
         chartSpecs={[seriesChartSpecFixture]}
       />,
     );
@@ -585,7 +565,6 @@ describe("ManuscriptCanvas chart specs", () => {
       <Harness
         initialBlocks={[]}
         initialPages={[createPage("page-1")]}
-        dataset={genericDatasetFixture}
         chartSpecs={[chartSpecFixture, conversionChartSpecFixture]}
       />,
     );
@@ -602,12 +581,11 @@ describe("ManuscriptCanvas chart specs", () => {
     expect(screen.getByRole("button", { name: "Insert chart" }).disabled).toBe(true);
   });
 
-  it("saves chartSpec title edits to manuscript chartLayout", async () => {
+  it("requires whole-chart selection before selecting and editing chart components", async () => {
     render(
       <Harness
         initialBlocks={[]}
         initialPages={[createPage("page-1")]}
-        dataset={genericDatasetFixture}
         chartSpecs={[chartSpecFixture]}
       />,
     );
@@ -619,11 +597,50 @@ describe("ManuscriptCanvas chart specs", () => {
     fireEvent.click(screen.getByRole("button", { name: "Insert chart" }));
 
     await waitFor(() => expect(readDocState().blocks).toHaveLength(1));
-    fireEvent.change(screen.getByDisplayValue("Selectivity vs Temperature"), { target: { value: "Custom figure title" } });
+    const chartFrame = document.querySelector(".canvas-block.chart");
+    const titleFrame = document.querySelector(".chart-title-frame");
+    const titleLayer = document.querySelector(".chart-title-layer");
+    const plotFrame = document.querySelector(".chart-plot-layer");
+    expect(chartFrame?.classList.contains("is-selected")).toBe(true);
+    expect(titleFrame?.classList.contains("is-selected")).toBe(false);
+
+    fireEvent.mouseDown(document.querySelector(".canvas"), { button: 0, clientX: 20, clientY: 20 });
+    fireEvent.mouseUp(window);
+    expect(chartFrame.classList.contains("is-selected")).toBe(false);
+    expect(titleFrame.classList.contains("is-selected")).toBe(false);
+
+    fireEvent.mouseDown(titleLayer, { button: 0, detail: 1, clientX: 160, clientY: 110 });
+    fireEvent.mouseUp(window);
+    expect(chartFrame.classList.contains("is-selected")).toBe(true);
+    expect(titleFrame.classList.contains("is-selected")).toBe(false);
+    expect(document.querySelector(".chart-text-editor")).toBeNull();
+
+    fireEvent.mouseDown(titleLayer, { button: 0, detail: 1, clientX: 160, clientY: 110 });
+    fireEvent.mouseUp(window);
+    expect(chartFrame.classList.contains("is-selected")).toBe(true);
+    expect(titleFrame.classList.contains("is-selected")).toBe(false);
+    expect(document.querySelector(".chart-text-editor")).toBeNull();
+
+    doubleClickLayer(titleLayer);
+    await waitFor(() => expect(titleFrame.classList.contains("is-selected")).toBe(true));
+    expect(document.querySelector(".chart-text-editor")).toBeNull();
+
+    doubleClickLayer(titleLayer);
+    const editor = await waitFor(() => {
+      const input = document.querySelector(".chart-text-editor");
+      expect(input).toBeTruthy();
+      return input;
+    });
+    fireEvent.change(editor, { target: { value: "Custom figure title" } });
+    fireEvent.blur(editor);
 
     await waitFor(() => {
       expect(readDocState().blocks[0].chartLayout.title.text).toBe("Custom figure title");
     });
+
+    doubleClickLayer(plotFrame);
+    await waitFor(() => expect(plotFrame.classList.contains("is-selected")).toBe(true));
+    expect(titleFrame.classList.contains("is-selected")).toBe(false);
   });
 });
 

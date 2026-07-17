@@ -2,13 +2,11 @@ import { blankTemplateLinks } from "../data/appMode.js";
 
 export const BLANK_ONBOARDING_STEPS = [
   "Upload Excel workbook",
-  "Scan workbook",
-  "Review detected tables/blocks",
-  "Approve or ignore blocks",
-  "Preview normalized data",
-  "Apply to project",
-  "Generate semantic mappings",
+  "Review detected source regions",
+  "Confirm workbook meaning",
+  "Create reviewed data or source extracts",
   "Generate chart proposals",
+  "Insert approved charts into Manuscript",
 ];
 
 export function BlankOnboarding({ onImportWorkbook, templateLinks = blankTemplateLinks() }) {

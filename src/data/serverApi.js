@@ -5,6 +5,7 @@ export class ServerApiError extends Error {
     this.status = details.status || null;
     this.code = details.code || details.error?.code || null;
     this.error = details.error || null;
+    this.details = details.details || details.error?.details || null;
     this.body = details.body || null;
   }
 }
@@ -113,106 +114,152 @@ export async function uploadServerProjectFile(projectId, file, options = {}) {
   });
 }
 
-export function createServerImportRun(projectId, fileObjectId, options = {}) {
-  if (!projectId) throw new ServerApiError("Select a project before creating an import run.");
-  if (!fileObjectId) throw new ServerApiError("Upload a file before creating an import run.");
-  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/import-runs`, { fileObjectId }, options);
-}
-
-export function createServerSupplementalImportBatch(projectId, request = {}, options = {}) {
-  if (!projectId) throw new ServerApiError("Select a project before creating a supplemental batch.");
-  const fileObjectIds = Array.isArray(request.fileObjectIds) ? request.fileObjectIds.filter(Boolean) : [];
-  if (!fileObjectIds.length) throw new ServerApiError("Choose one or more supplemental workbooks before creating a batch.");
-  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/supplemental-import-batches`, { fileObjectIds }, options);
-}
-
-export function getServerSupplementalImportBatch(projectId, batchId, options = {}) {
-  if (!projectId || !batchId) throw new ServerApiError("Select a supplemental batch before loading progress.");
-  return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/supplemental-import-batches/${encodeURIComponent(batchId)}`, options);
-}
-
-export function supplementalImportBatchEventsUrl(projectId, batchId) {
-  if (!projectId || !batchId) throw new ServerApiError("Select a supplemental batch before streaming progress.");
-  return `/api/projects/${encodeURIComponent(projectId)}/supplemental-import-batches/${encodeURIComponent(batchId)}/events`;
-}
-
-export function previewServerImportRunNormalization(importRunId, request = {}, options = {}) {
-  if (!importRunId) throw new ServerApiError("Create an import run before normalizing.");
-  return serverJson(`/api/import-runs/${encodeURIComponent(importRunId)}/normalize-preview`, {
-    approvedBlockIds: request.approvedBlockIds || [],
-    approvedStructures: request.approvedStructures || {},
-    fieldRoleOverrides: request.fieldRoleOverrides || {},
-    mappingOverrides: request.mappingOverrides || {},
-    templateId: request.templateId || null,
+export function createServerWorkbookReviewSession(projectId, request = {}, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before creating a workbook review session.");
+  if (!request.fileObjectId && !request.sourceDocumentId) {
+    throw new ServerApiError("Upload a workbook or select a source document before starting review.");
+  }
+  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/workbook-review-sessions`, {
+    fileObjectId: request.fileObjectId || null,
+    sourceDocumentId: request.sourceDocumentId || null,
   }, options);
 }
 
-export function previewServerImportRefresh(importRunId, request = {}, options = {}) {
-  if (!importRunId) throw new ServerApiError("Create a normalized import preview before refreshing.");
-  return serverJson(`/api/import-runs/${encodeURIComponent(importRunId)}/refresh-preview`, {
-    replaceImportId: request.replaceImportId || "",
-    expectedParentDatasetCommitId: request.expectedParentDatasetCommitId || "",
+export function listServerWorkbookReviewSessions(projectId, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before listing workbook review sessions.");
+  return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/workbook-review-sessions`, options);
+}
+
+export function getServerWorkbookReviewSession(sessionId, options = {}) {
+  if (!sessionId) throw new ServerApiError("Select a workbook review session before loading it.");
+  return serverRequest(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}`, options);
+}
+
+export function reviseServerWorkbookReviewSession(sessionId, request = {}, options = {}) {
+  if (!sessionId) throw new ServerApiError("Select a workbook review session before submitting a revision.");
+  if (!String(request.message || "").trim()) {
+    throw new ServerApiError("Describe the workbook correction before submitting it.");
+  }
+  return serverJson(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}/revisions`, {
+    message: request.message,
+    redBoxUpdates: request.redBoxUpdates || [],
+    previousUnderstandingId: request.previousUnderstandingId || null,
+    revisionMode: request.revisionMode || "merge",
+    activeDraftRegionId: request.activeDraftRegionId || null,
+    interpretationPatches: request.interpretationPatches || [],
   }, options);
 }
 
-export function previewServerImportRelationship(importRunId, request = {}, options = {}) {
-  if (!importRunId) throw new ServerApiError("Create a normalized import preview before resolving relationships.");
-  return serverJson(`/api/import-runs/${encodeURIComponent(importRunId)}/relationship-preview`, request, options);
-}
-
-export function applyServerImportRun(importRunId, request = {}, options = {}) {
-  if (!importRunId) throw new ServerApiError("Create a normalized import preview before applying.");
-  return serverJson(`/api/import-runs/${encodeURIComponent(importRunId)}/apply`, {
-    applyMode: request.applyMode || "append",
-    reviewNote: request.reviewNote || "",
-    ...(request.replaceImportId ? { replaceImportId: request.replaceImportId } : {}),
-    ...(request.expectedParentDatasetCommitId ? { expectedParentDatasetCommitId: request.expectedParentDatasetCommitId } : {}),
-    ...(request.relationshipDecision ? { relationshipDecision: request.relationshipDecision } : {}),
-    ...(request.targetExperimentIds ? { targetExperimentIds: request.targetExperimentIds } : {}),
+export function confirmServerWorkbookReviewSession(sessionId, request = {}, options = {}) {
+  if (!sessionId) throw new ServerApiError("Select a workbook review session before confirming understanding.");
+  return serverJson(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}/confirm`, {
+    workbookUnderstandingId: request.workbookUnderstandingId || null,
+    decisionSummary: request.decisionSummary || {},
   }, options);
 }
 
-export function createServerMappingSet(projectId, request = {}, options = {}) {
-  if (!projectId) throw new ServerApiError("Select a project before saving mapping proposals.");
-  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/mapping-sets`, request, options);
+export function listServerWorkbookUnderstandings(projectId, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before listing workbook understandings.");
+  return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/workbook-understandings`, options);
 }
 
-export function patchServerMappingSet(mappingSetId, request = {}, options = {}) {
-  if (!mappingSetId) throw new ServerApiError("Select a mapping set before updating decisions.");
-  return serverJson(`/api/mapping-sets/${encodeURIComponent(mappingSetId)}`, request, {
-    ...options,
-    method: "PATCH",
-  });
-}
-
-export function proposeServerProjectCharts(projectId, request = {}, options = {}) {
-  if (!projectId) throw new ServerApiError("Select a project before proposing charts.");
-  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/charts/propose`, {
-    selectedImportIds: request.selectedImportIds || [],
-    selectedExperimentIds: request.selectedExperimentIds || [],
-    userGoal: request.userGoal || "",
-    chartConstraints: request.chartConstraints || {},
-  }, options);
-}
-
-export function interpretServerProjectChart(projectId, request = {}, options = {}) {
+export function interpretServerProjectChartIntent(projectId, request = {}, options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before drafting charts.");
   return serverJson(`/api/projects/${encodeURIComponent(projectId)}/charts/interpret`, {
     prompt: request.prompt,
-    selectedImportIds: request.selectedImportIds || [],
-    selectedExperimentIds: request.selectedExperimentIds || [],
-    chartConstraints: request.chartConstraints || {},
     persistAsProposal: request.persistAsProposal !== false,
+    entrypoint: request.entrypoint || "unknown",
+    context: request.context || {},
   }, options);
 }
 
-export function resolveServerProjectDataQuery(projectId, request = {}, options = {}) {
-  if (!projectId) throw new ServerApiError("Select a project before resolving project data.");
-  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/data/resolve-query`, {
-    prompt: request.prompt || "",
-    selectedImportIds: request.selectedImportIds || [],
-    selectedExperimentIds: request.selectedExperimentIds || [],
-    maxResults: request.maxResults || 50,
+export function retrieveProjectEvidence(projectId, request = {}, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before retrieving project evidence.");
+  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/evidence/retrieve`, {
+    query: request.query || "",
+    mode: request.mode || "tool_agent",
+    includePreview: request.includePreview !== false,
+    includeUnconfirmedSuggestions: request.includeUnconfirmedSuggestions === true,
+    maxResults: request.maxResults || 5,
+  }, options);
+}
+
+export function draftServerProjectDataPlan(projectId, request = {}, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before drafting a data plan.");
+  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/data-plans/draft`, {
+    intent: request.intent || "experiment_browser_publish",
+    workbookUnderstandingIds: request.workbookUnderstandingIds || [],
+    identityDecisions: request.identityDecisions || [],
+  }, options).then((response) => {
+    if (response?.resultKind === "clarification") {
+      throw new ServerApiError(
+        response.clarification?.message || "The experiment data preview needs more review.",
+        { code: response.clarification?.code || "data_plan_clarification", body: response },
+      );
+    }
+    return response;
+  });
+}
+
+export function publishServerProjectDataPlan(projectId, request = {}, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before publishing experiment data.");
+  if (!request.dataPlan) throw new ServerApiError("Review an experiment data plan before publishing.");
+  if (!request.expectedPreviewHash || !request.expectedDependencyHash) {
+    throw new ServerApiError("Refresh the experiment preview before publishing.");
+  }
+  if (!request.idempotencyKey) throw new ServerApiError("A publish idempotency key is required.");
+  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/data-plans/publish`, {
+    dataPlan: request.dataPlan,
+    identityDecisions: request.identityDecisions || [],
+    expectedPreviewHash: request.expectedPreviewHash,
+    expectedDependencyHash: request.expectedDependencyHash,
+    idempotencyKey: request.idempotencyKey,
+  }, options);
+}
+
+export function listServerProjectDataPlans(projectId, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before listing data plans.");
+  return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/data-plans`, options);
+}
+
+export function listServerProjectDataSnapshots(projectId, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before listing data snapshots.");
+  return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/data-snapshots`, options);
+}
+
+export function listServerSourceDocuments(projectId, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before listing source documents.");
+  return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/source-documents`, options);
+}
+
+export function listServerSourceDocumentRegions(sourceDocumentId, options = {}) {
+  if (!sourceDocumentId) throw new ServerApiError("Select a source document before listing source regions.");
+  return serverRequest(`/api/source-documents/${encodeURIComponent(sourceDocumentId)}/regions`, options);
+}
+
+export function readServerSourceDocumentRange(sourceDocumentId, request = {}, options = {}) {
+  if (!sourceDocumentId) throw new ServerApiError("Select a source document before reading a source range.");
+  return serverJson(`/api/source-documents/${encodeURIComponent(sourceDocumentId)}/range`, {
+    sheetName: request.sheetName || "",
+    range: request.range || "",
+  }, options);
+}
+
+export function previewServerSourceRegionExtract(sourceRegionId, request = {}, options = {}) {
+  if (!sourceRegionId) throw new ServerApiError("Select a source region before previewing an extract.");
+  return serverJson(`/api/source-regions/${encodeURIComponent(sourceRegionId)}/extract-preview`, {
+    extractType: request.extractType || "generic_table",
+    intent: request.intent || {},
+  }, options);
+}
+
+export function previewServerSourceDocumentExtract(sourceDocumentId, request = {}, options = {}) {
+  if (!sourceDocumentId) throw new ServerApiError("Select a source document before previewing an extract.");
+  return serverJson(`/api/source-documents/${encodeURIComponent(sourceDocumentId)}/extract-preview`, {
+    sheetName: request.sheetName || "",
+    range: request.range || "",
+    extractType: request.extractType || "generic_table",
+    intent: request.intent || {},
   }, options);
 }
 
@@ -235,6 +282,11 @@ export function createServerAgentRun(projectId, request = {}, options = {}) {
   }, options);
 }
 
+export function getServerAgentRun(agentRunId, options = {}) {
+  if (!agentRunId) throw new ServerApiError("Select an AgentRun before loading it.");
+  return serverRequest(`/api/agent-runs/${encodeURIComponent(agentRunId)}`, options);
+}
+
 export function confirmServerAgentRun(agentRunId, actionId, options = {}) {
   if (!agentRunId) throw new ServerApiError("Select an AgentRun before confirming an action.");
   if (!actionId) throw new ServerApiError("Select an AgentRun action before confirming it.");
@@ -246,18 +298,17 @@ export function cancelServerAgentRun(agentRunId, options = {}) {
   return serverJson(`/api/agent-runs/${encodeURIComponent(agentRunId)}/cancel`, {}, options);
 }
 
-export function createServerAnalysisView(projectId, request = {}, options = {}) {
-  if (!projectId) throw new ServerApiError("Select a project before creating an analysis view.");
-  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/analysis-views`, {
-    viewType: request.viewType || "series_compare",
-    title: request.title || "",
-    spec: request.spec || {},
-  }, options);
+export function patchServerSourceExtractProposal(proposalId, request = {}, options = {}) {
+  if (!proposalId) throw new ServerApiError("Select a source extract proposal before updating decisions.");
+  return serverJson(`/api/source-extract-proposals/${encodeURIComponent(proposalId)}`, request, {
+    ...options,
+    method: "PATCH",
+  });
 }
 
-export function createServerAnalysisViewChartProposal(analysisViewId, options = {}) {
-  if (!analysisViewId) throw new ServerApiError("Create an analysis view before drafting a chart proposal.");
-  return serverJson(`/api/analysis-views/${encodeURIComponent(analysisViewId)}/chart-proposal`, {}, options);
+export function createServerSourceExtractChartProposal(proposalId, options = {}) {
+  if (!proposalId) throw new ServerApiError("Accept a source extract proposal before drafting a chart proposal.");
+  return serverJson(`/api/source-extract-proposals/${encodeURIComponent(proposalId)}/chart-proposal`, {}, options);
 }
 
 export function patchServerChartProposalSet(chartProposalSetId, request = {}, options = {}) {

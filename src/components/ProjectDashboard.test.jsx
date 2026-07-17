@@ -1,14 +1,13 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
-import { AgentPanel, ChartReviewModal, CompareSeriesModal, DeleteProjectModal, MappingReviewModal, NewProjectModal, ProjectDashboard, ProjectOverview, RefreshWorkbookModal, SupplementalWorkbooksModal, Topbar, activeChartSpecsForProject, buildCompareSeriesGroups, latestItem, mergeProjectStateForWorkspaceRefresh } from "../main.jsx";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AgentPanel, ChartReviewModal, DeleteProjectModal, NewProjectModal, ProjectDashboard, ProjectOverview, Topbar, WorkbookReviewWorkspace, activeChartSpecsForProject, latestItem, mergeProjectStateForWorkspaceRefresh } from "../main.jsx";
 
 const project = {
   id: "project_1",
   name: "Catalyst Screening",
   description: "Compare catalysts",
   status: "active",
-  currentDatasetCommitId: "commit_1",
   updatedAt: "2026-06-15T12:00:00.000Z",
   projectProfile: {
     researchGoal: "Compare gas selectivity.",
@@ -20,102 +19,22 @@ const project = {
 const projectState = {
   project,
   projectProfile: project.projectProfile,
-  currentDatasetCommit: { id: "commit_1" },
+  experimentSnapshotHeads: [
+    { experimentIdentityId: "exp_30", dataSnapshotId: "snapshot_1" },
+    { experimentIdentityId: "exp_31", dataSnapshotId: "snapshot_1" },
+  ],
   importRuns: [{ id: "run_1", status: "applied" }],
   chartProposalSets: [{
     id: "chart_set_1",
     payload: { proposals: [{ proposalId: "chart_1", status: "accepted" }] },
   }],
-  mappingSets: [{
-    id: "mapping_set_1",
-    datasetCommitId: "commit_1",
-    status: "proposed",
-    payload: {
-      schemaVersion: "labrat.semanticMappingSet.v1",
-      mappings: [
-        {
-          mappingId: "mapping_temp",
-          rawLabel: "Temperature",
-          canonicalField: "temperature",
-          semanticRole: "condition",
-          valueType: "numeric",
-          unit: "C",
-          sourceIds: ["field_temp_1"],
-          status: "accepted",
-        },
-        {
-          mappingId: "mapping_gas",
-          rawLabel: "Selectivity Gas",
-          canonicalField: "selectivity_gas",
-          semanticRole: "response",
-          valueType: "numeric",
-          unit: "%",
-          sourceIds: ["field_gas_1"],
-          status: "proposed",
-        },
-      ],
-    },
-    decisionSummary: { accepted: 1, proposed: 1, rejected: 0 },
-    updatedAt: "2026-06-15T12:00:00.000Z",
+  chartSpecs: [{
+    id: "chart_spec_1",
+    title: "Gas vs Temperature",
+    origin: "source_extract",
+    sourceSnapshot: { rows: [{ values: { temperature: 250, gas: 0.35 } }] },
   }],
-  chartSpecs: [{ id: "chart_spec_1", title: "Gas vs Temperature" }],
   manuscripts: [{ id: "manuscript_1", updatedAt: "2026-06-15T12:00:00.000Z" }],
-};
-
-const compareSeries = [
-  {
-    id: "series_exp30_adjusted",
-    datasetCommitId: "commit_1",
-    experimentId: "exp_30",
-    experimentLabel: "Exp30",
-    seriesKind: "reaction_rate_time_series",
-    xField: "reaction_time_min",
-    xLabel: "Reaction Time",
-    xUnit: "min",
-    yField: "adjusted_rate_m_s",
-    yLabel: "Adjusted Rate",
-    yUnit: "M/s",
-    summary: { pointCount: 62, sourceFileName: "Reaction_Rate_Exp30.xlsx" },
-    status: "active",
-    isStale: false,
-  },
-  {
-    id: "series_exp31_adjusted",
-    datasetCommitId: "commit_1",
-    experimentId: "exp_31",
-    experimentLabel: "Exp31",
-    seriesKind: "reaction_rate_time_series",
-    xField: "reaction_time_min",
-    xLabel: "Reaction Time",
-    xUnit: "min",
-    yField: "adjusted_rate_m_s",
-    yLabel: "Adjusted Rate",
-    yUnit: "M/s",
-    summary: { pointCount: 60, sourceFileName: "Reaction_Rate_Exp31.xlsx" },
-    status: "active",
-    isStale: false,
-  },
-  {
-    id: "series_exp30_rate",
-    datasetCommitId: "commit_1",
-    experimentId: "exp_30",
-    experimentLabel: "Exp30",
-    seriesKind: "reaction_rate_time_series",
-    xField: "reaction_time_min",
-    xLabel: "Reaction Time",
-    xUnit: "min",
-    yField: "reaction_rate_mol_g_h",
-    yLabel: "Reaction Rate",
-    yUnit: "mol/g/h",
-    summary: { pointCount: 62, sourceFileName: "Reaction_Rate_Exp30.xlsx" },
-    status: "active",
-    isStale: false,
-  },
-];
-
-const projectStateWithCompareSeries = {
-  ...projectState,
-  observationSeries: compareSeries,
 };
 
 function jsonResponse(body, init = {}) {
@@ -196,7 +115,6 @@ describe("Topbar", () => {
     expect(screen.queryByLabelText("Current lab and project")).toBeNull();
   });
 });
-
 describe("ProjectDashboard", () => {
   it("renders project workflow status and opens the selected project", () => {
     const onOpenProject = vi.fn();
@@ -221,7 +139,7 @@ describe("ProjectDashboard", () => {
     );
 
     expect(screen.getAllByText("Catalyst Screening").length).toBeGreaterThan(0);
-    expect(screen.getByText("Dataset committed")).toBeTruthy();
+    expect(screen.getByText("2 experiments")).toBeTruthy();
     expect(screen.getByText("1 specs")).toBeTruthy();
     expect(screen.getAllByText("Jun 15, 2026").length).toBeGreaterThan(0);
 
@@ -299,131 +217,58 @@ describe("DeleteProjectModal", () => {
 });
 
 describe("ProjectOverview", () => {
-  it("shows the next project workflow actions", () => {
-    const onOpenImportReview = vi.fn();
-    const onOpenRefreshWorkbook = vi.fn();
-    const onOpenSupplementWorkbook = vi.fn();
-    const onOpenSupplementManager = vi.fn();
-    const onOpenMappingReview = vi.fn();
+  it("shows the current workflow surfaces and routes actions", () => {
+    const onUploadWorkbook = vi.fn();
     const onOpenChartReview = vi.fn();
+    const onAskLabRat = vi.fn();
+    const onGoManuscript = vi.fn();
+    const onGoBrowser = vi.fn();
+    const state = {
+      ...projectState,
+      sourceDocuments: [{ id: "source_doc_1" }],
+      workbookReviewSessions: [{ id: "session_1" }],
+    };
+
     render(
       <ProjectOverview
-        projectState={projectState}
-        dataset={{ genericImports: [{ importId: "import_1", fileName: "runs.xlsx" }] }}
+        projectState={state}
+        onAskLabRat={onAskLabRat}
         onOpenProfile={() => {}}
-        onOpenImportReview={onOpenImportReview}
-        onOpenRefreshWorkbook={onOpenRefreshWorkbook}
-        onOpenSupplementWorkbook={onOpenSupplementWorkbook}
-        onOpenSupplementManager={onOpenSupplementManager}
-        onOpenMappingReview={onOpenMappingReview}
+        onUploadWorkbook={onUploadWorkbook}
+        onGoBrowser={onGoBrowser}
         onOpenChartReview={onOpenChartReview}
-        onGoManuscript={() => {}}
+        onGoManuscript={onGoManuscript}
       />,
     );
 
+    expect(screen.getByText("Ask LabRat")).toBeTruthy();
     expect(screen.getByText("Project profile")).toBeTruthy();
-    expect(screen.getByText("Master Dataset")).toBeTruthy();
-    expect(screen.getByText("Supplemental Workbooks")).toBeTruthy();
-    expect(screen.getByText("Semantic mappings")).toBeTruthy();
-    expect(screen.getByText("1 master table")).toBeTruthy();
-    expect(screen.getByText("0 supplemental files")).toBeTruthy();
-    expect(screen.getByText("1/2 accepted")).toBeTruthy();
-    expect(screen.getByText("1 specs")).toBeTruthy();
-    expect(screen.getByText("Draft")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Upload master table" }).disabled).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Refresh master table" }));
-    fireEvent.click(screen.getByRole("button", { name: "Add supplemental workbook" }));
-    fireEvent.click(screen.getByRole("button", { name: "Manage supplemental workbooks" }));
-    fireEvent.click(screen.getByRole("button", { name: "Edit mappings" }));
+    expect(screen.getByText("Workbook review")).toBeTruthy();
+    expect(screen.getAllByText("Experiment Browser").length).toBeGreaterThan(0);
+    expect(screen.getByText("2 published experiments")).toBeTruthy();
+    expect(screen.getAllByText("Review chart proposals").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Manage approved charts").length).toBeGreaterThan(0);
+    expect(screen.getByText("Manuscript")).toBeTruthy();
+    expect(screen.queryByText("Master Dataset")).toBeNull();
+    expect(screen.queryByText("Supplemental Workbooks")).toBeNull();
+    expect(screen.queryByText("Semantic mappings")).toBeNull();
+    expect(screen.getByText("1 source documents")).toBeTruthy();
+    expect(screen.getByText(/1 review sessions/)).toBeTruthy();
+    expect(screen.getByText("1 accepted / 1 specs")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Ask LabRat" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Experiment Browser" }));
     fireEvent.click(screen.getByRole("button", { name: "Review chart proposals" }));
-    expect(onOpenRefreshWorkbook).toHaveBeenCalledTimes(1);
-    expect(onOpenSupplementWorkbook).toHaveBeenCalledTimes(1);
-    expect(onOpenSupplementManager).toHaveBeenCalledTimes(1);
-    expect(onOpenMappingReview).toHaveBeenCalledTimes(1);
-    expect(onOpenChartReview).toHaveBeenCalledTimes(1);
-    expect(onOpenImportReview).not.toHaveBeenCalled();
-  });
+    fireEvent.click(screen.getByRole("button", { name: "Manage approved charts" }));
+    fireEvent.click(screen.getByRole("button", { name: "Insert approved charts" }));
 
-  it("shows a compare series entry when compatible observation series exist", () => {
-    const onOpenCompareSeries = vi.fn();
-
-    render(
-      <ProjectOverview
-        projectState={projectStateWithCompareSeries}
-        dataset={{ genericImports: [{ importId: "master", fileName: "master.xlsx" }] }}
-        onOpenProfile={() => {}}
-        onOpenImportReview={() => {}}
-        onOpenRefreshWorkbook={() => {}}
-        onOpenSupplementWorkbook={() => {}}
-        onOpenSupplementManager={() => {}}
-        onOpenCompareSeries={onOpenCompareSeries}
-        onOpenMappingReview={() => {}}
-        onOpenChartReview={() => {}}
-        onGoManuscript={() => {}}
-      />,
-    );
-
-    expect(screen.getByText("2 comparable series")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Compare series" }));
-    expect(onOpenCompareSeries).toHaveBeenCalledTimes(1);
-  });
-
-  it("groups compatible series and submits a series compare AnalysisView request", () => {
-    const onCreateCompare = vi.fn();
-    const groups = buildCompareSeriesGroups(projectStateWithCompareSeries);
-
-    expect(groups).toHaveLength(2);
-    expect(groups[0].yField).toBe("adjusted_rate_m_s");
-    expect(groups[0].series.map((series) => series.experimentLabel)).toEqual(["Exp30", "Exp31"]);
-
-    render(
-      <CompareSeriesModal
-        open
-        projectState={projectStateWithCompareSeries}
-        onCreateCompare={onCreateCompare}
-        onClose={() => {}}
-      />,
-    );
-
-    expect(screen.getByRole("dialog", { name: "Compare series" })).toBeTruthy();
-    expect(screen.getAllByText("Adjusted Rate (M/s) vs Reaction Time (min)").length).toBeGreaterThan(0);
-    expect(screen.getByText("2 of 2 selected")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Draft compare proposal" }));
-
-    expect(onCreateCompare).toHaveBeenCalledWith({
-      title: "Adjusted Rate (M/s) comparison",
-      seriesKind: "reaction_rate_time_series",
-      experimentIds: ["exp_30", "exp_31"],
-      xField: "reaction_time_min",
-      yField: "adjusted_rate_m_s",
-      groupBy: "experiment",
-    });
-  });
-
-  it("disables master refresh and supplemental uploads without a committed master import", () => {
-    const onOpenImportReview = vi.fn();
-    render(
-      <ProjectOverview
-        projectState={{ ...projectState, currentDatasetCommit: { id: "commit_1" } }}
-        dataset={{ genericImports: [] }}
-        onOpenProfile={() => {}}
-        onOpenImportReview={onOpenImportReview}
-        onOpenRefreshWorkbook={() => {}}
-        onOpenSupplementWorkbook={() => {}}
-        onOpenSupplementManager={() => {}}
-        onOpenMappingReview={() => {}}
-        onOpenChartReview={() => {}}
-        onGoManuscript={() => {}}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Upload master table" }));
-    expect(onOpenImportReview).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("No master table")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Refresh master table" }).disabled).toBe(true);
-    expect(screen.getByRole("button", { name: "Add supplemental workbook" }).disabled).toBe(true);
-    expect(screen.getByRole("button", { name: "Manage supplemental workbooks" }).disabled).toBe(true);
-    expect(screen.getByRole("button", { name: "Edit mappings" }).disabled).toBe(true);
+    expect(onAskLabRat).toHaveBeenCalledTimes(1);
+    expect(onUploadWorkbook).toHaveBeenCalledTimes(1);
+    expect(onGoBrowser).toHaveBeenCalledTimes(1);
+    expect(onOpenChartReview).toHaveBeenCalledTimes(2);
+    expect(onOpenChartReview).toHaveBeenLastCalledWith({ statusFilter: "active" });
+    expect(onGoManuscript).toHaveBeenCalledTimes(1);
   });
 
   it("lists pending chart proposals from the latest proposal set and opens review focused on edit", () => {
@@ -460,13 +305,8 @@ describe("ProjectOverview", () => {
     render(
       <ProjectOverview
         projectState={stateWithPendingProposals}
-        dataset={{ genericImports: [{ importId: "import_1", fileName: "runs.xlsx" }] }}
         onOpenProfile={() => {}}
-        onOpenImportReview={() => {}}
-        onOpenRefreshWorkbook={() => {}}
-        onOpenSupplementWorkbook={() => {}}
-        onOpenSupplementManager={() => {}}
-        onOpenMappingReview={() => {}}
+        onUploadWorkbook={() => {}}
         onOpenChartReview={onOpenChartReview}
         onGoManuscript={() => {}}
       />,
@@ -478,250 +318,38 @@ describe("ProjectOverview", () => {
     expect(screen.getByText("bar - 73% - proposed")).toBeTruthy();
     expect(screen.getByText("Pressure vs Rate")).toBeTruthy();
     expect(screen.getByText("+1 more pending")).toBeTruthy();
-    expect(screen.getByText("5 active")).toBeTruthy();
     expect(screen.getByText("1 accepted / 4 pending")).toBeTruthy();
     expect(screen.queryByText("Old pending proposal")).toBeNull();
     expect(screen.queryByText("Accepted Chart")).toBeNull();
     expect(screen.queryByText("Rejected Chart")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Accepted + pending" }));
+    fireEvent.click(screen.getByRole("button", { name: "Manage approved charts" }));
     expect(onOpenChartReview).toHaveBeenCalledWith({ statusFilter: "active" });
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
     expect(onOpenChartReview).toHaveBeenLastCalledWith("pending_1");
-  });
-
-  it("keeps supplemental details behind the manager button in the overview card", () => {
-    const stateWithSupplement = {
-      ...projectState,
-      fileObjects: [{ id: "file_pending", originalName: "pending-rate.xlsx" }],
-      importRuns: [{
-        id: "run_pending",
-        fileObjectId: "file_pending",
-        status: "normalized_preview",
-        scanResult: { sheets: [{ blocks: [{ detectedSupplementType: "reaction_rate_time_series" }] }] },
-        normalizePreview: {
-          datasetPatch: {
-            genericImports: [{
-              importId: "pending_import",
-              observationSets: [{ kind: "reaction_rate_time_series", inferredExperimentLabel: "Exp31", observations: [{}, {}, {}] }],
-              fields: [{}, {}],
-            }],
-          },
-        },
-        updatedAt: "2026-06-17T12:00:00.000Z",
-      }],
-    };
-    render(
-      <ProjectOverview
-        projectState={stateWithSupplement}
-        dataset={{
-          genericImports: [
-            { importId: "master", fileName: "master.xlsx" },
-            {
-              importId: "supplement",
-              fileName: "rate.xlsx",
-              relationship: { relationship: "supplement", supplementType: "reaction_rate_time_series", targetExperimentIds: ["exp_30"] },
-              observationSets: [{ kind: "reaction_rate_time_series", inferredExperimentLabel: "Exp30", observations: Array.from({ length: 62 }, () => ({})) }],
-              fields: [{}, {}, {}],
-            },
-          ],
-        }}
-        onOpenProfile={() => {}}
-        onOpenImportReview={() => {}}
-        onOpenRefreshWorkbook={() => {}}
-        onOpenSupplementWorkbook={() => {}}
-        onOpenSupplementManager={() => {}}
-        onOpenChartReview={() => {}}
-        onGoManuscript={() => {}}
-      />,
-    );
-
-    expect(screen.getByText("2 supplemental files")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Manage supplemental workbooks" }).disabled).toBe(false);
-    expect(screen.queryByText("rate.xlsx")).toBeNull();
-    expect(screen.queryByText("pending-rate.xlsx")).toBeNull();
-  });
-
-  it("shows supplemental workbook details and review/edit actions in the manager modal", () => {
-    const onAddSupplemental = vi.fn();
-    const onContinueReview = vi.fn();
-    const stateWithSupplement = {
-      ...projectState,
-      fileObjects: [{ id: "file_pending", originalName: "pending-rate.xlsx" }],
-      importRuns: [{
-        id: "run_pending",
-        fileObjectId: "file_pending",
-        status: "normalized_preview",
-        scanResult: { sheets: [{ blocks: [{ detectedSupplementType: "reaction_rate_time_series" }] }] },
-        normalizePreview: {
-          datasetPatch: {
-            genericImports: [{
-              importId: "pending_import",
-              observationSets: [{ kind: "reaction_rate_time_series", inferredExperimentLabel: "Exp31", observations: [{}, {}, {}] }],
-              fields: [{}, {}],
-            }],
-          },
-        },
-        updatedAt: "2026-06-17T12:00:00.000Z",
-      }],
-    };
-    const datasetWithSupplement = {
-      genericImports: [
-        { importId: "master", fileName: "master.xlsx" },
-        {
-          importId: "supplement",
-          fileName: "rate.xlsx",
-          relationship: { relationship: "supplement", supplementType: "reaction_rate_time_series", targetExperimentIds: ["exp_30"] },
-          observationSets: [{
-            kind: "reaction_rate_time_series",
-            inferredExperimentLabel: "Exp30",
-            yFields: ["adjustedRateMPerS"],
-            observations: Array.from({ length: 62 }, () => ({})),
-          }],
-          fields: [{}, {}, {}],
-          sources: [{}, {}],
-        },
-      ],
-    };
-
-    render(
-      <SupplementalWorkbooksModal
-        open
-        projectState={stateWithSupplement}
-        dataset={datasetWithSupplement}
-        onAddSupplemental={onAddSupplemental}
-        onContinueReview={onContinueReview}
-        onClose={() => {}}
-      />,
-    );
-
-    expect(screen.getByRole("dialog", { name: "Supplemental Workbooks" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /^rate\.xlsx/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /pending-rate\.xlsx/ })).toBeTruthy();
-    expect(screen.getByText("adjustedRateMPerS")).toBeTruthy();
-    expect(screen.getAllByText("Applied").length).toBeGreaterThan(0);
-
-    fireEvent.click(screen.getByRole("button", { name: /pending-rate\.xlsx/ }));
-    expect(screen.getAllByText("Needs relationship review").length).toBeGreaterThan(0);
-    expect(screen.getByText("3 observations - 2 fields")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Continue review" }));
-    expect(onContinueReview).toHaveBeenCalledWith("run_pending");
-
-    fireEvent.click(screen.getByRole("button", { name: /^rate\.xlsx/ }));
-    expect(screen.getByText(/Applied scientific values are immutable/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Replace / edit via reviewed import" }));
-    expect(onAddSupplemental).toHaveBeenCalledTimes(1);
-  });
-
-  it("opens compare series from the supplemental manager when compatible series exist", () => {
-    const onCompareSeries = vi.fn();
-
-    render(
-      <SupplementalWorkbooksModal
-        open
-        projectState={projectStateWithCompareSeries}
-        dataset={{ genericImports: [{ importId: "master", fileName: "master.xlsx" }] }}
-        onAddSupplemental={() => {}}
-        onCompareSeries={onCompareSeries}
-        onClose={() => {}}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Compare series" }));
-    expect(onCompareSeries).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows supplemental batch progress and selected ready apply actions", () => {
-    const onContinueReview = vi.fn();
-    const onRetryBatchItem = vi.fn();
-    const onApplyBatchItems = vi.fn();
-    const activeBatch = {
-      id: "batch_1",
-      status: "processing",
-      summary: { total: 3, completed: 2, ready: 1, failed: 1, processing: 1 },
-      items: [
-        {
-          id: "batch_item_ready",
-          fileObjectId: "file_ready",
-          importRunId: "run_ready",
-          fileName: "Reaction_Rate_Exp30.xlsx",
-          status: "ready_for_review",
-          progressMessage: "Ready for relationship review.",
-          relationshipPreview: {
-            proposals: [{
-              relationshipProposalId: "relationship_ready",
-              proposedRelationship: "supplement",
-              targetExperimentIds: ["exp_30"],
-              supplementType: "reaction_rate_time_series",
-            }],
-          },
-        },
-        {
-          id: "batch_item_resolving",
-          fileObjectId: "file_resolving",
-          fileName: "Reaction_Rate_Exp31.xlsx",
-          status: "resolving_relationship",
-          progressMessage: "AI is resolving experiment links...",
-        },
-        {
-          id: "batch_item_failed",
-          fileObjectId: "file_failed",
-          fileName: "bad.xlsx",
-          status: "failed",
-          error: { message: "Workbook could not be parsed." },
-        },
-      ],
-    };
-
-    render(
-      <SupplementalWorkbooksModal
-        open
-        projectState={projectState}
-        dataset={{ genericImports: [{ importId: "master", fileName: "master.xlsx" }] }}
-        activeBatch={activeBatch}
-        onAddSupplemental={() => {}}
-        onContinueReview={onContinueReview}
-        onRetryBatchItem={onRetryBatchItem}
-        onApplyBatchItems={onApplyBatchItems}
-        onClose={() => {}}
-      />,
-    );
-
-    expect(screen.getByText("Batch processing")).toBeTruthy();
-    expect(screen.getAllByText("AI is resolving experiment links...").length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole("button", { name: "Review" }));
-    expect(onContinueReview).toHaveBeenCalledWith("run_ready");
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    expect(onRetryBatchItem).toHaveBeenCalledWith("file_failed");
-    fireEvent.click(screen.getByRole("button", { name: "Apply selected ready (1)" }));
-    expect(onApplyBatchItems).toHaveBeenCalledWith([expect.objectContaining({ id: "batch_item_ready" })]);
   });
 
   it("ignores stale chart specs in overview counts and active chart choices", () => {
     const stateWithStaleSpec = {
       ...projectState,
       chartSpecs: [
-        { id: "chart_spec_active", title: "Current Gas", datasetCommitId: "commit_1", status: "active", isStale: false },
-        { id: "chart_spec_stale", title: "Old Gas", datasetCommitId: "commit_old", status: "stale", isStale: true },
+        { id: "chart_spec_active", title: "Current Gas", origin: "source_extract", sourceSnapshot: { rows: [{ temperature: 300, gas: 12 }] }, status: "active", isStale: false },
+        { id: "chart_spec_stale", title: "Old Gas", status: "stale", isStale: true },
       ],
     };
 
     render(
       <ProjectOverview
         projectState={stateWithStaleSpec}
-        dataset={{ genericImports: [{ importId: "import_1", fileName: "runs.xlsx" }] }}
         onOpenProfile={() => {}}
-        onOpenImportReview={() => {}}
-        onOpenRefreshWorkbook={() => {}}
-        onOpenSupplementWorkbook={() => {}}
-        onOpenSupplementManager={() => {}}
+        onUploadWorkbook={() => {}}
         onOpenChartReview={() => {}}
         onGoManuscript={() => {}}
       />,
     );
 
-    expect(screen.getByText("1 specs")).toBeTruthy();
-    expect(screen.getByText(/older chart specs are hidden/)).toBeTruthy();
+    expect(screen.getByText("1 accepted / 1 specs")).toBeTruthy();
+    expect(screen.getByText(/older specs are hidden/)).toBeTruthy();
     expect(activeChartSpecsForProject(stateWithStaleSpec).map((chartSpec) => chartSpec.id)).toEqual(["chart_spec_active"]);
   });
 
@@ -738,8 +366,7 @@ describe("ProjectOverview", () => {
 describe("project state refresh helpers", () => {
   it("preserves the current manuscript slice during workspace data refreshes", () => {
     const currentState = {
-      project: { id: "project_1", currentDatasetCommitId: "commit_old" },
-      currentDatasetCommit: { id: "commit_old" },
+      project: { id: "project_1" },
       chartSpecs: [{ id: "chart_old" }],
       manuscripts: [{
         id: "manuscript_1",
@@ -747,8 +374,7 @@ describe("project state refresh helpers", () => {
       }],
     };
     const incomingState = {
-      project: { id: "project_1", currentDatasetCommitId: "commit_new" },
-      currentDatasetCommit: { id: "commit_new" },
+      project: { id: "project_1" },
       chartSpecs: [{ id: "chart_new" }],
       manuscripts: [{
         id: "manuscript_1",
@@ -758,7 +384,7 @@ describe("project state refresh helpers", () => {
 
     const merged = mergeProjectStateForWorkspaceRefresh(currentState, incomingState, { preserveManuscripts: true });
 
-    expect(merged.currentDatasetCommit.id).toBe("commit_new");
+    expect(merged.project.id).toBe("project_1");
     expect(merged.chartSpecs.map((chartSpec) => chartSpec.id)).toEqual(["chart_new"]);
     expect(merged.manuscripts).toEqual(currentState.manuscripts);
   });
@@ -771,95 +397,667 @@ describe("project state refresh helpers", () => {
   });
 });
 
-describe("MappingReviewModal", () => {
-  it("edits semantic mapping draft fields and saves one mapping set", async () => {
-    const onSaveMappings = vi.fn().mockResolvedValue({
-      ...projectState.mappingSets[0],
-      payload: {
-        ...projectState.mappingSets[0].payload,
-        mappings: [{
-          ...projectState.mappingSets[0].payload.mappings[0],
-          canonicalField: "temperature_C",
-          semanticRole: "condition",
-          status: "accepted",
-        }],
-      },
+describe("WorkbookReviewWorkspace", () => {
+  function makeWorkbookReviewFetch() {
+    return vi.fn(async (url, init = {}) => {
+      if (url === "/api/projects/project_1/source-documents") {
+        return jsonResponse({
+          sourceDocuments: [{
+            id: "source_doc_1",
+            metadata: {
+              workbookName: "Master.xlsx",
+              sheets: [{ name: "Sheet1", usedRange: "A1:D5", rowCount: 5, columnCount: 4 }],
+            },
+            summary: { sheetCount: 1, regionCount: 1, nonEmptyCellCount: 12 },
+          }],
+        });
+      }
+      if (url === "/api/source-documents/source_doc_1/regions") {
+        return jsonResponse({ regions: [] });
+      }
+      if (url === "/api/source-documents/source_doc_1/range") {
+        const body = JSON.parse(init.body || "{}");
+        return jsonResponse({
+          sheetName: body.sheetName,
+          range: body.range,
+          rows: [
+            [
+              { row: 0, col: 0, address: "A1", rawValue: "Label", formattedValue: "Label" },
+              { row: 0, col: 1, address: "B1", rawValue: "Date", formattedValue: "Date" },
+            ],
+          ],
+          cells: [],
+        });
+      }
+      return jsonResponse({});
     });
+  }
 
-    render(
-      <MappingReviewModal
-        open
-        currentDatasetCommitId="commit_1"
-        mappingSetRecord={projectState.mappingSets[0]}
-        genericImports={[{ importId: "master", fileName: "master.xlsx" }]}
-        onGenerateMappings={() => {}}
-        onSaveMappings={onSaveMappings}
-        onClose={() => {}}
-      />,
-    );
+  const reviewState = {
+    loading: false,
+    error: "",
+    revisionLoading: false,
+    confirmLoading: false,
+    revisionError: "",
+    clarification: null,
+    session: {
+      id: "session_1",
+      status: "needs_user_review",
+      workbookSummary: { workbookName: "Master.xlsx", sheetCount: 1, regionCount: 1, nonEmptyCellCount: 12 },
+      currentUnderstanding: {},
+      messages: [{ id: "msg_1", role: "assistant", content: "I indexed Master.xlsx." }],
+    },
+    sourceDocument: {
+      id: "source_doc_1",
+      metadata: { workbookName: "Master.xlsx" },
+    },
+    regions: [],
+  };
 
-    expect(screen.getByRole("dialog", { name: "Edit semantic mappings" })).toBeTruthy();
-    expect(screen.getByText("1 accepted")).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("Canonical field Temperature"), {
-      target: { value: "temperature_C" },
-    });
-    fireEvent.change(screen.getByLabelText("Status Selectivity Gas"), {
-      target: { value: "rejected" },
-    });
-    fireEvent.change(screen.getByLabelText("Semantic role Selectivity Gas"), {
-      target: { value: "metadata" },
-    });
-    fireEvent.change(screen.getByLabelText("Unit Selectivity Gas"), {
-      target: { value: "pct" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Save mappings" }));
+  it("renders an Excel-only workbook preview without legacy review cards", async () => {
+    const fetchMock = makeWorkbookReviewFetch();
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    try {
+      const { container } = render(
+        <WorkbookReviewWorkspace
+          projectId="project_1"
+          reviewState={reviewState}
+          draftRegions={[]}
+          onDraftRegionsChange={() => {}}
+        />,
+      );
 
-    await waitFor(() => expect(onSaveMappings).toHaveBeenCalledTimes(1));
-    const savedPayload = onSaveMappings.mock.calls[0][1];
-    expect(savedPayload.mappings.find((mapping) => mapping.mappingId === "mapping_temp").canonicalField).toBe("temperature_C");
-    const gas = savedPayload.mappings.find((mapping) => mapping.mappingId === "mapping_gas");
-    expect(gas.status).toBe("rejected");
-    expect(gas.semanticRole).toBe("metadata");
-    expect(gas.unit).toBe("pct");
+      expect(await screen.findByText("Label")).toBeTruthy();
+      expect(screen.getByText("Date")).toBeTruthy();
+      expect(screen.getByRole("grid", { name: "Workbook sheet preview" })).toBeTruthy();
+      expect(container.querySelector(".workbook-data-grid-shell")).toBeTruthy();
+      expect(container.querySelector("table.workbook-excel-grid")).toBeNull();
+      expect(screen.queryByText("Source workbook")).toBeNull();
+      expect(screen.queryByText("Detected source regions")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Preview extract" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Upload workbook" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Choose another workbook" })).toBeNull();
+    } finally {
+      global.fetch = originalFetch;
+    }
   });
 
-  it("shows stale mapping warning and regenerates instead of saving old commit mappings", async () => {
-    const onGenerateMappings = vi.fn().mockResolvedValue({
-      ...projectState.mappingSets[0],
-      datasetCommitId: "commit_2",
+  it("turns a clicked workbook suggestion into a focused local draft red box", async () => {
+    const fetchMock = makeWorkbookReviewFetch();
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    const onDraftRegionsChange = vi.fn();
+    try {
+      render(
+        <WorkbookReviewWorkspace
+          projectId="project_1"
+          reviewState={reviewState}
+          draftRegions={[]}
+          onDraftRegionsChange={onDraftRegionsChange}
+          focusSelection={{
+            sourceDocumentId: "source_doc_1",
+            sheetName: "Sheet1",
+            range: "A1:B2",
+            selectionMethod: "suggestion_click",
+            description: "Detected experiment table",
+          }}
+        />,
+      );
+
+      await waitFor(() => {
+        const latest = onDraftRegionsChange.mock.calls.at(-1)?.[0] || [];
+        expect(latest).toHaveLength(1);
+      });
+      const nextRegions = onDraftRegionsChange.mock.calls.at(-1)[0];
+      expect(nextRegions[0]).toMatchObject({
+        sourceDocumentId: "source_doc_1",
+        sheetName: "Sheet1",
+        range: "A1:B2",
+        selectionMethod: "suggestion_click",
+        description: "Detected experiment table",
+      });
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("keeps the workbook grid mounted while the dock updates", async () => {
+    const fetchMock = makeWorkbookReviewFetch();
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    try {
+      function Harness() {
+        const [dockRevision, setDockRevision] = React.useState(0);
+        return (
+          <WorkbookReviewWorkspace
+            projectId="project_1"
+            reviewState={reviewState}
+            draftRegions={[]}
+            onDraftRegionsChange={() => {}}
+            reviewDock={(
+              <aside aria-label="Test workbook review dock">
+                <span>Dock revision {dockRevision}</span>
+                <button type="button" onClick={() => setDockRevision((value) => value + 1)}>Update dock</button>
+              </aside>
+            )}
+          />
+        );
+      }
+
+      render(<Harness />);
+      const grid = await screen.findByRole("grid", { name: "Workbook sheet preview" });
+      await screen.findByText("Label");
+      const rangeInput = screen.getByLabelText("Visible range");
+      fireEvent.change(rangeInput, { target: { value: "A1:A2" } });
+      await waitFor(() => expect(screen.getByLabelText("Visible range").value).toBe("A1:A2"));
+
+      fireEvent.click(screen.getByRole("button", { name: "Update dock" }));
+
+      expect(screen.getByText("Dock revision 1")).toBeTruthy();
+      expect(screen.getByRole("grid", { name: "Workbook sheet preview" })).toBe(grid);
+      expect(screen.getByLabelText("Visible range").value).toBe("A1:A2");
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("focuses the workbook viewport when the active red box changes", async () => {
+    const fetchMock = makeWorkbookReviewFetch();
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    const draftRegions = [{
+      clientRegionId: "draft_1",
+      draftRegionId: "draft_1",
+      sourceDocumentId: "source_doc_1",
+      sheetName: "Sheet1",
+      range: "A1:B2",
+      status: "draft",
+    }, {
+      clientRegionId: "draft_2",
+      draftRegionId: "draft_2",
+      sourceDocumentId: "source_doc_1",
+      sheetName: "Sheet1",
+      range: "C3:D4",
+      status: "draft",
+    }];
+    try {
+      const { rerender } = render(
+        <WorkbookReviewWorkspace
+          projectId="project_1"
+          reviewState={reviewState}
+          draftRegions={draftRegions}
+          activeDraftRegionId="draft_1"
+          onDraftRegionsChange={() => {}}
+        />,
+      );
+
+      await screen.findByText("Label");
+      await waitFor(() => expect(screen.getByLabelText("Visible range").value).toBe("A1:D5"));
+
+      rerender(
+        <WorkbookReviewWorkspace
+          projectId="project_1"
+          reviewState={reviewState}
+          draftRegions={draftRegions}
+          activeDraftRegionId="draft_2"
+          onDraftRegionsChange={() => {}}
+          focusSelection={{
+            requestId: "focus_draft_2",
+            clientRegionId: "draft_2",
+            draftRegionId: "draft_2",
+            sourceDocumentId: "source_doc_1",
+            sheetName: "Sheet1",
+            range: "C3:D4",
+            selectionMethod: "red_box_click",
+          }}
+        />,
+      );
+
+      await waitFor(() => expect(screen.getByLabelText("Visible range").value).toBe("C3:D4"));
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("creates a local draft red box by dragging from one workbook cell to another", async () => {
+    const fetchMock = makeWorkbookReviewFetch();
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    const onDraftRegionsChange = vi.fn();
+    try {
+      render(
+        <WorkbookReviewWorkspace
+          projectId="project_1"
+          reviewState={reviewState}
+          draftRegions={[]}
+          onDraftRegionsChange={onDraftRegionsChange}
+        />,
+      );
+
+      const startCell = await screen.findByLabelText("Cell A1");
+      const endCell = await screen.findByLabelText("Cell B1");
+      fireEvent.mouseDown(startCell, { button: 0 });
+      fireEvent.mouseEnter(endCell);
+      fireEvent.mouseUp(endCell);
+
+      await waitFor(() => expect(onDraftRegionsChange).toHaveBeenCalled());
+      const nextRegions = onDraftRegionsChange.mock.calls.at(-1)[0];
+      expect(nextRegions).toHaveLength(1);
+      expect(nextRegions[0]).toMatchObject({
+        sourceDocumentId: "source_doc_1",
+        sheetName: "Sheet1",
+        range: "A1:B1",
+        selectionMethod: "drag_select",
+        status: "draft",
+      });
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("focuses source evidence without creating a semantic red box", async () => {
+    const fetchMock = makeWorkbookReviewFetch();
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    const onDraftRegionsChange = vi.fn();
+    try {
+      render(
+        <WorkbookReviewWorkspace
+          projectId="project_1"
+          reviewState={reviewState}
+          draftRegions={[]}
+          onDraftRegionsChange={onDraftRegionsChange}
+          focusSelection={{
+            requestId: "evidence_focus_1",
+            sourceDocumentId: "source_doc_1",
+            sheetName: "Sheet1",
+            range: "C3:D4",
+            selectionMethod: "experiment_browser_source_link",
+            focusOnly: true,
+          }}
+        />,
+      );
+
+      await waitFor(() => expect(screen.getByLabelText("Visible range").value).toBe("C3:D4"));
+      expect(onDraftRegionsChange).not.toHaveBeenCalled();
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("reuses loaded workbook range windows when returning to a previous visible range", async () => {
+    const fetchMock = makeWorkbookReviewFetch();
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    try {
+      render(
+        <WorkbookReviewWorkspace
+          projectId="project_1"
+          reviewState={reviewState}
+          draftRegions={[]}
+          onDraftRegionsChange={() => {}}
+        />,
+      );
+
+      await screen.findByText("Label");
+      await waitFor(() => {
+        const rangeRequests = fetchMock.mock.calls
+          .filter(([url]) => url === "/api/source-documents/source_doc_1/range")
+          .map(([, init]) => JSON.parse(init.body || "{}").range);
+        expect(rangeRequests).toContain("A1:D5");
+      });
+
+      const rangeInput = screen.getByLabelText("Visible range");
+      fireEvent.change(rangeInput, { target: { value: "A1:B2" } });
+      await waitFor(() => {
+        const rangeRequests = fetchMock.mock.calls
+          .filter(([url]) => url === "/api/source-documents/source_doc_1/range")
+          .map(([, init]) => JSON.parse(init.body || "{}").range);
+        expect(rangeRequests).toContain("A1:B2");
+      });
+
+      fireEvent.change(rangeInput, { target: { value: "A1:D5" } });
+      await act(async () => {});
+
+      const rangeRequests = fetchMock.mock.calls
+        .filter(([url]) => url === "/api/source-documents/source_doc_1/range")
+        .map(([, init]) => JSON.parse(init.body || "{}").range);
+      expect(rangeRequests.filter((range) => range === "A1:D5")).toHaveLength(1);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("resets the real grid and adopts the next workbook range when switching workbooks", async () => {
+    const fetchMock = vi.fn(async (url, init = {}) => {
+      if (url === "/api/projects/project_1/source-documents") {
+        return jsonResponse({
+          sourceDocuments: [{
+            id: "source_doc_1",
+            metadata: {
+              workbookName: "First.xlsx",
+              sheets: [{ name: "Sheet1", usedRange: "A1:F81", rowCount: 81, columnCount: 6 }],
+            },
+          }, {
+            id: "source_doc_2",
+            metadata: {
+              workbookName: "Second.xlsx",
+              sheets: [{ name: "Results", usedRange: "C3:D4", rowCount: 4, columnCount: 4 }],
+            },
+          }],
+        });
+      }
+      if (url === "/api/source-documents/source_doc_1/range"
+        || url === "/api/source-documents/source_doc_2/range") {
+        const body = JSON.parse(init.body || "{}");
+        return jsonResponse({
+          sheetName: body.sheetName,
+          range: body.range,
+          rows: [],
+          cells: [],
+        });
+      }
+      return jsonResponse({});
     });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    try {
+      render(
+        <WorkbookReviewWorkspace
+          projectId="project_1"
+          reviewState={{
+            ...reviewState,
+            sourceDocument: {
+              id: "source_doc_1",
+              metadata: {
+                workbookName: "First.xlsx",
+                sheets: [{ name: "Sheet1", usedRange: "A1:F81", rowCount: 81, columnCount: 6 }],
+              },
+            },
+          }}
+          draftRegions={[]}
+          onDraftRegionsChange={() => {}}
+        />,
+      );
 
-    render(
-      <MappingReviewModal
-        open
-        currentDatasetCommitId="commit_2"
-        mappingSetRecord={{ ...projectState.mappingSets[0], datasetCommitId: "commit_old" }}
-        genericImports={[{ importId: "master", fileName: "master.xlsx" }]}
-        onGenerateMappings={onGenerateMappings}
-        onSaveMappings={() => {}}
-        onClose={() => {}}
-      />,
-    );
+      await waitFor(() => expect(screen.getByLabelText("Visible range").value).toBe("A1:F81"));
+      const grid = screen.getByRole("grid", { name: "Workbook sheet preview" });
+      Object.defineProperty(grid, "scrollTop", { configurable: true, writable: true, value: 900 });
+      Object.defineProperty(grid, "scrollLeft", { configurable: true, writable: true, value: 240 });
+      fireEvent.scroll(grid);
 
-    expect(screen.getByText(/older dataset commit/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Save mappings" }).disabled).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Regenerate for current dataset" }));
+      fireEvent.change(await screen.findByLabelText("Workbook"), { target: { value: "source_doc_2" } });
 
-    await waitFor(() => expect(onGenerateMappings).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(screen.getByLabelText("Visible range").value).toBe("C3:D4"));
+      expect(grid.scrollTop).toBe(0);
+      expect(grid.scrollLeft).toBe(0);
+      await waitFor(() => {
+        const secondWorkbookRequests = fetchMock.mock.calls
+          .filter(([url]) => url === "/api/source-documents/source_doc_2/range")
+          .map(([, init]) => JSON.parse(init.body || "{}"));
+        expect(secondWorkbookRequests).toContainEqual({ sheetName: "Results", range: "C3:D4" });
+      });
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("uses stable cached workbook tiles while dragging the scrollbar and returning to loaded rows", async () => {
+    const fetchMock = vi.fn(async (url, init = {}) => {
+      if (url === "/api/projects/project_1/source-documents") {
+        return jsonResponse({
+          sourceDocuments: [{
+            id: "source_doc_1",
+            metadata: {
+              workbookName: "Master.xlsx",
+              sheets: [{ name: "Sheet1", usedRange: "A1:F81", rowCount: 81, columnCount: 6 }],
+            },
+            summary: { sheetCount: 1, regionCount: 0, nonEmptyCellCount: 81 },
+          }],
+        });
+      }
+      if (url === "/api/source-documents/source_doc_1/range") {
+        const body = JSON.parse(init.body || "{}");
+        const startRow = Number(body.range.match(/^[A-Z]+(\d+):/)?.[1] || 1);
+        return jsonResponse({
+          sheetName: body.sheetName,
+          range: body.range,
+          rows: [[{
+            row: startRow - 1,
+            col: 0,
+            address: `A${startRow}`,
+            rawValue: `Row ${startRow}`,
+            formattedValue: `Row ${startRow}`,
+          }]],
+          cells: [],
+        });
+      }
+      return jsonResponse({});
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    try {
+      render(
+        <WorkbookReviewWorkspace
+          projectId="project_1"
+          reviewState={{
+            ...reviewState,
+            sourceDocument: {
+              id: "source_doc_1",
+              metadata: {
+                workbookName: "Master.xlsx",
+                sheets: [{ name: "Sheet1", usedRange: "A1:F81", rowCount: 81, columnCount: 6 }],
+              },
+            },
+          }}
+          draftRegions={[]}
+          onDraftRegionsChange={() => {}}
+        />,
+      );
+
+      expect(await screen.findByText("Row 1")).toBeTruthy();
+      const grid = screen.getByRole("grid", { name: "Workbook sheet preview" });
+      Object.defineProperty(grid, "clientWidth", { configurable: true, value: 1100 });
+      Object.defineProperty(grid, "clientHeight", { configurable: true, value: 600 });
+      Object.defineProperty(grid, "scrollTop", { configurable: true, writable: true, value: 0 });
+      Object.defineProperty(grid, "scrollLeft", { configurable: true, writable: true, value: 0 });
+
+      grid.scrollTop = 100;
+      fireEvent.scroll(grid);
+      grid.scrollTop = 700;
+      fireEvent.scroll(grid);
+      grid.scrollTop = 1500;
+      fireEvent.scroll(grid);
+
+      await waitFor(() => {
+        const loadedRanges = fetchMock.mock.calls
+          .filter(([url]) => url === "/api/source-documents/source_doc_1/range");
+        expect(loadedRanges.length).toBeGreaterThan(1);
+      });
+
+      grid.scrollTop = 100;
+      fireEvent.scroll(grid);
+      await act(async () => {
+        await new Promise((resolve) => {
+          setTimeout(resolve, 160);
+        });
+      });
+
+      const rangeRequests = fetchMock.mock.calls
+        .filter(([url]) => url === "/api/source-documents/source_doc_1/range")
+        .map(([, init]) => JSON.parse(init.body || "{}").range);
+      const startRows = rangeRequests.map((range) => Number(range.match(/^[A-Z]+(\d+):/)?.[1] || 0));
+      expect(startRows.every((row) => (row - 1) % 40 === 0)).toBe(true);
+      expect(rangeRequests.filter((range) => range === "A1:F40")).toHaveLength(1);
+      expect(new Set(rangeRequests).size).toBe(rangeRequests.length);
+      expect(screen.getByText("Row 1")).toBeTruthy();
+      rangeRequests.forEach((range) => {
+        const [, startCol, startRow, endCol, endRow] = range.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/) || [];
+        const columnNumber = (label) => [...label].reduce((value, char) => value * 26 + char.charCodeAt(0) - 64, 0);
+        expect((Number(endRow) - Number(startRow) + 1) * (columnNumber(endCol) - columnNumber(startCol) + 1)).toBeLessThanOrEqual(500);
+      });
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("replaces the active draft red box when dragging a new range", async () => {
+    const fetchMock = makeWorkbookReviewFetch();
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    const onDraftRegionsChange = vi.fn();
+    const onActiveDraftRegionChange = vi.fn();
+    try {
+      render(
+        <WorkbookReviewWorkspace
+          projectId="project_1"
+          reviewState={reviewState}
+          draftRegions={[{
+            clientRegionId: "draft_active",
+            draftRegionId: "draft_active",
+            sourceDocumentId: "source_doc_1",
+            sheetName: "Sheet1",
+            range: "A1:B1",
+            selectionMethod: "drag_select",
+            description: "",
+            status: "draft",
+          }]}
+          activeDraftRegionId="draft_active"
+          onDraftRegionsChange={onDraftRegionsChange}
+          onActiveDraftRegionChange={onActiveDraftRegionChange}
+        />,
+      );
+
+      const startCell = await screen.findByLabelText("Cell C1");
+      const endCell = await screen.findByLabelText("Cell D1");
+      fireEvent.mouseDown(startCell, { button: 0 });
+      fireEvent.mouseEnter(endCell);
+      fireEvent.mouseUp(endCell);
+
+      await waitFor(() => expect(onDraftRegionsChange).toHaveBeenCalled());
+      const nextRegions = onDraftRegionsChange.mock.calls.at(-1)[0];
+      expect(nextRegions).toHaveLength(1);
+      expect(nextRegions[0]).toMatchObject({
+        clientRegionId: "draft_active",
+        draftRegionId: "draft_active",
+        sourceDocumentId: "source_doc_1",
+        sheetName: "Sheet1",
+        range: "C1:D1",
+        selectionMethod: "drag_select",
+        status: "draft",
+      });
+      expect(onActiveDraftRegionChange).toHaveBeenCalledWith("draft_active");
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("auto-scrolls and extends drag selection when the pointer reaches the workbook edge", async () => {
+    const fetchMock = vi.fn(async (url, init = {}) => {
+      if (url === "/api/projects/project_1/source-documents") {
+        return jsonResponse({
+          sourceDocuments: [{
+            id: "source_doc_1",
+            metadata: {
+              workbookName: "Master.xlsx",
+              sheets: [{ name: "Sheet1", usedRange: "A1:J20", rowCount: 20, columnCount: 10 }],
+            },
+            summary: { sheetCount: 1, regionCount: 1, nonEmptyCellCount: 12 },
+          }],
+        });
+      }
+      if (url === "/api/source-documents/source_doc_1/range") {
+        const body = JSON.parse(init.body || "{}");
+        return jsonResponse({
+          sheetName: body.sheetName,
+          range: body.range,
+          rows: [[
+            { row: 0, col: 0, address: "A1", rawValue: "Label", formattedValue: "Label" },
+            { row: 0, col: 1, address: "B1", rawValue: "Date", formattedValue: "Date" },
+          ]],
+          cells: [],
+        });
+      }
+      return jsonResponse({});
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    const onDraftRegionsChange = vi.fn();
+    try {
+      render(
+        <WorkbookReviewWorkspace
+          projectId="project_1"
+          reviewState={{
+            ...reviewState,
+            sourceDocument: {
+              id: "source_doc_1",
+              metadata: {
+                workbookName: "Master.xlsx",
+                sheets: [{ name: "Sheet1", usedRange: "A1:J20", rowCount: 20, columnCount: 10 }],
+              },
+            },
+          }}
+          draftRegions={[]}
+          onDraftRegionsChange={onDraftRegionsChange}
+        />,
+      );
+
+      const startCell = await screen.findByLabelText("Cell A1");
+      const grid = screen.getByRole("grid", { name: "Workbook sheet preview" });
+      Object.defineProperty(grid, "clientWidth", { configurable: true, value: 240 });
+      Object.defineProperty(grid, "clientHeight", { configurable: true, value: 120 });
+      Object.defineProperty(grid, "scrollWidth", { configurable: true, value: 1200 });
+      Object.defineProperty(grid, "scrollHeight", { configurable: true, value: 600 });
+      grid.getBoundingClientRect = () => ({
+        left: 0,
+        top: 0,
+        right: 240,
+        bottom: 120,
+        width: 240,
+        height: 120,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      });
+
+      fireEvent.mouseDown(startCell, { button: 0, clientX: 8, clientY: 8 });
+      await act(async () => {});
+      fireEvent.mouseMove(window, { clientX: 238, clientY: 118 });
+      await act(async () => {
+        await new Promise((resolve) => {
+          setTimeout(resolve, 120);
+        });
+      });
+      fireEvent.mouseUp(window);
+
+      await waitFor(() => expect(onDraftRegionsChange).toHaveBeenCalled());
+      const nextRegions = onDraftRegionsChange.mock.calls.at(-1)[0];
+      expect(nextRegions[0]).toMatchObject({
+        sourceDocumentId: "source_doc_1",
+        sheetName: "Sheet1",
+        selectionMethod: "drag_select",
+      });
+      expect(nextRegions[0].range).toMatch(/^A1:[B-J](?:[2-9]|1\d|20)$/);
+      expect(grid.scrollLeft).toBeGreaterThan(0);
+      expect(grid.scrollTop).toBeGreaterThan(0);
+    } finally {
+      global.fetch = originalFetch;
+    }
   });
 });
+
 
 describe("ChartReviewModal", () => {
   it("shows one-chart prompt and proposal review only in the chart review modal", () => {
     render(
       <ChartReviewModal
         open
-        genericImports={[{ importId: "import_1", fileName: "runs.xlsx" }]}
-        mappingState={{}}
+        chartData={[{ importId: "import_1", fileName: "runs.xlsx" }]}
+        allowSourcePrompt
         chartProposalState={{}}
         chartInterpretState={{}}
         chartSpecs={[]}
-        onProposeCharts={() => {}}
         onChartProposalDecision={() => {}}
         onInterpretChart={() => {}}
         onCreateChartSpec={() => {}}
@@ -871,64 +1069,250 @@ describe("ChartReviewModal", () => {
     expect(screen.getByText("Review chart proposals")).toBeTruthy();
     expect(screen.getByText("One-chart prompt")).toBeTruthy();
     expect(screen.getByText("Chart proposals")).toBeTruthy();
-    expect(screen.getByText("Propose charts").disabled).toBe(false);
+    expect(screen.queryByText("Propose charts")).toBeNull();
   });
 
-  it("shows an import-first empty state when chart review has no data", () => {
+  it("switches charts modal to Edit specs and forwards proposal delete", () => {
+    const onChartProposalDelete = vi.fn();
+    render(
+      <ChartReviewModal
+        open
+        chartData={[{ importId: "import_1", fileName: "runs.xlsx" }]}
+        allowSourcePrompt
+        chartProposalState={{
+          result: {
+            proposalSet: {
+              proposalSetId: "chart_set_1",
+              serverId: "chart_set_1",
+              proposals: [
+                {
+                  proposalId: "chart_pending",
+                  status: "proposed",
+                  chartType: "scatter",
+                  title: "Pending chart",
+                  x: { label: "Time", unit: "min" },
+                  y: { label: "Conversion", unit: "%" },
+                  confidence: 0.8,
+                  warnings: [],
+                },
+                {
+                  proposalId: "chart_rejected",
+                  status: "rejected",
+                  chartType: "bar",
+                  title: "Rejected chart",
+                  x: { label: "Experiment" },
+                  y: { label: "Yield" },
+                  confidence: 0.4,
+                  warnings: [],
+                },
+              ],
+              warnings: [],
+            },
+          },
+        }}
+        chartInterpretState={{}}
+        chartSpecs={[]}
+        onChartProposalDecision={() => {}}
+        onChartProposalDelete={onChartProposalDelete}
+        onInterpretChart={() => {}}
+        onCreateChartSpec={() => {}}
+        onOpenImportReview={() => {}}
+        onClose={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "Edit specs" }));
+
+    expect(screen.queryByText("One-chart prompt")).toBeNull();
+    expect(screen.getByText("Pending chart")).toBeTruthy();
+    expect(screen.queryByText("Rejected chart")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(onChartProposalDelete).toHaveBeenCalledWith("chart_pending");
+  });
+
+  it("shows a project-first empty state when source chart review has no project", () => {
     const onOpenImportReview = vi.fn();
     const onClose = vi.fn();
     render(
       <ChartReviewModal
         open
-        genericImports={[]}
+        chartData={[]}
         onOpenImportReview={onOpenImportReview}
         onClose={onClose}
       />,
     );
 
-    expect(screen.getByText("Import workbook first")).toBeTruthy();
+    expect(screen.getByText("Select a server project first")).toBeTruthy();
     expect(screen.queryByText("One-chart prompt")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Import workbook" }));
 
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onOpenImportReview).toHaveBeenCalledTimes(1);
   });
-});
 
-describe("RefreshWorkbookModal", () => {
-  it("selects a committed import and uploads a replacement workbook", () => {
-    const onStartRefresh = vi.fn();
+  it("allows server project chart prompts without normalized imports for source evidence", () => {
+    const onInterpretChart = vi.fn();
     render(
-      <RefreshWorkbookModal
+      <ChartReviewModal
         open
-        imports={[
-          { importId: "import_old", fileName: "old.xlsx", experiments: [{ experimentId: "exp_1" }], fields: [{ fieldId: "field_1" }] },
-          { importId: "import_supp", fileName: "rate.xlsx", relationship: { relationship: "supplement" }, experiments: [], fields: [] },
-          { importId: "import_latest", fileName: "latest.xlsx", experiments: [], fields: [] },
-        ]}
-        defaultImportId="import_old"
-        onStartRefresh={onStartRefresh}
+        chartData={[]}
+        allowSourcePrompt
+        chartInterpretState={{}}
+        chartProposalState={{}}
+        chartSpecs={[]}
+        onInterpretChart={onInterpretChart}
         onClose={() => {}}
       />,
     );
-    const file = new File(["replacement"], "replacement.xlsx", {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
 
-    expect(screen.getByText("old.xlsx")).toBeTruthy();
-    expect(screen.getByText("1 experiments - 1 fields")).toBeTruthy();
-    expect(screen.queryByText("rate.xlsx")).toBeNull();
-    fireEvent.change(screen.getByLabelText("Upload replacement workbook"), { target: { files: [file] } });
-
-    expect(onStartRefresh).toHaveBeenCalledWith({
-      file,
-      replaceImportId: "import_old",
-      targetImport: expect.objectContaining({ importId: "import_old" }),
+    expect(screen.queryByText("Select a server project first")).toBeNull();
+    expect(screen.getByText("One-chart prompt")).toBeTruthy();
+    fireEvent.change(screen.getByPlaceholderText("e.g. plot carbon distribution from Sheet1!P31:BA32 in Calculation_Exp33.xlsx"), {
+      target: { value: "draw carbon distribution from P31 to BA32" },
     });
+    fireEvent.click(screen.getByText("Draft chart proposal"));
+
+    expect(onInterpretChart).toHaveBeenCalledWith("draw carbon distribution from P31 to BA32");
   });
 });
 
+
 describe("AgentPanel", () => {
+  const clearAgentChatHistoryStorage = () => {
+    for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+      const key = localStorage.key(index);
+      if (
+        key === "labrat_blank_chat_history_v1_react"
+        || key === "labrat_blank_chat_history_v2_local"
+        || key?.startsWith("labrat_blank_chat_history_v2_project_")
+      ) {
+        localStorage.removeItem(key);
+      }
+    }
+  };
+
+  beforeEach(() => {
+    clearAgentChatHistoryStorage();
+  });
+
+  afterEach(() => {
+    clearAgentChatHistoryStorage();
+  });
+
+  it("keeps chat history isolated per server project and ignores legacy global history", async () => {
+    localStorage.setItem("labrat_blank_chat_history_v1_react", JSON.stringify([
+      { role: "assistant", text: "Legacy shared answer" },
+    ]));
+    localStorage.setItem("labrat_blank_chat_history_v2_project_project_alpha", JSON.stringify([
+      { role: "assistant", text: "Alpha project answer" },
+    ]));
+    localStorage.setItem("labrat_blank_chat_history_v2_project_project_beta", JSON.stringify([
+      { role: "assistant", text: "Beta project answer" },
+    ]));
+
+    const panel = (projectId, name) => (
+      <AgentPanel
+        open
+        setOpen={() => {}}
+        blocks={[]}
+        setBlocks={() => {}}
+        references={[]}
+        selected={null}
+        selectedChartContext={null}
+        pendingChartAnalysis={null}
+        activeProjectId={projectId}
+        projectState={{ project: { id: projectId, name }, fileObjects: [] }}
+        onProjectStateLoaded={() => {}}
+      />
+    );
+
+    try {
+      const { rerender } = render(panel("project_alpha", "Alpha"));
+
+      expect(screen.getByText("Alpha project answer")).toBeTruthy();
+      expect(screen.queryByText("Beta project answer")).toBeNull();
+      expect(screen.queryByText("Legacy shared answer")).toBeNull();
+
+      rerender(panel("project_beta", "Beta"));
+      await waitFor(() => expect(screen.getByText("Beta project answer")).toBeTruthy());
+      expect(screen.queryByText("Alpha project answer")).toBeNull();
+      expect(screen.queryByText("Legacy shared answer")).toBeNull();
+    } finally {
+      localStorage.removeItem("labrat_blank_chat_history_v1_react");
+      localStorage.removeItem("labrat_blank_chat_history_v2_project_project_alpha");
+      localStorage.removeItem("labrat_blank_chat_history_v2_project_project_beta");
+    }
+  });
+
+  it("scrolls chat history to the bottom on first open and preserves user scroll after that", async () => {
+    localStorage.setItem("labrat_blank_chat_history_v2_project_project_1", JSON.stringify([
+      { role: "user", text: "Earlier question" },
+      { role: "assistant", text: "Earlier answer" },
+      { role: "user", text: "Follow-up question" },
+      { role: "assistant", text: "Follow-up answer" },
+    ]));
+    localStorage.removeItem("labrat_blank_anthropic_key_v1");
+    const frameCallbacks = [];
+    const originalRequestAnimationFrame = window.requestAnimationFrame;
+    const originalCancelAnimationFrame = window.cancelAnimationFrame;
+    window.requestAnimationFrame = (callback) => {
+      frameCallbacks.push(callback);
+      return frameCallbacks.length;
+    };
+    window.cancelAnimationFrame = () => {};
+    const panel = (open) => (
+      <AgentPanel
+        open={open}
+        setOpen={() => {}}
+        blocks={[]}
+        setBlocks={() => {}}
+        references={[]}
+        selected={null}
+        selectedChartContext={null}
+        pendingChartAnalysis={null}
+        activeProjectId=""
+        projectState={{ project: { id: "project_1", name: "Catalyst Screening" }, fileObjects: [] }}
+        onProjectStateLoaded={() => {}}
+      />
+    );
+
+    try {
+      const { rerender } = render(panel(false));
+      const messages = document.querySelector(".messages");
+      Object.defineProperty(messages, "scrollHeight", { configurable: true, value: 1200 });
+      Object.defineProperty(messages, "clientHeight", { configurable: true, value: 300 });
+
+      rerender(panel(true));
+      expect(frameCallbacks.length).toBe(1);
+      frameCallbacks.shift()();
+      expect(messages.scrollTop).toBe(900);
+
+      messages.scrollTop = 240;
+      fireEvent.scroll(messages);
+      rerender(panel(false));
+      rerender(panel(true));
+      expect(frameCallbacks.length).toBe(1);
+      frameCallbacks.shift()();
+      expect(messages.scrollTop).toBe(240);
+
+      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
+      fireEvent.change(promptInput, { target: { value: "Will this preserve my place?" } });
+      fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
+
+      await waitFor(() => expect(screen.getByText(/Add an Anthropic API key/)).toBeTruthy());
+      expect(messages.scrollTop).toBe(240);
+
+      fireEvent.click(screen.getByRole("button", { name: "Reset chat" }));
+      expect(messages.scrollTop).toBe(0);
+    } finally {
+      window.requestAnimationFrame = originalRequestAnimationFrame;
+      window.cancelAnimationFrame = originalCancelAnimationFrame;
+      localStorage.removeItem("labrat_blank_chat_history_v2_project_project_1");
+      localStorage.removeItem("labrat_blank_anthropic_key_v1");
+    }
+  });
+
   it("creates server-backed AgentRuns and renders a confirmable action card", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -941,10 +1325,10 @@ describe("AgentPanel", () => {
           visibleSteps: [{ stepId: "step_1", label: "Created compatibility action plan", details: { actionCount: 1 } }],
           actions: [{
             actionId: "agent_action_1",
-            type: "upload_supplement",
+            type: "upload_workbook_for_review",
             status: "requires_confirmation",
-            label: "Add supplemental workbook",
-            description: "Choose a workbook and review its relationship to existing experiments.",
+            label: "Upload workbook for review",
+            description: "Choose a workbook and review detected source regions before data or charting.",
             requiresFile: true,
             requiresReview: true,
             params: { targetExperimentAliases: ["Exp30"] },
@@ -962,7 +1346,6 @@ describe("AgentPanel", () => {
         <AgentPanel
           open
           setOpen={() => {}}
-          dataset={{ metadata: {}, experiments: [], genericImports: [] }}
           blocks={[]}
           setBlocks={() => {}}
           references={[]}
@@ -977,11 +1360,11 @@ describe("AgentPanel", () => {
 
       const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
       fireEvent.change(promptInput, {
-        target: { value: "upload supplement for Exp30" },
+        target: { value: "upload workbook for Exp30" },
       });
       fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
 
-      await waitFor(() => expect(screen.getByText("Add supplemental workbook")).toBeTruthy());
+      await waitFor(() => expect(screen.getByText("Upload workbook for review")).toBeTruthy());
       expect(screen.getByText("Created compatibility action plan")).toBeTruthy();
       expect(screen.getByText("Target: Exp30")).toBeTruthy();
       expect(screen.getByRole("button", { name: "Choose file" })).toBeTruthy();
@@ -991,210 +1374,57 @@ describe("AgentPanel", () => {
     }
   });
 
-  it("creates a compare series chart proposal from a chat action", async () => {
+  it("attaches spreadsheet files from the plus button and uploads only after sending the chat message", async () => {
     localStorage.removeItem("labrat_blank_chat_history_v1_react");
+    const onWorkbookReviewReady = vi.fn();
+    const onWorkbookSuggestionSelect = vi.fn();
     const onProjectStateLoaded = vi.fn();
     const fetchMock = vi.fn(async (url, init = {}) => {
-      if (url === "/api/projects/project_1/agent/runs") {
-        return jsonResponse({
-          agentRun: {
-            id: "agent_run_compare_1",
-            schemaVersion: "labrat.agentRun.v1",
-            status: "waiting_for_user",
-            mode: "series_compare",
-            visibleSteps: [
-              { stepId: "step_series", label: "Resolved compatible observation series", details: { experimentLabels: ["Exp30", "Exp31"] } },
-              { stepId: "step_action", label: "Prepared confirmable compare action", details: { actionType: "create_compare_chart_proposal" } },
-            ],
-            actions: [{
-              actionId: "agent_compare_1",
-              type: "create_compare_chart_proposal",
-              status: "requires_confirmation",
-              label: "Compare reaction-rate series",
-              description: "Create a reviewed AnalysisView, then queue one chart proposal.",
-              requiresReview: true,
-              params: {
-                prompt: "compare reaction rate for Exp30 and Exp31",
-                title: "Reaction rate comparison",
-                seriesKind: "reaction_rate_time_series",
-                experimentAliases: ["Exp30", "Exp31"],
-                experimentIds: ["exp_30", "exp_31"],
-                xField: "reaction_time_min",
-                yField: "adjusted_rate_m_s",
-                groupBy: "experiment",
-              },
-              warnings: [],
-            }],
-            warnings: [],
-          },
-        });
+      if (url === "/api/projects/project_1/files") {
+        expect(init.method).toBe("POST");
+        expect(init.body instanceof FormData).toBe(true);
+        return jsonResponse({ fileObject: { id: "file_1", originalName: "Master.xlsx" } }, { status: 201 });
       }
-      if (url === "/api/agent-runs/agent_run_compare_1/confirm") {
-        expect(JSON.parse(init.body)).toEqual({ actionId: "agent_compare_1" });
+      if (url === "/api/projects/project_1/workbook-review-sessions") {
+        expect(JSON.parse(init.body)).toMatchObject({ fileObjectId: "file_1" });
         return jsonResponse({
-          agentRun: { id: "agent_run_compare_1", status: "completed" },
-          analysisView: {
-            id: "analysis_view_compare_1",
-            viewType: "series_compare",
-            title: "Reaction rate comparison",
-            spec: { experimentIds: ["exp_30", "exp_31"] },
+          workbookReviewSession: {
+            id: "session_1",
+            status: "needs_user_review",
+            workbookSummary: { workbookName: "Master.xlsx", sheetCount: 1, regionCount: 1, nonEmptyCellCount: 12 },
+            currentUnderstanding: {},
+            messages: [{ id: "msg_1", role: "assistant", content: "I indexed Master.xlsx." }],
           },
-          chartProposalSet: {
-            id: "chart_set_compare_1",
-            datasetCommitId: "commit_1",
-            payload: {
-              proposalSetId: "chart_set_compare_1",
-              schemaVersion: "labrat.chartProposalSet.v1",
-              proposals: [{
-                proposalId: "chart_compare_1",
-                status: "proposed",
-                title: "Reaction rate comparison",
-              }],
-              warnings: [],
-            },
+          sourceDocument: {
+            id: "source_doc_1",
+            metadata: { workbookName: "Master.xlsx", sheets: [{ name: "Sheet1", usedRange: "A1:D5" }] },
+            summary: { sheetCount: 1, regionCount: 1, nonEmptyCellCount: 12 },
           },
-          sourceExtractProposal: null,
-        });
+          regions: [{
+            id: "source_region_1",
+            sourceDocumentId: "source_doc_1",
+            sheetName: "Sheet1",
+            rangeRef: "A1:Y10",
+            label: "Label, Date, Catalyst Type",
+            kind: "standard_table",
+            confidence: 0.87,
+          }],
+        }, { status: 201 });
       }
       if (url === "/api/projects/project_1/state") {
-        return jsonResponse({
-          ...projectStateWithCompareSeries,
-          chartProposalSets: [{
-            id: "chart_set_compare_1",
-            datasetCommitId: "commit_1",
-            payload: {
-              proposalSetId: "chart_set_compare_1",
-              schemaVersion: "labrat.chartProposalSet.v1",
-              proposals: [{ proposalId: "chart_compare_1", status: "proposed", title: "Reaction rate comparison" }],
-            },
-          }],
-        });
+        return jsonResponse({ project: { id: "project_1" }, sourceDocuments: [], workbookReviewSessions: [] });
       }
-      throw new Error(`Unexpected fetch ${url}`);
+      return jsonResponse({});
     });
     const originalFetch = global.fetch;
     global.fetch = fetchMock;
 
     try {
-      render(
+      const { container } = render(
         <AgentPanel
           open
           setOpen={() => {}}
-          dataset={{ metadata: {}, experiments: [], genericImports: [{ importId: "import_1" }] }}
           blocks={[]}
-          setBlocks={() => {}}
-          references={[]}
-          selected={null}
-          selectedChartContext={null}
-          pendingChartAnalysis={null}
-          activeProjectId="project_1"
-          projectState={projectStateWithCompareSeries}
-          onProjectStateLoaded={onProjectStateLoaded}
-        />,
-      );
-
-      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
-      fireEvent.change(promptInput, { target: { value: "compare reaction rate for Exp30 and Exp31" } });
-      fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
-
-      await waitFor(() => expect(screen.getByText("Compare reaction-rate series")).toBeTruthy());
-      expect(screen.getByText("Resolved compatible observation series")).toBeTruthy();
-      expect(screen.getByText("Target: Exp30, Exp31")).toBeTruthy();
-      fireEvent.click(screen.getByRole("button", { name: "Confirm agent action" }));
-
-      await waitFor(() => expect(screen.getByRole("button", { name: "Accept proposal" })).toBeTruthy());
-      expect(screen.getByText("Chart: Reaction rate comparison")).toBeTruthy();
-      expect(screen.getByText(/Queued chart proposal set chart_set_compare_1/)).toBeTruthy();
-      expect(onProjectStateLoaded).toHaveBeenCalledTimes(1);
-    } finally {
-      global.fetch = originalFetch;
-      localStorage.removeItem("labrat_blank_chat_history_v1_react");
-    }
-  });
-
-  it("accepts an interpreted chart proposal and creates a ChartSpec inside chat", async () => {
-    localStorage.removeItem("labrat_blank_chat_history_v1_react");
-    const onProjectStateLoaded = vi.fn();
-    const onInsertChartSpec = vi.fn();
-    const fetchMock = vi.fn(async (url, init = {}) => {
-      if (url === "/api/projects/project_1/agent/plan") {
-        return jsonResponse({
-          schemaVersion: "labrat.agentPlan.v1",
-          reply: "I prepared a chart action.",
-          actions: [{
-            actionId: "agent_chart_1",
-            type: "interpret_chart",
-            status: "proposed",
-            label: "Draft one chart proposal",
-            description: "Interpret the request into a source-backed ChartSpec draft.",
-            requiresFile: false,
-            params: { prompt: "I want a reaction rate scatter plot for experiment 55" },
-            warnings: [],
-          }],
-        });
-      }
-      if (url === "/api/projects/project_1/charts/interpret") {
-        return jsonResponse({
-          schemaVersion: "labrat.chartInterpretResponse.v1",
-          chartSpecDraft: { title: "Reaction Rate Scatter for Experiment 55", chartType: "scatter" },
-          chartProposalSet: {
-            id: "chart_set_55",
-            datasetCommitId: "commit_1",
-            payload: {
-              proposalSetId: "proposal_set_55",
-              schemaVersion: "labrat.chartProposalSet.v1",
-              proposals: [{
-                proposalId: "proposal_55",
-                status: "proposed",
-                title: "Reaction Rate Scatter for Experiment 55",
-              }],
-              warnings: [],
-            },
-          },
-          warnings: [],
-        });
-      }
-      if (url === "/api/chart-proposal-sets/chart_set_55") {
-        const body = JSON.parse(init.body);
-        expect(body.payload.proposals[0].status).toBe("accepted");
-        return jsonResponse({
-          chartProposalSet: {
-            id: "chart_set_55",
-            datasetCommitId: "commit_1",
-            payload: body.payload,
-          },
-        });
-      }
-      if (url === "/api/projects/project_1/chart-specs/from-proposal") {
-        expect(JSON.parse(init.body)).toEqual({
-          chartProposalSetId: "chart_set_55",
-          proposalId: "proposal_55",
-        });
-        return jsonResponse({ chartSpec: { id: "chart_spec_55", title: "Reaction Rate Scatter for Experiment 55" } }, { status: 201 });
-      }
-      if (url === "/api/projects/project_1/state") {
-        return jsonResponse({
-          project: { id: "project_1", name: "Catalyst Screening", currentDatasetCommitId: "commit_1" },
-          projectProfile: {},
-          currentDatasetCommit: { id: "commit_1", datasetPayload: { genericImports: [] } },
-          mappingSets: [],
-          chartProposalSets: [],
-          chartSpecs: [{ id: "chart_spec_55", title: "Reaction Rate Scatter for Experiment 55" }],
-          manuscripts: [{ id: "manuscript_1", blocks: [{ id: "server_block" }] }],
-        });
-      }
-      throw new Error(`Unexpected fetch ${url}`);
-    });
-    const originalFetch = global.fetch;
-    global.fetch = fetchMock;
-
-    try {
-      render(
-        <AgentPanel
-          open
-          setOpen={() => {}}
-          dataset={{ metadata: {}, experiments: [], genericImports: [{ importId: "import_1" }] }}
-          blocks={[{ id: "local_unsaved", kind: "text" }]}
           setBlocks={() => {}}
           references={[]}
           selected={null}
@@ -1203,33 +1433,470 @@ describe("AgentPanel", () => {
           activeProjectId="project_1"
           projectState={{ project: { id: "project_1", name: "Catalyst Screening" }, fileObjects: [] }}
           onProjectStateLoaded={onProjectStateLoaded}
-          onInsertChartSpec={onInsertChartSpec}
+          onWorkbookReviewReady={onWorkbookReviewReady}
+          onWorkbookSuggestionSelect={onWorkbookSuggestionSelect}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Attach spreadsheet" }));
+      const fileInput = container.querySelector('input[type="file"]');
+      const file = new File(["placeholder"], "Master.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      fireEvent.change(fileInput, { target: { files: [file] } });
+
+      expect(screen.getByText("Master.xlsx")).toBeTruthy();
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
+      fireEvent.change(promptInput, { target: { value: "Please help me understand this workbook" } });
+      fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
+
+      await waitFor(() => expect(onWorkbookReviewReady).toHaveBeenCalled());
+      expect(fetchMock).toHaveBeenCalledWith("/api/projects/project_1/files", expect.objectContaining({ method: "POST" }));
+      expect(fetchMock).toHaveBeenCalledWith("/api/projects/project_1/workbook-review-sessions", expect.objectContaining({ method: "POST" }));
+      expect(screen.getByText(/I found potentially useful regions/)).toBeTruthy();
+
+      const suggestion = screen.getByRole("button", { name: "Select Sheet1!A1:Y10" });
+      fireEvent.click(suggestion);
+      expect(onWorkbookSuggestionSelect).toHaveBeenCalledWith(expect.objectContaining({
+        sourceDocumentId: "source_doc_1",
+        sheetName: "Sheet1",
+        range: "A1:Y10",
+      }));
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("keeps workbook review controls out of the global Agent composer", () => {
+    localStorage.removeItem("labrat_blank_chat_history_v1_react");
+
+    render(
+      <AgentPanel
+        open
+        setOpen={() => {}}
+        blocks={[]}
+        setBlocks={() => {}}
+        references={[]}
+        selected={null}
+        selectedChartContext={null}
+        pendingChartAnalysis={null}
+        activeProjectId="project_1"
+        projectState={{ project: { id: "project_1", name: "Catalyst Screening" }, fileObjects: [] }}
+        onProjectStateLoaded={() => {}}
+        workbookReviewContext={{
+          active: true,
+          session: { id: "session_1", status: "needs_user_review" },
+          workbookName: "Master.xlsx",
+          currentUnderstanding: {
+            id: "understanding_draft_1",
+            facts: [{ factId: "fact_1", kind: "region_description" }],
+          },
+          pendingRedBoxes: [],
+        }}
+      />,
+    );
+
+    expect(screen.queryByLabelText("Workbook review response")).toBeNull();
+    expect(screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...")).toBeTruthy();
+  });
+
+  it("keeps server-backed interpret chart actions executable when they require confirmation", async () => {
+    localStorage.removeItem("labrat_blank_chat_history_v1_react");
+    const onProjectStateLoaded = vi.fn();
+    const fetchMock = vi.fn(async (url, init = {}) => {
+      if (url === "/api/projects/project_1/agent/runs") {
+        return jsonResponse({
+          agentRun: {
+            id: "agent_run_chart_1",
+            schemaVersion: "labrat.agentRun.v1",
+            status: "waiting_for_user",
+            mode: "action_plan",
+            visibleSteps: [{ stepId: "step_chart", label: "Created compatibility action plan", details: { actionCount: 1 } }],
+            actions: [{
+              actionId: "agent_chart_1",
+              type: "interpret_chart",
+              status: "requires_confirmation",
+              label: "Draft one chart proposal",
+              description: "Interpret the request into a source-backed ChartSpec draft, then queue it for review if confirmed.",
+              params: {
+                prompt: "i want a cross-compare chart for every experiment, x axis is reaction time, y axis is reaction rate",
+              },
+              warnings: [],
+            }],
+            warnings: [],
+          },
+        }, { status: 201 });
+      }
+      if (url === "/api/projects/project_1/charts/interpret") {
+        expect(JSON.parse(init.body)).toMatchObject({
+          prompt: "i want a cross-compare chart for every experiment, x axis is reaction time, y axis is reaction rate",
+          persistAsProposal: true,
+          entrypoint: "agent_drawer",
+          context: { actionId: "agent_chart_1" },
+        });
+        return jsonResponse({
+          schemaVersion: "labrat.chartInterpretResponse.v1",
+          chartSpecDraft: { title: "Reaction Rate vs Reaction Time for All Experiments", chartType: "scatter" },
+          chartProposalSet: {
+            id: "chart_set_cross_compare",
+            payload: {
+              proposalSetId: "proposal_set_cross_compare",
+              schemaVersion: "labrat.chartProposalSet.v1",
+              proposals: [{
+                proposalId: "proposal_cross_compare",
+                status: "proposed",
+                title: "Reaction Rate vs Reaction Time for All Experiments",
+              }],
+              warnings: [],
+            },
+          },
+          warnings: [],
+        });
+      }
+      if (url === "/api/projects/project_1/state") {
+        return jsonResponse({
+          project: { id: "project_1", name: "Catalyst Screening" },
+          projectProfile: {},
+          chartProposalSets: [],
+          chartSpecs: [],
+          manuscripts: [],
+        });
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+
+    try {
+      render(
+        <AgentPanel
+          open
+          setOpen={() => {}}
+          blocks={[]}
+          setBlocks={() => {}}
+          references={[]}
+          selected={null}
+          selectedChartContext={null}
+          pendingChartAnalysis={null}
+          activeProjectId="project_1"
+          projectState={{ project: { id: "project_1", name: "Catalyst Screening" }, fileObjects: [] }}
+          onProjectStateLoaded={onProjectStateLoaded}
         />,
       );
 
       const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
       fireEvent.change(promptInput, {
-        target: { value: "I want a reaction rate scatter plot for experiment 55" },
+        target: { value: "i want a cross-compare chart for every experiment, x axis is reaction time, y axis is reaction rate" },
+      });
+      fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
+
+      await waitFor(() => expect(screen.getByText("Draft one chart proposal")).toBeTruthy());
+      expect(screen.getByText("requires_confirmation")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Confirm agent action" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Prepare" }));
+
+      await waitFor(() => expect(screen.getByRole("button", { name: "Accept proposal" })).toBeTruthy());
+      expect(screen.getByText("Chart: Reaction Rate vs Reaction Time for All Experiments")).toBeTruthy();
+      expect(screen.getByText(/Queued chart proposal set chart_set_cross_compare/)).toBeTruthy();
+      expect(onProjectStateLoaded).toHaveBeenCalledTimes(1);
+    } finally {
+      global.fetch = originalFetch;
+      localStorage.removeItem("labrat_blank_chat_history_v1_react");
+    }
+  });
+
+  it("renders completed AgentRun source extract actions as reviewable instead of preparing again", async () => {
+    localStorage.removeItem("labrat_blank_chat_history_v1_react");
+    const onReviewSourceExtract = vi.fn();
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      agentRun: {
+        id: "agent_run_source_1",
+        schemaVersion: "labrat.agentRun.v1",
+        status: "completed",
+        mode: "source_extract",
+        visibleSteps: [
+          { stepId: "step_parse", label: "Parsed source evidence" },
+          { stepId: "step_resolve", label: "Resolved source evidence" },
+          { stepId: "step_validate", label: "Validated source extract preview" },
+        ],
+        actions: [{
+          actionId: "agent_source_1",
+          type: "create_source_extract_proposal",
+          status: "completed",
+          label: "Create source extract proposal",
+          description: "Create a reviewable source extract proposal from the matched source evidence.",
+          params: { prompt: "draw carbon balance distribution from P31 to BA32" },
+          result: {
+            sourceExtractProposal: {
+              id: "source_extract_33",
+              status: "proposed",
+              extractType: "component_distribution",
+              preview: {
+                chartIntentDraft: { title: "Exp33 carbon number distribution" },
+                rows: [],
+              },
+              warnings: [],
+            },
+          },
+        }],
+        warnings: [],
+      },
+    }, { status: 201 }));
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+
+    try {
+      render(
+        <AgentPanel
+          open
+          setOpen={() => {}}
+          blocks={[]}
+          setBlocks={() => {}}
+          references={[]}
+          selected={null}
+          selectedChartContext={null}
+          pendingChartAnalysis={null}
+          activeProjectId="project_1"
+          projectState={{ project: { id: "project_1", name: "Catalyst Screening" }, fileObjects: [] }}
+          onProjectStateLoaded={() => {}}
+          onReviewSourceExtract={onReviewSourceExtract}
+        />,
+      );
+
+      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
+      fireEvent.change(promptInput, {
+        target: { value: "draw carbon balance distribution from P31 to BA32" },
+      });
+      fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
+
+      await waitFor(() => expect(screen.getByText("Create source extract proposal")).toBeTruthy());
+      expect(screen.getByText(/Created source extract proposal source_extract_33/)).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Prepare" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Confirm agent action" })).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Review source extract" }));
+      expect(onReviewSourceExtract).toHaveBeenCalledWith(expect.objectContaining({
+        id: "source_extract_33",
+        status: "proposed",
+        extractType: "component_distribution",
+      }));
+    } finally {
+      global.fetch = originalFetch;
+      localStorage.removeItem("labrat_blank_chat_history_v1_react");
+    }
+  });
+
+  it("recovers a stale source extract AgentRun card when the run is already completed", async () => {
+    localStorage.setItem("labrat_blank_chat_history_v2_project_project_1", JSON.stringify([
+      {
+        role: "assistant",
+        text: "I prepared an AgentRun action. Review the trace and confirm before anything changes.",
+        actions: [{
+          actionId: "agent_source_1",
+          agentRunId: "agent_run_source_1",
+          type: "create_source_extract_proposal",
+          status: "failed",
+          label: "Create source extract proposal",
+          description: "Create a reviewable source extract proposal from the matched source evidence.",
+          params: { prompt: "draw carbon balance distribution from P31 to BA32" },
+          error: "AgentRun is already completed.",
+          warnings: [],
+        }],
+      },
+    ]));
+    const onProjectStateLoaded = vi.fn();
+    const onReviewSourceExtract = vi.fn();
+    const fetchMock = vi.fn(async (url) => {
+      if (url === "/api/agent-runs/agent_run_source_1/confirm") {
+        return jsonResponse({
+          error: {
+            code: "agent_run_closed",
+            message: "AgentRun is already completed.",
+          },
+        }, { status: 409 });
+      }
+      if (url === "/api/agent-runs/agent_run_source_1") {
+        return jsonResponse({
+          agentRun: {
+            id: "agent_run_source_1",
+            schemaVersion: "labrat.agentRun.v1",
+            status: "completed",
+            mode: "source_extract",
+            visibleSteps: [
+              { stepId: "step_created", label: "Created source extract proposal" },
+            ],
+            proposalRefs: [{ type: "source_extract_proposal", id: "source_extract_33" }],
+            actions: [{
+              actionId: "agent_source_1",
+              type: "create_source_extract_proposal",
+              status: "completed",
+              label: "Create source extract proposal",
+              description: "Create a reviewable source extract proposal from the matched source evidence.",
+              params: { prompt: "draw carbon balance distribution from P31 to BA32" },
+              result: { sourceExtractProposalId: "source_extract_33" },
+              warnings: [],
+            }],
+            warnings: [],
+          },
+        });
+      }
+      if (url === "/api/projects/project_1/state") {
+        return jsonResponse({
+          project: { id: "project_1", name: "Catalyst Screening" },
+          projectProfile: {},
+          chartProposalSets: [],
+          chartSpecs: [],
+          manuscripts: [],
+          sourceExtractProposals: [{
+            id: "source_extract_33",
+            status: "proposed",
+            extractType: "component_distribution",
+          }],
+        });
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+
+    try {
+      render(
+        <AgentPanel
+          open
+          setOpen={() => {}}
+          blocks={[]}
+          setBlocks={() => {}}
+          references={[]}
+          selected={null}
+          selectedChartContext={null}
+          pendingChartAnalysis={null}
+          activeProjectId="project_1"
+          projectState={{ project: { id: "project_1", name: "Catalyst Screening" }, fileObjects: [] }}
+          onProjectStateLoaded={onProjectStateLoaded}
+          onReviewSourceExtract={onReviewSourceExtract}
+        />,
+      );
+
+      expect(screen.queryByRole("button", { name: "Prepare" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Refresh result" }));
+
+      await waitFor(() => expect(screen.getByRole("button", { name: "Review source extract" })).toBeTruthy());
+      expect(screen.getByText(/Created source extract proposal source_extract_33/)).toBeTruthy();
+      expect(screen.queryByText("AgentRun is already completed.")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Prepare" })).toBeNull();
+      expect(onProjectStateLoaded).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(screen.getByRole("button", { name: "Review source extract" }));
+      expect(onReviewSourceExtract).toHaveBeenCalledWith(expect.objectContaining({
+        id: "source_extract_33",
+        status: "proposed",
+      }));
+    } finally {
+      global.fetch = originalFetch;
+      localStorage.removeItem("labrat_blank_chat_history_v2_project_project_1");
+    }
+  });
+
+  it("treats interpreted source extract proposals as completed chat actions", async () => {
+    localStorage.removeItem("labrat_blank_chat_history_v1_react");
+    const onProjectStateLoaded = vi.fn();
+    const onReviewSourceExtract = vi.fn();
+    const fetchMock = vi.fn(async (url, init = {}) => {
+      if (url === "/api/projects/project_1/agent/plan") {
+        return jsonResponse({
+          schemaVersion: "labrat.agentPlan.v1",
+          reply: "I prepared a source-backed chart action.",
+          actions: [{
+            actionId: "agent_source_chart_1",
+            type: "interpret_chart",
+            status: "proposed",
+            label: "Draft one chart proposal",
+            description: "Interpret the request into a source-backed ChartSpec draft.",
+            requiresFile: false,
+            params: { prompt: "draw carbon balance distribution of experiment 33 from P31 to BA32" },
+            warnings: [],
+          }],
+        });
+      }
+      if (url === "/api/projects/project_1/charts/interpret") {
+        expect(JSON.parse(init.body)).toMatchObject({
+          prompt: "draw carbon balance distribution of experiment 33 from P31 to BA32",
+          persistAsProposal: true,
+          entrypoint: "agent_drawer",
+          context: { actionId: "agent_source_chart_1" },
+        });
+        return jsonResponse({
+          schemaVersion: "labrat.chartInterpretResponse.v1",
+          chartSpecDraft: null,
+          chartProposalSet: null,
+          evidenceIntent: { sourceKind: "excel_range", range: "P31:BA32", extractType: "component_distribution" },
+          evidenceResolution: { status: "resolved", range: "P31:BA32" },
+          sourceExtractProposal: {
+            id: "source_extract_33",
+            status: "proposed",
+            extractType: "component_distribution",
+            preview: {
+              chartIntentDraft: { title: "Exp33 carbon number distribution" },
+              rows: [],
+            },
+            warnings: [],
+          },
+          warnings: [],
+        });
+      }
+      if (url === "/api/projects/project_1/state") {
+        return jsonResponse({
+          project: { id: "project_1", name: "Catalyst Screening" },
+          projectProfile: {},
+          chartProposalSets: [],
+          chartSpecs: [],
+          manuscripts: [],
+          sourceExtractProposals: [{ id: "source_extract_33", status: "proposed" }],
+        });
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+
+    try {
+      render(
+        <AgentPanel
+          open
+          setOpen={() => {}}
+          blocks={[]}
+          setBlocks={() => {}}
+          references={[]}
+          selected={null}
+          selectedChartContext={null}
+          pendingChartAnalysis={null}
+          activeProjectId="project_1"
+          projectState={{ project: { id: "project_1", name: "Catalyst Screening" }, fileObjects: [] }}
+          onProjectStateLoaded={onProjectStateLoaded}
+          onInsertChartSpec={() => {}}
+          onReviewSourceExtract={onReviewSourceExtract}
+        />,
+      );
+
+      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
+      fireEvent.change(promptInput, {
+        target: { value: "draw carbon balance distribution of experiment 33 from P31 to BA32" },
       });
       fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
 
       await waitFor(() => expect(screen.getByText("Draft one chart proposal")).toBeTruthy());
       fireEvent.click(screen.getByRole("button", { name: "Prepare" }));
 
-      await waitFor(() => expect(screen.getByRole("button", { name: "Accept proposal" })).toBeTruthy());
-      expect(screen.getByRole("button", { name: "Create ChartSpec" }).disabled).toBe(true);
-
-      fireEvent.click(screen.getByRole("button", { name: "Accept proposal" }));
-      await waitFor(() => expect(screen.getByText("Proposal accepted")).toBeTruthy());
-      expect(screen.getByRole("button", { name: "Create ChartSpec" }).disabled).toBe(false);
-
-      fireEvent.click(screen.getByRole("button", { name: "Create ChartSpec" }));
-      await waitFor(() => expect(screen.getByText("ChartSpec created")).toBeTruthy());
-      expect(screen.getByText(/Created ChartSpec chart_spec_55/)).toBeTruthy();
-      await waitFor(() => expect(screen.getByRole("button", { name: "Insert into Manuscript" }).disabled).toBe(false));
-      fireEvent.click(screen.getByRole("button", { name: "Insert into Manuscript" }));
-      expect(onInsertChartSpec).toHaveBeenCalledWith("chart_spec_55");
-      expect(onProjectStateLoaded).toHaveBeenCalledTimes(3);
+      await waitFor(() => expect(screen.getByText(/Created source extract proposal source_extract_33/)).toBeTruthy());
+      expect(screen.getByText("completed")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Accept proposal" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Review source extract" }));
+      expect(onReviewSourceExtract).toHaveBeenCalledWith(expect.objectContaining({
+        id: "source_extract_33",
+        status: "proposed",
+        extractType: "component_distribution",
+      }));
+      expect(onProjectStateLoaded).toHaveBeenCalledTimes(1);
     } finally {
       global.fetch = originalFetch;
       localStorage.removeItem("labrat_blank_chat_history_v1_react");

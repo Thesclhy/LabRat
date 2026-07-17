@@ -1,7 +1,8 @@
 import { encodeRange } from "../import/utils/excelAddress.js";
-import { chartProposalFromAnalysisView, resolveSeriesCompareAnalysisView } from "./analysisViews.js";
+import { parseChartEvidenceIntent } from "../charts/services/chartEvidenceIntent.js";
+import { createSourceExtractProposalFromEvidence, resolveChartEvidenceIntent } from "./chartEvidenceResolver.js";
 import { createProjectAgentPlan } from "./projectAgentPlanner.js";
-import { buildSourceExtractPreview, sourceExtractProposalSummary } from "./sourceExtracts.js";
+import { buildSourceExtractPreview } from "./sourceExtracts.js";
 import { sha256Hex } from "./ids.js";
 
 export const AGENT_RUN_SCHEMA_VERSION = "labrat.agentRun.v1";
@@ -66,6 +67,21 @@ function action({ type, label, description, params = {}, requiresReview = true }
   };
 }
 
+function previewStats(preview) {
+  const series = asArray(preview?.series);
+  if (series.length) {
+    return {
+      extractType: preview.extractType || null,
+      seriesCount: series.length,
+      rowCount: series.reduce((total, item) => total + asArray(item.rows).length, 0),
+    };
+  }
+  return {
+    extractType: preview?.extractType || null,
+    rowCount: asArray(preview?.rows).length,
+  };
+}
+
 function deterministicUsage() {
   return {
     provider: "deterministic",
@@ -88,7 +104,6 @@ export function agentRunSummary(run) {
     selectedContext: run.selectedContext || {},
     visibleSteps: run.visibleSteps || [],
     toolTrace: run.toolTrace || [],
-    analysisViewId: run.analysisViewId || null,
     proposalRefs: run.proposalRefs || [],
     actions: run.actions || [],
     usage: run.usage || {},
@@ -101,23 +116,109 @@ export function agentRunSummary(run) {
   };
 }
 
-function compareActionFromPlan({ project, plan, message }) {
-  const planned = asArray(plan.actions).find((item) => item.type === "compare_series");
-  if (!planned) return null;
-  return action({
-    type: "create_compare_chart_proposal",
-    label: "Create compare AnalysisView and chart proposal",
-    description: "Create a series_compare AnalysisView and queue one chart proposal for review.",
-    params: {
-      projectId: project.id,
-      prompt: message,
-      ...planned.params,
-    },
-  });
-}
-
 async function sourceDistributionAction({ context, project, message }) {
   if (!isSourceDistributionRequest(message)) return null;
+  const evidenceIntent = parseChartEvidenceIntent(message);
+  if (evidenceIntent) {
+    const resolved = await resolveChartEvidenceIntent({ context, project, evidenceIntent });
+    const parsedDetails = {
+      range: evidenceIntent.range || null,
+      rowNumber: evidenceIntent.rowNumber || null,
+      sheetName: evidenceIntent.sheetName || null,
+      workbookHint: evidenceIntent.workbookHint || null,
+      targetExperimentAliases: asArray(evidenceIntent.targetExperimentAliases),
+      chartTask: evidenceIntent.chartTask || null,
+      scope: evidenceIntent.scope || null,
+    };
+    if (resolved.clarification || !resolved.sourceExtractPreview) {
+      return {
+        clarification: resolved.clarification || {
+          code: "source_extract_unresolved",
+          message: "The requested source evidence could not be resolved.",
+        },
+        visibleSteps: [
+          visibleStep("Parsed source evidence", parsedDetails),
+          visibleStep("Resolved source evidence", {
+            status: resolved.evidenceResolution?.status || "needs_clarification",
+            range: resolved.evidenceResolution?.range || evidenceIntent.range || null,
+            sheetName: resolved.evidenceResolution?.sheetName || null,
+            clarificationCode: resolved.clarification?.code || null,
+          }),
+        ],
+        toolTrace: [{
+          tool: "source.evidence.resolve",
+          observation: {
+            status: resolved.evidenceResolution?.status || "needs_clarification",
+            clarificationCode: resolved.clarification?.code || null,
+            evidenceIntent: parsedDetails,
+          },
+        }],
+      };
+    }
+    const preview = resolved.sourceExtractPreview;
+    const resolution = resolved.evidenceResolution || {};
+    const sourceDocumentId = resolved.sourceDocument?.id
+      || resolution.sourceDocumentId
+      || preview.range?.sourceDocumentId
+      || null;
+    const sourceRegionId = resolved.sourceRegion?.id
+      || resolution.sourceRegionId
+      || preview.range?.sourceRegionId
+      || null;
+    const range = resolution.range || preview.range?.range || evidenceIntent.range || "";
+    const sheetName = resolution.sheetName || preview.range?.sheetName || evidenceIntent.sheetName || "";
+    return {
+      action: action({
+        type: "create_source_extract_proposal",
+        label: "Create source extract proposal",
+        description: "Create a reviewable source extract proposal from the matched source evidence.",
+        params: {
+          projectId: project.id,
+          evidenceIntent,
+          evidenceResolution: resolution,
+          sourceDocumentId,
+          sourceRegionId,
+          sheetName,
+          range,
+          extractType: preview.extractType || evidenceIntent.extractType,
+          purpose: preview.purpose || "chart_source",
+          intent: {
+            title: preview.title,
+            chartTitle: preview.chartIntentDraft?.title || preview.title,
+            evidenceIntent,
+          },
+        },
+      }),
+      visibleSteps: [
+        visibleStep("Parsed source evidence", parsedDetails),
+        visibleStep("Resolved source evidence", {
+          status: resolution.status || "resolved",
+          mode: resolution.mode || null,
+          sourceDocumentId,
+          sourceRegionId,
+          sheetName,
+          range,
+          series: asArray(resolution.series).map((item) => ({
+            experimentAlias: item.experimentAlias,
+            sheetName: item.sheetName,
+            range: item.range,
+          })),
+        }),
+        visibleStep("Validated source extract preview", previewStats(preview)),
+      ],
+      toolTrace: [{
+        tool: "source.evidence.resolve",
+        observation: {
+          status: resolution.status || "resolved",
+          sourceDocumentId,
+          sourceRegionId,
+          sheetName,
+          range,
+          ...previewStats(preview),
+        },
+      }],
+    };
+  }
   const sourceDocuments = context.store.listSourceDocuments
     ? await context.store.listSourceDocuments({ projectId: project.id })
     : [];
@@ -254,14 +355,12 @@ export async function buildAgentRunDraft({
   context,
   project,
   projectProfile = {},
-  currentDatasetCommit = null,
-  observationSeries = [],
   fileObjects = [],
-  importRuns = [],
-  mappingSets = [],
   chartProposalSets = [],
   chartSpecs = [],
   manuscripts = [],
+  experimentSnapshotHeads = [],
+  sourceDocuments = [],
   message = "",
   conversation = [],
   selectedContext = {},
@@ -289,51 +388,20 @@ export async function buildAgentRunDraft({
   const plan = createProjectAgentPlan({
     project,
     projectProfile,
-    currentDatasetCommit,
-    observationSeries,
     fileObjects,
-    importRuns,
-    mappingSets,
     chartProposalSets,
     chartSpecs,
     manuscripts,
+    experimentSnapshotHeads,
+    sourceDocuments,
     message: text,
     conversation,
     selectedContext,
   });
-  const compareAction = compareActionFromPlan({ project, plan, message: text });
-  if (compareAction) {
-    return {
-      mode: "series_compare",
-      status: "waiting_for_user",
-      visibleSteps: [
-        visibleStep("Checked current dataset", { currentDatasetCommitId: currentDatasetCommit?.id || null }),
-        visibleStep("Resolved compatible observation series", {
-          seriesIds: asArray(compareAction.params.seriesIds),
-          experimentLabels: asArray(compareAction.params.experimentLabels),
-          xField: compareAction.params.xField,
-          yField: compareAction.params.yField,
-        }),
-        visibleStep("Prepared confirmable compare action", { actionType: compareAction.type }),
-      ],
-      toolTrace: [{
-        tool: "observationSeries.resolveCompare",
-        observation: {
-          seriesIds: asArray(compareAction.params.seriesIds),
-          experimentIds: asArray(compareAction.params.experimentIds),
-          xField: compareAction.params.xField,
-          yField: compareAction.params.yField,
-        },
-      }],
-      actions: [compareAction],
-      usage: deterministicUsage(),
-      warnings: asArray(plan.warnings),
-    };
-  }
   return {
     mode: "action_plan",
     status: "waiting_for_user",
-    visibleSteps: [visibleStep("Created compatibility action plan", { actionCount: asArray(plan.actions).length })],
+    visibleSteps: [visibleStep("Created project action plan", { actionCount: asArray(plan.actions).length })],
     toolTrace: [],
     actions: asArray(plan.actions),
     usage: deterministicUsage(),
@@ -342,91 +410,41 @@ export async function buildAgentRunDraft({
 }
 
 export async function executeAgentRunAction({ context, run, action, actorUserId }) {
-  if (action.type === "create_compare_chart_proposal") {
-    const project = await context.store.findProjectById(run.projectId);
-    const currentDatasetCommit = project?.currentDatasetCommitId
-      ? await context.store.findDatasetCommitById(project.currentDatasetCommitId)
-      : null;
-    const observationSeries = context.store.listObservationSeries
-      ? await context.store.listObservationSeries({ projectId: run.projectId })
-      : [];
-    const resolved = resolveSeriesCompareAnalysisView({
-      project,
-      datasetCommit: currentDatasetCommit,
-      observationSeries,
-      request: {
-        viewType: "series_compare",
-        title: action.params.title || "Reaction rate comparison",
-        prompt: run.userMessage,
-        spec: {
-          seriesKind: action.params.seriesKind || "reaction_rate_time_series",
-          experimentIds: asArray(action.params.experimentIds),
-          experimentAliases: asArray(action.params.experimentAliases),
-          xField: action.params.xField,
-          yField: action.params.yField,
-          groupBy: action.params.groupBy || "experiment",
-        },
-      },
-    });
-    if (resolved.error || resolved.clarification) {
-      const error = new Error(resolved.error?.message || resolved.clarification?.message || "Compare action could not be resolved.");
-      error.statusCode = 409;
-      error.code = resolved.error?.code || resolved.clarification?.code || "agent_run_action_unresolved";
-      throw error;
-    }
-    const draft = resolved.analysisView;
-    const analysisView = await context.store.createAnalysisView({
-      labId: run.labId,
-      projectId: run.projectId,
-      datasetCommitId: currentDatasetCommit.id,
-      schemaVersion: draft.schemaVersion,
-      viewType: draft.viewType,
-      status: draft.status || "draft",
-      title: draft.title,
-      spec: draft.spec,
-      sourceRefs: draft.sourceRefs,
-      warnings: draft.warnings,
-      createdBy: actorUserId,
-    });
-    const proposal = chartProposalFromAnalysisView({
-      analysisView,
-      datasetCommit: currentDatasetCommit,
-      observationSeries,
-    });
-    const chartProposalSet = await context.store.createChartProposalSet({
-      labId: run.labId,
-      projectId: run.projectId,
-      datasetCommitId: analysisView.datasetCommitId,
-      mappingSetId: null,
-      schemaVersion: "labrat.chartProposalSet.v1",
-      status: "proposed",
-      payload: {
-        proposalSetId: `chart_proposal_set_agent_run_${sha256Hex(run.id).slice(0, 16)}`,
-        schemaVersion: "labrat.chartProposalSet.v1",
-        sourceImportIds: proposal.sourceImportIds || [],
-        proposals: [proposal],
-        warnings: proposal.warnings || [],
-        origin: "agent_run",
-        agentRunId: run.id,
-        analysisViewId: analysisView.id,
-      },
-      decisionSummary: { accepted: 0, rejected: 0, proposalCount: 1 },
-      createdBy: actorUserId,
-    });
-    return {
-      analysisView,
-      chartProposalSet,
-      visibleSteps: [
-        visibleStep("Created AnalysisView", { analysisViewId: analysisView.id }),
-        visibleStep("Queued chart proposal for review", { chartProposalSetId: chartProposalSet.id }),
-      ],
-      proposalRefs: [{ type: "chart_proposal_set", id: chartProposalSet.id }],
-      analysisViewId: analysisView.id,
-    };
-  }
-
   if (action.type === "create_source_extract_proposal") {
     const project = await context.store.findProjectById(run.projectId);
+    if (action.params.evidenceIntent) {
+      const resolved = await resolveChartEvidenceIntent({
+        context,
+        project,
+        evidenceIntent: action.params.evidenceIntent,
+      });
+      if (resolved.clarification || !resolved.sourceExtractPreview) {
+        const error = new Error(resolved.clarification?.message || "Source evidence for this AgentRun action could not be resolved.");
+        error.statusCode = 409;
+        error.code = resolved.clarification?.code || "agent_run_source_unresolved";
+        throw error;
+      }
+      const sourceExtractProposal = await createSourceExtractProposalFromEvidence({
+        context,
+        project,
+        sourceDocument: resolved.sourceDocument,
+        sourceRegion: resolved.sourceRegion,
+        sourceExtractPreview: resolved.sourceExtractPreview,
+        evidenceIntent: action.params.evidenceIntent,
+        createdBy: actorUserId,
+        recordAudit: false,
+      });
+      return {
+        sourceExtractProposal,
+        visibleSteps: [
+          visibleStep("Created source extract proposal", {
+            sourceExtractProposalId: sourceExtractProposal.id,
+            extractType: sourceExtractProposal.extractType,
+          }),
+        ],
+        proposalRefs: [{ type: "source_extract_proposal", id: sourceExtractProposal.id }],
+      };
+    }
     const sourceDocument = await context.store.findSourceDocumentById?.(action.params.sourceDocumentId);
     const sourceRegion = action.params.sourceRegionId
       ? await context.store.findSourceRegionById?.(action.params.sourceRegionId)
@@ -456,7 +474,6 @@ export async function executeAgentRunAction({ context, run, action, actorUserId 
       projectId: run.projectId,
       sourceDocumentId: sourceDocument.id,
       sourceRegionId: sourceRegion?.id || null,
-      datasetCommitId: null,
       status: "proposed",
       purpose: action.params.purpose || preview.purpose || "chart_source",
       extractType: action.params.extractType || preview.extractType,

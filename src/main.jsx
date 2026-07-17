@@ -1,69 +1,66 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { useCallback } from "react";
+import { DataGrid } from "react-data-grid";
+import "react-data-grid/lib/styles.css";
 import { makePlot } from "./charts/makePlot";
-import { BackendScanPanel, ChartReviewPanel } from "./components/BackendScanPanel";
+import { ChartReviewPanel } from "./components/BackendScanPanel";
 import { BlankOnboarding } from "./components/BlankOnboarding";
 import { ProjectProfileChat } from "./components/ProjectProfileChat.jsx";
 import { ServerLogin } from "./components/ServerLogin.jsx";
 import { ThinkingIndicator } from "./components/ThinkingIndicator.jsx";
-import { GenericImportBrowser } from "./components/GenericImportBrowser";
+import { WorkbookReviewDock } from "./components/WorkbookReviewDock.jsx";
+import { DataPlanReviewPanel } from "./components/DataPlanReviewPanel.jsx";
+import { ExperimentBrowser } from "./components/ExperimentBrowser.jsx";
 import { Plot } from "./charts/Plot";
 import { ManuscriptCanvas } from "./components/ManuscriptCanvas";
 import { BLANK_PROJECT_SOURCE_NAME, blankTemplateLinks, isBlankDataMode } from "./data/appMode.js";
-import { interpretChartWithBackend } from "./data/backendChartInterpretApi.js";
-import { proposeChartsWithBackend } from "./data/backendChartProposalApi.js";
-import { scanWorkbookWithBackend } from "./data/backendImportScanApi.js";
-import { normalizeScanWithBackend } from "./data/backendImportNormalizeApi.js";
-import { proposeSemanticMappingsWithBackend } from "./data/backendSemanticMappingApi.js";
-import { proposeExcelMappingsFromScan } from "./data/aiExcelParserBoundary.js";
-import { applyGenericImportPatch } from "./data/genericImportPatch.js";
-import { buildGenericBrowserRows } from "./data/experimentBrowserRows.js";
-import { getMasterImports, getSupplementalImports, hasMasterImport, isSupplementalImport, supplementalWorkbookSummariesForProject } from "./data/genericImportRelationships.js";
-import { setChartProposalStatus, setMappingStatus, upsertGenericChartProposalSet, upsertGenericMappingSet } from "./data/genericProposalState.js";
-import { createBlockReviewState, setBlockReviewDecision } from "./data/importBlockReviewState.js";
-import { parseLocalExcelFolder } from "./data/masterTableImporter.js";
+import { interpretProjectChartIntent } from "./data/chartIntentClient.js";
+import { removeChartProposal, setChartProposalStatus } from "./data/chartProposalViewState.js";
 import { emptyDataset } from "./data/loadEmbeddedDataset.js";
-import { resolveStartupProject } from "./data/startupProject.js";
-import { uploadSupplementalFilesAsBatch } from "./data/supplementalBatchUpload.js";
-import { scanExcelFolder } from "./data/workbookScanner.js";
 import {
-  applyServerImportRun,
   confirmServerAgentRun,
   createServerAgentRun,
-  createServerAnalysisView,
-  createServerAnalysisViewChartProposal,
   createServerChartSpecFromProposal,
-  createServerImportRun,
   createServerManuscript,
-  createServerMappingSet,
   createServerProject,
-  createServerSupplementalImportBatch,
+  createServerWorkbookReviewSession,
+  draftServerProjectDataPlan,
+  publishServerProjectDataPlan,
   deleteServerProject,
+  getServerAgentRun,
   getServerProjectState,
   getServerSession,
-  getServerSupplementalImportBatch,
-  interpretServerProjectChart,
+  getServerWorkbookReviewSession,
+  listServerSourceDocuments,
   listServerLabs,
   listServerProjects,
   loginToServer,
   logoutFromServer,
   patchServerChartProposalSet,
   patchServerManuscript,
-  patchServerMappingSet,
   patchServerProjectProfile,
+  patchServerSourceExtractProposal,
   planServerProjectAgent,
-  previewServerImportRelationship,
-  previewServerImportRefresh,
-  previewServerImportRunNormalization,
-  proposeServerProjectCharts,
-  resolveServerProjectDataQuery,
-  supplementalImportBatchEventsUrl,
+  reviseServerWorkbookReviewSession,
+  readServerSourceDocumentRange,
+  confirmServerWorkbookReviewSession,
+  createServerSourceExtractChartProposal,
   uploadServerProjectFile,
 } from "./data/serverApi.js";
 import { ls } from "./storage/localStorage";
-import { buildProjectRecord, loadActiveProject, normalizeProjectDataset, normalizeProjectRecord, saveActiveProject } from "./storage/projectStorage";
 import { experimentDateSortValue, formatExperimentDateForDisplay } from "./utils/date.js";
-import { expNo, fmt, uid } from "./utils/format";
+import { fmt, uid } from "./utils/format";
+import { initialWorkbookDraftRegions, reconcileWorkbookDraftRegions } from "./data/workbookReviewState.js";
+import {
+  boundsContainCell,
+  getWorkbookTileCacheEntry,
+  rememberWorkbookTileCacheEntry,
+  WORKBOOK_SCROLL_DEBOUNCE_MS,
+  workbookPrefetchTileBounds,
+  workbookTileCacheKey,
+  workbookVisibleTileBounds,
+} from "./data/workbookRangeTiles.js";
 import "./styles.css";
 
 const BLANK_MODE = isBlankDataMode();
@@ -78,6 +75,266 @@ function payloadWithServerId(record, idKey) {
     ...payload,
     serverId: record?.id || payload.serverId || null,
     [idKey]: payload[idKey] || record?.id || payload.serverId || null,
+  };
+}
+
+function workbookSuggestionRange(region) {
+  return region?.range || region?.rangeRef || region?.range_ref || "";
+}
+
+function workbookSuggestionSheet(region) {
+  return region?.sheetName || region?.sheet_name || region?.sheet || "";
+}
+
+function workbookReviewSuggestionsFromResponse(response = {}) {
+  const sourceDocument = response.sourceDocument || null;
+  const sourceDocumentId = sourceDocument?.id || response.workbookReviewSession?.sourceDocumentId || response.session?.sourceDocumentId || "";
+  const regionSuggestions = asArray(response.regions)
+    .map((region) => {
+      const sheetName = workbookSuggestionSheet(region);
+      const range = workbookSuggestionRange(region);
+      if (!sheetName || !range) return null;
+      return {
+        sourceDocumentId: region.sourceDocumentId || sourceDocumentId,
+        sourceRegionId: region.id || "",
+        sheetName,
+        range,
+        label: region.label || region.kind || "Detected source region",
+        confidence: region.confidence ?? null,
+        reason: region.kind || "detected_source_region",
+        description: region.label || region.kind || "",
+        selectionMethod: "suggestion_click",
+      };
+    })
+    .filter(Boolean);
+  if (regionSuggestions.length) return regionSuggestions.slice(0, 6);
+  const fallbackSheets = asArray(sourceDocument?.metadata?.sheets);
+  return fallbackSheets
+    .map((sheet) => {
+      const sheetName = sheet?.name || "";
+      const range = sheet?.usedRange || "";
+      if (!sheetName || !range) return null;
+      return {
+        sourceDocumentId,
+        sourceRegionId: "",
+        sheetName,
+        range,
+        label: "Used range",
+        confidence: null,
+        reason: "sheet_used_range",
+        description: "Workbook used range",
+        selectionMethod: "suggestion_click",
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 3);
+}
+
+function workbookSuggestionButtonLabel(selection) {
+  return `Select ${selection.sheetName}!${selection.range}`;
+}
+
+function excelColumnLabelToIndex(label) {
+  const text = String(label || "").trim().toUpperCase();
+  if (!/^[A-Z]+$/.test(text)) return null;
+  let index = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    index = index * 26 + (text.charCodeAt(i) - 64);
+  }
+  return index - 1;
+}
+
+function excelIndexToColumnLabel(index) {
+  let value = Number(index) + 1;
+  if (!Number.isFinite(value) || value <= 0) return "";
+  let label = "";
+  while (value > 0) {
+    const remainder = (value - 1) % 26;
+    label = String.fromCharCode(65 + remainder) + label;
+    value = Math.floor((value - 1) / 26);
+  }
+  return label;
+}
+
+function parseExcelCellAddress(address) {
+  const match = String(address || "").trim().match(/^([A-Z]+)(\d+)$/i);
+  if (!match) return null;
+  const col = excelColumnLabelToIndex(match[1]);
+  const row = Number(match[2]) - 1;
+  if (col == null || !Number.isInteger(row) || row < 0) return null;
+  return { row, col };
+}
+
+function normalizeExcelBounds(bounds) {
+  if (!bounds) return null;
+  const startRow = Math.min(bounds.startRow, bounds.endRow);
+  const endRow = Math.max(bounds.startRow, bounds.endRow);
+  const startCol = Math.min(bounds.startCol, bounds.endCol);
+  const endCol = Math.max(bounds.startCol, bounds.endCol);
+  if ([startRow, endRow, startCol, endCol].some((value) => !Number.isInteger(value) || value < 0)) return null;
+  return { startRow, endRow, startCol, endCol };
+}
+
+function clampNumber(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function parseExcelA1Range(range) {
+  const text = String(range || "").trim();
+  if (!text) return null;
+  const plainRange = text.includes("!") ? text.slice(text.lastIndexOf("!") + 1) : text;
+  const [startText, endText = startText] = plainRange.split(":").map((part) => part.trim());
+  const start = parseExcelCellAddress(startText);
+  const end = parseExcelCellAddress(endText);
+  if (!start || !end) return null;
+  return normalizeExcelBounds({
+    startRow: start.row,
+    endRow: end.row,
+    startCol: start.col,
+    endCol: end.col,
+  });
+}
+
+function formatExcelA1Range(bounds) {
+  const normalized = normalizeExcelBounds(bounds);
+  if (!normalized) return "";
+  const start = `${excelIndexToColumnLabel(normalized.startCol)}${normalized.startRow + 1}`;
+  const end = `${excelIndexToColumnLabel(normalized.endCol)}${normalized.endRow + 1}`;
+  return start === end ? start : `${start}:${end}`;
+}
+
+function excelRangeBoundsFromSheet(sheet) {
+  const usedBounds = parseExcelA1Range(sheet?.usedRange);
+  if (usedBounds) return usedBounds;
+  const rowCount = Number(sheet?.rowCount);
+  const columnCount = Number(sheet?.columnCount);
+  if (Number.isFinite(rowCount) && rowCount > 0 && Number.isFinite(columnCount) && columnCount > 0) {
+    return { startRow: 0, endRow: rowCount - 1, startCol: 0, endCol: columnCount - 1 };
+  }
+  return { startRow: 0, endRow: 24, startCol: 0, endCol: 7 };
+}
+
+function excelCellsFromRangeResult(rangeResult) {
+  const cells = [
+    ...asArray(rangeResult?.cells),
+    ...asArray(rangeResult?.rows).flatMap((row) => asArray(row)),
+  ];
+  const map = new Map();
+  cells.forEach((cell) => {
+    if (!Number.isInteger(cell?.row) || !Number.isInteger(cell?.col)) return;
+    map.set(`${cell.row}:${cell.col}`, cell);
+  });
+  return map;
+}
+
+function cellInAnyWorkbookRegion(row, col, regions = []) {
+  return asArray(regions).some((region) => {
+    const bounds = parseExcelA1Range(region.range || region.rangeRef);
+    if (!bounds) return false;
+    return row >= bounds.startRow && row <= bounds.endRow && col >= bounds.startCol && col <= bounds.endCol;
+  });
+}
+
+function upsertDraftWorkbookRegion(regions, nextRegion) {
+  const values = asArray(regions);
+  const nextId = nextRegion.draftRegionId || nextRegion.clientRegionId || "";
+  if (nextId) {
+    const existingIdIndex = values.findIndex((region) => (
+      region.draftRegionId === nextId || region.clientRegionId === nextId
+    ));
+    if (existingIdIndex >= 0) {
+      return values.map((region, index) => (index === existingIdIndex ? { ...region, ...nextRegion } : region));
+    }
+  }
+  const key = `${nextRegion.sourceDocumentId}:${nextRegion.sheetName}:${nextRegion.range}`;
+  const existingIndex = values.findIndex((region) => (
+    `${region.sourceDocumentId}:${region.sheetName}:${region.range}` === key
+  ));
+  if (existingIndex >= 0) {
+    return values.map((region, index) => (index === existingIndex ? { ...region, ...nextRegion } : region));
+  }
+  return [...values, nextRegion];
+}
+
+function workbookDraftRegionId(sourceDocumentId, sheetName, range) {
+  return `draft_${sourceDocumentId}_${sheetName}_${range}`.replace(/[^a-zA-Z0-9_]/g, "_");
+}
+
+function findWorkbookDraftRegionById(regions, id) {
+  const targetId = String(id || "");
+  if (!targetId) return null;
+  return asArray(regions).find((region) => (
+    region.draftRegionId === targetId || region.clientRegionId === targetId
+  )) || null;
+}
+
+const WORKBOOK_EXCEL_CELL_WIDTH = 112;
+const WORKBOOK_EXCEL_ROW_HEIGHT = 30;
+const WORKBOOK_EXCEL_EDGE_SCROLL_ZONE = 36;
+const WORKBOOK_EXCEL_EDGE_SCROLL_INTERVAL_MS = 80;
+
+function workbookEdgeScrollDirection(clientX, clientY, rect) {
+  if (!rect) return { x: 0, y: 0 };
+  const x = clientX >= rect.right - WORKBOOK_EXCEL_EDGE_SCROLL_ZONE
+    ? 1
+    : clientX <= rect.left + WORKBOOK_EXCEL_EDGE_SCROLL_ZONE
+      ? -1
+      : 0;
+  const y = clientY >= rect.bottom - WORKBOOK_EXCEL_EDGE_SCROLL_ZONE
+    ? 1
+    : clientY <= rect.top + WORKBOOK_EXCEL_EDGE_SCROLL_ZONE
+      ? -1
+      : 0;
+  return { x, y };
+}
+
+function normalizeAgentRunActionForChat(action, agentRun = {}) {
+  const result = action?.result && typeof action.result === "object" ? action.result : {};
+  const proposalRefs = asArray(agentRun?.proposalRefs);
+  const chartProposalSet = result.chartProposalSet || action?.chartProposalSet || null;
+  const chartProposalPayload = chartProposalSet?.payload || action?.chartProposalSetPayload || null;
+  const chartProposal = asArray(chartProposalPayload?.proposals)[0] || null;
+  const chartProposalSetId = chartProposalSet?.id
+    || result.chartProposalSetId
+    || action?.chartProposalSetId
+    || "";
+  const sourceExtractProposal = result.sourceExtractProposal || action?.sourceExtractProposal || null;
+  const sourceExtractProposalId = sourceExtractProposal?.id
+    || result.sourceExtractProposalId
+    || action?.sourceExtractProposalId
+    || (action?.type === "create_source_extract_proposal"
+      ? proposalRefs.find((ref) => ref?.type === "source_extract_proposal")?.id
+      : "")
+    || "";
+  const warnings = [
+    ...asArray(action?.warnings),
+    ...asArray(agentRun?.warnings),
+    ...asArray(chartProposalPayload?.warnings),
+    ...asArray(sourceExtractProposal?.warnings),
+  ];
+  const previewPatch = {};
+  if (chartProposal?.title || sourceExtractProposal?.preview?.chartIntentDraft?.title) {
+    previewPatch.chartTitle = chartProposal?.title || sourceExtractProposal?.preview?.chartIntentDraft?.title || "";
+  }
+  if (chartProposalSetId || sourceExtractProposalId) {
+    previewPatch.message = chartProposalSetId
+      ? `Queued chart proposal set ${chartProposalSetId}.`
+      : `Created source extract proposal ${sourceExtractProposalId}. Review the extracted source data before charting.`;
+  }
+  if (warnings.length) previewPatch.warnings = warnings;
+
+  return {
+    ...action,
+    agentRunId: agentRun?.id || action?.agentRunId || "",
+    ...(chartProposalSetId ? { chartProposalSetId } : {}),
+    ...(chartProposalPayload ? { chartProposalSetPayload: chartProposalSet ? payloadWithServerId(chartProposalSet, "proposalSetId") : chartProposalPayload } : {}),
+    ...(chartProposal?.proposalId ? { proposalId: chartProposal.proposalId, proposalStatus: chartProposal.status || "proposed" } : {}),
+    ...(sourceExtractProposalId ? { sourceExtractProposalId, sourceExtractProposalStatus: sourceExtractProposal?.status || action?.sourceExtractProposalStatus || "proposed" } : {}),
+    ...(sourceExtractProposal ? { sourceExtractProposal } : {}),
+    preview: {
+      ...(action?.preview || {}),
+      ...previewPatch,
+    },
   };
 }
 
@@ -97,15 +354,8 @@ function decisionSummary(items = []) {
   };
 }
 
-function datasetFromServerProjectState(projectState) {
-  const payload = projectState?.currentDatasetCommit?.datasetPayload || {};
-  return normalizeProjectDataset({
-    ...emptyDataset(),
-    ...payload,
-    genericImports: asArray(payload.genericImports),
-    genericMappingSets: asArray(projectState?.mappingSets).map((set) => payloadWithServerId(set, "mappingSetId")),
-    genericChartProposals: asArray(projectState?.chartProposalSets).map((set) => payloadWithServerId(set, "proposalSetId")),
-  });
+function datasetFromServerProjectState() {
+  return emptyDataset();
 }
 
 export function mergeProjectStateForWorkspaceRefresh(currentState, incomingState, options = {}) {
@@ -147,91 +397,6 @@ export function latestItem(items) {
   return latest || fallback;
 }
 
-function emptyRefreshDraft() {
-  return {
-    open: false,
-    replaceImportId: "",
-    expectedParentDatasetCommitId: "",
-    targetImport: null,
-    preview: null,
-    loading: false,
-    error: "",
-  };
-}
-
-function emptyRelationshipDraft() {
-  return {
-    preview: null,
-    selectedProposalId: "",
-    loading: false,
-    error: "",
-  };
-}
-
-function emptySupplementalBatchState() {
-  return {
-    activeBatchId: "",
-    batch: null,
-    uploading: false,
-    applying: false,
-    error: "",
-    usePolling: false,
-    sseFailures: 0,
-  };
-}
-
-function selectableRelationshipProposals(preview) {
-  return asArray(preview?.proposals).filter((proposal) => (
-    proposal?.proposedRelationship === "supplement"
-    && asArray(proposal.targetExperimentIds).length > 0
-  ));
-}
-
-function scanBlockIds(scanResult) {
-  return asArray(scanResult?.sheets).flatMap((sheet) => asArray(sheet?.blocks).map((block) => block?.blockId).filter(Boolean));
-}
-
-function summarizeNormalizePreview(normalizePreview) {
-  const imports = asArray(normalizePreview?.datasetPatch?.genericImports);
-  return {
-    importCount: imports.length,
-    experimentCount: normalizePreview?.summary?.createdExperiments ?? imports.reduce((total, item) => total + asArray(item?.experiments).length, 0),
-    fieldCount: normalizePreview?.summary?.createdFields ?? imports.reduce((total, item) => total + asArray(item?.fields).length, 0),
-    measurementCount: normalizePreview?.summary?.createdMeasurements ?? imports.reduce((total, item) => total + asArray(item?.measurements).length, 0),
-    warningCount: normalizePreview?.summary?.warningCount ?? imports.reduce((total, item) => total + asArray(item?.warnings).length, 0),
-  };
-}
-
-const SEMANTIC_ROLE_OPTIONS = ["identifier", "time", "condition", "response", "material", "metadata", "note", "replicate"];
-const MAPPING_STATUS_OPTIONS = ["proposed", "accepted", "rejected"];
-
-function mappingPayloadFromRecord(record) {
-  if (!record) return null;
-  return payloadWithServerId(record, "mappingSetId");
-}
-
-function mappingSetForDatasetCommit(projectState, datasetCommitId) {
-  const mappingSets = asArray(projectState?.mappingSets);
-  if (!mappingSets.length) return null;
-  const currentCommitSets = datasetCommitId
-    ? mappingSets.filter((set) => set?.datasetCommitId === datasetCommitId)
-    : [];
-  return latestItem(currentCommitSets) || latestItem(mappingSets);
-}
-
-function mappingSetIsStale(mappingSet, datasetCommitId) {
-  return !!(mappingSet?.datasetCommitId && datasetCommitId && mappingSet.datasetCommitId !== datasetCommitId);
-}
-
-function mappingCounts(mappingSet) {
-  const mappings = asArray(mappingSet?.payload?.mappings || mappingSet?.mappings);
-  return {
-    total: mappings.length,
-    accepted: mappings.filter((mapping) => mapping?.status === "accepted").length,
-    rejected: mappings.filter((mapping) => mapping?.status === "rejected").length,
-    proposed: mappings.filter((mapping) => !mapping?.status || mapping.status === "proposed").length,
-  };
-}
 
 function proposalPayloadFromRecord(record) {
   if (!record) return null;
@@ -264,54 +429,6 @@ function activeChartProposalSummaryForProject(projectState) {
   };
 }
 
-function genericImportLabel(genericImport) {
-  if (!genericImport) return "Imported workbook";
-  return genericImport.fileName
-    || genericImport.files?.[0]?.name
-    || genericImport.files?.[0]?.fileName
-    || genericImport.importId
-    || "Imported workbook";
-}
-
-function genericImportExperimentCount(genericImport) {
-  return asArray(genericImport?.experiments).length;
-}
-
-function genericImportFieldCount(genericImport) {
-  const fields = asArray(genericImport?.fields);
-  if (fields.length) return fields.length;
-  const labels = new Set();
-  asArray(genericImport?.measurements).forEach((measurement) => {
-    const key = measurement?.fieldId || measurement?.displayName || measurement?.rawLabel || measurement?.measurementId;
-    if (key) labels.add(key);
-  });
-  return labels.size;
-}
-
-function genericImportObservationCount(genericImport) {
-  return asArray(genericImport?.observationSets).reduce((total, set) => (
-    total + (set?.summary?.observationCount ?? asArray(set?.observations).length)
-  ), 0);
-}
-
-function genericImportLineageText(genericImport) {
-  const metadata = genericImport?.refreshMetadata || {};
-  const parentImportId = genericImport?.refreshOfImportId || metadata.refreshOfImportId || "";
-  const appliedAt = metadata.appliedAt || genericImport?.refreshedAt || "";
-  if (!parentImportId && !appliedAt) return "";
-  const parts = [];
-  if (parentImportId) parts.push(`refreshed from ${parentImportId}`);
-  if (appliedAt) parts.push(`applied ${formatShortDate(appliedAt)}`);
-  return parts.join(" - ");
-}
-
-function refreshErrorMessage(error) {
-  if (error?.code === "refresh_no_changes_detected") return "No changes detected.";
-  if (error?.code === "dataset_commit_conflict") return "Project data changed; reload project and try again.";
-  if (error?.code === "refresh_target_not_found") return "The selected import no longer exists. Choose another refresh target.";
-  return error?.message || String(error);
-}
-
 function upsertServerRecordById(items, incoming) {
   if (!incoming?.id) return asArray(items);
   const values = asArray(items);
@@ -333,69 +450,15 @@ function completedProfileFields(projectProfile) {
     .filter((key) => Array.isArray(profile[key]) ? profile[key].length : String(profile[key] || "").trim()).length;
 }
 
-function projectCurrentDatasetCommitId(projectState) {
-  return projectState?.currentDatasetCommit?.id || projectState?.project?.currentDatasetCommitId || null;
-}
-
-function isActiveChartSpecForProject(chartSpec, projectState) {
+function isActiveChartSpecForProject(chartSpec) {
   if (!chartSpec) return false;
   if (chartSpec.isStale || chartSpec.status === "stale") return false;
-  const currentCommitId = projectCurrentDatasetCommitId(projectState);
-  if (chartSpec.datasetCommitId && currentCommitId && chartSpec.datasetCommitId !== currentCommitId) return false;
-  return true;
+  const spec = chartSpec.spec && typeof chartSpec.spec === "object" ? chartSpec.spec : chartSpec;
+  return spec?.origin === "source_extract" || Boolean(spec?.sourceSnapshot);
 }
 
 export function activeChartSpecsForProject(projectState) {
   return asArray(projectState?.chartSpecs).filter((chartSpec) => isActiveChartSpecForProject(chartSpec, projectState));
-}
-
-export function activeObservationSeriesForProject(projectState) {
-  const currentCommitId = projectCurrentDatasetCommitId(projectState);
-  return asArray(projectState?.observationSeries).filter((series) => (
-    series?.experimentId
-    && series?.datasetCommitId
-    && (!currentCommitId || series.datasetCommitId === currentCommitId)
-    && !series.isStale
-    && series.status !== "stale"
-  ));
-}
-
-function seriesAxisLabel(series, axis) {
-  const label = axis === "x" ? series?.xLabel : series?.yLabel;
-  const field = axis === "x" ? series?.xField : series?.yField;
-  const unit = axis === "x" ? series?.xUnit : series?.yUnit;
-  return [label || field || "field", unit ? `(${unit})` : ""].filter(Boolean).join(" ");
-}
-
-export function buildCompareSeriesGroups(projectState) {
-  const groups = new Map();
-  activeObservationSeriesForProject(projectState).forEach((series) => {
-    if (!series.seriesKind || !series.xField || !series.yField) return;
-    const key = [series.seriesKind, series.xField, series.yField].join("|");
-    const group = groups.get(key) || {
-      key,
-      seriesKind: series.seriesKind,
-      xField: series.xField,
-      yField: series.yField,
-      xLabel: seriesAxisLabel(series, "x"),
-      yLabel: seriesAxisLabel(series, "y"),
-      series: [],
-    };
-    if (!group.series.some((item) => item.experimentId === series.experimentId)) {
-      group.series.push(series);
-    }
-    groups.set(key, group);
-  });
-  return [...groups.values()]
-    .map((group) => ({
-      ...group,
-      series: group.series.sort((a, b) => {
-        const byNumber = expNo(a.experimentLabel) - expNo(b.experimentLabel);
-        if (Number.isFinite(byNumber) && byNumber !== 0) return byNumber;
-        return String(a.experimentLabel || a.experimentId).localeCompare(String(b.experimentLabel || b.experimentId));
-      }),
-    }))
-    .sort((a, b) => b.series.length - a.series.length || a.yLabel.localeCompare(b.yLabel));
 }
 
 function staleChartSpecCountForProject(projectState) {
@@ -405,7 +468,8 @@ function staleChartSpecCountForProject(projectState) {
 function projectWorkflowSummary(project, state = null) {
   const projectProfile = state?.projectProfile || project?.projectProfile || {};
   const profileCount = completedProfileFields(projectProfile);
-  const hasDataset = !!(state?.currentDatasetCommit?.id || project?.currentDatasetCommitId);
+  const publishedExperimentCount = asArray(state?.experimentSnapshotHeads).length;
+  const hasPublishedData = publishedExperimentCount > 0;
   const importRuns = asArray(state?.importRuns);
   const latestImportRun = latestItem(importRuns);
   const chartProposalSets = asArray(state?.chartProposalSets);
@@ -417,8 +481,9 @@ function projectWorkflowSummary(project, state = null) {
   return {
     profileCount,
     profileComplete: profileCount >= 3,
-    hasDataset,
-    importStatus: latestImportRun?.status || (hasDataset ? "applied" : "not started"),
+    hasPublishedData,
+    publishedExperimentCount,
+    importStatus: latestImportRun?.status || (hasPublishedData ? "published" : "not started"),
     chartProposalCount: proposalPayloads.length,
     acceptedCharts,
     chartSpecCount: chartSpecs.length,
@@ -524,7 +589,6 @@ export function Topbar({
   dirty,
   onSave,
   onAgent,
-  dataset,
   sourceName,
   loadingSource,
   sourceError,
@@ -673,7 +737,7 @@ export function ProjectDashboard({
                   <ProjectStatusChip tone={rowSummary.profileComplete ? "good" : "warn"}>Profile {rowSummary.profileCount}/7</ProjectStatusChip>
                   <ProjectStatusChip tone={rowSummary.manuscriptCount ? "good" : "neutral"}>{rowSummary.manuscriptCount ? "Manuscript" : "No manuscript"}</ProjectStatusChip>
                 </span>
-                <span>{rowSummary.hasDataset ? "Dataset committed" : "No data"}</span>
+                <span>{rowSummary.hasPublishedData ? `${rowSummary.publishedExperimentCount} experiments` : "No published data"}</span>
                 <span>{rowSummary.chartSpecCount} specs</span>
                 <span>{formatShortDate(project.updatedAt)}</span>
                 <span className="project-open-cell">
@@ -712,13 +776,13 @@ export function ProjectDashboard({
             </div>
             <div className="project-detail-metrics">
               <div><strong>{summary.profileCount}/7</strong><span>Profile fields</span></div>
-              <div><strong>{summary.hasDataset ? "Yes" : "No"}</strong><span>Dataset commit</span></div>
+              <div><strong>{summary.publishedExperimentCount}</strong><span>Published experiments</span></div>
               <div><strong>{summary.chartSpecCount}</strong><span>Chart specs</span></div>
               <div><strong>{summary.manuscriptCount}</strong><span>Manuscripts</span></div>
             </div>
             <div className="project-flow-stack">
               <ProjectFlowItem done={summary.profileComplete} label="Project background" detail={summary.profileComplete ? "Ready for AI context" : "Needs more context"} />
-              <ProjectFlowItem done={summary.hasDataset} label="Dataset" detail={summary.hasDataset ? "Current commit available" : "Upload and apply import"} />
+              <ProjectFlowItem done={summary.hasPublishedData} label="Experiment Browser" detail={summary.hasPublishedData ? `${summary.publishedExperimentCount} accepted experiment records` : "Review and publish workbook experiments"} />
               <ProjectFlowItem done={summary.chartSpecCount > 0} label="Approved charts" detail={summary.chartSpecCount ? `${summary.chartSpecCount} chart specs` : `${summary.chartProposalCount} proposals, ${summary.acceptedCharts} accepted`} />
               <ProjectFlowItem done={summary.manuscriptCount > 0} label="Manuscript" detail={summary.manuscriptUpdatedAt ? `Updated ${formatShortDate(summary.manuscriptUpdatedAt)}` : "Not started"} />
             </div>
@@ -755,37 +819,24 @@ function ProjectFlowItem({ done, label, detail }) {
   );
 }
 
-export function ProjectOverview({ projectState, dataset, onOpenProfile, onOpenImportReview, onOpenRefreshWorkbook, onOpenSupplementWorkbook, onOpenSupplementManager, onOpenCompareSeries, onOpenMappingReview, onOpenChartReview, onGoManuscript }) {
+export function ProjectOverview({ projectState, onAskLabRat, onOpenProfile, onUploadWorkbook, onGoBrowser, onOpenChartReview, onGoManuscript }) {
   const summary = projectWorkflowSummary(projectState?.project, projectState);
-  const masterImports = getMasterImports(dataset);
-  const supplementalImports = getSupplementalImports(dataset);
-  const supplementalSummaries = supplementalWorkbookSummariesForProject(projectState, dataset);
-  const compareSeriesGroups = buildCompareSeriesGroups(projectState);
-  const hasMaster = masterImports.length > 0;
-  const currentCommitId = projectState?.currentDatasetCommit?.id || projectState?.project?.currentDatasetCommitId || "";
-  const mappingSet = mappingSetForDatasetCommit(projectState, currentCommitId);
-  const mappingStats = mappingCounts(mappingSet);
-  const mappingStale = mappingSetIsStale(mappingSet, currentCommitId);
-  const canRefreshWorkbook = !!(projectState?.currentDatasetCommit?.id || projectState?.project?.currentDatasetCommitId)
-    && hasMaster;
-  const canAddSupplementalWorkbook = canRefreshWorkbook;
-  const canEditMappings = !!currentCommitId && hasMaster;
-  const mappingDetail = !hasMaster
-    ? "Upload the master table before reviewing semantic mappings"
-    : !mappingSet
-      ? "Generate mappings for Browser columns and chart inputs"
-      : mappingStale
-        ? "Mappings are from an older dataset commit; regenerate before editing"
-        : `${mappingStats.proposed} proposed, ${mappingStats.rejected} rejected`;
+  const workbookReviewSessions = asArray(projectState?.workbookReviewSessions);
+  const sourceDocumentCount = asArray(projectState?.sourceDocuments).length;
   const pendingChartProposals = pendingChartProposalsForProject(projectState);
   const activeChartProposalSummary = activeChartProposalSummaryForProject(projectState);
-  const chartDetail = summary.staleChartSpecCount
-    ? `${summary.chartProposalCount} proposals, ${summary.acceptedCharts} accepted. Some older chart specs are hidden until regenerated.`
-    : `${summary.chartProposalCount} proposals, ${summary.acceptedCharts} accepted`;
+  const chartReviewDetail = "Use the one-chart prompt or queued proposals; source extracts stay reviewable before charting";
+  const manageChartDetail = summary.staleChartSpecCount
+    ? `${summary.chartSpecCount} active ChartSpecs. Some older specs are hidden until regenerated.`
+    : summary.chartSpecCount
+      ? `${summary.chartSpecCount} active ChartSpecs are available for Manuscript insertion`
+      : "Accepted proposals and durable ChartSpecs appear here after review";
   const nextAction = !summary.profileComplete
     ? { label: "Edit profile", action: onOpenProfile }
-    : !summary.hasDataset
-      ? { label: "Import workbook", action: onOpenImportReview }
+    : workbookReviewSessions.length
+      ? { label: "Continue workbook review", action: onUploadWorkbook }
+      : !sourceDocumentCount
+        ? { label: "Upload workbook", action: onAskLabRat }
     : !summary.chartSpecCount
         ? { label: "Review chart proposals", action: onOpenChartReview }
         : { label: "Build manuscript", action: onGoManuscript };
@@ -799,401 +850,46 @@ export function ProjectOverview({ projectState, dataset, onOpenProfile, onOpenIm
         <button type="button" className="primary" onClick={nextAction.action}>{nextAction.label}</button>
       </section>
       <section className="project-overview-grid">
+        <ProjectOverviewCard
+          title="Ask LabRat"
+          value="Assistant"
+          detail="Conversational help for guided workflows and questions; actions still land in review surfaces"
+          action="Open Ask LabRat"
+          onClick={onAskLabRat}
+        />
         <ProjectOverviewCard title="Project profile" value={`${summary.profileCount}/7`} detail={summary.profileComplete ? "Enough context for chart AI" : "Add research goal, materials, methods, and analysis notes"} action="Edit profile" onClick={onOpenProfile} />
         <ProjectOverviewCard
-          title="Master Dataset"
-          value={hasMaster ? "1 master table" : "No master table"}
-          detail={hasMaster ? `Master imports active: ${masterImports.length}. Import status: ${summary.importStatus}` : "Upload one reviewed MasterTable before adding supplemental workbooks"}
-          action="Upload master table"
-          onClick={onOpenImportReview}
-          actionDisabled={hasMaster}
-          actionTitle={hasMaster ? "A project can have one active master table. Use refresh to replace it." : "Upload the project master table"}
-          secondaryAction="Refresh master table"
-          onSecondaryClick={onOpenRefreshWorkbook}
-          secondaryDisabled={!canRefreshWorkbook}
-          secondaryTitle={canRefreshWorkbook ? "Replace the committed master table with a reviewed workbook refresh" : "Refresh requires a committed master table"}
+          title="Workbook review"
+          value={`${sourceDocumentCount} source documents`}
+          detail={workbookReviewSessions.length ? `${workbookReviewSessions.length} review sessions. Confirm workbook meaning before data or charts.` : "Upload any Excel workbook and review detected source regions before extracting data."}
+          action={workbookReviewSessions.length ? "Continue review" : "Upload workbook"}
+          onClick={workbookReviewSessions.length ? onUploadWorkbook : onAskLabRat}
+          actionTitle={workbookReviewSessions.length ? "Open the latest workbook review session" : "Open Ask LabRat, then use the + button to attach a spreadsheet"}
         />
         <ProjectOverviewCard
-          title="Supplemental Workbooks"
-          value={`${supplementalSummaries.length} supplemental files`}
-          detail={hasMaster ? "Attach extra Excel files to existing experiments through relationship review" : "Upload a master table before adding supplemental files"}
-          action="Add supplemental workbook"
-          onClick={onOpenSupplementWorkbook}
-          actionDisabled={!canAddSupplementalWorkbook}
-          actionTitle={canAddSupplementalWorkbook ? "Upload an extra workbook and link it to existing experiments" : "Supplemental uploads require a committed master table"}
-          secondaryAction="Manage supplemental workbooks"
-          onSecondaryClick={onOpenSupplementManager}
-          secondaryDisabled={!hasMaster && !supplementalSummaries.length}
-          secondaryTitle={hasMaster || supplementalSummaries.length ? "Browse supplemental workbook details and review/edit options" : "Supplemental workbooks require a committed master table"}
-        >
-          <CompareSeriesOverviewAction groups={compareSeriesGroups} onClick={onOpenCompareSeries} />
-        </ProjectOverviewCard>
-        <ProjectOverviewCard
-          title="Semantic mappings"
-          value={mappingSet ? `${mappingStats.accepted}/${mappingStats.total} accepted` : "No mappings"}
-          detail={mappingDetail}
-          action="Edit mappings"
-          onClick={onOpenMappingReview}
-          actionDisabled={!canEditMappings}
-          actionTitle={canEditMappings ? "Edit accepted fields for Browser columns and chart inputs" : "Mappings require a committed master table"}
+          title="Experiment Browser"
+          value={`${summary.publishedExperimentCount} published experiments`}
+          detail="Browse accepted records, save views, compare scalar values, and inspect full source-backed details."
+          action="Open Experiment Browser"
+          onClick={onGoBrowser}
+          actionDisabled={!summary.hasPublishedData}
+          actionTitle={summary.hasPublishedData ? "Open accepted experiment records" : "Publish reviewed workbook experiments first"}
         />
-        <ProjectOverviewCard title="Charts" value={`${summary.chartSpecCount} specs`} detail={chartDetail} action="Review chart proposals" onClick={onOpenChartReview}>
-          <ActiveChartProposalButton
-            summary={activeChartProposalSummary}
-            onClick={() => onOpenChartReview?.({ statusFilter: "active" })}
-          />
+        <ProjectOverviewCard title="Review chart proposals" value={`${summary.chartProposalCount} proposals`} detail={chartReviewDetail} action="Review chart proposals" onClick={onOpenChartReview}>
           <PendingChartProposalList
             proposals={pendingChartProposals.proposals}
             remaining={pendingChartProposals.remaining}
             onEditProposal={(proposalId) => onOpenChartReview?.(proposalId)}
           />
         </ProjectOverviewCard>
-        <ProjectOverviewCard title="Manuscript" value={summary.manuscriptCount ? "Draft" : "Not started"} detail={summary.manuscriptUpdatedAt ? `Updated ${formatShortDate(summary.manuscriptUpdatedAt)}` : "Insert approved chart specs into the canvas"} action="Open manuscript" onClick={onGoManuscript} />
+        <ProjectOverviewCard title="Manage approved charts" value={`${summary.acceptedCharts} accepted / ${summary.chartSpecCount} specs`} detail={manageChartDetail} action="Manage approved charts" onClick={() => onOpenChartReview?.({ statusFilter: "active" })}>
+          <ActiveChartProposalSummary
+            summary={activeChartProposalSummary}
+          />
+        </ProjectOverviewCard>
+        <ProjectOverviewCard title="Manuscript" value={summary.manuscriptCount ? "Draft" : "Not started"} detail={summary.manuscriptUpdatedAt ? `Updated ${formatShortDate(summary.manuscriptUpdatedAt)}. Insert approved ChartSpecs only.` : "Insert approved ChartSpecs or future FigurePackages into the canvas"} action="Insert approved charts" onClick={onGoManuscript} />
       </section>
     </main>
-  );
-}
-
-function supplementStatusLabel(status) {
-  if (status === "applied") return "Applied";
-  if (status === "normalized_preview") return "Needs relationship review";
-  if (status === "review_ready") return "Pending review";
-  if (status === "failed") return "Failed";
-  return status ? String(status).replace(/_/g, " ") : "Pending";
-}
-
-function supplementStatusClass(status) {
-  if (status === "applied") return "applied";
-  if (status === "failed") return "failed";
-  return "pending";
-}
-
-function supplementalTargetsText(item = {}) {
-  return item.targetLabels?.length ? item.targetLabels.join(", ") : "No linked experiment yet";
-}
-
-function supplementalCountText(item = {}) {
-  const countParts = [
-    item.observationCount ? `${item.observationCount} observations` : "",
-    item.fieldCount ? `${item.fieldCount} fields` : "",
-    item.sourceCount ? `${item.sourceCount} sources` : "",
-  ].filter(Boolean);
-  return countParts.join(" - ") || "No parsed counts";
-}
-
-function batchItemStatusLabel(status) {
-  if (status === "ready_for_review") return "Ready for review";
-  if (status === "resolving_relationship") return "Resolving";
-  return supplementStatusLabel(status);
-}
-
-function selectableRelationshipForBatchItem(item = {}) {
-  const proposals = asArray(item.relationshipPreview?.proposals);
-  return proposals.find((proposal) => (
-    proposal?.proposedRelationship === "supplement"
-    && asArray(proposal.targetExperimentIds).length > 0
-  )) || null;
-}
-
-function batchItemReadyForApply(item = {}) {
-  return item.status === "ready_for_review" && item.importRunId && selectableRelationshipForBatchItem(item);
-}
-
-function mergeSupplementalBatches(projectState, activeBatch) {
-  const batches = [];
-  if (activeBatch?.id) batches.push(activeBatch);
-  asArray(projectState?.supplementalImportBatches).forEach((batch) => {
-    if (!batches.some((item) => item.id === batch.id)) batches.push(batch);
-  });
-  return batches;
-}
-
-function SupplementalBatchPanel({ batches, selectedItemIds, onSelectionChange, onReviewItem, onRetryItem, onApplySelected, applying }) {
-  const visibleBatches = asArray(batches).filter((batch) => asArray(batch.items).length);
-  if (!visibleBatches.length) return null;
-  const selectedCount = selectedItemIds.size;
-  return (
-    <section className="supplemental-batch-panel" aria-label="Supplemental batch progress">
-      <div className="supplemental-batch-head">
-        <div>
-          <strong>Batch processing</strong>
-          <span>Review-ready files are prepared, but not applied until you approve them.</span>
-        </div>
-        <button type="button" className="primary" disabled={!selectedCount || applying} onClick={onApplySelected}>
-          {applying ? "Applying..." : `Apply selected ready (${selectedCount})`}
-        </button>
-      </div>
-      {visibleBatches.map((batch) => (
-        <div className="supplemental-batch-card" key={batch.id}>
-          <div className="supplemental-batch-title">
-            <strong>{batch.summary?.completed || 0}/{batch.summary?.total || batch.items.length} processed</strong>
-            <span className={`supplemental-status ${supplementStatusClass(batch.status)}`}>{batchItemStatusLabel(batch.status)}</span>
-          </div>
-          <div className="supplemental-batch-items">
-            {asArray(batch.items).map((item) => {
-              const ready = batchItemReadyForApply(item);
-              const selected = selectedItemIds.has(item.id);
-              const resolving = item.status === "resolving_relationship";
-              return (
-                <article className={`supplemental-batch-item is-${item.status}`} key={item.id}>
-                  <label className="supplemental-batch-select">
-                    <input
-                      type="checkbox"
-                      disabled={!ready || applying}
-                      checked={ready && selected}
-                      onChange={(event) => onSelectionChange?.(item.id, event.target.checked)}
-                    />
-                    <span>
-                      <strong>{item.fileName || "Supplemental workbook"}</strong>
-                      <small>{item.progressMessage || batchItemStatusLabel(item.status)}</small>
-                    </span>
-                  </label>
-                  <span className={`supplemental-status ${supplementStatusClass(item.status)}`}>{batchItemStatusLabel(item.status)}</span>
-                  {resolving && <ThinkingIndicator text="AI is resolving experiment links..." />}
-                  {item.error && <p className="import-review-error">{item.error.message || item.error.code}</p>}
-                  <div className="supplemental-batch-actions">
-                    {item.importRunId && item.status !== "failed" && (
-                      <button type="button" onClick={() => onReviewItem?.(item.importRunId)}>Review</button>
-                    )}
-                    {item.status === "failed" && item.fileObjectId && (
-                      <button type="button" onClick={() => onRetryItem?.(item.fileObjectId)}>Retry</button>
-                    )}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-    </section>
-  );
-}
-
-export function SupplementalWorkbooksModal({ open, projectState, dataset, activeBatch, batchUploading = false, batchApplying = false, batchError = "", onAddSupplemental, onCompareSeries, onContinueReview, onRetryBatchItem, onApplyBatchItems, onClose }) {
-  const summaries = supplementalWorkbookSummariesForProject(projectState, dataset);
-  const summaryIds = summaries.map((item) => item.id).join("|");
-  const [selectedId, setSelectedId] = useState("");
-  const batches = mergeSupplementalBatches(projectState, activeBatch);
-  const compareGroups = buildCompareSeriesGroups(projectState);
-  const canCompareSeries = compareGroups.some((group) => group.series.length >= 2);
-  const readyItemIds = batches.flatMap((batch) => asArray(batch.items).filter(batchItemReadyForApply).map((item) => item.id)).join("|");
-  const [selectedBatchItemIds, setSelectedBatchItemIds] = useState(() => new Set());
-  useEffect(() => {
-    if (!open) return;
-    setSelectedId((current) => summaries.some((item) => item.id === current) ? current : summaries[0]?.id || "");
-  }, [open, summaryIds]);
-  useEffect(() => {
-    if (!open) return;
-    setSelectedBatchItemIds((current) => {
-      const readyIds = new Set(readyItemIds ? readyItemIds.split("|").filter(Boolean) : []);
-      const next = new Set([...current].filter((id) => readyIds.has(id)));
-      readyIds.forEach((id) => next.add(id));
-      return next;
-    });
-  }, [open, readyItemIds]);
-  if (!open) return null;
-  const selected = summaries.find((item) => item.id === selectedId) || summaries[0] || null;
-  const selectedBatchItems = batches.flatMap((batch) => asArray(batch.items)).filter((item) => selectedBatchItemIds.has(item.id) && batchItemReadyForApply(item));
-  const hasBatchRows = batches.some((batch) => asArray(batch.items).length);
-  const closeFromBackdrop = (event) => {
-    if (event.target === event.currentTarget) onClose?.();
-  };
-  return (
-    <div className="modal-backdrop" onMouseDown={closeFromBackdrop}>
-      <div className="modal wide supplemental-manager-modal" role="dialog" aria-modal="true" aria-label="Supplemental Workbooks">
-        <div className="modal-head">
-          <div>
-            <h2>Supplemental Workbooks</h2>
-            <p>Browse attached supplemental files, inspect parsed content, and continue reviewed edit flows.</p>
-          </div>
-          <button type="button" aria-label="Close" onClick={onClose}>x</button>
-        </div>
-        <div className="modal-body supplemental-manager-body">
-          <div className="supplemental-manager-toolbar">
-            <div>
-              <strong>{summaries.length} supplemental files</strong>
-              <span>Applied files stay immutable; edits go through reviewed supplemental import.</span>
-            </div>
-            <div className="supplemental-manager-toolbar-actions">
-              <button
-                type="button"
-                disabled={!canCompareSeries}
-                title={canCompareSeries ? "Select compatible observation series and draft a compare chart proposal" : "Need at least two compatible active observation series"}
-                onClick={onCompareSeries}
-              >
-                Compare series
-              </button>
-              <button type="button" className="primary" onClick={onAddSupplemental}>Add supplemental workbook</button>
-            </div>
-          </div>
-          {batchUploading && (
-            <div className="supplemental-batch-message">
-              <ThinkingIndicator text="Uploading supplemental workbooks..." />
-            </div>
-          )}
-          {batchError && <p className="import-review-error">{batchError}</p>}
-          <SupplementalBatchPanel
-            batches={batches}
-            selectedItemIds={selectedBatchItemIds}
-            applying={batchApplying}
-            onSelectionChange={(itemId, checked) => setSelectedBatchItemIds((current) => {
-              const next = new Set(current);
-              if (checked) next.add(itemId);
-              else next.delete(itemId);
-              return next;
-            })}
-            onReviewItem={onContinueReview}
-            onRetryItem={onRetryBatchItem}
-            onApplySelected={() => onApplyBatchItems?.(selectedBatchItems)}
-          />
-          {!summaries.length && !hasBatchRows ? (
-            <div className="supplemental-manager-empty">
-              <h3>No supplemental workbooks yet.</h3>
-              <p>Add an extra workbook after the master table is committed, then review the relationship before it becomes part of the dataset.</p>
-              <button type="button" onClick={onAddSupplemental}>Add supplemental workbook</button>
-            </div>
-          ) : summaries.length ? (
-            <div className="supplemental-manager-layout">
-              <aside className="supplemental-manager-list" aria-label="Supplemental workbook list">
-                {summaries.map((item) => (
-                  <button
-                    type="button"
-                    key={item.id}
-                    className={`supplemental-manager-item ${item.id === selected?.id ? "selected" : ""}`}
-                    onClick={() => setSelectedId(item.id)}
-                  >
-                    <span>
-                      <strong>{item.fileName || "Supplemental workbook"}</strong>
-                      <small>{item.supplementType || "supplemental_data"} - {supplementalTargetsText(item)}</small>
-                      <small>{supplementalCountText(item)}</small>
-                    </span>
-                    <span className={`supplemental-status ${supplementStatusClass(item.status)}`}>{supplementStatusLabel(item.status)}</span>
-                  </button>
-                ))}
-              </aside>
-              <section className="supplemental-manager-detail">
-                {selected ? (
-                  <>
-                    <div className="supplemental-detail-head">
-                      <div>
-                        <h3>{selected.fileName || "Supplemental workbook"}</h3>
-                        <p>{selected.supplementType || "supplemental_data"}</p>
-                      </div>
-                      <span className={`supplemental-status ${supplementStatusClass(selected.status)}`}>{supplementStatusLabel(selected.status)}</span>
-                    </div>
-                    <dl className="supplemental-detail-grid">
-                      <div>
-                        <dt>Linked experiments</dt>
-                        <dd>{supplementalTargetsText(selected)}</dd>
-                      </div>
-                      <div>
-                        <dt>Observation sets</dt>
-                        <dd>{selected.observationSetCount || 0}</dd>
-                      </div>
-                      <div>
-                        <dt>Observations</dt>
-                        <dd>{selected.observationCount || 0}</dd>
-                      </div>
-                      <div>
-                        <dt>Fields</dt>
-                        <dd>{selected.fieldCount || 0}</dd>
-                      </div>
-                      <div>
-                        <dt>Sources</dt>
-                        <dd>{selected.sourceCount || 0}</dd>
-                      </div>
-                      <div>
-                        <dt>Updated</dt>
-                        <dd>{selected.updatedAt ? formatShortDate(selected.updatedAt) : "Not recorded"}</dd>
-                      </div>
-                    </dl>
-                    <div className="supplemental-detail-section">
-                      <strong>Y fields</strong>
-                      <p>{selected.yFields?.length ? selected.yFields.join(", ") : "No observation y fields detected."}</p>
-                    </div>
-                    <div className="supplemental-detail-section">
-                      <strong>Edit / review path</strong>
-                      <p>
-                        {selected.status === "applied"
-                          ? "Applied scientific values are immutable. Replace or add a supplemental workbook through review to change the active dataset."
-                          : "This workbook has not been applied yet. Continue review to inspect blocks, relationships, and apply decisions."}
-                      </p>
-                    </div>
-                    <div className="supplemental-manager-actions">
-                      {selected.status !== "applied" && selected.importRunId && (
-                        <button type="button" className="primary" onClick={() => onContinueReview?.(selected.importRunId)}>Continue review</button>
-                      )}
-                      <button type="button" className="secondary" onClick={onAddSupplemental}>Replace / edit via reviewed import</button>
-                    </div>
-                  </>
-                ) : null}
-              </section>
-            </div>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function chartProposalMeta(proposal) {
-  const parts = [];
-  if (proposal?.chartType) parts.push(proposal.chartType);
-  if (typeof proposal?.confidence === "number") parts.push(`${Math.round(proposal.confidence * 100)}%`);
-  parts.push(proposal?.status || "proposed");
-  return parts.join(" - ");
-}
-
-function ActiveChartProposalButton({ summary, onClick }) {
-  if (!summary?.total) return null;
-  return (
-    <div className="active-chart-review-row">
-      <div>
-        <strong>{summary.total} active</strong>
-        <small>{summary.accepted} accepted / {summary.pending} pending</small>
-      </div>
-      <button type="button" onClick={onClick}>Accepted + pending</button>
-    </div>
-  );
-}
-
-function PendingChartProposalList({ proposals = [], remaining = 0, onEditProposal }) {
-  if (!proposals.length) return null;
-  return (
-    <div className="pending-chart-proposals" aria-label="Pending chart proposals">
-      {proposals.map((proposal, index) => (
-        <div className="pending-chart-proposal-row" key={proposal.proposalId || proposal.title || `pending-chart-${index}`}>
-          <div>
-            <strong>{proposal.title || proposal.proposalId || "Untitled proposal"}</strong>
-            <small>{chartProposalMeta(proposal)}</small>
-          </div>
-          <button type="button" onClick={() => onEditProposal?.(proposal.proposalId)}>Edit</button>
-        </div>
-      ))}
-      {remaining > 0 && <span className="pending-chart-more">+{remaining} more pending</span>}
-    </div>
-  );
-}
-
-function CompareSeriesOverviewAction({ groups = [], onClick }) {
-  const comparableGroups = groups.filter((group) => group.series.length >= 2);
-  const seriesCount = comparableGroups.reduce((total, group) => total + group.series.length, 0);
-  if (!groups.length) return null;
-  return (
-    <div className="compare-series-entry-row">
-      <div>
-        <strong>{seriesCount || groups.length} comparable series</strong>
-        <small>{comparableGroups.length ? `${comparableGroups.length} compatible group${comparableGroups.length === 1 ? "" : "s"}` : "Need at least two matching experiments"}</small>
-      </div>
-      <button
-        type="button"
-        disabled={!comparableGroups.length}
-        title={comparableGroups.length ? "Create a cross-experiment compare chart" : "Need at least two compatible active observation series"}
-        onClick={onClick}
-      >
-        Compare series
-      </button>
-    </div>
   );
 }
 
@@ -1219,6 +915,38 @@ function ProjectOverviewCard({ title, value, detail, action, onClick, actionDisa
         )}
       </div>
     </article>
+  );
+}
+
+function proposalConfidenceLabel(proposal) {
+  return typeof proposal?.confidence === "number" ? `${Math.round(proposal.confidence * 100)}%` : "n/a";
+}
+
+function PendingChartProposalList({ proposals = [], remaining = 0, onEditProposal }) {
+  const items = asArray(proposals);
+  if (!items.length) return null;
+  return (
+    <div className="overview-mini-list">
+      {items.map((proposal) => (
+        <div className="overview-mini-row" key={proposal.proposalId || proposal.title}>
+          <div>
+            <strong>{proposal.title || proposal.proposalId}</strong>
+            <small>{proposal.chartType || "chart"} - {proposalConfidenceLabel(proposal)} - {proposal.status || "proposed"}</small>
+          </div>
+          <button type="button" onClick={() => onEditProposal?.(proposal.proposalId)}>Edit</button>
+        </div>
+      ))}
+      {remaining > 0 && <small className="overview-mini-more">+{remaining} more pending</small>}
+    </div>
+  );
+}
+
+function ActiveChartProposalSummary({ summary }) {
+  if (!summary?.total) return null;
+  return (
+    <div className="overview-mini-list">
+      <small>{summary.accepted} accepted / {summary.pending} pending</small>
+    </div>
   );
 }
 
@@ -1286,381 +1014,6 @@ export function DeleteProjectModal({ open, project, loading = false, error = "",
   );
 }
 
-export function RefreshWorkbookModal({ open, imports = [], defaultImportId = "", loading = false, error = "", onStartRefresh, onClose }) {
-  const committedImports = asArray(imports).filter((item) => item?.importId && !isSupplementalImport(item));
-  const fallbackImportId = defaultImportId || latestItem(committedImports)?.importId || "";
-  const [selectedImportId, setSelectedImportId] = useState(fallbackImportId);
-  useEffect(() => {
-    if (open) setSelectedImportId(fallbackImportId);
-  }, [open, fallbackImportId]);
-  if (!open) return null;
-  const selectedImport = committedImports.find((item) => item.importId === selectedImportId) || committedImports[0] || null;
-  const startRefresh = (event) => {
-    const file = event.target.files?.[0];
-    if (file && selectedImport) {
-      onStartRefresh?.({
-        file,
-        replaceImportId: selectedImport.importId,
-        targetImport: selectedImport,
-      });
-    }
-    event.target.value = "";
-  };
-  return (
-    <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !loading) onClose?.(); }}>
-      <section className="modal refresh-workbook-modal" role="dialog" aria-modal="true" aria-label="Refresh workbook">
-        <div className="modal-head">
-          <h2>Refresh workbook</h2>
-          <button type="button" aria-label="Close refresh workbook" disabled={loading} onClick={onClose}>x</button>
-        </div>
-        <div className="modal-body">
-          <p className="import-review-note">
-            Choose the committed import to replace, then upload the corrected workbook. The replacement still goes through full scan, block review, normalized preview, and refresh diff review before apply.
-          </p>
-          {committedImports.length ? (
-            <div className="refresh-import-list" role="radiogroup" aria-label="Committed imports">
-              {committedImports.map((item) => {
-                const itemId = item.importId;
-                const lineage = genericImportLineageText(item);
-                return (
-                  <label className={`refresh-import-option ${selectedImportId === itemId ? "active" : ""}`} key={itemId}>
-                    <input
-                      type="radio"
-                      name="refresh-import"
-                      value={itemId}
-                      checked={selectedImportId === itemId}
-                      onChange={() => setSelectedImportId(itemId)}
-                    />
-                    <span>
-                      <strong>{genericImportLabel(item)}</strong>
-                      <small>{genericImportExperimentCount(item)} experiments - {genericImportFieldCount(item)} fields</small>
-                      {lineage && <small>{lineage}</small>}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="import-review-empty">No committed imports are available to refresh.</div>
-          )}
-          {error && <p className="import-review-error">{error}</p>}
-          <div className="modal-actions">
-            <button type="button" disabled={loading} onClick={onClose}>Cancel</button>
-            <label className={`folder-btn ${loading || !selectedImport ? "disabled" : ""}`}>
-              {loading ? "Starting..." : "Upload replacement workbook"}
-              <input
-                type="file"
-                accept=".xlsx,.xls"
-                disabled={loading || !selectedImport}
-                onChange={startRefresh}
-              />
-            </label>
-          </div>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-export function CompareSeriesModal({ open, projectState, loading = false, error = "", clarification = null, onCreateCompare, onClose }) {
-  const groups = useMemo(() => buildCompareSeriesGroups(projectState), [projectState]);
-  const comparableGroups = groups.filter((group) => group.series.length >= 2);
-  const groupKeys = groups.map((group) => group.key).join("|");
-  const [selectedGroupKey, setSelectedGroupKey] = useState("");
-  const [selectedExperimentIds, setSelectedExperimentIds] = useState(() => new Set());
-  const [search, setSearch] = useState("");
-  const [titleDraft, setTitleDraft] = useState("");
-
-  useEffect(() => {
-    if (!open) return;
-    const fallbackGroup = comparableGroups[0] || groups[0] || null;
-    setSelectedGroupKey((current) => groups.some((group) => group.key === current) ? current : fallbackGroup?.key || "");
-  }, [open, groupKeys]);
-
-  const selectedGroup = groups.find((group) => group.key === selectedGroupKey) || comparableGroups[0] || groups[0] || null;
-  const selectedSeriesKey = selectedGroup?.series.map((series) => series.experimentId).join("|") || "";
-
-  useEffect(() => {
-    if (!open || !selectedGroup) return;
-    setSelectedExperimentIds(new Set(selectedGroup.series.map((series) => series.experimentId).filter(Boolean)));
-    setTitleDraft(`${selectedGroup.yLabel} comparison`);
-  }, [open, selectedGroup?.key, selectedSeriesKey]);
-
-  if (!open) return null;
-
-  const query = search.toLowerCase().trim();
-  const visibleSeries = selectedGroup
-    ? selectedGroup.series.filter((series) => !query || [
-      series.experimentLabel,
-      series.experimentId,
-      series.summary?.sourceFileName,
-      series.yLabel,
-      series.xLabel,
-    ].join(" ").toLowerCase().includes(query))
-    : [];
-  const selectedCount = selectedExperimentIds.size;
-  const canSubmit = !!selectedGroup && selectedCount >= 2 && !loading;
-  const closeFromBackdrop = (event) => {
-    if (event.target === event.currentTarget && !loading) onClose?.();
-  };
-  const toggleExperiment = (experimentId, checked) => {
-    setSelectedExperimentIds((current) => {
-      const next = new Set(current);
-      if (checked) next.add(experimentId);
-      else next.delete(experimentId);
-      return next;
-    });
-  };
-  const submit = (event) => {
-    event.preventDefault();
-    if (!selectedGroup || selectedCount < 2) return;
-    onCreateCompare?.({
-      title: titleDraft.trim() || `${selectedGroup.yLabel} comparison`,
-      seriesKind: selectedGroup.seriesKind,
-      experimentIds: selectedGroup.series
-        .map((series) => series.experimentId)
-        .filter((experimentId) => selectedExperimentIds.has(experimentId)),
-      xField: selectedGroup.xField,
-      yField: selectedGroup.yField,
-      groupBy: "experiment",
-    });
-  };
-
-  return (
-    <div className="modal-backdrop" onMouseDown={closeFromBackdrop}>
-      <form className="modal wide compare-series-modal" role="dialog" aria-modal="true" aria-label="Compare series" onSubmit={submit}>
-        <div className="modal-head">
-          <div>
-            <h2>Compare series</h2>
-            <p>Select compatible supplemental observation series, then draft a reviewable chart proposal.</p>
-          </div>
-          <button type="button" aria-label="Close compare series" disabled={loading} onClick={onClose}>x</button>
-        </div>
-        <div className="modal-body compare-series-body">
-          {!groups.length ? (
-            <div className="import-review-empty">
-              Apply at least two compatible supplemental workbooks before creating a compare chart.
-            </div>
-          ) : (
-            <>
-              <section className="compare-series-groups" aria-label="Compatible series groups">
-                {groups.map((group) => (
-                  <label className={`compare-series-group ${group.key === selectedGroup?.key ? "active" : ""}`} key={group.key}>
-                    <input
-                      type="radio"
-                      name="compare-series-group"
-                      value={group.key}
-                      checked={group.key === selectedGroup?.key}
-                      onChange={() => setSelectedGroupKey(group.key)}
-                    />
-                    <span>
-                      <strong>{group.yLabel} vs {group.xLabel}</strong>
-                      <small>{group.series.length} experiment{group.series.length === 1 ? "" : "s"} - {group.seriesKind}</small>
-                    </span>
-                  </label>
-                ))}
-              </section>
-              {selectedGroup && (
-                <section className="compare-series-selection">
-                  <div className="compare-series-selection-head">
-                    <div>
-                      <strong>{selectedCount} of {selectedGroup.series.length} selected</strong>
-                      <small>{selectedGroup.yLabel} vs {selectedGroup.xLabel}</small>
-                    </div>
-                    <div className="compare-series-selection-actions">
-                      <button type="button" onClick={() => setSelectedExperimentIds(new Set(selectedGroup.series.map((series) => series.experimentId).filter(Boolean)))}>Select all</button>
-                      <button type="button" onClick={() => setSelectedExperimentIds(new Set())}>Clear</button>
-                    </div>
-                  </div>
-                  <label className="compare-series-title">
-                    Chart title
-                    <input value={titleDraft} onChange={(event) => setTitleDraft(event.target.value)} />
-                  </label>
-                  <input
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Search experiment label or source file..."
-                    aria-label="Search compare series"
-                  />
-                  <div className="compare-series-list">
-                    {visibleSeries.map((series) => {
-                      const experimentId = series.experimentId;
-                      return (
-                        <label className="compare-series-row" key={series.id || series.seriesId || experimentId}>
-                          <input
-                            type="checkbox"
-                            checked={selectedExperimentIds.has(experimentId)}
-                            onChange={(event) => toggleExperiment(experimentId, event.target.checked)}
-                          />
-                          <span>
-                            <strong>{series.experimentLabel || experimentId}</strong>
-                            <small>{series.summary?.pointCount || 0} points - {series.summary?.sourceFileName || series.sourceImportId || "source n/a"}</small>
-                          </span>
-                        </label>
-                      );
-                    })}
-                    {!visibleSeries.length && <div className="import-review-empty">No series match the current search.</div>}
-                  </div>
-                </section>
-              )}
-            </>
-          )}
-          {clarification && (
-            <div className="import-review-error">
-              <strong>{clarification.message || "Need clarification"}</strong>
-              {asArray(clarification.options).length ? (
-                <span>{asArray(clarification.options).map((option) => option.label || option.field || option.experimentId || option.alias).filter(Boolean).join(", ")}</span>
-              ) : null}
-            </div>
-          )}
-          {error && <p className="import-review-error">{error}</p>}
-          <div className="modal-actions">
-            <button type="button" disabled={loading} onClick={onClose}>Cancel</button>
-            <button type="submit" className="primary" disabled={!canSubmit}>{loading ? "Drafting..." : "Draft compare proposal"}</button>
-          </div>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-function Browser({ dataset, setSelected, sourceName, blankMode, onOpenImportReview, onOpenMappingReview, onOpenCompareSeries, compareSeriesEnabled = false, compareSeriesTitle = "", onOpenProfile, projectProfile, templateLinks, projectId }) {
-  const [filters, setFilters] = useState({ search: "", cat: [], impeller: [], rpm: [], cb95: false, hasPostGc: false, hasSweep: false, hasrate: false });
-  const [sort, setSort] = useState(["date", -1]);
-  const [browserView, setBrowserView] = useState("curated");
-  const setChip = (key, val) => setFilters((f) => ({ ...f, [key]: f[key].includes(val) ? f[key].filter((x) => x !== val) : [...f[key], val] }));
-  const hasPostReactionGc = (e) => !!(e.calculation || e.files?.calculation || e.sources?.some((source) => source.kind === "post_reaction_gc"));
-  const hasSweepData = (e) => !!(e.sweep || e.files?.sweep || e.sources?.some((source) => source.kind === "sweep_gc"));
-  const genericRowCount = useMemo(() => buildGenericBrowserRows(dataset).length, [dataset]);
-  const activeView = !dataset.experiments.length && genericRowCount ? "imported" : browserView;
-  const viewSwitch = (
-    <section className="filter">
-      <h4>View</h4>
-      <div className="chips">
-        <Chip active={activeView === "curated"} onClick={() => setBrowserView("curated")}>Curated ({dataset.experiments.length})</Chip>
-        <Chip active={activeView === "imported"} onClick={() => setBrowserView("imported")}>Imported ({genericRowCount})</Chip>
-      </div>
-    </section>
-  );
-  const rows = useMemo(() => {
-    const q = filters.search.toLowerCase().trim();
-    const out = dataset.experiments.filter((e) => {
-      if (q && !`${e.label} ${e.comments || ""}`.toLowerCase().includes(q)) return false;
-      if (filters.cat.length && !filters.cat.includes(e.catalyst_type || "-")) return false;
-      if (filters.impeller.length && !filters.impeller.includes(e.impeller || "-")) return false;
-      if (filters.rpm.length && !filters.rpm.includes(String(e.rpm))) return false;
-      if (filters.cb95 && !(e.carbon_balance_pct >= 95)) return false;
-      if (filters.hasPostGc && !hasPostReactionGc(e)) return false;
-      if (filters.hasSweep && !hasSweepData(e)) return false;
-      if (filters.hasrate && !e.rate_sources?.length) return false;
-      return true;
-    });
-    const [col, dir] = sort;
-    return out.sort((a, b) => {
-      const av = col === "label" ? expNo(a.label) : col === "date" ? experimentDateSortValue(a.date) : a[col];
-      const bv = col === "label" ? expNo(b.label) : col === "date" ? experimentDateSortValue(b.date) : b[col];
-      if (av == null) return 1;
-      if (bv == null) return -1;
-      return (av > bv ? 1 : av < bv ? -1 : 0) * dir;
-    });
-  }, [filters, sort, dataset.experiments]);
-  const cats = [...new Set(dataset.experiments.map((e) => e.catalyst_type || "-"))].sort();
-  const imps = [...new Set(dataset.experiments.map((e) => e.impeller || "-"))].sort();
-  const rpms = [...new Set(dataset.experiments.map((e) => String(e.rpm)))].sort((a, b) => Number(a) - Number(b));
-  const blankProjectHasNoUserData = blankMode
-    && !dataset.experiments.length
-    && !(dataset.genericImports || []).length
-    && !(dataset.genericMappingSets || []).length
-    && !(dataset.genericChartProposals || []).length;
-  if (blankProjectHasNoUserData) {
-    return (
-      <div className="browser">
-        <aside className="sidebar blank-sidebar">
-          <section className="filter">
-            <h4>Project</h4>
-            <p>Empty project</p>
-          </section>
-          <section className="filter">
-            <h4>Compatibility</h4>
-            <p>Legacy HDPE MasterTable folder import remains available from Import review.</p>
-          </section>
-        </aside>
-        <main className="main">
-          <div className="page-head">
-            <div><h1>New LabRat project</h1><p>{projectProfile?.researchGoal || "No accepted dataset commit yet."}</p></div>
-            <button type="button" className="compact-action primary" onClick={onOpenImportReview}>Import workbook</button>
-          </div>
-          <div className="server-project-start">
-            <button type="button" className="primary" onClick={onOpenProfile}>Edit profile</button>
-          </div>
-          <BlankOnboarding onImportWorkbook={onOpenImportReview} templateLinks={templateLinks} />
-        </main>
-      </div>
-    );
-  }
-  if (activeView === "imported") {
-    return (
-      <div className="browser">
-        <GenericImportBrowser
-          dataset={dataset}
-          sourceName={sourceName}
-          onOpenImportReview={onOpenImportReview}
-          onOpenMappingReview={onOpenMappingReview}
-          onCompareSeries={onOpenCompareSeries}
-          compareSeriesEnabled={compareSeriesEnabled}
-          compareSeriesTitle={compareSeriesTitle}
-          viewSwitch={viewSwitch}
-          projectId={projectId}
-        />
-      </div>
-    );
-  }
-  return (
-    <div className="browser">
-      <aside className="sidebar">
-        {viewSwitch}
-        <Filter title="Search"><input value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} placeholder="Label, comments..." /></Filter>
-        <Filter title="Catalyst">{cats.map((c) => <Chip key={c} active={filters.cat.includes(c)} onClick={() => setChip("cat", c)}>{c}</Chip>)}</Filter>
-        <Filter title="Impeller">{imps.map((c) => <Chip key={c} active={filters.impeller.includes(c)} onClick={() => setChip("impeller", c)}>{c}</Chip>)}</Filter>
-        <Filter title="RPM">{rpms.map((c) => <Chip key={c} active={filters.rpm.includes(c)} onClick={() => setChip("rpm", c)}>{c}</Chip>)}</Filter>
-        <label className="check"><input type="checkbox" checked={filters.cb95} onChange={(e) => setFilters({ ...filters, cb95: e.target.checked })} /> Carbon balance &gt;= 95%</label>
-        <label className="check"><input type="checkbox" checked={filters.hasPostGc} onChange={(e) => setFilters({ ...filters, hasPostGc: e.target.checked })} /> Has post-rxn GC data</label>
-        <label className="check"><input type="checkbox" checked={filters.hasSweep} onChange={(e) => setFilters({ ...filters, hasSweep: e.target.checked })} /> Has sweep data</label>
-        <label className="check"><input type="checkbox" checked={filters.hasrate} onChange={(e) => setFilters({ ...filters, hasrate: e.target.checked })} /> Has rate data</label>
-        <button className="clear" type="button" onClick={() => setFilters({ search: "", cat: [], impeller: [], rpm: [], cb95: false, hasPostGc: false, hasSweep: false, hasrate: false })}>Clear filters</button>
-      </aside>
-      <main className="main">
-        <div className="page-head">
-          <div><h1>Experiment Browser</h1><p>{rows.length} of {dataset.experiments.length} experiments - source: {sourceName} - click a row for full record.</p></div>
-          <button type="button" className="compact-action primary" onClick={onOpenImportReview}>Import workbook</button>
-        </div>
-        <div className="card table-wrap experiment-table">
-          <table>
-            <thead><tr>{[
-              ["label", "Label"], ["date", "Date"], ["catalyst_loading_g", "Cat (g)"], ["reaction_time_hr", "t (h)"], ["rpm", "RPM"], ["impeller", "Impeller"], ["conversion_pct", "Conv %"], ["selectivity_liquid_pct", "Sel S/L/G"], ["carbon_balance_pct", "C-bal %"], ["files", "Files"],
-            ].map(([k, l]) => <th key={k} onClick={() => k !== "files" && setSort(([old, d]) => old === k ? [k, -d] : [k, 1])}>{l}</th>)}</tr></thead>
-            <tbody>{rows.map((e) => (
-              <tr key={e.label} onClick={() => setSelected(e)}>
-                <td><span>{e.label}</span></td><td>{formatExperimentDateForDisplay(e.date)}</td><td>{fmt(e.catalyst_loading_g, 3)}</td><td>{fmt(e.reaction_time_hr, 1)}</td><td>{fmt(e.rpm, 0)}</td>
-                <td><span className="pill muted">{e.impeller || "-"}</span></td><td>{fmt(e.conversion_pct, 1)}</td>
-                <td>{fmt(e.selectivity_solid_pct, 1)} / {fmt(e.selectivity_liquid_pct, 1)} / {fmt(e.selectivity_gas_pct, 1)}</td>
-                <td className="plain-cell"><span className={`pill ${e.carbon_balance_pct >= 95 ? "ok" : e.carbon_balance_pct >= 90 ? "warn" : "bad"}`}>{fmt(e.carbon_balance_pct, 1)}</span></td>
-                <td className="plain-cell"><FilePills e={e} /></td>
-              </tr>
-            ))}
-              {!rows.length && (
-                <tr className="table-empty-row">
-                  <td colSpan={10}>No experiments match the active filters.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </main>
-    </div>
-  );
-}
-
 function Filter({ title, children }) {
   return <section className="filter"><h4>{title}</h4><div className="chips">{children}</div></section>;
 }
@@ -1722,90 +1075,615 @@ function Stat({ label, value, note }) {
   return <div className="stat"><span>{label}</span><span className="stat-value">{value}</span><small>{note}</small></div>;
 }
 
-function ImportReviewModal({
-  mode = "append",
-  refreshDraft,
-  relationshipDraft,
-  backendScanState,
-  backendBlockReview,
-  backendNormalizeState,
-  backendMappingState,
-  genericImports,
-  fieldRoleOverrides,
-  onBackendScanFile,
-  onBlockReviewDecision,
-  onFieldRoleOverride,
-  onPreviewNormalize,
-  onApplyNormalize,
-  onRelationshipProposalSelect,
-  onProposeMappings,
-  onMappingDecision,
-  onReloadProjectState,
-  onClose,
+export function WorkbookReviewWorkspace({
+  projectId,
+  reviewState,
+  draftRegions = [],
+  activeDraftRegionId = "",
+  onDraftRegionsChange,
+  onActiveDraftRegionChange,
+  focusSelection = null,
+  reviewDock = null,
 }) {
-  const isRefreshMode = mode === "refresh";
-  const isSupplementMode = mode === "supplement";
-  const targetLabel = genericImportLabel(refreshDraft?.targetImport);
-  const modalLabel = isRefreshMode ? "Refresh workbook review" : isSupplementMode ? "Supplemental workbook review" : "Import review";
+  const session = reviewState?.session || reviewState?.workbookReviewSession || null;
+  const initialSourceDocument = reviewState?.sourceDocument || null;
+  const [documentsState, setDocumentsState] = useState({
+    loading: false,
+    error: "",
+    items: initialSourceDocument?.id ? [initialSourceDocument] : [],
+  });
+  const [selectedDocumentId, setSelectedDocumentId] = useState(initialSourceDocument?.id || "");
+  const [activeSheetName, setActiveSheetName] = useState("");
+  const [activeRange, setActiveRange] = useState("");
+  const [rangeState, setRangeState] = useState({ loading: false, error: "" });
+  const [scrollState, setScrollState] = useState({ top: 0, left: 0, width: 1100, height: 600 });
+  const [settledScrollState, setSettledScrollState] = useState({ top: 0, left: 0, width: 1100, height: 600 });
+  const [rangeCacheRevision, setRangeCacheRevision] = useState(0);
+  const [dragSelection, setDragSelection] = useState(null);
+  const viewportRef = useRef(null);
+  const gridScrollRef = useRef(null);
+  const rangeCacheRef = useRef(new Map());
+  const pendingScrollStateRef = useRef(scrollState);
+  const scrollFrameRef = useRef(null);
+  const scrollDirectionRef = useRef({ top: 0, left: 0 });
+  const edgeScrollDirectionRef = useRef({ x: 0, y: 0 });
+  const appliedFocusKeyRef = useRef("");
+  const sourceDocument = documentsState.items.find((document) => document.id === selectedDocumentId)
+    || initialSourceDocument
+    || documentsState.items[0]
+    || null;
+  const workbookName = sourceDocument?.metadata?.workbookName
+    || session?.workbookSummary?.workbookName
+    || "Workbook";
+  const sheets = asArray(sourceDocument?.metadata?.sheets);
+  const activeSheet = sheets.find((sheet) => sheet.name === activeSheetName) || sheets[0] || null;
+  const regionsForSheet = asArray(reviewState?.regions)
+    .filter((region) => (region.sourceDocumentId || sourceDocument?.id) === sourceDocument?.id)
+    .filter((region) => !activeSheetName || workbookSuggestionSheet(region) === activeSheetName)
+    .map((region) => ({
+      ...region,
+      range: workbookSuggestionRange(region),
+      sheetName: workbookSuggestionSheet(region),
+    }));
+  const draftRegionsForSheet = asArray(draftRegions)
+    .filter((region) => region.sourceDocumentId === sourceDocument?.id)
+    .filter((region) => region.sheetName === activeSheetName);
+  const displayBounds = parseExcelA1Range(activeRange) || excelRangeBoundsFromSheet(activeSheet);
+  const visibleTileBounds = useMemo(() => workbookVisibleTileBounds(displayBounds, settledScrollState, {
+    rowHeight: WORKBOOK_EXCEL_ROW_HEIGHT,
+    columnWidth: WORKBOOK_EXCEL_CELL_WIDTH,
+  }), [
+    activeRange,
+    activeSheet?.name,
+    settledScrollState.top,
+    settledScrollState.left,
+    settledScrollState.width,
+    settledScrollState.height,
+  ]);
+  const visibleTileKey = visibleTileBounds.map(formatExcelA1Range).join("|");
+  const loadedTileEntries = useMemo(() => [...rangeCacheRef.current.values()].filter((entry) => (
+    entry?.status === "fulfilled"
+    && entry.sourceDocumentId === sourceDocument?.id
+    && entry.sheetName === activeSheetName
+  )), [rangeCacheRevision, sourceDocument?.id, activeSheetName]);
+  const loadedTileBounds = useMemo(
+    () => loadedTileEntries.map((entry) => entry.bounds),
+    [loadedTileEntries],
+  );
+  const cellsByCoord = useMemo(() => {
+    const cells = new Map();
+    loadedTileEntries.forEach((entry) => {
+      excelCellsFromRangeResult(entry.result).forEach((cell, key) => cells.set(key, cell));
+    });
+    return cells;
+  }, [loadedTileEntries]);
+  const rowIndexes = [];
+  const colIndexes = [];
+  for (let row = displayBounds.startRow; row <= displayBounds.endRow; row += 1) rowIndexes.push(row);
+  for (let col = displayBounds.startCol; col <= displayBounds.endCol; col += 1) colIndexes.push(col);
+
+  useEffect(() => {
+    setDocumentsState((current) => {
+      if (!initialSourceDocument?.id) return current;
+      if (current.items.some((document) => document.id === initialSourceDocument.id)) return current;
+      return { ...current, items: [initialSourceDocument, ...current.items] };
+    });
+    if (initialSourceDocument?.id) setSelectedDocumentId((current) => current || initialSourceDocument.id);
+  }, [initialSourceDocument?.id]);
+
+  useEffect(() => {
+    if (!projectId) return undefined;
+    let cancelled = false;
+    setDocumentsState((current) => ({ ...current, loading: true, error: "" }));
+    listServerSourceDocuments(projectId)
+      .then((body) => {
+        if (cancelled) return;
+        const items = asArray(body?.sourceDocuments);
+        setDocumentsState({ loading: false, error: "", items: items.length ? items : (initialSourceDocument?.id ? [initialSourceDocument] : []) });
+        setSelectedDocumentId((current) => current || items[0]?.id || initialSourceDocument?.id || "");
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setDocumentsState((current) => ({ ...current, loading: false, error: err.message || String(err) }));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, initialSourceDocument?.id]);
+
+  useEffect(() => {
+    if (!sourceDocument?.id) return;
+    const nextSheet = activeSheetName && sheets.some((sheet) => sheet.name === activeSheetName)
+      ? activeSheetName
+      : sheets[0]?.name || "";
+    if (nextSheet && nextSheet !== activeSheetName) setActiveSheetName(nextSheet);
+  }, [sourceDocument?.id, sheets, activeSheetName]);
+
+  useEffect(() => {
+    if (!activeSheet) return;
+    const nextRange = activeRange || activeSheet.usedRange || formatExcelA1Range(excelRangeBoundsFromSheet(activeSheet));
+    if (nextRange && nextRange !== activeRange) setActiveRange(nextRange);
+  }, [activeSheet?.name, activeSheet?.usedRange, activeRange]);
+
+  useEffect(() => {
+    const scrollElement = gridScrollRef.current?.getBoundingClientRect
+      ? gridScrollRef.current
+      : viewportRef.current?.querySelector?.('[role="grid"]')
+        || viewportRef.current?.querySelector?.(".rdg")
+        || viewportRef.current;
+    if (!scrollElement) return;
+    scrollElement.scrollTop = 0;
+    scrollElement.scrollLeft = 0;
+    const nextScrollState = {
+      top: 0,
+      left: 0,
+      width: scrollElement.clientWidth || 1100,
+      height: scrollElement.clientHeight || 600,
+    };
+    pendingScrollStateRef.current = nextScrollState;
+    scrollDirectionRef.current = { top: 0, left: 0 };
+    setScrollState(nextScrollState);
+    setSettledScrollState(nextScrollState);
+    setRangeState((current) => ({ ...current, error: "" }));
+  }, [sourceDocument?.id, activeSheetName, activeRange]);
+
+  useEffect(() => {
+    if (!focusSelection?.sourceDocumentId || !focusSelection?.sheetName || !focusSelection?.range) return;
+    const focusKey = `${focusSelection.requestId || ""}:${focusSelection.sourceDocumentId}:${focusSelection.sheetName}:${focusSelection.range}`;
+    if (appliedFocusKeyRef.current === focusKey) return;
+    appliedFocusKeyRef.current = focusKey;
+    setSelectedDocumentId(focusSelection.sourceDocumentId);
+    setActiveSheetName(focusSelection.sheetName);
+    setActiveRange(focusSelection.range);
+    if (focusSelection.focusOnly) return;
+    const nextRegionId = focusSelection.clientRegionId || focusSelection.draftRegionId || workbookDraftRegionId(focusSelection.sourceDocumentId, focusSelection.sheetName, focusSelection.range);
+    onDraftRegionsChange?.(upsertDraftWorkbookRegion(draftRegions, {
+      clientRegionId: nextRegionId,
+      draftRegionId: nextRegionId,
+      sourceDocumentId: focusSelection.sourceDocumentId,
+      sheetName: focusSelection.sheetName,
+      range: focusSelection.range,
+      selectionMethod: focusSelection.selectionMethod || "suggestion_click",
+      description: focusSelection.description || focusSelection.label || "",
+      status: "draft",
+    }));
+    onActiveDraftRegionChange?.(nextRegionId);
+  }, [focusSelection, draftRegions, onDraftRegionsChange, onActiveDraftRegionChange]);
+
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      setSettledScrollState(scrollState);
+    }, WORKBOOK_SCROLL_DEBOUNCE_MS);
+    return () => window.clearTimeout(timerId);
+  }, [scrollState]);
+
+  const loadWorkbookTile = useCallback((bounds) => {
+    if (!sourceDocument?.id || !activeSheetName || !bounds) return Promise.resolve(null);
+    const cacheKey = workbookTileCacheKey(sourceDocument.id, activeSheetName, bounds);
+    const cached = getWorkbookTileCacheEntry(rangeCacheRef.current, cacheKey);
+    if (cached?.status === "fulfilled") return Promise.resolve(cached.result);
+    if (cached?.status === "pending") return cached.promise;
+
+    const range = formatExcelA1Range(bounds);
+    let request;
+    request = readServerSourceDocumentRange(sourceDocument.id, { sheetName: activeSheetName, range })
+      .then((result) => {
+        rememberWorkbookTileCacheEntry(rangeCacheRef.current, cacheKey, {
+          status: "fulfilled",
+          sourceDocumentId: sourceDocument.id,
+          sheetName: activeSheetName,
+          bounds,
+          range,
+          result,
+        });
+        setRangeCacheRevision((value) => value + 1);
+        return result;
+      })
+      .catch((err) => {
+        if (rangeCacheRef.current.get(cacheKey)?.promise === request) {
+          rangeCacheRef.current.delete(cacheKey);
+        }
+        throw err;
+      });
+    rememberWorkbookTileCacheEntry(rangeCacheRef.current, cacheKey, {
+      status: "pending",
+      sourceDocumentId: sourceDocument.id,
+      sheetName: activeSheetName,
+      bounds,
+      range,
+      promise: request,
+    });
+    return request;
+  }, [sourceDocument?.id, activeSheetName]);
+
+  useEffect(() => {
+    if (!sourceDocument?.id || !activeSheetName || !activeRange || !visibleTileBounds.length) {
+      setRangeState({ loading: false, error: "" });
+      return undefined;
+    }
+    let cancelled = false;
+    const needsLoad = visibleTileBounds.some((bounds) => {
+      const cacheKey = workbookTileCacheKey(sourceDocument.id, activeSheetName, bounds);
+      return rangeCacheRef.current.get(cacheKey)?.status !== "fulfilled";
+    });
+    setRangeState({ loading: needsLoad, error: "" });
+    Promise.all(visibleTileBounds.map((bounds) => loadWorkbookTile(bounds)))
+      .then(() => {
+        if (!cancelled) setRangeState({ loading: false, error: "" });
+      })
+      .catch((err) => {
+        if (!cancelled) setRangeState({ loading: false, error: err.message || String(err) });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sourceDocument?.id, activeSheetName, activeRange, visibleTileKey, loadWorkbookTile]);
+
+  useEffect(() => {
+    const prefetchBounds = workbookPrefetchTileBounds(
+      displayBounds,
+      visibleTileBounds,
+      scrollDirectionRef.current,
+    );
+    if (!prefetchBounds) return undefined;
+    const timerId = window.setTimeout(() => {
+      loadWorkbookTile(prefetchBounds).catch(() => {});
+    }, 0);
+    return () => window.clearTimeout(timerId);
+  }, [
+    sourceDocument?.id,
+    activeSheetName,
+    activeRange,
+    visibleTileKey,
+    settledScrollState.top,
+    settledScrollState.left,
+    loadWorkbookTile,
+  ]);
+
+  const createCellDraftRegion = (row, col, selectionMethod = "cell_context_menu") => {
+    if (!sourceDocument?.id || !activeSheetName) return;
+    const range = formatExcelA1Range({ startRow: row, endRow: row, startCol: col, endCol: col });
+    const activeRegion = findWorkbookDraftRegionById(draftRegions, activeDraftRegionId);
+    const nextRegionId = activeRegion?.draftRegionId || activeRegion?.clientRegionId || workbookDraftRegionId(sourceDocument.id, activeSheetName, range);
+    onDraftRegionsChange?.(upsertDraftWorkbookRegion(draftRegions, {
+      ...activeRegion,
+      clientRegionId: nextRegionId,
+      draftRegionId: nextRegionId,
+      sourceDocumentId: sourceDocument.id,
+      sheetName: activeSheetName,
+      range,
+      selectionMethod,
+      description: "",
+      status: "draft",
+    }));
+    onActiveDraftRegionChange?.(nextRegionId);
+  };
+  const createRangeDraftRegion = (start, end, selectionMethod = "drag_select") => {
+    if (!sourceDocument?.id || !activeSheetName || !start || !end) return;
+    const bounds = normalizeExcelBounds({
+      startRow: start.row,
+      endRow: end.row,
+      startCol: start.col,
+      endCol: end.col,
+    });
+    const range = formatExcelA1Range(bounds);
+    const activeRegion = findWorkbookDraftRegionById(draftRegions, activeDraftRegionId);
+    const nextRegionId = activeRegion?.draftRegionId || activeRegion?.clientRegionId || workbookDraftRegionId(sourceDocument.id, activeSheetName, range);
+    onDraftRegionsChange?.(upsertDraftWorkbookRegion(draftRegions, {
+      ...activeRegion,
+      clientRegionId: nextRegionId,
+      draftRegionId: nextRegionId,
+      sourceDocumentId: sourceDocument.id,
+      sheetName: activeSheetName,
+      range,
+      selectionMethod,
+      description: "",
+      status: "draft",
+    }));
+    onActiveDraftRegionChange?.(nextRegionId);
+  };
+  const beginCellDragSelection = (event, row, col) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    setDragSelection({ active: true, start: { row, col }, end: { row, col } });
+  };
+  const extendCellDragSelection = (row, col) => {
+    setDragSelection((current) => current?.active
+      ? { ...current, end: { row, col } }
+      : current);
+  };
+  const workbookGridScrollElement = () => (
+    gridScrollRef.current?.getBoundingClientRect
+      ? gridScrollRef.current
+      : viewportRef.current?.querySelector?.('[role="grid"]')
+        || viewportRef.current?.querySelector?.(".rdg")
+        || null
+  );
+  const syncWorkbookScrollState = (element) => {
+    if (!element) return;
+    const nextScrollState = {
+      top: element.scrollTop || 0,
+      left: element.scrollLeft || 0,
+      width: element.clientWidth || 1100,
+      height: element.clientHeight || 600,
+    };
+    const previous = pendingScrollStateRef.current || nextScrollState;
+    scrollDirectionRef.current = {
+      top: nextScrollState.top - previous.top,
+      left: nextScrollState.left - previous.left,
+    };
+    pendingScrollStateRef.current = nextScrollState;
+    if (scrollFrameRef.current != null) return;
+    const flushScrollState = () => {
+      scrollFrameRef.current = null;
+      setScrollState(pendingScrollStateRef.current);
+    };
+    scrollFrameRef.current = typeof window.requestAnimationFrame === "function"
+      ? window.requestAnimationFrame(flushScrollState)
+      : window.setTimeout(flushScrollState, 16);
+  };
+  useEffect(() => () => {
+    if (scrollFrameRef.current == null) return;
+    if (typeof window.cancelAnimationFrame === "function") window.cancelAnimationFrame(scrollFrameRef.current);
+    else window.clearTimeout(scrollFrameRef.current);
+    scrollFrameRef.current = null;
+  }, []);
+  const applyWorkbookEdgeScroll = () => {
+    const direction = edgeScrollDirectionRef.current || { x: 0, y: 0 };
+    if (!direction.x && !direction.y) return;
+    const element = workbookGridScrollElement();
+    if (!element) return;
+    const maxLeft = Math.max(0, (element.scrollWidth || 0) - (element.clientWidth || 0));
+    const maxTop = Math.max(0, (element.scrollHeight || 0) - (element.clientHeight || 0));
+    element.scrollLeft = clampNumber(
+      (element.scrollLeft || 0) + direction.x * WORKBOOK_EXCEL_CELL_WIDTH,
+      0,
+      maxLeft,
+    );
+    element.scrollTop = clampNumber(
+      (element.scrollTop || 0) + direction.y * WORKBOOK_EXCEL_ROW_HEIGHT,
+      0,
+      maxTop,
+    );
+    syncWorkbookScrollState(element);
+    setDragSelection((current) => {
+      if (!current?.active) return current;
+      const nextEnd = {
+        row: clampNumber(current.end.row + direction.y, displayBounds.startRow, displayBounds.endRow),
+        col: clampNumber(current.end.col + direction.x, displayBounds.startCol, displayBounds.endCol),
+      };
+      if (nextEnd.row === current.end.row && nextEnd.col === current.end.col) return current;
+      return { ...current, end: nextEnd };
+    });
+  };
+  const finishCellDragSelection = () => {
+    edgeScrollDirectionRef.current = { x: 0, y: 0 };
+    setDragSelection((current) => {
+      if (current?.active) createRangeDraftRegion(current.start, current.end, "drag_select");
+      return null;
+    });
+  };
+  useEffect(() => {
+    if (!dragSelection?.active) return undefined;
+    window.addEventListener("mouseup", finishCellDragSelection);
+    return () => window.removeEventListener("mouseup", finishCellDragSelection);
+  }, [dragSelection?.active, draftRegions, sourceDocument?.id, activeSheetName, activeDraftRegionId]);
+  useEffect(() => {
+    if (!dragSelection?.active) return undefined;
+    const updateEdgeScrollDirection = (event) => {
+      const element = workbookGridScrollElement();
+      const rect = element?.getBoundingClientRect?.();
+      edgeScrollDirectionRef.current = workbookEdgeScrollDirection(event.clientX, event.clientY, rect);
+    };
+    window.addEventListener("mousemove", updateEdgeScrollDirection);
+    const intervalId = window.setInterval(applyWorkbookEdgeScroll, WORKBOOK_EXCEL_EDGE_SCROLL_INTERVAL_MS);
+    return () => {
+      edgeScrollDirectionRef.current = { x: 0, y: 0 };
+      window.removeEventListener("mousemove", updateEdgeScrollDirection);
+      window.clearInterval(intervalId);
+    };
+  }, [
+    dragSelection?.active,
+    displayBounds.startRow,
+    displayBounds.endRow,
+    displayBounds.startCol,
+    displayBounds.endCol,
+  ]);
+  const workbookCellIsLoading = (row, col) => (
+    rangeState.loading
+    && visibleTileBounds.some((bounds) => boundsContainCell(bounds, row, col))
+    && !loadedTileBounds.some((bounds) => boundsContainCell(bounds, row, col))
+  );
+  const gridRows = useMemo(() => rowIndexes.map((row) => {
+    const item = { __rowIndex: row, __rowNumber: row + 1 };
+    colIndexes.forEach((col) => {
+      const cell = cellsByCoord.get(`${row}:${col}`) || {};
+      item[`col_${col}`] = cell.formattedValue ?? cell.rawValue ?? "";
+    });
+    return item;
+  }), [rowIndexes, colIndexes, cellsByCoord]);
+  const gridColumns = useMemo(() => [
+    {
+      key: "__rowNumber",
+      name: "",
+      width: 52,
+      minWidth: 52,
+      frozen: true,
+      resizable: false,
+      headerCellClass: "workbook-data-grid-corner",
+      cellClass: "workbook-data-grid-row-number",
+      renderCell: ({ row }) => row.__rowNumber,
+    },
+    ...colIndexes.map((col) => ({
+      key: `col_${col}`,
+      name: excelIndexToColumnLabel(col),
+      width: WORKBOOK_EXCEL_CELL_WIDTH,
+      minWidth: 72,
+      resizable: true,
+      cellClass: (row) => {
+        const classes = [];
+        if (cellInAnyWorkbookRegion(row.__rowIndex, col, regionsForSheet)) classes.push("is-detected");
+        if (cellInAnyWorkbookRegion(row.__rowIndex, col, draftRegionsForSheet)) classes.push("is-draft");
+        if (dragSelection?.active) {
+          const selectionBounds = normalizeExcelBounds({
+            startRow: dragSelection.start.row,
+            endRow: dragSelection.end.row,
+            startCol: dragSelection.start.col,
+            endCol: dragSelection.end.col,
+          });
+          if (row.__rowIndex >= selectionBounds.startRow
+            && row.__rowIndex <= selectionBounds.endRow
+            && col >= selectionBounds.startCol
+            && col <= selectionBounds.endCol) {
+            classes.push("is-selecting");
+          }
+        }
+        return classes.join(" ");
+      },
+      renderCell: ({ row }) => {
+        const address = `${excelIndexToColumnLabel(col)}${row.__rowIndex + 1}`;
+        const loadingCell = workbookCellIsLoading(row.__rowIndex, col);
+        return (
+          <div
+            className={`workbook-data-grid-cell-value${loadingCell ? " is-loading" : ""}`}
+            aria-label={`Cell ${address}`}
+            onMouseDown={(event) => beginCellDragSelection(event, row.__rowIndex, col)}
+            onMouseEnter={() => extendCellDragSelection(row.__rowIndex, col)}
+            onMouseUp={finishCellDragSelection}
+          >
+            {loadingCell ? <span className="workbook-cell-skeleton" aria-hidden="true" /> : row[`col_${col}`]}
+          </div>
+        );
+      },
+    })),
+  ], [
+    colIndexes,
+    draftRegionsForSheet,
+    dragSelection,
+    loadedTileBounds,
+    rangeState.loading,
+    regionsForSheet,
+    visibleTileKey,
+  ]);
+
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <section className="modal wide import-review-modal" role="dialog" aria-modal="true" aria-label={modalLabel}>
-        <div className="modal-head">
-          <span>{modalLabel}</span>
-          <button type="button" aria-label="Close import review" onClick={onClose}>x</button>
+    <main className="workbook-review-workspace">
+      <section className="workbook-excel-toolbar" aria-label="Workbook controls">
+        <strong>{workbookName}</strong>
+        {documentsState.items.length > 1 && (
+          <select
+            aria-label="Workbook"
+            value={selectedDocumentId}
+            onChange={(event) => {
+              setSelectedDocumentId(event.target.value);
+              setActiveSheetName("");
+              setActiveRange("");
+            }}
+          >
+            {documentsState.items.map((document) => (
+              <option value={document.id} key={document.id}>
+                {document.metadata?.workbookName || document.fileName || document.id}
+              </option>
+            ))}
+          </select>
+        )}
+        <div className="workbook-sheet-tabs" aria-label="Workbook sheets">
+          {sheets.map((sheet) => (
+            <button
+              type="button"
+              className={sheet.name === activeSheetName ? "active" : ""}
+              key={sheet.name}
+              onClick={() => {
+                setActiveSheetName(sheet.name);
+                setActiveRange(sheet.usedRange || formatExcelA1Range(excelRangeBoundsFromSheet(sheet)));
+              }}
+            >
+              {sheet.name}
+            </button>
+          ))}
         </div>
-        <div className="modal-body">
-          <p className="import-review-note">
-            {isRefreshMode
-              ? `Refresh workflow: scan the replacement workbook for ${targetLabel}, review detected blocks and fields, preview normalized data, then approve the refresh diff before replacing the committed import.`
-              : isSupplementMode
-                ? "Supplement workflow: scan an extra workbook, review detected blocks and fields, preview normalized data, then approve the detected relationship to attach it to existing experiments."
-                : "Import workflow: scan a workbook, review detected blocks and fields, preview/apply normalized data, then review semantic mappings for Browser columns and chart inputs."}
-          </p>
-          <BackendScanPanel
-            mode={mode}
-            refreshDraft={refreshDraft}
-            relationshipDraft={relationshipDraft}
-            scanState={backendScanState}
-            blockReview={backendBlockReview}
-            normalizeState={backendNormalizeState}
-            mappingState={backendMappingState}
-            genericImports={genericImports}
-            fieldRoleOverrides={fieldRoleOverrides}
-            onScanFile={onBackendScanFile}
-            onBlockReviewDecision={onBlockReviewDecision}
-            onFieldRoleOverride={onFieldRoleOverride}
-            onPreviewNormalize={onPreviewNormalize}
-            onApplyNormalize={onApplyNormalize}
-            onRelationshipProposalSelect={onRelationshipProposalSelect}
-            onProposeMappings={onProposeMappings}
-            onMappingDecision={onMappingDecision}
-            onReloadProjectState={onReloadProjectState}
-          />
-        </div>
+        <input
+          aria-label="Visible range"
+          value={activeRange}
+          onChange={(event) => setActiveRange(event.target.value)}
+          placeholder="A1:D20"
+        />
       </section>
-    </div>
+      <div className={`workbook-review-layout${reviewDock ? " has-review-dock" : ""}`}>
+        <section className="workbook-review-main" aria-label="Workbook evidence">
+          {reviewState?.error && <p className="import-review-error">{reviewState.error}</p>}
+          {documentsState.error && <p className="import-review-error">{documentsState.error}</p>}
+          {rangeState.error && <p className="import-review-error">{rangeState.error}</p>}
+          {!sourceDocument && !documentsState.loading && (
+            <div className="import-review-empty">Open Ask LabRat and attach a spreadsheet to start workbook review.</div>
+          )}
+          {sourceDocument && (
+            <div
+              className="workbook-excel-viewport"
+              ref={viewportRef}
+            >
+              <div className="workbook-data-grid-shell">
+                <DataGrid
+                  ref={gridScrollRef}
+                  aria-label="Workbook sheet preview"
+                  className="workbook-data-grid rdg-light"
+                  columns={gridColumns}
+                  rows={gridRows}
+                  rowKeyGetter={(row) => row.__rowIndex}
+                  rowHeight={WORKBOOK_EXCEL_ROW_HEIGHT}
+                  headerRowHeight={WORKBOOK_EXCEL_ROW_HEIGHT}
+                  enableVirtualization={false}
+                  defaultColumnOptions={{ resizable: true }}
+                  onCellContextMenu={(args, event) => {
+                    event.preventDefault();
+                    const key = String(args.column.key || "");
+                    if (!key.startsWith("col_")) return;
+                    const col = Number(key.slice(4));
+                    if (!Number.isInteger(col)) return;
+                    createCellDraftRegion(args.row.__rowIndex, col);
+                  }}
+                  onScroll={(event) => {
+                    syncWorkbookScrollState(event.currentTarget);
+                  }}
+                />
+              </div>
+              {rangeState.loading && (
+                <div className="workbook-excel-loading" role="status">
+                  Loading visible workbook cells...
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+        {reviewDock}
+      </div>
+    </main>
   );
 }
 
 export function ChartReviewModal({
   open,
-  genericImports = [],
-  mappingState,
+  allowSourcePrompt = false,
   chartProposalState,
   chartInterpretState,
   chartSpecs,
   focusProposalId,
   statusFilter,
-  onProposeCharts,
   onChartProposalDecision,
+  onChartProposalDelete,
   onInterpretChart,
+  onSourceExtractDecision,
+  onCreateChartProposalFromSourceExtract,
   onCreateChartSpec,
   onOpenImportReview,
   onClose,
 }) {
+  const [reviewMode, setReviewMode] = useState(statusFilter === "active" ? "edit" : "review");
+  useEffect(() => {
+    if (open) setReviewMode(statusFilter === "active" ? "edit" : "review");
+  }, [open, statusFilter]);
   if (!open) return null;
-  const hasImports = genericImports.length > 0;
+  const canReviewCharts = allowSourcePrompt;
   const title = statusFilter === "active" ? "Accepted + pending charts" : "Review chart proposals";
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -1818,24 +1696,46 @@ export function ChartReviewModal({
           <p className="import-review-note">
             Draft one chart proposal from a prompt, review chart proposals, then create ChartSpecs for Manuscript.
           </p>
-          {hasImports ? (
+          <div className="chart-review-mode-tabs" role="tablist" aria-label="Chart review mode">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={reviewMode === "review"}
+              className={reviewMode === "review" ? "active" : ""}
+              onClick={() => setReviewMode("review")}
+            >
+              Review proposals
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={reviewMode === "edit"}
+              className={reviewMode === "edit" ? "active" : ""}
+              onClick={() => setReviewMode("edit")}
+            >
+              Edit specs
+            </button>
+          </div>
+          {canReviewCharts ? (
             <ChartReviewPanel
-              genericImports={genericImports}
-              mappingState={mappingState}
+              allowSourcePrompt={allowSourcePrompt}
               chartProposalState={chartProposalState}
               chartInterpretState={chartInterpretState}
               chartSpecs={chartSpecs}
               focusProposalId={focusProposalId}
               statusFilter={statusFilter}
-              onProposeCharts={onProposeCharts}
+              viewMode={reviewMode}
               onChartProposalDecision={onChartProposalDecision}
+              onChartProposalDelete={onChartProposalDelete}
               onInterpretChart={onInterpretChart}
+              onSourceExtractDecision={onSourceExtractDecision}
+              onCreateChartProposalFromSourceExtract={onCreateChartProposalFromSourceExtract}
               onCreateChartSpec={onCreateChartSpec}
             />
           ) : (
             <div className="import-review-empty chart-review-empty">
-              <strong>Import workbook first</strong>
-              <span>Chart proposals need reviewed imported data before LabRat can draft chart specs.</span>
+              <strong>Select a server project first</strong>
+              <span>Source-backed chart review requires project-scoped workbook evidence.</span>
               <button
                 type="button"
                 className="primary"
@@ -1854,270 +1754,24 @@ export function ChartReviewModal({
   );
 }
 
-function cloneJson(value) {
-  return JSON.parse(JSON.stringify(value || {}));
-}
-
-function editableMappingPayload(mappingSetRecord) {
-  const payload = mappingPayloadFromRecord(mappingSetRecord) || {
-    schemaVersion: "labrat.semanticMappingSet.v1",
-    mappings: [],
-    warnings: [],
-  };
-  return {
-    ...cloneJson(payload),
-    mappings: asArray(payload.mappings).map((mapping) => ({
-      status: "proposed",
-      canonicalField: "",
-      semanticRole: "",
-      unit: "",
-      ...cloneJson(mapping),
-    })),
-    warnings: asArray(payload.warnings),
-  };
-}
-
-export function MappingReviewModal({
-  open,
-  currentDatasetCommitId,
-  mappingSetRecord,
-  genericImports = [],
-  onGenerateMappings,
-  onSaveMappings,
-  onClose,
-}) {
-  const [draft, setDraft] = useState(() => editableMappingPayload(mappingSetRecord));
-  const [busy, setBusy] = useState("");
-  const [error, setError] = useState("");
-  const mappingSetKey = `${mappingSetRecord?.id || "none"}:${mappingSetRecord?.updatedAt || mappingSetRecord?.createdAt || ""}`;
-  useEffect(() => {
-    if (!open) return;
-    setDraft(editableMappingPayload(mappingSetRecord));
-    setBusy("");
-    setError("");
-  }, [open, mappingSetKey]);
-  if (!open) return null;
-
-  const stale = mappingSetIsStale(mappingSetRecord, currentDatasetCommitId);
-  const mappings = asArray(draft.mappings);
-  const counts = {
-    total: mappings.length,
-    accepted: mappings.filter((mapping) => mapping.status === "accepted").length,
-    rejected: mappings.filter((mapping) => mapping.status === "rejected").length,
-    proposed: mappings.filter((mapping) => !mapping.status || mapping.status === "proposed").length,
-  };
-  const hasCurrentMappingSet = !!mappingSetRecord?.id && !stale;
-  const hasMasterImports = getMasterImports({ genericImports }).length > 0;
-  const updateMapping = (mappingId, patch) => {
-    setDraft((current) => ({
-      ...current,
-      mappings: asArray(current.mappings).map((mapping) => (
-        mapping.mappingId === mappingId ? { ...mapping, ...patch } : mapping
-      )),
-    }));
-  };
-  const runGenerate = async () => {
-    setBusy("generate");
-    setError("");
-    try {
-      const nextRecord = await onGenerateMappings?.();
-      if (nextRecord) setDraft(editableMappingPayload(nextRecord));
-    } catch (err) {
-      setError(err.message || String(err));
-    } finally {
-      setBusy("");
-    }
-  };
-  const save = async () => {
-    setBusy("save");
-    setError("");
-    try {
-      const nextRecord = await onSaveMappings?.(mappingSetRecord, draft);
-      if (nextRecord) setDraft(editableMappingPayload(nextRecord));
-    } catch (err) {
-      setError(err.message || String(err));
-    } finally {
-      setBusy("");
-    }
-  };
-  const closeFromBackdrop = (event) => {
-    if (event.target === event.currentTarget) onClose?.();
-  };
-
-  return (
-    <div className="modal-backdrop" onMouseDown={closeFromBackdrop}>
-      <section className="modal wide mapping-review-modal" role="dialog" aria-modal="true" aria-label="Edit semantic mappings">
-        <div className="modal-head">
-          <div>
-            <h2>Edit semantic mappings</h2>
-            <p>Mapping changes update Browser columns, chart inputs, and AI context without changing raw imported data.</p>
-          </div>
-          <button type="button" aria-label="Close" onClick={onClose}>x</button>
-        </div>
-        <div className="modal-body mapping-review-body">
-          <div className="mapping-review-toolbar">
-            <div className="backend-scan-stats">
-              <span>{counts.total} mappings</span>
-              <span>{counts.accepted} accepted</span>
-              <span>{counts.proposed} proposed</span>
-              <span>{counts.rejected} rejected</span>
-            </div>
-            <div className="mapping-review-actions">
-              <button
-                type="button"
-                disabled={!hasMasterImports || busy === "generate"}
-                onClick={runGenerate}
-              >
-                {busy === "generate"
-                  ? "Generating..."
-                  : stale
-                    ? "Regenerate for current dataset"
-                    : mappingSetRecord ? "Regenerate mappings" : "Generate mappings"}
-              </button>
-              <button
-                type="button"
-                className="primary"
-                disabled={!hasCurrentMappingSet || !mappings.length || busy === "save"}
-                onClick={save}
-              >
-                {busy === "save" ? "Saving..." : "Save mappings"}
-              </button>
-            </div>
-          </div>
-          {!hasMasterImports && <p className="import-review-error">Upload and apply a master table before editing mappings.</p>}
-          {stale && (
-            <p className="import-review-error">
-              This mapping set belongs to an older dataset commit. Regenerate mappings for the current dataset before editing.
-            </p>
-          )}
-          {error && <p className="import-review-error">{error}</p>}
-          {!mappingSetRecord && !busy && (
-            <div className="import-review-empty">
-              No semantic mappings have been generated for this dataset yet.
-            </div>
-          )}
-          {mappings.length > 0 && (
-            <div className="mapping-editor-table">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Source field</th>
-                    <th>Status</th>
-                    <th>Canonical field</th>
-                    <th>Semantic role</th>
-                    <th>Unit</th>
-                    <th>Value type</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {mappings.map((mapping) => {
-                    const label = mapping.rawLabel || mapping.displayName || mapping.mappingId;
-                    return (
-                      <tr key={mapping.mappingId}>
-                        <td>
-                          <strong>{label}</strong>
-                          <small>{asArray(mapping.sourceIds).length} source values</small>
-                        </td>
-                        <td>
-                          <select
-                            aria-label={`Status ${label}`}
-                            value={mapping.status || "proposed"}
-                            disabled={stale}
-                            onChange={(event) => updateMapping(mapping.mappingId, { status: event.target.value })}
-                          >
-                            {MAPPING_STATUS_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-                          </select>
-                        </td>
-                        <td>
-                          <input
-                            aria-label={`Canonical field ${label}`}
-                            value={mapping.canonicalField || ""}
-                            disabled={stale}
-                            onChange={(event) => updateMapping(mapping.mappingId, { canonicalField: event.target.value })}
-                          />
-                        </td>
-                        <td>
-                          <select
-                            aria-label={`Semantic role ${label}`}
-                            value={mapping.semanticRole || ""}
-                            disabled={stale}
-                            onChange={(event) => updateMapping(mapping.mappingId, { semanticRole: event.target.value })}
-                          >
-                            <option value="">unmapped</option>
-                            {SEMANTIC_ROLE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-                          </select>
-                        </td>
-                        <td>
-                          <input
-                            aria-label={`Unit ${label}`}
-                            value={mapping.unit || ""}
-                            disabled={stale}
-                            onChange={(event) => updateMapping(mapping.mappingId, { unit: event.target.value })}
-                          />
-                        </td>
-                        <td><span className="backend-scan-muted">{mapping.valueType || "unknown"}</span></td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function KV({ e }) {
-  const rows = [["Temperature", `${fmt(e.temperature_C, 0)} C`], ["Pressure", `${fmt(e.pressure_bar, 0)} bar`], ["Reaction time", `${fmt(e.reaction_time_hr, 1)} h`], ["RPM", fmt(e.rpm, 0)], ["Catalyst", `${fmt(e.catalyst_loading_g, 4)} g`], ["HDPE", `${fmt(e.polymer_loading_g, 4)} g`]];
-  return <dl className="kv">{rows.map(([k, v]) => <React.Fragment key={k}><dt>{k}</dt><dd>{v}</dd></React.Fragment>)}</dl>;
-}
-
-function SourceList({ e }) {
-  return <div className="sources"><FilePills e={e} />{(e.sources || []).map((s, i) => <div key={i} className="source-row"><span>{s.kind}</span><span>{s.file}{s.sheet ? ` - ${s.sheet}` : ""}{s.row ? ` - row ${s.row}` : ""}</span></div>)}</div>;
-}
-
-function ReferenceLibrary({ references, setReferences }) {
-  const [filter, setFilter] = useState("all");
-  const addFiles = (files) => Array.from(files || []).forEach((file) => {
-    const reader = new FileReader();
-    reader.onload = () => setReferences((refs) => [...refs, { id: uid(), name: file.name, mime: file.type, size: file.size, dataUrl: reader.result, note: "", createdAt: Date.now(), kind: refKind(file) }]);
-    reader.readAsDataURL(file);
-  });
-  const shown = filter === "all" ? references : references.filter((r) => r.kind === filter);
-  return <main className="reference main">
-    <div className="page-head"><div><h1>References</h1><p>Upload images, PDFs, raw data, calculations, and notes into the local reference library.</p></div></div>
-    <label className="drop">Drop or choose files<input type="file" multiple onChange={(e) => addFiles(e.target.files)} /></label>
-    <div className="chips ref-filter">{["all", "image", "pdf", "data", "document", "code", "other"].map((k) => <Chip key={k} active={filter === k} onClick={() => setFilter(k)}>{k}</Chip>)}</div>
-    <div className="ref-grid">{shown.map((r) => <article className="ref-card" key={r.id}>
-      <div className="thumb">{r.kind === "image" ? <img src={r.dataUrl} alt="" /> : <span>{r.kind}</span>}</div>
-      <div className="ref-info"><span>{r.name}</span><small>{Math.round(r.size / 1024)} KB</small><textarea value={r.note} placeholder="Add a note..." onChange={(e) => setReferences((refs) => refs.map((x) => x.id === r.id ? { ...x, note: e.target.value } : x))} /></div>
-      <div className="ref-actions"><a href={r.dataUrl} download={r.name}>Download</a><button onClick={() => setReferences((refs) => refs.filter((x) => x.id !== r.id))}>Delete</button></div>
-    </article>)}</div>
-  </main>;
-}
-
-function refKind(file) {
-  const n = file.name.toLowerCase();
-  if (file.type.startsWith("image/")) return "image";
-  if (n.endsWith(".pdf")) return "pdf";
-  if (/\.(xlsx|xls|csv|tsv|txt|log|json)$/i.test(n)) return "data";
-  if (/\.(docx|doc|md|pptx)$/i.test(n)) return "document";
-  if (/\.(m|py|js|r|mat)$/i.test(n)) return "code";
-  return "other";
-}
-
-function AgentActionCard({ action, projectState, busyActionId, onChooseFile, onUseExistingFile, onExecute, onConfirm, onAcceptChartProposal, onCreateChartSpec, onInsertChartSpec }) {
+function AgentActionCard({ action, projectState, busyActionId, onChooseFile, onUseExistingFile, onExecute, onConfirm, onAcceptChartProposal, onCreateChartSpec, onInsertChartSpec, onReviewSourceExtract }) {
   const params = action.params || {};
   const preview = action.preview || null;
   const fileOptions = asArray(params.existingFiles);
   const isBusy = busyActionId === action.actionId || ["previewing", "executing", "accepting_proposal", "creating_chart_spec"].includes(action.status);
+  const isBackendAgentRunAction = Boolean(action.agentRunId);
   const isAgentRunConfirmable = Boolean(action.agentRunId)
     && ["create_compare_chart_proposal", "create_source_extract_proposal"].includes(action.type)
     && action.status === "requires_confirmation";
+  const isFrontendExecutableAgentRunAction = isBackendAgentRunAction
+    && ["interpret_chart"].includes(action.type)
+    && action.status === "requires_confirmation";
+  const canRefreshClosedAgentRun = isBackendAgentRunAction
+    && action.status === "failed"
+    && /AgentRun is already (completed|cancelled)/i.test(action.error || "");
   const canConfirm = isAgentRunConfirmable || ["ready_to_apply", "ready_to_persist", "ready_to_create"].includes(action.status);
   const hasChatChartProposal = ["interpret_chart", "compare_series", "create_compare_chart_proposal"].includes(action.type) && action.chartProposalSetId && action.proposalId;
+  const hasSourceExtractProposal = Boolean(action.sourceExtractProposalId) && !hasChatChartProposal;
   const proposalAccepted = action.proposalStatus === "accepted" || ["proposal_accepted", "chart_spec_created"].includes(action.status);
   const chartSpecCreated = action.status === "chart_spec_created" || Boolean(action.chartSpecId);
   const warnings = [...asArray(action.warnings), ...asArray(preview?.warnings)];
@@ -2180,7 +1834,7 @@ function AgentActionCard({ action, projectState, busyActionId, onChooseFile, onU
             )}
           </>
         )}
-        {!action.requiresFile && !canConfirm && action.status !== "completed" && !hasChatChartProposal && (
+        {!action.requiresFile && (!isBackendAgentRunAction || isFrontendExecutableAgentRunAction) && !canConfirm && action.status !== "completed" && !hasChatChartProposal && (
           <button type="button" disabled={isBusy} onClick={() => onExecute?.(action.actionId)}>
             {isBusy ? "Working..." : action.type === "resolve_data_query" ? "Resolve query" : "Prepare"}
           </button>
@@ -2188,6 +1842,11 @@ function AgentActionCard({ action, projectState, busyActionId, onChooseFile, onU
         {canConfirm && (
           <button type="button" className="primary" disabled={isBusy} onClick={() => onConfirm?.(action.actionId)}>
             {isBusy ? "Applying..." : isAgentRunConfirmable ? "Confirm agent action" : action.type === "create_chart_spec_from_proposal" ? "Create ChartSpec" : action.type?.includes("chart") ? "Confirm chart action" : "Confirm apply"}
+          </button>
+        )}
+        {canRefreshClosedAgentRun && (
+          <button type="button" className="primary" disabled={isBusy} onClick={() => onConfirm?.(action.actionId)}>
+            {isBusy ? "Refreshing..." : "Refresh result"}
           </button>
         )}
         {hasChatChartProposal && !chartSpecCreated && (
@@ -2221,6 +1880,18 @@ function AgentActionCard({ action, projectState, busyActionId, onChooseFile, onU
             Insert into Manuscript
           </button>
         )}
+        {hasSourceExtractProposal && (
+          <button
+            type="button"
+            disabled={isBusy}
+            onClick={() => onReviewSourceExtract?.(action.sourceExtractProposal || {
+              id: action.sourceExtractProposalId,
+              status: action.sourceExtractProposalStatus || "proposed",
+            })}
+          >
+            Review source extract
+          </button>
+        )}
         {action.status === "completed" && !hasChatChartProposal && <span className="workflow-status is-applied">Completed</span>}
       </div>
       {projectState?.project?.name && <small>Project: {projectState.project.name}</small>}
@@ -2228,10 +1899,27 @@ function AgentActionCard({ action, projectState, busyActionId, onChooseFile, onU
   );
 }
 
+const AGENT_CHAT_HISTORY_KEY_PREFIX = "labrat_blank_chat_history_v2_project_";
+const AGENT_CHAT_HISTORY_LOCAL_KEY = "labrat_blank_chat_history_v2_local";
+
+function agentChatHistoryKey(activeProjectId, projectState) {
+  const projectId = String(activeProjectId || projectState?.project?.id || "").trim();
+  return projectId
+    ? `${AGENT_CHAT_HISTORY_KEY_PREFIX}${encodeURIComponent(projectId)}`
+    : AGENT_CHAT_HISTORY_LOCAL_KEY;
+}
+
+function sanitizeStoredChatHistory(messages) {
+  return asArray(messages).map(({ streaming, streamId, ...message }) => message);
+}
+
+function readAgentChatHistory(key) {
+  return sanitizeStoredChatHistory(ls.get(key, []));
+}
+
 export function AgentPanel({
   open,
   setOpen,
-  dataset,
   blocks,
   setBlocks,
   references,
@@ -2243,8 +1931,26 @@ export function AgentPanel({
   projectState,
   onProjectStateLoaded,
   onInsertChartSpec,
+  onReviewSourceExtract,
+  onWorkbookReviewReady,
+  onWorkbookSuggestionSelect,
+  onOpenExperimentBrowser,
 }) {
-  const [history, setHistory] = useState(() => ls.get("labrat_blank_chat_history_v1_react", []).map(({ streaming, streamId, ...message }) => message));
+  const chatHistoryKey = useMemo(
+    () => agentChatHistoryKey(activeProjectId, projectState),
+    [activeProjectId, projectState?.project?.id],
+  );
+  const [historyState, setHistoryState] = useState(() => ({
+    key: chatHistoryKey,
+    messages: readAgentChatHistory(chatHistoryKey),
+  }));
+  const history = historyState.messages;
+  const setHistory = (updater) => {
+    setHistoryState((current) => ({
+      ...current,
+      messages: typeof updater === "function" ? updater(current.messages) : updater,
+    }));
+  };
   const [apiKey, setApiKey] = useState(() => localStorage.getItem("labrat_blank_anthropic_key_v1") || "");
   const [model, setModel] = useState(() => localStorage.getItem("labrat_blank_anthropic_model_v1") || "claude-sonnet-4-5");
   const [writingExamples, setWritingExamples] = useState(() => localStorage.getItem("labrat_blank_writing_examples_v1") || "");
@@ -2255,7 +1961,11 @@ export function AgentPanel({
   const [expanded, setExpanded] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pendingFileActionId, setPendingFileActionId] = useState("");
+  const [pendingSpreadsheetFile, setPendingSpreadsheetFile] = useState(null);
   const [busyActionId, setBusyActionId] = useState("");
+  const messagesRef = useRef(null);
+  const chatScrollInitializedRef = useRef(false);
+  const lastChatScrollTopRef = useRef(0);
   const fileActionInputRef = useRef(null);
   const [settingsDraft, setSettingsDraft] = useState({
     apiKey,
@@ -2265,8 +1975,51 @@ export function AgentPanel({
     houseRules,
   });
   useEffect(() => {
-    ls.set("labrat_blank_chat_history_v1_react", history.map(({ streaming, streamId, ...message }) => message));
-  }, [history]);
+    setHistoryState((current) => {
+      if (current.key === chatHistoryKey) return current;
+      chatScrollInitializedRef.current = false;
+      lastChatScrollTopRef.current = 0;
+      return {
+        key: chatHistoryKey,
+        messages: readAgentChatHistory(chatHistoryKey),
+      };
+    });
+  }, [chatHistoryKey]);
+  useEffect(() => {
+    ls.set(historyState.key, sanitizeStoredChatHistory(historyState.messages));
+  }, [historyState]);
+  useEffect(() => {
+    if (!open) return undefined;
+    const schedule = typeof window.requestAnimationFrame === "function"
+      ? (callback) => window.requestAnimationFrame(callback)
+      : (callback) => window.setTimeout(callback, 0);
+    const cancel = typeof window.cancelAnimationFrame === "function"
+      ? (handle) => window.cancelAnimationFrame(handle)
+      : (handle) => window.clearTimeout(handle);
+    const handle = schedule(() => {
+      const messages = messagesRef.current;
+      if (!messages) return;
+      const maxScrollTop = Math.max(0, messages.scrollHeight - messages.clientHeight);
+      const nextScrollTop = chatScrollInitializedRef.current
+        ? Math.min(lastChatScrollTopRef.current, maxScrollTop)
+        : maxScrollTop;
+      messages.scrollTop = nextScrollTop;
+      lastChatScrollTopRef.current = messages.scrollTop;
+      chatScrollInitializedRef.current = true;
+    });
+    return () => cancel(handle);
+  }, [open]);
+  const rememberChatScroll = () => {
+    if (!messagesRef.current) return;
+    lastChatScrollTopRef.current = messagesRef.current.scrollTop;
+  };
+  const resetChat = () => {
+    setHistory([]);
+    setPendingSpreadsheetFile(null);
+    chatScrollInitializedRef.current = false;
+    lastChatScrollTopRef.current = 0;
+    if (messagesRef.current) messagesRef.current.scrollTop = 0;
+  };
   const openSettings = () => {
     setSettingsDraft({ apiKey, model, writingExamples, projectBackground, houseRules });
     setSettingsOpen(true);
@@ -2297,8 +2050,22 @@ export function AgentPanel({
   };
   const updateSettingsDraft = (key, value) => setSettingsDraft((draft) => ({ ...draft, [key]: value }));
   const context = () => ({
-    study: dataset.metadata.study,
-    n_experiments: dataset.experiments.length,
+    project: {
+      id: projectState?.project?.id || activeProjectId || null,
+      name: projectState?.project?.name || null,
+      profile: projectState?.projectProfile || projectState?.project?.projectProfile || {},
+    },
+    published_experiment_count: asArray(projectState?.experimentSnapshotHeads).length,
+    source_documents: asArray(projectState?.sourceDocuments).map((document) => ({
+      id: document.id,
+      filename: document.metadata?.filename || document.metadata?.workbookName || "",
+      status: document.status,
+    })),
+    approved_charts: activeChartSpecsForProject(projectState).map((chartSpec) => ({
+      id: chartSpec.id,
+      title: chartSpec.title,
+      chartType: chartSpec.chartType || chartSpec.spec?.chartType,
+    })),
     selected: selected?.label,
     selected_chart: selectedChartContext,
     assistant_profile: {
@@ -2313,7 +2080,6 @@ export function AgentPanel({
       text: b.kind === "text" ? b.html : undefined,
     })),
     references: references.map((r) => ({ name: r.name, kind: r.kind, note: r.note })),
-    experiments_csv: dataset.experiments.map((e) => [e.label, e.catalyst_loading_g, e.rpm, e.impeller, e.reaction_time_hr, e.conversion_pct, e.selectivity_liquid_pct, e.carbon_balance_pct].join(",")).join("\n"),
   });
   const serverAgentEnabled = Boolean(activeProjectId);
   const updateActionInHistory = (actionId, patch) => {
@@ -2339,6 +2105,22 @@ export function AgentPanel({
     const state = await getServerProjectState(activeProjectId);
     onProjectStateLoaded?.(state);
     return state;
+  };
+  const recoverCompletedAgentRunAction = async (action) => {
+    const response = await getServerAgentRun(action.agentRunId);
+    const latestRun = response.agentRun || {};
+    const latestAction = asArray(latestRun.actions).find((candidate) => candidate.actionId === action.actionId);
+    if (!latestAction) throw new Error("The completed AgentRun action could not be found.");
+    const normalizedAction = normalizeAgentRunActionForChat(latestAction, latestRun);
+    updateActionInHistory(action.actionId, {
+      ...normalizedAction,
+      error: "",
+      preview: {
+        ...(action.preview || {}),
+        ...(normalizedAction.preview || {}),
+      },
+    });
+    await reloadProjectAfterAgentAction();
   };
   const chartProposalActionPayload = (action) => action.chartProposalSetPayload
     || action.chartProposalSet?.payload
@@ -2434,7 +2216,7 @@ export function AgentPanel({
       setBusyActionId("");
     }
   };
-  const createImportRunFromAgentFile = async (action, { file = null, fileObjectId = "" } = {}) => {
+  const createWorkbookReviewSessionFromAgentFile = async (action, { file = null, fileObjectId = "" } = {}) => {
     if (!activeProjectId) throw new Error("Select a server project first.");
     let nextFileObjectId = fileObjectId;
     if (!nextFileObjectId && file) {
@@ -2442,64 +2224,56 @@ export function AgentPanel({
       nextFileObjectId = uploaded.fileObject?.id;
     }
     if (!nextFileObjectId) throw new Error("Choose a workbook file first.");
-    const runResponse = await createServerImportRun(activeProjectId, nextFileObjectId);
-    const importRun = runResponse.importRun;
-    const approvedBlockIds = scanBlockIds(importRun.scanResult);
-    if (!approvedBlockIds.length) throw new Error("No importable workbook blocks were detected.");
-    const normalizeResponse = await previewServerImportRunNormalization(importRun.id, { approvedBlockIds });
-    const normalizePreview = normalizeResponse.importRun?.normalizePreview || importRun.normalizePreview;
-    const normalizeSummary = summarizeNormalizePreview(normalizePreview);
-
-    if (action.type === "upload_supplement") {
-      const relationshipPreview = await previewServerImportRelationship(importRun.id, {});
-      const aliases = asArray(action.params?.targetExperimentAliases).map((item) => String(item).toLowerCase());
-      const proposals = selectableRelationshipProposals(relationshipPreview);
-      const proposal = proposals.find((candidate) => (
-        aliases.length && asArray(candidate.targetExperimentIds).some((target) => aliases.some((alias) => String(target).toLowerCase().includes(alias)))
-      )) || proposals.sort((a, b) => (b.confidence || 0) - (a.confidence || 0))[0] || null;
-      updateActionInHistory(action.actionId, {
-        status: proposal ? "ready_to_apply" : "failed",
-        importRunId: importRun.id,
-        preview: {
-          summary: normalizeSummary,
-          relationshipProposal: proposal,
-          warnings: relationshipPreview.warnings,
-        },
-        relationshipDecision: proposal,
-        error: proposal ? "" : "No supplemental relationship target was found.",
-      });
-      return;
-    }
-
-    if (action.type === "refresh_master_table") {
-      const parentCommitId = projectState?.currentDatasetCommit?.id || projectState?.project?.currentDatasetCommitId || action.params?.expectedParentDatasetCommitId || "";
-      const targetImport = getMasterImports(dataset)[0];
-      if (!parentCommitId || !targetImport?.importId) throw new Error("Refresh requires an active master import.");
-      const refreshPreview = await previewServerImportRefresh(importRun.id, {
-        replaceImportId: targetImport.importId,
-        expectedParentDatasetCommitId: parentCommitId,
-      });
-      updateActionInHistory(action.actionId, {
-        status: refreshPreview.hasChanges ? "ready_to_apply" : "failed",
-        importRunId: importRun.id,
-        replaceImportId: targetImport.importId,
-        expectedParentDatasetCommitId: parentCommitId,
-        preview: {
-          summary: refreshPreview.summary,
-          message: refreshPreview.hasChanges ? "Refresh diff is ready for confirmation." : "No changes detected.",
-          warnings: refreshPreview.warnings,
-        },
-        error: refreshPreview.hasChanges ? "" : "No changes detected in the replacement workbook.",
-      });
-      return;
-    }
-
+    const response = await createServerWorkbookReviewSession(activeProjectId, { fileObjectId: nextFileObjectId });
+    const session = response.workbookReviewSession || response.session || null;
+    const sourceDocument = response.sourceDocument || null;
+    const workbookName = sourceDocument?.metadata?.workbookName || session?.workbookSummary?.workbookName || file?.name || "workbook";
+    onWorkbookReviewReady?.({
+      response,
+      session,
+      sourceDocument,
+      regions: asArray(response.regions),
+      file,
+      suggestions: workbookReviewSuggestionsFromResponse(response),
+    });
     updateActionInHistory(action.actionId, {
-      status: "ready_to_apply",
-      importRunId: importRun.id,
-      preview: { summary: normalizeSummary },
+      status: "completed",
+      workbookReviewSessionId: session?.id || "",
+      sourceDocumentId: sourceDocument?.id || "",
+      preview: {
+        summary: session?.workbookSummary || {},
+        message: `Created workbook review session for ${workbookName}. Review the source workbook before extracting data or charting.`,
+        warnings: session?.warnings || [],
+      },
       error: "",
     });
+    await reloadProjectAfterAgentAction();
+  };
+  const createWorkbookReviewSessionFromChatAttachment = async (file) => {
+    if (!activeProjectId) throw new Error("Select a server project first.");
+    if (!file) throw new Error("Choose a workbook file first.");
+    const uploaded = await uploadServerProjectFile(activeProjectId, file);
+    const fileObjectId = uploaded.fileObject?.id;
+    if (!fileObjectId) throw new Error("The server did not return an uploaded file id.");
+    const response = await createServerWorkbookReviewSession(activeProjectId, { fileObjectId });
+    const session = response.workbookReviewSession || response.session || null;
+    const sourceDocument = response.sourceDocument || null;
+    const suggestions = workbookReviewSuggestionsFromResponse(response);
+    onWorkbookReviewReady?.({
+      response,
+      session,
+      sourceDocument,
+      regions: asArray(response.regions),
+      file,
+      suggestions,
+    });
+    await reloadProjectAfterAgentAction();
+    return {
+      response,
+      session,
+      sourceDocument,
+      suggestions,
+    };
   };
   const executeAgentAction = async (actionId, filePayload = {}) => {
     const action = actionById(actionId);
@@ -2508,105 +2282,73 @@ export function AgentPanel({
     updateActionInHistory(actionId, { status: action.requiresFile ? "previewing" : "executing", error: "" });
     try {
       if (action.requiresFile) {
-        await createImportRunFromAgentFile(action, filePayload);
-      } else if (action.type === "resolve_data_query") {
-        const response = await resolveServerProjectDataQuery(activeProjectId, { prompt: action.params?.prompt || "" });
+        await createWorkbookReviewSessionFromAgentFile(action, filePayload);
+      } else if (action.type === "open_experiment_browser") {
+        onOpenExperimentBrowser?.(action.params || {});
         updateActionInHistory(actionId, {
           status: "completed",
           preview: {
-            summary: {
-              experiments: response.retrievedContext?.experiments?.length || 0,
-              fields: response.retrievedContext?.fields?.length || 0,
-              imports: response.retrievedContext?.imports?.length || 0,
-            },
-            message: response.viewIntentDraft?.title || response.clarification?.message || "Data query resolved.",
-            warnings: response.warnings,
+            message: "Opened Experiment Browser for source-backed comparison.",
+            warnings: action.warnings || [],
           },
+          error: "",
         });
-      } else if (action.type === "propose_charts") {
-        const response = await proposeServerProjectCharts(activeProjectId, { userGoal: action.params?.userGoal || "" });
-        updateActionInHistory(actionId, {
-          status: "completed",
-          preview: {
-            summary: response.summary || { proposals: response.proposalSet?.proposals?.length || 0 },
-            message: `Created chart proposal set ${response.chartProposalSet?.id || ""}.`,
-            warnings: response.warnings,
-          },
-        });
-        await reloadProjectAfterAgentAction();
+      } else if (["resolve_data_query", "propose_charts", "compare_series"].includes(action.type)) {
+        throw new Error("This legacy dataset action is retired. Use Experiment Browser for comparison or select workbook source evidence for charting.");
       } else if (action.type === "interpret_chart") {
-        const response = await interpretServerProjectChart(activeProjectId, {
+        const intentResult = await interpretProjectChartIntent(activeProjectId, {
           prompt: action.params?.prompt || "",
           persistAsProposal: true,
+          entrypoint: "agent_drawer",
+          context: { actionId },
         });
+        const response = intentResult.response;
         const chartProposalSet = response.chartProposalSet || null;
         const proposalPayload = chartProposalSet?.payload || null;
         const proposal = asArray(proposalPayload?.proposals)[0] || null;
+        const sourceExtractProposal = response.sourceExtractProposal || null;
+        const completed = Boolean(chartProposalSet || sourceExtractProposal);
         updateActionInHistory(actionId, {
-          status: chartProposalSet ? "completed" : "failed",
+          status: completed ? "completed" : "failed",
+          chartIntentKind: intentResult.kind,
           chartProposalSetId: chartProposalSet?.id || "",
           chartProposalSetPayload: proposalPayload ? payloadWithServerId(chartProposalSet, "proposalSetId") : null,
           proposalId: proposal?.proposalId || "",
           proposalStatus: proposal?.status || "proposed",
+          sourceExtractProposalId: sourceExtractProposal?.id || "",
+          sourceExtractProposalStatus: sourceExtractProposal?.status || "",
+          sourceExtractProposal,
           preview: {
-            chartTitle: proposal?.title || response.chartSpecDraft?.title,
-            message: chartProposalSet ? `Queued chart proposal set ${chartProposalSet.id}.` : response.clarification?.message || "Chart could not be drafted.",
-            warnings: response.warnings,
+            chartTitle: proposal?.title || response.chartSpecDraft?.title || sourceExtractProposal?.preview?.chartIntentDraft?.title || "",
+            message: chartProposalSet
+              ? `Queued chart proposal set ${chartProposalSet.id}.`
+              : sourceExtractProposal
+                ? `Created source extract proposal ${sourceExtractProposal.id}. Review the extracted source data before charting.`
+                : response.clarification?.message || "Chart could not be drafted.",
+            warnings: [
+              ...asArray(response.warnings),
+              ...asArray(sourceExtractProposal?.warnings),
+            ],
           },
-          error: chartProposalSet ? "" : response.clarification?.message || "Chart draft requires clarification.",
+          error: completed ? "" : response.clarification?.message || "Chart draft requires clarification.",
         });
-        if (chartProposalSet) await reloadProjectAfterAgentAction();
-      } else if (action.type === "compare_series") {
-        const params = action.params || {};
-        const viewResponse = await createServerAnalysisView(activeProjectId, {
-          viewType: params.viewType || "series_compare",
-          title: params.title || "Reaction rate comparison",
-          spec: {
-            seriesKind: params.seriesKind || "reaction_rate_time_series",
-            experimentIds: asArray(params.experimentIds),
-            xField: params.xField || "reaction_time_min",
-            yField: params.yField || "",
-            groupBy: params.groupBy || "experiment",
-          },
-        });
-        if (viewResponse.clarification) {
-          updateActionInHistory(actionId, {
-            status: "failed",
-            preview: {
-              message: viewResponse.clarification.message || "Compare request needs clarification.",
-              warnings: viewResponse.warnings,
-            },
-            error: viewResponse.clarification.message || "Compare request needs clarification.",
-          });
-          return;
-        }
-        const analysisView = viewResponse.analysisView;
-        if (!analysisView?.id) throw new Error("The server did not return an AnalysisView.");
-        const chartResponse = await createServerAnalysisViewChartProposal(analysisView.id);
-        const chartProposalSet = chartResponse.chartProposalSet || chartResponse.proposalSet || null;
-        const proposalPayload = chartProposalSet?.payload || chartResponse.proposalSet || null;
-        const proposal = asArray(proposalPayload?.proposals)[0] || null;
-        updateActionInHistory(actionId, {
-          status: chartProposalSet ? "completed" : "failed",
-          analysisViewId: analysisView.id,
-          analysisView,
-          chartProposalSetId: chartProposalSet?.id || "",
-          chartProposalSetPayload: chartProposalSet?.payload ? payloadWithServerId(chartProposalSet, "proposalSetId") : proposalPayload,
-          proposalId: proposal?.proposalId || "",
-          proposalStatus: proposal?.status || "proposed",
-          preview: {
-            chartTitle: proposal?.title || analysisView.title,
-            message: chartProposalSet ? `Queued chart proposal set ${chartProposalSet.id}.` : "Compare chart proposal could not be created.",
-            warnings: chartResponse.warnings,
-          },
-          error: chartProposalSet ? "" : "Compare chart proposal could not be created.",
-        });
-        if (chartProposalSet) await reloadProjectAfterAgentAction();
+        if (completed) await reloadProjectAfterAgentAction();
       } else if (action.type === "create_chart_spec_from_proposal") {
         if (!action.params?.chartProposalSetId || !action.params?.proposalId) throw new Error("No accepted proposal is available for ChartSpec creation.");
         updateActionInHistory(actionId, { status: "ready_to_create" });
       }
     } catch (err) {
+      const alreadyClosedAgentRun = Boolean(action.agentRunId)
+        && (err?.code === "agent_run_closed" || /AgentRun is already (completed|cancelled)/i.test(err?.message || ""));
+      if (alreadyClosedAgentRun) {
+        try {
+          await recoverCompletedAgentRunAction(action);
+          return;
+        } catch (recoverErr) {
+          updateActionInHistory(actionId, { status: "failed", error: recoverErr.message || err.message || String(recoverErr || err) });
+          return;
+        }
+      }
       updateActionInHistory(actionId, { status: "failed", error: err.message || String(err) });
     } finally {
       setBusyActionId("");
@@ -2626,16 +2368,16 @@ export function AgentPanel({
         const sourceExtractProposal = response.sourceExtractProposal || null;
         updateActionInHistory(actionId, {
           status: "completed",
-          analysisViewId: response.analysisView?.id || action.analysisViewId || "",
-          analysisView: response.analysisView || action.analysisView || null,
           chartProposalSetId: chartProposalSet?.id || "",
           chartProposalSetPayload: chartProposalSet?.payload ? payloadWithServerId(chartProposalSet, "proposalSetId") : null,
           proposalId: proposal?.proposalId || "",
           proposalStatus: proposal?.status || "proposed",
           sourceExtractProposalId: sourceExtractProposal?.id || "",
+          sourceExtractProposalStatus: sourceExtractProposal?.status || "",
+          sourceExtractProposal,
           preview: {
             ...(action.preview || {}),
-            chartTitle: proposal?.title || response.analysisView?.title || sourceExtractProposal?.preview?.chartIntentDraft?.title || "",
+            chartTitle: proposal?.title || sourceExtractProposal?.preview?.chartIntentDraft?.title || "",
             message: chartProposalSet?.id
               ? `Queued chart proposal set ${chartProposalSet.id}.`
               : sourceExtractProposal?.id
@@ -2653,29 +2395,7 @@ export function AgentPanel({
         return;
       }
 
-      if (action.type === "upload_master_table") {
-        await applyServerImportRun(action.importRunId, {
-          applyMode: "append",
-          reviewNote: "Applied master table from LabRat chat action.",
-        });
-        await reloadProjectAfterAgentAction();
-      } else if (action.type === "upload_supplement") {
-        if (!action.relationshipDecision) throw new Error("Supplement relationship preview is missing.");
-        await applyServerImportRun(action.importRunId, {
-          applyMode: "supplement_import",
-          relationshipDecision: action.relationshipDecision,
-          reviewNote: "Applied supplemental workbook from LabRat chat action.",
-        });
-        await reloadProjectAfterAgentAction();
-      } else if (action.type === "refresh_master_table") {
-        await applyServerImportRun(action.importRunId, {
-          applyMode: "replace_import",
-          replaceImportId: action.replaceImportId,
-          expectedParentDatasetCommitId: action.expectedParentDatasetCommitId,
-          reviewNote: "Applied master table refresh from LabRat chat action.",
-        });
-        await reloadProjectAfterAgentAction();
-      } else if (action.type === "create_chart_spec_from_proposal") {
+      if (action.type === "create_chart_spec_from_proposal") {
         await createServerChartSpecFromProposal(activeProjectId, {
           chartProposalSetId: action.params?.chartProposalSetId,
           proposalId: action.params?.proposalId,
@@ -2684,6 +2404,17 @@ export function AgentPanel({
       }
       updateActionInHistory(actionId, { status: "completed", error: "" });
     } catch (err) {
+      const alreadyClosedAgentRun = Boolean(action.agentRunId)
+        && (err?.code === "agent_run_closed" || /AgentRun is already (completed|cancelled)/i.test(err?.message || ""));
+      if (alreadyClosedAgentRun) {
+        try {
+          await recoverCompletedAgentRunAction(action);
+          return;
+        } catch (recoverErr) {
+          updateActionInHistory(actionId, { status: "failed", error: recoverErr.message || err.message || String(recoverErr || err) });
+          return;
+        }
+      }
       updateActionInHistory(actionId, { status: "failed", error: err.message || String(err) });
     } finally {
       setBusyActionId("");
@@ -2693,12 +2424,21 @@ export function AgentPanel({
     setPendingFileActionId(actionId);
     fileActionInputRef.current?.click();
   };
+  const chooseSpreadsheetAttachment = () => {
+    setPendingFileActionId("");
+    fileActionInputRef.current?.click();
+  };
   const onAgentFileSelected = async (event) => {
     const file = event.target.files?.[0];
     const actionId = pendingFileActionId;
     event.target.value = "";
     setPendingFileActionId("");
-    if (file && actionId) await executeAgentAction(actionId, { file });
+    if (!file) return;
+    if (actionId) {
+      await executeAgentAction(actionId, { file });
+      return;
+    }
+    setPendingSpreadsheetFile(file);
   };
   const appendStreamDelta = (streamId, delta) => {
     setHistory((current) => current.map((message) => (
@@ -2745,9 +2485,40 @@ export function AgentPanel({
   const send = async (prefill, meta = null) => {
     const text = (prefill ?? input).trim();
     if (!text || busy) return;
+    const spreadsheetAttachment = pendingSpreadsheetFile;
     setInput("");
-    const next = [...history.map(({ streaming, streamId, ...message }) => message), { role: "user", text, meta }];
+    if (spreadsheetAttachment) setPendingSpreadsheetFile(null);
+    const next = [...history.map(({ streaming, streamId, ...message }) => message), {
+      role: "user",
+      text,
+      meta,
+      attachments: spreadsheetAttachment ? [{ name: spreadsheetAttachment.name, kind: "spreadsheet" }] : [],
+    }];
     setHistory(next);
+    if (serverAgentEnabled && spreadsheetAttachment && !meta?.source) {
+      setBusy(true);
+      try {
+        const result = await createWorkbookReviewSessionFromChatAttachment(spreadsheetAttachment);
+        const suggestions = asArray(result.suggestions);
+        const workbookName = result.sourceDocument?.metadata?.workbookName
+          || result.session?.workbookSummary?.workbookName
+          || spreadsheetAttachment.name
+          || "workbook";
+        setHistory([...next, {
+          role: "assistant",
+          text: suggestions.length
+            ? `I indexed ${workbookName}. I found potentially useful regions; click a range to highlight it in the Excel preview.`
+            : `I indexed ${workbookName}. You can inspect the workbook in the preview; select a range and describe it if you want LabRat to revise its understanding.`,
+          workbookSuggestions: suggestions,
+        }]);
+      } catch (err) {
+        setPendingSpreadsheetFile(spreadsheetAttachment);
+        setHistory([...next, { role: "assistant", text: `Workbook upload failed: ${err.message || String(err)}` }]);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     if (serverAgentEnabled && !meta?.source) {
       setBusy(true);
       try {
@@ -2764,10 +2535,7 @@ export function AgentPanel({
           },
         });
         const agentRun = response.agentRun || {};
-        const actions = asArray(agentRun.actions).map((action) => ({
-          ...action,
-          agentRunId: agentRun.id,
-        }));
+        const actions = asArray(agentRun.actions).map((action) => normalizeAgentRunActionForChat(action, agentRun));
         const warningText = asArray(agentRun.warnings).map((warning) => warning.message || warning.code).filter(Boolean).join(" ");
         const reply = actions.length
           ? "I prepared an AgentRun action. Review the trace and confirm before anything changes."
@@ -2901,11 +2669,11 @@ export function AgentPanel({
       <div className="agent-head-actions">
         <button type="button" aria-label={expanded ? "Collapse Lab Rat panel" : "Expand Lab Rat panel"} title={expanded ? "Collapse" : "Expand"} onClick={() => setExpanded((value) => !value)}>{expanded ? "\u2199" : "\u2197"}</button>
         <button type="button" className={settingsOpen ? "active" : ""} aria-label="Settings" title="Settings" onClick={openSettings}>&#9881;</button>
-        <button type="button" aria-label="Reset chat" title="Reset chat" onClick={() => setHistory([])}>&#8635;</button>
+        <button type="button" aria-label="Reset chat" title="Reset chat" onClick={resetChat}>&#8635;</button>
         <button type="button" aria-label="Close Lab Rat panel" title="Close" onClick={closeAgent}>&times;</button>
       </div>
     </div>
-    <div className="agent-context">Manuscript 路 {blocks.length} blocks on canvas 路 focused: {selected?.label || "none"} 路 {selectedChartContext ? "1 chart selected" : "0 charts selected"}</div>
+    <div className="agent-context">Manuscript - {blocks.length} blocks on canvas - focused: {selected?.label || "none"} - {selectedChartContext ? "1 chart selected" : "0 charts selected"}</div>
     {selectedChartContext && (
       <div className="agent-chart-context">
         <img className="agent-chart-avatar" src={logoSrc} alt="" />
@@ -2920,7 +2688,7 @@ export function AgentPanel({
         </div>
       </div>
     )}
-    <div className="messages">
+    <div className="messages" ref={messagesRef} onScroll={rememberChatScroll}>
       {!history.length && <div className="welcome">
         <img className="welcome-avatar" src={logoSrc} alt="" />
         <span>Hi! I'm the lab rat.</span>
@@ -2934,6 +2702,28 @@ export function AgentPanel({
         <div className="msg-body">
           <span>{m.role === "user" ? "You" : "the lab rat"}</span>
           <p>{m.text}</p>
+          {!!asArray(m.attachments).length && (
+            <div className="agent-attachments">
+              {asArray(m.attachments).map((attachment, attachmentIndex) => (
+                <span className="agent-attachment-chip" key={`${attachment.name || "attachment"}-${attachmentIndex}`}>
+                  {attachment.name || "Attached file"}
+                </span>
+              ))}
+            </div>
+          )}
+          {!!asArray(m.workbookSuggestions).length && (
+            <div className="agent-workbook-suggestions">
+              {asArray(m.workbookSuggestions).map((selection, selectionIndex) => (
+                <button
+                  type="button"
+                  key={`${selection.sourceDocumentId}-${selection.sheetName}-${selection.range}-${selectionIndex}`}
+                  onClick={() => onWorkbookSuggestionSelect?.(selection)}
+                >
+                  {workbookSuggestionButtonLabel(selection)}
+                </button>
+              ))}
+            </div>
+          )}
           {m.agentRun?.visibleSteps?.length > 0 && (
             <div className="backend-workflow-steps agent-run-steps">
               {m.agentRun.visibleSteps.map((step, stepIndex) => (
@@ -2959,6 +2749,7 @@ export function AgentPanel({
               onAcceptChartProposal={acceptAgentChartProposal}
               onCreateChartSpec={createAgentChartSpec}
               onInsertChartSpec={onInsertChartSpec}
+              onReviewSourceExtract={onReviewSourceExtract}
             />
           ))}
           {m.role === "assistant" && m.meta?.source === "chart" && m.text && !m.streaming && !m.text.startsWith("Request failed:") && <button className="insert-chat-text" onClick={() => insertAssistantText(m)}>Insert as text box</button>}
@@ -2967,7 +2758,15 @@ export function AgentPanel({
       {busy && !history.some((m) => m.role === "assistant" && m.streaming && m.text) && <div className="typing">Thinking...</div>}
     </div>
     <div className="agent-foot">
-      <button type="button" className="agent-tool" aria-label="Attach reference">+</button>
+      {pendingSpreadsheetFile && (
+        <div className="agent-pending-attachment">
+          <span>{pendingSpreadsheetFile.name}</span>
+          <button type="button" aria-label="Remove attached spreadsheet" onClick={() => setPendingSpreadsheetFile(null)}>
+            x
+          </button>
+        </div>
+      )}
+      <button type="button" className="agent-tool" aria-label="Attach spreadsheet" title="Attach spreadsheet" onClick={chooseSpreadsheetAttachment}>+</button>
       <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="Ask the rat about your data, charts, or manuscript..." />
       <button type="button" className="agent-send" onClick={() => send()}>&#8593;</button>
       <input ref={fileActionInputRef} className="agent-file-input" type="file" accept=".xlsx,.xls" onChange={onAgentFileSelected} />
@@ -3036,7 +2835,6 @@ function App() {
   const [dataset, setDataset] = useState(() => emptyDataset());
   const [sourceName, setSourceName] = useState(BLANK_PROJECT_SOURCE_NAME);
   const [sourceError, setSourceError] = useState("");
-  const [loadingSource, setLoadingSource] = useState(false);
   const [staged, setStaged] = useState([]);
   const [blocks, setBlocks] = useState([]);
   const [canvasHeight, setCanvasHeight] = useState(0);
@@ -3065,54 +2863,29 @@ function App() {
   const [deleteProjectTarget, setDeleteProjectTarget] = useState(null);
   const [deleteProjectBusy, setDeleteProjectBusy] = useState(false);
   const [deleteProjectError, setDeleteProjectError] = useState("");
-  const [activeImportRun, setActiveImportRun] = useState(null);
   const [profileChatOpen, setProfileChatOpen] = useState(false);
-  const [importReviewOpen, setImportReviewOpen] = useState(false);
-  const [mappingReviewOpen, setMappingReviewOpen] = useState(false);
   const [chartReviewOpen, setChartReviewOpen] = useState(false);
   const [focusedChartProposalId, setFocusedChartProposalId] = useState("");
   const [chartReviewStatusFilter, setChartReviewStatusFilter] = useState("");
-  const [supplementManagerOpen, setSupplementManagerOpen] = useState(false);
-  const [compareSeriesState, setCompareSeriesState] = useState({ open: false, loading: false, error: "", clarification: null });
-  const [supplementalBatchState, setSupplementalBatchState] = useState(() => emptySupplementalBatchState());
-  const [importReviewMode, setImportReviewMode] = useState("append");
-  const [refreshDraft, setRefreshDraft] = useState(() => emptyRefreshDraft());
-  const [relationshipDraft, setRelationshipDraft] = useState(() => emptyRelationshipDraft());
-  const [importSession, setImportSession] = useState(null);
-  const [backendScanState, setBackendScanState] = useState({ loading: false, result: null, error: "", fileName: "" });
-  const [backendBlockReview, setBackendBlockReview] = useState(() => createBlockReviewState());
-  const [backendNormalizeState, setBackendNormalizeState] = useState({ loading: false, result: null, error: "" });
-  const [backendMappingState, setBackendMappingState] = useState({ loading: false, result: null, error: "" });
+  const [workbookReviewState, setWorkbookReviewState] = useState({ loading: false, error: "", revisionLoading: false, confirmLoading: false, revisionError: "", clarification: null, session: null, sourceDocument: null, regions: [] });
+  const [dataPlanReviewState, setDataPlanReviewState] = useState({ loading: false, error: "", review: null, identityDecisions: [] });
+  const [workbookReviewDraftRegions, setWorkbookReviewDraftRegions] = useState([]);
+  const [activeWorkbookReviewDraftRegionId, setActiveWorkbookReviewDraftRegionId] = useState("");
+  const [workbookReviewFocusSelection, setWorkbookReviewFocusSelection] = useState(null);
+  const [browserSelectedExperimentIds, setBrowserSelectedExperimentIds] = useState([]);
   const [backendChartProposalState, setBackendChartProposalState] = useState({ loading: false, result: null, error: "" });
   const [backendChartInterpretState, setBackendChartInterpretState] = useState({ loading: false, result: null, error: "" });
-  const [fieldRoleOverrides, setFieldRoleOverrides] = useState({});
-  const supplementFileInputRef = useRef(null);
   const resetReviewState = () => {
-    setBackendScanState({ loading: false, result: null, error: "", fileName: "" });
-    setBackendBlockReview(createBlockReviewState());
-    setBackendNormalizeState({ loading: false, result: null, error: "" });
-    setBackendMappingState({ loading: false, result: null, error: "" });
     setBackendChartProposalState({ loading: false, result: null, error: "" });
     setBackendChartInterpretState({ loading: false, result: null, error: "" });
-    setFieldRoleOverrides({});
-    setActiveImportRun(null);
-    setImportReviewMode("append");
-    setRefreshDraft(emptyRefreshDraft());
-    setRelationshipDraft(emptyRelationshipDraft());
-    setMappingReviewOpen(false);
-    setChartReviewOpen(false);
     setFocusedChartProposalId("");
     setChartReviewStatusFilter("");
-    setCompareSeriesState({ open: false, loading: false, error: "", clarification: null });
-  };
-  const resetImportReviewState = () => {
-    setBackendScanState({ loading: false, result: null, error: "", fileName: "" });
-    setBackendBlockReview(createBlockReviewState());
-    setBackendNormalizeState({ loading: false, result: null, error: "" });
-    setBackendMappingState({ loading: false, result: null, error: "" });
-    setFieldRoleOverrides({});
-    setActiveImportRun(null);
-    setRelationshipDraft(emptyRelationshipDraft());
+    setWorkbookReviewState({ loading: false, error: "", revisionLoading: false, confirmLoading: false, revisionError: "", clarification: null, session: null, sourceDocument: null, regions: [] });
+    setDataPlanReviewState({ loading: false, error: "", review: null, identityDecisions: [] });
+    setWorkbookReviewDraftRegions([]);
+    setActiveWorkbookReviewDraftRegionId("");
+    setWorkbookReviewFocusSelection(null);
+    setBrowserSelectedExperimentIds([]);
   };
 
   const applyProjectShellState = (state) => {
@@ -3126,13 +2899,7 @@ function App() {
   };
 
   const applyReviewState = (state) => {
-    const latestMapping = latestItem(state?.mappingSets);
     const latestChartProposal = latestItem(state?.chartProposalSets);
-    setBackendMappingState(latestMapping?.payload ? {
-      loading: false,
-      result: { mappingSet: payloadWithServerId(latestMapping, "mappingSetId") },
-      error: "",
-    } : { loading: false, result: null, error: "" });
     setBackendChartProposalState(latestChartProposal?.payload ? {
       loading: false,
       result: {
@@ -3170,19 +2937,6 @@ function App() {
     applyReviewState(state);
   };
 
-  const mergeSupplementalBatchIntoState = (batch) => {
-    if (!batch?.id) return;
-    setSupplementalBatchState((current) => ({ ...current, activeBatchId: batch.id, batch, error: "" }));
-    setProjectState((current) => {
-      if (!current) return current;
-      const batches = asArray(current.supplementalImportBatches);
-      const nextBatches = batches.some((item) => item.id === batch.id)
-        ? batches.map((item) => item.id === batch.id ? batch : item)
-        : [batch, ...batches];
-      return { ...current, supplementalImportBatches: nextBatches };
-    });
-  };
-
   const refreshProjectWorkspace = async () => {
     if (!activeProjectId) return null;
     const state = await getServerProjectState(activeProjectId);
@@ -3201,7 +2955,6 @@ function App() {
       setSelectedProjectId(projectId);
       setWorkspaceMode("project");
       setTab("overview");
-      setSupplementalBatchState(emptySupplementalBatchState());
       applyProjectState(state);
     } catch (err) {
       setSourceError(err.message || String(err));
@@ -3210,11 +2963,6 @@ function App() {
     }
   };
 
-  const reloadActiveProjectState = async () => {
-    if (!activeProjectId) return;
-    await loadProjectState(activeProjectId);
-    setImportReviewOpen(false);
-  };
 
   const requestChartSpecManuscriptInsert = (chartSpecId) => {
     if (!chartSpecId) return;
@@ -3283,155 +3031,6 @@ function App() {
   useEffect(() => {
     if (projectLoaded) setDirty(true);
   }, [staged, blocks, pages, references, canvasHeight, pageOrientationPreference, chartTemplates]);
-  useEffect(() => {
-    const batchId = supplementalBatchState.activeBatchId;
-    if (!activeProjectId || !batchId) return undefined;
-    let cancelled = false;
-    let eventSource = null;
-    let pollingTimer = null;
-    const isTerminalBatch = (batch) => batch && !["queued", "processing"].includes(batch.status);
-    const handleBatch = (batch) => {
-      if (!batch || cancelled) return;
-      mergeSupplementalBatchIntoState(batch);
-      if (isTerminalBatch(batch)) {
-        setSupplementalBatchState((current) => ({ ...current, uploading: false, usePolling: false }));
-        refreshProjectWorkspace().catch((err) => {
-          setSupplementalBatchState((current) => ({ ...current, error: err.message || String(err) }));
-        });
-        if (eventSource) eventSource.close();
-        if (pollingTimer) window.clearInterval(pollingTimer);
-      }
-    };
-    const poll = async () => {
-      try {
-        const response = await getServerSupplementalImportBatch(activeProjectId, batchId);
-        handleBatch(response.batch);
-      } catch (err) {
-        if (!cancelled) setSupplementalBatchState((current) => ({ ...current, error: err.message || String(err) }));
-      }
-    };
-    if (supplementalBatchState.usePolling || typeof EventSource !== "function") {
-      poll();
-      pollingTimer = window.setInterval(poll, 3000);
-      return () => {
-        cancelled = true;
-        if (pollingTimer) window.clearInterval(pollingTimer);
-      };
-    }
-    eventSource = new EventSource(supplementalImportBatchEventsUrl(activeProjectId, batchId), { withCredentials: true });
-    const onMessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data || "{}");
-        handleBatch(payload.batch);
-      } catch (err) {
-        setSupplementalBatchState((current) => ({ ...current, error: err.message || String(err) }));
-      }
-    };
-    ["snapshot", "batch", "item", "item_ready", "item_failed", "complete"].forEach((eventName) => {
-      eventSource.addEventListener(eventName, onMessage);
-    });
-    eventSource.onerror = () => {
-      setSupplementalBatchState((current) => {
-        const failures = current.sseFailures + 1;
-        return {
-          ...current,
-          sseFailures: failures,
-          usePolling: failures >= 2,
-          error: failures >= 2 ? "Live progress disconnected; falling back to periodic refresh." : current.error,
-        };
-      });
-    };
-    return () => {
-      cancelled = true;
-      if (eventSource) eventSource.close();
-    };
-  }, [activeProjectId, supplementalBatchState.activeBatchId, supplementalBatchState.usePolling]);
-  useEffect(() => {
-    const runningBatch = latestItem(asArray(projectState?.supplementalImportBatches).filter((batch) => (
-      batch && ["queued", "processing"].includes(batch.status)
-    )));
-    if (!runningBatch || supplementalBatchState.activeBatchId) return;
-    setSupplementalBatchState((current) => ({
-      ...current,
-      activeBatchId: runningBatch.id,
-      batch: runningBatch,
-      error: "",
-      usePolling: false,
-      sseFailures: 0,
-    }));
-  }, [projectState?.project?.id, projectState?.supplementalImportBatches, supplementalBatchState.activeBatchId]);
-  const currentProject = () => buildProjectRecord({ dataset, sourceName, staged, blocks, pages, canvasHeight, pageOrientationPreference, chartTemplates, references });
-  const save = async () => {
-    try {
-      if (activeProjectId) {
-        const currentManuscript = asArray(projectState?.manuscripts)[0] || null;
-        const request = {
-          title: currentManuscript?.title || "Manuscript",
-          blocks,
-          pages: Array.isArray(pages) ? pages : [],
-          canvasState: { canvasHeight, pageOrientationPreference },
-          references,
-        };
-        const response = currentManuscript?.id
-          ? await patchServerManuscript(currentManuscript.id, request)
-          : await createServerManuscript(activeProjectId, request);
-        setProjectState((current) => {
-          if (!current) return current;
-          const savedManuscript = response.manuscript;
-          const currentManuscripts = asArray(current.manuscripts);
-          const manuscripts = currentManuscripts.some((manuscript) => manuscript.id === savedManuscript.id)
-            ? currentManuscripts.map((manuscript) => manuscript.id === savedManuscript.id ? savedManuscript : manuscript)
-            : [savedManuscript, ...currentManuscripts];
-          return { ...current, manuscripts };
-        });
-      } else {
-        await saveActiveProject(currentProject());
-      }
-      setSourceError("");
-      setDirty(false);
-    } catch (err) {
-      setSourceError(`Save failed: ${err.message}`);
-    }
-  };
-  const applyProject = (project) => {
-    setDataset(project.dataset);
-    setSourceName(project.sourceName);
-    setStaged(project.staged);
-    setBlocks(project.blocks);
-    setPages(project.pages);
-    setCanvasHeight(project.canvasHeight);
-    setPageOrientationPreference(project.pageOrientationPreference);
-    setChartTemplates(project.chartTemplates);
-    setReferences(project.references);
-    setSelected(null);
-    setSelectedChartContext(null);
-  };
-  const exportProject = () => {
-    const project = currentProject();
-    const blob = new Blob([JSON.stringify(project, null, 2)], { type: "application/json" });
-    const date = new Date().toISOString().slice(0, 10);
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `labrat-project-${date}.labrat.json`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-  };
-  const importProject = async (file) => {
-    if (!file) return;
-    try {
-      const text = await file.text();
-      const project = normalizeProjectRecord(JSON.parse(text), dataset);
-      await saveActiveProject(project);
-      applyProject(project);
-      setSourceError("");
-      setDirty(false);
-    } catch (err) {
-      setSourceError(`Import failed: ${err.message}`);
-    }
-  };
   const login = async ({ username, password }) => {
     setAuthState((current) => ({ ...current, loading: true, error: "" }));
     try {
@@ -3546,8 +3145,6 @@ function App() {
   };
   const openProjectDashboard = () => {
     setWorkspaceMode("dashboard");
-    setImportReviewOpen(false);
-    setMappingReviewOpen(false);
     setChartReviewOpen(false);
     setFocusedChartProposalId("");
     setChartReviewStatusFilter("");
@@ -3564,393 +3161,286 @@ function App() {
     } : current);
     return response;
   };
-  const loadFolder = async (files) => {
-    if (!files?.length) return;
-    setLoadingSource(true);
-    setSourceError("");
-    try {
-      const next = await parseLocalExcelFolder(files);
-      let nextImportSession = null;
-      try {
-        const scan = await scanExcelFolder(files);
-        const proposals = proposeExcelMappingsFromScan(scan);
-        nextImportSession = {
-          createdAt: new Date().toISOString(),
-          scan,
-          proposals,
-          confirmedProposalIds: [],
-          rejectedProposalIds: [],
-        };
-      } catch (scanErr) {
-        nextImportSession = {
-          createdAt: new Date().toISOString(),
-          scan: { workbookCount: 0, scannedWorkbooks: [] },
-          proposals: {
-            parserStatus: "stub",
-            generatedAt: new Date().toISOString(),
-            parserName: "future-ai-parser",
-            proposals: [],
-            notes: `Scanner unavailable: ${scanErr.message || String(scanErr)}`,
-          },
-          confirmedProposalIds: [],
-          rejectedProposalIds: [],
-        };
-      }
-      setDataset(next);
-      setSourceName(`local folder (${next.experiments.length} experiments)`);
-      setStaged([]);
-      setBlocks([]);
-      setPages([]);
-      setCanvasHeight(0);
-      setPageOrientationPreference(null);
-      await saveActiveProject(buildProjectRecord({
-        dataset: next,
-        sourceName: `local folder (${next.experiments.length} experiments)`,
-        staged: [],
-        blocks: [],
-        pages: [],
-        canvasHeight: 0,
-        pageOrientationPreference: null,
-        chartTemplates,
-        references,
-      }));
-      setImportSession(nextImportSession);
-      setDirty(false);
-    } catch (err) {
-      setSourceError(err.message || String(err));
-    } finally {
-      setLoadingSource(false);
-    }
-  };
   const stage = (label) => setStaged((s) => s.includes(label) ? s.filter((x) => x !== label) : [...s, label]);
-  const currentDatasetCommitId = () => projectState?.currentDatasetCommit?.id || projectState?.project?.currentDatasetCommitId || null;
-  const currentServerMappingSetId = () => backendMappingState.result?.mappingSet?.serverId || latestItem(projectState?.mappingSets)?.id || null;
-  const currentMappingSetRecord = () => mappingSetForDatasetCommit(projectState, currentDatasetCommitId());
-  const openMappingReview = () => {
-    if (!activeProjectId || !currentDatasetCommitId() || !hasMasterImport(dataset)) return;
-    setMappingReviewOpen(true);
-  };
   const openChartReview = (options = "") => {
     const isOptionsObject = options && typeof options === "object" && !("currentTarget" in options);
     setFocusedChartProposalId(typeof options === "string" ? options : (isOptionsObject && typeof options.proposalId === "string" ? options.proposalId : ""));
     setChartReviewStatusFilter(isOptionsObject && options.statusFilter === "active" ? "active" : "");
     setChartReviewOpen(true);
   };
-  const openCompareSeries = () => {
-    setSupplementManagerOpen(false);
-    setCompareSeriesState({ open: true, loading: false, error: "", clarification: null });
-  };
-  const closeCompareSeries = () => {
-    if (compareSeriesState.loading) return;
-    setCompareSeriesState({ open: false, loading: false, error: "", clarification: null });
-  };
   const closeChartReview = () => {
     setChartReviewOpen(false);
     setFocusedChartProposalId("");
     setChartReviewStatusFilter("");
   };
-  const createCompareSeriesProposal = async (request) => {
-    if (!activeProjectId || !currentDatasetCommitId()) {
-      setCompareSeriesState((current) => ({
-        ...current,
-        loading: false,
-        error: "Open a server project with a committed dataset before comparing series.",
-      }));
+  const openWorkbookUpload = () => {
+    if (!activeProjectId) {
+      setSourceError("Select or create a server project before uploading a workbook.");
       return;
     }
-    setCompareSeriesState((current) => ({ ...current, loading: true, error: "", clarification: null }));
-    try {
-      const viewResult = await createServerAnalysisView(activeProjectId, {
-        viewType: "series_compare",
-        title: request.title,
-        spec: {
-          seriesKind: request.seriesKind,
-          experimentIds: request.experimentIds || [],
-          xField: request.xField,
-          yField: request.yField,
-          groupBy: request.groupBy || "experiment",
-        },
-      });
-      if (viewResult.clarification) {
-        setCompareSeriesState((current) => ({
-          ...current,
-          loading: false,
-          clarification: viewResult.clarification,
-          error: "",
-        }));
-        return;
-      }
-      const analysisView = viewResult.analysisView;
-      if (!analysisView?.id) throw new Error("The server did not return an AnalysisView.");
-      const chartResult = await createServerAnalysisViewChartProposal(analysisView.id);
-      const chartProposalSet = chartResult.chartProposalSet || chartResult.proposalSet || null;
-      const proposalSet = chartProposalSet?.payload
-        ? payloadWithServerId(chartProposalSet, "proposalSetId")
-        : chartResult.proposalSet;
-      if (!proposalSet) throw new Error("The server did not return a chart proposal set.");
-      setBackendChartProposalState({
-        loading: false,
-        result: { ...chartResult, analysisView, chartProposalSet, proposalSet },
-        error: "",
-      });
-      setDataset((current) => upsertGenericChartProposalSet(current, proposalSet));
-      setProjectState((current) => current ? {
-        ...current,
-        analysisViews: upsertServerRecordById(current.analysisViews, analysisView),
-        chartProposalSets: chartProposalSet?.id
-          ? upsertServerRecordById(current.chartProposalSets, chartProposalSet)
-          : asArray(current.chartProposalSets),
-      } : current);
-      const firstProposalId = asArray(proposalSet.proposals)[0]?.proposalId || "";
-      setCompareSeriesState({ open: false, loading: false, error: "", clarification: null });
-      setFocusedChartProposalId(firstProposalId);
-      setChartReviewStatusFilter("");
-      setChartReviewOpen(true);
-      setDirty(true);
-    } catch (err) {
-      setCompareSeriesState((current) => ({
-        ...current,
-        loading: false,
-        error: err.message || String(err),
-        clarification: null,
-      }));
-    }
-  };
-  const saveMappingReviewDraft = async (mappingSetRecord, mappingPayload) => {
-    if (!mappingSetRecord?.id) throw new Error("Generate mappings before saving changes.");
-    const saved = await patchServerMappingSet(mappingSetRecord.id, {
-      status: "proposed",
-      payload: mappingPayload,
-      decisionSummary: decisionSummary(mappingPayload.mappings),
-    });
-    const state = await getServerProjectState(activeProjectId);
-    applyProjectWorkspaceRefresh(state);
-    const savedRecord = state.mappingSets?.find((set) => set.id === saved.mappingSet.id) || saved.mappingSet;
-    return savedRecord;
-  };
-  const generateMappingReviewMappings = async () => {
-    const datasetCommitId = currentDatasetCommitId();
-    const genericImports = getMasterImports(dataset);
-    if (!activeProjectId || !datasetCommitId || !genericImports.length) {
-      throw new Error("Generate mappings requires a committed master table.");
-    }
-    const result = await proposeSemanticMappingsWithBackend({
-      genericImports,
-      selectedImportIds: genericImports.map((item) => item.importId).filter(Boolean),
-      scanSummary: null,
-      priorDecisions: (dataset.genericMappingSets || []).flatMap((set) => set.mappings || []),
-    });
-    const existingCurrentRecord = latestItem(asArray(projectState?.mappingSets).filter((set) => set?.datasetCommitId === datasetCommitId));
-    const request = {
-      importRunId: existingCurrentRecord?.importRunId || null,
-      datasetCommitId,
-      schemaVersion: result.schemaVersion,
-      status: "proposed",
-      payload: result.mappingSet,
-      decisionSummary: decisionSummary(result.mappingSet.mappings),
-    };
-    const saved = existingCurrentRecord?.id
-      ? await patchServerMappingSet(existingCurrentRecord.id, request)
-      : await createServerMappingSet(activeProjectId, request);
-    const state = await getServerProjectState(activeProjectId);
-    applyProjectWorkspaceRefresh(state);
-    const savedId = saved.mappingSet?.id;
-    return state.mappingSets?.find((set) => set.id === savedId) || saved.mappingSet;
+    setAgentOpen(true);
   };
   const openAppendImportReview = () => {
-    setImportReviewMode("append");
-    setRefreshDraft(emptyRefreshDraft());
-    setRelationshipDraft(emptyRelationshipDraft());
-    setImportReviewOpen(true);
+    openWorkbookUpload();
   };
   const openRefreshWorkbook = () => {
-    const committedImports = getMasterImports(dataset).filter((item) => item?.importId);
-    const parentCommitId = currentDatasetCommitId();
-    if (!activeProjectId || !parentCommitId || !committedImports.length) return;
-    resetImportReviewState();
-    const targetImport = latestItem(committedImports);
-    setImportReviewMode("refresh");
-    setRefreshDraft({
-      ...emptyRefreshDraft(),
-      open: true,
-      replaceImportId: targetImport.importId,
-      expectedParentDatasetCommitId: parentCommitId,
-      targetImport,
-    });
+    openWorkbookUpload();
   };
   const openSupplementWorkbook = () => {
-    if (!activeProjectId || !currentDatasetCommitId() || !hasMasterImport(dataset)) return;
-    supplementFileInputRef.current?.click();
+    openWorkbookUpload();
   };
-  const startSupplementalBatch = async (fileObjectIds) => {
-    if (!activeProjectId || !fileObjectIds?.length) return null;
-    setSupplementalBatchState((current) => ({ ...current, uploading: true, error: "", usePolling: false, sseFailures: 0 }));
-    const response = await createServerSupplementalImportBatch(activeProjectId, { fileObjectIds });
-    const batch = response.batch;
-    mergeSupplementalBatchIntoState(batch);
-    setSupplementalBatchState((current) => ({
-      ...current,
-      activeBatchId: batch.id,
-      batch,
-      uploading: false,
-      error: "",
-      usePolling: false,
-      sseFailures: 0,
-    }));
-    setSupplementManagerOpen(true);
-    return batch;
-  };
-  const handleSupplementFilesSelected = async (event) => {
-    const files = Array.from(event.target.files || []);
-    event.target.value = "";
-    if (!files.length || !activeProjectId || !currentDatasetCommitId() || !hasMasterImport(dataset)) return;
-    if (files.length === 1) {
-      resetImportReviewState();
-      setImportReviewMode("supplement");
-      setRefreshDraft(emptyRefreshDraft());
-      setRelationshipDraft(emptyRelationshipDraft());
-      setImportReviewOpen(true);
-      await runBackendScan(files[0], { mode: "supplement" });
-      return;
-    }
-    setSupplementManagerOpen(true);
-    setSupplementalBatchState({
-      ...emptySupplementalBatchState(),
-      uploading: true,
-    });
-    try {
-      const { fileObjects, batch } = await uploadSupplementalFilesAsBatch({
-        projectId: activeProjectId,
-        files,
-        concurrency: 3,
-      });
-      setProjectState((current) => current ? {
-        ...current,
-        fileObjects: [...asArray(current.fileObjects), ...fileObjects],
-      } : current);
-      mergeSupplementalBatchIntoState(batch);
-      setSupplementalBatchState((current) => ({
-        ...current,
-        activeBatchId: batch.id,
-        batch,
-        uploading: false,
-        error: "",
-        usePolling: false,
-        sseFailures: 0,
-      }));
-    } catch (err) {
-      setSupplementalBatchState((current) => ({
-        ...current,
-        uploading: false,
-        error: err.message || String(err),
-      }));
-    }
-  };
-  const openSupplementImportRunReview = async (importRunId) => {
-    let run = asArray(projectState?.importRuns).find((item) => item?.id === importRunId);
-    let stateForRun = projectState;
-    if (!run && activeProjectId) {
-      try {
-        stateForRun = await refreshProjectWorkspace();
-        run = asArray(stateForRun?.importRuns).find((item) => item?.id === importRunId);
-      } catch {
-        run = null;
-      }
-    }
-    if (!run) {
-      setSourceError("Supplemental import run was not found. Reload the project and try again.");
-      return;
-    }
-    const fileObject = asArray(stateForRun?.fileObjects).find((item) => item?.id === run.fileObjectId);
-    const fileName = fileObject?.originalName || run.scanResult?.file?.name || "";
-    setSupplementManagerOpen(false);
-    setImportReviewMode("supplement");
-    setRefreshDraft(emptyRefreshDraft());
-    setActiveImportRun(run);
-    setBackendScanState({
+  const handleWorkbookReviewReadyFromAgent = ({ response, session, sourceDocument, regions = [] } = {}) => {
+    const nextSession = session || response?.workbookReviewSession || response?.session || null;
+    const nextSourceDocument = sourceDocument || response?.sourceDocument || null;
+    const nextDraftRegions = initialWorkbookDraftRegions({
+      sourceDocument: nextSourceDocument,
+      regions: asArray(regions.length ? regions : response?.regions),
+    }, nextSession);
+    const nextActiveRegion = nextDraftRegions.at(-1);
+    setWorkbookReviewDraftRegions(nextDraftRegions);
+    setActiveWorkbookReviewDraftRegionId(
+      response?.activeDraftRegionId
+      || nextActiveRegion?.draftRegionId
+      || nextActiveRegion?.clientRegionId
+      || "",
+    );
+    setWorkbookReviewFocusSelection(null);
+    setDataPlanReviewState({ loading: false, error: "", review: null, identityDecisions: [] });
+    setWorkbookReviewState({
       loading: false,
-      result: run.scanResult || null,
-      error: run.scanResult ? "" : "This supplemental import run does not have scan details.",
-      fileName,
+      error: "",
+      revisionLoading: false,
+      confirmLoading: false,
+      revisionError: "",
+      clarification: null,
+      session: nextSession,
+      sourceDocument: nextSourceDocument,
+      regions: asArray(regions.length ? regions : response?.regions),
     });
-    setBackendBlockReview(createBlockReviewState(run.scanResult, run.reviewDecisions || {}));
-    setBackendNormalizeState({ loading: false, result: run.normalizePreview || null, error: "" });
-    setBackendMappingState({ loading: false, result: null, error: "" });
-    setBackendChartProposalState({ loading: false, result: null, error: "" });
-    setBackendChartInterpretState({ loading: false, result: null, error: "" });
-    setFieldRoleOverrides({});
-    setRelationshipDraft(emptyRelationshipDraft());
-    setImportReviewOpen(true);
-    if (run.status === "normalized_preview" && run.normalizePreview) {
-      setRelationshipDraft((current) => ({ ...current, preview: null, selectedProposalId: "", loading: true, error: "" }));
-      try {
-        const relationshipPreview = await previewServerImportRelationship(run.id, {});
-        const selected = selectableRelationshipProposals(relationshipPreview)
-          .sort((a, b) => (b.confidence || 0) - (a.confidence || 0))[0] || null;
-        setRelationshipDraft({
-          preview: relationshipPreview,
-          selectedProposalId: selected?.relationshipProposalId || "",
-          loading: false,
-          error: "",
-        });
-      } catch (err) {
-        setRelationshipDraft({
-          ...emptyRelationshipDraft(),
-          error: err.message || String(err),
-        });
-      }
+    setTab("workbook_review");
+    setAgentOpen(false);
+  };
+  const continueWorkbookReview = async () => {
+    const session = latestItem(projectState?.workbookReviewSessions);
+    if (!session?.id) {
+      openWorkbookUpload();
+      return;
+    }
+    setWorkbookReviewState((current) => ({ ...current, loading: true, error: "" }));
+    try {
+      const response = await getServerWorkbookReviewSession(session.id);
+      handleWorkbookReviewReadyFromAgent({ response });
+    } catch (error) {
+      setWorkbookReviewState((current) => ({
+        ...current,
+        loading: false,
+        error: error?.message || String(error),
+      }));
     }
   };
-  const retrySupplementalBatchItem = async (fileObjectId) => {
-    if (!fileObjectId) return;
+  const handleWorkbookSuggestionSelect = (selection) => {
+    if (!selection?.sourceDocumentId || !selection?.sheetName || !selection?.range) return;
+    setWorkbookReviewFocusSelection({
+      ...selection,
+      requestId: uid(),
+      selectionMethod: selection.selectionMethod || "suggestion_click",
+    });
+    setTab("workbook_review");
+    setAgentOpen(false);
+  };
+  const handleWorkbookReviewRegionActivate = (regionId) => {
+    setActiveWorkbookReviewDraftRegionId(regionId);
+    const region = findWorkbookDraftRegionById(workbookReviewDraftRegions, regionId);
+    if (!region) return;
+    setWorkbookReviewFocusSelection({
+      ...region,
+      requestId: uid(),
+      selectionMethod: "red_box_click",
+    });
+  };
+  const submitWorkbookReviewRevision = async ({ message, redBoxUpdates = [], interpretationPatches = [], previousUnderstandingId = null, revisionMode = "merge", activeDraftRegionId = null } = {}) => {
+    const session = workbookReviewState.session || workbookReviewState.workbookReviewSession || null;
+    if (!session?.id) throw new Error("Start a workbook review session before submitting a revision.");
+    setWorkbookReviewState((current) => ({
+      ...current,
+      revisionLoading: true,
+      revisionError: "",
+      clarification: null,
+    }));
     try {
-      await startSupplementalBatch([fileObjectId]);
+      const response = await reviseServerWorkbookReviewSession(session.id, {
+        message,
+        redBoxUpdates,
+        previousUnderstandingId,
+        revisionMode,
+        activeDraftRegionId,
+        interpretationPatches,
+      });
+      const updatedSession = response.workbookReviewSession || response.session || null;
+      setWorkbookReviewState((current) => ({
+        ...current,
+        loading: false,
+        revisionLoading: false,
+        revisionError: "",
+        clarification: response.clarification || null,
+        session: updatedSession || current.session,
+      }));
+      const nextRegions = reconcileWorkbookDraftRegions(workbookReviewDraftRegions, response, updatedSession);
+      setWorkbookReviewDraftRegions(nextRegions);
+      setActiveWorkbookReviewDraftRegionId((currentId) => {
+        const preferredId = response.activeDraftRegionId || activeDraftRegionId || currentId;
+        const preferredRegion = findWorkbookDraftRegionById(nextRegions, preferredId);
+        const fallbackRegion = nextRegions.at(-1);
+        return preferredRegion?.draftRegionId
+          || preferredRegion?.clientRegionId
+          || fallbackRegion?.draftRegionId
+          || fallbackRegion?.clientRegionId
+          || "";
+      });
+      return response;
     } catch (err) {
-      setSupplementalBatchState((current) => ({ ...current, error: err.message || String(err), uploading: false }));
+      const clarification = err.body?.clarification || err.body?.error?.details?.clarification || null;
+      setWorkbookReviewState((current) => ({
+        ...current,
+        revisionLoading: false,
+        revisionError: clarification?.message || err.message || String(err),
+        clarification,
+      }));
+      throw err;
     }
   };
-  const applySelectedSupplementalBatchItems = async (items = []) => {
-    const readyItems = asArray(items).filter(batchItemReadyForApply);
-    if (!readyItems.length || !activeProjectId) return;
-    const ok = window.confirm(`Apply ${readyItems.length} reviewed supplemental workbook(s) to the active dataset?`);
-    if (!ok) return;
-    setSupplementalBatchState((current) => ({ ...current, applying: true, error: "" }));
+  const confirmWorkbookReviewUnderstanding = async ({ workbookUnderstandingId = "", decisionSummary = {} } = {}) => {
+    const session = workbookReviewState.session || workbookReviewState.workbookReviewSession || null;
+    if (!session?.id) throw new Error("Start a workbook review session before confirming understanding.");
+    setWorkbookReviewState((current) => ({
+      ...current,
+      confirmLoading: true,
+      revisionError: "",
+      clarification: null,
+    }));
     try {
-      for (const item of readyItems) {
-        const relationshipDecision = selectableRelationshipForBatchItem(item);
-        await applyServerImportRun(item.importRunId, {
-          applyMode: "supplement_import",
-          relationshipDecision,
-          reviewNote: "Applied supplemental workbook from batch.",
-        });
-      }
+      const response = await confirmServerWorkbookReviewSession(session.id, {
+        workbookUnderstandingId,
+        decisionSummary,
+      });
+      const updatedSession = response.workbookReviewSession || response.session || null;
+      setWorkbookReviewState((current) => ({
+        ...current,
+        confirmLoading: false,
+        revisionError: "",
+        clarification: null,
+        session: updatedSession || current.session,
+        workbookUnderstanding: response.workbookUnderstanding || current.workbookUnderstanding || null,
+        extractionReviewRequested: false,
+      }));
+      setDataPlanReviewState({ loading: false, error: "", review: null, identityDecisions: [] });
       const state = await getServerProjectState(activeProjectId);
       applyProjectWorkspaceRefresh(state);
-      setSupplementalBatchState((current) => ({ ...current, applying: false, error: "" }));
+      return response;
     } catch (err) {
-      setSupplementalBatchState((current) => ({
+      setWorkbookReviewState((current) => ({
         ...current,
-        applying: false,
-        error: err.message || String(err),
+        confirmLoading: false,
+        revisionError: err.message || String(err),
+      }));
+      throw err;
+    }
+  };
+  const reviewWorkbookExperimentRecords = async (identityDecisions = []) => {
+    const session = workbookReviewState.session || workbookReviewState.workbookReviewSession || null;
+    const acceptedUnderstanding = workbookReviewState.workbookUnderstanding
+      || asArray(projectState?.workbookUnderstandings).find((understanding) => (
+        understanding.status === "accepted"
+        && (!session?.id || understanding.workbookReviewSessionId === session.id)
+      ));
+    setWorkbookReviewState((current) => ({ ...current, extractionReviewRequested: true }));
+    if (!acceptedUnderstanding?.id) {
+      setDataPlanReviewState({
+        loading: false,
+        error: "The accepted workbook understanding could not be found. Reopen the review and try again.",
+        review: null,
+        identityDecisions,
+      });
+      return;
+    }
+    setDataPlanReviewState((current) => ({ ...current, loading: true, error: "", identityDecisions }));
+    try {
+      const review = await draftServerProjectDataPlan(activeProjectId, {
+        intent: "experiment_browser_publish",
+        workbookUnderstandingIds: [acceptedUnderstanding.id],
+        identityDecisions,
+      });
+      setDataPlanReviewState({ loading: false, error: "", review, identityDecisions });
+    } catch (error) {
+      setDataPlanReviewState((current) => ({
+        ...current,
+        loading: false,
+        error: error?.body?.clarification?.message || error?.message || String(error),
       }));
     }
   };
-  const closeRefreshWorkbookModal = () => {
-    setImportReviewMode("append");
-    setRefreshDraft(emptyRefreshDraft());
+  const closeExperimentRecordReview = () => {
+    setWorkbookReviewState((current) => ({ ...current, extractionReviewRequested: false }));
   };
-  const setBackendFieldOverride = (fieldId, patch) => {
-    setFieldRoleOverrides((current) => ({
+  const publishWorkbookExperimentRecords = async (request) => {
+    const previewKey = String(request.expectedPreviewHash || "").replace(/[^a-zA-Z0-9]/g, "").slice(-20);
+    const planKey = String(request.dataPlan?.id || "preview").replace(/[^a-zA-Z0-9._:-]/g, "");
+    const response = await publishServerProjectDataPlan(activeProjectId, {
+      ...request,
+      idempotencyKey: `publish_${planKey}_${previewKey}`,
+    });
+    const state = await getServerProjectState(activeProjectId);
+    applyProjectWorkspaceRefresh(state);
+    setBrowserSelectedExperimentIds(asArray(response.experimentIdentities).map((identity) => identity.id).filter(Boolean));
+    setTab("browser");
+    return response;
+  };
+  const refreshStaleExperimentRecordReview = (currentReview) => {
+    setDataPlanReviewState((current) => ({
       ...current,
-      [fieldId]: { ...(current[fieldId] || {}), ...patch },
+      loading: false,
+      error: "Source evidence changed after this preview. Review the refreshed values before publishing again.",
+      review: currentReview,
     }));
-    setBackendNormalizeState({ loading: false, result: null, error: "" });
-    setBackendMappingState({ loading: false, result: null, error: "" });
-    setBackendChartProposalState({ loading: false, result: null, error: "" });
-    setBackendChartInterpretState({ loading: false, result: null, error: "" });
-    setRelationshipDraft(emptyRelationshipDraft());
-    if (importReviewMode === "refresh") {
-      setRefreshDraft((current) => ({ ...current, preview: null, loading: false, error: "" }));
+  };
+  const focusDataPlanSource = (source) => {
+    setWorkbookReviewFocusSelection({
+      sourceDocumentId: source.sourceDocumentId,
+      sheetName: source.sheetName,
+      range: source.range,
+      requestId: uid(),
+      selectionMethod: "data_plan_source_link",
+    });
+  };
+  const focusExperimentBrowserSource = async (source) => {
+    if (!source?.sourceDocumentId || !(source.sheet || source.sheetName) || !(source.range || source.cell)) return;
+    const focusSelection = {
+      sourceDocumentId: source.sourceDocumentId,
+      sheetName: source.sheet || source.sheetName,
+      range: source.range || source.cell,
+      requestId: uid(),
+      selectionMethod: "experiment_browser_source_link",
+      focusOnly: true,
+    };
+    const session = latestItem(projectState?.workbookReviewSessions);
+    if (!session?.id) {
+      setWorkbookReviewFocusSelection(focusSelection);
+      setTab("workbook_review");
+      return;
+    }
+    setWorkbookReviewState((current) => ({ ...current, loading: true, error: "" }));
+    try {
+      const response = await getServerWorkbookReviewSession(session.id);
+      handleWorkbookReviewReadyFromAgent({ response });
+      setWorkbookReviewFocusSelection(focusSelection);
+    } catch (error) {
+      setWorkbookReviewState((current) => ({
+        ...current,
+        loading: false,
+        error: error?.message || String(error),
+      }));
+      setWorkbookReviewFocusSelection(focusSelection);
+      setTab("workbook_review");
     }
   };
   const requestChartAnalysis = (blockId) => {
@@ -3960,401 +3450,18 @@ function App() {
   const clearChartAnalysisRequest = (nonce) => {
     setPendingChartAnalysis((request) => request?.nonce === nonce ? null : request);
   };
-  const approveImportProposal = (proposalId) => {
-    setImportSession((current) => current ? {
-      ...current,
-      confirmedProposalIds: current.confirmedProposalIds.includes(proposalId) ? current.confirmedProposalIds : [...current.confirmedProposalIds, proposalId],
-      rejectedProposalIds: current.rejectedProposalIds.filter((id) => id !== proposalId),
-    } : current);
-  };
-  const rejectImportProposal = (proposalId) => {
-    setImportSession((current) => current ? {
-      ...current,
-      rejectedProposalIds: current.rejectedProposalIds.includes(proposalId) ? current.rejectedProposalIds : [...current.rejectedProposalIds, proposalId],
-      confirmedProposalIds: current.confirmedProposalIds.filter((id) => id !== proposalId),
-    } : current);
-  };
-  const runBackendScan = async (file, options = {}) => {
-    if (!file) return;
-    const scanMode = options.mode || importReviewMode;
-    setBackendScanState({ loading: true, result: null, error: "", fileName: file.name });
-    setBackendBlockReview(createBlockReviewState());
-    setBackendNormalizeState({ loading: false, result: null, error: "" });
-    setBackendMappingState({ loading: false, result: null, error: "" });
-    setBackendChartProposalState({ loading: false, result: null, error: "" });
-    setBackendChartInterpretState({ loading: false, result: null, error: "" });
-    setFieldRoleOverrides({});
-    setRelationshipDraft(emptyRelationshipDraft());
-    if (scanMode === "refresh") {
-      setRefreshDraft((current) => ({ ...current, preview: null, loading: false, error: "" }));
-    }
-    try {
-      let result;
-      if (activeProjectId) {
-        const upload = await uploadServerProjectFile(activeProjectId, file);
-        const run = await createServerImportRun(activeProjectId, upload.fileObject.id);
-        setActiveImportRun(run.importRun);
-        result = run.importRun.scanResult;
-        setProjectState((current) => current ? {
-          ...current,
-          fileObjects: [...asArray(current.fileObjects), upload.fileObject],
-          importRuns: [...asArray(current.importRuns), run.importRun],
-        } : current);
-      } else {
-        result = await scanWorkbookWithBackend(file);
-      }
-      setBackendScanState({ loading: false, result, error: "", fileName: file.name });
-      setBackendBlockReview(createBlockReviewState(result));
-      setBackendNormalizeState({ loading: false, result: null, error: "" });
-      setBackendMappingState({ loading: false, result: null, error: "" });
-      setBackendChartProposalState({ loading: false, result: null, error: "" });
-      setBackendChartInterpretState({ loading: false, result: null, error: "" });
-      setRelationshipDraft(emptyRelationshipDraft());
-      if (scanMode === "refresh") {
-        setRefreshDraft((current) => ({ ...current, preview: null, loading: false, error: "" }));
-      }
-    } catch (err) {
-      setBackendScanState({
-        loading: false,
-        result: null,
-        error: err.message || String(err),
-        fileName: file.name,
-      });
-      setBackendBlockReview(createBlockReviewState());
-      setBackendNormalizeState({ loading: false, result: null, error: "" });
-      setBackendMappingState({ loading: false, result: null, error: "" });
-      setBackendChartProposalState({ loading: false, result: null, error: "" });
-      setBackendChartInterpretState({ loading: false, result: null, error: "" });
-      setRelationshipDraft(emptyRelationshipDraft());
-      if (scanMode === "refresh") {
-        setRefreshDraft((current) => ({ ...current, preview: null, loading: false, error: refreshErrorMessage(err) }));
-      }
-    }
-  };
-  const startRefreshWorkbook = async ({ file, replaceImportId, targetImport }) => {
-    const parentCommitId = currentDatasetCommitId();
-    const selectedImport = targetImport || asArray(dataset.genericImports).find((item) => item?.importId === replaceImportId) || null;
-    if (!file || !selectedImport?.importId || !parentCommitId) {
-      setRefreshDraft((current) => ({
-        ...current,
-        error: "Refresh requires a committed dataset import and replacement workbook.",
-      }));
-      return;
-    }
-    setImportReviewMode("refresh");
-    setRefreshDraft({
-      ...emptyRefreshDraft(),
-      open: false,
-      replaceImportId: selectedImport.importId,
-      expectedParentDatasetCommitId: parentCommitId,
-      targetImport: selectedImport,
-    });
-    setImportReviewOpen(true);
-    await runBackendScan(file, { mode: "refresh" });
-  };
-  const setBackendBlockDecision = (blockId, decision) => {
-    setBackendBlockReview((current) => setBlockReviewDecision(current, blockId, decision));
-    setBackendNormalizeState({ loading: false, result: null, error: "" });
-    setBackendMappingState({ loading: false, result: null, error: "" });
-    setBackendChartProposalState({ loading: false, result: null, error: "" });
-    setBackendChartInterpretState({ loading: false, result: null, error: "" });
-    setRelationshipDraft(emptyRelationshipDraft());
-    if (importReviewMode === "refresh") {
-      setRefreshDraft((current) => ({ ...current, preview: null, loading: false, error: "" }));
-    }
-  };
-  const previewBackendNormalization = async () => {
-    if (!backendScanState.result) return;
-    setBackendNormalizeState({ loading: true, result: null, error: "" });
-    setBackendMappingState({ loading: false, result: null, error: "" });
-    setBackendChartProposalState({ loading: false, result: null, error: "" });
-    setBackendChartInterpretState({ loading: false, result: null, error: "" });
-    setRelationshipDraft(emptyRelationshipDraft());
-    if (importReviewMode === "refresh") {
-      setRefreshDraft((current) => ({ ...current, preview: null, loading: false, error: "" }));
-    }
-    try {
-      let result;
-      let normalizedImportRunId = activeImportRun?.id || "";
-      if (activeImportRun?.id) {
-        const response = await previewServerImportRunNormalization(activeImportRun.id, {
-          approvedBlockIds: backendBlockReview.approvedBlockIds,
-          fieldRoleOverrides,
-        });
-        setActiveImportRun(response.importRun);
-        normalizedImportRunId = response.importRun?.id || activeImportRun.id;
-        result = response.importRun.normalizePreview;
-      } else {
-        result = await normalizeScanWithBackend({
-          scanResult: backendScanState.result,
-          approvedBlockIds: backendBlockReview.approvedBlockIds,
-          fieldRoleOverrides,
-        });
-      }
-      setBackendNormalizeState({ loading: false, result, error: "" });
-      if (importReviewMode === "refresh") {
-        if (!normalizedImportRunId || !refreshDraft.replaceImportId || !refreshDraft.expectedParentDatasetCommitId) {
-          setRefreshDraft((current) => ({
-            ...current,
-            preview: null,
-            loading: false,
-            error: "Refresh requires a server import run, refresh target, and parent dataset commit.",
-          }));
-          return;
-        }
-        setRefreshDraft((current) => ({ ...current, preview: null, loading: true, error: "" }));
-        try {
-          const refreshPreview = await previewServerImportRefresh(normalizedImportRunId, {
-            replaceImportId: refreshDraft.replaceImportId,
-            expectedParentDatasetCommitId: refreshDraft.expectedParentDatasetCommitId,
-          });
-          setRefreshDraft((current) => ({ ...current, preview: refreshPreview, loading: false, error: "" }));
-        } catch (refreshErr) {
-          setRefreshDraft((current) => ({
-            ...current,
-            preview: null,
-            loading: false,
-            error: refreshErrorMessage(refreshErr),
-          }));
-        }
-      }
-      if (importReviewMode === "supplement") {
-        if (!normalizedImportRunId || !activeProjectId) {
-          setRelationshipDraft({
-            ...emptyRelationshipDraft(),
-            error: "Supplemental import requires a server project import run.",
-          });
-          return;
-        }
-        setRelationshipDraft((current) => ({ ...current, preview: null, selectedProposalId: "", loading: true, error: "" }));
-        try {
-          const relationshipPreview = await previewServerImportRelationship(normalizedImportRunId, {});
-          const selected = selectableRelationshipProposals(relationshipPreview)
-            .sort((a, b) => (b.confidence || 0) - (a.confidence || 0))[0] || null;
-          setRelationshipDraft({
-            preview: relationshipPreview,
-            selectedProposalId: selected?.relationshipProposalId || "",
-            loading: false,
-            error: "",
-          });
-        } catch (relationshipErr) {
-          setRelationshipDraft({
-            ...emptyRelationshipDraft(),
-            error: relationshipErr.message || String(relationshipErr),
-          });
-        }
-      }
-    } catch (err) {
-      setBackendNormalizeState({ loading: false, result: null, error: err.message || String(err) });
-      if (importReviewMode === "refresh") {
-        setRefreshDraft((current) => ({ ...current, preview: null, loading: false, error: refreshErrorMessage(err) }));
-      }
-      if (importReviewMode === "supplement") {
-        setRelationshipDraft({
-          ...emptyRelationshipDraft(),
-          error: err.message || String(err),
-        });
-      }
-    }
-  };
-  const applyBackendNormalization = async () => {
-    const datasetPatch = backendNormalizeState.result?.datasetPatch;
-    if (!datasetPatch?.genericImports?.length) return;
-    const isRefreshMode = importReviewMode === "refresh";
-    const isSupplementMode = importReviewMode === "supplement";
-    if (isRefreshMode) {
-      if (!activeImportRun?.id || !activeProjectId) {
-        setRefreshDraft((current) => ({ ...current, error: "Refresh apply requires a server project import run." }));
-        return;
-      }
-      if (!refreshDraft.preview) {
-        setRefreshDraft((current) => ({ ...current, error: "Review the refresh diff before applying." }));
-        return;
-      }
-      if (!refreshDraft.preview.hasChanges) {
-        setRefreshDraft((current) => ({ ...current, error: "No changes detected." }));
-        return;
-      }
-    }
-    let selectedRelationship = null;
-    if (isSupplementMode) {
-      if (!activeImportRun?.id || !activeProjectId) {
-        setRelationshipDraft((current) => ({ ...current, error: "Supplemental apply requires a server project import run." }));
-        return;
-      }
-      selectedRelationship = selectableRelationshipProposals(relationshipDraft.preview)
-        .find((proposal) => proposal.relationshipProposalId === relationshipDraft.selectedProposalId) || null;
-      if (!selectedRelationship) {
-        setRelationshipDraft((current) => ({ ...current, error: "Select a supplement relationship before applying." }));
-        return;
-      }
-    }
-    const ok = window.confirm(isRefreshMode
-      ? `Apply this workbook refresh and replace ${genericImportLabel(refreshDraft.targetImport)}?`
-      : isSupplementMode
-        ? "Attach this supplemental workbook to the selected experiment data?"
-        : "Apply normalized generic import data to this project?");
-    if (!ok) return;
-    try {
-      if (activeImportRun?.id && activeProjectId) {
-        await applyServerImportRun(activeImportRun.id, isRefreshMode ? {
-          applyMode: "replace_import",
-          replaceImportId: refreshDraft.replaceImportId,
-          expectedParentDatasetCommitId: refreshDraft.expectedParentDatasetCommitId,
-          reviewNote: "Applied workbook refresh.",
-        } : isSupplementMode ? {
-          applyMode: "supplement_import",
-          relationshipDecision: selectedRelationship,
-          reviewNote: "Applied supplemental workbook.",
-        } : {
-          applyMode: "append",
-          reviewNote: "Approved normalized master table from Import review.",
-        });
-        const state = await getServerProjectState(activeProjectId);
-        applyProjectWorkspaceRefresh(state);
-        if (isRefreshMode || isSupplementMode) {
-          resetReviewState();
-          setImportReviewOpen(false);
-          return;
-        }
-      } else {
-        setDataset((current) => applyGenericImportPatch(current, datasetPatch));
-        setDirty(true);
-      }
-      setBackendNormalizeState((current) => ({ ...current, applied: true }));
-    } catch (err) {
-      if (isRefreshMode) {
-        setRefreshDraft((current) => ({ ...current, error: refreshErrorMessage(err) }));
-      } else if (isSupplementMode) {
-        setRelationshipDraft((current) => ({ ...current, error: err.message || String(err) }));
-      } else {
-        setBackendNormalizeState((current) => ({ ...current, error: err.message || String(err) }));
-      }
-    }
-  };
-  const currentPhase3GenericImports = () => {
-    const previewImports = backendNormalizeState.result?.datasetPatch?.genericImports;
-    return previewImports?.length ? previewImports : (dataset.genericImports || []);
-  };
-  const proposeBackendMappings = async () => {
-    const genericImports = currentPhase3GenericImports();
-    if (!genericImports.length) return;
-    setBackendMappingState({ loading: true, result: null, error: "" });
-    setBackendChartProposalState({ loading: false, result: null, error: "" });
-    setBackendChartInterpretState({ loading: false, result: null, error: "" });
-    try {
-      const result = await proposeSemanticMappingsWithBackend({
-        genericImports,
-        selectedImportIds: genericImports.map((item) => item.importId).filter(Boolean),
-        scanSummary: backendScanState.result?.summary || null,
-        priorDecisions: (dataset.genericMappingSets || []).flatMap((set) => set.mappings || []),
-      });
-      let mappingSet = result.mappingSet;
-      if (activeProjectId && currentDatasetCommitId()) {
-        const saved = await createServerMappingSet(activeProjectId, {
-          importRunId: activeImportRun?.id || null,
-          datasetCommitId: currentDatasetCommitId(),
-          schemaVersion: result.schemaVersion,
-          status: "proposed",
-          payload: mappingSet,
-          decisionSummary: decisionSummary(mappingSet.mappings),
-        });
-        mappingSet = payloadWithServerId(saved.mappingSet, "mappingSetId");
-        setProjectState((current) => current ? {
-          ...current,
-          mappingSets: [...asArray(current.mappingSets), saved.mappingSet],
-        } : current);
-      }
-      setBackendMappingState({ loading: false, result: { ...result, mappingSet }, error: "" });
-      setDataset((current) => upsertGenericMappingSet(current, mappingSet));
-      setDirty(true);
-    } catch (err) {
-      setBackendMappingState({ loading: false, result: null, error: err.message || String(err) });
-    }
-  };
-  const setBackendMappingDecision = async (mappingId, status) => {
-    const mappingSet = backendMappingState.result?.mappingSet;
-    if (!mappingSet) return;
-    const nextMappingSet = setMappingStatus(mappingSet, mappingId, status);
-    setBackendMappingState((current) => current.result ? ({
-      ...current,
-      result: { ...current.result, mappingSet: nextMappingSet },
-    }) : current);
-    setBackendChartProposalState({ loading: false, result: null, error: "" });
-    setBackendChartInterpretState({ loading: false, result: null, error: "" });
-    setDataset((current) => upsertGenericMappingSet(current, nextMappingSet));
-    if (nextMappingSet.serverId) {
-      try {
-        const saved = await patchServerMappingSet(nextMappingSet.serverId, {
-          status: "proposed",
-          payload: nextMappingSet,
-          decisionSummary: decisionSummary(nextMappingSet.mappings),
-        });
-        setProjectState((current) => current ? {
-          ...current,
-          mappingSets: asArray(current.mappingSets).map((set) => set.id === saved.mappingSet.id ? saved.mappingSet : set),
-        } : current);
-      } catch (err) {
-        setBackendMappingState((current) => ({ ...current, error: err.message || String(err) }));
-      }
-    }
-    setDirty(true);
-  };
-  const proposeBackendCharts = async () => {
-    const genericImports = currentPhase3GenericImports();
-    const mappingSet = backendMappingState.result?.mappingSet;
-    if (!genericImports.length) return;
-    setBackendChartProposalState({ loading: true, result: null, error: "" });
-    try {
-      const result = activeProjectId && currentDatasetCommitId()
-        ? await proposeServerProjectCharts(activeProjectId, {
-          selectedImportIds: genericImports.map((item) => item.importId).filter(Boolean),
-          userGoal: projectState?.projectProfile?.researchGoal || "",
-        })
-        : await proposeChartsWithBackend({
-          genericImports,
-          selectedImportIds: genericImports.map((item) => item.importId).filter(Boolean),
-          mappingSets: mappingSet ? [mappingSet] : [],
-          priorDecisions: (dataset.genericChartProposals || []).flatMap((set) => set.proposals || []),
-        });
-      const proposalSet = result.chartProposalSet
-        ? payloadWithServerId(result.chartProposalSet, "proposalSetId")
-        : result.proposalSet;
-      setBackendChartProposalState({ loading: false, result: { ...result, proposalSet }, error: "" });
-      setDataset((current) => upsertGenericChartProposalSet(current, proposalSet));
-      if (result.chartProposalSet) {
-        setProjectState((current) => current ? {
-          ...current,
-          chartProposalSets: upsertServerRecordById(current.chartProposalSets, result.chartProposalSet),
-        } : current);
-      }
-      setDirty(true);
-    } catch (err) {
-      setBackendChartProposalState({ loading: false, result: null, error: err.message || String(err) });
-    }
-  };
   const interpretBackendChart = async (prompt) => {
-    const genericImports = currentPhase3GenericImports();
-    if (!genericImports.length) return;
+    if (!activeProjectId) return;
     setBackendChartInterpretState({ loading: true, result: null, error: "" });
     try {
-      const result = activeProjectId && currentDatasetCommitId()
-        ? await interpretServerProjectChart(activeProjectId, {
-          prompt,
-          selectedImportIds: genericImports.map((item) => item.importId).filter(Boolean),
-          persistAsProposal: true,
-        })
-        : await interpretChartWithBackend({
-          prompt,
-          genericImports,
-          selectedImportIds: genericImports.map((item) => item.importId).filter(Boolean),
-          mappingSets: [
-            ...(dataset.genericMappingSets || []),
-            ...(backendMappingState.result?.mappingSet ? [backendMappingState.result.mappingSet] : []),
-          ],
-          priorDecisions: (dataset.genericChartProposals || []).flatMap((set) => set.proposals || []),
-        });
-      setBackendChartInterpretState({ loading: false, result, error: "" });
+      const intentResult = await interpretProjectChartIntent(activeProjectId, {
+        prompt,
+        persistAsProposal: true,
+        entrypoint: "chart_review",
+      });
+      const result = intentResult.response || intentResult;
+      const normalizedResult = { ...result, chartIntentKind: intentResult.kind, chartIntentEntrypoint: intentResult.entrypoint };
+      setBackendChartInterpretState({ loading: false, result: normalizedResult, error: "" });
       if (result.chartProposalSet) {
         const proposalSet = payloadWithServerId(result.chartProposalSet, "proposalSetId");
         setBackendChartProposalState({
@@ -4362,16 +3469,102 @@ function App() {
           result: { ...result, chartProposalSet: result.chartProposalSet, proposalSet },
           error: "",
         });
-        setDataset((current) => upsertGenericChartProposalSet(current, proposalSet));
         setProjectState((current) => current ? {
           ...current,
           chartProposalSets: upsertServerRecordById(current.chartProposalSets, result.chartProposalSet),
         } : current);
         setDirty(true);
       }
+      if (result.sourceExtractProposal) {
+        setProjectState((current) => current ? {
+          ...current,
+          sourceExtractProposals: upsertServerRecordById(current.sourceExtractProposals, result.sourceExtractProposal),
+        } : current);
+        setDirty(true);
+      }
     } catch (err) {
       setBackendChartInterpretState({ loading: false, result: null, error: err.message || String(err) });
     }
+  };
+  const updateSourceExtractProposalInState = (sourceExtractProposal) => {
+    if (!sourceExtractProposal?.id) return;
+    setBackendChartInterpretState((current) => current.result?.sourceExtractProposal?.id === sourceExtractProposal.id ? ({
+      ...current,
+      result: {
+        ...current.result,
+        sourceExtractProposal,
+      },
+    }) : current);
+    setProjectState((current) => current ? {
+      ...current,
+      sourceExtractProposals: upsertServerRecordById(current.sourceExtractProposals, sourceExtractProposal),
+    } : current);
+  };
+  const setSourceExtractProposalDecision = async (proposalId, status) => {
+    if (!proposalId || !activeProjectId) return;
+    const busy = status === "accepted" ? "accepting_source_extract" : "rejecting_source_extract";
+    setBackendChartInterpretState((current) => ({ ...current, sourceExtractBusy: busy, error: "" }));
+    try {
+      const response = await patchServerSourceExtractProposal(proposalId, {
+        status,
+        decisionSummary: {
+          acceptedByUser: status === "accepted",
+          rejectedByUser: status === "rejected",
+        },
+      });
+      updateSourceExtractProposalInState(response.sourceExtractProposal);
+      setDirty(true);
+    } catch (err) {
+      setBackendChartInterpretState((current) => ({ ...current, error: err.message || String(err) }));
+    } finally {
+      setBackendChartInterpretState((current) => ({ ...current, sourceExtractBusy: "" }));
+    }
+  };
+  const createChartProposalFromSourceExtract = async (proposalId) => {
+    if (!proposalId || !activeProjectId) return;
+    setBackendChartInterpretState((current) => ({ ...current, sourceExtractBusy: "creating_source_chart_proposal", error: "" }));
+    try {
+      const response = await createServerSourceExtractChartProposal(proposalId);
+      if (response.sourceExtractProposal) updateSourceExtractProposalInState(response.sourceExtractProposal);
+      const chartProposalSet = response.chartProposalSet || null;
+      if (chartProposalSet) {
+        const proposalSet = payloadWithServerId(chartProposalSet, "proposalSetId");
+        setBackendChartProposalState({
+          loading: false,
+          result: { ...response, chartProposalSet, proposalSet },
+          error: "",
+        });
+        setProjectState((current) => current ? {
+          ...current,
+          chartProposalSets: upsertServerRecordById(current.chartProposalSets, chartProposalSet),
+        } : current);
+      }
+      setDirty(true);
+    } catch (err) {
+      setBackendChartInterpretState((current) => ({ ...current, error: err.message || String(err) }));
+    } finally {
+      setBackendChartInterpretState((current) => ({ ...current, sourceExtractBusy: "" }));
+    }
+  };
+  const reviewSourceExtractProposal = (proposal) => {
+    const proposalId = typeof proposal === "string" ? proposal : proposal?.id;
+    const fullProposal = asArray(projectState?.sourceExtractProposals).find((item) => item.id === proposalId) || (typeof proposal === "object" ? proposal : null);
+    if (!fullProposal?.id) return;
+    setBackendChartInterpretState({
+      loading: false,
+      sourceExtractBusy: "",
+      result: {
+        schemaVersion: "labrat.chartInterpretResponse.v1",
+        chartSpecDraft: null,
+        chartProposalSet: null,
+        sourceExtractProposal: fullProposal,
+        warnings: fullProposal.warnings || [],
+      },
+      error: "",
+    });
+    setFocusedChartProposalId("");
+    setChartReviewStatusFilter("");
+    setChartReviewOpen(true);
   };
   const setBackendChartProposalDecision = async (proposalId, status) => {
     const proposalSet = backendChartProposalState.result?.proposalSet;
@@ -4381,7 +3574,6 @@ function App() {
       ...current,
       result: { ...current.result, proposalSet: nextProposalSet },
     }) : current);
-    setDataset((current) => upsertGenericChartProposalSet(current, nextProposalSet));
     if (nextProposalSet.serverId) {
       try {
         const saved = await patchServerChartProposalSet(nextProposalSet.serverId, {
@@ -4399,6 +3591,57 @@ function App() {
     }
     setDirty(true);
   };
+  const deleteBackendChartProposal = async (proposalId) => {
+    const proposalSet = backendChartProposalState.result?.proposalSet;
+    if (!proposalSet || !proposalId) return;
+    const nextProposalSet = removeChartProposal(proposalSet, proposalId);
+    setBackendChartProposalState((current) => current.result ? ({
+      ...current,
+      result: { ...current.result, proposalSet: nextProposalSet },
+    }) : current);
+    if (nextProposalSet.serverId) {
+      try {
+        const saved = await patchServerChartProposalSet(nextProposalSet.serverId, {
+          status: "proposed",
+          payload: nextProposalSet,
+          decisionSummary: decisionSummary(nextProposalSet.proposals),
+        });
+        setProjectState((current) => current ? {
+          ...current,
+          chartProposalSets: asArray(current.chartProposalSets).map((set) => set.id === saved.chartProposalSet.id ? saved.chartProposalSet : set),
+        } : current);
+      } catch (err) {
+        setBackendChartProposalState((current) => ({ ...current, error: err.message || String(err) }));
+      }
+    }
+    setDirty(true);
+  };
+  const save = async () => {
+    if (!activeProjectId) return;
+    const manuscript = asArray(projectState?.manuscripts)[0] || null;
+    const request = {
+      title: manuscript?.title || `${projectState?.project?.name || "Untitled"} manuscript`,
+      blocks,
+      pages: Array.isArray(pages) ? pages : [],
+      canvasState: { canvasHeight, pageOrientationPreference },
+      references,
+    };
+    try {
+      const response = manuscript?.id
+        ? await patchServerManuscript(manuscript.id, request)
+        : await createServerManuscript(activeProjectId, request);
+      const savedManuscript = response.manuscript;
+      if (savedManuscript?.id) {
+        setProjectState((current) => current ? {
+          ...current,
+          manuscripts: upsertServerRecordById(current.manuscripts, savedManuscript),
+        } : current);
+      }
+      setDirty(false);
+    } catch (err) {
+      setSourceError(err.message || String(err));
+    }
+  };
   const createChartSpecFromProposal = async (chartProposalSetId, proposalId) => {
     if (!activeProjectId || !chartProposalSetId || !proposalId) return;
     setBackendChartProposalState((current) => ({ ...current, error: "" }));
@@ -4406,7 +3649,6 @@ function App() {
       await createServerChartSpecFromProposal(activeProjectId, {
         chartProposalSetId,
         proposalId,
-        datasetCommitId: currentDatasetCommitId(),
       });
       const state = await getServerProjectState(activeProjectId);
       applyProjectWorkspaceRefresh(state);
@@ -4414,11 +3656,6 @@ function App() {
       setBackendChartProposalState((current) => ({ ...current, error: err.message || String(err) }));
     }
   };
-  const compareSeriesGroups = buildCompareSeriesGroups(projectState);
-  const compareSeriesEnabled = compareSeriesGroups.some((group) => group.series.length >= 2);
-  const compareSeriesTitle = compareSeriesEnabled
-    ? "Create a reviewable cross-experiment compare chart from active supplemental observation series"
-    : "Need at least two compatible active supplemental observation series";
   if (authState.checking) {
     return (
       <main className="server-login">
@@ -4442,10 +3679,9 @@ function App() {
           dirty={dirty}
           onSave={save}
           onAgent={() => setAgentOpen(true)}
-          dataset={dataset}
           sourceName={sourceError || sourceName}
           sourceError={sourceError}
-          loadingSource={loadingSource}
+          loadingSource={workbookReviewState.loading}
           onOpenImportReview={openAppendImportReview}
           hasImportReview={false}
           blankMode={BLANK_MODE}
@@ -4499,11 +3735,10 @@ function App() {
       <Topbar tab={tab} setTab={setTab} dirty={dirty} onSave={save} onAgent={() => setAgentOpen(true)}
         workspaceMode={workspaceMode}
         onOpenDashboard={openProjectDashboard}
-        dataset={dataset}
         sourceName={sourceName}
         sourceError={sourceError || (projectStateLoading ? "Loading project..." : "")}
-        loadingSource={loadingSource}
-        onOpenImportReview={openAppendImportReview}
+        loadingSource={workbookReviewState.loading}
+        onOpenImportReview={openWorkbookUpload}
         hasImportReview={!!activeProjectId}
         blankMode={BLANK_MODE}
         user={authState.user}
@@ -4519,127 +3754,74 @@ function App() {
       />
       {tab === "overview" && <ProjectOverview
         projectState={projectState}
-        dataset={dataset}
+        onAskLabRat={() => setAgentOpen(true)}
         onOpenProfile={() => setProfileChatOpen(true)}
-        onOpenImportReview={openAppendImportReview}
-        onOpenRefreshWorkbook={openRefreshWorkbook}
-        onOpenSupplementWorkbook={openSupplementWorkbook}
-        onOpenSupplementManager={() => setSupplementManagerOpen(true)}
-        onOpenCompareSeries={openCompareSeries}
-        onOpenMappingReview={openMappingReview}
+        onUploadWorkbook={continueWorkbookReview}
+        onGoBrowser={() => setTab("browser")}
         onOpenChartReview={openChartReview}
         onGoManuscript={() => setTab("manuscript")}
       />}
-      {tab === "browser" && <Browser
-        dataset={dataset}
-        sourceName={sourceError || sourceName}
-        setSelected={setSelected}
-        blankMode={BLANK_MODE}
-        onOpenImportReview={openAppendImportReview}
-        onOpenMappingReview={openMappingReview}
-        onOpenCompareSeries={openCompareSeries}
-        compareSeriesEnabled={compareSeriesEnabled}
-        compareSeriesTitle={compareSeriesTitle}
-        onOpenProfile={() => setProfileChatOpen(true)}
-        projectProfile={projectState?.projectProfile}
-        templateLinks={blankTemplateLinks()}
+      {tab === "browser" && <ExperimentBrowser
         projectId={activeProjectId}
+        initialSelectedExperimentIds={browserSelectedExperimentIds}
+        onSelectionChange={setBrowserSelectedExperimentIds}
+        onOpenImportReview={openWorkbookUpload}
+        onOpenSourceRange={focusExperimentBrowserSource}
       />}
-      {tab === "manuscript" && <ManuscriptCanvas dataset={dataset} blocks={blocks} setBlocks={setBlocks} staged={staged} setStaged={setStaged} references={references} chartTemplates={chartTemplates} setChartTemplates={setChartTemplates} chartSpecs={activeChartSpecsForProject(projectState)} pages={pages} setPages={setPages} canvasHeight={canvasHeight} setCanvasHeight={setCanvasHeight} pageOrientationPreference={pageOrientationPreference} setPageOrientationPreference={setPageOrientationPreference} chartSpecInsertRequest={chartSpecInsertRequest} onChartSpecInsertRequestHandled={clearChartSpecManuscriptInsertRequest} onSelectedChartContextChange={setSelectedChartContext} onRequestChartAnalysis={requestChartAnalysis} onSaveProject={save} />}
+      {tab === "workbook_review" && (
+        <WorkbookReviewWorkspace
+          projectId={activeProjectId}
+          reviewState={workbookReviewState}
+          draftRegions={workbookReviewDraftRegions}
+          activeDraftRegionId={activeWorkbookReviewDraftRegionId}
+          onDraftRegionsChange={setWorkbookReviewDraftRegions}
+          onActiveDraftRegionChange={setActiveWorkbookReviewDraftRegionId}
+          focusSelection={workbookReviewFocusSelection}
+          reviewDock={(
+            workbookReviewState.extractionReviewRequested ? (
+              <DataPlanReviewPanel
+                review={dataPlanReviewState.review}
+                loading={dataPlanReviewState.loading}
+                error={dataPlanReviewState.error}
+                onApplyIdentityDecisions={reviewWorkbookExperimentRecords}
+                onOpenSource={focusDataPlanSource}
+                onBack={closeExperimentRecordReview}
+                onPublish={publishWorkbookExperimentRecords}
+                onPreviewStale={refreshStaleExperimentRecordReview}
+              />
+            ) : (
+              <WorkbookReviewDock
+                reviewState={workbookReviewState}
+                draftRegions={workbookReviewDraftRegions}
+                activeDraftRegionId={activeWorkbookReviewDraftRegionId}
+                onActiveDraftRegionChange={handleWorkbookReviewRegionActivate}
+                onSubmitRevision={submitWorkbookReviewRevision}
+                onConfirmUnderstanding={confirmWorkbookReviewUnderstanding}
+                onReviewExtractedExperiments={() => reviewWorkbookExperimentRecords([])}
+              />
+            )
+          )}
+        />
+      )}
+      {tab === "manuscript" && <ManuscriptCanvas blocks={blocks} setBlocks={setBlocks} staged={staged} setStaged={setStaged} references={references} chartTemplates={chartTemplates} setChartTemplates={setChartTemplates} chartSpecs={activeChartSpecsForProject(projectState)} pages={pages} setPages={setPages} canvasHeight={canvasHeight} setCanvasHeight={setCanvasHeight} pageOrientationPreference={pageOrientationPreference} setPageOrientationPreference={setPageOrientationPreference} chartSpecInsertRequest={chartSpecInsertRequest} onChartSpecInsertRequestHandled={clearChartSpecManuscriptInsertRequest} onSelectedChartContextChange={setSelectedChartContext} onRequestChartAnalysis={requestChartAnalysis} onSaveProject={save} />}
       {tab === "reference" && <ReferenceLibrary references={references} setReferences={setReferences} />}
       <DetailModal exp={selected} onClose={() => setSelected(null)} onStage={stage} />
-      {importReviewOpen && <ImportReviewModal
-        mode={importReviewMode}
-        refreshDraft={refreshDraft}
-        relationshipDraft={relationshipDraft}
-        backendScanState={backendScanState}
-        backendBlockReview={backendBlockReview}
-        backendNormalizeState={backendNormalizeState}
-        backendMappingState={backendMappingState}
-        genericImports={dataset.genericImports || []}
-        fieldRoleOverrides={fieldRoleOverrides}
-        onBackendScanFile={runBackendScan}
-        onBlockReviewDecision={setBackendBlockDecision}
-        onFieldRoleOverride={setBackendFieldOverride}
-        onPreviewNormalize={previewBackendNormalization}
-        onApplyNormalize={applyBackendNormalization}
-        onRelationshipProposalSelect={(proposalId) => setRelationshipDraft((current) => ({
-          ...current,
-          selectedProposalId: proposalId,
-          error: "",
-        }))}
-        onProposeMappings={proposeBackendMappings}
-        onMappingDecision={setBackendMappingDecision}
-        onReloadProjectState={reloadActiveProjectState}
-        onClose={() => setImportReviewOpen(false)}
-      />}
-      <MappingReviewModal
-        open={mappingReviewOpen}
-        currentDatasetCommitId={currentDatasetCommitId()}
-        mappingSetRecord={currentMappingSetRecord()}
-        genericImports={dataset.genericImports || []}
-        onGenerateMappings={generateMappingReviewMappings}
-        onSaveMappings={saveMappingReviewDraft}
-        onClose={() => setMappingReviewOpen(false)}
-      />
       <ChartReviewModal
         open={chartReviewOpen}
-        genericImports={dataset.genericImports || []}
-        mappingState={backendMappingState}
+        allowSourcePrompt={Boolean(activeProjectId)}
         chartProposalState={backendChartProposalState}
         chartInterpretState={backendChartInterpretState}
         chartSpecs={activeChartSpecsForProject(projectState)}
         focusProposalId={focusedChartProposalId}
         statusFilter={chartReviewStatusFilter}
-        onProposeCharts={proposeBackendCharts}
         onChartProposalDecision={setBackendChartProposalDecision}
+        onChartProposalDelete={deleteBackendChartProposal}
         onInterpretChart={interpretBackendChart}
+        onSourceExtractDecision={setSourceExtractProposalDecision}
+        onCreateChartProposalFromSourceExtract={createChartProposalFromSourceExtract}
         onCreateChartSpec={createChartSpecFromProposal}
-        onOpenImportReview={openAppendImportReview}
+        onOpenImportReview={openWorkbookUpload}
         onClose={closeChartReview}
-      />
-      <RefreshWorkbookModal
-        open={refreshDraft.open}
-        imports={dataset.genericImports || []}
-        defaultImportId={refreshDraft.replaceImportId}
-        loading={backendScanState.loading}
-        error={refreshDraft.error}
-        onStartRefresh={startRefreshWorkbook}
-        onClose={closeRefreshWorkbookModal}
-      />
-      <SupplementalWorkbooksModal
-        open={supplementManagerOpen}
-        projectState={projectState}
-        dataset={dataset}
-        activeBatch={supplementalBatchState.batch}
-        batchUploading={supplementalBatchState.uploading}
-        batchApplying={supplementalBatchState.applying}
-        batchError={supplementalBatchState.error}
-        onAddSupplemental={() => {
-          openSupplementWorkbook();
-        }}
-        onCompareSeries={openCompareSeries}
-        onContinueReview={openSupplementImportRunReview}
-        onRetryBatchItem={retrySupplementalBatchItem}
-        onApplyBatchItems={applySelectedSupplementalBatchItems}
-        onClose={() => setSupplementManagerOpen(false)}
-      />
-      <CompareSeriesModal
-        open={compareSeriesState.open}
-        projectState={projectState}
-        loading={compareSeriesState.loading}
-        error={compareSeriesState.error}
-        clarification={compareSeriesState.clarification}
-        onCreateCompare={createCompareSeriesProposal}
-        onClose={closeCompareSeries}
-      />
-      <input
-        ref={supplementFileInputRef}
-        className="agent-file-input"
-        type="file"
-        accept=".xlsx,.xls"
-        multiple
-        onChange={handleSupplementFilesSelected}
       />
       <ProjectProfileChat
         open={profileChatOpen}
@@ -4658,7 +3840,6 @@ function App() {
       <AgentPanel
         open={agentOpen}
         setOpen={setAgentOpen}
-        dataset={dataset}
         blocks={blocks}
         setBlocks={setBlocks}
         references={references}
@@ -4670,6 +3851,10 @@ function App() {
         projectState={projectState}
         onProjectStateLoaded={applyProjectWorkspaceRefresh}
         onInsertChartSpec={requestChartSpecManuscriptInsert}
+        onReviewSourceExtract={reviewSourceExtractProposal}
+        onWorkbookReviewReady={handleWorkbookReviewReadyFromAgent}
+        onWorkbookSuggestionSelect={handleWorkbookSuggestionSelect}
+        onOpenExperimentBrowser={() => setTab("browser")}
       />
     </>
   );

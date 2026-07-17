@@ -52,7 +52,6 @@ create table if not exists projects (
   name text not null,
   description text,
   status text not null default 'active',
-  current_dataset_commit_id text,
   metadata jsonb not null default '{}',
   created_at timestamptz not null,
   updated_at timestamptz not null,
@@ -88,37 +87,6 @@ create table if not exists import_runs (
   review_decisions jsonb not null default '{}',
   warnings jsonb not null default '[]',
   error jsonb,
-  applied_dataset_commit_id text,
-  created_at timestamptz not null,
-  updated_at timestamptz not null,
-  created_by text not null references users(id),
-  updated_by text references users(id)
-);
-
-create table if not exists dataset_commits (
-  id text primary key,
-  lab_id text not null references labs(id),
-  project_id text not null references projects(id),
-  parent_commit_id text references dataset_commits(id),
-  source_import_run_ids jsonb not null default '[]',
-  source_mapping_set_ids jsonb not null default '[]',
-  dataset_payload jsonb not null,
-  summary jsonb not null default '{}',
-  warnings jsonb not null default '[]',
-  created_at timestamptz not null,
-  created_by text not null references users(id)
-);
-
-create table if not exists mapping_sets (
-  id text primary key,
-  lab_id text not null references labs(id),
-  project_id text not null references projects(id),
-  import_run_id text references import_runs(id),
-  dataset_commit_id text references dataset_commits(id),
-  schema_version text not null,
-  status text not null default 'proposed',
-  payload jsonb not null,
-  decision_summary jsonb not null default '{}',
   created_at timestamptz not null,
   updated_at timestamptz not null,
   created_by text not null references users(id),
@@ -129,8 +97,6 @@ create table if not exists chart_proposal_sets (
   id text primary key,
   lab_id text not null references labs(id),
   project_id text not null references projects(id),
-  dataset_commit_id text references dataset_commits(id),
-  mapping_set_id text references mapping_sets(id),
   schema_version text not null,
   status text not null default 'proposed',
   payload jsonb not null,
@@ -145,8 +111,6 @@ create table if not exists chart_specs (
   id text primary key,
   lab_id text not null references labs(id),
   project_id text not null references projects(id),
-  dataset_commit_id text references dataset_commits(id),
-  mapping_set_id text references mapping_sets(id),
   source_chart_proposal_set_id text references chart_proposal_sets(id),
   source_proposal_id text,
   title text,
@@ -202,23 +166,8 @@ create index if not exists idx_projects_lab_id on projects(lab_id);
 create index if not exists idx_file_objects_project on file_objects(lab_id, project_id);
 create index if not exists idx_file_objects_checksum on file_objects(checksum_sha256);
 create index if not exists idx_import_runs_project on import_runs(lab_id, project_id);
-create index if not exists idx_dataset_commits_project on dataset_commits(lab_id, project_id);
-create index if not exists idx_mapping_sets_project on mapping_sets(lab_id, project_id);
 create index if not exists idx_chart_proposal_sets_project on chart_proposal_sets(lab_id, project_id);
 create index if not exists idx_chart_specs_project on chart_specs(lab_id, project_id);
 create index if not exists idx_manuscripts_project on manuscripts(lab_id, project_id);
 create index if not exists idx_audit_events_scope on audit_events(lab_id, project_id, created_at);
 create index if not exists idx_audit_events_actor on audit_events(actor_user_id, created_at);
-
-alter table projects
-  drop constraint if exists projects_current_dataset_commit_id_fkey;
-alter table projects
-  add constraint projects_current_dataset_commit_id_fkey
-  foreign key (current_dataset_commit_id) references dataset_commits(id);
-
-alter table import_runs
-  drop constraint if exists import_runs_applied_dataset_commit_id_fkey;
-alter table import_runs
-  add constraint import_runs_applied_dataset_commit_id_fkey
-  foreign key (applied_dataset_commit_id) references dataset_commits(id);
-
