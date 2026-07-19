@@ -157,6 +157,14 @@ function validateFieldBindings(operations, errors) {
       if (!VALUE_TYPES.has(text(field?.valueType))) {
         errors.push(error("invalid_field_value_type", "Each field binding requires a supported valueType.", { evidenceKey: operationItem.evidenceKey, index }));
       }
+      if (asArray(field?.headerSourceRefs).some((sourceRef) => (
+        sourceRef?.sourceType !== "excel_cell"
+        || !text(sourceRef?.sourceDocumentId)
+        || !text(sourceRef?.sheet)
+        || !text(sourceRef?.cell)
+      ))) {
+        errors.push(error("invalid_header_source_ref", "Field header source refs must identify an Excel source document, sheet, and cell.", { evidenceKey: operationItem.evidenceKey, index }));
+      }
     });
   });
 }

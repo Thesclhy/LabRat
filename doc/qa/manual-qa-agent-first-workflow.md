@@ -1,21 +1,21 @@
 # Manual QA: Workbook Evidence To Browser And Output
 
 Status: active
-Last reviewed: 2026-07-16
+Last reviewed: 2026-07-19
 
 Use a development account with editor access and a workbook containing at least two experiments plus one chartable source range.
 
 ## Project And Upload
 
-- [ ] Login and open/create a project.
-- [ ] Project Overview shows no fabricated sample experiments.
+- [ v ] Login and open/create a project.
+- [ v ] Project Overview shows no fabricated sample experiments.
 - [ ] Attach and send one workbook through Ask LabRat.
 - [ ] Upload creates one file/import run and opens Workbook Review.
 - [ ] No accepted experiment rows or ChartSpecs appear merely from upload.
 
 ## Conversational Red-Box Review
 
-- [ ] Workbook grid stays mounted while the right review dock is used.
+- [ v ] Workbook grid stays mounted while the right review dock is used.
 - [ ] Detected regions appear as red boxes and in the region list.
 - [ ] Selecting a box focuses the matching sheet/range.
 - [ ] A natural-language correction updates only the active box.
@@ -69,6 +69,17 @@ Use a development account with editor access and a workbook containing at least 
 - [ ] Browser compare/search prompts route to Experiment Browser rather than creating hidden data artifacts.
 - [ ] Source chart actions remain confirmation gated.
 - [ ] Visible steps are concise workflow summaries and contain no hidden reasoning.
+
+## 2026-07-19 Regression Batch
+
+- [x] Asking what the current project contains returns a direct summary without an `Open Experiment Browser` confirmation card.
+- [ ] An explicit upload or chart-creation request that also mentions the project still produces the corresponding review action instead of a project summary.
+- [x] An accepted and published workbook review shows `View accepted review`, accepted status, and the published experiment count instead of `Continue review`.
+- [ ] When pending and accepted review sessions coexist, `Continue review` opens the latest pending session.
+- [x] A merged parent header such as `Selectivity (%)` with `Solid`, `Liquid`, and `Gas` children publishes three distinct Browser columns with exact source values.
+- [x] Experiment Browser has one horizontal scrollbar owner and no page-level horizontal overflow.
+- [ ] In a live editable workbook review, Ctrl/Meta-drag adds a disconnected range, selecting the exact same range again removes it, and an ordinary drag still replaces the active range.
+- [x] Browser console has no warnings or errors while checking the direct summary, Overview status, and grouped Browser data.
 
 ## Retirement Checks
 

@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ExperimentBrowser } from "./ExperimentBrowser.jsx";
@@ -36,6 +38,16 @@ function viewApi(overrides = {}) {
 }
 
 describe("ExperimentBrowser", () => {
+  it("assigns horizontal scrolling only to the shared grid frame", () => {
+    const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
+    const frameRule = css.match(/\.experiment-grid-frame\s*\{([^}]*)\}/)?.[1] || "";
+    const viewportRule = css.match(/\.experiment-grid-viewport\s*\{([^}]*)\}/)?.[1] || "";
+
+    expect(frameRule).toMatch(/overflow-x:\s*auto/);
+    expect(viewportRule).toMatch(/overflow-x:\s*clip/);
+    expect(viewportRule).toMatch(/overflow-y:\s*auto/);
+  });
+
   it("loads recommended columns, supports column visibility, search, filtering, and sorting", async () => {
     const loadProjection = vi.fn(async () => projection());
     render(<ExperimentBrowser projectId="project_1" loadProjection={loadProjection} loadDetail={vi.fn()} {...viewApi()} />);

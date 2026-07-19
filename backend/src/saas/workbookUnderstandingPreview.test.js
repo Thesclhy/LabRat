@@ -14,7 +14,7 @@ function columnName(index) {
   return output;
 }
 
-function sourceFixture({ sheetName, rows, workbookName = "fixture.xlsx" }) {
+function sourceFixture({ sheetName, rows, workbookName = "fixture.xlsx", cellDetails = {} }) {
   const cells = rows.flatMap((row, rowIndex) => row.map((rawValue, colIndex) => ({
     address: `${columnName(colIndex)}${rowIndex + 1}`,
     row: rowIndex,
@@ -22,6 +22,7 @@ function sourceFixture({ sheetName, rows, workbookName = "fixture.xlsx" }) {
     rawValue,
     formattedValue: rawValue == null ? null : String(rawValue),
     type: typeof rawValue === "number" ? "number" : "string",
+    ...(cellDetails[`${columnName(colIndex)}${rowIndex + 1}`] || {}),
   })));
   return {
     sourceDocument: {
@@ -112,6 +113,55 @@ test("proposes row-oriented experiment identity, fields, units, inclusion, and s
     cell: "B1",
   }]);
   assert.equal(region.inspection.rows.length, 4);
+  assert.equal(preview.blockers.length, 0);
+});
+
+test("flattens a merged parent header into every leaf field with exact header refs", () => {
+  const fixture = sourceFixture({
+    sheetName: "Runs",
+    rows: [
+      ["Experiment", "Selectivity (%)", "", ""],
+      ["", "Solid", "Liquid", "Gas"],
+      ["Exp1", 92.8, 0.1, 0.35],
+      ["Exp2", 92, 0.34, 0.41],
+    ],
+    cellDetails: {
+      B1: { merged: true, mergedRange: "B1:D1" },
+    },
+  });
+
+  const preview = buildWorkbookUnderstandingPreview({
+    ...fixture,
+    draftRegions: [draftRegion({
+      sheetName: "Runs",
+      range: "A1:D4",
+      semanticType: "experiment_table",
+      description: "Grouped selectivity experiment table.",
+    })],
+  });
+
+  const interpretation = preview.regions[0].interpretation;
+  assert.equal(interpretation.headerRow, 2);
+  assert.equal(interpretation.experimentIdColumn, "A");
+  assert.deepEqual(
+    interpretation.fields.map((field) => [
+      field.column,
+      field.semanticKey,
+      field.displayName,
+      field.unit,
+      field.sourceRefs.map((sourceRef) => sourceRef.cell),
+    ]),
+    [
+      ["B", "selectivity_solid", "Selectivity - Solid (%)", "percent", ["B1", "B2"]],
+      ["C", "selectivity_liquid", "Selectivity - Liquid (%)", "percent", ["B1", "C2"]],
+      ["D", "selectivity_gas", "Selectivity - Gas (%)", "percent", ["B1", "D2"]],
+    ],
+  );
+  assert.deepEqual(interpretation.inclusion, {
+    startRow: 3,
+    endRow: 4,
+    skippedRows: [],
+  });
   assert.equal(preview.blockers.length, 0);
 });
 

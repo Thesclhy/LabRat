@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-07-17
+Last reviewed: 2026-07-19
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -12,6 +12,10 @@ Keep entries concise, newest first, and include:
 - meaningful changes
 - verification
 - follow-ups or residual risk
+
+## 2026-07-19
+
+- Fixed the workbook-review and Experiment Browser regression batch. Project-content questions now return a direct project summary without proposing a confirmation-gated Browser action while explicit upload/chart requests retain action priority; Experiment Browser has one horizontal scroll owner; Ctrl/Meta drag adds or toggles workbook ranges while normal drag replaces the active range; accepted/published reviews show accepted state and published counts instead of `Continue review` and mixed pending/accepted projects open the selected session; and merged two-row headers such as `Selectivity (%)` over `Solid`, `Liquid`, and `Gas` preserve merge evidence, parent/leaf header refs, and all three source-backed fields through publish. Added planner conflict, route, grouped-header provenance, mixed Overview-state, range-selection, and scrollbar regressions; updated the API/data contracts. Independent review findings were fixed and rechecked. Verification passed with frontend 211/211, backend 150 passed plus 1 optional Postgres skip, production build success with the existing chunk warning, and `git diff --check` with existing line-ending warnings only. Browser QA confirmed the direct Chinese summary, accepted-review Overview state, all three Selectivity columns and exact values for two experiments, one horizontal scroll owner with no page overflow, and no browser warnings/errors. Ctrl/Meta range behavior remains listed for hands-on pointer QA in a real workbook.
 
 ## 2026-07-17
 

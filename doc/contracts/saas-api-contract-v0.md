@@ -102,7 +102,7 @@ POST /api/source-regions/:sourceRegionId/extract-preview
 Rules:
 
 - Reads are bounded and project-authorized.
-- Range responses preserve sheet, A1 range, row/column coordinates, values, formulas, and source refs when available.
+- Range responses preserve sheet, A1 range, row/column coordinates, values, formulas, merged-cell membership/ranges, and source refs when available.
 - Query and extract preview endpoints are read-only and cannot create accepted data.
 - Oversized requests return an explicit validation error instead of silently truncating scientific evidence.
 
@@ -170,7 +170,7 @@ Draft request:
 }
 ```
 
-Draft response contains a transient `labrat.dataPlan.v2` plus deterministic `labrat.dataSnapshot.v2` preview, dependency hash, preview hash, warnings, skipped rows, and source refs. Drafting performs no durable scientific write.
+Draft response contains a transient `labrat.dataPlan.v2` plus deterministic `labrat.dataSnapshot.v2` preview, dependency hash, preview hash, warnings, skipped rows, and source refs. Field bindings preserve accepted `headerSourceRefs` separately from each emitted value's `sourceRefs`, including every parent and leaf cell used to interpret grouped headers. Drafting performs no durable scientific write.
 
 Publish request:
 
@@ -236,7 +236,7 @@ POST /api/agent-runs/:agentRunId/confirm
 POST /api/agent-runs/:agentRunId/cancel
 ```
 
-Current planner actions are review-gated workbook upload, Experiment Browser navigation/search/compare, and source-extract proposal creation. Planning records visible workflow steps, not hidden chain-of-thought, and must not create accepted data or manuscript placements.
+Current planner actions are review-gated workbook upload, Experiment Browser navigation/search/compare, and source-extract proposal creation. Project-content questions may instead complete as a read-only `project_summary` AgentRun with no actions; `POST /api/projects/:projectId/agent/runs` returns its user-facing text in the top-level `reply` field. Planning records visible workflow steps, not hidden chain-of-thought, and must not create accepted data or manuscript placements.
 
 ## Source-Backed Charts
 

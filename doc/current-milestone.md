@@ -2,7 +2,7 @@
 
 Status: completed
 Read when: checking what the next implementation slice should be.
-Last reviewed: 2026-07-17
+Last reviewed: 2026-07-19
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
 
@@ -31,6 +31,7 @@ Implemented:
 - Milestone 5 Snapshot-backed Experiment Browser: accepted-snapshot/head-only projection, project-isolated list/detail APIs, deterministic unit-aware recommended columns, cursor pagination, typed search/filter/sort, virtualized rows, lazy detail, selection, and read-only source evidence navigation.
 - Milestone 6 saved views and comparison: owner-isolated personal BrowserView CRUD, complete column configuration, default/load/save/rename/delete controls, persistent cross-query selection, and a lazy source-backed scalar/series comparison table without unit coercion.
 - Milestone 7 legacy retirement and golden workflow: removed aggregate dataset/mapping/analysis/observation stores, routes, helpers, and UI contracts; removed unscoped normalize/semantic-map/generic chart endpoints; added migration 011; made ChartSpec validation/rendering source-only; added golden workbook upload-review-draft-publish-reload-Browser coverage; retained source-backed chart/Manuscript workflows; accepted natural-language documentation exclusion; and stabilized local in-memory development sessions by running the backend without file-watch restarts.
+- Post-milestone regression hardening: direct project-content summaries no longer create confirmation-gated Browser actions while explicit upload/chart intent keeps priority; accepted review cards report accepted/published state and open the selected pending/accepted session; Ctrl/Meta workbook range selection supports additive/toggle behavior; Experiment Browser uses one horizontal scroll owner; and grouped two-row workbook headers preserve all child fields plus parent/leaf header provenance through publish and Browser projection.
 
 Not implemented yet:
 
@@ -66,7 +67,7 @@ node --test backend/src/saas/routes/saasRoutes.postgres.test.js
 git diff --check
 ```
 
-Latest local evidence: frontend 206/206, backend 144 passed plus 1 optional Postgres skip, production build passed, and browser QA on a real 600-cell workbook confirmed horizontal tile loading, local skeleton state, instant return to cached cells without another loading state, no layout overflow, and no browser warnings/errors. Identity bulk review passed focused 60-item, canonical-label reuse, exact-match, selection, filter, undo, reset, and publish-gating tests; workbook switching passed a regression for selected-document range adoption and actual grid scroll reset.
+Latest local evidence: frontend 211/211, backend 150 passed plus 1 optional Postgres skip, and production build passed. Browser QA confirmed direct Chinese project summaries, accepted-review Overview state, grouped Selectivity Solid/Liquid/Gas fields with exact values, one horizontal Browser scroll owner, no page overflow, and no browser warnings/errors. The earlier 600-cell workbook QA also confirmed horizontal tile loading, local skeleton state, instant return to cached cells without another loading state, and stable workbook switching. Identity bulk review retains focused 60-item, canonical-label reuse, exact-match, selection, filter, undo, reset, and publish-gating coverage.
 
 ## Open Risks
 

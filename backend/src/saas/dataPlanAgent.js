@@ -200,6 +200,7 @@ function compileExperimentEvidence({ acceptedUnderstandings, sourceDocuments, so
             valueType: field.valueType,
             unit: field.unit || null,
             confidence: field.confidence ?? interpretation.confidence ?? null,
+            headerSourceRefs: asArray(field.sourceRefs).map((sourceRef) => ({ ...sourceRef })),
           })),
         },
         ...(asArray(interpretation.series).length ? [{

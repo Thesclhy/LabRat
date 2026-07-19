@@ -74,6 +74,95 @@ function isWorkbookUploadReviewRequest(message) {
     && /\b(workbook|excel|xlsx|xls|file|table|master|mastertable|supplement|supplemental|calculation|source|data)\b/.test(text);
 }
 
+function isExplicitChartActionRequest(message) {
+  const text = normalizedText(message);
+  return (/\b(create|make|generate|plot|draw|draft|save|show)\b/.test(text) || /^(chart|graph)\b/.test(text))
+    && /\b(plot|chart|figure|graph|vs|versus)\b/.test(text);
+}
+
+function isProjectSummaryRequest(message) {
+  const raw = String(message || "").trim();
+  const text = normalizedText(raw);
+  const chineseProjectQuestion = /(?:这个|当前|目前|本)?项目.*(?:有什么|有哪些|内容|情况|状态|进展|介绍|概况)/.test(raw)
+    || /(?:这个|当前|目前|本)?项目.*(?:有什么|有哪些|多少|什么).*(?:数据|实验|文档)/.test(raw)
+    || /(?:这个|当前|目前|本)?项目.*(?:是什么样|怎么样|如何)/.test(raw)
+    || /(?:介绍|总结|概括).*(?:这个|当前|目前|本)?项目/.test(raw);
+  const englishProjectQuestion = (
+    /\b(?:what|summarize|summary|overview|status|contents?|about)\b.*\b(?:project|study)\b/.test(text)
+    || /\b(?:project|study)\b.*\b(?:what|contain|include|summary|overview|status|about)\b/.test(text)
+  );
+  return chineseProjectQuestion || englishProjectQuestion;
+}
+
+function countLabel(count, singular, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function projectSummaryReply({
+  project,
+  projectProfile,
+  experimentSnapshotHeads,
+  sourceDocuments,
+  chartSpecs,
+  manuscripts,
+  message,
+}) {
+  const isChinese = /[\u3400-\u9fff]/.test(String(message || ""));
+  const name = project?.name || "Untitled project";
+  const description = String(project?.description || "").trim();
+  const profile = projectProfile || {};
+  const facts = [
+    ["researchGoal", profile.researchGoal],
+    ["experimentBackground", profile.experimentBackground],
+    ["materials", profile.materials],
+    ["methods", profile.methods],
+    ["instruments", profile.instruments],
+    ["analysisNotes", profile.analysisNotes],
+  ].filter(([, value]) => String(value || "").trim());
+  const counts = {
+    experiments: asArray(experimentSnapshotHeads).length,
+    sources: asArray(sourceDocuments).length,
+    charts: asArray(chartSpecs).length,
+    manuscripts: asArray(manuscripts).length,
+  };
+  if (isChinese) {
+    const profileLabels = {
+      researchGoal: "研究目标",
+      experimentBackground: "实验背景",
+      materials: "材料",
+      methods: "方法",
+      instruments: "仪器",
+      analysisNotes: "分析说明",
+    };
+    const details = facts.map(([key, value]) => `${profileLabels[key]}：${String(value).trim()}`);
+    if (description) details.unshift(`项目说明：${description}`);
+    return [
+      `项目「${name}」当前包含 ${counts.sources} 个源文档、${counts.experiments} 个已发布实验、${counts.charts} 个图表规范和 ${counts.manuscripts} 份稿件。`,
+      counts.experiments
+        ? "当前已有接受并发布的数据记录，可在 Experiment Browser 中浏览和比较。"
+        : "当前尚无可浏览的已发布实验记录。",
+      details.length ? details.join("；") : "项目档案中还没有填写研究背景或方法信息。",
+    ].join(" ");
+  }
+  const detailLabels = {
+    researchGoal: "Research goal",
+    experimentBackground: "Background",
+    materials: "Materials",
+    methods: "Methods",
+    instruments: "Instruments",
+    analysisNotes: "Analysis notes",
+  };
+  const details = facts.map(([key, value]) => `${detailLabels[key]}: ${String(value).trim()}`);
+  if (description) details.unshift(`Description: ${description}`);
+  return [
+    `Project ${name} currently has ${countLabel(counts.sources, "source document")}, ${countLabel(counts.experiments, "published experiment")}, ${countLabel(counts.charts, "chart spec")}, and ${countLabel(counts.manuscripts, "manuscript")}.`,
+    counts.experiments
+      ? "Accepted published records are available to browse and compare in Experiment Browser."
+      : "No published experiment records are available yet.",
+    details.length ? details.join("; ") : "The project profile does not yet include research context or methods.",
+  ].join(" ");
+}
+
 function chartPrompt(message) {
   return String(message || "").replace(/\b(create|make|draft|plot|show|generate|please)\b/gi, " ").replace(/\s+/g, " ").trim() || String(message || "");
 }
@@ -96,6 +185,12 @@ export function createProjectAgentPlan({
   const normalized = normalizedText(text);
   const targetExperimentAliases = experimentAliases(text);
   const actions = [];
+  let intent = "action_plan";
+  let reply = "";
+  const projectSummaryRequest = isProjectSummaryRequest(text);
+  const chartRequest = /\b(plot|chart|figure|graph|vs|versus)\b/.test(normalized);
+  const chartSpecRequest = /\b(create|save|make)\b/.test(normalized)
+    && /\b(chart spec|chartspec|chart specification)\b/.test(normalized);
 
   if (isWorkbookUploadReviewRequest(text)) {
     actions.push(action({
@@ -110,7 +205,7 @@ export function createProjectAgentPlan({
         existingFiles: compactExistingFiles(fileObjects),
       },
     }));
-  } else if (/\b(create|save|make)\b/.test(normalized) && /\b(chart spec|chartspec|chart specification)\b/.test(normalized)) {
+  } else if (chartSpecRequest) {
     const accepted = latestAcceptedSourceProposal(chartProposalSets);
     actions.push(action({
       projectId,
@@ -125,7 +220,32 @@ export function createProjectAgentPlan({
         severity: "warning",
       }],
     }));
-  } else if (/\b(plot|chart|figure|graph|vs|versus)\b/.test(normalized)) {
+  } else if (isExplicitChartActionRequest(text)) {
+    actions.push(action({
+      projectId,
+      message: text,
+      type: "interpret_chart",
+      label: "Review source-backed chart request",
+      description: "Resolve explicit workbook source evidence and keep extracted values reviewable before chart creation.",
+      params: { prompt: chartPrompt(text) },
+      warnings: [{
+        code: "explicit_source_evidence_required",
+        message: "Accepted DataSnapshot-to-chart generation is deferred; select an explicit workbook sheet and range for charting.",
+        severity: "info",
+      }],
+    }));
+  } else if (projectSummaryRequest) {
+    intent = "project_summary";
+    reply = projectSummaryReply({
+      project,
+      projectProfile,
+      experimentSnapshotHeads,
+      sourceDocuments,
+      chartSpecs,
+      manuscripts,
+      message: text,
+    });
+  } else if (chartRequest) {
     actions.push(action({
       projectId,
       message: text,
@@ -161,7 +281,8 @@ export function createProjectAgentPlan({
 
   return {
     schemaVersion: PROJECT_AGENT_PLAN_VERSION,
-    reply: `I prepared an action for: ${actions[0].label}. Review the card before anything changes.`,
+    intent,
+    reply: reply || `I prepared an action for: ${actions[0].label}. Review the card before anything changes.`,
     actions,
     contextSummary: {
       projectId,

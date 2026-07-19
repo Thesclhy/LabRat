@@ -112,6 +112,70 @@ function inferHeaderRow(rows) {
   return candidates[0] || { row: [], rowNumber: 1, score: 0 };
 }
 
+function mergedRangeIncludesColumn(rangeRef, columnIndex) {
+  if (!rangeRef) return false;
+  try {
+    const decoded = decodeRange(rangeRef);
+    return columnIndex >= decoded.s.c && columnIndex <= decoded.e.c;
+  } catch {
+    return false;
+  }
+}
+
+function spansMultipleColumns(cell) {
+  if (!cell?.mergedRange) return false;
+  try {
+    const decoded = decodeRange(cell.mergedRange);
+    return decoded.e.c > decoded.s.c;
+  } catch {
+    return false;
+  }
+}
+
+function nonBlankHeaderCellForColumn(row, columnIndex) {
+  const exact = asArray(row).find((cell) => cell?.col === columnIndex);
+  if (exact && !isBlank(cellValue(exact))) return exact;
+  return asArray(row).find((cell) => (
+    !isBlank(cellValue(cell))
+    && mergedRangeIncludesColumn(cell.mergedRange, columnIndex)
+  )) || null;
+}
+
+function hasChildHeaders(parentRow, childRow) {
+  const groupedCells = asArray(parentRow).filter((cell) => (
+    !isBlank(cellValue(cell)) && spansMultipleColumns(cell)
+  ));
+  if (!groupedCells.length) return false;
+  return asArray(childRow).some((cell) => (
+    !isBlank(cellValue(cell))
+    && groupedCells.some((parent) => mergedRangeIncludesColumn(parent.mergedRange, cell.col))
+  ));
+}
+
+function inferHeader({ rows }) {
+  const availableRows = asArray(rows);
+  const proposed = inferHeaderRow(availableRows);
+  const proposedIndex = availableRows.findIndex((row) => rowNumber(asArray(row)[0]) === proposed.rowNumber);
+  const previousRow = proposedIndex > 0 ? availableRows[proposedIndex - 1] : null;
+  const nextRow = proposedIndex >= 0 ? availableRows[proposedIndex + 1] : null;
+
+  if (nextRow && hasChildHeaders(proposed.row, nextRow)) {
+    return {
+      row: nextRow,
+      rowNumber: rowNumber(asArray(nextRow)[0]) || proposed.rowNumber + 1,
+      rows: [proposed.row, nextRow],
+    };
+  }
+  if (previousRow && hasChildHeaders(previousRow, proposed.row)) {
+    return {
+      row: proposed.row,
+      rowNumber: proposed.rowNumber,
+      rows: [previousRow, proposed.row],
+    };
+  }
+  return { ...proposed, rows: [proposed.row] };
+}
+
 function inferUnit(headerText) {
   const raw = text(headerText);
   const lower = raw.toLowerCase().replace(/[°℃]/g, "c");
@@ -143,9 +207,21 @@ function semanticKeyFor(headerText) {
   if (/experiment|experiment id|run id|sample id|^run$|^label$/.test(value)) return "experiment_id";
   if (/conversion/.test(value)) return "conversion";
   if (/yield/.test(value)) return "yield";
-  if (/selectivity/.test(value)) return slug(value.replace(/percent/g, ""), "selectivity");
+  if (/selectivity/.test(value)) return slug(value.replace(/percent|%/g, ""), "selectivity");
   if (/catalyst/.test(value)) return "catalyst";
   return slug(value.replace(/\b(c|degc|min|minutes|h|hr|hours|percent|bar|rpm|mg|g|ml)\b/g, ""));
+}
+
+function combinedHeaderDisplayName(parts) {
+  if (parts.length <= 1) return parts[0] || "";
+  let unitSuffix = "";
+  const labels = parts.map((part) => {
+    const match = String(part).match(/\s*\(([^)]+)\)\s*$/);
+    if (!match) return part;
+    if (!unitSuffix) unitSuffix = match[1].trim();
+    return String(part).slice(0, match.index).trim();
+  }).filter(Boolean);
+  return `${labels.join(" - ")}${unitSuffix ? ` (${unitSuffix})` : ""}`;
 }
 
 function roleFor(semanticKey) {
@@ -175,27 +251,45 @@ function sourceCellRef({ sourceDocument, sheetName, cell }) {
 }
 
 function headersFrom({ sourceDocument, rangeResult, header }) {
-  return asArray(header.row).flatMap((cell, index) => {
-    const displayName = text(cellValue(cell));
-    if (!displayName) return [];
-    const column = columnFromAddress(cell.address) || columnName(index);
+  const decoded = decodeRange(rangeResult.range);
+  const headerRows = asArray(header.rows).length ? header.rows : [header.row];
+  const fields = [];
+  for (let columnIndex = decoded.s.c; columnIndex <= decoded.e.c; columnIndex += 1) {
+    const pathCells = headerRows
+      .map((row) => nonBlankHeaderCellForColumn(row, columnIndex))
+      .filter(Boolean)
+      .filter((cell, index, cells) => cells.findIndex((candidate) => candidate.address === cell.address) === index);
+    const headerParts = pathCells
+      .map((cell) => text(cellValue(cell)))
+      .filter(Boolean)
+      .filter((part, index, parts) => parts.findIndex((candidate) => normalized(candidate) === normalized(part)) === index);
+    if (!headerParts.length) continue;
+    const displayName = combinedHeaderDisplayName(headerParts);
+    const column = columnName(columnIndex);
     const dataCells = asArray(rangeResult.rows)
       .filter((row) => rowNumber(asArray(row)[0]) > header.rowNumber)
       .map((row) => asArray(row).find((candidate) => columnFromAddress(candidate.address) === column))
       .filter(Boolean);
     const semanticKey = semanticKeyFor(displayName);
-    return [{
+    const leafCell = [...pathCells].reverse().find((cell) => columnFromAddress(cell.address) === column)
+      || pathCells[pathCells.length - 1];
+    fields.push({
       column,
-      headerCell: cell.address,
+      headerCell: leafCell.address,
       displayName,
       semanticKey,
       role: roleFor(semanticKey),
       valueType: valueTypeFor(dataCells),
       unit: inferUnit(displayName),
       confidence: semanticKey === slug(displayName) ? 0.68 : 0.9,
-      sourceRefs: [sourceCellRef({ sourceDocument, sheetName: rangeResult.sheetName, cell })],
-    }];
-  });
+      sourceRefs: pathCells.map((cell) => sourceCellRef({
+        sourceDocument,
+        sheetName: rangeResult.sheetName,
+        cell,
+      })),
+    });
+  }
+  return fields;
 }
 
 function identityColumn(headers) {
@@ -258,7 +352,7 @@ function seriesFrom(fields) {
 }
 
 function proposalFor({ sourceDocument, region, rangeResult, fullRange, inspectionTruncated }) {
-  const header = inferHeaderRow(rangeResult.rows);
+  const header = inferHeader({ rows: rangeResult.rows });
   const headers = headersFrom({ sourceDocument, rangeResult, header });
   const experimentLabel = experimentLabelFrom(
     region.description,
@@ -342,14 +436,16 @@ function fieldFromPatch({ sourceDocument, sheetName, patch, proposedFields, full
     valueType,
     unit: patch.unit === null ? null : text(patch.unit ?? proposed.unit) || null,
     confidence: 0.98,
-    sourceRefs: [{
-      sourceType: "excel_cell",
-      sourceDocumentId: sourceDocument.id,
-      fileObjectId: sourceDocument.fileObjectId || null,
-      importRunId: sourceDocument.importRunId || null,
-      sheet: sheetName,
-      cell: headerCell,
-    }],
+    sourceRefs: asArray(proposed.sourceRefs).length
+      ? proposed.sourceRefs
+      : [{
+        sourceType: "excel_cell",
+        sourceDocumentId: sourceDocument.id,
+        fileObjectId: sourceDocument.fileObjectId || null,
+        importRunId: sourceDocument.importRunId || null,
+        sheet: sheetName,
+        cell: headerCell,
+      }],
   };
 }
 
@@ -384,10 +480,13 @@ function applyPatch({ sourceDocument, region, rangeResult, proposal, patch, full
     patchError("invalid_header_row", "Header row must be inside the selected source range.", { headerRow, minRow, maxRow });
   }
   const selectedHeaderRow = asArray(rangeResult.rows).find((row) => rowNumber(asArray(row)[0]) === headerRow) || [];
+  const inferredHeader = headerRow === proposal.headerRow
+    ? inferHeader({ rows: rangeResult.rows })
+    : null;
   const headerFields = headersFrom({
     sourceDocument,
     rangeResult,
-    header: { row: selectedHeaderRow, rowNumber: headerRow },
+    header: inferredHeader || { row: selectedHeaderRow, rowNumber: headerRow },
   });
   const proposedIdentityColumn = experimentAxis === "rows" ? identityColumn(headerFields) : null;
   const identityColumnCandidate = source.experimentIdColumn === null

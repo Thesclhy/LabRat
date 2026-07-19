@@ -155,6 +155,7 @@ Typical shape:
       "valueType": "number",
       "value": 250,
       "unit": "C",
+      "headerSourceRefs": [],
       "sourceRefs": []
     }
   ],
@@ -173,7 +174,7 @@ Typical shape:
 }
 ```
 
-Scalar and series values retain typed values, raw-value context when needed, units, and exact source refs.
+Scalar and series values retain typed values, raw-value context when needed, units, and exact source refs. Scalar `headerSourceRefs` preserve the accepted header interpretation separately from value-cell `sourceRefs`; grouped headers retain both parent and leaf header cells. Series may retain corresponding `xHeaderSourceRefs` and `yHeaderSourceRefs`.
 
 ## ExperimentIdentity
 

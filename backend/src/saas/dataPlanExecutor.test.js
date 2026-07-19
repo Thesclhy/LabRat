@@ -103,8 +103,26 @@ test("executes one region-oriented record with a typed XY series and constant sc
     identity: { experimentLabel: "Exp33" },
     range: "A1:C4",
     fields: [
-      { column: "A", fieldKey: "reaction_time", displayName: "Time", role: "condition", valueType: "number", unit: "min", confidence: 0.9 },
-      { column: "B", fieldKey: "reaction_rate", displayName: "Rate", role: "outcome", valueType: "number", unit: "mol_g_h", confidence: 0.9 },
+      {
+        column: "A",
+        fieldKey: "reaction_time",
+        displayName: "Time",
+        role: "condition",
+        valueType: "number",
+        unit: "min",
+        confidence: 0.9,
+        headerSourceRefs: [{ sourceType: "excel_cell", sourceDocumentId: "source_doc_1", sheet: "Runs", cell: "A1" }],
+      },
+      {
+        column: "B",
+        fieldKey: "reaction_rate",
+        displayName: "Rate",
+        role: "outcome",
+        valueType: "number",
+        unit: "mol_g_h",
+        confidence: 0.9,
+        headerSourceRefs: [{ sourceType: "excel_cell", sourceDocumentId: "source_doc_1", sheet: "Runs", cell: "B1" }],
+      },
       { column: "C", fieldKey: "temperature", displayName: "Temperature", role: "condition", valueType: "number", unit: "degC", confidence: 0.9 },
     ],
     series: [{
@@ -139,6 +157,8 @@ test("executes one region-oriented record with a typed XY series and constant sc
   assert.deepEqual(record.series[0].points.map((point) => [point.x, point.y]), [[0, 0.1], [5, 0.2]]);
   assert.equal(record.series[0].points[0].sourceRefs[0].cell, "A2");
   assert.equal(record.series[0].points[0].sourceRefs[1].cell, "B2");
+  assert.deepEqual(record.series[0].xHeaderSourceRefs.map((sourceRef) => sourceRef.cell), ["A1"]);
+  assert.deepEqual(record.series[0].yHeaderSourceRefs.map((sourceRef) => sourceRef.cell), ["B1"]);
 });
 
 test("chunks production source reads at 500 cells and rejects oversized aggregate plans", async () => {

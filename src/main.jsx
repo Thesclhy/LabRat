@@ -822,6 +822,10 @@ function ProjectFlowItem({ done, label, detail }) {
 export function ProjectOverview({ projectState, onAskLabRat, onOpenProfile, onUploadWorkbook, onGoBrowser, onOpenChartReview, onGoManuscript }) {
   const summary = projectWorkflowSummary(projectState?.project, projectState);
   const workbookReviewSessions = asArray(projectState?.workbookReviewSessions);
+  const pendingWorkbookReviewSessions = workbookReviewSessions.filter((session) => session?.status !== "accepted");
+  const acceptedWorkbookReviewSessions = workbookReviewSessions.filter((session) => session?.status === "accepted");
+  const pendingWorkbookReviewSession = latestItem(pendingWorkbookReviewSessions);
+  const acceptedWorkbookReviewSession = latestItem(acceptedWorkbookReviewSessions);
   const sourceDocumentCount = asArray(projectState?.sourceDocuments).length;
   const pendingChartProposals = pendingChartProposalsForProject(projectState);
   const activeChartProposalSummary = activeChartProposalSummaryForProject(projectState);
@@ -833,10 +837,14 @@ export function ProjectOverview({ projectState, onAskLabRat, onOpenProfile, onUp
       : "Accepted proposals and durable ChartSpecs appear here after review";
   const nextAction = !summary.profileComplete
     ? { label: "Edit profile", action: onOpenProfile }
-    : workbookReviewSessions.length
-      ? { label: "Continue workbook review", action: onUploadWorkbook }
+    : pendingWorkbookReviewSessions.length
+      ? { label: "Continue workbook review", action: () => onUploadWorkbook?.(pendingWorkbookReviewSession) }
       : !sourceDocumentCount
         ? { label: "Upload workbook", action: onAskLabRat }
+        : summary.hasPublishedData
+          ? { label: "Open Experiment Browser", action: onGoBrowser }
+          : acceptedWorkbookReviewSessions.length
+            ? { label: "View accepted review", action: () => onUploadWorkbook?.(acceptedWorkbookReviewSession) }
     : !summary.chartSpecCount
         ? { label: "Review chart proposals", action: onOpenChartReview }
         : { label: "Build manuscript", action: onGoManuscript };
@@ -861,10 +869,26 @@ export function ProjectOverview({ projectState, onAskLabRat, onOpenProfile, onUp
         <ProjectOverviewCard
           title="Workbook review"
           value={`${sourceDocumentCount} source documents`}
-          detail={workbookReviewSessions.length ? `${workbookReviewSessions.length} review sessions. Confirm workbook meaning before data or charts.` : "Upload any Excel workbook and review detected source regions before extracting data."}
-          action={workbookReviewSessions.length ? "Continue review" : "Upload workbook"}
-          onClick={workbookReviewSessions.length ? onUploadWorkbook : onAskLabRat}
-          actionTitle={workbookReviewSessions.length ? "Open the latest workbook review session" : "Open Ask LabRat, then use the + button to attach a spreadsheet"}
+          detail={pendingWorkbookReviewSessions.length
+            ? `${pendingWorkbookReviewSessions.length} review sessions need confirmation before data or charts.`
+            : acceptedWorkbookReviewSessions.length
+              ? `${acceptedWorkbookReviewSessions.length} accepted review${acceptedWorkbookReviewSessions.length === 1 ? "" : "s"}. Workbook meaning is confirmed${summary.hasPublishedData ? ` and ${summary.publishedExperimentCount} experiments are published` : ""}.`
+              : "Upload any Excel workbook and review detected source regions before extracting data."}
+          action={pendingWorkbookReviewSessions.length
+            ? "Continue review"
+            : acceptedWorkbookReviewSessions.length
+              ? "View accepted review"
+              : "Upload workbook"}
+          onClick={pendingWorkbookReviewSession
+            ? () => onUploadWorkbook?.(pendingWorkbookReviewSession)
+            : acceptedWorkbookReviewSession
+              ? () => onUploadWorkbook?.(acceptedWorkbookReviewSession)
+              : onAskLabRat}
+          actionTitle={pendingWorkbookReviewSessions.length
+            ? "Open the latest unfinished workbook review session"
+            : acceptedWorkbookReviewSessions.length
+              ? "Inspect the accepted workbook understanding"
+              : "Open Ask LabRat, then use the + button to attach a spreadsheet"}
         />
         <ProjectOverviewCard
           title="Experiment Browser"
@@ -1100,6 +1124,7 @@ export function WorkbookReviewWorkspace({
   const [settledScrollState, setSettledScrollState] = useState({ top: 0, left: 0, width: 1100, height: 600 });
   const [rangeCacheRevision, setRangeCacheRevision] = useState(0);
   const [dragSelection, setDragSelection] = useState(null);
+  const dragSelectionRef = useRef(null);
   const viewportRef = useRef(null);
   const gridScrollRef = useRef(null);
   const rangeCacheRef = useRef(new Map());
@@ -1358,7 +1383,7 @@ export function WorkbookReviewWorkspace({
     }));
     onActiveDraftRegionChange?.(nextRegionId);
   };
-  const createRangeDraftRegion = (start, end, selectionMethod = "drag_select") => {
+  const createRangeDraftRegion = (start, end, selectionMethod = "drag_select", additive = false) => {
     if (!sourceDocument?.id || !activeSheetName || !start || !end) return;
     const bounds = normalizeExcelBounds({
       startRow: start.row,
@@ -1367,10 +1392,29 @@ export function WorkbookReviewWorkspace({
       endCol: end.col,
     });
     const range = formatExcelA1Range(bounds);
+    const matchingRegion = asArray(draftRegions).find((region) => (
+      region.sourceDocumentId === sourceDocument.id
+      && region.sheetName === activeSheetName
+      && region.range === range
+    ));
+    if (additive && matchingRegion) {
+      const matchingId = matchingRegion.draftRegionId || matchingRegion.clientRegionId || "";
+      const nextRegions = asArray(draftRegions).filter((region) => region !== matchingRegion);
+      const activeStillExists = findWorkbookDraftRegionById(nextRegions, activeDraftRegionId);
+      const fallbackRegion = activeStillExists || nextRegions.findLast((region) => (
+        region.sourceDocumentId === sourceDocument.id && region.sheetName === activeSheetName
+      )) || nextRegions.at(-1);
+      onDraftRegionsChange?.(nextRegions);
+      if (matchingId === activeDraftRegionId || !activeStillExists) {
+        onActiveDraftRegionChange?.(fallbackRegion?.draftRegionId || fallbackRegion?.clientRegionId || "");
+      }
+      return;
+    }
     const activeRegion = findWorkbookDraftRegionById(draftRegions, activeDraftRegionId);
-    const nextRegionId = activeRegion?.draftRegionId || activeRegion?.clientRegionId || workbookDraftRegionId(sourceDocument.id, activeSheetName, range);
+    const replacedRegion = additive ? null : activeRegion;
+    const nextRegionId = replacedRegion?.draftRegionId || replacedRegion?.clientRegionId || workbookDraftRegionId(sourceDocument.id, activeSheetName, range);
     onDraftRegionsChange?.(upsertDraftWorkbookRegion(draftRegions, {
-      ...activeRegion,
+      ...replacedRegion,
       clientRegionId: nextRegionId,
       draftRegionId: nextRegionId,
       sourceDocumentId: sourceDocument.id,
@@ -1385,12 +1429,22 @@ export function WorkbookReviewWorkspace({
   const beginCellDragSelection = (event, row, col) => {
     if (event.button !== 0) return;
     event.preventDefault();
-    setDragSelection({ active: true, start: { row, col }, end: { row, col } });
+    event.stopPropagation();
+    const nextSelection = {
+      active: true,
+      start: { row, col },
+      end: { row, col },
+      additive: Boolean(event.ctrlKey || event.metaKey),
+    };
+    dragSelectionRef.current = nextSelection;
+    setDragSelection(nextSelection);
   };
   const extendCellDragSelection = (row, col) => {
-    setDragSelection((current) => current?.active
-      ? { ...current, end: { row, col } }
-      : current);
+    const current = dragSelectionRef.current;
+    if (!current?.active) return;
+    const nextSelection = { ...current, end: { row, col } };
+    dragSelectionRef.current = nextSelection;
+    setDragSelection(nextSelection);
   };
   const workbookGridScrollElement = () => (
     gridScrollRef.current?.getBoundingClientRect
@@ -1453,15 +1507,19 @@ export function WorkbookReviewWorkspace({
         col: clampNumber(current.end.col + direction.x, displayBounds.startCol, displayBounds.endCol),
       };
       if (nextEnd.row === current.end.row && nextEnd.col === current.end.col) return current;
-      return { ...current, end: nextEnd };
+      const nextSelection = { ...current, end: nextEnd };
+      dragSelectionRef.current = nextSelection;
+      return nextSelection;
     });
   };
   const finishCellDragSelection = () => {
     edgeScrollDirectionRef.current = { x: 0, y: 0 };
-    setDragSelection((current) => {
-      if (current?.active) createRangeDraftRegion(current.start, current.end, "drag_select");
-      return null;
-    });
+    const current = dragSelectionRef.current;
+    dragSelectionRef.current = null;
+    setDragSelection(null);
+    if (current?.active) {
+      createRangeDraftRegion(current.start, current.end, "drag_select", current.additive);
+    }
   };
   useEffect(() => {
     if (!dragSelection?.active) return undefined;
@@ -2537,9 +2595,9 @@ export function AgentPanel({
         const agentRun = response.agentRun || {};
         const actions = asArray(agentRun.actions).map((action) => normalizeAgentRunActionForChat(action, agentRun));
         const warningText = asArray(agentRun.warnings).map((warning) => warning.message || warning.code).filter(Boolean).join(" ");
-        const reply = actions.length
+        const reply = response.reply || (actions.length
           ? "I prepared an AgentRun action. Review the trace and confirm before anything changes."
-          : warningText || "I recorded an AgentRun, but I need more detail before preparing an action.";
+          : warningText || "I recorded an AgentRun, but I need more detail before preparing an action.");
         setHistory([...next, {
           role: "assistant",
           text: reply,
@@ -3220,8 +3278,10 @@ function App() {
     setTab("workbook_review");
     setAgentOpen(false);
   };
-  const continueWorkbookReview = async () => {
-    const session = latestItem(projectState?.workbookReviewSessions);
+  const continueWorkbookReview = async (requestedSession = null) => {
+    const session = requestedSession?.id
+      ? requestedSession
+      : latestItem(projectState?.workbookReviewSessions);
     if (!session?.id) {
       openWorkbookUpload();
       return;

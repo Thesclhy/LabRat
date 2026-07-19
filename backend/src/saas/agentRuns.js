@@ -398,9 +398,22 @@ export async function buildAgentRunDraft({
     conversation,
     selectedContext,
   });
+  if (!asArray(plan.actions).length && plan.intent === "project_summary") {
+    return {
+      mode: "project_summary",
+      status: "completed",
+      reply: plan.reply,
+      visibleSteps: [visibleStep("Summarized project state", plan.contextSummary)],
+      toolTrace: [],
+      actions: [],
+      usage: deterministicUsage(),
+      warnings: asArray(plan.warnings),
+    };
+  }
   return {
     mode: "action_plan",
     status: "waiting_for_user",
+    reply: plan.reply,
     visibleSteps: [visibleStep("Created project action plan", { actionCount: asArray(plan.actions).length })],
     toolTrace: [],
     actions: asArray(plan.actions),

@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import { after, before, test } from "node:test";
 import * as XLSX from "xlsx";
-import { createGoldenExperimentBrowserWorkbook, goldenExperimentBrowserFixture } from "../../import/fixtures/workbookFixtures.js";
+import {
+  createGoldenExperimentBrowserWorkbook,
+  createGroupedMasterTableWorkbook,
+  goldenExperimentBrowserFixture,
+  groupedMasterTableFixture,
+} from "../../import/fixtures/workbookFixtures.js";
 import { createServer } from "../../server.js";
 import { loadSaasConfig } from "../config.js";
 import { MemorySaasStore } from "../memoryStore.js";
@@ -25,6 +30,11 @@ function makeWorkbookBlob(rows = [
   return new Blob([XLSX.write(workbook, { type: "buffer", bookType: "xlsx" })], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
+}
+
+function groupedMasterTableBlob() {
+  const fixture = createGroupedMasterTableWorkbook();
+  return new Blob([fixture.buffer], { type: fixture.contentType });
 }
 
 function makeReactionRateWorkbookBlob(rows = [
@@ -904,6 +914,146 @@ test("golden workbook publishes three reviewed experiments to Browser without le
   assert.equal(JSON.stringify(projection.rows).includes('"points"'), false);
 });
 
+test("grouped selectivity headers publish Solid, Liquid, and Gas fields to Browser", async () => {
+  const project = await createProject("Grouped Selectivity Browser Project");
+  const upload = await uploadProjectFile(
+    project.id,
+    groupedMasterTableBlob(),
+    groupedMasterTableFixture.filename,
+  );
+  const create = await jsonFetch(`/api/projects/${project.id}/workbook-review-sessions`, {
+    method: "POST",
+    body: { fileObjectId: upload.body.fileObject.id },
+  });
+  assert.equal(create.status, 201);
+  const createBody = await create.json();
+  const sessionId = createBody.workbookReviewSession.id;
+  const sourceDocumentId = createBody.sourceDocument.id;
+
+  const sourceRange = await jsonFetch(`/api/source-documents/${sourceDocumentId}/range`, {
+    method: "POST",
+    body: { sheetName: groupedMasterTableFixture.sheetName, range: "L1:N2" },
+  });
+  assert.equal(sourceRange.status, 200);
+  const sourceRangeBody = await sourceRange.json();
+  assert.deepEqual(
+    sourceRangeBody.rows[0].map((cell) => [cell.address, cell.mergedRange]),
+    [["L1", "L1:N1"], ["M1", "L1:N1"], ["N1", "L1:N1"]],
+  );
+
+  const revision = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/revisions`, {
+    method: "POST",
+    body: {
+      message: "This is an experiment table with grouped selectivity headers and one experiment per row.",
+      redBoxUpdates: [{
+        clientRegionId: "draft_grouped_master",
+        operation: "upsert",
+        sourceDocumentId,
+        sheetName: groupedMasterTableFixture.sheetName,
+        range: "A1:N4",
+        selectionMethod: "drag_select",
+        description: "experiment table",
+      }],
+    },
+  });
+  assert.equal(revision.status, 200);
+  const revisionBody = await revision.json();
+  const draftUnderstanding = revisionBody.workbookUnderstandingDraft;
+  const groupedFact = draftUnderstanding.facts.find((fact) => fact.range === "A1:N4");
+  assert.ok(groupedFact);
+  const interpretation = groupedFact.interpretation;
+  assert.deepEqual(
+    interpretation.fields
+      .filter((field) => field.semanticKey.startsWith("selectivity_"))
+      .map((field) => [field.semanticKey, field.column, field.unit]),
+    [
+      ["selectivity_solid", "L", "percent"],
+      ["selectivity_liquid", "M", "percent"],
+      ["selectivity_gas", "N", "percent"],
+    ],
+    JSON.stringify(interpretation.fields.map((field) => ({
+      key: field.semanticKey,
+      column: field.column,
+      name: field.displayName,
+      unit: field.unit,
+    }))),
+  );
+
+  const confirm = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/confirm`, {
+    method: "POST",
+    body: {
+      workbookUnderstandingId: draftUnderstanding.id,
+      decisionSummary: { acceptedByUser: true },
+    },
+  });
+  assert.equal(confirm.status, 200);
+  const accepted = (await confirm.json()).workbookUnderstanding;
+  const identityDecisions = ["Exp1", "Exp2"].map((sourceAlias) => ({ sourceAlias, action: "create" }));
+  const draft = await jsonFetch(`/api/projects/${project.id}/data-plans/draft`, {
+    method: "POST",
+    body: {
+      intent: "experiment_browser_publish",
+      workbookUnderstandingIds: [accepted.id],
+      identityDecisions,
+    },
+  });
+  assert.equal(draft.status, 200);
+  const review = await draft.json();
+  assert.deepEqual(review.reviewSummary.blockers, []);
+  const selectivityBindings = review.dataPlan.operations
+    .find((operation) => operation.op === "bind_fields")
+    .fields
+    .filter((field) => field.fieldKey.startsWith("selectivity_"));
+  assert.deepEqual(
+    selectivityBindings.map((field) => [
+      field.fieldKey,
+      field.headerSourceRefs.map((sourceRef) => sourceRef.cell),
+    ]),
+    [
+      ["selectivity_solid", ["L1", "L2"]],
+      ["selectivity_liquid", ["L1", "M2"]],
+      ["selectivity_gas", ["L1", "N2"]],
+    ],
+  );
+
+  const publish = await jsonFetch(`/api/projects/${project.id}/data-plans/publish`, {
+    method: "POST",
+    body: {
+      dataPlan: review.dataPlan,
+      identityDecisions,
+      expectedPreviewHash: review.snapshotPreview.previewHash,
+      expectedDependencyHash: review.dataPlan.dependencyHash,
+      idempotencyKey: "grouped_selectivity_publish_v1",
+    },
+  });
+  assert.equal(publish.status, 201);
+
+  const browser = await jsonFetch(`/api/projects/${project.id}/experiment-browser?limit=10`);
+  assert.equal(browser.status, 200);
+  const projection = await browser.json();
+  const selectivityColumns = projection.columns.filter((column) => column.fieldKey?.startsWith("selectivity_"));
+  assert.deepEqual(
+    selectivityColumns.map((column) => column.fieldKey).sort(),
+    ["selectivity_gas", "selectivity_liquid", "selectivity_solid"],
+  );
+  const exp1 = projection.rows.find((row) => row.label === "Exp1");
+  const values = Object.fromEntries(selectivityColumns.map((column) => [
+    column.fieldKey,
+    exp1.cells[column.id]?.value,
+  ]));
+  assert.deepEqual(values, {
+    selectivity_solid: 92.8,
+    selectivity_liquid: 0.1,
+    selectivity_gas: 0.35,
+  });
+  const detail = await jsonFetch(`/api/projects/${project.id}/experiments/${exp1.experimentId}`);
+  assert.equal(detail.status, 200);
+  const detailBody = await detail.json();
+  const gasField = detailBody.record.fields.find((field) => field.fieldKey === "selectivity_gas");
+  assert.deepEqual(gasField.headerSourceRefs.map((sourceRef) => sourceRef.cell), ["L1", "N2"]);
+  assert.equal(gasField.sourceRefs[0].cell, "N3");
+});
+
 test("BrowserView routes persist only owner-scoped personal display state", async () => {
   const project = await createProject("Personal Browser Views Project");
   const otherProject = await createProject("Other Browser Views Project");
@@ -1321,6 +1471,20 @@ test("agent planner uses one workbook upload action and no legacy upload/supplem
   const compareBody = await compare.json();
   assert.equal(compareBody.actions[0].type, "open_experiment_browser");
   assert.equal(compareBody.contextSummary.currentDatasetCommitId, undefined);
+});
+
+test("project-content AgentRun returns a direct read-only answer without confirmation actions", async () => {
+  const project = await createProject("Agent Project Summary");
+  const run = await jsonFetch(`/api/projects/${project.id}/agent/runs`, {
+    method: "POST",
+    body: { message: "这个项目目前有什么内容？" },
+  });
+  assert.equal(run.status, 201);
+  const body = await run.json();
+  assert.equal(body.agentRun.mode, "project_summary");
+  assert.equal(body.agentRun.status, "completed");
+  assert.deepEqual(body.agentRun.actions, []);
+  assert.match(body.reply, /Agent Project Summary/);
 });
 
 test("source extract AgentRun remains review-gated and confirmable", async () => {

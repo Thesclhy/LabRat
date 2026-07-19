@@ -329,6 +329,65 @@ describe("ProjectOverview", () => {
     expect(onOpenChartReview).toHaveBeenLastCalledWith("pending_1");
   });
 
+  it("shows accepted workbook review status after experiments are published", () => {
+    const onUploadWorkbook = vi.fn();
+    const onGoBrowser = vi.fn();
+    render(
+      <ProjectOverview
+        projectState={{
+          ...projectState,
+          sourceDocuments: [{ id: "source_doc_1" }],
+          workbookReviewSessions: [{ id: "session_1", status: "accepted" }],
+        }}
+        onAskLabRat={() => {}}
+        onOpenProfile={() => {}}
+        onUploadWorkbook={onUploadWorkbook}
+        onGoBrowser={onGoBrowser}
+        onOpenChartReview={() => {}}
+        onGoManuscript={() => {}}
+      />,
+    );
+
+    expect(screen.getByText(/1 accepted review/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Continue review" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "View accepted review" }));
+    expect(onUploadWorkbook).toHaveBeenCalledWith({ id: "session_1", status: "accepted" });
+  });
+
+  it("opens the latest pending review when pending and accepted sessions coexist", () => {
+    const onUploadWorkbook = vi.fn();
+    const pendingSession = {
+      id: "session_pending",
+      status: "review",
+      updatedAt: "2026-07-18T12:00:00.000Z",
+    };
+    render(
+      <ProjectOverview
+        projectState={{
+          ...projectState,
+          sourceDocuments: [{ id: "source_doc_1" }, { id: "source_doc_2" }],
+          workbookReviewSessions: [
+            pendingSession,
+            {
+              id: "session_accepted",
+              status: "accepted",
+              updatedAt: "2026-07-19T12:00:00.000Z",
+            },
+          ],
+        }}
+        onAskLabRat={() => {}}
+        onOpenProfile={() => {}}
+        onUploadWorkbook={onUploadWorkbook}
+        onGoBrowser={() => {}}
+        onOpenChartReview={() => {}}
+        onGoManuscript={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue review" }));
+    expect(onUploadWorkbook).toHaveBeenCalledWith(pendingSession);
+  });
+
   it("ignores stale chart specs in overview counts and active chart choices", () => {
     const stateWithStaleSpec = {
       ...projectState,
@@ -953,6 +1012,72 @@ describe("WorkbookReviewWorkspace", () => {
     }
   });
 
+  it("adds and toggles disconnected draft ranges with Ctrl-drag", async () => {
+    const fetchMock = makeWorkbookReviewFetch();
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    const onDraftRegionsChange = vi.fn();
+    const onActiveDraftRegionChange = vi.fn();
+    const initialRegion = {
+      clientRegionId: "draft_active",
+      draftRegionId: "draft_active",
+      sourceDocumentId: "source_doc_1",
+      sheetName: "Sheet1",
+      range: "A1:B1",
+      selectionMethod: "drag_select",
+      description: "",
+      status: "draft",
+    };
+    try {
+      function Harness() {
+        const [regions, setRegions] = React.useState([initialRegion]);
+        const [activeId, setActiveId] = React.useState("draft_active");
+        return (
+          <WorkbookReviewWorkspace
+            projectId="project_1"
+            reviewState={reviewState}
+            draftRegions={regions}
+            activeDraftRegionId={activeId}
+            onDraftRegionsChange={(next) => {
+              onDraftRegionsChange(next);
+              setRegions(next);
+            }}
+            onActiveDraftRegionChange={(next) => {
+              onActiveDraftRegionChange(next);
+              setActiveId(next);
+            }}
+          />
+        );
+      }
+      render(<Harness />);
+
+      const startCell = await screen.findByLabelText("Cell C1");
+      const endCell = await screen.findByLabelText("Cell D1");
+      fireEvent.mouseDown(startCell, { button: 0, ctrlKey: true });
+      fireEvent.mouseEnter(endCell);
+      fireEvent.mouseUp(endCell);
+
+      await waitFor(() => {
+        const regions = onDraftRegionsChange.mock.calls.at(-1)?.[0] || [];
+        expect(regions.map((region) => region.range)).toEqual(["A1:B1", "C1:D1"]);
+      });
+      const addedRegionId = onActiveDraftRegionChange.mock.calls.at(-1)[0];
+      expect(addedRegionId).not.toBe("draft_active");
+
+      fireEvent.mouseDown(startCell, { button: 0, ctrlKey: true });
+      fireEvent.mouseEnter(endCell);
+      fireEvent.mouseUp(endCell);
+
+      await waitFor(() => {
+        const regions = onDraftRegionsChange.mock.calls.at(-1)?.[0] || [];
+        expect(regions.map((region) => region.range)).toEqual(["A1:B1"]);
+      });
+      expect(onActiveDraftRegionChange).toHaveBeenLastCalledWith("draft_active");
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   it("auto-scrolls and extends drag selection when the pointer reaches the workbook edge", async () => {
     const fetchMock = vi.fn(async (url, init = {}) => {
       if (url === "/api/projects/project_1/source-documents") {
@@ -1369,6 +1494,54 @@ describe("AgentPanel", () => {
       expect(screen.getByText("Target: Exp30")).toBeTruthy();
       expect(screen.getByRole("button", { name: "Choose file" })).toBeTruthy();
       expect(fetchMock).toHaveBeenCalledWith("/api/projects/project_1/agent/runs", expect.objectContaining({ method: "POST" }));
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("renders a direct project summary response without a confirmation card", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        reply: "Project Catalyst Screening has 2 published experiments and 1 source document.",
+        agentRun: {
+          id: "agent_run_summary_1",
+          schemaVersion: "labrat.agentRun.v1",
+          status: "completed",
+          mode: "project_summary",
+          visibleSteps: [{ stepId: "step_summary", label: "Summarized project state", details: {} }],
+          actions: [],
+          warnings: [],
+        },
+      }),
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+
+    try {
+      render(
+        <AgentPanel
+          open
+          setOpen={() => {}}
+          blocks={[]}
+          setBlocks={() => {}}
+          references={[]}
+          selected={null}
+          selectedChartContext={null}
+          pendingChartAnalysis={null}
+          activeProjectId="project_1"
+          projectState={{ project: { id: "project_1", name: "Catalyst Screening" } }}
+          onProjectStateLoaded={() => {}}
+        />,
+      );
+
+      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
+      fireEvent.change(promptInput, { target: { value: "这个项目目前有哪些内容？" } });
+      fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
+
+      expect(await screen.findByText("Project Catalyst Screening has 2 published experiments and 1 source document.")).toBeTruthy();
+      expect(screen.queryByText("Open Experiment Browser")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Confirm agent action" })).toBeNull();
     } finally {
       global.fetch = originalFetch;
     }

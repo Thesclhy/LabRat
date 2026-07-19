@@ -1159,7 +1159,10 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
     summary: `Created AgentRun ${agentRun.id}.`,
     metadata: { mode: agentRun.mode, actionCount: asArray(agentRun.actions).length },
   });
-  sendJson(res, 201, { agentRun: agentRunSummary(agentRun) });
+  sendJson(res, 201, {
+    agentRun: agentRunSummary(agentRun),
+    reply: draft.reply || "",
+  });
 }
 
 async function handleAgentRunById(req, res, context, agentRunId) {

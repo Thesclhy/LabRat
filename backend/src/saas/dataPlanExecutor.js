@@ -185,6 +185,7 @@ function fieldValueFromCell(field, cell, source) {
     warnings: typed.value === null && cellValue(cell) !== ""
       ? [{ code: "value_type_mismatch", message: `${field.displayName || field.fieldKey} could not be read as ${field.valueType}.` }]
       : [],
+    headerSourceRefs: asArray(field.headerSourceRefs).map((sourceRef) => ({ ...sourceRef })),
     sourceRefs: [makeCellRef(cell, field.fieldKey, source)],
   };
 }
@@ -262,6 +263,8 @@ function regionSeries({ rows, source, fields, seriesBinding }) {
     yUnit: seriesBinding.yUnit || yField.unit || null,
     points,
     warnings,
+    xHeaderSourceRefs: asArray(xField.headerSourceRefs).map((sourceRef) => ({ ...sourceRef })),
+    yHeaderSourceRefs: asArray(yField.headerSourceRefs).map((sourceRef) => ({ ...sourceRef })),
     sourceRefs: [rangeSourceRef(source)],
   };
 }

@@ -264,6 +264,8 @@ function buildGridBlob({ project, fileObject, importRun, scanResult, sheets }) {
           formattedValue: cell.formattedValue ?? null,
           type: cell.type || null,
           formula: cell.formula || null,
+          merged: Boolean(cell.merged),
+          mergedRange: cell.mergedRange || null,
           comments: asArray(cell.comments),
         })),
       },
@@ -578,6 +580,10 @@ export function readSourceDocumentRange({
     cell.address || encodeCell(cell.row, cell.col),
     cell,
   ]));
+  const mergedRanges = [...new Set(asArray(sheet.cellGrid?.cells)
+    .map((cell) => cell.mergedRange)
+    .filter(Boolean))]
+    .map((rangeRef) => ({ rangeRef, decoded: decodeRange(rangeRef) }));
   const rows = [];
   const cells = [];
   for (let row = decoded.s.r; row <= decoded.e.r; row += 1) {
@@ -585,6 +591,12 @@ export function readSourceDocumentRange({
     for (let col = decoded.s.c; col <= decoded.e.c; col += 1) {
       const address = encodeCell(row, col);
       const cell = cellsByAddress.get(address) || { row, col, address, rawValue: null, formattedValue: null, type: "blank" };
+      const containingMerge = mergedRanges.find(({ decoded: mergedRange }) => (
+        row >= mergedRange.s.r
+        && row <= mergedRange.e.r
+        && col >= mergedRange.s.c
+        && col <= mergedRange.e.c
+      ));
       const outputCell = {
         address,
         row,
@@ -593,6 +605,8 @@ export function readSourceDocumentRange({
         formattedValue: cell.formattedValue ?? null,
         type: cell.type || null,
         formula: cell.formula || null,
+        merged: Boolean(cell.merged || containingMerge),
+        mergedRange: cell.mergedRange || containingMerge?.rangeRef || null,
       };
       outputRow.push(outputCell);
       cells.push(outputCell);
