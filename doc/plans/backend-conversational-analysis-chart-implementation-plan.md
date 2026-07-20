@@ -160,7 +160,7 @@ git commit -m "Add backend LabRat intent routing"
 - Produces: `createAnalysisToolRegistry(context)` exposing the five reviewed planning tools.
 - Consumes: accepted active snapshot heads and SourceDocument range metadata.
 
-- [ ] **Step 1: Write failing schema and selection tests**
+- [x] **Step 1: Write failing schema and selection tests**
 
 ```js
 test("selection resolves only accepted active heads", () => {
@@ -178,13 +178,13 @@ test("non-contiguous source cells remain separate rectangles", () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and confirm missing exports**
+- [x] **Step 2: Run tests and confirm missing exports**
 
 Run: `node --test backend/src/saas/analysisSchemas.test.js backend/src/saas/analysisSelection.test.js backend/src/saas/analysisToolRegistry.test.js`
 
 Expected: FAIL because the analysis services do not exist.
 
-- [ ] **Step 3: Implement immutable schema normalization and hashing**
+- [x] **Step 3: Implement immutable schema normalization and hashing**
 
 ```js
 export function frozenPlanHash(plan) {
@@ -200,7 +200,7 @@ export function frozenPlanHash(plan) {
 
 Validation must reject embedded authoritative result arrays, missing source refs, unsupported runtime names, missing Python source hashes, unknown fields, mismatched units, duplicate trace/output ids, and missing explicit missing-value behavior.
 
-- [ ] **Step 4: Implement accepted-head selection and field catalog**
+- [x] **Step 4: Implement accepted-head selection and field catalog**
 
 Create a reusable active-record resolver extracted from `experimentProjection.js`. Return:
 
@@ -221,7 +221,7 @@ Create a reusable active-record resolver extracted from `experimentProjection.js
 
 Each selected scalar value retains `experimentId`, `snapshotId`, `recordIndex`, field definition, value, unit, and source refs. Series points retain stable series and point indexes.
 
-- [ ] **Step 5: Implement authorization-neutral tool registry**
+- [x] **Step 5: Implement authorization-neutral tool registry**
 
 ```js
 const registry = createAnalysisToolRegistry({
@@ -237,7 +237,7 @@ await registry.call("preview_analysis_selection", args, authContext);
 
 The registry validates each tool input, requires project ownership through injected service functions, returns bounded results, and exposes no execution tool.
 
-- [ ] **Step 6: Run targeted tests**
+- [x] **Step 6: Run targeted tests**
 
 Run:
 
@@ -247,7 +247,7 @@ node --test backend/src/saas/analysisSchemas.test.js backend/src/saas/analysisSe
 
 Expected: all accepted-head, unit, coverage, bounded-page, and source-rectangle cases pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/src/saas/analysisSchemas.js backend/src/saas/analysisSchemas.test.js backend/src/saas/analysisSelection.js backend/src/saas/analysisSelection.test.js backend/src/saas/analysisToolRegistry.js backend/src/saas/analysisToolRegistry.test.js backend/src/saas/experimentProjection.js backend/src/saas/sourceDocuments.js

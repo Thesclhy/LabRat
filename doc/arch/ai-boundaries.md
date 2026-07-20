@@ -71,6 +71,16 @@ WorkbookUnderstanding confirmation, DataPlan publish, source extract acceptance,
 - Dependency/preview mismatches stop before writes.
 - Identity create/reuse decisions and low-confidence acknowledgements are explicit user state.
 
+## Analysis Planning Rules
+
+- The framework-independent AnalysisToolRegistry exposes project context, unit-aware accepted fields, experiment-scope resolution, bounded selection preview/inspection, and plan validation.
+- The registry has no execution tool. A model cannot run Python by issuing a planning tool call.
+- Analysis selections use only accepted DataSnapshots referenced by active ExperimentSnapshotHeads.
+- Field ids include field key, unit, and value type; incompatible units remain separate.
+- Non-contiguous source cells remain separate review rectangles. Oversized source ranges fail before cell expansion.
+- An AnalysisPlanRevision requires an explicit missing-value policy, exact `labrat-python-v1` source/hash, manifest, expected output shape, and frozen selection/dependency hashes.
+- AnalysisPlanRevision validation rejects embedded result arrays. No calculation or persistence is implemented by this planning-tools milestone.
+
 ## Chart Rules
 
 - Current chart interpretation is source-evidence-only.

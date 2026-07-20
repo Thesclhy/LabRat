@@ -34,6 +34,7 @@ Implemented:
 - Post-milestone regression hardening: direct project-content summaries no longer create confirmation-gated Browser actions while explicit upload/chart intent keeps priority; accepted review cards report accepted/published state and open the selected pending/accepted session; Ctrl/Meta workbook range selection supports additive/toggle behavior; Experiment Browser uses one horizontal scroll owner; and grouped two-row workbook headers preserve all child fields plus parent/leaf header provenance through publish and Browser projection.
 - The next architecture has been approved conversationally and written for review in `doc/plans/backend-conversational-analysis-chart-design.md`: backend intent routing, plan/revision review against Excel red boxes, exact accepted Python in a LabRat-managed sandbox, validated result review, atomic AnalysisResult/ChartSpec publication, and placement-local Canvas trace visibility.
 - Conversational-analysis Task 1 is implemented: backend-only provider configuration, bounded intent routing, direct project answers, reviewed-analysis disposition for trends/calculations/charts, explicit-only Browser navigation, and removal of frontend provider credentials/direct calls.
+- Conversational-analysis Task 2 is implemented: accepted-active-head analysis schemas and selection hashes, unit-aware field catalog, source rectangle compression/limits, plan validation, and a project-scoped six-tool planning registry with no executor.
 
 Not implemented yet:
 
@@ -44,8 +45,8 @@ Not implemented yet:
 
 Execute `doc/plans/backend-conversational-analysis-chart-implementation-plan.md` in coherent tested tasks. The first implementation milestone should:
 
-1. Establish accepted-snapshot analysis schemas, selection/source-rectangle resolution, and the framework-independent planning tool registry.
-2. Add AnalysisThread/plan-revision persistence and routes without executing calculations yet.
+1. Add AnalysisThread/plan-revision persistence and routes without executing calculations yet.
+2. Make AgentRun analysis dispositions create a durable thread and first reviewable revision.
 3. Keep DataSnapshot-backed chart publication explicitly unsupported until each reviewed milestone reaches its contract boundary.
 
 ## Guardrails

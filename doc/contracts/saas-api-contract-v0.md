@@ -240,6 +240,8 @@ Agent requests pass through the backend intent router. Explicit workbook upload,
 
 `POST /api/projects/:projectId/agent/runs` returns user-facing text in the top-level `reply` field. Provider configuration and credentials are backend-only. AgentRun usage stores provider, model, token, and latency metadata while planning records visible workflow steps rather than hidden chain-of-thought.
 
+The backend now owns an internal AnalysisToolRegistry with `get_project_analysis_context`, `list_analysis_fields`, `resolve_experiment_scope`, `preview_analysis_selection`, `inspect_analysis_selection`, and `validate_analysis_plan`. These are project-authorized planning tools, not public mutation routes. The registry exposes no execution operation. AnalysisThread/plan-revision HTTP routes remain unavailable until the next persistence slice.
+
 ## Source-Backed Charts
 
 ```text

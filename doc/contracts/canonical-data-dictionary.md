@@ -209,6 +209,23 @@ Personal display state owned by one user/project:
 
 It never stores authoritative values or changes accepted data.
 
+## AnalysisSelection v1
+
+A transient, deterministic selection resolved only from accepted DataSnapshots selected by active ExperimentSnapshotHeads. It contains:
+
+- stable experiment, snapshot, head, and record-index refs
+- unit- and value-type-aware `fieldId` values
+- selected scalar values and optional series points with exact source refs
+- field coverage, missing counts, scalar/point counts, warnings, and blockers
+- non-contiguous SourceDocument rectangles for review
+- canonical dependency and selection hashes
+
+Incompatible units produce different field ids and are never combined implicitly. Selection previews are bounded to 100,000 scalar values, 1,000,000 series points, and 100,000 expanded source cells. AnalysisSelection is not accepted scientific state and is not persisted until it is frozen into a reviewed AnalysisPlanRevision.
+
+## AnalysisPlanRevision v1
+
+A reviewable calculation proposal containing a frozen AnalysisSelection reference, visible processing summary, machine-readable calculation manifest, explicit missing-value policy, exact `labrat-python-v1` source/hash, and expected output/chart shape. It cannot contain authoritative result arrays. This milestone validates the shape only; persistence, acceptance, and execution are later workflow boundaries.
+
 ## SourceExtractProposal
 
 A reviewable bounded extraction from SourceDocument evidence for source-backed visualization. It records target document/sheet/range, proposed meaning, preview rows/series, source refs, confidence, warnings, status, and review decisions.

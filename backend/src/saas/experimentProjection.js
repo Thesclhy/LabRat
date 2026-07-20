@@ -87,7 +87,7 @@ function encodeCursor(offset, signature) {
   return Buffer.from(JSON.stringify({ offset, signature }), "utf8").toString("base64url");
 }
 
-function activeRecords({ projectId, dataSnapshots, experimentIdentities, experimentSnapshotHeads }) {
+export function resolveActiveExperimentRecords({ projectId, dataSnapshots, experimentIdentities, experimentSnapshotHeads }) {
   const snapshots = new Map(asArray(dataSnapshots)
     .filter((snapshot) => snapshot?.projectId === projectId && snapshot.status === "accepted")
     .map((snapshot) => [snapshot.id, snapshot]));
@@ -281,7 +281,7 @@ export function buildExperimentProjection({
   cursor = null,
   limit = DEFAULT_LIMIT,
 } = {}) {
-  const entries = activeRecords({ projectId, dataSnapshots, experimentIdentities, experimentSnapshotHeads });
+  const entries = resolveActiveExperimentRecords({ projectId, dataSnapshots, experimentIdentities, experimentSnapshotHeads });
   const columns = buildColumns(entries);
   const allRows = buildRows(entries, columns);
   const normalizedSearch = text(search).toLowerCase();
@@ -331,7 +331,7 @@ export function getExperimentProjectionDetail({
   experimentIdentities = [],
   experimentSnapshotHeads = [],
 } = {}) {
-  const entry = activeRecords({ projectId, dataSnapshots, experimentIdentities, experimentSnapshotHeads })
+  const entry = resolveActiveExperimentRecords({ projectId, dataSnapshots, experimentIdentities, experimentSnapshotHeads })
     .find(({ identity }) => identity.id === experimentId);
   if (!entry) return null;
   return clone({

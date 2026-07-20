@@ -65,6 +65,7 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 - **DataPlan Agent/Executor**: deterministic row/region extraction, typed scalars/series, exact source refs, canonical hashes, and identity blockers.
 - **Snapshot Publisher**: idempotent atomic accepted DataPlan/DataSnapshot/identity/head/audit transaction.
 - **Experiment Projection**: unit-aware field catalog, cursor rows, filters/sort/search, and lazy detail.
+- **Analysis Tool Registry**: project-authorized, framework-independent read/plan tools for accepted field catalogs, experiment scope, selection previews/inspection, and plan validation. It exposes no calculation executor.
 - **Source Chart Resolver**: explicit range/experiment evidence, source extract proposals, immutable chart snapshots, and validation.
 - **Manuscript Store**: pages, blocks, references, ChartSpec snapshots, and canvas state.
 
@@ -78,6 +79,8 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 - ExperimentSnapshotHead selects the current accepted record for one experiment.
 - Experiment Browser is a read model.
 - BrowserView is personal display state only.
+- AnalysisSelection is a transient accepted-head-only review artifact with dependency/selection hashes.
+- AnalysisPlanRevision is a reviewable manifest and exact program; it is not a result.
 - SourceExtractProposal/ChartProposalSet/ChartSpec are reviewed visualization artifacts.
 - Manuscript stores layout and snapshots, not a parallel scientific dataset.
 - AgentRun stores visible workflow/audit traces, not hidden chain-of-thought.

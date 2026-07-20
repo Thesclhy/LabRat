@@ -72,6 +72,7 @@ Status code guidance:
 - Durable charts currently require source-backed immutable snapshots.
 - Manuscript blocks store chart snapshots and do not recalculate scientific values.
 - LabRat intent routing directly answers resolvable project questions, sends derived analysis/chart requests to reviewed analysis planning, and opens Experiment Browser only for explicit navigation.
+- Internal analysis planning tools resolve only accepted active snapshot heads, keep unit-incompatible fields separate, return bounded source-backed selections, and cannot execute calculations.
 
 ## Verification
 
