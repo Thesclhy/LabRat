@@ -1,6 +1,6 @@
 # Current Milestone
 
-Status: in progress
+Status: complete
 Read when: checking what the next implementation slice should be.
 Last reviewed: 2026-07-20
 
@@ -10,7 +10,7 @@ This file tracks the active execution state. Keep `doc/plan.md` as the short roa
 
 - Product mainline: Workbook Understanding First, ending in Experiment Browser.
 - Engineering mainline: accepted WorkbookUnderstanding -> experiment-record DataPlan -> accepted DataSnapshot -> Browser projection.
-- Current milestone: Backend conversational analysis and chart workflow implementation.
+- Completed milestone: Backend conversational analysis and chart workflow implementation.
 
 ## Current Position
 
@@ -41,18 +41,18 @@ Implemented:
 - Conversational-analysis Task 6 is implemented: exact run/result/preview identity binding; complete paged trace loading; Source/Result/Chart review tabs; validated values, exclusions, missing policy, warnings, invariants, hashes, per-row lineage and source navigation; independently paged evidence; unit-compatible chart panels; default-visible trace selection; stale async response protection; historical result rehydration; and exact-result-hash feedback to later immutable plan revisions. Real acceptance remains disabled until Task 7 provides the atomic publication route.
 - Conversational-analysis Task 7 is implemented: strict analysis-result ChartSpec v2 validation; exact result/default-trace acceptance; active-head rechecks inside one idempotent memory/Postgres transaction; acceptance-only result mutation; run/thread completion; complete immutable trace catalogs with accepted snapshot refs and lineage; bounded project/list metadata plus full detail reads; editor-only publication; real Analysis Review wiring; and shared rendering with local trace filtering and unit-safe axes.
 - Conversational-analysis Task 8 is implemented: one trace-aware chart-view normalizer migrates legacy source experiment filters into stable trace ids and applies reviewed analysis defaults; Manuscript insertion lazy-loads full ChartSpec details before snapshotting; insertion, reload, chart context, Canvas rendering, and PPTX export all use placement-local `visibleTraceIds`; the selected-chart inspector provides searchable trace toggles, counts, Select all, and Clear; duplicate placements remain independent through undo/redo; and source-backed ChartSpecs remain compatible.
+- Conversational-analysis Task 9 is implemented: a real grouped-header workbook golden route test now covers accepted experiment publication, natural-language analysis routing, feedback revision 2, exact-plan execution, invariant-validated normalized selectivity, atomic ChartSpec publication, reload, and complete source lineage without legacy artifacts. A stateful frontend golden test covers LabRat plan review through result acceptance and Manuscript trace filtering. Active contracts now describe both ChartSpec origins and the backend-only provider/executor boundary. Browser QA confirmed direct project answers, exact `Sheet1!L3:N4` red cells, no execution before revision acceptance, validated 2-input/2-output results, two default-visible experiment traces, one atomic chart, independent 2/2 and 1/2 Manuscript placements after reload, responsive review layouts, and no new console errors. Reloaded Manuscript blocks now render from their immutable complete snapshots, selected-chart context no longer loops when project summaries are recreated, and chart-review title/legend spacing is stable.
 
-Not implemented yet:
+Deployment work not included in this completed milestone:
 
-- Golden conversational-analysis workflow coverage, final contract reconciliation, and browser QA.
+- Production analysis execution still requires an external hardened no-network worker and deployment-managed provider credentials.
+- Optional MCP access remains a future adapter over the same backend tools and review state; it is not required for the first-party workflow.
 
 ## Next Recommended Slice
 
-Continue `doc/plans/backend-conversational-analysis-chart-implementation-plan.md` with Task 9:
-
-1. Add the golden backend workflow from natural-language request through immutable plan revision, execution, result review, ChartSpec publication, and reload.
-2. Add the frontend workflow test through LabRat review, Manuscript insertion, and placement-local trace visibility.
-3. Reconcile final contracts, run full verification, and complete desktop/mobile browser QA.
+1. Operationalize the hardened analysis worker, secret management, timeouts, audit telemetry, and provider cost/latency monitoring in a production-like environment.
+2. Exercise migration 012 and the atomic analysis publication path against a configured Postgres test database.
+3. Consider an optional MCP adapter only after the first-party workflow has production evidence; keep authorization, review, execution, and publication in the existing backend services.
 
 ## Guardrails
 
@@ -65,13 +65,13 @@ Continue `doc/plans/backend-conversational-analysis-chart-implementation-plan.md
 
 ## Verification Target
 
-Milestone 7 completion verification:
+Conversational-analysis milestone completion verification:
 
 ```bash
-rg -n "currentDatasetCommit|datasetCommits|genericImports|genericMappingSets|GenericImportBrowser|buildGenericBrowserRows" src backend/src
 npm run codex:verify
 node --test backend/src/saas/routes/saasRoutes.postgres.test.js
 git diff --check
+rg -n "anthropic-dangerous-direct-browser-access|labrat_blank_anthropic_key_v1|Only source-backed chart proposals" src backend/src
 ```
 
 Latest Task 4 evidence: targeted frontend analysis/API/workspace/AgentPanel coverage passed 51/51 and the production build succeeded with the existing Plotly chunk-size warning. Browser QA used only repository-owned synthetic workbook data plus a local deterministic provider stub; it confirmed analysis routing, two non-contiguous source rectangles, red-cell focus, feedback revision supersession, exact-plan acceptance/queueing, stale-card recovery, desktop split geometry, mobile stacked geometry, and no page-level horizontal overflow. No external provider received QA data.
@@ -84,11 +84,13 @@ Latest Task 7 evidence: full verification passed with frontend 239/239, backend 
 
 Latest Task 8 evidence: focused chart-view/renderer/Canvas/export/ProjectDashboard coverage passed 100/100, full frontend passed 247/247, JavaScript syntax and diff checks passed, and the production build succeeded with the existing Plotly chunk-size warning. Tests cover legacy source-view migration, reviewed analysis defaults, explicit empty views, duplicate placement independence through undo/redo, bounded LabRat context, full-detail lazy insertion, immutable snapshot retention, source and analysis export filtering, and source-backed rendering compatibility.
 
+Latest Task 9 evidence: the grouped-header backend golden workflow passed through one trace-complete `origin: analysis_result` ChartSpec with exact source lineage. Frontend passed 250/250 with Vitest capped at four workers for repeatable Windows execution; backend passed 230 with 1 optional Postgres integration skip; the production build succeeded with the existing Plotly chunk-size warning. Desktop and 390x844 browser QA covered direct answers, reviewed plan revision, red source cells, validated result review, chart publication, duplicate Manuscript placements, reload persistence, mobile stacking, and console stability. PPTX placement filtering remains covered by automated export tests.
+
 ## Open Risks
 
 - The worktree contains substantial existing changes from prior milestones; do not revert or restage unrelated files.
 - Large workbook reads now use stable cached tiles, but the current grid still renders the complete selected row/column DOM with React Data Grid virtualization disabled; very large selected ranges still need a dedicated rendering architecture later.
 - DataSnapshot-to-chart work must define unit, series, selection, and staleness rules rather than reuse removed contracts.
-- The LabRat-managed arbitrary Python runtime is the largest new security and operations risk; implementation must not use an unrestricted subprocess as a production sandbox.
+- The LabRat-managed arbitrary Python runtime remains the largest security and operations risk; the local subprocess adapter is development-only and production must use the hardened worker contract.
 - Existing source-evidence chart flows must remain intact while the new chart path is added.
 - Local in-memory backend development intentionally does not auto-reload; restart `npm --prefix backend run dev` after backend source edits so sessions are not silently discarded.

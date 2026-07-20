@@ -251,7 +251,15 @@ function resultPlot(traces, expectedOutput = {}) {
     layout: plotLayout({
       title: { text: "Validated analysis preview", font: { size: 14 } },
       height: 340,
-      margin: { l: 58, r: 20, t: 48, b: 48 },
+      margin: { l: 58, r: 20, t: 76, b: 48 },
+      legend: {
+        orientation: "h",
+        y: 1.02,
+        x: 0.5,
+        xanchor: "center",
+        yanchor: "bottom",
+        bgcolor: "rgba(255,255,255,.9)",
+      },
       xaxis: {
         ...plotLayout().xaxis,
         title: first.xUnit ? `X (${first.xUnit})` : "X",

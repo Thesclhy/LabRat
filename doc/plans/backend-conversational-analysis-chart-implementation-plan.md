@@ -737,25 +737,25 @@ git commit -m "Add placement-local chart trace visibility"
 - Produces a documented, tested first-party end-to-end workflow.
 - Consumes all prior tasks.
 
-- [ ] **Step 1: Add the failing golden backend workflow**
+- [x] **Step 1: Add the failing golden backend workflow**
 
 The test must publish accepted experiment snapshots, post a natural-language normalization/chart request, modify the plan, accept it, execute the exact program through the injected test executor, inspect validated output, atomically accept/create a chart, reload state, and assert complete trace catalog plus source lineage.
 
-- [ ] **Step 2: Run the golden test and fix only integration gaps**
+- [x] **Step 2: Run the golden test and fix only integration gaps**
 
 Run: `node --test --test-name-pattern="golden conversational analysis" backend/src/saas/routes/saasRoutes.test.js`
 
 Expected before integration fixes: FAIL at the first disconnected boundary. Expected after fixes: PASS through ChartSpec creation.
 
-- [ ] **Step 3: Add the frontend workflow test**
+- [x] **Step 3: Add the frontend workflow test**
 
 Drive LabRat request -> plan card -> modification -> plan accept -> result tabs -> combined result acceptance -> Manuscript insertion -> trace visibility. Assert there is no API-key UI and no Browser action for the analysis request.
 
-- [ ] **Step 4: Update active contracts and remove obsolete unsupported statements**
+- [x] **Step 4: Update active contracts and remove obsolete unsupported statements**
 
 Document exact routes, persisted shapes, status transitions, idempotency, executor configuration, provider metadata, ChartSpec v2 origins, list/detail bounds, and Canvas `visibleTraceIds`. Retain the source-backed chart contract as a separate valid origin.
 
-- [ ] **Step 5: Run full verification**
+- [x] **Step 5: Run full verification**
 
 Run:
 
@@ -770,7 +770,7 @@ rg -n "anthropic-dangerous-direct-browser-access|labrat_blank_anthropic_key_v1|O
 
 Expected: frontend and backend suites pass; build succeeds; diff check is clean apart from existing line-ending warnings; forbidden browser provider paths return no matches.
 
-- [ ] **Step 6: Run browser QA**
+- [x] **Step 6: Run browser QA**
 
 Verify:
 
@@ -784,7 +784,7 @@ Verify:
 8. Two Canvas placements of that ChartSpec keep independent visible experiments after reload.
 9. PPTX export matches each placement's visible traces.
 
-- [ ] **Step 7: Update milestone/progress and commit**
+- [x] **Step 7: Update milestone/progress and commit**
 
 ```bash
 git add doc/contracts/saas-api-contract-v0.md doc/contracts/saas-database-schema-v0.md doc/contracts/backend-api-contract.md doc/contracts/canonical-data-dictionary.md doc/arch/architecture.md doc/arch/ai-boundaries.md doc/current-milestone.md doc/plan.md doc/PROGRESS.md backend/src/saas/routes/saasRoutes.test.js src/components/ProjectDashboard.test.jsx

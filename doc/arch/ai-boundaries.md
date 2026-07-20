@@ -39,7 +39,7 @@ Send compact project-owned context only:
 - accepted WorkbookUnderstanding summaries/source refs
 - DataPlan preview summaries, hashes, warnings, and identity decisions
 - Experiment Browser field catalog and selected experiment summaries
-- approved source-backed chart/manuscript summaries
+- approved source- and analysis-result chart/manuscript summaries, including bounded trace metadata and current visible trace ids without full x/y arrays
 
 Do not send full workbooks, entire DataSnapshot point collections, unrelated project history, credentials, or private session data.
 
@@ -54,7 +54,7 @@ AI draft
   -> audit event
 ```
 
-WorkbookUnderstanding confirmation, DataPlan publish, source extract acceptance, ChartSpec creation, and Manuscript save are separate boundaries. Confirmation at one stage does not authorize later stages.
+WorkbookUnderstanding confirmation, DataPlan publish, source extract acceptance, analysis-plan acceptance, AnalysisResult acceptance/ChartSpec publication, and Manuscript save are separate boundaries. Confirmation at one stage does not authorize later stages.
 
 ## Evidence Rules
 
@@ -96,6 +96,7 @@ WorkbookUnderstanding confirmation, DataPlan publish, source extract acceptance,
 - Analysis-result ChartSpecs derive only from one accepted backend-validated AnalysisResult and retain exact analysis hashes, accepted input snapshot refs, complete trace arrays, and source-record lineage.
 - The model may suggest chart type, axes, and style, but cannot supply uncited plotted values.
 - Generic DataSnapshot-backed chart proposals remain unimplemented and must return an explicit unsupported transition; the reviewed analysis-result publication path is the only DataSnapshot-derived ChartSpec path.
+- A ChartSpec owns the complete accepted trace domain. A Manuscript placement owns only its local `visibleTraceIds`; model suggestions and user visibility changes cannot remove traces from the immutable catalog.
 
 ## AgentRun Rules
 

@@ -91,7 +91,7 @@ Upload workbook
   -> PPTX export
 ```
 
-The current app supports server login, lab/project selection, project profile editing, workbook source indexing, conversational red-box review, accepted WorkbookUnderstanding persistence, tool-governed evidence retrieval, deterministic experiment-record previews, transactional accepted snapshot publish, a cursor-paginated Experiment Browser with saved views/comparison/detail provenance, backend-owned durable analysis threads and reviewed immutable calculation plans, accepted-run execution with validated immutable result previews, source-backed chart review, Manuscript layout/persistence, and PPTX export. Analysis results still require a separate review before a DataSnapshot-backed ChartSpec can be published.
+The current app supports server login, lab/project selection, project profile editing, workbook source indexing, conversational red-box review, accepted WorkbookUnderstanding persistence, tool-governed evidence retrieval, deterministic experiment-record previews, transactional accepted snapshot publish, a cursor-paginated Experiment Browser with saved views/comparison/detail provenance, backend-owned durable analysis threads and reviewed immutable calculation plans, accepted-run execution with validated immutable result previews, separate result acceptance into trace-complete analysis-result ChartSpecs, source-backed chart review, Manuscript placement-local trace visibility, persistence, and PPTX export.
 
 Analysis execution is disabled by default. For local non-production development only:
 
@@ -103,7 +103,7 @@ npm --prefix backend run dev
 
 Production must use `LABRAT_ANALYSIS_EXECUTOR=worker` plus an HTTPS `LABRAT_ANALYSIS_WORKER_ENDPOINT` backed by an isolated no-network worker. The local subprocess adapter is rejected in production.
 
-The next major engineering goal is accepted DataSnapshot-backed chart planning. It must use the same experiment identities, active snapshot heads, units, source refs, and review boundaries as Experiment Browser. Server workflow reliability, Docker/Postgres readiness, and admin/audit usability remain guardrails. New server-mode work does not need compatibility migrations for old IndexedDB, `.labrat.json`, or previous local project shapes.
+The next major engineering goal is production operationalization of reviewed analysis execution: deploy the hardened no-network worker, configure provider secrets outside the browser, exercise migration 012 and atomic publication against Postgres, and add cost/latency/audit telemetry. Server workflow reliability, Docker/Postgres readiness, and admin/audit usability remain guardrails. New server-mode work does not need compatibility migrations for old IndexedDB, `.labrat.json`, or previous local project shapes.
 
 ## Example Templates
 

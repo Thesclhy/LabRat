@@ -7,6 +7,7 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     include: ["src/**/*.{test,spec}.{js,jsx}"],
+    maxWorkers: 4,
     setupFiles: "./src/test/setupTests.js",
   },
 });

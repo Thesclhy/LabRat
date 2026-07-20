@@ -279,7 +279,21 @@ Rules:
 - Successful result publication atomically marks the existing AnalysisResult `accepted`, moves its AnalysisRun and AnalysisThread to `completed`, creates one `labrat.chartSpec.v2` `origin: analysis_result` ChartSpec, links artifact ids, writes the audit event and publication receipt, and returns the complete ChartSpec. Same-key/same-request retries return the original artifacts; conflicting key reuse returns `409`.
 - `LABRAT_ANALYSIS_EXECUTOR` defaults to `disabled`. `local` is non-production only; production execution requires a configured HTTPS hardened worker. Executor command, endpoint, timeout, and provider credentials are backend-only configuration.
 
-## Source-Backed Charts
+Status flow:
+
+```text
+AnalysisThread planning
+  -> awaiting_plan_review
+  -> executing
+  -> awaiting_result_review
+  -> completed
+
+AnalysisPlanRevision awaiting_review -> superseded | accepted
+AnalysisRun queued -> running -> failed | validation_failed | awaiting_result_review -> completed
+AnalysisResult awaiting_review -> accepted
+```
+
+## Evidence-Backed Charts
 
 ```text
 GET   /api/projects/:projectId/source-extract-proposals
@@ -311,7 +325,7 @@ POST  /api/projects/:projectId/manuscripts
 PATCH /api/manuscripts/:manuscriptId
 ```
 
-Manuscript chart blocks store `chartSpecId`, an immutable `chartSpecSnapshot`, a user-selected `chartView`, and editable chart layout. Existing blocks can render from the stored source snapshot even when the live ChartSpec is no longer listed.
+Manuscript chart blocks store `chartSpecId`, a complete immutable `chartSpecSnapshot`, placement-local `chartView.visibleTraceIds`, and editable chart layout. If a project/list ChartSpec has `detailRequired: true`, the frontend must load `GET /api/chart-specs/:chartSpecId` before insertion and snapshot the complete artifact. Existing blocks render from their stored snapshot even when the live ChartSpec is no longer listed. Two placements of one ChartSpec may show different trace subsets; visibility changes do not mutate or delete traces from the shared ChartSpec.
 
 ## Retired Endpoints
 

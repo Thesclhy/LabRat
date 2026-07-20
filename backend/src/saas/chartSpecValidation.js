@@ -290,7 +290,10 @@ export function validateChartSpecProposal({ proposal } = {}) {
     return { ok: true, chartSpec };
   }
   if (proposal.origin !== "source_extract" && !isObject(proposal.sourceSnapshot)) {
-    throw validationError("source_snapshot_required", "Only source-backed chart proposals can create ChartSpecs.");
+    throw validationError(
+      "source_snapshot_required",
+      "Proposal-based ChartSpec creation requires source-extract evidence; analysis-result charts require accepted result publication.",
+    );
   }
 
   const requestedChartType = proposal.chartType || null;

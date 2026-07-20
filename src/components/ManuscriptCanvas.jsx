@@ -65,6 +65,7 @@ export function ManuscriptCanvas({ blocks, setBlocks, staged, setStaged, referen
   const toolbarControlControllerRef = useRef(null);
   const textEditSessionRef = useRef(null);
   const chartInsertRequestRef = useRef("");
+  const selectedChartContextRef = useRef({ key: null, onChange: null });
   const [loadedChartSpecDetails, setLoadedChartSpecDetails] = useState({});
   const [chartDetailState, setChartDetailState] = useState({ busyId: "", error: "" });
   const safeChartSpecs = useMemo(() => normalizeChartSpecs(chartSpecs).map((chartSpec) => (
@@ -733,7 +734,12 @@ export function ManuscriptCanvas({ blocks, setBlocks, staged, setStaged, referen
     }
   }, [pageOrientationPreference, inferredPageOrientation, setPageOrientationPreference]);
   useEffect(() => {
-    onSelectedChartContextChange?.(selectedBlock?.kind === "chart" ? buildChartContext(selectedBlock, safeChartSpecs) : null);
+    const nextContext = selectedBlock?.kind === "chart" ? buildChartContext(selectedBlock, safeChartSpecs) : null;
+    const nextKey = JSON.stringify(nextContext);
+    const previous = selectedChartContextRef.current;
+    if (previous.key === nextKey && previous.onChange === onSelectedChartContextChange) return;
+    selectedChartContextRef.current = { key: nextKey, onChange: onSelectedChartContextChange };
+    onSelectedChartContextChange?.(nextContext);
   }, [selectedBlockId, safeBlocks, safeChartSpecs, onSelectedChartContextChange]);
   return (
     <div className={`manuscript ${leftSidebarOpen ? "sidebar-open" : "sidebar-closed"} ${inspectorOpen ? "inspector-open" : "inspector-closed"}`} onMouseDownCapture={handleManuscriptMouseDownCapture}>
@@ -1050,8 +1056,8 @@ function normalizeChartSpecs(chartSpecs) {
 }
 
 function resolveChartSpecForBlock(block, chartSpecs) {
-  return (Array.isArray(chartSpecs) ? chartSpecs : []).find((chartSpec) => chartSpec.id === block?.chartSpecId)
-    || block?.chartSpecSnapshot
+  return block?.chartSpecSnapshot
+    || (Array.isArray(chartSpecs) ? chartSpecs : []).find((chartSpec) => chartSpec.id === block?.chartSpecId)
     || null;
 }
 

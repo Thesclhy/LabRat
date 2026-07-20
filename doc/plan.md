@@ -33,7 +33,7 @@ Use this split when deciding what to build:
 
 - Product mainline: Workbook Understanding First, ending in Experiment Browser.
 - Engineering mainline: structured WorkbookUnderstanding -> experiment-record DataPlan -> accepted DataSnapshot -> Browser projection.
-- Current execution milestone: implement the approved backend conversational-analysis and chart workflow.
+- Completed execution milestone: backend conversational analysis, reviewed calculation, analysis-result ChartSpec publication, and placement-local trace visibility.
 
 ## Recently Completed
 
@@ -63,11 +63,13 @@ Use this split when deciding what to build:
 - Implemented conversational-analysis Task 6: the existing LabRat review workspace now binds exact run/result hashes, reviews validated rows, exclusions, missing policy, warnings, invariants, lineage and source evidence, loads the complete trace domain, separates incompatible units, preserves historical runs, and supports immutable result-feedback revisions plus reviewed default trace visibility.
 - Implemented conversational-analysis Task 7: exact result/default-trace acceptance now atomically rechecks accepted heads, accepts the existing result, completes its run/thread, creates one provenance-complete analysis-result ChartSpec v2, records an idempotent receipt/audit event, exposes bounded list metadata plus full detail, and renders validated traces without a sourceSnapshot.
 - Implemented conversational-analysis Task 8: a shared trace-aware chart-view model migrates legacy source experiment selections, inherits reviewed analysis defaults, lazy-loads complete ChartSpecs before Manuscript insertion, keeps each placement's visible traces independent, exposes searchable Canvas trace controls, bounds LabRat chart context, and filters PPTX output by the placement-local view.
+- Completed conversational-analysis Task 9: backend and stateful frontend golden workflows now cover natural-language request through revision, exact-plan execution, validated result review, atomic trace-complete ChartSpec publication, Manuscript insertion, independent placement views, reload, and source lineage. Final contracts cover both ChartSpec origins and backend-only model/executor boundaries. Desktop/mobile browser QA also fixed immutable-snapshot reload rendering, a selected-chart context update loop, and chart-preview title/legend overlap.
 
 ## Next Recommended Slices
 
-1. Execute Task 9 of `doc/plans/backend-conversational-analysis-chart-implementation-plan.md`: golden backend/frontend workflow coverage, final contract reconciliation, full verification, and browser QA.
-2. Preserve source-backed chart creation as a distinct evidence path and converge both forms only at the validated ChartSpec/rendering boundary.
+1. Deploy and exercise the hardened no-network analysis worker with production secret management, audit telemetry, timeout controls, and provider cost/latency monitoring.
+2. Run migration 012 and the atomic publication workflow against configured Postgres in CI or a staging environment.
+3. Evaluate an optional MCP adapter only as another client of the existing backend tools and confirmation state.
 
 ## Operating Loop
 

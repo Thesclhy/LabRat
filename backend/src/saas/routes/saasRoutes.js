@@ -2595,7 +2595,7 @@ async function handleChartSpecFromProposal(req, res, context, projectId) {
       res,
       409,
       "data_snapshot_chart_not_implemented",
-      "Only source-backed chart proposals can create ChartSpecs until accepted DataSnapshot charting is implemented.",
+      "This proposal endpoint accepts source-extract evidence only; analysis-result charts must use accepted result publication.",
     );
     return;
   }

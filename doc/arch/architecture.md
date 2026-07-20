@@ -3,7 +3,7 @@
 Status: active reference
 Last reviewed: 2026-07-20
 
-LabRat is a server-first research workspace that turns workbook evidence into reviewed experiment records, cross-experiment Browser views, source-backed charts, and manuscript output while preserving provenance and review history.
+LabRat is a server-first research workspace that turns workbook evidence into reviewed experiment records, cross-experiment Browser views, evidence-backed charts, and manuscript output while preserving provenance and review history.
 
 ## Product Flow
 
@@ -29,8 +29,6 @@ SourceDocument range
   -> source-backed ChartSpec with immutable sourceSnapshot
   -> Manuscript chart block / PPTX
 ```
-
-DataSnapshot-backed chart planning is the next output milestone and must not be approximated through the retired aggregate dataset model.
 
 Reviewed accepted-data analysis now begins as:
 
@@ -71,8 +69,8 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 - **Workbook Review**: bounded Excel-like grid, stable red boxes, current-box conversation, structured semantic controls, blockers, and confirmation.
 - **DataPlan Review**: deterministic experiment records, identity decisions, units, warnings, source navigation, stale-preview recovery, and explicit publish.
 - **Experiment Browser**: accepted-head-only rows, configurable columns, typed filters/sort/search, saved personal views, persistent selection, comparison tray, and lazy detail/source evidence.
-- **Chart Review**: source-evidence prompts and proposal acceptance; no generic normalized-data path.
-- **Manuscript**: page/block canvas, source-backed chart insertion, editable chart layers, persistence, and PPTX export.
+- **Chart Review**: source-evidence proposal review plus accepted-data analysis result review; no unreviewed generic normalized-data path.
+- **Manuscript**: page/block canvas, source- and analysis-result ChartSpec insertion, placement-local trace controls, editable chart layers, persistence, and PPTX export.
 - **Ask LabRat**: project-scoped planning and review-gated actions, not a second data store.
 
 ## Backend Components
@@ -108,7 +106,7 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 - AnalysisPlanRevision is a durable immutable manifest, frozen selection, and exact program; it is not a result.
 - AnalysisRun is an immutable attempt that is claimed once and finalized with bounded execution/validation metadata.
 - AnalysisResult is immutable validated output awaiting a separate user review; acceptance changes workflow metadata only, and failed or invalid execution creates none.
-- SourceExtractProposal/ChartProposalSet/ChartSpec are reviewed visualization artifacts.
+- SourceExtractProposal/ChartProposalSet and analysis-result publication are separate reviewed paths that converge on ChartSpec.
 - Manuscript stores layout and snapshots, not a parallel scientific dataset.
 - AgentRun stores visible workflow/audit traces, not hidden chain-of-thought.
 
@@ -121,7 +119,8 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 - Incompatible units remain separate unless a reviewed conversion exists.
 - Browser publish does not create chart/manuscript artifacts.
 - Source-backed chart creation does not mutate accepted snapshots.
-- Manuscript chart blocks keep a ChartSpec snapshot for stable historical rendering.
+- Analysis execution does not create charts; explicit result acceptance creates one immutable analysis-result ChartSpec.
+- Manuscript chart blocks keep a complete ChartSpec snapshot and placement-local `visibleTraceIds` for stable historical rendering and independent export.
 
 ## Chart Architecture
 

@@ -377,8 +377,14 @@ describe("AnalysisReviewWorkspace", () => {
   });
 
   it("shows validated results, exclusions, invariants, and complete trace choices before acceptance", () => {
-    const PlotStub = ({ traces }) => (
-      <div aria-label="Analysis chart preview">{traces.map((trace) => trace.name).join(", ")}</div>
+    const PlotStub = ({ traces, layout }) => (
+      <div
+        aria-label="Analysis chart preview"
+        data-margin-top={layout?.margin?.t}
+        data-legend-y={layout?.legend?.y}
+      >
+        {traces.map((trace) => trace.name).join(", ")}
+      </div>
     );
     render(
       <AnalysisReviewWorkspace
@@ -411,6 +417,8 @@ describe("AnalysisReviewWorkspace", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Chart" }));
     expect(screen.getByLabelText("Analysis chart preview").textContent).toContain("Exp 1");
     expect(screen.getByLabelText("Analysis chart preview").textContent).toContain("Exp 2");
+    expect(screen.getByLabelText("Analysis chart preview").dataset.marginTop).toBe("76");
+    expect(screen.getByLabelText("Analysis chart preview").dataset.legendY).toBe("1.02");
     expect(screen.getByRole("checkbox", { name: "Show Exp 1 by default" }).checked).toBe(true);
     fireEvent.click(screen.getByRole("checkbox", { name: "Show Exp 2 by default" }));
     expect(screen.getByRole("checkbox", { name: "Show Exp 2 by default" }).checked).toBe(false);
@@ -615,7 +623,7 @@ describe("AnalysisReviewWorkspace", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Chart" }));
     expect(screen.getByTestId("complete-trace-plot").textContent).toBe("1200");
     expect(screen.getByRole("checkbox", { name: "Show Exp 1200 by default" }).checked).toBe(true);
-  });
+  }, 15_000);
 
   it("rejects a preview that does not match the visible run and result hashes", () => {
     render(

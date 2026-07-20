@@ -180,6 +180,80 @@ async function createProject(name = "Route Test Project") {
   return (await response.json()).project;
 }
 
+async function publishGroupedSelectivityDataForAnalysis(project, suffix) {
+  const upload = await uploadProjectFile(
+    project.id,
+    groupedMasterTableBlob(),
+    groupedMasterTableFixture.filename,
+  );
+  assert.equal(upload.response.status, 201);
+  const created = await jsonFetch(`/api/projects/${project.id}/workbook-review-sessions`, {
+    method: "POST",
+    body: { fileObjectId: upload.body.fileObject.id },
+  });
+  assert.equal(created.status, 201);
+  const createdBody = await created.json();
+  const revision = await jsonFetch(
+    `/api/workbook-review-sessions/${createdBody.workbookReviewSession.id}/revisions`,
+    {
+      method: "POST",
+      body: {
+        message: "This is an experiment table with grouped selectivity headers and one experiment per row.",
+        redBoxUpdates: [{
+          clientRegionId: `draft_analysis_${suffix}`,
+          operation: "upsert",
+          sourceDocumentId: createdBody.sourceDocument.id,
+          sheetName: groupedMasterTableFixture.sheetName,
+          range: "A1:N4",
+          selectionMethod: "drag_select",
+          description: "experiment table",
+        }],
+      },
+    },
+  );
+  assert.equal(revision.status, 200);
+  const revisionBody = await revision.json();
+  const confirmed = await jsonFetch(
+    `/api/workbook-review-sessions/${createdBody.workbookReviewSession.id}/confirm`,
+    {
+      method: "POST",
+      body: {
+        workbookUnderstandingId: revisionBody.workbookUnderstandingDraft.id,
+        decisionSummary: { acceptedByUser: true },
+      },
+    },
+  );
+  assert.equal(confirmed.status, 200);
+  const understanding = (await confirmed.json()).workbookUnderstanding;
+  const identityDecisions = ["Exp1", "Exp2"].map((sourceAlias) => ({
+    sourceAlias,
+    action: "create",
+  }));
+  const drafted = await jsonFetch(`/api/projects/${project.id}/data-plans/draft`, {
+    method: "POST",
+    body: {
+      intent: "experiment_browser_publish",
+      workbookUnderstandingIds: [understanding.id],
+      identityDecisions,
+    },
+  });
+  assert.equal(drafted.status, 200);
+  const draftBody = await drafted.json();
+  assert.deepEqual(draftBody.reviewSummary.blockers, []);
+  const published = await jsonFetch(`/api/projects/${project.id}/data-plans/publish`, {
+    method: "POST",
+    body: {
+      dataPlan: draftBody.dataPlan,
+      identityDecisions,
+      expectedPreviewHash: draftBody.snapshotPreview.previewHash,
+      expectedDependencyHash: draftBody.dataPlan.dependencyHash,
+      idempotencyKey: `golden_analysis_data_${suffix}`,
+    },
+  });
+  assert.equal(published.status, 201);
+  return published.json();
+}
+
 function seedRouteAnalysisData(project, suffix = "route") {
   const experimentId = `experiment_analysis_${suffix}`;
   const snapshotId = `data_snapshot_analysis_${suffix}`;
@@ -1721,6 +1795,320 @@ test("experiment trend AgentRun enters reviewed analysis instead of opening Brow
   assert.match(body.reply, /reviewed analysis plan/i);
   assert.match(body.analysisThread.id, /^analysis_thread_/);
   assert.equal(body.currentPlanRevision, null);
+});
+
+test("golden conversational analysis normalizes accepted selectivity and publishes a trace-complete chart", async () => {
+  const project = await createProject("Golden Conversational Analysis");
+  const suffix = `golden_${Date.now()}`;
+  const publication = await publishGroupedSelectivityDataForAnalysis(project, suffix);
+  assert.equal(publication.dataSnapshot.status, "accepted");
+  assert.equal(publication.experimentSnapshotHeads.length, 2);
+
+  const originalDraftAnalysisPlan = testModelProvider.draftAnalysisPlan;
+  const originalExecuteAcceptedRun = testAnalysisExecutor.executeAcceptedRun;
+  const selectedFieldKeys = [
+    "selectivity_solid",
+    "selectivity_liquid",
+    "selectivity_gas",
+  ];
+  const outputFieldKeys = selectedFieldKeys.map((fieldKey) => `${fieldKey}_normalized`);
+  const pythonSource = [
+    "def analyze(tables, labrat):",
+    "    result_table = []",
+    "    for row in tables.get('records', []):",
+    "        total = row.get('selectivity_solid') + row.get('selectivity_liquid') + row.get('selectivity_gas')",
+    "        result_table.append({",
+    "            '__result_id': row.get('__source_record_id'),",
+    "            '__experiment_id': row.get('__experiment_id'),",
+    "            '__snapshot_id': row.get('__snapshot_id'),",
+    "            '__record_index': row.get('__record_index'),",
+    "            'selectivity_solid_normalized': row.get('selectivity_solid') / total * 100,",
+    "            'selectivity_liquid_normalized': row.get('selectivity_liquid') / total * 100,",
+    "            'selectivity_gas_normalized': row.get('selectivity_gas') / total * 100,",
+    "        })",
+    "    return {'result_table': result_table, 'traces': [], 'lineage': {}, 'summary': {}}",
+  ].join("\n");
+
+  testModelProvider.draftAnalysisPlan = async (input) => {
+    const selectedFields = selectedFieldKeys.map((fieldKey) => (
+      input.fields.find((field) => field.fieldKey === fieldKey)
+    ));
+    assert.equal(selectedFields.every(Boolean), true);
+    const fieldIds = selectedFields.map((field) => field.fieldId);
+    return {
+      ok: true,
+      selectionRequest: {
+        experimentIds: [],
+        fieldIds,
+        includeSeries: false,
+      },
+      plan: {
+        requestSummary: "Normalize Solid, Liquid, and Gas selectivity to 100 percent for every accepted experiment.",
+        processingSummary: [
+          "Use the accepted Solid, Liquid, and Gas selectivity cells for every published experiment.",
+          "Divide each component by its row total and multiply by 100.",
+          ...(input.feedback ? [`Apply the review feedback: ${input.feedback}`] : []),
+        ],
+        calculationManifest: {
+          inputs: selectedFields.map((field) => ({
+            fieldId: field.fieldId,
+            fieldKey: field.fieldKey,
+            unit: field.unit,
+          })),
+          missingValuePolicy: {
+            mode: "exclude_record",
+            requiredFieldIds: fieldIds,
+          },
+          derivedFields: outputFieldKeys.map((fieldKey) => ({
+            fieldKey,
+            inputFieldIds: fieldIds,
+            expression: `${fieldKey.replace("_normalized", "")} / row_total * 100`,
+            outputUnit: "percent",
+          })),
+          invariants: [{
+            type: "row_sum",
+            fieldKeys: outputFieldKeys,
+            target: 100,
+            absoluteTolerance: 0.000001,
+          }],
+        },
+        pythonProgram: {
+          runtime: "labrat-python-v1",
+          entrypoint: "analyze",
+          source: pythonSource,
+        },
+        expectedOutput: {
+          shape: "experiment_traces",
+          chartType: "stacked_bar",
+          xField: "experiment_label",
+          yFields: outputFieldKeys,
+        },
+        warnings: [],
+      },
+    };
+  };
+
+  testAnalysisExecutor.executeAcceptedRun = async (runPackage) => {
+    const resultTable = runPackage.tables.records.map((record, index) => {
+      const total = selectedFieldKeys.reduce(
+        (sum, fieldKey) => sum + Number(record[fieldKey]),
+        0,
+      );
+      const solid = Number(record.selectivity_solid) / total * 100;
+      const liquid = Number(record.selectivity_liquid) / total * 100;
+      return {
+        __result_id: `normalized_result_${index + 1}`,
+        __experiment_id: record.__experiment_id,
+        __snapshot_id: record.__snapshot_id,
+        __record_index: record.__record_index,
+        selectivity_solid_normalized: solid,
+        selectivity_liquid_normalized: liquid,
+        selectivity_gas_normalized: 100 - solid - liquid,
+      };
+    });
+    const sourceRecordIds = runPackage.tables.records.map(
+      (record) => record.__source_record_id,
+    );
+    const traces = [
+      ["trace_solid", "Solid", "selectivity_solid_normalized"],
+      ["trace_liquid", "Liquid", "selectivity_liquid_normalized"],
+      ["trace_gas", "Gas", "selectivity_gas_normalized"],
+    ].map(([traceId, name, fieldKey]) => ({
+      traceId,
+      name,
+      yField: fieldKey,
+      x: runPackage.tables.records.map((record) => record.__experiment_label),
+      y: resultTable.map((row) => row[fieldKey]),
+      xUnit: null,
+      yUnit: "percent",
+      sourceRecordIds,
+    }));
+    return {
+      ok: true,
+      adapter: "golden_test_executor",
+      runtime: {
+        version: runPackage.runtimeVersion,
+        exitCode: 0,
+      },
+      result: {
+        result_table: resultTable,
+        traces,
+        lineage: {
+          ...Object.fromEntries(resultTable.map((row, index) => [
+            row.__result_id,
+            { sourceRecordIds: [sourceRecordIds[index]] },
+          ])),
+          ...Object.fromEntries(traces.map((trace) => [
+            trace.traceId,
+            { sourceRecordIds },
+          ])),
+        },
+        summary: {
+          inputRecordCount: runPackage.tables.records.length,
+          outputRecordCount: resultTable.length,
+          excludedRecordCount: 0,
+          excludedRecords: [],
+          missingValuePolicy: runPackage.calculationManifest.missingValuePolicy.mode,
+        },
+      },
+    };
+  };
+
+  try {
+    const requested = await jsonFetch(`/api/projects/${project.id}/agent/runs`, {
+      method: "POST",
+      body: {
+        message: "Normalize Solid, Liquid, and Gas selectivity for every experiment so each row sums to 100%, then create a stacked chart.",
+      },
+    });
+    assert.equal(requested.status, 201);
+    const requestedBody = await requested.json();
+    assert.equal(requestedBody.agentRun.mode, "analysis_planning");
+    assert.deepEqual(requestedBody.agentRun.actions, []);
+    assert.equal(requestedBody.reply.includes("Open Experiment Browser"), false);
+    assert.equal(requestedBody.currentPlanRevision.revision, 1);
+    assert.equal(requestedBody.currentPlanRevision.sourceRectangles.length, 1);
+    assert.equal(requestedBody.currentPlanRevision.sourceRectangles[0].range, "L3:N4");
+
+    const feedback = "Keep all accepted experiments and use concise Solid, Liquid, and Gas trace labels.";
+    const modified = await jsonFetch(
+      `/api/analysis-threads/${requestedBody.analysisThread.id}/plan-revisions`,
+      {
+        method: "POST",
+        body: { feedback },
+      },
+    );
+    assert.equal(modified.status, 201);
+    const modifiedBody = await modified.json();
+    const revision = modifiedBody.analysisPlanRevision;
+    assert.equal(revision.revision, 2);
+    assert.equal(revision.feedback, feedback);
+    assert.equal(revision.status, "awaiting_review");
+
+    const threadAfterRevision = await jsonFetch(
+      `/api/analysis-threads/${requestedBody.analysisThread.id}`,
+    );
+    const threadAfterRevisionBody = await threadAfterRevision.json();
+    assert.equal(threadAfterRevisionBody.planRevisions[0].status, "superseded");
+    assert.equal(threadAfterRevisionBody.planRevisions[1].id, revision.id);
+
+    const accepted = await jsonFetch(
+      `/api/analysis-plan-revisions/${revision.id}/accept`,
+      {
+        method: "POST",
+        headers: { "idempotency-key": `golden_plan_accept_${suffix}` },
+        body: {
+          planHash: revision.planHash,
+          selectionHash: revision.selectionHash,
+          dependencyHash: revision.dependencyHash,
+        },
+      },
+    );
+    assert.equal(accepted.status, 201);
+    const acceptedBody = await accepted.json();
+    assert.equal(acceptedBody.analysisRun.status, "queued");
+
+    const executed = await jsonFetch(
+      `/api/analysis-runs/${acceptedBody.analysisRun.id}/execute`,
+      { method: "POST", body: {} },
+    );
+    assert.equal(executed.status, 201);
+    const executedBody = await executed.json();
+    assert.equal(executedBody.analysisRun.status, "awaiting_result_review");
+    assert.equal(executedBody.analysisRun.execution.adapter, "golden_test_executor");
+    assert.equal(executedBody.analysisResult.status, "awaiting_review");
+    assert.equal(executedBody.analysisResult.validation.ok, true);
+    assert.equal(executedBody.analysisResult.validation.invariants[0].ok, true);
+
+    const preview = await jsonFetch(
+      `/api/analysis-runs/${acceptedBody.analysisRun.id}/result-preview?offset=0&limit=10&traceOffset=0&traceLimit=10`,
+    );
+    assert.equal(preview.status, 200);
+    const previewBody = await preview.json();
+    assert.equal(previewBody.rows.length, 2);
+    assert.equal(previewBody.traces.length, 3);
+    previewBody.rows.forEach((row) => {
+      const normalizedTotal = outputFieldKeys.reduce(
+        (sum, fieldKey) => sum + row[fieldKey],
+        0,
+      );
+      assert.equal(Math.abs(normalizedTotal - 100) < 0.000001, true);
+    });
+
+    const published = await jsonFetch(
+      `/api/analysis-runs/${acceptedBody.analysisRun.id}/accept-and-create-chart`,
+      {
+        method: "POST",
+        headers: { "idempotency-key": `golden_result_accept_${suffix}` },
+        body: {
+          resultHash: executedBody.analysisResult.contentHash,
+          defaultVisibleTraceIds: ["trace_solid", "trace_liquid", "trace_gas"],
+        },
+      },
+    );
+    assert.equal(published.status, 201);
+    const publishedBody = await published.json();
+    assert.equal(publishedBody.analysisThread.status, "completed");
+    assert.equal(publishedBody.analysisRun.status, "completed");
+    assert.equal(publishedBody.analysisResult.status, "accepted");
+
+    const reloadedState = await jsonFetch(`/api/projects/${project.id}/state`);
+    assert.equal(reloadedState.status, 200);
+    const reloadedStateBody = await reloadedState.json();
+    const chartSummary = reloadedStateBody.chartSpecs.find(
+      (chartSpec) => chartSpec.id === publishedBody.chartSpec.id,
+    );
+    assert.equal(chartSummary.spec.origin, "analysis_result");
+    assert.equal(chartSummary.spec.detailRequired, true);
+    assert.equal(Object.hasOwn(chartSummary.spec.traceCatalog[0], "x"), false);
+    assert.equal(reloadedStateBody.analysisThreads[0].status, "completed");
+
+    const reloadedThread = await jsonFetch(
+      `/api/analysis-threads/${requestedBody.analysisThread.id}`,
+    );
+    assert.equal(reloadedThread.status, 200);
+    const reloadedThreadBody = await reloadedThread.json();
+    assert.equal(reloadedThreadBody.analysisRuns[0].status, "completed");
+    assert.deepEqual(
+      reloadedThreadBody.analysisThread.chartSpecIds,
+      [publishedBody.chartSpec.id],
+    );
+    const reloadedRun = await jsonFetch(
+      `/api/analysis-runs/${acceptedBody.analysisRun.id}`,
+    );
+    assert.equal(reloadedRun.status, 200);
+    const reloadedRunBody = await reloadedRun.json();
+    assert.equal(reloadedRunBody.analysisResult.status, "accepted");
+
+    const detail = await jsonFetch(`/api/chart-specs/${publishedBody.chartSpec.id}`);
+    assert.equal(detail.status, 200);
+    const chartSpec = (await detail.json()).chartSpec.spec;
+    assert.equal(chartSpec.traceCatalog.length, 3);
+    assert.equal(chartSpec.inputSnapshotRefs.length, 2);
+    assert.deepEqual(
+      chartSpec.defaultChartView.visibleTraceIds,
+      ["trace_solid", "trace_liquid", "trace_gas"],
+    );
+    chartSpec.inputSnapshotRefs.forEach((ref) => {
+      assert.match(ref.sourceRecordId, new RegExp(`^${ref.snapshotId}:\\d+$`));
+      assert.match(ref.contentHash, /^sha256_/);
+      assert.match(ref.dependencyHash, /^sha256_/);
+      assert.match(ref.headId, /^experiment_snapshot_head_/);
+    });
+    chartSpec.traceCatalog.forEach((trace) => {
+      assert.equal(trace.x.length, 2);
+      assert.equal(trace.y.length, 2);
+      assert.deepEqual(trace.sourceRecordIds, chartSpec.inputSnapshotRefs.map(
+        (ref) => ref.sourceRecordId,
+      ));
+    });
+    assert.equal(Object.hasOwn(reloadedStateBody, "datasetCommits"), false);
+    assert.equal(Object.hasOwn(reloadedStateBody, "mappingSets"), false);
+    assert.equal(Object.hasOwn(reloadedStateBody, "analysisViews"), false);
+  } finally {
+    testModelProvider.draftAnalysisPlan = originalDraftAnalysisPlan;
+    testAnalysisExecutor.executeAcceptedRun = originalExecuteAcceptedRun;
+  }
 });
 
 test("analysis thread routes preserve immutable reviewed plans and queue accepted work idempotently", async () => {

@@ -1,7 +1,17 @@
-import React from "react";
+import React, { useState } from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentPanel, ChartReviewModal, DeleteProjectModal, NewProjectModal, ProjectDashboard, ProjectOverview, Topbar, WorkbookReviewWorkspace, activeChartSpecsForProject, latestItem, mergeProjectStateForWorkspaceRefresh } from "../main.jsx";
+import { AnalysisReviewWorkspace } from "./AnalysisReviewWorkspace.jsx";
+import { ManuscriptCanvas } from "./ManuscriptCanvas.jsx";
+
+vi.mock("../charts/Plot.jsx", () => ({
+  Plot: () => <div data-testid="plotly-placeholder" />,
+}));
+
+vi.mock("../export/pptxExport.js", () => ({
+  exportManuscriptPagesToPptx: vi.fn(),
+}));
 
 const project = {
   id: "project_1",
@@ -1679,12 +1689,428 @@ describe("AgentPanel", () => {
       });
       fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
 
-      expect(await screen.findByText("Analysis plan revision 1")).toBeTruthy();
+      expect((await screen.findAllByText("Analysis plan revision 1")).length).toBeGreaterThanOrEqual(1);
       expect(screen.getByRole("button", { name: "Review analysis plan" })).toBeTruthy();
       expect(screen.queryByText("Open Experiment Browser")).toBeNull();
       expect(onOpenAnalysisReview).toHaveBeenCalledWith({
         thread: analysisThread,
         revision: currentPlanRevision,
+      });
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("drives reviewed analysis from LabRat through Manuscript trace selection", async () => {
+    const analysisThread = {
+      id: "analysis_thread_golden",
+      projectId: "project_1",
+      status: "planning",
+      originalRequest: "Normalize selectivity and compare every experiment.",
+      messages: [],
+    };
+    const revision1 = {
+      id: "analysis_plan_revision_golden_1",
+      analysisThreadId: analysisThread.id,
+      revision: 1,
+      status: "awaiting_review",
+      requestSummary: "Normalize Solid, Liquid, and Gas selectivity.",
+      processingSummary: [
+        "Read accepted selectivity values.",
+        "Scale each retained row to a total of 100 percent.",
+      ],
+      sourceRectangles: [{
+        sourceDocumentId: "source_document_1",
+        sheetName: "Runs",
+        range: "L3:N4",
+        label: "Accepted selectivity inputs",
+      }],
+      planHash: "sha256_plan_golden_1",
+      selectionHash: "sha256_selection_golden",
+      dependencyHash: "sha256_dependency_golden",
+      programHash: "sha256_program_golden_1",
+      pythonProgram: {
+        source: "def analyze(tables, labrat):\n    return {}",
+        sourceHash: "sha256_program_golden_1",
+      },
+      warnings: [],
+    };
+    const feedback = "Keep both experiments and label each experiment trace clearly.";
+    const revision2 = {
+      ...revision1,
+      id: "analysis_plan_revision_golden_2",
+      revision: 2,
+      planHash: "sha256_plan_golden_2",
+      programHash: "sha256_program_golden_2",
+      pythonProgram: {
+        ...revision1.pythonProgram,
+        sourceHash: "sha256_program_golden_2",
+      },
+      feedback,
+    };
+    const selection = {
+      sourceRectangles: revision1.sourceRectangles,
+      coverage: { selectedExperimentCount: 2, selectedFieldCount: 3 },
+      records: [
+        {
+          experimentId: "experiment_1",
+          experimentLabel: "Exp 1",
+          snapshotId: "snapshot_1",
+          recordIndex: 0,
+          fields: [{ fieldKey: "solid", displayName: "Solid", value: 92.8 }],
+          series: [],
+        },
+        {
+          experimentId: "experiment_2",
+          experimentLabel: "Exp 2",
+          snapshotId: "snapshot_2",
+          recordIndex: 0,
+          fields: [{ fieldKey: "solid", displayName: "Solid", value: 92 }],
+          series: [],
+        },
+      ],
+      warnings: [],
+    };
+    const run = {
+      id: "analysis_run_golden",
+      acceptedPlanRevisionId: revision2.id,
+      status: "awaiting_result_review",
+      inputHash: revision2.selectionHash,
+      programHash: revision2.programHash,
+      runtimeVersion: "labrat-python-v1",
+      execution: { adapter: "golden_test_executor", runtimeVersion: "labrat-python-v1" },
+      validation: { ok: true, errors: [] },
+    };
+    const result = {
+      id: "analysis_result_golden",
+      analysisRunId: run.id,
+      status: "awaiting_review",
+      contentHash: "sha256_result_golden",
+      resultPreviewHash: "sha256_preview_golden",
+      rowCount: 2,
+      traceCount: 2,
+      sourceRefCount: 2,
+      summary: {
+        inputRecordCount: 2,
+        outputRecordCount: 2,
+        excludedRecordCount: 0,
+        excludedRecords: [],
+        missingValuePolicy: "exclude_record",
+      },
+      validation: {
+        ok: true,
+        invariants: [{
+          type: "row_sum",
+          fieldKeys: ["solid", "liquid", "gas"],
+          target: 100,
+          absoluteTolerance: 0.000001,
+          ok: true,
+        }],
+        errors: [],
+      },
+      warnings: [],
+    };
+    const traces = [
+      {
+        traceId: "trace_exp_1",
+        experimentId: "experiment_1",
+        experimentLabel: "Exp 1",
+        name: "Exp 1",
+        x: ["Solid", "Liquid", "Gas"],
+        y: [99.5, 0.1, 0.4],
+        xUnit: null,
+        yUnit: "percent",
+        sourceRecordIds: ["snapshot_1:0"],
+      },
+      {
+        traceId: "trace_exp_2",
+        experimentId: "experiment_2",
+        experimentLabel: "Exp 2",
+        name: "Exp 2",
+        x: ["Solid", "Liquid", "Gas"],
+        y: [99.2, 0.4, 0.4],
+        xUnit: null,
+        yUnit: "percent",
+        sourceRecordIds: ["snapshot_2:0"],
+      },
+    ];
+    const resultPreview = {
+      analysisRunId: run.id,
+      analysisResultId: result.id,
+      contentHash: result.contentHash,
+      resultPreviewHash: result.resultPreviewHash,
+      rows: [
+        {
+          __result_id: "result_1",
+          __experiment_id: "experiment_1",
+          __snapshot_id: "snapshot_1",
+          __record_index: 0,
+          solid: 99.5,
+          liquid: 0.1,
+          gas: 0.4,
+        },
+        {
+          __result_id: "result_2",
+          __experiment_id: "experiment_2",
+          __snapshot_id: "snapshot_2",
+          __record_index: 0,
+          solid: 99.2,
+          liquid: 0.4,
+          gas: 0.4,
+        },
+      ],
+      traces,
+      lineage: {
+        result_1: { sourceRecordIds: ["snapshot_1:0"] },
+        result_2: { sourceRecordIds: ["snapshot_2:0"] },
+        trace_exp_1: { sourceRecordIds: ["snapshot_1:0"] },
+        trace_exp_2: { sourceRecordIds: ["snapshot_2:0"] },
+      },
+      summary: result.summary,
+      validation: result.validation,
+      warnings: [],
+      sourceRefs: [
+        {
+          sourceDocumentId: "source_document_1",
+          sheetName: "Runs",
+          range: "L3:N3",
+          sourceRecordId: "snapshot_1:0",
+        },
+        {
+          sourceDocumentId: "source_document_1",
+          sheetName: "Runs",
+          range: "L4:N4",
+          sourceRecordId: "snapshot_2:0",
+        },
+      ],
+      rowPage: { offset: 0, limit: 50, totalCount: 2 },
+      tracePage: { offset: 0, limit: 500, totalCount: 2 },
+      sourcePage: { offset: 0, limit: 200, totalCount: 2 },
+    };
+    const chartSpec = {
+      id: "chart_spec_golden",
+      title: "Normalized selectivity by experiment",
+      chartType: "bar",
+      origin: "analysis_result",
+      spec: {
+        schemaVersion: "labrat.chartSpec.v2",
+        origin: "analysis_result",
+        chartType: "bar",
+        title: "Normalized selectivity by experiment",
+        x: { field: "component", label: "Component", unit: null },
+        y: { field: "normalized_selectivity", label: "Selectivity", unit: "percent" },
+        traceCatalog: traces,
+        defaultChartView: { visibleTraceIds: ["trace_exp_1", "trace_exp_2"] },
+      },
+    };
+    const createRevision = vi.fn().mockResolvedValue({
+      analysisPlanRevision: revision2,
+    });
+    const acceptPlan = vi.fn().mockResolvedValue({
+      analysisPlanRevision: { ...revision2, status: "accepted" },
+      analysisRun: { ...run, status: "queued" },
+    });
+    const executeRun = vi.fn().mockResolvedValue({
+      analysisRun: run,
+      analysisResult: result,
+    });
+    const loadResultPreview = vi.fn().mockResolvedValue(resultPreview);
+    const acceptResult = vi.fn().mockResolvedValue({
+      analysisThread: { ...analysisThread, status: "completed" },
+      analysisPlanRevision: { ...revision2, status: "accepted" },
+      analysisRun: { ...run, status: "completed" },
+      analysisResult: { ...result, status: "accepted" },
+      chartSpec,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      reply: "I drafted a reviewed analysis plan. Check the selected source cells and processing steps.",
+      analysisThread,
+      currentPlanRevision: revision1,
+      agentRun: {
+        id: "agent_run_golden",
+        status: "waiting_for_user",
+        mode: "analysis_planning",
+        visibleSteps: [{ stepId: "draft", label: "Drafted reviewable analysis plan", details: {} }],
+        actions: [],
+        warnings: [],
+      },
+    }, { status: 201 }));
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+
+    function WorkbookSourceStub({ draftRegions }) {
+      return (
+        <div aria-label="Golden workbook source">
+          {draftRegions.map((region) => (
+            <span key={region.draftRegionId}>{`${region.sheetName}!${region.range}`}</span>
+          ))}
+        </div>
+      );
+    }
+
+    function GoldenWorkflowHarness() {
+      const [review, setReview] = useState(null);
+      const [publishedChart, setPublishedChart] = useState(null);
+      const [insertRequest, setInsertRequest] = useState(null);
+      const [blocks, setBlocks] = useState([]);
+      const [pages, setPages] = useState([{
+        id: "page_golden",
+        y: 0,
+        width: 1600,
+        height: 900,
+        orientation: "landscape",
+      }]);
+      const [canvasHeight, setCanvasHeight] = useState(900);
+      const [orientation, setOrientation] = useState("landscape");
+      const [staged, setStaged] = useState([]);
+      const [templates, setTemplates] = useState([]);
+
+      if (publishedChart) {
+        return (
+          <>
+            <ManuscriptCanvas
+              blocks={blocks}
+              setBlocks={setBlocks}
+              staged={staged}
+              setStaged={setStaged}
+              references={[]}
+              chartTemplates={templates}
+              setChartTemplates={setTemplates}
+              chartSpecs={[publishedChart]}
+              pages={pages}
+              setPages={setPages}
+              canvasHeight={canvasHeight}
+              setCanvasHeight={setCanvasHeight}
+              pageOrientationPreference={orientation}
+              setPageOrientationPreference={setOrientation}
+              chartSpecInsertRequest={insertRequest}
+              onChartSpecInsertRequestHandled={() => setInsertRequest(null)}
+              onLoadChartSpecDetail={vi.fn().mockResolvedValue(publishedChart)}
+              onSelectedChartContextChange={() => {}}
+              onRequestChartAnalysis={() => {}}
+              onSaveProject={() => {}}
+            />
+            <pre data-testid="golden-manuscript-state">{JSON.stringify({ blocks })}</pre>
+          </>
+        );
+      }
+
+      return (
+        <>
+          <AgentPanel
+            open
+            setOpen={() => {}}
+            blocks={[]}
+            setBlocks={() => {}}
+            references={[]}
+            selected={null}
+            selectedChartContext={null}
+            pendingChartAnalysis={null}
+            activeProjectId="project_1"
+            projectState={{ project }}
+            onProjectStateLoaded={() => {}}
+            onOpenAnalysisReview={setReview}
+          />
+          {review ? (
+            <AnalysisReviewWorkspace
+              projectId="project_1"
+              thread={review.thread}
+              revision={review.revision}
+              planRevisions={[review.revision]}
+              selection={selection}
+              WorkbookWorkspaceComponent={WorkbookSourceStub}
+              PlotComponent={({ traces: previewTraces }) => (
+                <div aria-label="Golden analysis preview">{previewTraces.length} traces</div>
+              )}
+              createRevision={createRevision}
+              acceptPlan={acceptPlan}
+              executeRun={executeRun}
+              loadResultPreview={loadResultPreview}
+              onAcceptResult={acceptResult}
+              onAccepted={(response) => {
+                if (!response?.chartSpec) return;
+                setPublishedChart(response.chartSpec);
+                setInsertRequest({
+                  chartSpecId: response.chartSpec.id,
+                  requestId: "golden_insert_request",
+                });
+              }}
+            />
+          ) : null}
+        </>
+      );
+    }
+
+    try {
+      render(<GoldenWorkflowHarness />);
+      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
+      fireEvent.change(promptInput, {
+        target: { value: "Normalize selectivity and compare every experiment." },
+      });
+      fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
+
+      expect((await screen.findAllByText("Analysis plan revision 1")).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText("Runs!L3:N4").length).toBeGreaterThanOrEqual(1);
+      expect(screen.queryByText("Open Experiment Browser")).toBeNull();
+      expect(screen.queryByLabelText(/Anthropic API key/i)).toBeNull();
+
+      fireEvent.change(screen.getByPlaceholderText("Describe a modification"), {
+        target: { value: feedback },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Send modification" }));
+      await waitFor(() => expect(createRevision).toHaveBeenCalledWith(
+        analysisThread.id,
+        { feedback },
+      ));
+      expect(screen.getAllByText("Analysis plan revision 2").length).toBeGreaterThanOrEqual(1);
+      expect(acceptPlan).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole("button", { name: "Accept plan" }));
+      await waitFor(() => expect(acceptPlan).toHaveBeenCalledWith(
+        revision2.id,
+        {
+          planHash: revision2.planHash,
+          selectionHash: revision2.selectionHash,
+          dependencyHash: revision2.dependencyHash,
+        },
+        expect.objectContaining({ idempotencyKey: expect.any(String) }),
+      ));
+      await waitFor(() => expect(executeRun).toHaveBeenCalledWith(run.id));
+      await waitFor(() => expect(loadResultPreview).toHaveBeenCalled());
+
+      fireEvent.click(screen.getByRole("tab", { name: "Result" }));
+      expect(screen.getByText("Row sum = 100 +/- 0.000001")).toBeTruthy();
+      expect(screen.getByText("2 inputs, 2 outputs, 0 exclusions.")).toBeTruthy();
+      fireEvent.click(screen.getByRole("tab", { name: "Chart" }));
+      expect(screen.getByRole("checkbox", { name: "Show Exp 1 by default" }).checked).toBe(true);
+      expect(screen.getByRole("checkbox", { name: "Show Exp 2 by default" }).checked).toBe(true);
+      fireEvent.click(screen.getByRole("button", { name: "Accept result and create chart" }));
+
+      await waitFor(() => expect(acceptResult).toHaveBeenCalledWith({
+        runId: run.id,
+        resultHash: result.contentHash,
+        defaultVisibleTraceIds: ["trace_exp_1", "trace_exp_2"],
+      }));
+      expect(await screen.findByRole("dialog", { name: "Insert chart" })).toBeTruthy();
+      expect(screen.getByText("2 of 2 traces visible")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Insert chart" }));
+
+      await waitFor(() => {
+        const state = JSON.parse(screen.getByTestId("golden-manuscript-state").textContent);
+        expect(state.blocks[0].chartView.visibleTraceIds).toEqual([
+          "trace_exp_1",
+          "trace_exp_2",
+        ]);
+      });
+      const chartFrame = document.querySelector(".canvas-block.chart");
+      fireEvent.mouseDown(chartFrame, { button: 0, clientX: 100, clientY: 100 });
+      fireEvent.mouseUp(window);
+      fireEvent.click(screen.getByLabelText("Hide Exp 2 in selected chart"));
+
+      await waitFor(() => {
+        const state = JSON.parse(screen.getByTestId("golden-manuscript-state").textContent);
+        expect(state.blocks[0].chartView.visibleTraceIds).toEqual(["trace_exp_1"]);
+        expect(state.blocks[0].chartSpecSnapshot.spec.traceCatalog).toHaveLength(2);
       });
     } finally {
       global.fetch = originalFetch;

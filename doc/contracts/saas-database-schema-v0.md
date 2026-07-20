@@ -94,7 +94,7 @@ browser_views
 
 BrowserViews are scoped by `(lab_id, project_id, owner_user_id)`. `payload` may contain display configuration and selected ids only; it cannot contain authoritative scientific values. At most one default view should exist per owner/project after store operations.
 
-### Source-Backed Output Layer
+### Evidence-Backed Output Layer
 
 ```text
 source_extract_proposals
@@ -108,9 +108,9 @@ agent_runs
 
 `chart_proposal_sets` stores proposal/review state. Active proposal creation is source-backed only.
 
-`chart_specs` stores durable source-backed chart definitions. `spec` must contain exact source refs and immutable source snapshot rows/series. It has no accepted-data aggregate foreign key.
+`chart_specs` stores durable evidence-backed chart definitions. `origin: source_extract` specs contain exact source refs and immutable source snapshot rows/series. `origin: analysis_result` specs use `labrat.chartSpec.v2`, set `analysis_result_id`, and contain exact analysis hashes, accepted input snapshot refs, a complete validated trace catalog, source-record lineage, and reviewed default trace visibility. There is no aggregate dataset foreign key.
 
-`manuscripts` stores blocks, pages, canvas state, and references. Chart blocks carry their own ChartSpec snapshot for stable rendering.
+`manuscripts` stores blocks, pages, canvas state, and references. Chart blocks carry their own complete ChartSpec snapshot plus placement-local `chartView.visibleTraceIds` for stable independent rendering and export.
 
 `agent_runs` stores visible workflow steps, summarized tool observations, review-gated actions, usage metadata, and status. It does not store hidden chain-of-thought.
 
@@ -217,3 +217,6 @@ Migration 012 adds reviewed analysis persistence, publication receipts, and null
 - Active experiment heads are verified under the execution-claim transaction before code runs.
 - Finalization and optional valid AnalysisResult insertion are atomic.
 - Failed execution or result validation must not persist an AnalysisResult.
+- Result acceptance is idempotent, must recheck selected active heads, and atomically creates exactly one ChartSpec while linking the accepted result/run/thread.
+- Analysis-result ChartSpec list projections must not duplicate full trace arrays into project state; full arrays remain in the immutable stored spec and detail response.
+- Placement-local trace visibility belongs to manuscript block payloads, never to a ChartSpec mutation.

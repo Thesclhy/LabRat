@@ -1,7 +1,7 @@
 # Canonical Data Dictionary
 
 Status: active
-Last reviewed: 2026-07-16
+Last reviewed: 2026-07-20
 
 This document defines the current scientific and workflow entities used by LabRat. Persisted JSON schema details live beside backend validators; this file defines meaning, ownership, and lineage.
 
@@ -18,7 +18,7 @@ FileObject
   -> Experiment Browser row/detail
 ```
 
-Source-backed charts branch from bounded source evidence through SourceExtractProposal and ChartSpec. DataSnapshot-backed chart planning is not implemented yet.
+Charts have two reviewed branches. Explicit SourceDocument evidence flows through SourceExtractProposal/ChartProposalSet into a source-extract ChartSpec. Accepted active DataSnapshot records flow through AnalysisSelection, an immutable reviewed AnalysisPlanRevision, a validated AnalysisResult, and explicit result acceptance into an analysis-result ChartSpec. Generic DataSnapshot chart proposals outside reviewed analysis remain unimplemented.
 
 ## FileObject
 
@@ -272,7 +272,14 @@ Project/list responses may omit large trace x/y arrays and set `detailRequired: 
 
 ## Manuscript
 
-A project-owned editable document containing pages, blocks, canvas state, and references. Chart blocks keep `chartSpecId`, a stored `chartSpecSnapshot`, placement-local chart view, and editable layout so historical figures remain renderable.
+A project-owned editable document containing pages, blocks, canvas state, and references. Each chart block keeps:
+
+- the durable `chartSpecId`
+- a complete immutable `chartSpecSnapshot`, loaded from detail before insertion when the list entry has `detailRequired: true`
+- placement-local `chartView.visibleTraceIds`
+- editable chart layout
+
+Two blocks may reference the same ChartSpec while showing different trace subsets. Visibility changes, undo/redo, save/reload, LabRat selected-chart context, rendering, and PPTX export use the block-local view without deleting hidden traces from the stored snapshot.
 
 ## AgentRun
 

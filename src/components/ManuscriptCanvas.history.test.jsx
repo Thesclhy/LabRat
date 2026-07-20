@@ -1,10 +1,15 @@
-import React, { useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ManuscriptCanvas } from "./ManuscriptCanvas";
 
 vi.mock("../charts/Plot", () => ({
-  Plot: () => <div data-testid="plotly-placeholder" />,
+  Plot: ({ traces = [] }) => (
+    <div
+      data-testid="plotly-placeholder"
+      data-traces={JSON.stringify(traces)}
+    />
+  ),
 }));
 
 vi.mock("../export/pptxExport", () => ({
@@ -452,6 +457,47 @@ describe("ManuscriptCanvas chart specs", () => {
     });
   });
 
+  it("does not republish unchanged selected-chart context when chart summaries are recreated", async () => {
+    const onContext = vi.fn();
+    function RerenderingParent() {
+      const [, setContext] = useState(null);
+      const contextUpdateCount = useRef(0);
+      const handleContext = useMemo(() => (nextContext) => {
+        if (!nextContext) return;
+        onContext(nextContext);
+        contextUpdateCount.current += 1;
+        if (contextUpdateCount.current < 3) setContext(nextContext);
+      }, []);
+      return (
+        <Harness
+          initialBlocks={[{
+            id: "chart-block-context-loop",
+            kind: "chart",
+            chartSpecId: analysisChartSpecFixture.id,
+            chartSpecSnapshot: analysisChartSpecFixture,
+            chartView: { visibleTraceIds: ["trace_exp_1", "trace_exp_2"] },
+            chartLayout: {},
+            x: 80,
+            y: 80,
+            w: 640,
+            h: 420,
+          }]}
+          initialPages={[createPage("page-1")]}
+          chartSpecs={[{ ...analysisChartSpecFixture }]}
+          onSelectedChartContextChange={handleContext}
+        />
+      );
+    }
+    render(<RerenderingParent />);
+
+    const chartFrame = document.querySelector(".canvas-block.chart");
+    fireEvent.mouseDown(chartFrame, { button: 0, clientX: 100, clientY: 100 });
+    fireEvent.mouseUp(window);
+
+    await waitFor(() => expect(onContext).toHaveBeenCalled());
+    expect(onContext).toHaveBeenCalledTimes(1);
+  });
+
   it("loads complete ChartSpec detail before opening insertion and snapshots full traces", async () => {
     const summary = {
       ...analysisChartSpecFixture,
@@ -482,6 +528,44 @@ describe("ManuscriptCanvas chart specs", () => {
       expect(block.chartSpecSnapshot.spec.traceCatalog[0].x).toEqual([0, 10]);
       expect(block.chartSpecSnapshot.detailRequired).not.toBe(true);
     });
+  });
+
+  it("renders a persisted analysis chart from its complete snapshot when the project list only has summary traces", () => {
+    const summary = {
+      ...analysisChartSpecFixture,
+      detailRequired: true,
+      spec: {
+        ...analysisChartSpecFixture.spec,
+        traceCatalog: analysisChartSpecFixture.spec.traceCatalog.map(({ x, y, ...trace }) => trace),
+      },
+    };
+    render(
+      <Harness
+        initialBlocks={[{
+          id: "chart-block-reloaded",
+          kind: "chart",
+          chartSpecId: analysisChartSpecFixture.id,
+          chartSpecSnapshot: analysisChartSpecFixture,
+          chartView: { visibleTraceIds: ["trace_exp_2"] },
+          chartLayout: {},
+          x: 80,
+          y: 80,
+          w: 640,
+          h: 420,
+        }]}
+        initialPages={[createPage("page-1")]}
+        chartSpecs={[summary]}
+      />,
+    );
+
+    const renderedPlots = screen.getAllByTestId("plotly-placeholder")
+      .map((node) => JSON.parse(node.dataset.traces || "[]"));
+    expect(renderedPlots.some((traces) => (
+      traces.length === 1
+      && traces[0].meta?.traceId === "trace_exp_2"
+      && traces[0].x?.join(",") === "0,10"
+      && traces[0].y?.join(",") === "2,3"
+    ))).toBe(true);
   });
 
   it("reports a bounded complete trace catalog and placement view to LabRat context", async () => {
