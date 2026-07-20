@@ -2,7 +2,7 @@
 
 Status: completed
 Read when: checking what the next implementation slice should be.
-Last reviewed: 2026-07-19
+Last reviewed: 2026-07-20
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
 
@@ -32,6 +32,7 @@ Implemented:
 - Milestone 6 saved views and comparison: owner-isolated personal BrowserView CRUD, complete column configuration, default/load/save/rename/delete controls, persistent cross-query selection, and a lazy source-backed scalar/series comparison table without unit coercion.
 - Milestone 7 legacy retirement and golden workflow: removed aggregate dataset/mapping/analysis/observation stores, routes, helpers, and UI contracts; removed unscoped normalize/semantic-map/generic chart endpoints; added migration 011; made ChartSpec validation/rendering source-only; added golden workbook upload-review-draft-publish-reload-Browser coverage; retained source-backed chart/Manuscript workflows; accepted natural-language documentation exclusion; and stabilized local in-memory development sessions by running the backend without file-watch restarts.
 - Post-milestone regression hardening: direct project-content summaries no longer create confirmation-gated Browser actions while explicit upload/chart intent keeps priority; accepted review cards report accepted/published state and open the selected pending/accepted session; Ctrl/Meta workbook range selection supports additive/toggle behavior; Experiment Browser uses one horizontal scroll owner; and grouped two-row workbook headers preserve all child fields plus parent/leaf header provenance through publish and Browser projection.
+- The next architecture has been approved conversationally and written for review in `doc/plans/backend-conversational-analysis-chart-design.md`: backend intent routing, plan/revision review against Excel red boxes, exact accepted Python in a LabRat-managed sandbox, validated result review, atomic AnalysisResult/ChartSpec publication, and placement-local Canvas trace visibility.
 
 Not implemented yet:
 
@@ -39,13 +40,12 @@ Not implemented yet:
 
 ## Next Recommended Slice
 
-Define the next milestone around accepted DataSnapshot-backed chart planning:
+Review the written conversational-analysis specification, then use it to create the implementation plan. The first implementation milestone should:
 
-1. Start from Browser-selected experiment ids and stable field/series ids.
-2. Resolve active snapshot heads and validate unit compatibility/source refs server-side.
-3. Return a reviewable chart proposal without mutating accepted data.
-4. Compile accepted proposals into a ChartSpec form that shares rendering/layout behavior with source-backed specs.
-5. Keep unsupported requests explicit until this contract is implemented.
+1. Move all provider access to the backend and remove the frontend provider-key path.
+2. Add intent routing that directly answers resolvable read-only questions instead of defaulting to Browser actions.
+3. Establish the framework-independent analysis tool registry and AnalysisThread/plan-revision contracts without executing calculations yet.
+4. Keep DataSnapshot-backed chart requests explicitly unsupported until each reviewed milestone reaches its contract boundary.
 
 ## Guardrails
 
@@ -74,5 +74,6 @@ Latest local evidence: frontend 211/211, backend 150 passed plus 1 optional Post
 - The worktree contains substantial existing changes from prior milestones; do not revert or restage unrelated files.
 - Large workbook reads now use stable cached tiles, but the current grid still renders the complete selected row/column DOM with React Data Grid virtualization disabled; very large selected ranges still need a dedicated rendering architecture later.
 - DataSnapshot-to-chart work must define unit, series, selection, and staleness rules rather than reuse removed contracts.
+- The LabRat-managed arbitrary Python runtime is the largest new security and operations risk; implementation must not use an unrestricted subprocess as a production sandbox.
 - Existing source-evidence chart flows must remain intact while the new chart path is added.
 - Local in-memory backend development intentionally does not auto-reload; restart `npm --prefix backend run dev` after backend source edits so sessions are not silently discarded.

@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-07-19
+Last reviewed: 2026-07-20
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -12,6 +12,10 @@ Keep entries concise, newest first, and include:
 - meaningful changes
 - verification
 - follow-ups or residual risk
+
+## 2026-07-20
+
+- Added the written design for backend conversational analysis, reviewed Python calculation, DataSnapshot-backed ChartSpecs, and placement-local Canvas trace visibility at `doc/plans/backend-conversational-analysis-chart-design.md`. The approved workflow moves provider access to the backend, routes ordinary questions to direct answers when scope is unambiguous, shows model-selected accepted data as Excel red boxes beside the LabRat conversation, freezes a machine-readable calculation manifest plus exact Python only after plan acceptance, executes it in a LabRat-managed sandbox, validates and re-reviews the result, and atomically accepts the result plus ChartSpec. ChartSpecs retain the complete accepted trace catalog while each Manuscript placement independently controls visible traces and inherits the result-review view. Recorded the durable architecture decision and updated the short plan/current milestone. Documentation-only; preflight passed. Follow-up: written-spec review, then create a milestone implementation plan; no implementation started.
 
 ## 2026-07-19
 

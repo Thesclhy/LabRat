@@ -2,7 +2,7 @@
 
 Status: active
 Read when: deciding what LabRat should build next.
-Last reviewed: 2026-07-17
+Last reviewed: 2026-07-20
 
 This is the short active plan. Current execution status lives in `doc/current-milestone.md`; detailed implementation plans live under `doc/plans/`.
 
@@ -54,11 +54,13 @@ Use this split when deciding what to build:
 - Phase 1 read-only Workbook Source Review UI in import/scan review.
 - SourceDocument, SourceRegion, SourceExtractProposal, AgentRun, and source-backed ChartSpec foundations.
 - Server project state with auth, labs, projects, files, source review, accepted snapshots/heads, BrowserViews, source-backed charts, manuscripts, and audit events.
+- Approved the backend conversational-analysis design: backend-only model access, intent routing, Excel red-box plan review, immutable plan revisions with exact Python, LabRat-managed sandbox execution, result review, atomic AnalysisResult/ChartSpec creation, and placement-local Canvas trace visibility. The written specification is awaiting review at `doc/plans/backend-conversational-analysis-chart-design.md`; no implementation has started.
 
 ## Next Recommended Slices
 
-1. Design and implement reviewed DataSnapshot-backed chart planning from Browser-selected experiments/fields/series.
-2. Preserve source-backed chart creation as a distinct evidence path and converge both forms only at the validated ChartSpec/rendering boundary.
+1. Review `doc/plans/backend-conversational-analysis-chart-design.md`, then create the milestone implementation plan beginning with backend provider migration, intent routing, and frontend provider-key removal.
+2. Implement the reviewed AnalysisThread -> accepted Python plan -> validated AnalysisResult -> DataSnapshot-backed ChartSpec workflow in coherent milestones.
+3. Preserve source-backed chart creation as a distinct evidence path and converge both forms only at the validated ChartSpec/rendering boundary.
 
 ## Operating Loop
 

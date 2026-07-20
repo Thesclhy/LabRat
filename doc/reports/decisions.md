@@ -2,9 +2,29 @@
 
 Status: reference
 Read when: checking durable architecture or product decisions.
-Last reviewed: 2026-07-16
+Last reviewed: 2026-07-20
 
 Durable decisions for LabRat architecture, product workflow, and Codex execution belong here. Keep entries newest first. Each entry should explain the decision, the context, the consequences, and any follow-up.
+
+## 2026-07-20 - Reviewed Backend Analysis And Placement-Local Chart Views
+
+Status: Accepted
+
+Decision:
+Natural-language calculations and DataSnapshot-backed charts use a backend-owned, two-review workflow. The model drafts exact accepted-data selection, a human-readable processing explanation, and frozen Python; the frontend shows the source evidence as Excel red boxes beside the normal LabRat conversation; plan acceptance authorizes only LabRat-managed sandbox execution; backend validation precedes result review; and `Accept result and create chart` atomically accepts the immutable result and creates the ChartSpec. A ChartSpec retains every accepted available trace, while each Manuscript placement independently stores which traces are visible.
+
+Context:
+Selection-only chart intents cannot express normalization, fitting, statistics, or later analysis requests. Letting the model directly fill plotted arrays would weaken reproducibility and source lineage. Provider code execution would also make it harder to guarantee that the exact user-reviewed program ran. The existing Manuscript chart block and Inspector already provide a placement-local `chartView` foundation.
+
+Consequences:
+
+- Provider credentials and model calls move to the backend; ordinary read-only questions no longer default to Browser actions.
+- LabRat needs AnalysisThread, immutable plan revisions/runs/results, a framework-independent tool registry, and a versioned isolated Python runtime.
+- The model may draft code and calculation meaning, but only the exact accepted revision may execute.
+- DataSnapshot-backed ChartSpecs introduce an `analysis_result` origin with immutable result data, trace catalog, source lineage, and default visible traces.
+- Canvas visibility changes are visual-only, placement-local, undoable, persistable, and exportable; they never recompute data or mutate the ChartSpec.
+- LangChain/LangGraph are not required initially. MCP remains an adapter over the same backend tools.
+- The written design is `doc/plans/backend-conversational-analysis-chart-design.md`.
 
 ## 2026-07-16 - Retire The Aggregate Dataset Path
 
