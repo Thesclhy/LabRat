@@ -4,6 +4,7 @@ Use this file to record user requests, meaningful changes, verification results,
 
 ## 2026-07-20
 
+- Clarified the Legible Commits default: every AI-assisted session that produces commits now creates or updates one concise, reviewed, redacted session record; raw chat archives are optional, routine no-change chats are excluded, and the policy does not authorize automatic commits. Updated `AGENTS.md`, `transcripts/README.md`, and the active setup session record. Documentation-only verification passed.
 - Adopted the Legible Commits convention for AI-assisted work. Added decision-focused commit, transcript provenance, privacy review, history-reading, and explicit-path staging guidance to `AGENTS.md`; added `transcripts/README.md` and the first redacted session record. Verified the documentation diff and links; no runtime build or tests were needed.
 
 ## 2026-06-17

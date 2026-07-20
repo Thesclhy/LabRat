@@ -142,10 +142,12 @@ When committing AI-assisted work:
 - Include a decision-focused body when the reasoning is not obvious from the diff.
 - Add `source: session <short-id> @ <ISO-8601 timestamp>` so the commit points to a matching file in `transcripts/`.
 - Credit the human collaborator and AI agent when their identities are known; do not invent handles or model identities.
-- Archive a reviewed, secret-free session transcript or concise session record under `transcripts/`. If the raw conversation is sensitive, keep it outside this repository and put enough redacted reasoning in the commit body to preserve the decision.
+- For every AI-assisted session that produces one or more commits, create or update one concise, reviewed, redacted session record under `transcripts/`. This session record is the default; archiving the full raw chat is optional.
 - Stage only explicit paths you changed. Never use `git add -A` or `git add .` in a shared working tree.
 
-Transcript filenames should sort chronologically and contain the session short id, for example `transcripts/2026-07-20-auth-refactor-a1b2c3d4.md`. Review transcripts for credentials, personal data, and unrelated private context before staging them.
+This convention does not authorize automatic commits for every request. Do not archive routine questions, status checks, or conversations that produce no commit or durable repository decision. A no-commit conversation may be archived only when it records an important decision future contributors need. If the raw conversation is sensitive, keep it outside this repository and preserve only the safe reasoning needed to understand the change.
+
+Use one transcript record per logical working session, even when that session produces multiple commits, and update it as the work evolves. Transcript filenames should sort chronologically and contain the session short id, for example `transcripts/2026-07-20-auth-refactor-a1b2c3d4.md`. Review transcripts for credentials, personal data, and unrelated private context before staging them.
 
 ## Progress Logging
 
