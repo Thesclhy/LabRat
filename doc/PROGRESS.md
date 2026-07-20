@@ -15,6 +15,29 @@ Keep entries concise, newest first, and include:
 
 ## 2026-07-20
 
+- Completed progressive full-sheet Workbook Review loading and
+  checkbox-controlled blue highlights. The current sheet now keeps its complete
+  metadata `usedRange`, loads visible 40-by-12 tiles first, hydrates every
+  remaining tile through a three-worker queue, retains normalized cells plus
+  empty/completed tile state per document/sheet, ignores late responses from
+  inactive sheets, reports loaded/incomplete progress, and retries only failed
+  ranges while every backend read remains at or below 500 cells. Checked region
+  ids are now the sole editable-blue-highlight state: ordinary drag replaces
+  them, Ctrl/Command drag adds or toggles, and activating another review card
+  only focuses its source range. Browser QA on `Calculation Exp19.xlsx`
+  confirmed `A1:CE73` completed as 14/14 ranges without scrolling, a second
+  `A1:CE108` sheet completed as 21/21, returning to Sheet1 immediately restored
+  14/14 and loaded cells, checkbox/blue-cell correspondence, independent card
+  activation, ordinary replacement, Ctrl addition, and Ctrl toggle removal.
+  QA found and fixed a `red_box_click` focus regression before completion.
+  Independent review added frozen-request coverage for visible-before-
+  background ordering, the three-worker concurrency ceiling, top-tile priority
+  after Sheet switches, and latest-selection use when a drag ends on the global
+  mouseup handler. Verification: frontend 262/262, backend 230 passed with 1
+  optional Postgres skip, and production build success with the existing Plotly
+  chunk warning.
+  Remaining risk: the grid still renders the complete usedRange DOM, so
+  unusually large sheets need a future virtualized rendering architecture.
 - Approved the written full-sheet Workbook Review specification and created the
   executable TDD plan at
   `doc/plans/workbook-full-sheet-selection-highlights-implementation-plan.md`.

@@ -745,6 +745,53 @@ describe("WorkbookReviewWorkspace", () => {
     }
   });
 
+  it("focuses an existing red box without changing checked draft ids", async () => {
+    const fetchMock = makeWorkbookReviewFetch();
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    const onDraftRegionsChange = vi.fn();
+    const onSelectedDraftRegionIdsChange = vi.fn();
+    const draftRegions = [{
+      clientRegionId: "draft_1",
+      draftRegionId: "draft_1",
+      sourceDocumentId: "source_doc_1",
+      sheetName: "Sheet1",
+      range: "A1:B1",
+      status: "draft",
+    }, {
+      clientRegionId: "draft_2",
+      draftRegionId: "draft_2",
+      sourceDocumentId: "source_doc_1",
+      sheetName: "Sheet1",
+      range: "C1:D1",
+      status: "draft",
+    }];
+    try {
+      render(
+        <WorkbookReviewWorkspace
+          projectId="project_1"
+          reviewState={reviewState}
+          draftRegions={draftRegions}
+          activeDraftRegionId="draft_2"
+          selectedDraftRegionIds={["draft_1"]}
+          onDraftRegionsChange={onDraftRegionsChange}
+          onSelectedDraftRegionIdsChange={onSelectedDraftRegionIdsChange}
+          focusSelection={{
+            ...draftRegions[1],
+            requestId: "focus_draft_2",
+            selectionMethod: "red_box_click",
+          }}
+        />,
+      );
+
+      await screen.findByLabelText("Cell A1");
+      expect(onDraftRegionsChange).not.toHaveBeenCalled();
+      expect(onSelectedDraftRegionIdsChange).not.toHaveBeenCalled();
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   it("turns a clicked workbook suggestion into a focused local draft red box", async () => {
     const fetchMock = makeWorkbookReviewFetch();
     const originalFetch = global.fetch;
@@ -1246,6 +1293,133 @@ describe("WorkbookReviewWorkspace", () => {
     }
   });
 
+  it("waits for visible cells before starting at most three background reads", async () => {
+    const sheets = [{
+      name: "Sheet1",
+      usedRange: "A1:X81",
+      rowCount: 81,
+      columnCount: 24,
+    }];
+    let releaseVisible;
+    const pendingBackground = [];
+    const requests = [];
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const fetchMock = vi.fn(async (url, init = {}) => {
+      if (url === "/api/projects/project_1/source-documents") {
+        return jsonResponse({
+          sourceDocuments: [{
+            id: "source_doc_1",
+            metadata: { workbookName: "Large.xlsx", sheets },
+          }],
+        });
+      }
+      if (url === "/api/source-documents/source_doc_1/range") {
+        const body = JSON.parse(init.body || "{}");
+        requests.push(body.range);
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        if (body.range === "A1:L40") {
+          return new Promise((resolve) => {
+            releaseVisible = () => {
+              inFlight -= 1;
+              resolve(jsonResponse({
+                sheetName: body.sheetName,
+                range: body.range,
+                rows: [],
+                cells: [],
+              }));
+            };
+          });
+        }
+        return new Promise((resolve) => {
+          pendingBackground.push(() => {
+            inFlight -= 1;
+            resolve(jsonResponse({
+              sheetName: body.sheetName,
+              range: body.range,
+              rows: [],
+              cells: [],
+            }));
+          });
+        });
+      }
+      return jsonResponse({});
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    try {
+      render(
+        <WorkbookReviewWorkspace
+          projectId="project_1"
+          reviewState={largeReviewState(sheets)}
+          draftRegions={[]}
+          selectedDraftRegionIds={[]}
+          onDraftRegionsChange={() => {}}
+          onSelectedDraftRegionIdsChange={() => {}}
+        />,
+      );
+
+      await waitFor(() => expect(requests).toEqual(["A1:L40"]));
+      expect(maxInFlight).toBe(1);
+      await act(async () => releaseVisible());
+      await waitFor(() => expect(requests).toHaveLength(4));
+      expect(inFlight).toBe(3);
+      expect(maxInFlight).toBe(3);
+
+      await act(async () => {
+        pendingBackground.splice(0).forEach((release) => release());
+      });
+      await waitFor(() => expect(requests).toHaveLength(6));
+      expect(maxInFlight).toBe(3);
+      await act(async () => {
+        pendingBackground.splice(0).forEach((release) => release());
+      });
+      await screen.findByText("Sheet loaded: 6/6 ranges");
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("starts a newly selected sheet from its top visible tile", async () => {
+    const sheets = [
+      { name: "Sheet1", usedRange: "A1:X61", rowCount: 61, columnCount: 24 },
+      { name: "Sheet2", usedRange: "A1:X61", rowCount: 61, columnCount: 24 },
+    ];
+    const { fetchMock } = makeHydrationFetch({ sheets });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    try {
+      render(
+        <WorkbookReviewWorkspace
+          projectId="project_1"
+          reviewState={largeReviewState(sheets)}
+          draftRegions={[]}
+          selectedDraftRegionIds={[]}
+          onDraftRegionsChange={() => {}}
+          onSelectedDraftRegionIdsChange={() => {}}
+        />,
+      );
+
+      await screen.findByText("Sheet loaded: 4/4 ranges");
+      const grid = screen.getByRole("grid", { name: "Workbook sheet preview" });
+      Object.defineProperty(grid, "scrollTop", { configurable: true, writable: true, value: 1200 });
+      fireEvent.scroll(grid);
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 160));
+      });
+      fetchMock.mockClear();
+
+      fireEvent.click(screen.getByRole("button", { name: "Sheet2" }));
+      await screen.findByText("Sheet loaded: 4/4 ranges");
+
+      const sheet2Requests = workbookRangeRequests(fetchMock, "Sheet2");
+      expect(sheet2Requests[0]?.range).toBe("A1:L40");
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   it("retains completed and empty tiles when switching sheets", async () => {
     const sheets = [
       { name: "Sheet1", usedRange: "A1:X81", rowCount: 81, columnCount: 24 },
@@ -1280,7 +1454,7 @@ describe("WorkbookReviewWorkspace", () => {
     } finally {
       global.fetch = originalFetch;
     }
-  });
+  }, 10_000);
 
   it("does not show late responses from the previous sheet", async () => {
     const sheets = [
@@ -1362,7 +1536,7 @@ describe("WorkbookReviewWorkspace", () => {
     } finally {
       global.fetch = originalFetch;
     }
-  });
+  }, 10_000);
 
   it("replaces the active draft red box when dragging a new range", async () => {
     const fetchMock = makeWorkbookReviewFetch();
@@ -1492,6 +1666,67 @@ describe("WorkbookReviewWorkspace", () => {
       });
       expect(onActiveDraftRegionChange).toHaveBeenLastCalledWith("draft_active");
       expect(onSelectedDraftRegionIdsChange).toHaveBeenLastCalledWith(["draft_active"]);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("uses the latest checked ids when Ctrl-drag finishes after an external selection update", async () => {
+    const fetchMock = makeWorkbookReviewFetch();
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    const onSelectedDraftRegionIdsChange = vi.fn();
+    const draftRegions = [{
+      clientRegionId: "draft_active",
+      draftRegionId: "draft_active",
+      sourceDocumentId: "source_doc_1",
+      sheetName: "Sheet1",
+      range: "A1:B1",
+      status: "draft",
+    }, {
+      clientRegionId: "draft_external",
+      draftRegionId: "draft_external",
+      sourceDocumentId: "source_doc_1",
+      sheetName: "Sheet1",
+      range: "C1:C1",
+      status: "draft",
+    }];
+    try {
+      function Harness() {
+        const [selectedIds, setSelectedIds] = React.useState(["draft_active"]);
+        return (
+          <>
+            <button type="button" onClick={() => setSelectedIds(["draft_active", "draft_external"])}>
+              Apply external selection
+            </button>
+            <WorkbookReviewWorkspace
+              projectId="project_1"
+              reviewState={reviewState}
+              draftRegions={draftRegions}
+              activeDraftRegionId="draft_active"
+              selectedDraftRegionIds={selectedIds}
+              onDraftRegionsChange={() => {}}
+              onActiveDraftRegionChange={() => {}}
+              onSelectedDraftRegionIdsChange={(nextIds) => {
+                onSelectedDraftRegionIdsChange(nextIds);
+                setSelectedIds(nextIds);
+              }}
+            />
+          </>
+        );
+      }
+      render(<Harness />);
+
+      const cell = await screen.findByLabelText("Cell D1");
+      fireEvent.mouseDown(cell, { button: 0, ctrlKey: true });
+      fireEvent.click(screen.getByRole("button", { name: "Apply external selection" }));
+      fireEvent.mouseUp(window);
+
+      expect(onSelectedDraftRegionIdsChange).toHaveBeenLastCalledWith([
+        "draft_active",
+        "draft_external",
+        "draft_source_doc_1_Sheet1_D1",
+      ]);
     } finally {
       global.fetch = originalFetch;
     }

@@ -1,6 +1,6 @@
 # Current Milestone
 
-Status: implementation_planned
+Status: completed
 Read when: checking what the next implementation slice should be.
 Last reviewed: 2026-07-20
 
@@ -11,7 +11,7 @@ This file tracks the active execution state. Keep `doc/plan.md` as the short roa
 - Product mainline: Workbook Understanding First, ending in Experiment Browser.
 - Engineering mainline: accepted WorkbookUnderstanding -> experiment-record DataPlan -> accepted DataSnapshot -> Browser projection.
 - Completed milestone: Backend conversational analysis and chart workflow implementation.
-- Active implementation plan: progressive full-sheet workbook loading and
+- Completed milestone: progressive full-sheet workbook loading and
   checkbox-controlled selection highlights.
 
 ## Current Position
@@ -22,7 +22,15 @@ Implemented:
 - Tool-Governed Evidence Retrieval MVP: `POST /api/projects/:projectId/evidence/retrieve` returns usable accepted WorkbookUnderstanding evidence and marks unconfirmed suggestions as not DataPlan-ready.
 - Transient DataPlan Agent Phase 1-2: DataPlan/DataSnapshot schemas, backend DataPlan tools, deterministic DataSnapshot preview execution, fallback DataPlan agent orchestration, `POST /api/projects/:projectId/data-plans/draft`, frontend `draftServerProjectDataPlan()`, and route/helper/unit coverage.
 - DataPlan identity bulk review: users can create all unmatched experiments, accept unique exact matches, apply selected-row actions, filter by decision state, inspect totals, and undo the latest batch while create/reuse remains explicit and publish-gated; reusable identities match and display their canonical labels.
-- WorkbookReviewWorkspace stable tile loading: 40-row by 12-column SourceDocument windows stay below 500 cells, scroll changes are frame-coalesced and settled before reads, one directional tile is prefetched, fulfilled/pending requests share an LRU cache, loaded cells remain visible when another tile loads, and document/Sheet/range changes reset the real grid while adopting the selected workbook's own range.
+- WorkbookReviewWorkspace full-sheet loading: the complete current-sheet
+  `usedRange` is enumerated into 40-row by 12-column SourceDocument windows
+  below 500 cells; visible tiles load first and three background workers fill
+  the rest. Per-sheet normalized cell/completion caches retain loaded and empty
+  tiles across navigation, stale responses stay isolated, failed ranges can be
+  retried without re-reading successful tiles, and toolbar progress reports the
+  exact loaded tile count. Checked region ids alone control editable blue
+  highlights; ordinary drag is exclusive, Ctrl/Command drag adds or toggles,
+  and active-card focus is independent.
 - Target architecture and milestone sequence are approved in `doc/plans/workbook-review-to-experiment-browser-plan.md`.
 - Milestone 0 contract cutover: active API/schema/data/architecture/AI contracts now define the Snapshot-backed Browser path and mark DatasetCommit/generic imports deprecated.
 - Workbook source range race fix: late detected-region responses no longer overwrite a manual range entered while loading.
@@ -52,14 +60,9 @@ Deployment work not included in this completed milestone:
 
 ## Next Recommended Slice
 
-1. Execute
-   `doc/plans/workbook-full-sheet-selection-highlights-implementation-plan.md`
-   with TDD: load the current sheet's complete `usedRange` through prioritized
-   bounded tiles and make checked region ids the single source of blue
-   highlights.
-2. Operationalize the hardened analysis worker, secret management, timeouts, audit telemetry, and provider cost/latency monitoring in a production-like environment.
-3. Exercise migration 012 and the atomic analysis publication path against a configured Postgres test database.
-4. Consider an optional MCP adapter only after the first-party workflow has production evidence; keep authorization, review, execution, and publication in the existing backend services.
+1. Operationalize the hardened analysis worker, secret management, timeouts, audit telemetry, and provider cost/latency monitoring in a production-like environment.
+2. Exercise migration 012 and the atomic analysis publication path against a configured Postgres test database.
+3. Consider an optional MCP adapter only after the first-party workflow has production evidence; keep authorization, review, execution, and publication in the existing backend services.
 
 ## Guardrails
 
@@ -93,10 +96,23 @@ Latest Task 8 evidence: focused chart-view/renderer/Canvas/export/ProjectDashboa
 
 Latest Task 9 evidence: the grouped-header backend golden workflow passed through one trace-complete `origin: analysis_result` ChartSpec with exact source lineage. Frontend passed 250/250 with Vitest capped at four workers for repeatable Windows execution; backend passed 230 with 1 optional Postgres integration skip; the production build succeeded with the existing Plotly chunk-size warning. Desktop and 390x844 browser QA covered direct answers, reviewed plan revision, red source cells, validated result review, chart publication, duplicate Manuscript placements, reload persistence, mobile stacking, and console stability. PPTX placement filtering remains covered by automated export tests.
 
+Latest full-sheet Workbook Review evidence: frontend passed 262/262,
+backend passed 230 with 1 optional Postgres integration skip, and the production
+build succeeded with the existing Plotly chunk-size warning. Browser QA on a
+real two-sheet review confirmed visible-first completion at 14/14 and 21/21
+ranges, immediate cached return, checkbox-only blue highlights, focus/selection
+independence, ordinary drag replacement, Ctrl addition, and Ctrl toggle
+removal. Frozen-request tests additionally verify that background hydration
+waits for visible cells, never exceeds three workers, and starts a newly
+selected Sheet from its top tile.
+
 ## Open Risks
 
 - The worktree contains substantial existing changes from prior milestones; do not revert or restage unrelated files.
-- Large workbook reads now use stable cached tiles, but the current grid still renders the complete selected row/column DOM with React Data Grid virtualization disabled; very large selected ranges still need a dedicated rendering architecture later.
+- Large workbook reads now hydrate and cache the complete current-sheet
+  `usedRange`, but the grid still renders that complete row/column DOM with
+  React Data Grid virtualization disabled; unusually large sheets still need a
+  dedicated rendering architecture.
 - DataSnapshot-to-chart work must define unit, series, selection, and staleness rules rather than reuse removed contracts.
 - The LabRat-managed arbitrary Python runtime remains the largest security and operations risk; the local subprocess adapter is development-only and production must use the hardened worker contract.
 - Existing source-evidence chart flows must remain intact while the new chart path is added.

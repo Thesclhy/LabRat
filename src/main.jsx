@@ -1305,7 +1305,7 @@ export function WorkbookReviewWorkspace({
     appliedFocusKeyRef.current = focusKey;
     setSelectedDocumentId(focusSelection.sourceDocumentId);
     setActiveSheetName(focusSelection.sheetName);
-    if (focusSelection.focusOnly) return;
+    if (focusSelection.focusOnly || focusSelection.selectionMethod === "red_box_click") return;
     const nextRegionId = focusSelection.clientRegionId || focusSelection.draftRegionId || workbookDraftRegionId(focusSelection.sourceDocumentId, focusSelection.sheetName, focusSelection.range);
     onDraftRegionsChange?.(upsertDraftWorkbookRegion(draftRegions, {
       clientRegionId: nextRegionId,
@@ -1645,7 +1645,17 @@ export function WorkbookReviewWorkspace({
     if (!dragSelection?.active) return undefined;
     window.addEventListener("mouseup", finishCellDragSelection);
     return () => window.removeEventListener("mouseup", finishCellDragSelection);
-  }, [dragSelection?.active, draftRegions, sourceDocument?.id, activeSheetName, activeDraftRegionId]);
+  }, [
+    dragSelection?.active,
+    draftRegions,
+    sourceDocument?.id,
+    activeSheetName,
+    activeDraftRegionId,
+    selectedDraftRegionIds,
+    onDraftRegionsChange,
+    onActiveDraftRegionChange,
+    onSelectedDraftRegionIdsChange,
+  ]);
   useEffect(() => {
     if (!dragSelection?.active) return undefined;
     const updateEdgeScrollDirection = (event) => {

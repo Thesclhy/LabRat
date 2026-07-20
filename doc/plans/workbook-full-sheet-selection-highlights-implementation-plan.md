@@ -1,5 +1,8 @@
 # Full-Sheet Workbook Loading And Selection Highlights Implementation Plan
 
+Status: implemented 2026-07-20. Tasks were completed through TDD and verified
+with the full frontend/backend/build gate plus live two-sheet browser QA.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use

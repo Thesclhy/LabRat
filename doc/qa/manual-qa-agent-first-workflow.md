@@ -1,7 +1,7 @@
 # Manual QA: Workbook Evidence To Browser And Output
 
 Status: active
-Last reviewed: 2026-07-19
+Last reviewed: 2026-07-20
 
 Use a development account with editor access and a workbook containing at least two experiments plus one chartable source range.
 
@@ -80,6 +80,23 @@ Use a development account with editor access and a workbook containing at least 
 - [x] Experiment Browser has one horizontal scrollbar owner and no page-level horizontal overflow.
 - [ ] In a live editable workbook review, Ctrl/Meta-drag adds a disconnected range, selecting the exact same range again removes it, and an ordinary drag still replaces the active range.
 - [x] Browser console has no warnings or errors while checking the direct summary, Overview status, and grouped Browser data.
+
+## 2026-07-20 Full-Sheet Workbook Review
+
+- [x] Opening `Calculation Exp19.xlsx` displays its complete `A1:CE73`
+  metadata range and reaches `Sheet loaded: 14/14 ranges` without scrolling.
+- [x] Opening the second `A1:CE108` sheet reaches 21/21 ranges; returning to
+  Sheet1 immediately restores 14/14 and previously loaded cell values.
+- [x] Exactly the checked review ranges render editable blue cells; unchecking
+  the last range leaves zero blue cells.
+- [x] Activating a different review card focuses that card but preserves the
+  checked range and its blue cells.
+- [x] An ordinary pointer drag clears the prior checked/blue region and selects
+  only the new range.
+- [x] Ctrl-drag adds a disconnected checked/blue range, and repeating Ctrl-drag
+  on the same range removes it.
+- [x] Automated failure injection retains successful cells and retries only the
+  failed tile; all generated range requests contain at most 500 cells.
 
 ## Retirement Checks
 

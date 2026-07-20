@@ -37,6 +37,12 @@ Use this split when deciding what to build:
 
 ## Recently Completed
 
+- Progressive full-sheet Workbook Review loading: the active sheet's complete
+  `usedRange` hydrates through visible-first bounded tiles with three background
+  workers, persistent per-sheet cell/completion caches, late-response
+  isolation, progress and failed-range retry. Checked region ids are the sole
+  blue-highlight state; ordinary drag replaces, Ctrl/Command drag adds or
+  toggles, and card activation changes focus without changing checked ranges.
 - Workbook Understanding MVP: upload, WorkbookReviewSession, red-box/natural-language revisions, and accepted WorkbookUnderstanding persistence.
 - Tool-Governed Evidence Retrieval MVP: `POST /api/projects/:projectId/evidence/retrieve` returns usable accepted evidence and non-usable unconfirmed suggestions.
 - Transient DataPlan Agent Phase 1-2: DataPlan/DataSnapshot schemas, backend DataPlan tools, deterministic preview execution, `POST /api/projects/:projectId/data-plans/draft`, and frontend helper coverage.
