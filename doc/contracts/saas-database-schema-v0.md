@@ -128,9 +128,9 @@ analysis_publications
 
 `analysis_plan_revisions` is append-only except for workflow status. Each row stores one complete reviewed plan and frozen AnalysisSelection with exact source rectangles, manifest, missing-value policy, Python source/program hash, dependency/selection/plan hashes, validation, feedback, and actor timestamps. `(analysis_thread_id, revision)` is unique.
 
-`analysis_runs` links one accepted plan revision to an immutable execution attempt. Plan acceptance currently creates only a `queued` row. `(project_id, idempotency_key)` makes acceptance retry-safe.
+`analysis_runs` links one accepted plan revision to an immutable execution attempt. Plan acceptance creates a `queued` row. Execution transactionally locks the run and selected active-head rows before moving it to `running`; changed heads instead terminally produce `validation_failed`. Running claims carry an internal token and lease metadata so an expired worker may be replaced without allowing the old worker to finalize. One atomic finalization moves the run to `failed`, `validation_failed`, or `awaiting_result_review`. The run records frozen input/program/runtime hashes, bounded executor metadata, result-preview hash, warnings, and validation. `(project_id, idempotency_key)` makes plan acceptance retry-safe.
 
-`analysis_results` and `analysis_publications` establish the append-only/result-publication schema for later executor and result-review milestones. They have no public creation routes yet. `analysis_publications` will key atomic accepted result plus ChartSpec receipts by `(project_id, idempotency_key)`.
+`analysis_results` stores only backend-validated immutable executor output. A valid run finalization inserts one `awaiting_review` result in the same transaction that updates its AnalysisRun and AnalysisThread; failed or invalid output inserts no result. `analysis_publications` remains reserved for the later atomic accepted-result plus ChartSpec boundary and is keyed by `(project_id, idempotency_key)`.
 
 `chart_specs.analysis_result_id` is nullable so existing `source_extract` ChartSpecs remain valid. No analysis-result ChartSpec is created by the current persistence milestone.
 
@@ -166,7 +166,7 @@ lock project/idempotency key
   -> record audit event
 ```
 
-This transaction does not execute Python or create an AnalysisResult/ChartSpec.
+This transaction does not execute Python or create an AnalysisResult/ChartSpec. A later explicit execution transaction claims only that queued run, validates frozen dependencies and output, and may create one awaiting-review AnalysisResult. It never creates a ChartSpec.
 
 ## Migration Sequence
 
@@ -196,3 +196,7 @@ Migration 012 adds reviewed analysis persistence and nullable `chart_specs.analy
 - Source-backed chart creation must not mutate accepted DataSnapshots.
 - Analysis plan revisions are immutable apart from explicit status/acceptance metadata.
 - Plan acceptance is idempotent and must not execute code or create result/chart artifacts.
+- One queued AnalysisRun may be claimed once; expired running claims rotate their internal token, and finalization requires the current token.
+- Active experiment heads are verified under the execution-claim transaction before code runs.
+- Finalization and optional valid AnalysisResult insertion are atomic.
+- Failed execution or result validation must not persist an AnalysisResult.

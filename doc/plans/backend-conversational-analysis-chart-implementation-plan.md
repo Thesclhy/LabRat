@@ -435,7 +435,7 @@ git commit -m "Add conversational analysis plan review"
 - Produces: `validateAnalysisResult({ run, plan, selection, executorResult })`.
 - Consumes an accepted plan revision and frozen execution package only.
 
-- [ ] **Step 1: Write failing policy, executor, and validator tests**
+- [x] **Step 1: Write failing policy, executor, and validator tests**
 
 ```js
 test("rejects network and subprocess imports before execution", () => {
@@ -454,21 +454,21 @@ test("blocks a normalized result that violates row-sum invariants", () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and confirm missing modules**
+- [x] **Step 2: Run tests and confirm missing modules**
 
 Run: `node --test backend/src/saas/pythonPolicy.test.js backend/src/saas/analysisExecutor.test.js backend/src/saas/analysisResultValidation.test.js`
 
 Expected: FAIL because the executor modules do not exist.
 
-- [ ] **Step 3: Implement static Python policy and canonical run package**
+- [x] **Step 3: Implement static Python policy and canonical run package**
 
 Reject imports outside the standard numeric allowlist plus pandas/numpy/scipy, calls to `open`, `exec`, `eval`, `compile`, `__import__`, subprocess/process APIs, sockets, HTTP clients, and filesystem traversal. Require exactly one `analyze(tables, labrat)` function.
 
-- [ ] **Step 4: Implement development and production executor adapters**
+- [x] **Step 4: Implement development and production executor adapters**
 
 `LABRAT_ANALYSIS_EXECUTOR=disabled` is the production default unless a hardened worker endpoint is configured. `local` is allowed only outside production and invokes the runner with a sanitized environment, temporary directory, timeout, bounded input/output, and recorded `adapter: "local_non_production"`. The runner applies process resource limits where supported and returns JSON only.
 
-- [ ] **Step 5: Implement result validation and run routes**
+- [x] **Step 5: Implement result validation and run routes**
 
 Implement:
 
@@ -481,7 +481,7 @@ POST /api/analysis-runs/:analysisRunId/revise
 
 Execution rechecks accepted state, active dependencies, source/program/input hashes, policy, and idempotency. Validation checks finite values, ids, x/y lengths, lineage, units, missing/exclusion counts, output bounds, and manifest invariants before persisting an immutable awaiting-review AnalysisResult.
 
-- [ ] **Step 6: Run executor and route tests**
+- [x] **Step 6: Run executor and route tests**
 
 Run:
 
@@ -491,7 +491,7 @@ node --test backend/src/saas/pythonPolicy.test.js backend/src/saas/analysisExecu
 
 Expected: policy violations fail before process start; exact accepted source/hash is recorded; valid fixtures reach `awaiting_result_review`; invalid fixtures cannot publish.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/src/saas/pythonPolicy.js backend/src/saas/pythonPolicy.test.js backend/src/saas/analysisExecutor.js backend/src/saas/analysisExecutor.test.js backend/src/saas/analysisResultValidation.js backend/src/saas/analysisResultValidation.test.js backend/scripts/labrat_python_runner.py backend/src/saas/analysisThreads.js backend/src/saas/routes/saasRoutes.js backend/src/saas/routes/saasRoutes.test.js

@@ -108,6 +108,9 @@ test("draftAnalysisPlan requests the backend-reviewed selection and program shap
       assert.match(body.system, /selectionRequest/);
       assert.match(body.system, /pythonProgram/);
       assert.match(body.system, /Do not return selection hashes/);
+      assert.match(body.system, /experiment_traces/);
+      assert.match(body.system, /excludedRecords/);
+      assert.match(body.system, /sourceRecordIds/);
       return {
         ok: true,
         async json() {

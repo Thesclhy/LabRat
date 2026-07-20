@@ -252,6 +252,10 @@ GET  /api/analysis-threads/:analysisThreadId
 POST /api/analysis-threads/:analysisThreadId/plan-revisions
 GET  /api/analysis-plan-revisions/:planRevisionId/selection
 POST /api/analysis-plan-revisions/:planRevisionId/accept
+POST /api/analysis-runs/:analysisRunId/execute
+GET  /api/analysis-runs/:analysisRunId
+GET  /api/analysis-runs/:analysisRunId/result-preview
+POST /api/analysis-runs/:analysisRunId/revise
 ```
 
 Rules:
@@ -263,7 +267,14 @@ Rules:
 - Plan acceptance requires an `Idempotency-Key` header and exact `planHash`, `selectionHash`, and `dependencyHash` request fields.
 - Acceptance re-resolves current active experiment heads. Hash changes return `409 analysis_plan_stale`; accepting a non-current revision returns `409 analysis_plan_revision_mismatch`.
 - Successful acceptance atomically marks the revision accepted, advances the thread to `executing`, writes an audit event, and creates one immutable `status: queued` AnalysisRun. Same-key/same-request retries return the same run; conflicting reuse returns `409`.
-- Plan acceptance does not run Python, create an AnalysisResult, create a ChartSpec, or place manuscript content. Those routes remain unavailable until the executor/result-review milestones.
+- Plan acceptance does not run Python, create an AnalysisResult, create a ChartSpec, or place manuscript content.
+- Execution transactionally locks and verifies the frozen active-head refs while claiming a queued run, then rechecks dependency, selection, input, program, runtime, and Python-policy hashes. Changed heads terminally produce `validation_failed` so the user can revise against current accepted data.
+- A running claim uses an internal token and six-minute lease. An expired claim may be recovered with a new token; an old worker cannot finalize after recovery. The claim token is never returned by public summaries.
+- Valid execution output is bounded and checked for supported `experiment_traces` encoding, finite declared output fields, plottable x/y types and lengths, exact experiment/snapshot identity, accepted-record lineage, declared units, complete output-or-exclusion input accounting, visible exclusion reasons, missing-value policy, runtime/hash agreement, and declared invariants. Only a valid output creates one immutable `status: awaiting_review` AnalysisResult and advances the run/thread to `awaiting_result_review`.
+- Executor or validation failure records a terminal run status and audit event but creates no AnalysisResult or ChartSpec. Repeating `execute` on a terminal run returns the original state with `idempotentReplay: true`.
+- Result preview is separately paginated: result rows and source refs are capped at 200 per request and traces at 500. Lineage is limited to the returned row/trace page. Ordinary run detail returns result metadata and source-ref counts rather than full result/evidence arrays.
+- Revision requires feedback and, when a result exists, its exact visible `resultHash`. It sends bounded result/validation context to backend planning and creates a later immutable AnalysisPlanRevision; the prior result remains unchanged.
+- `LABRAT_ANALYSIS_EXECUTOR` defaults to `disabled`. `local` is non-production only; production execution requires a configured HTTPS hardened worker. Executor command, endpoint, timeout, and provider credentials are backend-only configuration.
 
 ## Source-Backed Charts
 

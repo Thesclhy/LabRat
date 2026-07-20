@@ -232,11 +232,11 @@ A project-scoped conversational workflow container for one analysis goal. It sto
 
 ## AnalysisRun v1
 
-An immutable execution-attempt record linked to one accepted AnalysisPlanRevision. Exact-hash plan acceptance currently creates a `queued` run with input/program/runtime hashes and no result. Executor status, result preview, and validation are later milestones.
+An immutable execution-attempt record linked to one accepted AnalysisPlanRevision. Exact-hash plan acceptance creates a `queued` run with input/program/runtime hashes and no result. Execution transactionally verifies frozen active-head refs, uses an internal claim-token lease, and rechecks accepted hashes plus Python policy before the run moves through `running` to `failed`, `validation_failed`, or `awaiting_result_review`. Bounded executor adapter/runtime/error metadata, result-preview hash, warnings, and backend validation are recorded on the attempt; internal claim tokens are never public.
 
 ## AnalysisResult v1
 
-The reserved append-only validated output record for a future completed AnalysisRun. Migration 012 defines its ownership, hash, lineage/result payload, validation, warnings, and acceptance metadata, but no public result-creation or acceptance API exists yet.
+An append-only backend-validated output linked to one completed AnalysisRun. It contains canonical content/result-preview hashes, normalized result rows, chart traces, lineage sidecar, execution summary with explicit exclusions, exact source refs, validation, warnings, and later acceptance metadata. It begins as `awaiting_review`; executor or validation failures create no AnalysisResult. Rows, traces, relevant lineage, and source refs are paged independently through the bounded result-preview endpoint rather than project state or ordinary run detail.
 
 ## SourceExtractProposal
 

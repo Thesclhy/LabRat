@@ -340,6 +340,52 @@ const testModelProvider = {
   },
 };
 
+const testAnalysisExecutor = {
+  async executeAcceptedRun(runPackage) {
+    const resultTable = runPackage.tables.records.map((record, index) => ({
+      __result_id: `result_row_${index + 1}`,
+      __experiment_id: record.__experiment_id,
+      __snapshot_id: record.__snapshot_id,
+      __record_index: record.__record_index,
+      yield: record.yield,
+    }));
+    const sourceRecordIds = runPackage.tables.records.map((record) => record.__source_record_id);
+    return {
+      ok: true,
+      adapter: "test_executor",
+      runtime: {
+        version: runPackage.runtimeVersion,
+        exitCode: 0,
+      },
+      result: {
+        result_table: resultTable,
+        traces: [{
+          traceId: "trace_yield",
+          x: runPackage.tables.records.map((record) => record.__experiment_label),
+          y: runPackage.tables.records.map((record) => record.yield),
+          xUnit: null,
+          yUnit: "percent",
+          sourceRecordIds,
+        }],
+        lineage: {
+          ...Object.fromEntries(resultTable.map((row, index) => [
+            row.__result_id,
+            { sourceRecordIds: [sourceRecordIds[index]] },
+          ])),
+          trace_yield: { sourceRecordIds },
+        },
+        summary: {
+          inputRecordCount: runPackage.tables.records.length,
+          outputRecordCount: resultTable.length,
+          excludedRecordCount: 0,
+          excludedRecords: [],
+          missingValuePolicy: runPackage.calculationManifest.missingValuePolicy.mode,
+        },
+      },
+    };
+  },
+};
+
 before(async () => {
   const config = {
     ...loadSaasConfig({
@@ -350,7 +396,12 @@ before(async () => {
     fileStorageRoot: `${os.tmpdir()}\\labrat-saas-test-${Date.now()}`,
   };
   store = new MemorySaasStore({ seedDevAccounts: true });
-  server = createServer({ config, store, modelProvider: testModelProvider });
+  server = createServer({
+    config,
+    store,
+    modelProvider: testModelProvider,
+    analysisExecutor: testAnalysisExecutor,
+  });
   await new Promise((resolve) => {
     server.listen(0, "127.0.0.1", () => {
       const address = server.address();
@@ -1872,6 +1923,179 @@ test("analysis thread routes preserve immutable reviewed plans and queue accepte
   });
   assert.equal(viewerCreate.status, 403);
   assert.equal((await viewerCreate.json()).error.code, "forbidden");
+  cookie = ownerCookie;
+});
+
+test("accepted analysis runs execute once, expose a bounded result preview, and revise immutably", async () => {
+  const project = await createProject("Analysis Execution Route Project");
+  seedRouteAnalysisData(project, `execute_${Date.now()}`);
+  const drafted = await jsonFetch(`/api/projects/${project.id}/agent/runs`, {
+    method: "POST",
+    body: { message: "Compare yield across all experiments and plot it." },
+  });
+  assert.equal(drafted.status, 201);
+  const draftedBody = await drafted.json();
+  const revision = draftedBody.currentPlanRevision;
+  const accepted = await jsonFetch(`/api/analysis-plan-revisions/${revision.id}/accept`, {
+    method: "POST",
+    headers: { "idempotency-key": `execute_accept_${Date.now()}` },
+    body: {
+      planHash: revision.planHash,
+      selectionHash: revision.selectionHash,
+      dependencyHash: revision.dependencyHash,
+    },
+  });
+  assert.equal(accepted.status, 201);
+  const queuedRun = (await accepted.json()).analysisRun;
+
+  const executed = await jsonFetch(`/api/analysis-runs/${queuedRun.id}/execute`, {
+    method: "POST",
+    body: {},
+  });
+  assert.equal(executed.status, 201);
+  const executedBody = await executed.json();
+  assert.equal(executedBody.analysisRun.status, "awaiting_result_review");
+  assert.equal(Object.hasOwn(executedBody.analysisRun.execution, "claimToken"), false);
+  assert.equal(executedBody.analysisResult.status, "awaiting_review");
+  assert.match(executedBody.analysisResult.contentHash, /^sha256_/);
+
+  const replay = await jsonFetch(`/api/analysis-runs/${queuedRun.id}/execute`, {
+    method: "POST",
+    body: {},
+  });
+  assert.equal(replay.status, 200);
+  const replayBody = await replay.json();
+  assert.equal(replayBody.idempotentReplay, true);
+  assert.equal(replayBody.analysisResult.id, executedBody.analysisResult.id);
+
+  const detail = await jsonFetch(`/api/analysis-runs/${queuedRun.id}`);
+  assert.equal(detail.status, 200);
+  const detailBody = await detail.json();
+  assert.equal(detailBody.analysisResult.id, executedBody.analysisResult.id);
+  assert.equal(detailBody.analysisPlanRevision.id, revision.id);
+
+  const preview = await jsonFetch(
+    `/api/analysis-runs/${queuedRun.id}/result-preview?offset=0&limit=1&traceOffset=0&traceLimit=1`,
+  );
+  assert.equal(preview.status, 200);
+  const previewBody = await preview.json();
+  assert.equal(previewBody.rows.length, 1);
+  assert.equal(previewBody.traces.length, 1);
+  assert.equal(previewBody.rowPage.limit, 1);
+  assert.equal(previewBody.resultPreviewHash, executedBody.analysisResult.resultPreviewHash);
+
+  const revised = await jsonFetch(`/api/analysis-runs/${queuedRun.id}/revise`, {
+    method: "POST",
+    body: {
+      resultHash: executedBody.analysisResult.contentHash,
+      feedback: "Keep the same accepted data but label the yield trace more clearly.",
+    },
+  });
+  assert.equal(revised.status, 201);
+  const revisedBody = await revised.json();
+  assert.equal(revisedBody.analysisPlanRevision.revision, 2);
+  assert.equal((await store.findAnalysisResultById(executedBody.analysisResult.id)).status, "awaiting_review");
+});
+
+test("analysis execution terminally rejects stale active heads and remains revisable", async () => {
+  const project = await createProject("Stale Analysis Execution Project");
+  const seeded = seedRouteAnalysisData(project, `stale_execute_${Date.now()}`);
+  const drafted = await jsonFetch(`/api/projects/${project.id}/agent/runs`, {
+    method: "POST",
+    body: { message: "Compare yield across all experiments and plot it." },
+  });
+  assert.equal(drafted.status, 201);
+  const revision = (await drafted.json()).currentPlanRevision;
+  const accepted = await jsonFetch(`/api/analysis-plan-revisions/${revision.id}/accept`, {
+    method: "POST",
+    headers: { "idempotency-key": `stale_execute_accept_${Date.now()}` },
+    body: {
+      planHash: revision.planHash,
+      selectionHash: revision.selectionHash,
+      dependencyHash: revision.dependencyHash,
+    },
+  });
+  assert.equal(accepted.status, 201);
+  const queuedRun = (await accepted.json()).analysisRun;
+  const headId = seeded.selection.records[0].headId;
+  const priorHead = store.experimentSnapshotHeads.get(headId);
+  const priorSnapshot = store.dataSnapshots.get(priorHead.dataSnapshotId);
+  const replacementSnapshotId = `${priorSnapshot.id}_replacement`;
+  store.dataSnapshots.set(replacementSnapshotId, {
+    ...priorSnapshot,
+    id: replacementSnapshotId,
+    contentHash: `${priorSnapshot.contentHash}_replacement`,
+  });
+  store.experimentSnapshotHeads.set(headId, {
+    ...priorHead,
+    dataSnapshotId: replacementSnapshotId,
+  });
+
+  const executed = await jsonFetch(`/api/analysis-runs/${queuedRun.id}/execute`, {
+    method: "POST",
+    body: {},
+  });
+  assert.equal(executed.status, 201);
+  const executedBody = await executed.json();
+  assert.equal(executedBody.analysisRun.status, "validation_failed");
+  assert.equal(executedBody.analysisResult, null);
+
+  const revised = await jsonFetch(`/api/analysis-runs/${queuedRun.id}/revise`, {
+    method: "POST",
+    body: { feedback: "Use the newly accepted experiment snapshot instead." },
+  });
+  assert.equal(revised.status, 201);
+  assert.equal((await revised.json()).analysisPlanRevision.revision, 2);
+});
+
+test("analysis run reads allow viewers while execution and revision require editors", async () => {
+  const ownerCookie = cookie;
+  const project = await createProject("Analysis Run Authorization Project");
+  seedRouteAnalysisData(project, `execute_auth_${Date.now()}`);
+  const drafted = await jsonFetch(`/api/projects/${project.id}/agent/runs`, {
+    method: "POST",
+    body: { message: "Compare yield across experiments." },
+  });
+  const revision = (await drafted.json()).currentPlanRevision;
+  const accepted = await jsonFetch(`/api/analysis-plan-revisions/${revision.id}/accept`, {
+    method: "POST",
+    headers: { "idempotency-key": `execute_auth_accept_${Date.now()}` },
+    body: {
+      planHash: revision.planHash,
+      selectionHash: revision.selectionHash,
+      dependencyHash: revision.dependencyHash,
+    },
+  });
+  const queuedRun = (await accepted.json()).analysisRun;
+  const viewerUsername = `analysis_run_viewer_${Date.now()}`;
+  const viewerPassword = "AnalysisRunViewer123!";
+  const createViewer = await jsonFetch("/api/admin/users", {
+    method: "POST",
+    body: {
+      username: viewerUsername,
+      displayName: "Analysis Run Viewer",
+      temporaryPassword: viewerPassword,
+      labId: project.labId,
+      role: "viewer",
+    },
+  });
+  assert.equal(createViewer.status, 201);
+  const viewerLogin = await jsonFetch("/api/auth/login", {
+    method: "POST",
+    body: { username: viewerUsername, password: viewerPassword },
+  });
+  cookie = cookieFrom(viewerLogin);
+
+  assert.equal((await jsonFetch(`/api/analysis-runs/${queuedRun.id}`)).status, 200);
+  assert.equal((await jsonFetch(`/api/analysis-runs/${queuedRun.id}/execute`, {
+    method: "POST",
+    body: {},
+  })).status, 403);
+  assert.equal((await jsonFetch(`/api/analysis-runs/${queuedRun.id}/revise`, {
+    method: "POST",
+    body: { feedback: "Change it." },
+  })).status, 403);
+
   cookie = ownerCookie;
 });
 

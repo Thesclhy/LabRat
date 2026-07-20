@@ -86,6 +86,8 @@ test("migration 012 and Postgres store expose analysis persistence parity", asyn
     "findAnalysisRunById",
     "findAnalysisRunByIdempotencyKey",
     "listAnalysisRuns",
+    "claimAnalysisRun",
+    "finalizeAnalysisRun",
     "createAnalysisResult",
     "findAnalysisResultById",
     "publishAnalysisResult",
@@ -119,7 +121,52 @@ test("Postgres SaaS routes preserve workbook review, source documents, and sourc
     };
     store = new PostgresSaasStore(config);
     await store.initialize();
-    server = createServer({ config, store });
+    const analysisExecutor = {
+      async executeAcceptedRun(runPackage) {
+        const field = runPackage.fieldCatalog[0];
+        const resultTable = runPackage.tables.records.map((record, index) => ({
+          __result_id: `postgres_result_${index + 1}`,
+          __experiment_id: record.__experiment_id,
+          __snapshot_id: record.__snapshot_id,
+          __record_index: record.__record_index,
+          [field.fieldKey]: record[field.fieldKey],
+        }));
+        const sourceRecordIds = runPackage.tables.records.map(
+          (record) => record.__source_record_id,
+        );
+        return {
+          ok: true,
+          adapter: "postgres_test",
+          runtime: { version: runPackage.runtimeVersion, exitCode: 0 },
+          result: {
+            result_table: resultTable,
+            traces: [{
+              traceId: "postgres_trace",
+              x: runPackage.tables.records.map((record) => record.__experiment_label),
+              y: runPackage.tables.records.map((record) => record[field.fieldKey]),
+              xUnit: null,
+              yUnit: field.unit || null,
+              sourceRecordIds,
+            }],
+            lineage: {
+              ...Object.fromEntries(resultTable.map((row, index) => [
+                row.__result_id,
+                { sourceRecordIds: [sourceRecordIds[index]] },
+              ])),
+              postgres_trace: { sourceRecordIds },
+            },
+            summary: {
+              inputRecordCount: resultTable.length,
+              outputRecordCount: resultTable.length,
+              excludedRecordCount: 0,
+              excludedRecords: [],
+              missingValuePolicy: runPackage.calculationManifest.missingValuePolicy.mode,
+            },
+          },
+        };
+      },
+    };
+    server = createServer({ config, store, analysisExecutor });
     await new Promise((resolve) => {
       server.listen(0, "127.0.0.1", resolve);
     });
@@ -401,6 +448,22 @@ test("Postgres SaaS routes preserve workbook review, source documents, and sourc
       acceptedAnalysisBody.analysisRun.id,
     );
     assert.equal((await store.listAnalysisRuns({ projectId: project.project.id })).length, 1);
+    assert.equal((await store.listChartSpecs({ projectId: project.project.id })).length, 0);
+    const analysisExecute = await jsonFetch(
+      `/api/analysis-runs/${acceptedAnalysisBody.analysisRun.id}/execute`,
+      { method: "POST", body: {} },
+    );
+    assert.equal(analysisExecute.status, 201);
+    const analysisExecuteBody = await analysisExecute.json();
+    assert.equal(analysisExecuteBody.analysisRun.status, "awaiting_result_review");
+    assert.equal(analysisExecuteBody.analysisResult.status, "awaiting_review");
+    assert.equal(
+      (await store.listAnalysisResults({
+        projectId: project.project.id,
+        analysisThreadId: analysisThread.id,
+      })).length,
+      1,
+    );
     assert.equal((await store.listChartSpecs({ projectId: project.project.id })).length, 0);
 
     const sourceExtract = await jsonFetch(`/api/projects/${project.project.id}/source-extract-proposals`, {

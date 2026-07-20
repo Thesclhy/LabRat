@@ -18,6 +18,11 @@ const ANALYSIS_PLAN_SYSTEM = [
   "plan contains requestSummary, processingSummary, calculationManifest, pythonProgram, expectedOutput, and warnings.",
   "calculationManifest must declare inputs, an explicit missingValuePolicy, derivedFields, and invariants.",
   "pythonProgram must contain runtime labrat-python-v1, entrypoint analyze, and exact Python source defining analyze(tables, labrat).",
+  "expectedOutput must use shape experiment_traces and declare chartType, xField, and one or more yFields.",
+  "analyze must return {result_table, traces, lineage, summary}; each row keeps __experiment_id, __snapshot_id, __record_index, a stable __result_id, and every expected yField.",
+  "Each trace has a stable traceId, finite numeric y, string-or-finite-numeric x, units, and accepted sourceRecordIds.",
+  "summary declares inputRecordCount, outputRecordCount, excludedRecordCount, excludedRecords, and missingValuePolicy; each excluded record has sourceRecordId and reason.",
+  "Use only tables and labrat inputs. Do not read files, URLs, environment state, processes, or network resources.",
   "Do not return selection hashes, dependency hashes, source rectangles, source hashes, result rows, plotted arrays, or hidden reasoning.",
   "The backend will resolve accepted data, compute all hashes, validate the plan, and require user review before execution.",
 ].join(" ");

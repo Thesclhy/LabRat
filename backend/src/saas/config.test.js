@@ -39,3 +39,33 @@ test("loadSaasConfig keeps provider credentials on the backend", () => {
   assert.equal(config.anthropicApiKey, "server-only-secret");
   assert.equal(config.anthropicModel, "claude-test");
 });
+
+test("analysis execution defaults to disabled and only auto-selects a configured worker", () => {
+  const disabled = loadSaasConfig({
+    NODE_ENV: "production",
+    SESSION_SECRET: "prod-secret",
+  });
+  const worker = loadSaasConfig({
+    NODE_ENV: "production",
+    SESSION_SECRET: "prod-secret",
+    LABRAT_ANALYSIS_WORKER_ENDPOINT: "https://worker.example.test/analyze",
+  });
+
+  assert.equal(disabled.analysisExecutorMode, "disabled");
+  assert.equal(worker.analysisExecutorMode, "worker");
+  assert.equal(worker.analysisWorkerEndpoint, "https://worker.example.test/analyze");
+});
+
+test("analysis executor limits and local command remain backend-only configuration", () => {
+  const config = loadSaasConfig({
+    NODE_ENV: "test",
+    SESSION_SECRET: "test-secret",
+    LABRAT_ANALYSIS_EXECUTOR: "local",
+    LABRAT_ANALYSIS_PYTHON_COMMAND: "python-test",
+    LABRAT_ANALYSIS_TIMEOUT_MS: "12345",
+  });
+
+  assert.equal(config.analysisExecutorMode, "local");
+  assert.equal(config.analysisPythonCommand, "python-test");
+  assert.equal(config.analysisExecutorTimeoutMs, 12345);
+});

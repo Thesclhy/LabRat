@@ -7,9 +7,15 @@ import {
 } from "./analysisSchemas.js";
 import { stableDataHash } from "./dataPlanSchemas.js";
 import { makeId } from "./ids.js";
+import { buildAnalysisRunPackage } from "./analysisExecutor.js";
+import { validateAnalysisResult } from "./analysisResultValidation.js";
+import { validatePythonPolicy } from "./pythonPolicy.js";
 
 const THREAD_LIST_LIMIT = 100;
 const SELECTION_PAGE_LIMIT = 200;
+const RESULT_PAGE_LIMIT = 200;
+const TRACE_PAGE_LIMIT = 500;
+const ANALYSIS_RUN_LEASE_MS = 360_000;
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -158,6 +164,7 @@ export function analysisPlanRevisionSummary(revision) {
 }
 
 export function analysisRunSummary(run) {
+  const { claimToken: _claimToken, ...execution } = run.payload || {};
   return {
     id: run.id,
     labId: run.labId,
@@ -170,12 +177,40 @@ export function analysisRunSummary(run) {
     programHash: run.programHash,
     runtimeVersion: run.runtimeVersion,
     resultPreviewHash: run.resultPreviewHash || null,
+    execution,
     warnings: run.warnings || [],
     validation: run.validation || {},
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
     createdBy: run.createdBy,
     updatedBy: run.updatedBy,
+  };
+}
+
+export function analysisResultSummary(result) {
+  if (!result) return null;
+  return {
+    id: result.id,
+    labId: result.labId,
+    projectId: result.projectId,
+    analysisThreadId: result.analysisThreadId,
+    analysisRunId: result.analysisRunId,
+    schemaVersion: result.schemaVersion,
+    status: result.status,
+    contentHash: result.contentHash,
+    resultPreviewHash: result.resultPreviewHash || null,
+    summary: result.result?.summary || {},
+    rowCount: asArray(result.result?.resultTable).length,
+    traceCount: asArray(result.result?.traces).length,
+    sourceRefCount: asArray(result.sourceRefs).length,
+    warnings: result.warnings || [],
+    validation: result.validation || {},
+    acceptedAt: result.acceptedAt || null,
+    acceptedBy: result.acceptedBy || null,
+    createdAt: result.createdAt,
+    updatedAt: result.updatedAt,
+    createdBy: result.createdBy,
+    updatedBy: result.updatedBy,
   };
 }
 
@@ -233,6 +268,7 @@ export async function draftAnalysisPlanRevision({
   modelProvider,
   analysisToolRegistry,
   feedback = null,
+  reviewContext = null,
 } = {}) {
   const thread = await store.findAnalysisThreadById(analysisThreadId);
   if (!thread || thread.projectId !== project?.id) {
@@ -309,6 +345,7 @@ export async function draftAnalysisPlanRevision({
     },
     originalRequest: thread.originalRequest,
     feedback: text(feedback) || null,
+    reviewContext: reviewContext || null,
     priorRevisions: priorRevisions.slice(-5).map((revision) => ({
       id: revision.id,
       revision: revision.revision,
@@ -436,7 +473,12 @@ export async function createAnalysisPlanRevision({
   if (!thread || thread.projectId !== project?.id) {
     throw analysisError("analysis_thread_not_found", "Analysis thread was not found.", 404);
   }
-  if (!["planning", "awaiting_plan_review"].includes(thread.status)) {
+  if (![
+    "planning",
+    "awaiting_plan_review",
+    "awaiting_result_review",
+    "execution_failed",
+  ].includes(thread.status)) {
     throw analysisError(
       "analysis_thread_closed",
       `Analysis thread cannot accept a plan revision while ${thread.status}.`,
@@ -445,6 +487,18 @@ export async function createAnalysisPlanRevision({
   }
   const selection = await currentSelection(store, project.id, selectionRequest);
   const validation = validatePlanSelection(plan, selection);
+  const policy = validatePythonPolicy(
+    plan.pythonProgram?.source,
+    plan.pythonProgram?.runtime,
+  );
+  if (!policy.ok) {
+    throw analysisError(
+      "analysis_python_policy_failed",
+      "The analysis Python program did not pass the backend runtime policy.",
+      422,
+      { errors: policy.errors },
+    );
+  }
   const revisions = await store.listAnalysisPlanRevisions({ analysisThreadId: thread.id });
   const prior = revisions.find((item) => item.status === "awaiting_review") || null;
   const createdAt = new Date().toISOString();
@@ -613,6 +667,18 @@ export async function acceptAnalysisPlanRevision({
       },
     );
   }
+  const policy = validatePythonPolicy(
+    revision.pythonProgram?.source,
+    revision.runtimeVersion,
+  );
+  if (!policy.ok) {
+    throw analysisError(
+      "analysis_python_policy_failed",
+      "The reviewed analysis Python program did not pass the backend runtime policy.",
+      422,
+      { errors: policy.errors },
+    );
+  }
   let selection;
   try {
     selection = await currentSelection(store, project.id, revision.selectionRequest);
@@ -697,4 +763,565 @@ export async function acceptAnalysisPlanRevision({
     }],
   });
   return { ...result, idempotentReplay: false };
+}
+
+async function analysisResultForRun(store, run) {
+  if (!run) return null;
+  const results = await store.listAnalysisResults({
+    projectId: run.projectId,
+    analysisThreadId: run.analysisThreadId,
+  });
+  return results.find((result) => result.analysisRunId === run.id) || null;
+}
+
+function collectedSelectionSourceRefs(selection) {
+  const candidates = [
+    ...asArray(selection?.sourceRectangles),
+    ...asArray(selection?.records).flatMap((record) => [
+      ...asArray(record.sourceRefs),
+      ...asArray(record.fields).flatMap((field) => asArray(field.sourceRefs)),
+      ...asArray(record.series).flatMap((series) => [
+        ...asArray(series.sourceRefs),
+        ...asArray(series.points).flatMap((point) => asArray(point.sourceRefs)),
+      ]),
+    ]),
+  ];
+  const seen = new Set();
+  return candidates.filter((sourceRef) => {
+    const hash = stableDataHash(sourceRef);
+    if (seen.has(hash)) return false;
+    seen.add(hash);
+    return true;
+  });
+}
+
+function executionAuditEvent({
+  project,
+  actorUserId,
+  action,
+  targetType,
+  targetId,
+  summary,
+  metadata,
+  createdAt,
+  ipAddress,
+  userAgent,
+}) {
+  return {
+    labId: project.labId,
+    projectId: project.id,
+    actorUserId,
+    action,
+    targetType,
+    targetId,
+    summary,
+    metadata,
+    createdAt,
+    ipAddress,
+    userAgent,
+  };
+}
+
+export async function executeAnalysisRun({
+  store,
+  project,
+  actorUserId,
+  analysisRunId,
+  executor,
+  ipAddress = null,
+  userAgent = null,
+} = {}) {
+  let run = await store.findAnalysisRunById(analysisRunId);
+  if (!run || run.projectId !== project?.id) {
+    throw analysisError("analysis_run_not_found", "Analysis run was not found.", 404);
+  }
+  const revision = await store.findAnalysisPlanRevisionById(run.acceptedPlanRevisionId);
+  if (!revision || revision.projectId !== project.id || revision.status !== "accepted") {
+    throw analysisError(
+      "analysis_run_plan_invalid",
+      "Analysis run does not reference one accepted plan revision.",
+      409,
+    );
+  }
+  if (["awaiting_result_review", "validation_failed", "failed"].includes(run.status)) {
+    return {
+      analysisThread: await store.findAnalysisThreadById(run.analysisThreadId),
+      analysisPlanRevision: revision,
+      analysisRun: run,
+      analysisResult: await analysisResultForRun(store, run),
+      idempotentReplay: true,
+    };
+  }
+  if (!["queued", "running"].includes(run.status)) {
+    throw analysisError(
+      "analysis_run_state_conflict",
+      `Analysis run cannot execute while ${run.status}.`,
+      409,
+    );
+  }
+  const selection = revision.selection || {};
+  const staleValidation = {
+    ok: false,
+    errors: [{
+      code: "analysis_run_stale",
+      message: "Active accepted experiment heads changed before execution claim.",
+    }],
+    warnings: [],
+  };
+  const claimAt = new Date().toISOString();
+  run = await store.claimAnalysisRun({
+    projectId: project.id,
+    analysisRunId: run.id,
+    actorUserId,
+    expectedHeadRefs: asArray(selection.records).map((record) => ({
+      headId: record.headId,
+      experimentId: record.experimentId,
+      dataSnapshotId: record.snapshotId,
+      recordIndex: Number(record.recordIndex),
+    })),
+    staleValidation,
+    staleAuditEvents: [executionAuditEvent({
+      project,
+      actorUserId,
+      action: "analysis_run.stale",
+      targetType: "analysis_run",
+      targetId: run.id,
+      summary: "Analysis execution stopped because active accepted experiment heads changed.",
+      metadata: {
+        analysisThreadId: run.analysisThreadId,
+        acceptedPlanRevisionId: revision.id,
+      },
+      createdAt: claimAt,
+      ipAddress,
+      userAgent,
+    })],
+    startedAt: claimAt,
+    staleAfterMs: ANALYSIS_RUN_LEASE_MS,
+  });
+  if (run.status === "validation_failed") {
+    return {
+      analysisThread: await store.findAnalysisThreadById(run.analysisThreadId),
+      analysisPlanRevision: revision,
+      analysisRun: run,
+      analysisResult: null,
+      idempotentReplay: false,
+    };
+  }
+
+  const preparationErrors = [];
+  if (
+    selection.selectionHash !== revision.selectionHash
+    || selection.dependencyHash !== revision.dependencyHash
+    || run.inputHash !== revision.selectionHash
+    || run.programHash !== revision.programHash
+    || run.runtimeVersion !== revision.runtimeVersion
+  ) {
+    preparationErrors.push({
+      code: "analysis_run_hash_mismatch",
+      message: "Frozen execution hashes differ from the accepted plan revision.",
+    });
+  }
+  const policy = validatePythonPolicy(
+    revision.pythonProgram?.source,
+    revision.runtimeVersion,
+  );
+  if (!policy.ok) preparationErrors.push(...policy.errors);
+  let runPackage = null;
+  try {
+    runPackage = buildAnalysisRunPackage({ run, planRevision: revision, selection });
+  } catch (error) {
+    preparationErrors.push({
+      code: error.code || "analysis_run_package_invalid",
+      message: error.message || "Accepted analysis run package is invalid.",
+    });
+  }
+  if (preparationErrors.length) {
+    const completedAt = new Date().toISOString();
+    const validation = {
+      ok: false,
+      errors: preparationErrors,
+      warnings: [],
+    };
+    const finalized = await store.finalizeAnalysisRun({
+      projectId: project.id,
+      analysisRunId: run.id,
+      actorUserId,
+      claimToken: run.payload?.claimToken,
+      status: "validation_failed",
+      payload: {
+        startedAt: run.payload?.startedAt || null,
+        completedAt,
+        packageHash: runPackage?.packageHash || null,
+        adapter: "not_started",
+        runtime: {},
+        error: preparationErrors[0],
+      },
+      warnings: [],
+      validation,
+      completedAt,
+      auditEvents: [executionAuditEvent({
+        project,
+        actorUserId,
+        action: "analysis_run.preparation_failed",
+        targetType: "analysis_run",
+        targetId: run.id,
+        summary: "Analysis execution stopped because its frozen package failed validation.",
+        metadata: {
+          analysisThreadId: run.analysisThreadId,
+          acceptedPlanRevisionId: revision.id,
+          errorCodes: preparationErrors.map((error) => error.code),
+        },
+        createdAt: completedAt,
+        ipAddress,
+        userAgent,
+      })],
+    });
+    return {
+      ...finalized,
+      analysisPlanRevision: revision,
+      idempotentReplay: false,
+    };
+  }
+
+  let executorResult;
+  try {
+    executorResult = typeof executor?.executeAcceptedRun === "function"
+      ? await executor.executeAcceptedRun(runPackage)
+      : {
+        ok: false,
+        adapter: "disabled",
+        error: {
+          code: "analysis_executor_disabled",
+          message: "Analysis execution is disabled until an executor is configured.",
+        },
+      };
+  } catch (error) {
+    executorResult = {
+      ok: false,
+      adapter: "unknown",
+      error: {
+        code: "analysis_executor_failed",
+        message: "Analysis executor failed unexpectedly.",
+        detail: text(error?.message),
+      },
+    };
+  }
+
+  const completedAt = new Date().toISOString();
+  const executionPayload = {
+    startedAt: run.payload?.startedAt || null,
+    completedAt,
+    packageHash: runPackage.packageHash,
+    adapter: executorResult?.adapter || "unknown",
+    runtime: executorResult?.runtime || {},
+    error: executorResult?.ok ? null : executorResult?.error || null,
+  };
+  if (!executorResult?.ok) {
+    const validation = {
+      ok: false,
+      errors: [{
+        code: executorResult?.error?.code || "analysis_executor_failed",
+        message: executorResult?.error?.message || "Analysis execution failed.",
+      }],
+      warnings: [],
+    };
+    const finalized = await store.finalizeAnalysisRun({
+      projectId: project.id,
+      analysisRunId: run.id,
+      actorUserId,
+      claimToken: run.payload?.claimToken,
+      status: "failed",
+      payload: executionPayload,
+      warnings: [],
+      validation,
+      completedAt,
+      auditEvents: [executionAuditEvent({
+        project,
+        actorUserId,
+        action: "analysis_run.execute_failed",
+        targetType: "analysis_run",
+        targetId: run.id,
+        summary: "Analysis execution failed before producing a reviewable result.",
+        metadata: {
+          analysisThreadId: run.analysisThreadId,
+          acceptedPlanRevisionId: revision.id,
+          packageHash: runPackage.packageHash,
+          errorCode: validation.errors[0].code,
+        },
+        createdAt: completedAt,
+        ipAddress,
+        userAgent,
+      })],
+    });
+    return {
+      ...finalized,
+      analysisPlanRevision: revision,
+      idempotentReplay: false,
+    };
+  }
+
+  const checked = validateAnalysisResult({
+    run,
+    plan: revision,
+    selection,
+    executorResult,
+  });
+  if (!checked.ok) {
+    const finalized = await store.finalizeAnalysisRun({
+      projectId: project.id,
+      analysisRunId: run.id,
+      actorUserId,
+      claimToken: run.payload?.claimToken,
+      status: "validation_failed",
+      payload: executionPayload,
+      warnings: checked.warnings,
+      validation: checked.validation,
+      completedAt,
+      auditEvents: [executionAuditEvent({
+        project,
+        actorUserId,
+        action: "analysis_run.validation_failed",
+        targetType: "analysis_run",
+        targetId: run.id,
+        summary: "Analysis output failed backend validation and was not persisted as a result.",
+        metadata: {
+          analysisThreadId: run.analysisThreadId,
+          acceptedPlanRevisionId: revision.id,
+          packageHash: runPackage.packageHash,
+          errorCodes: checked.errors.map((error) => error.code),
+        },
+        createdAt: completedAt,
+        ipAddress,
+        userAgent,
+      })],
+    });
+    return {
+      ...finalized,
+      analysisPlanRevision: revision,
+      idempotentReplay: false,
+    };
+  }
+
+  const analysisResult = {
+    id: makeId("analysis_result"),
+    labId: project.labId,
+    projectId: project.id,
+    analysisThreadId: run.analysisThreadId,
+    analysisRunId: run.id,
+    schemaVersion: "labrat.analysisResult.v1",
+    status: "awaiting_review",
+    contentHash: checked.contentHash,
+    resultPreviewHash: checked.resultPreviewHash,
+    result: checked.result,
+    sourceRefs: collectedSelectionSourceRefs(selection),
+    warnings: checked.warnings,
+    validation: checked.validation,
+    acceptedAt: null,
+    acceptedBy: null,
+    createdAt: completedAt,
+    updatedAt: completedAt,
+    createdBy: actorUserId,
+    updatedBy: actorUserId,
+  };
+  const finalized = await store.finalizeAnalysisRun({
+    projectId: project.id,
+    analysisRunId: run.id,
+    actorUserId,
+    claimToken: run.payload?.claimToken,
+    status: "awaiting_result_review",
+    resultPreviewHash: checked.resultPreviewHash,
+    payload: executionPayload,
+    warnings: checked.warnings,
+    validation: checked.validation,
+    analysisResult,
+    completedAt,
+    auditEvents: [executionAuditEvent({
+      project,
+      actorUserId,
+      action: "analysis_run.execute",
+      targetType: "analysis_result",
+      targetId: analysisResult.id,
+      summary: "Executed one accepted analysis plan and created a reviewable result.",
+      metadata: {
+        analysisThreadId: run.analysisThreadId,
+        analysisRunId: run.id,
+        acceptedPlanRevisionId: revision.id,
+        packageHash: runPackage.packageHash,
+        resultHash: analysisResult.contentHash,
+        resultPreviewHash: analysisResult.resultPreviewHash,
+      },
+      createdAt: completedAt,
+      ipAddress,
+      userAgent,
+    })],
+  });
+  return {
+    ...finalized,
+    analysisPlanRevision: revision,
+    idempotentReplay: false,
+  };
+}
+
+export async function getAnalysisRunDetail({ store, analysisRunId } = {}) {
+  const analysisRun = await store.findAnalysisRunById(analysisRunId);
+  if (!analysisRun) {
+    throw analysisError("analysis_run_not_found", "Analysis run was not found.", 404);
+  }
+  const [analysisThread, analysisPlanRevision, analysisResult] = await Promise.all([
+    store.findAnalysisThreadById(analysisRun.analysisThreadId),
+    store.findAnalysisPlanRevisionById(analysisRun.acceptedPlanRevisionId),
+    analysisResultForRun(store, analysisRun),
+  ]);
+  return {
+    analysisThread,
+    analysisPlanRevision,
+    analysisRun,
+    analysisResult,
+  };
+}
+
+export async function getAnalysisResultPreview({
+  store,
+  analysisRunId,
+  offset = 0,
+  limit = 50,
+  traceOffset = 0,
+  traceLimit = 50,
+  sourceOffset = 0,
+  sourceLimit = 50,
+} = {}) {
+  const detail = await getAnalysisRunDetail({ store, analysisRunId });
+  if (!detail.analysisResult) {
+    throw analysisError(
+      "analysis_result_not_available",
+      "This analysis run does not have a valid reviewable result.",
+      409,
+      { runStatus: detail.analysisRun.status },
+    );
+  }
+  const rows = asArray(detail.analysisResult.result?.resultTable);
+  const traces = asArray(detail.analysisResult.result?.traces);
+  const sourceRefs = asArray(detail.analysisResult.sourceRefs);
+  const boundedOffset = Math.max(Number.parseInt(offset, 10) || 0, 0);
+  const boundedLimit = Math.min(
+    Math.max(Number.parseInt(limit, 10) || 50, 1),
+    RESULT_PAGE_LIMIT,
+  );
+  const boundedTraceOffset = Math.max(Number.parseInt(traceOffset, 10) || 0, 0);
+  const boundedTraceLimit = Math.min(
+    Math.max(Number.parseInt(traceLimit, 10) || 50, 1),
+    TRACE_PAGE_LIMIT,
+  );
+  const boundedSourceOffset = Math.max(Number.parseInt(sourceOffset, 10) || 0, 0);
+  const boundedSourceLimit = Math.min(
+    Math.max(Number.parseInt(sourceLimit, 10) || 50, 1),
+    RESULT_PAGE_LIMIT,
+  );
+  const pagedRows = rows.slice(boundedOffset, boundedOffset + boundedLimit);
+  const pagedTraces = traces.slice(
+    boundedTraceOffset,
+    boundedTraceOffset + boundedTraceLimit,
+  );
+  const visibleLineageIds = new Set([
+    ...pagedRows.map((row) => String(row?.__result_id || row?.resultId || "").trim()),
+    ...pagedTraces.map((trace) => String(trace?.traceId || "").trim()),
+  ].filter(Boolean));
+  const lineage = Object.fromEntries(
+    Object.entries(detail.analysisResult.result?.lineage || {})
+      .filter(([id]) => visibleLineageIds.has(id)),
+  );
+  return {
+    schemaVersion: "labrat.analysisResultPreview.v1",
+    projectId: detail.analysisRun.projectId,
+    analysisThreadId: detail.analysisRun.analysisThreadId,
+    analysisRunId: detail.analysisRun.id,
+    analysisResultId: detail.analysisResult.id,
+    contentHash: detail.analysisResult.contentHash,
+    resultPreviewHash: detail.analysisResult.resultPreviewHash,
+    rows: pagedRows,
+    traces: pagedTraces,
+    lineage,
+    summary: detail.analysisResult.result?.summary || {},
+    validation: detail.analysisResult.validation || {},
+    warnings: detail.analysisResult.warnings || [],
+    sourceRefs: sourceRefs.slice(
+      boundedSourceOffset,
+      boundedSourceOffset + boundedSourceLimit,
+    ),
+    rowPage: {
+      offset: boundedOffset,
+      limit: boundedLimit,
+      totalCount: rows.length,
+    },
+    tracePage: {
+      offset: boundedTraceOffset,
+      limit: boundedTraceLimit,
+      totalCount: traces.length,
+    },
+    sourcePage: {
+      offset: boundedSourceOffset,
+      limit: boundedSourceLimit,
+      totalCount: sourceRefs.length,
+    },
+  };
+}
+
+export async function reviseAnalysisRun({
+  store,
+  project,
+  actorUserId,
+  analysisRunId,
+  resultHash,
+  feedback,
+  modelProvider,
+  analysisToolRegistry,
+} = {}) {
+  const value = text(feedback);
+  if (!value) {
+    throw analysisError(
+      "analysis_revision_feedback_required",
+      "Feedback is required to revise an analysis run.",
+    );
+  }
+  const detail = await getAnalysisRunDetail({ store, analysisRunId });
+  if (detail.analysisRun.projectId !== project?.id) {
+    throw analysisError("analysis_run_not_found", "Analysis run was not found.", 404);
+  }
+  if (!["awaiting_result_review", "validation_failed", "failed"].includes(detail.analysisRun.status)) {
+    throw analysisError(
+      "analysis_run_revision_unavailable",
+      `Analysis run cannot be revised while ${detail.analysisRun.status}.`,
+      409,
+    );
+  }
+  if (
+    detail.analysisResult
+    && text(resultHash) !== detail.analysisResult.contentHash
+  ) {
+    throw analysisError(
+      "analysis_result_hash_mismatch",
+      "Revision feedback must reference the exact visible analysis result.",
+      409,
+      { currentResultHash: detail.analysisResult.contentHash },
+    );
+  }
+  const analysisPlanRevision = await draftAnalysisPlanRevision({
+    store,
+    project,
+    analysisThreadId: detail.analysisRun.analysisThreadId,
+    actorUserId,
+    modelProvider,
+    analysisToolRegistry,
+    feedback: value,
+    reviewContext: {
+      analysisRun: analysisRunSummary(detail.analysisRun),
+      analysisResult: analysisResultSummary(detail.analysisResult),
+      validation: detail.analysisRun.validation || {},
+    },
+  });
+  return {
+    analysisPlanRevision,
+    priorAnalysisRun: detail.analysisRun,
+    priorAnalysisResult: detail.analysisResult,
+  };
 }

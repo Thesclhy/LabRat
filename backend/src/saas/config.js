@@ -7,6 +7,10 @@ function boolFromEnv(value) {
 export function loadSaasConfig(env = process.env) {
   const nodeEnv = env.NODE_ENV || "development";
   const seedDevAccounts = boolFromEnv(env.LABRAT_SEED_DEV_ACCOUNTS);
+  const analysisWorkerEndpoint = env.LABRAT_ANALYSIS_WORKER_ENDPOINT || "";
+  const analysisExecutorMode = String(
+    env.LABRAT_ANALYSIS_EXECUTOR || (analysisWorkerEndpoint ? "worker" : "disabled"),
+  ).trim().toLowerCase();
   const sessionSecret = env.SESSION_SECRET || (nodeEnv === "production" ? "" : "dev-only-labrat-session-secret");
   if (nodeEnv === "production" && !sessionSecret) {
     throw Object.assign(new Error("SESSION_SECRET is required in production."), {
@@ -27,6 +31,13 @@ export function loadSaasConfig(env = process.env) {
     aiProvider: env.LABRAT_AI_PROVIDER || "anthropic",
     anthropicApiKey: env.ANTHROPIC_API_KEY || "",
     anthropicModel: env.ANTHROPIC_MODEL || "claude-sonnet-4-5",
+    analysisExecutorMode,
+    analysisPythonCommand: env.LABRAT_ANALYSIS_PYTHON_COMMAND || "python",
+    analysisWorkerEndpoint,
+    analysisExecutorTimeoutMs: Math.min(
+      Math.max(Number(env.LABRAT_ANALYSIS_TIMEOUT_MS) || 60_000, 1_000),
+      300_000,
+    ),
     sessionSecret,
     seedDevAccounts,
     sessionCookieName: env.LABRAT_SESSION_COOKIE || "labrat_session",

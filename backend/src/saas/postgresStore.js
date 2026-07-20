@@ -1997,6 +1997,252 @@ export class PostgresSaasStore {
     return result.rows.map(analysisRunFromRow);
   }
 
+  async claimAnalysisRun({
+    projectId,
+    analysisRunId,
+    actorUserId,
+    expectedHeadRefs = [],
+    staleValidation = {},
+    staleAuditEvents = [],
+    startedAt = nowIso(),
+    staleAfterMs = 360_000,
+  }) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const runResult = await client.query(
+        "select * from analysis_runs where id = $1 and project_id = $2 for update",
+        [analysisRunId, projectId],
+      );
+      const run = analysisRunFromRow(runResult.rows[0]);
+      const threadResult = run
+        ? await client.query(
+          "select * from analysis_threads where id = $1 and project_id = $2 for update",
+          [run.analysisThreadId, projectId],
+        )
+        : { rows: [] };
+      const thread = analysisThreadFromRow(threadResult.rows[0]);
+      const priorStartedAt = Date.parse(run?.payload?.startedAt || "");
+      const claimStartedAt = Date.parse(startedAt);
+      const expiredLease = run?.status === "running"
+        && Number.isFinite(priorStartedAt)
+        && Number.isFinite(claimStartedAt)
+        && claimStartedAt - priorStartedAt >= Math.max(Number(staleAfterMs) || 0, 1);
+      if (!run || !thread || run.status !== "queued" && !expiredLease) {
+        throw Object.assign(new Error("Analysis run is not queued for execution."), {
+          statusCode: 409,
+          code: "analysis_run_state_conflict",
+        });
+      }
+
+      const expectedRefs = Array.isArray(expectedHeadRefs) ? expectedHeadRefs : [];
+      const experimentIds = [...new Set(
+        expectedRefs.map((head) => head.experimentId).filter(Boolean),
+      )];
+      const headsResult = experimentIds.length
+        ? await client.query(
+          `select * from experiment_snapshot_heads
+           where project_id = $1 and experiment_id = any($2::text[])
+           for share`,
+          [projectId, experimentIds],
+        )
+        : { rows: [] };
+      const currentHeads = headsResult.rows.map(experimentSnapshotHeadFromRow);
+      const headMismatches = expectedRefs.flatMap((expected) => {
+        const current = currentHeads.find((head) => head.experimentId === expected.experimentId);
+        return (
+          current
+          && current.id === expected.headId
+          && current.dataSnapshotId === expected.dataSnapshotId
+          && Number(current.recordIndex) === Number(expected.recordIndex)
+        ) ? [] : [{
+          experimentId: expected.experimentId,
+          expected,
+          current: current ? {
+            headId: current.id,
+            dataSnapshotId: current.dataSnapshotId,
+            recordIndex: Number(current.recordIndex),
+          } : null,
+        }];
+      });
+      if (headMismatches.length) {
+        const payload = {
+          ...(run.payload || {}),
+          completedAt: startedAt,
+          error: {
+            code: "analysis_run_stale",
+            message: "Active accepted experiment heads changed before execution claim.",
+          },
+          headMismatches,
+        };
+        const completedResult = await client.query(
+          `update analysis_runs
+           set status = 'validation_failed',
+               payload = $3,
+               validation = $4,
+               updated_at = $5,
+               updated_by = $6
+           where id = $1 and project_id = $2
+           returning *`,
+          [
+            analysisRunId,
+            projectId,
+            jsonb(payload),
+            jsonb(staleValidation || {}),
+            startedAt,
+            actorUserId,
+          ],
+        );
+        await client.query(
+          `update analysis_threads
+           set status = 'execution_failed', updated_at = $2, updated_by = $3
+           where id = $1`,
+          [thread.id, startedAt, actorUserId],
+        );
+        await insertAuditEventRows(client, staleAuditEvents);
+        await client.query("commit");
+        return analysisRunFromRow(completedResult.rows[0]);
+      }
+
+      const payload = {
+        ...(run.payload || {}),
+        ...(expiredLease ? {
+          recoveredFromStartedAt: run.payload?.startedAt || null,
+          recoveryCount: (Number(run.payload?.recoveryCount) || 0) + 1,
+        } : {}),
+        claimToken: makeId("analysis_claim"),
+        startedAt,
+      };
+      const claimedResult = await client.query(
+        `update analysis_runs
+         set status = 'running',
+             payload = $3,
+             updated_at = $4,
+             updated_by = $5
+         where id = $1 and project_id = $2
+         returning *`,
+        [
+          analysisRunId,
+          projectId,
+          jsonb(payload),
+          startedAt,
+          actorUserId,
+        ],
+      );
+      await client.query("commit");
+      return analysisRunFromRow(claimedResult.rows[0]);
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async finalizeAnalysisRun({
+    projectId,
+    analysisRunId,
+    actorUserId,
+    claimToken,
+    status,
+    resultPreviewHash = null,
+    payload = {},
+    warnings = [],
+    validation = {},
+    analysisResult = null,
+    threadStatus,
+    completedAt = nowIso(),
+    auditEvents = [],
+  }) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const runResult = await client.query(
+        "select * from analysis_runs where id = $1 and project_id = $2 for update",
+        [analysisRunId, projectId],
+      );
+      const run = analysisRunFromRow(runResult.rows[0]);
+      const threadResult = run
+        ? await client.query(
+          "select * from analysis_threads where id = $1 and project_id = $2 for update",
+          [run.analysisThreadId, projectId],
+        )
+        : { rows: [] };
+      const thread = analysisThreadFromRow(threadResult.rows[0]);
+      if (
+        !run
+        || run.status !== "running"
+        || !claimToken
+        || claimToken !== run.payload?.claimToken
+        || !thread
+        || !["failed", "validation_failed", "awaiting_result_review"].includes(status)
+        || analysisResult && (
+          status !== "awaiting_result_review"
+          || analysisResult.projectId !== projectId
+          || analysisResult.analysisThreadId !== thread.id
+          || analysisResult.analysisRunId !== run.id
+        )
+      ) {
+        throw Object.assign(new Error("The analysis run completion package is invalid."), {
+          statusCode: 409,
+          code: "analysis_run_state_conflict",
+        });
+      }
+      const persistedResult = analysisResult
+        ? await insertAnalysisResultRow(client, analysisResult)
+        : null;
+      const completedRunResult = await client.query(
+        `update analysis_runs
+         set status = $3,
+             result_preview_hash = $4,
+             payload = $5,
+             warnings = $6,
+             validation = $7,
+             updated_at = $8,
+             updated_by = $9
+         where id = $1 and project_id = $2
+         returning *`,
+        [
+          analysisRunId,
+          projectId,
+          status,
+          resultPreviewHash,
+          jsonb(payload || {}),
+          jsonb(warnings || [], []),
+          jsonb(validation || {}),
+          completedAt,
+          actorUserId,
+        ],
+      );
+      const updatedThreadResult = await client.query(
+        `update analysis_threads
+         set status = $2, updated_at = $3, updated_by = $4
+         where id = $1
+         returning *`,
+        [
+          thread.id,
+          threadStatus || (
+            status === "awaiting_result_review" ? "awaiting_result_review" : "execution_failed"
+          ),
+          completedAt,
+          actorUserId,
+        ],
+      );
+      await insertAuditEventRows(client, auditEvents);
+      await client.query("commit");
+      return {
+        analysisRun: analysisRunFromRow(completedRunResult.rows[0]),
+        analysisThread: analysisThreadFromRow(updatedThreadResult.rows[0]),
+        analysisResult: persistedResult,
+      };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async createAnalysisResult(input) {
     return insertAnalysisResultRow(this, input);
   }

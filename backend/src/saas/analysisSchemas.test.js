@@ -141,3 +141,31 @@ test("rejects unsupported runtime and non-analyze entrypoint", () => {
     "analysis_entrypoint_invalid",
   ]);
 });
+
+test("rejects unsupported or incomplete expected output encodings", () => {
+  const unsupported = validateAnalysisPlanRevision(validPlan({
+    expectedOutput: {
+      shape: "arbitrary_rows",
+      chartType: "bar",
+      xField: "experiment_label",
+      yFields: ["selectivity_normalized"],
+    },
+  }));
+  const incomplete = validateAnalysisPlanRevision(validPlan({
+    expectedOutput: {
+      shape: "experiment_traces",
+      chartType: "bar",
+      xField: "",
+      yFields: [],
+    },
+  }));
+
+  assert.equal(
+    unsupported.errors.some((item) => item.code === "analysis_output_shape_unsupported"),
+    true,
+  );
+  assert.equal(
+    incomplete.errors.some((item) => item.code === "analysis_output_encoding_required"),
+    true,
+  );
+});

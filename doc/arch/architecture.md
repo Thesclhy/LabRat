@@ -42,9 +42,12 @@ natural-language analysis request
   -> immutable AnalysisPlanRevision review
   -> exact-hash acceptance
   -> queued AnalysisRun
+  -> frozen package execution in a versioned adapter
+  -> backend shape/hash/lineage/invariant validation
+  -> immutable awaiting-review AnalysisResult
 ```
 
-The queued run is not executed by this milestone and creates no AnalysisResult or ChartSpec.
+Execution creates no ChartSpec. Result acceptance and chart publication remain a later explicit review boundary.
 
 ## Runtime Topology
 
@@ -54,6 +57,8 @@ React/Vite frontend :5173
       -> Postgres when DATABASE_URL is configured
       -> in-memory store for isolated development/tests
       -> local uploaded-file storage
+      -> disabled executor by default
+      -> local bounded runner outside production or configured hardened HTTPS worker
 ```
 
 Logged-in server mode treats backend project state as the source of truth. Old IndexedDB/project-file shapes are not migration targets.
@@ -80,7 +85,8 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 - **Snapshot Publisher**: idempotent atomic accepted DataPlan/DataSnapshot/identity/head/audit transaction.
 - **Experiment Projection**: unit-aware field catalog, cursor rows, filters/sort/search, and lazy detail.
 - **Analysis Tool Registry**: project-authorized, framework-independent read/plan tools for accepted field catalogs, experiment scope, selection previews/inspection, and plan validation. It exposes no calculation executor.
-- **Analysis Thread Service**: immutable plan revision persistence, backend-owned draft normalization, exact selection/program hashing, feedback revisioning, stale-head detection, and idempotent queued-run creation.
+- **Analysis Thread Service**: immutable plan revision persistence, backend-owned draft normalization, exact selection/program hashing, feedback revisioning, stale-head detection, idempotent queued-run creation, run orchestration, bounded result preview, and result-linked replanning.
+- **Analysis Executor/Validator**: canonical frozen run packages, transactionally checked active-head claims, internal claim-token leases, versioned static/runner Python policy, non-production local adapter, production hardened-worker adapter, and deterministic output/schema/identity/accounting/hash/lineage/unit/invariant validation before result persistence.
 - **Source Chart Resolver**: explicit range/experiment evidence, source extract proposals, immutable chart snapshots, and validation.
 - **Manuscript Store**: pages, blocks, references, ChartSpec snapshots, and canvas state.
 
@@ -97,7 +103,8 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 - AnalysisSelection is a transient accepted-head-only review artifact with dependency/selection hashes.
 - AnalysisThread owns one durable reviewed-analysis conversation and its artifact ids.
 - AnalysisPlanRevision is a durable immutable manifest, frozen selection, and exact program; it is not a result.
-- AnalysisRun is an immutable attempt. Its current first state is `queued`; no executor is mounted yet.
+- AnalysisRun is an immutable attempt that is claimed once and finalized with bounded execution/validation metadata.
+- AnalysisResult is immutable validated output awaiting a separate user review; failed or invalid execution creates none.
 - SourceExtractProposal/ChartProposalSet/ChartSpec are reviewed visualization artifacts.
 - Manuscript stores layout and snapshots, not a parallel scientific dataset.
 - AgentRun stores visible workflow/audit traces, not hidden chain-of-thought.
@@ -132,7 +139,9 @@ Current ChartSpecs require `origin: source_extract`, exact source refs, and immu
 
 AI may classify, rank, explain, and draft bounded reviewable patches. Deterministic backend code owns evidence reads, validation, identity checks, unit/value parsing, hashes, publication, and authorization. Scientific mutations require explicit user confirmation.
 
-For analysis planning, the model selects fields/scope and drafts calculation meaning plus Python. Backend services re-resolve accepted active-head data and overwrite selection, source, and Python hashes before persistence. The planning registry still exposes no execution operation.
+For analysis planning, the model selects fields/scope and drafts calculation meaning plus Python. Backend services re-resolve accepted active-head data and overwrite selection, source, and Python hashes before persistence. The planning registry exposes no execution operation. Execution occurs only through the accepted AnalysisRun service, never through a model tool call.
+
+The Python policy is defense in depth, not the production isolation boundary. It blocks direct numeric-library I/O, module-chain escapes, private/runtime attributes, and known process/network/filesystem APIs, but local subprocess execution remains an explicitly enabled development adapter and is disabled in production. A production worker must provide OS/container-level network denial, read-only runtime assets, resource limits, per-run isolation, and runId idempotency in addition to the policy and result validator.
 
 The frontend does not hold provider credentials or call provider APIs. AgentPanel submits project-scoped messages and compact selected context to the authenticated backend.
 

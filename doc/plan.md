@@ -59,11 +59,12 @@ Use this split when deciding what to build:
 - Implemented conversational-analysis Task 2: accepted-head-only unit-aware selections, source review rectangles and limits, frozen plan/program schema validation, and a project-scoped six-tool planning registry without execution.
 - Implemented conversational-analysis Task 3: durable threads and immutable plan revisions, backend-only initial/feedback plan drafting, exact accepted-selection/source/Python hashes, migration/store parity, bounded review routes, AgentRun artifact links, stale-plan checks, and idempotent acceptance that creates a queued run without executing or creating a chart.
 - Implemented conversational-analysis Task 4: normal LabRat analysis cards open a persistent Excel-plus-conversation review workspace; accepted source cells are highlighted as non-contiguous red rectangles; users can iterate immutable plan revisions through the split modify composer; exact visible hashes gate acceptance; stale cards reopen the latest active revision; and responsive layouts keep Result/Chart unavailable before execution.
+- Implemented conversational-analysis Task 5: accepted queued runs are revalidated and executed through a versioned backend adapter; static/runner Python policy and production-disabled defaults bound code execution; valid output is hash/shape/lineage/count/invariant checked before one immutable awaiting-review AnalysisResult is persisted; result previews and hash-bound replanning are available without creating a ChartSpec.
 
 ## Next Recommended Slices
 
-1. Execute Task 5 of `doc/plans/backend-conversational-analysis-chart-implementation-plan.md`: versioned Python policy, sandbox adapter, and validated AnalysisResult creation.
-2. Continue through result review -> DataSnapshot-backed ChartSpec in coherent tested milestones.
+1. Execute Task 6 of `doc/plans/backend-conversational-analysis-chart-implementation-plan.md`: result/validation/exclusion review and the result feedback loop in the existing LabRat conversation workspace.
+2. Continue through accepted result -> DataSnapshot-backed ChartSpec in coherent tested milestones.
 3. Preserve source-backed chart creation as a distinct evidence path and converge both forms only at the validated ChartSpec/rendering boundary.
 
 ## Operating Loop

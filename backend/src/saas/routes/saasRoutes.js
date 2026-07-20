@@ -52,13 +52,18 @@ import {
 import {
   acceptAnalysisPlanRevision,
   analysisPlanRevisionSummary,
+  analysisResultSummary,
   analysisRunSummary,
   analysisThreadSummary,
   createAnalysisPlanRevision,
   createAnalysisThread,
   draftAnalysisPlanRevision,
   getAnalysisPlanSelectionPage,
+  getAnalysisResultPreview,
+  getAnalysisRunDetail,
   listAnalysisThreads,
+  executeAnalysisRun,
+  reviseAnalysisRun,
 } from "../analysisThreads.js";
 import { validateChartSpecProposal } from "../chartSpecValidation.js";
 import {
@@ -434,6 +439,19 @@ async function analysisPlanRevisionAuth(req, context, planRevisionId, role = "vi
   }
   requireLabRole(auth, analysisPlanRevision.labId, role);
   return { auth, analysisPlanRevision };
+}
+
+async function analysisRunAuth(req, context, analysisRunId, role = "viewer") {
+  const auth = requireAuth(await authFor(req, context));
+  const analysisRun = await context.store.findAnalysisRunById?.(analysisRunId);
+  if (!analysisRun) {
+    throw Object.assign(new Error("Analysis run not found."), {
+      statusCode: 404,
+      code: "analysis_run_not_found",
+    });
+  }
+  requireLabRole(auth, analysisRun.labId, role);
+  return { auth, analysisRun };
 }
 
 async function handleLogin(req, res, context) {
@@ -1630,6 +1648,117 @@ async function handleAnalysisPlanAccept(req, res, context, planRevisionId) {
   });
 }
 
+async function handleAnalysisRunById(req, res, context, analysisRunId) {
+  await analysisRunAuth(req, context, analysisRunId, "viewer");
+  const detail = await getAnalysisRunDetail({
+    store: context.store,
+    analysisRunId,
+  });
+  sendJson(res, 200, {
+    analysisThread: analysisThreadSummary(detail.analysisThread),
+    analysisPlanRevision: analysisPlanRevisionSummary(detail.analysisPlanRevision),
+    analysisRun: analysisRunSummary(detail.analysisRun),
+    analysisResult: analysisResultSummary(detail.analysisResult),
+  });
+}
+
+async function handleAnalysisRunExecute(req, res, context, analysisRunId) {
+  const { auth, analysisRun } = await analysisRunAuth(
+    req,
+    context,
+    analysisRunId,
+    "editor",
+  );
+  await readOptionalJsonBody(req);
+  const project = await context.store.findProjectById(analysisRun.projectId);
+  if (!project) {
+    throw Object.assign(new Error("Project not found."), {
+      statusCode: 404,
+      code: "project_not_found",
+    });
+  }
+  const result = await executeAnalysisRun({
+    store: context.store,
+    project,
+    actorUserId: auth.user.id,
+    analysisRunId,
+    executor: context.analysisExecutor,
+    ipAddress: clientIp(req),
+    userAgent: userAgent(req),
+  });
+  sendJson(res, result.idempotentReplay ? 200 : 201, {
+    analysisThread: analysisThreadSummary(result.analysisThread),
+    analysisPlanRevision: analysisPlanRevisionSummary(result.analysisPlanRevision),
+    analysisRun: analysisRunSummary(result.analysisRun),
+    analysisResult: analysisResultSummary(result.analysisResult),
+    idempotentReplay: result.idempotentReplay,
+  });
+}
+
+async function handleAnalysisResultPreview(req, res, context, analysisRunId, url) {
+  await analysisRunAuth(req, context, analysisRunId, "viewer");
+  const preview = await getAnalysisResultPreview({
+    store: context.store,
+    analysisRunId,
+    offset: url.searchParams.get("offset"),
+    limit: url.searchParams.get("limit"),
+    traceOffset: url.searchParams.get("traceOffset"),
+    traceLimit: url.searchParams.get("traceLimit"),
+    sourceOffset: url.searchParams.get("sourceOffset"),
+    sourceLimit: url.searchParams.get("sourceLimit"),
+  });
+  sendJson(res, 200, preview);
+}
+
+async function handleAnalysisRunRevise(req, res, context, analysisRunId) {
+  const { auth, analysisRun } = await analysisRunAuth(
+    req,
+    context,
+    analysisRunId,
+    "editor",
+  );
+  const project = await context.store.findProjectById(analysisRun.projectId);
+  if (!project) {
+    throw Object.assign(new Error("Project not found."), {
+      statusCode: 404,
+      code: "project_not_found",
+    });
+  }
+  const body = await readJsonBody(req);
+  const result = await reviseAnalysisRun({
+    store: context.store,
+    project,
+    actorUserId: auth.user.id,
+    analysisRunId,
+    resultHash: body.resultHash,
+    feedback: body.feedback,
+    modelProvider: context.modelProvider,
+    analysisToolRegistry: context.analysisToolRegistry,
+  });
+  await context.store.recordAuditEvent({
+    labId: project.labId,
+    projectId: project.id,
+    actorUserId: auth.user.id,
+    action: "analysis_result.request_revision",
+    targetType: "analysis_plan_revision",
+    targetId: result.analysisPlanRevision.id,
+    summary: `Requested analysis revision ${result.analysisPlanRevision.revision} from a prior run.`,
+    metadata: {
+      analysisThreadId: analysisRun.analysisThreadId,
+      priorAnalysisRunId: analysisRun.id,
+      priorAnalysisResultId: result.priorAnalysisResult?.id || null,
+      priorResultHash: result.priorAnalysisResult?.contentHash || null,
+    },
+    ipAddress: clientIp(req),
+    userAgent: userAgent(req),
+  });
+  sendJson(res, 201, {
+    analysisPlanRevision: analysisPlanRevisionSummary(result.analysisPlanRevision),
+    priorAnalysisRun: analysisRunSummary(result.priorAnalysisRun),
+    priorAnalysisResult: analysisResultSummary(result.priorAnalysisResult),
+  });
+}
+
 async function handleProjectChartInterpret(req, res, context, projectId) {
   const { auth, project } = await projectAuth(req, context, projectId, "viewer");
   const body = await readJsonBody(req);
@@ -2581,6 +2710,22 @@ async function dispatch(req, res, context) {
   if (analysisPlanRevisionAcceptMatch && req.method === "POST") {
     return handleAnalysisPlanAccept(req, res, context, analysisPlanRevisionAcceptMatch[1]);
   }
+  const analysisRunResultPreviewMatch = pathName.match(/^\/api\/analysis-runs\/([^/]+)\/result-preview$/);
+  if (analysisRunResultPreviewMatch && req.method === "GET") {
+    return handleAnalysisResultPreview(req, res, context, analysisRunResultPreviewMatch[1], url);
+  }
+  const analysisRunExecuteMatch = pathName.match(/^\/api\/analysis-runs\/([^/]+)\/execute$/);
+  if (analysisRunExecuteMatch && req.method === "POST") {
+    return handleAnalysisRunExecute(req, res, context, analysisRunExecuteMatch[1]);
+  }
+  const analysisRunReviseMatch = pathName.match(/^\/api\/analysis-runs\/([^/]+)\/revise$/);
+  if (analysisRunReviseMatch && req.method === "POST") {
+    return handleAnalysisRunRevise(req, res, context, analysisRunReviseMatch[1]);
+  }
+  const analysisRunMatch = pathName.match(/^\/api\/analysis-runs\/([^/]+)$/);
+  if (analysisRunMatch && req.method === "GET") {
+    return handleAnalysisRunById(req, res, context, analysisRunMatch[1]);
+  }
   const analysisThreadPlanRevisionsMatch = pathName.match(/^\/api\/analysis-threads\/([^/]+)\/plan-revisions$/);
   if (analysisThreadPlanRevisionsMatch && req.method === "POST") {
     return handleAnalysisPlanRevisions(req, res, context, analysisThreadPlanRevisionsMatch[1]);
@@ -2616,6 +2761,7 @@ export async function handleSaasRoutes(req, res, context) {
     && !req.url?.startsWith("/api/agent-runs")
     && !req.url?.startsWith("/api/analysis-threads")
     && !req.url?.startsWith("/api/analysis-plan-revisions")
+    && !req.url?.startsWith("/api/analysis-runs")
     && !req.url?.startsWith("/api/import-runs")
     && !req.url?.startsWith("/api/chart-proposal-sets")
     && !req.url?.startsWith("/api/manuscripts")) {

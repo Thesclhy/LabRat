@@ -1061,6 +1061,218 @@ export class MemorySaasStore {
       .map(copy);
   }
 
+  async claimAnalysisRun({
+    projectId,
+    analysisRunId,
+    actorUserId,
+    expectedHeadRefs = [],
+    staleValidation = {},
+    staleAuditEvents = [],
+    startedAt = nowIso(),
+    staleAfterMs = 360_000,
+  }) {
+    const run = this.analysisRuns.get(analysisRunId);
+    const thread = run ? this.analysisThreads.get(run.analysisThreadId) : null;
+    const priorStartedAt = Date.parse(run?.payload?.startedAt || "");
+    const claimStartedAt = Date.parse(startedAt);
+    const expiredLease = run?.status === "running"
+      && Number.isFinite(priorStartedAt)
+      && Number.isFinite(claimStartedAt)
+      && claimStartedAt - priorStartedAt >= Math.max(Number(staleAfterMs) || 0, 1);
+    if (
+      !run
+      || run.projectId !== projectId
+      || !thread
+      || thread.projectId !== projectId
+      || run.status !== "queued" && !expiredLease
+    ) {
+      throw Object.assign(new Error("Analysis run is not queued for execution."), {
+        statusCode: 409,
+        code: "analysis_run_state_conflict",
+      });
+    }
+    const headMismatches = asArray(expectedHeadRefs).flatMap((expected) => {
+      const current = [...this.experimentSnapshotHeads.values()].find((head) => (
+        head.projectId === projectId && head.experimentId === expected.experimentId
+      ));
+      return (
+        current
+        && current.id === expected.headId
+        && current.dataSnapshotId === expected.dataSnapshotId
+        && Number(current.recordIndex) === Number(expected.recordIndex)
+      ) ? [] : [{
+        experimentId: expected.experimentId,
+        expected,
+        current: current ? {
+          headId: current.id,
+          dataSnapshotId: current.dataSnapshotId,
+          recordIndex: Number(current.recordIndex),
+        } : null,
+      }];
+    });
+    if (headMismatches.length) {
+      const completed = {
+        ...copy(run),
+        status: "validation_failed",
+        payload: {
+          ...copy(run.payload || {}),
+          completedAt: startedAt,
+          error: {
+            code: "analysis_run_stale",
+            message: "Active accepted experiment heads changed before execution claim.",
+          },
+          headMismatches,
+        },
+        validation: copy(staleValidation) || {},
+        updatedAt: startedAt,
+        updatedBy: actorUserId,
+      };
+      const failedThread = {
+        ...copy(thread),
+        status: "execution_failed",
+        updatedAt: startedAt,
+        updatedBy: actorUserId,
+      };
+      const nextRuns = new Map(this.analysisRuns);
+      const nextThreads = new Map(this.analysisThreads);
+      const nextAuditEvents = new Map(this.auditEvents);
+      nextRuns.set(run.id, completed);
+      nextThreads.set(thread.id, failedThread);
+      asArray(staleAuditEvents).forEach((auditInput) => {
+        const event = {
+          id: auditInput.id || makeId("audit"),
+          labId: auditInput.labId || run.labId || null,
+          projectId: auditInput.projectId || projectId,
+          actorUserId: auditInput.actorUserId || actorUserId || null,
+          action: auditInput.action,
+          targetType: auditInput.targetType || null,
+          targetId: auditInput.targetId || null,
+          summary: auditInput.summary || null,
+          metadata: copy(auditInput.metadata) || {},
+          createdAt: auditInput.createdAt || startedAt,
+          ipAddress: auditInput.ipAddress || null,
+          userAgent: auditInput.userAgent || null,
+        };
+        nextAuditEvents.set(event.id, event);
+      });
+      this.analysisRuns = nextRuns;
+      this.analysisThreads = nextThreads;
+      this.auditEvents = nextAuditEvents;
+      return copy(completed);
+    }
+    const claimed = {
+      ...copy(run),
+      status: "running",
+      payload: {
+        ...copy(run.payload || {}),
+        ...(expiredLease ? {
+          recoveredFromStartedAt: run.payload?.startedAt || null,
+          recoveryCount: (Number(run.payload?.recoveryCount) || 0) + 1,
+        } : {}),
+        claimToken: makeId("analysis_claim"),
+        startedAt,
+      },
+      updatedAt: startedAt,
+      updatedBy: actorUserId,
+    };
+    const nextRuns = new Map(this.analysisRuns);
+    nextRuns.set(run.id, claimed);
+    this.analysisRuns = nextRuns;
+    return copy(claimed);
+  }
+
+  async finalizeAnalysisRun({
+    projectId,
+    analysisRunId,
+    actorUserId,
+    claimToken,
+    status,
+    resultPreviewHash = null,
+    payload = {},
+    warnings = [],
+    validation = {},
+    analysisResult = null,
+    threadStatus,
+    completedAt = nowIso(),
+    auditEvents = [],
+  }) {
+    const run = this.analysisRuns.get(analysisRunId);
+    const thread = run ? this.analysisThreads.get(run.analysisThreadId) : null;
+    if (
+      !run
+      || run.projectId !== projectId
+      || run.status !== "running"
+      || !claimToken
+      || claimToken !== run.payload?.claimToken
+      || !thread
+      || thread.projectId !== projectId
+      || !["failed", "validation_failed", "awaiting_result_review"].includes(status)
+      || analysisResult && (
+        status !== "awaiting_result_review"
+        || analysisResult.projectId !== projectId
+        || analysisResult.analysisThreadId !== thread.id
+        || analysisResult.analysisRunId !== run.id
+        || this.analysisResults.has(analysisResult.id)
+      )
+    ) {
+      throw Object.assign(new Error("The analysis run completion package is invalid."), {
+        statusCode: 409,
+        code: "analysis_run_state_conflict",
+      });
+    }
+    const nextRuns = new Map(this.analysisRuns);
+    const nextThreads = new Map(this.analysisThreads);
+    const nextResults = new Map(this.analysisResults);
+    const nextAuditEvents = new Map(this.auditEvents);
+    const completedRun = {
+      ...copy(run),
+      status,
+      resultPreviewHash,
+      payload: copy(payload) || {},
+      warnings: copy(warnings) || [],
+      validation: copy(validation) || {},
+      updatedAt: completedAt,
+      updatedBy: actorUserId,
+    };
+    const updatedThread = {
+      ...copy(thread),
+      status: threadStatus || (
+        status === "awaiting_result_review" ? "awaiting_result_review" : "execution_failed"
+      ),
+      updatedAt: completedAt,
+      updatedBy: actorUserId,
+    };
+    nextRuns.set(run.id, completedRun);
+    nextThreads.set(thread.id, updatedThread);
+    if (analysisResult) nextResults.set(analysisResult.id, copy(analysisResult));
+    asArray(auditEvents).forEach((auditInput) => {
+      const event = {
+        id: auditInput.id || makeId("audit"),
+        labId: auditInput.labId || run.labId || null,
+        projectId: auditInput.projectId || projectId,
+        actorUserId: auditInput.actorUserId || actorUserId || null,
+        action: auditInput.action,
+        targetType: auditInput.targetType || null,
+        targetId: auditInput.targetId || null,
+        summary: auditInput.summary || null,
+        metadata: copy(auditInput.metadata) || {},
+        createdAt: auditInput.createdAt || completedAt,
+        ipAddress: auditInput.ipAddress || null,
+        userAgent: auditInput.userAgent || null,
+      };
+      nextAuditEvents.set(event.id, event);
+    });
+    this.analysisRuns = nextRuns;
+    this.analysisThreads = nextThreads;
+    this.analysisResults = nextResults;
+    this.auditEvents = nextAuditEvents;
+    return {
+      analysisRun: copy(completedRun),
+      analysisThread: copy(updatedThread),
+      analysisResult: copy(analysisResult),
+    };
+  }
+
   async createAnalysisResult(input) {
     if (this.analysisResults.has(input.id)) {
       throw Object.assign(new Error("Analysis result already exists."), {

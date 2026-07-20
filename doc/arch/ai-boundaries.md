@@ -82,6 +82,11 @@ WorkbookUnderstanding confirmation, DataPlan publish, source extract acceptance,
 - AnalysisPlanRevision validation rejects embedded result arrays. The backend persists immutable numbered revisions; feedback creates a later revision instead of patching prior payloads.
 - AgentRun analysis dispositions create a durable AnalysisThread. With accepted data and a configured provider, the backend may draft revision 1 and returns only visible artifact summaries.
 - Plan acceptance requires exact reviewed hashes plus idempotency, re-resolves active heads, and creates only a queued AnalysisRun. It does not execute Python or create an AnalysisResult/ChartSpec.
+- A model cannot call the executor. Only the authenticated AnalysisRun endpoint can execute an accepted frozen package after active-head, dependency, selection, input, program, runtime, and Python-policy checks.
+- Static policy permits a bounded numeric-library allowlist and rejects dynamic code, direct numeric-library I/O, module/private-attribute escapes, process, network, filesystem, runtime-internal, and path-traversal operations. The runner repeats AST checks with restricted builtins.
+- Local execution is a non-production development adapter, not a security sandbox. Production defaults to disabled and requires an externally hardened HTTPS worker with network denial, read-only assets, isolation, and resource limits.
+- Executor output is untrusted until deterministic validation checks the supported output encoding, finite declared fields, plottable x/y types and lengths, exact experiment/snapshot identity, stable ids, accepted-record lineage, complete output-or-reasoned-exclusion accounting, missing-value behavior, size limits, hashes, units, and manifest invariants.
+- Only valid output becomes an immutable awaiting-review AnalysisResult. No executor path creates a ChartSpec. Result feedback references the exact visible result hash and creates a later plan revision without mutating prior artifacts.
 
 ## Chart Rules
 

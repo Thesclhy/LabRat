@@ -9,6 +9,7 @@ import {
   createAnalysisToolRegistry,
   createStoreBackedAnalysisHandlers,
 } from "./saas/analysisToolRegistry.js";
+import { createAnalysisExecutor } from "./saas/analysisExecutor.js";
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 8787;
@@ -17,6 +18,13 @@ export function createServer(options = {}) {
   const config = options.config || loadSaasConfig();
   const storePromise = options.store ? Promise.resolve(options.store) : createSaasStore(config);
   const modelProvider = options.modelProvider || createBackendModelProvider({ config });
+  const analysisExecutor = options.analysisExecutor || createAnalysisExecutor({
+    mode: config.analysisExecutorMode,
+    nodeEnv: config.nodeEnv,
+    pythonCommand: config.analysisPythonCommand,
+    workerEndpoint: config.analysisWorkerEndpoint,
+    timeoutMs: config.analysisExecutorTimeoutMs,
+  });
   const analysisToolRegistryPromise = storePromise.then((store) => (
     options.analysisToolRegistry || createAnalysisToolRegistry({
       handlers: createStoreBackedAnalysisHandlers({ store }),
@@ -28,7 +36,13 @@ export function createServer(options = {}) {
         storePromise,
         analysisToolRegistryPromise,
       ]);
-      const saasContext = { config, store, modelProvider, analysisToolRegistry };
+      const saasContext = {
+        config,
+        store,
+        modelProvider,
+        analysisToolRegistry,
+        analysisExecutor,
+      };
       if (req.method === "GET" && req.url === "/health") {
         sendJson(res, 200, { ok: true, service: "labrat-backend" });
         return;

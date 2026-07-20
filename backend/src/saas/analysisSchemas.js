@@ -108,6 +108,20 @@ export function validateAnalysisPlanRevision(plan = {}) {
       "analysis_expected_output_required",
       "Expected output shape and chart type are required.",
     ));
+  } else if (text(plan.expectedOutput.shape) !== "experiment_traces") {
+    errors.push(error(
+      "analysis_output_shape_unsupported",
+      "Analysis expectedOutput.shape must be experiment_traces.",
+    ));
+  }
+  if (
+    !text(plan.expectedOutput?.xField)
+    || !asArray(plan.expectedOutput?.yFields).map(text).filter(Boolean).length
+  ) {
+    errors.push(error(
+      "analysis_output_encoding_required",
+      "Analysis expectedOutput requires one xField and at least one yField.",
+    ));
   }
   if (containsResultPayload(plan)) {
     errors.push(error(

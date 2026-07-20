@@ -6,6 +6,10 @@ import {
   createAnalysisPlanRevision,
   createAnalysisThread,
   draftAnalysisPlanRevision,
+  executeAnalysisRun,
+  analysisResultSummary,
+  analysisRunSummary,
+  getAnalysisResultPreview,
   getAnalysisPlanSelectionPage,
 } from "./analysisThreads.js";
 import { analysisFieldId, resolveAnalysisSelection } from "./analysisSelection.js";
@@ -504,4 +508,217 @@ test("memory analysis runs and results are append-only like Postgres rows", asyn
   );
   assert.notEqual((await store.findAnalysisRunById(run.id)).status, "mutated");
   assert.equal((await store.findAnalysisResultById(result.id)).result.summary.rowCount, 1);
+});
+
+test("analysis result summaries and previews keep evidence reads bounded", async () => {
+  const store = new MemorySaasStore();
+  const run = {
+    id: "analysis_run_bounded_preview",
+    projectId: "project_bounded_preview",
+    analysisThreadId: "analysis_thread_bounded_preview",
+    acceptedPlanRevisionId: "analysis_plan_bounded_preview",
+    status: "awaiting_result_review",
+  };
+  const result = {
+    id: "analysis_result_bounded_preview",
+    projectId: run.projectId,
+    analysisThreadId: run.analysisThreadId,
+    analysisRunId: run.id,
+    status: "awaiting_review",
+    contentHash: "sha256_bounded_result",
+    resultPreviewHash: "sha256_bounded_preview",
+    result: {
+      resultTable: [
+        { __result_id: "row_1", value: 1 },
+        { __result_id: "row_2", value: 2 },
+      ],
+      traces: [
+        { traceId: "trace_1", x: [1], y: [1] },
+        { traceId: "trace_2", x: [2], y: [2] },
+      ],
+      lineage: {
+        row_1: { sourceRecordIds: ["snapshot_1:0"] },
+        row_2: { sourceRecordIds: ["snapshot_2:0"] },
+        trace_1: { sourceRecordIds: ["snapshot_1:0"] },
+        trace_2: { sourceRecordIds: ["snapshot_2:0"] },
+      },
+      summary: {},
+    },
+    sourceRefs: [
+      { sourceDocumentId: "source_1", cell: "A1" },
+      { sourceDocumentId: "source_1", cell: "A2" },
+      { sourceDocumentId: "source_1", cell: "A3" },
+    ],
+    warnings: [],
+    validation: { ok: true },
+  };
+  store.analysisRuns.set(run.id, run);
+  store.analysisResults.set(result.id, result);
+
+  const summary = analysisResultSummary(result);
+  const runSummary = analysisRunSummary({
+    ...run,
+    payload: { claimToken: "internal_claim_token", adapter: "test" },
+  });
+  const preview = await getAnalysisResultPreview({
+    store,
+    analysisRunId: run.id,
+    limit: 1,
+    traceLimit: 1,
+    sourceLimit: 1,
+  });
+
+  assert.equal(summary.sourceRefCount, 3);
+  assert.equal(Object.hasOwn(summary, "sourceRefs"), false);
+  assert.deepEqual(runSummary.execution, { adapter: "test" });
+  assert.deepEqual(Object.keys(preview.lineage).sort(), ["row_1", "trace_1"]);
+  assert.equal(preview.sourceRefs.length, 1);
+  assert.deepEqual(preview.sourcePage, { offset: 0, limit: 1, totalCount: 3 });
+});
+
+test("analysis run claim atomically rejects changed active snapshot heads", async () => {
+  const { store, project, thread, selection } = await setup();
+  const run = {
+    id: "analysis_run_stale_claim",
+    labId: project.labId,
+    projectId: project.id,
+    analysisThreadId: thread.id,
+    status: "queued",
+    payload: {},
+  };
+  store.analysisRuns.set(run.id, run);
+  await store.updateAnalysisThread(thread.id, { status: "executing" });
+  const head = store.experimentSnapshotHeads.get("head_analysis_1");
+  store.experimentSnapshotHeads.set(head.id, {
+    ...head,
+    dataSnapshotId: "data_snapshot_changed",
+  });
+
+  const claimed = await store.claimAnalysisRun({
+    projectId: project.id,
+    analysisRunId: run.id,
+    actorUserId: "user_editor",
+    expectedHeadRefs: selection.records.map((record) => ({
+      headId: record.headId,
+      experimentId: record.experimentId,
+      dataSnapshotId: record.snapshotId,
+      recordIndex: record.recordIndex,
+    })),
+    staleValidation: {
+      ok: false,
+      errors: [{ code: "analysis_run_stale", message: "Active heads changed." }],
+    },
+  });
+
+  assert.equal(claimed.status, "validation_failed");
+  assert.equal((await store.findAnalysisThreadById(thread.id)).status, "execution_failed");
+});
+
+test("analysis run claim recovers an expired running lease but not an active one", async () => {
+  const { store, project, thread, selection } = await setup();
+  const expectedHeadRefs = selection.records.map((record) => ({
+    headId: record.headId,
+    experimentId: record.experimentId,
+    dataSnapshotId: record.snapshotId,
+    recordIndex: record.recordIndex,
+  }));
+  const run = {
+    id: "analysis_run_expired_lease",
+    labId: project.labId,
+    projectId: project.id,
+    analysisThreadId: thread.id,
+    status: "running",
+    payload: {
+      startedAt: "2026-07-20T00:00:00.000Z",
+      claimToken: "analysis_claim_expired",
+    },
+  };
+  store.analysisRuns.set(run.id, run);
+  const recovered = await store.claimAnalysisRun({
+    projectId: project.id,
+    analysisRunId: run.id,
+    actorUserId: "user_editor",
+    expectedHeadRefs,
+    startedAt: "2026-07-20T00:10:00.000Z",
+    staleAfterMs: 60_000,
+  });
+
+  assert.equal(recovered.status, "running");
+  assert.equal(recovered.payload.recoveryCount, 1);
+  assert.notEqual(recovered.payload.claimToken, "analysis_claim_expired");
+  await assert.rejects(
+    store.finalizeAnalysisRun({
+      projectId: project.id,
+      analysisRunId: run.id,
+      actorUserId: "user_editor",
+      claimToken: "analysis_claim_expired",
+      status: "failed",
+    }),
+    (error) => error.code === "analysis_run_state_conflict",
+  );
+  await assert.rejects(
+    store.claimAnalysisRun({
+      projectId: project.id,
+      analysisRunId: run.id,
+      actorUserId: "user_editor",
+      expectedHeadRefs,
+      startedAt: "2026-07-20T00:10:30.000Z",
+      staleAfterMs: 60_000,
+    }),
+    (error) => error.code === "analysis_run_state_conflict",
+  );
+});
+
+test("invalid executor output finalizes without persisting a result or chart", async () => {
+  const { store, project, thread, selection, selectionRequest } = await setup();
+  const revision = await createAnalysisPlanRevision({
+    store,
+    project,
+    analysisThreadId: thread.id,
+    actorUserId: "user_editor",
+    plan: planForSelection(selection),
+    selectionRequest,
+  });
+  const accepted = await acceptAnalysisPlanRevision({
+    store,
+    project,
+    actorUserId: "user_editor",
+    planRevisionId: revision.id,
+    idempotencyKey: "invalid_executor_result",
+    planHash: revision.planHash,
+    selectionHash: revision.selectionHash,
+    dependencyHash: revision.dependencyHash,
+  });
+  const executed = await executeAnalysisRun({
+    store,
+    project,
+    actorUserId: "user_editor",
+    analysisRunId: accepted.analysisRun.id,
+    executor: {
+      async executeAcceptedRun(runPackage) {
+        return {
+          ok: true,
+          adapter: "invalid_test",
+          runtime: { version: runPackage.runtimeVersion },
+          result: {
+            result_table: [],
+            traces: [],
+            lineage: {},
+            summary: {
+              inputRecordCount: 1,
+              outputRecordCount: 0,
+              excludedRecordCount: 0,
+              excludedRecords: [],
+              missingValuePolicy: "exclude_record",
+            },
+          },
+        };
+      },
+    },
+  });
+
+  assert.equal(executed.analysisRun.status, "validation_failed");
+  assert.equal(executed.analysisResult, null);
+  assert.equal((await store.listAnalysisResults({ projectId: project.id })).length, 0);
+  assert.equal((await store.listChartSpecs({ projectId: project.id })).length, 0);
 });
