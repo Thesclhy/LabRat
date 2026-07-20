@@ -1110,8 +1110,10 @@ export function WorkbookReviewWorkspace({
   reviewState,
   draftRegions = [],
   activeDraftRegionId = "",
+  selectedDraftRegionIds = [],
   onDraftRegionsChange,
   onActiveDraftRegionChange,
+  onSelectedDraftRegionIdsChange,
   focusSelection = null,
   reviewDock = null,
 }) {
@@ -1166,9 +1168,16 @@ export function WorkbookReviewWorkspace({
     () => draftRegionsForSheet.filter((region) => region.status === "reviewed_input"),
     [draftRegionsForSheet],
   );
-  const editableDrafts = useMemo(
-    () => draftRegionsForSheet.filter((region) => region.status !== "reviewed_input"),
-    [draftRegionsForSheet],
+  const selectedDraftRegionIdSet = useMemo(
+    () => new Set(selectedDraftRegionIds),
+    [selectedDraftRegionIds],
+  );
+  const highlightedEditableDrafts = useMemo(
+    () => draftRegionsForSheet.filter((region) => (
+      region.status !== "reviewed_input"
+      && selectedDraftRegionIdSet.has(region.draftRegionId || region.clientRegionId)
+    )),
+    [draftRegionsForSheet, selectedDraftRegionIdSet],
   );
   const displayBounds = parseExcelA1Range(activeRange) || excelRangeBoundsFromSheet(activeSheet);
   const visibleTileBounds = useMemo(() => workbookVisibleTileBounds(displayBounds, settledScrollState, {
@@ -1290,7 +1299,14 @@ export function WorkbookReviewWorkspace({
       status: "draft",
     }));
     onActiveDraftRegionChange?.(nextRegionId);
-  }, [focusSelection, draftRegions, onDraftRegionsChange, onActiveDraftRegionChange]);
+    onSelectedDraftRegionIdsChange?.([nextRegionId]);
+  }, [
+    focusSelection,
+    draftRegions,
+    onDraftRegionsChange,
+    onActiveDraftRegionChange,
+    onSelectedDraftRegionIdsChange,
+  ]);
 
   useEffect(() => {
     const timerId = window.setTimeout(() => {
@@ -1399,6 +1415,7 @@ export function WorkbookReviewWorkspace({
       status: "draft",
     }));
     onActiveDraftRegionChange?.(nextRegionId);
+    onSelectedDraftRegionIdsChange?.([nextRegionId]);
   };
   const createRangeDraftRegion = (start, end, selectionMethod = "drag_select", additive = false) => {
     if (!sourceDocument?.id || !activeSheetName || !start || !end) return;
@@ -1422,6 +1439,9 @@ export function WorkbookReviewWorkspace({
         region.sourceDocumentId === sourceDocument.id && region.sheetName === activeSheetName
       )) || nextRegions.at(-1);
       onDraftRegionsChange?.(nextRegions);
+      onSelectedDraftRegionIdsChange?.(
+        selectedDraftRegionIds.filter((selectedId) => selectedId !== matchingId),
+      );
       if (matchingId === activeDraftRegionId || !activeStillExists) {
         onActiveDraftRegionChange?.(fallbackRegion?.draftRegionId || fallbackRegion?.clientRegionId || "");
       }
@@ -1442,6 +1462,11 @@ export function WorkbookReviewWorkspace({
       status: "draft",
     }));
     onActiveDraftRegionChange?.(nextRegionId);
+    onSelectedDraftRegionIdsChange?.(
+      additive
+        ? [...selectedDraftRegionIds.filter((id) => id !== nextRegionId), nextRegionId]
+        : [nextRegionId],
+    );
   };
   const beginCellDragSelection = (event, row, col) => {
     if (event.button !== 0) return;
@@ -1599,7 +1624,7 @@ export function WorkbookReviewWorkspace({
         const classes = [];
         if (cellInAnyWorkbookRegion(row.__rowIndex, col, regionsForSheet)) classes.push("is-detected");
         if (cellInAnyWorkbookRegion(row.__rowIndex, col, reviewedAnalysisInputs)) classes.push("is-analysis-input");
-        if (cellInAnyWorkbookRegion(row.__rowIndex, col, editableDrafts)) classes.push("is-draft");
+        if (cellInAnyWorkbookRegion(row.__rowIndex, col, highlightedEditableDrafts)) classes.push("is-draft");
         if (dragSelection?.active) {
           const selectionBounds = normalizeExcelBounds({
             startRow: dragSelection.start.row,
@@ -1635,7 +1660,7 @@ export function WorkbookReviewWorkspace({
   ], [
     colIndexes,
     dragSelection,
-    editableDrafts,
+    highlightedEditableDrafts,
     loadedTileBounds,
     rangeState.loading,
     regionsForSheet,
@@ -2857,6 +2882,7 @@ function App() {
   const [dataPlanReviewState, setDataPlanReviewState] = useState({ loading: false, error: "", review: null, identityDecisions: [] });
   const [workbookReviewDraftRegions, setWorkbookReviewDraftRegions] = useState([]);
   const [activeWorkbookReviewDraftRegionId, setActiveWorkbookReviewDraftRegionId] = useState("");
+  const [selectedWorkbookReviewDraftRegionIds, setSelectedWorkbookReviewDraftRegionIds] = useState([]);
   const [workbookReviewFocusSelection, setWorkbookReviewFocusSelection] = useState(null);
   const [browserSelectedExperimentIds, setBrowserSelectedExperimentIds] = useState([]);
   const [backendChartProposalState, setBackendChartProposalState] = useState({ loading: false, result: null, error: "" });
@@ -2870,6 +2896,7 @@ function App() {
     setDataPlanReviewState({ loading: false, error: "", review: null, identityDecisions: [] });
     setWorkbookReviewDraftRegions([]);
     setActiveWorkbookReviewDraftRegionId("");
+    setSelectedWorkbookReviewDraftRegionIds([]);
     setWorkbookReviewFocusSelection(null);
     setBrowserSelectedExperimentIds([]);
     setAnalysisReviewState(null);
@@ -3184,13 +3211,13 @@ function App() {
       regions: asArray(regions.length ? regions : response?.regions),
     }, nextSession);
     const nextActiveRegion = nextDraftRegions.at(-1);
-    setWorkbookReviewDraftRegions(nextDraftRegions);
-    setActiveWorkbookReviewDraftRegionId(
-      response?.activeDraftRegionId
+    const nextActiveRegionId = response?.activeDraftRegionId
       || nextActiveRegion?.draftRegionId
       || nextActiveRegion?.clientRegionId
-      || "",
-    );
+      || "";
+    setWorkbookReviewDraftRegions(nextDraftRegions);
+    setActiveWorkbookReviewDraftRegionId(nextActiveRegionId);
+    setSelectedWorkbookReviewDraftRegionIds(nextActiveRegionId ? [nextActiveRegionId] : []);
     setWorkbookReviewFocusSelection(null);
     setDataPlanReviewState({ loading: false, error: "", review: null, identityDecisions: [] });
     setWorkbookReviewState({
@@ -3276,6 +3303,12 @@ function App() {
       }));
       const nextRegions = reconcileWorkbookDraftRegions(workbookReviewDraftRegions, response, updatedSession);
       setWorkbookReviewDraftRegions(nextRegions);
+      const availableRegionIds = new Set(nextRegions.map((region) => (
+        region.draftRegionId || region.clientRegionId || ""
+      )).filter(Boolean));
+      setSelectedWorkbookReviewDraftRegionIds((currentIds) => (
+        currentIds.filter((id) => availableRegionIds.has(id))
+      ));
       setActiveWorkbookReviewDraftRegionId((currentId) => {
         const preferredId = response.activeDraftRegionId || activeDraftRegionId || currentId;
         const preferredRegion = findWorkbookDraftRegionById(nextRegions, preferredId);
@@ -3804,8 +3837,10 @@ function App() {
           reviewState={workbookReviewState}
           draftRegions={workbookReviewDraftRegions}
           activeDraftRegionId={activeWorkbookReviewDraftRegionId}
+          selectedDraftRegionIds={selectedWorkbookReviewDraftRegionIds}
           onDraftRegionsChange={setWorkbookReviewDraftRegions}
           onActiveDraftRegionChange={setActiveWorkbookReviewDraftRegionId}
+          onSelectedDraftRegionIdsChange={setSelectedWorkbookReviewDraftRegionIds}
           focusSelection={workbookReviewFocusSelection}
           reviewDock={(
             workbookReviewState.extractionReviewRequested ? (
@@ -3824,7 +3859,9 @@ function App() {
                 reviewState={workbookReviewState}
                 draftRegions={workbookReviewDraftRegions}
                 activeDraftRegionId={activeWorkbookReviewDraftRegionId}
+                selectedDraftRegionIds={selectedWorkbookReviewDraftRegionIds}
                 onActiveDraftRegionChange={handleWorkbookReviewRegionActivate}
+                onSelectedDraftRegionIdsChange={setSelectedWorkbookReviewDraftRegionIds}
                 onSubmitRevision={submitWorkbookReviewRevision}
                 onConfirmUnderstanding={confirmWorkbookReviewUnderstanding}
                 onReviewExtractedExperiments={() => reviewWorkbookExperimentRecords([])}

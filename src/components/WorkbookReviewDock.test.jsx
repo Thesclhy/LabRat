@@ -98,12 +98,15 @@ function structuredReviewState(overrides = {}) {
 describe("WorkbookReviewDock", () => {
   it("keeps the conversation and all red boxes visible while changing the active box", () => {
     const onActiveDraftRegionChange = vi.fn();
+    const onSelectedDraftRegionIdsChange = vi.fn();
     render(
       <WorkbookReviewDock
         reviewState={reviewState()}
         draftRegions={draftRegions}
         activeDraftRegionId="draft_1"
+        selectedDraftRegionIds={["draft_1"]}
         onActiveDraftRegionChange={onActiveDraftRegionChange}
+        onSelectedDraftRegionIdsChange={onSelectedDraftRegionIdsChange}
       />,
     );
 
@@ -116,18 +119,25 @@ describe("WorkbookReviewDock", () => {
     fireEvent.click(within(dock).getByRole("button", { name: "Activate Sheet1!D1:E5" }));
 
     expect(onActiveDraftRegionChange).toHaveBeenCalledWith("draft_2");
+    expect(onSelectedDraftRegionIdsChange).not.toHaveBeenCalled();
   });
 
   it("submits the active box by default and supports an explicit multi-box revision", async () => {
     const onSubmitRevision = vi.fn(async () => ({}));
-    render(
-      <WorkbookReviewDock
-        reviewState={reviewState()}
-        draftRegions={draftRegions}
-        activeDraftRegionId="draft_1"
-        onSubmitRevision={onSubmitRevision}
-      />,
-    );
+    function Harness() {
+      const [selectedIds, setSelectedIds] = useState(["draft_1"]);
+      return (
+        <WorkbookReviewDock
+          reviewState={reviewState()}
+          draftRegions={draftRegions}
+          activeDraftRegionId="draft_1"
+          selectedDraftRegionIds={selectedIds}
+          onSelectedDraftRegionIdsChange={setSelectedIds}
+          onSubmitRevision={onSubmitRevision}
+        />
+      );
+    }
+    render(<Harness />);
 
     const dock = screen.getByLabelText("Workbook review dock");
     const textarea = within(dock).getByPlaceholderText("Describe what should change about the selected red box...");
@@ -148,6 +158,34 @@ describe("WorkbookReviewDock", () => {
     ]);
   });
 
+  it("uses controlled checked ids and allows an explicitly empty selection", () => {
+    const onSelectedDraftRegionIdsChange = vi.fn();
+    function Harness() {
+      const [selectedIds, setSelectedIds] = useState(["draft_1"]);
+      return (
+        <WorkbookReviewDock
+          reviewState={reviewState()}
+          draftRegions={draftRegions}
+          activeDraftRegionId="draft_1"
+          selectedDraftRegionIds={selectedIds}
+          onSelectedDraftRegionIdsChange={(nextIds) => {
+            setSelectedIds(nextIds);
+            onSelectedDraftRegionIdsChange(nextIds);
+          }}
+        />
+      );
+    }
+    render(<Harness />);
+
+    const checkbox = screen.getByRole("checkbox", {
+      name: "Include Sheet1!A1:B3 in revision",
+    });
+    fireEvent.click(checkbox);
+
+    expect(onSelectedDraftRegionIdsChange).toHaveBeenLastCalledWith([]);
+    expect(checkbox.checked).toBe(false);
+  });
+
   it("keeps submission progress and errors local to the dock", async () => {
     let rejectRevision;
     const onSubmitRevision = vi.fn(() => new Promise((resolve, reject) => {
@@ -158,6 +196,7 @@ describe("WorkbookReviewDock", () => {
         reviewState={reviewState()}
         draftRegions={draftRegions}
         activeDraftRegionId="draft_1"
+        selectedDraftRegionIds={["draft_1"]}
         onSubmitRevision={onSubmitRevision}
       />,
     );
@@ -185,6 +224,7 @@ describe("WorkbookReviewDock", () => {
           reviewState={state}
           draftRegions={draftRegions}
           activeDraftRegionId="draft_1"
+          selectedDraftRegionIds={["draft_1"]}
           onConfirmUnderstanding={async (input) => {
             expect(input).toMatchObject({ workbookUnderstandingId: "understanding_draft_1" });
             const acceptedSession = { ...state.session, status: "accepted" };
@@ -213,6 +253,7 @@ describe("WorkbookReviewDock", () => {
         reviewState={structuredReviewState()}
         draftRegions={draftRegions}
         activeDraftRegionId="draft_1"
+        selectedDraftRegionIds={["draft_1"]}
       />,
     );
 
@@ -237,6 +278,7 @@ describe("WorkbookReviewDock", () => {
         reviewState={structuredReviewState()}
         draftRegions={draftRegions}
         activeDraftRegionId="draft_1"
+        selectedDraftRegionIds={["draft_1"]}
         onSubmitRevision={onSubmitRevision}
       />,
     );
@@ -287,6 +329,7 @@ describe("WorkbookReviewDock", () => {
         reviewState={state}
         draftRegions={draftRegions}
         activeDraftRegionId="draft_1"
+        selectedDraftRegionIds={["draft_1"]}
         onConfirmUnderstanding={vi.fn()}
       />,
     );
@@ -303,6 +346,7 @@ describe("WorkbookReviewDock", () => {
         reviewState={state}
         draftRegions={draftRegions}
         activeDraftRegionId="draft_1"
+        selectedDraftRegionIds={["draft_1"]}
         onSubmitRevision={vi.fn()}
         onReviewExtractedExperiments={vi.fn()}
       />,

@@ -601,6 +601,66 @@ describe("WorkbookReviewWorkspace", () => {
     }
   });
 
+  it("renders blue cells only for checked draft region ids", async () => {
+    const fetchMock = makeWorkbookReviewFetch();
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    const draftRegions = [{
+      clientRegionId: "draft_1",
+      draftRegionId: "draft_1",
+      sourceDocumentId: "source_doc_1",
+      sheetName: "Sheet1",
+      range: "A1:B1",
+      status: "draft",
+    }, {
+      clientRegionId: "draft_2",
+      draftRegionId: "draft_2",
+      sourceDocumentId: "source_doc_1",
+      sheetName: "Sheet1",
+      range: "C1:D1",
+      status: "draft",
+    }];
+    try {
+      const { rerender } = render(
+        <WorkbookReviewWorkspace
+          projectId="project_1"
+          reviewState={reviewState}
+          draftRegions={draftRegions}
+          activeDraftRegionId="draft_1"
+          selectedDraftRegionIds={["draft_1"]}
+          onDraftRegionsChange={() => {}}
+          onSelectedDraftRegionIdsChange={() => {}}
+        />,
+      );
+
+      const firstCell = await screen.findByLabelText("Cell A1");
+      const secondCell = await screen.findByLabelText("Cell C1");
+      await waitFor(() => {
+        expect(firstCell.closest(".rdg-cell")?.classList.contains("is-draft")).toBe(true);
+      });
+      expect(secondCell.closest(".rdg-cell")?.classList.contains("is-draft")).toBe(false);
+
+      rerender(
+        <WorkbookReviewWorkspace
+          projectId="project_1"
+          reviewState={reviewState}
+          draftRegions={draftRegions}
+          activeDraftRegionId="draft_1"
+          selectedDraftRegionIds={["draft_2"]}
+          onDraftRegionsChange={() => {}}
+          onSelectedDraftRegionIdsChange={() => {}}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(firstCell.closest(".rdg-cell")?.classList.contains("is-draft")).toBe(false);
+        expect(secondCell.closest(".rdg-cell")?.classList.contains("is-draft")).toBe(true);
+      });
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   it("turns a clicked workbook suggestion into a focused local draft red box", async () => {
     const fetchMock = makeWorkbookReviewFetch();
     const originalFetch = global.fetch;
@@ -743,6 +803,7 @@ describe("WorkbookReviewWorkspace", () => {
     const originalFetch = global.fetch;
     global.fetch = fetchMock;
     const onDraftRegionsChange = vi.fn();
+    const onSelectedDraftRegionIdsChange = vi.fn();
     try {
       render(
         <WorkbookReviewWorkspace
@@ -750,6 +811,7 @@ describe("WorkbookReviewWorkspace", () => {
           reviewState={reviewState}
           draftRegions={[]}
           onDraftRegionsChange={onDraftRegionsChange}
+          onSelectedDraftRegionIdsChange={onSelectedDraftRegionIdsChange}
         />,
       );
 
@@ -769,6 +831,9 @@ describe("WorkbookReviewWorkspace", () => {
         selectionMethod: "drag_select",
         status: "draft",
       });
+      expect(onSelectedDraftRegionIdsChange).toHaveBeenLastCalledWith([
+        "draft_source_doc_1_Sheet1_A1_B1",
+      ]);
     } finally {
       global.fetch = originalFetch;
     }
@@ -1026,6 +1091,7 @@ describe("WorkbookReviewWorkspace", () => {
     global.fetch = fetchMock;
     const onDraftRegionsChange = vi.fn();
     const onActiveDraftRegionChange = vi.fn();
+    const onSelectedDraftRegionIdsChange = vi.fn();
     try {
       render(
         <WorkbookReviewWorkspace
@@ -1042,8 +1108,10 @@ describe("WorkbookReviewWorkspace", () => {
             status: "draft",
           }]}
           activeDraftRegionId="draft_active"
+          selectedDraftRegionIds={["draft_active"]}
           onDraftRegionsChange={onDraftRegionsChange}
           onActiveDraftRegionChange={onActiveDraftRegionChange}
+          onSelectedDraftRegionIdsChange={onSelectedDraftRegionIdsChange}
         />,
       );
 
@@ -1066,6 +1134,7 @@ describe("WorkbookReviewWorkspace", () => {
         status: "draft",
       });
       expect(onActiveDraftRegionChange).toHaveBeenCalledWith("draft_active");
+      expect(onSelectedDraftRegionIdsChange).toHaveBeenLastCalledWith(["draft_active"]);
     } finally {
       global.fetch = originalFetch;
     }
@@ -1077,6 +1146,7 @@ describe("WorkbookReviewWorkspace", () => {
     global.fetch = fetchMock;
     const onDraftRegionsChange = vi.fn();
     const onActiveDraftRegionChange = vi.fn();
+    const onSelectedDraftRegionIdsChange = vi.fn();
     const initialRegion = {
       clientRegionId: "draft_active",
       draftRegionId: "draft_active",
@@ -1091,12 +1161,14 @@ describe("WorkbookReviewWorkspace", () => {
       function Harness() {
         const [regions, setRegions] = React.useState([initialRegion]);
         const [activeId, setActiveId] = React.useState("draft_active");
+        const [selectedIds, setSelectedIds] = React.useState(["draft_active"]);
         return (
           <WorkbookReviewWorkspace
             projectId="project_1"
             reviewState={reviewState}
             draftRegions={regions}
             activeDraftRegionId={activeId}
+            selectedDraftRegionIds={selectedIds}
             onDraftRegionsChange={(next) => {
               onDraftRegionsChange(next);
               setRegions(next);
@@ -1104,6 +1176,10 @@ describe("WorkbookReviewWorkspace", () => {
             onActiveDraftRegionChange={(next) => {
               onActiveDraftRegionChange(next);
               setActiveId(next);
+            }}
+            onSelectedDraftRegionIdsChange={(next) => {
+              onSelectedDraftRegionIdsChange(next);
+              setSelectedIds(next);
             }}
           />
         );
@@ -1122,6 +1198,10 @@ describe("WorkbookReviewWorkspace", () => {
       });
       const addedRegionId = onActiveDraftRegionChange.mock.calls.at(-1)[0];
       expect(addedRegionId).not.toBe("draft_active");
+      expect(onSelectedDraftRegionIdsChange).toHaveBeenLastCalledWith([
+        "draft_active",
+        addedRegionId,
+      ]);
 
       fireEvent.mouseDown(startCell, { button: 0, ctrlKey: true });
       fireEvent.mouseEnter(endCell);
@@ -1132,6 +1212,7 @@ describe("WorkbookReviewWorkspace", () => {
         expect(regions.map((region) => region.range)).toEqual(["A1:B1"]);
       });
       expect(onActiveDraftRegionChange).toHaveBeenLastCalledWith("draft_active");
+      expect(onSelectedDraftRegionIdsChange).toHaveBeenLastCalledWith(["draft_active"]);
     } finally {
       global.fetch = originalFetch;
     }

@@ -261,7 +261,9 @@ export function WorkbookReviewDock({
   reviewState = {},
   draftRegions = [],
   activeDraftRegionId = "",
+  selectedDraftRegionIds = [],
   onActiveDraftRegionChange,
+  onSelectedDraftRegionIdsChange,
   onSubmitRevision,
   onConfirmUnderstanding,
   onReviewExtractedExperiments,
@@ -272,20 +274,13 @@ export function WorkbookReviewDock({
   const fallbackRegionId = regionId(regions.at(-1));
   const activeRegionId = activeDraftRegionId || fallbackRegionId;
   const [revisionDraft, setRevisionDraft] = useState("");
-  const [selectedRegionIds, setSelectedRegionIds] = useState(() => activeRegionId ? [activeRegionId] : []);
   const [pendingAction, setPendingAction] = useState("");
   const [actionError, setActionError] = useState("");
 
-  useEffect(() => {
-    if (activeRegionId) setSelectedRegionIds([activeRegionId]);
-  }, [activeRegionId]);
-
   const validSelectedIds = useMemo(() => {
     const available = new Set(regions.map(regionId).filter(Boolean));
-    const selected = selectedRegionIds.filter((id) => available.has(id));
-    if (selected.length) return selected;
-    return activeRegionId && available.has(activeRegionId) ? [activeRegionId] : [];
-  }, [activeRegionId, regions, selectedRegionIds]);
+    return selectedDraftRegionIds.filter((id) => available.has(id));
+  }, [regions, selectedDraftRegionIds]);
   const selectedRegions = regions.filter((region) => validSelectedIds.includes(regionId(region)));
   const messages = asArray(session?.messages);
   const workbookName = reviewState.sourceDocument?.metadata?.workbookName
@@ -307,18 +302,17 @@ export function WorkbookReviewDock({
   const activateRegion = (region) => {
     const id = regionId(region);
     if (!id) return;
-    setSelectedRegionIds([id]);
     onActiveDraftRegionChange?.(id);
   };
 
   const toggleRegion = (region) => {
     const id = regionId(region);
     if (!id) return;
-    setSelectedRegionIds((current) => (
-      current.includes(id)
-        ? current.filter((selectedId) => selectedId !== id)
-        : [...current, id]
-    ));
+    onSelectedDraftRegionIdsChange?.(
+      validSelectedIds.includes(id)
+        ? validSelectedIds.filter((selectedId) => selectedId !== id)
+        : [...validSelectedIds, id],
+    );
   };
 
   const submitRevision = async () => {
