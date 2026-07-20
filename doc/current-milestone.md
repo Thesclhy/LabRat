@@ -1,6 +1,6 @@
 # Current Milestone
 
-Status: complete
+Status: design_review
 Read when: checking what the next implementation slice should be.
 Last reviewed: 2026-07-20
 
@@ -11,6 +11,8 @@ This file tracks the active execution state. Keep `doc/plan.md` as the short roa
 - Product mainline: Workbook Understanding First, ending in Experiment Browser.
 - Engineering mainline: accepted WorkbookUnderstanding -> experiment-record DataPlan -> accepted DataSnapshot -> Browser projection.
 - Completed milestone: Backend conversational analysis and chart workflow implementation.
+- Active design review: progressive full-sheet workbook loading and
+  checkbox-controlled selection highlights.
 
 ## Current Position
 
@@ -50,9 +52,13 @@ Deployment work not included in this completed milestone:
 
 ## Next Recommended Slice
 
-1. Operationalize the hardened analysis worker, secret management, timeouts, audit telemetry, and provider cost/latency monitoring in a production-like environment.
-2. Exercise migration 012 and the atomic analysis publication path against a configured Postgres test database.
-3. Consider an optional MCP adapter only after the first-party workflow has production evidence; keep authorization, review, execution, and publication in the existing backend services.
+1. After written-spec approval, implement
+   `doc/plans/workbook-full-sheet-selection-highlights-design.md`: load the
+   current sheet's complete `usedRange` through prioritized bounded tiles and
+   make checked region ids the single source of blue highlights.
+2. Operationalize the hardened analysis worker, secret management, timeouts, audit telemetry, and provider cost/latency monitoring in a production-like environment.
+3. Exercise migration 012 and the atomic analysis publication path against a configured Postgres test database.
+4. Consider an optional MCP adapter only after the first-party workflow has production evidence; keep authorization, review, execution, and publication in the existing backend services.
 
 ## Guardrails
 
