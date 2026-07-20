@@ -15,6 +15,13 @@ Keep entries concise, newest first, and include:
 
 ## 2026-07-20
 
+- Approved the written full-sheet Workbook Review specification and created the
+  executable TDD plan at
+  `doc/plans/workbook-full-sheet-selection-highlights-implementation-plan.md`.
+  The plan separates pure full-sheet tile ordering, controlled checked-region
+  state, three-worker background hydration with per-sheet cell/completion
+  caches, usedRange-preserving focus, retry/progress UI, full verification, and
+  browser QA. Planning checkpoint only; no product code changed yet.
 - Approved the design direction for full-sheet Workbook Review loading and
   checkbox-controlled blue selection highlights. The written specification at
   `doc/plans/workbook-full-sheet-selection-highlights-design.md` keeps the

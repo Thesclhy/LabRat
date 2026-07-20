@@ -1,6 +1,6 @@
 # Full-Sheet Workbook Loading And Selection Highlights
 
-Status: approved design, awaiting written-spec review
+Status: approved
 Date: 2026-07-20
 
 ## Problem
