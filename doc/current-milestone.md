@@ -1,6 +1,6 @@
 # Current Milestone
 
-Status: completed
+Status: in progress
 Read when: checking what the next implementation slice should be.
 Last reviewed: 2026-07-20
 
@@ -10,7 +10,7 @@ This file tracks the active execution state. Keep `doc/plan.md` as the short roa
 
 - Product mainline: Workbook Understanding First, ending in Experiment Browser.
 - Engineering mainline: accepted WorkbookUnderstanding -> experiment-record DataPlan -> accepted DataSnapshot -> Browser projection.
-- Current milestone: Milestone 7 Legacy Retirement and Golden Workflow completed.
+- Current milestone: Backend conversational analysis and chart workflow implementation.
 
 ## Current Position
 
@@ -37,10 +37,11 @@ Implemented:
 Not implemented yet:
 
 - Accepted DataSnapshot-backed chart proposal/ChartSpec planning.
+- Backend-owned reviewed calculation execution and result publication.
 
 ## Next Recommended Slice
 
-Review the written conversational-analysis specification, then use it to create the implementation plan. The first implementation milestone should:
+Execute `doc/plans/backend-conversational-analysis-chart-implementation-plan.md` in coherent tested tasks. The first implementation milestone should:
 
 1. Move all provider access to the backend and remove the frontend provider-key path.
 2. Add intent routing that directly answers resolvable read-only questions instead of defaulting to Browser actions.

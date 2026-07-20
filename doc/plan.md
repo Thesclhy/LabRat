@@ -33,7 +33,7 @@ Use this split when deciding what to build:
 
 - Product mainline: Workbook Understanding First, ending in Experiment Browser.
 - Engineering mainline: structured WorkbookUnderstanding -> experiment-record DataPlan -> accepted DataSnapshot -> Browser projection.
-- Current execution milestone: Milestone 7 completed; prepare accepted DataSnapshot-backed chart planning.
+- Current execution milestone: implement the approved backend conversational-analysis and chart workflow.
 
 ## Recently Completed
 
@@ -58,8 +58,8 @@ Use this split when deciding what to build:
 
 ## Next Recommended Slices
 
-1. Review `doc/plans/backend-conversational-analysis-chart-design.md`, then create the milestone implementation plan beginning with backend provider migration, intent routing, and frontend provider-key removal.
-2. Implement the reviewed AnalysisThread -> accepted Python plan -> validated AnalysisResult -> DataSnapshot-backed ChartSpec workflow in coherent milestones.
+1. Execute `doc/plans/backend-conversational-analysis-chart-implementation-plan.md`, beginning with backend provider migration, intent routing, and frontend provider-key removal.
+2. Continue through AnalysisThread -> accepted Python plan -> validated AnalysisResult -> DataSnapshot-backed ChartSpec in coherent tested milestones.
 3. Preserve source-backed chart creation as a distinct evidence path and converge both forms only at the validated ChartSpec/rendering boundary.
 
 ## Operating Loop
