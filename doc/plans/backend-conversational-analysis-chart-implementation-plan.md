@@ -661,7 +661,7 @@ git commit -m "Publish analysis result chart specs"
 - Produces: `traceOptionsForChartSpec(chartSpec)`.
 - Consumes complete ChartSpec trace catalog and default view.
 
-- [ ] **Step 1: Write failing normalization, Canvas, and export tests**
+- [x] **Step 1: Write failing normalization, Canvas, and export tests**
 
 ```js
 it("normalizes legacy experiment selection into trace ids", () => {
@@ -678,7 +678,7 @@ it("keeps duplicate placements independent", async () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and confirm trace-aware APIs are absent**
+- [x] **Step 2: Run tests and confirm trace-aware APIs are absent**
 
 Run:
 
@@ -688,19 +688,19 @@ npm test -- src/charts/chartView.test.js src/components/ManuscriptCanvas.history
 
 Expected: FAIL because `visibleTraceIds` normalization and export filtering are missing.
 
-- [ ] **Step 3: Implement bounded compatibility normalization**
+- [x] **Step 3: Implement bounded compatibility normalization**
 
 For analysis-result specs, use `defaultChartView.visibleTraceIds` when no persisted view exists. For source specs, map existing selected/excluded experiment ids to stable trace ids. Preserve unknown legacy keys only during normalization; persisted updates write `visibleTraceIds`.
 
-- [ ] **Step 4: Replace experiment-only Canvas controls with trace controls**
+- [x] **Step 4: Replace experiment-only Canvas controls with trace controls**
 
 Insertion inherits the default view. Inspector shows searchable trace checkboxes, visible/total count, Select all, and Clear. Checkbox changes patch only the selected block and participate in existing history transactions.
 
-- [ ] **Step 5: Apply visibility to context, reload, and PPTX**
+- [x] **Step 5: Apply visibility to context, reload, and PPTX**
 
 Chart context includes complete trace catalog plus current visible ids without full arrays. Plot and PPTX export both pass the placement-local normalized chart view. Hidden traces remain in `chartSpecSnapshot`.
 
-- [ ] **Step 6: Run Canvas/chart/export tests and build**
+- [x] **Step 6: Run Canvas/chart/export tests and build**
 
 Run:
 
@@ -711,7 +711,7 @@ npm run build
 
 Expected: duplicate placements remain independent through undo/redo and save/reload; export includes only visible traces.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/charts/chartView.js src/charts/chartView.test.js src/components/ManuscriptCanvas.jsx src/components/ManuscriptCanvas.history.test.jsx src/charts/sourceChartPreview.js src/charts/sourceChartPreview.test.js src/export/pptxExport.js src/export/pptxExport.test.js src/styles.css

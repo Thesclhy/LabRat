@@ -32,6 +32,7 @@ import {
   publishServerProjectDataPlan,
   deleteServerProject,
   getServerAgentRun,
+  getServerChartSpec,
   getServerProjectState,
   getServerSession,
   getServerWorkbookReviewSession,
@@ -3675,6 +3676,16 @@ function App() {
     applyProjectWorkspaceRefresh({ ...state, chartSpecs });
     return response;
   };
+  const loadChartSpecDetailForManuscript = useCallback(async (chartSpecId) => {
+    const response = await getServerChartSpec(chartSpecId);
+    const chartSpec = response?.chartSpec || null;
+    if (!chartSpec?.id) throw new Error("The ChartSpec detail response is incomplete.");
+    setProjectState((current) => current ? {
+      ...current,
+      chartSpecs: upsertServerRecordById(current.chartSpecs, chartSpec),
+    } : current);
+    return chartSpec;
+  }, []);
   if (authState.checking) {
     return (
       <main className="server-login">
@@ -3822,7 +3833,7 @@ function App() {
           )}
         />
       )}
-      {tab === "manuscript" && <ManuscriptCanvas blocks={blocks} setBlocks={setBlocks} staged={staged} setStaged={setStaged} references={references} chartTemplates={chartTemplates} setChartTemplates={setChartTemplates} chartSpecs={activeChartSpecsForProject(projectState)} pages={pages} setPages={setPages} canvasHeight={canvasHeight} setCanvasHeight={setCanvasHeight} pageOrientationPreference={pageOrientationPreference} setPageOrientationPreference={setPageOrientationPreference} chartSpecInsertRequest={chartSpecInsertRequest} onChartSpecInsertRequestHandled={clearChartSpecManuscriptInsertRequest} onSelectedChartContextChange={setSelectedChartContext} onRequestChartAnalysis={requestChartAnalysis} onSaveProject={save} />}
+      {tab === "manuscript" && <ManuscriptCanvas blocks={blocks} setBlocks={setBlocks} staged={staged} setStaged={setStaged} references={references} chartTemplates={chartTemplates} setChartTemplates={setChartTemplates} chartSpecs={activeChartSpecsForProject(projectState)} pages={pages} setPages={setPages} canvasHeight={canvasHeight} setCanvasHeight={setCanvasHeight} pageOrientationPreference={pageOrientationPreference} setPageOrientationPreference={setPageOrientationPreference} chartSpecInsertRequest={chartSpecInsertRequest} onChartSpecInsertRequestHandled={clearChartSpecManuscriptInsertRequest} onLoadChartSpecDetail={loadChartSpecDetailForManuscript} onSelectedChartContextChange={setSelectedChartContext} onRequestChartAnalysis={requestChartAnalysis} onSaveProject={save} />}
       {tab === "reference" && <ReferenceLibrary references={references} setReferences={setReferences} />}
       {analysisReviewState?.thread?.id && (
         <AnalysisReviewWorkspace

@@ -1,4 +1,9 @@
 import { plotLayout } from "./chartLayout.js";
+import {
+  normalizeChartView,
+  sourceFieldTraceId,
+  sourceSeriesTraceId,
+} from "./chartView.js";
 
 const SERIES_COLORS = [
   "#0072B2",
@@ -40,22 +45,6 @@ function renderChartType(chartType) {
 
 function isBarChart(chartType) {
   return ["bar", "grouped_bar", "stacked_bar", "distribution_bar"].includes(chartType);
-}
-
-function selectedExperimentIds(chartView = {}) {
-  return new Set(asArray(chartView.selectedExperimentIds).map(String).filter(Boolean));
-}
-
-function excludedExperimentIds(chartView = {}) {
-  return new Set(asArray(chartView.excludedExperimentIds).map(String).filter(Boolean));
-}
-
-function includesExperiment(experimentId, chartView = {}) {
-  const id = String(experimentId || "");
-  const selected = selectedExperimentIds(chartView);
-  const excluded = excludedExperimentIds(chartView);
-  if (selected.size && !selected.has(id)) return false;
-  return !excluded.has(id);
 }
 
 function renderStyleFor(spec) {
@@ -184,18 +173,20 @@ function sourceSnapshotTraces(spec, chartView, style) {
   const chartType = renderChartType(spec.chartType);
   const xField = fieldKey(spec.x, spec.seriesScope?.xField || "carbon_number");
   const yFields = yAxesFor(spec);
+  const visibleTraceIds = new Set(asArray(chartView.visibleTraceIds).map(String));
   const snapshotSeries = asArray(spec.sourceSnapshot?.series).filter(isObject);
   if (snapshotSeries.length) {
     const yField = fieldKey(spec.y, spec.seriesScope?.yField || "percentage");
     return snapshotSeries.flatMap((snapshot, index) => {
-      const experimentId = String(snapshot.experimentId || "");
-      if (!includesExperiment(experimentId, chartView)) return [];
-      const points = pointsFromRows(snapshot.rows, xField, yField);
-      if (!points.length) return [];
       const series = asArray(spec.series).find((candidate) => (
         candidate?.seriesId === snapshot.seriesId
         || candidate?.experimentId === snapshot.experimentId
       )) || snapshot;
+      const traceId = sourceSeriesTraceId(series, spec.y || { field: yField }, index);
+      if (!visibleTraceIds.has(traceId)) return [];
+      const experimentId = String(snapshot.experimentId || "");
+      const points = pointsFromRows(snapshot.rows, xField, yField);
+      if (!points.length) return [];
       const styleForTrace = traceStyle(style, index, series);
       return [{
         type: isBarChart(chartType) ? "bar" : "scatter",
@@ -205,11 +196,14 @@ function sourceSnapshotTraces(spec, chartView, style) {
         y: points.map((point) => point.y),
         line: styleForTrace.line,
         marker: styleForTrace.marker,
+        meta: { traceId, experimentId: experimentId || null },
       }];
     });
   }
 
   return yFields.flatMap((axis, index) => {
+    const traceId = sourceFieldTraceId(axis, index);
+    if (!visibleTraceIds.has(traceId)) return [];
     const yField = fieldKey(axis, index === 0 ? "percentage" : "");
     const points = pointsFromRows(spec.sourceSnapshot?.rows, xField, yField);
     if (!points.length) return [];
@@ -222,19 +216,13 @@ function sourceSnapshotTraces(spec, chartView, style) {
       y: points.map((point) => point.y),
       line: styleForTrace.line,
       marker: styleForTrace.marker,
+      meta: { traceId, experimentId: null },
     }];
   });
 }
 
 function analysisVisibleTraceIds(spec, chartView) {
-  const source = Object.hasOwn(chartView, "visibleTraceIds")
-    ? asArray(chartView.visibleTraceIds)
-    : asArray(spec.defaultChartView?.visibleTraceIds);
-  if (!source.length && !Object.hasOwn(chartView, "visibleTraceIds")
-    && !Array.isArray(spec.defaultChartView?.visibleTraceIds)) {
-    return null;
-  }
-  return new Set(source.map(String));
+  return new Set(asArray(chartView.visibleTraceIds).map(String));
 }
 
 function analysisResultTraces(spec, chartView, style) {
@@ -308,7 +296,7 @@ export function makeSourceChartPreview(chartSpecOrProposal, options = {}) {
   const spec = chartSpecToProposal(chartSpecOrProposal);
   const chartType = renderChartType(spec.chartType);
   const style = renderStyleFor(spec);
-  const chartView = isObject(options.chartView) ? options.chartView : {};
+  const chartView = normalizeChartView(chartSpecOrProposal, options.chartView);
   const traces = spec.origin === "analysis_result"
     ? analysisResultTraces(spec, chartView, style)
     : sourceSnapshotTraces(spec, chartView, style);

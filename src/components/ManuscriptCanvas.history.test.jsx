@@ -164,6 +164,8 @@ function Harness({
   chartSpecs = [],
   chartSpecInsertRequest = null,
   onChartSpecInsertRequestHandled = () => {},
+  onLoadChartSpecDetail,
+  onSelectedChartContextChange = () => {},
 }) {
   const [blocks, setBlocks] = useState(initialBlocks);
   const [pages, setPages] = useState(initialPages);
@@ -191,7 +193,8 @@ function Harness({
         setPageOrientationPreference={setPageOrientationPreference}
         chartSpecInsertRequest={chartSpecInsertRequest}
         onChartSpecInsertRequestHandled={onChartSpecInsertRequestHandled}
-        onSelectedChartContextChange={() => {}}
+        onLoadChartSpecDetail={onLoadChartSpecDetail}
+        onSelectedChartContextChange={onSelectedChartContextChange}
         onRequestChartAnalysis={() => {}}
         onSaveProject={() => {}}
       />
@@ -368,6 +371,154 @@ async function openTextEditor(text = "Hello") {
 }
 
 describe("ManuscriptCanvas chart specs", () => {
+  const analysisChartSpecFixture = {
+    id: "chart_spec_analysis",
+    title: "Reaction rate over time",
+    chartType: "scatter",
+    origin: "analysis_result",
+    spec: {
+      origin: "analysis_result",
+      chartType: "scatter",
+      title: "Reaction rate over time",
+      x: { field: "time", label: "Time", unit: "min" },
+      y: { field: "rate", label: "Rate", unit: "mmol/g/min" },
+      traceCatalog: [
+        {
+          traceId: "trace_exp_1",
+          experimentId: "exp_1",
+          experimentLabel: "Exp-001",
+          x: [0, 10],
+          y: [1, 2],
+          xUnit: "min",
+          yUnit: "mmol/g/min",
+        },
+        {
+          traceId: "trace_exp_2",
+          experimentId: "exp_2",
+          experimentLabel: "Exp-002",
+          x: [0, 10],
+          y: [2, 3],
+          xUnit: "min",
+          yUnit: "mmol/g/min",
+        },
+      ],
+      defaultChartView: { visibleTraceIds: ["trace_exp_1", "trace_exp_2"] },
+    },
+  };
+
+  it("keeps trace visibility independent between two placements of one ChartSpec", async () => {
+    const chartBlock = (id, x) => ({
+      id,
+      kind: "chart",
+      chartSpecId: analysisChartSpecFixture.id,
+      chartSpecSnapshot: analysisChartSpecFixture,
+      chartView: { visibleTraceIds: ["trace_exp_1", "trace_exp_2"] },
+      chartLayout: {},
+      x,
+      y: 80,
+      w: 640,
+      h: 420,
+    });
+    render(
+      <Harness
+        initialBlocks={[chartBlock("chart-block-1", 50), chartBlock("chart-block-2", 740)]}
+        initialPages={[createPage("page-1")]}
+        chartSpecs={[analysisChartSpecFixture]}
+      />,
+    );
+
+    const chartFrames = document.querySelectorAll(".canvas-block.chart");
+    fireEvent.mouseDown(chartFrames[0], { button: 0, clientX: 100, clientY: 100 });
+    fireEvent.mouseUp(window);
+    fireEvent.click(screen.getByLabelText("Hide Exp-002 in selected chart"));
+
+    await waitFor(() => {
+      const [first, second] = readDocState().blocks;
+      expect(first.chartView).toEqual({ visibleTraceIds: ["trace_exp_1"] });
+      expect(second.chartView).toEqual({ visibleTraceIds: ["trace_exp_1", "trace_exp_2"] });
+    });
+
+    clickUndo();
+    await waitFor(() => {
+      const [first, second] = readDocState().blocks;
+      expect(first.chartView.visibleTraceIds).toEqual(["trace_exp_1", "trace_exp_2"]);
+      expect(second.chartView.visibleTraceIds).toEqual(["trace_exp_1", "trace_exp_2"]);
+    });
+    clickRedo();
+    await waitFor(() => {
+      const [first, second] = readDocState().blocks;
+      expect(first.chartView.visibleTraceIds).toEqual(["trace_exp_1"]);
+      expect(second.chartView.visibleTraceIds).toEqual(["trace_exp_1", "trace_exp_2"]);
+    });
+  });
+
+  it("loads complete ChartSpec detail before opening insertion and snapshots full traces", async () => {
+    const summary = {
+      ...analysisChartSpecFixture,
+      detailRequired: true,
+      spec: {
+        ...analysisChartSpecFixture.spec,
+        traceCatalog: analysisChartSpecFixture.spec.traceCatalog.map(({ x, y, ...trace }) => trace),
+      },
+    };
+    const onLoadChartSpecDetail = vi.fn().mockResolvedValue(analysisChartSpecFixture);
+    render(
+      <Harness
+        initialBlocks={[]}
+        initialPages={[createPage("page-1")]}
+        chartSpecs={[summary]}
+        chartSpecInsertRequest={{ chartSpecId: summary.id, requestId: "detail_request_1" }}
+        onLoadChartSpecDetail={onLoadChartSpecDetail}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "Insert chart" })).toBeTruthy());
+    expect(onLoadChartSpecDetail).toHaveBeenCalledWith(summary.id);
+    fireEvent.click(screen.getByRole("button", { name: "Insert chart" }));
+
+    await waitFor(() => {
+      const block = readDocState().blocks[0];
+      expect(block.chartView).toEqual({ visibleTraceIds: ["trace_exp_1", "trace_exp_2"] });
+      expect(block.chartSpecSnapshot.spec.traceCatalog[0].x).toEqual([0, 10]);
+      expect(block.chartSpecSnapshot.detailRequired).not.toBe(true);
+    });
+  });
+
+  it("reports a bounded complete trace catalog and placement view to LabRat context", async () => {
+    const onSelectedChartContextChange = vi.fn();
+    render(
+      <Harness
+        initialBlocks={[{
+          id: "chart-block-context",
+          kind: "chart",
+          chartSpecId: analysisChartSpecFixture.id,
+          chartSpecSnapshot: analysisChartSpecFixture,
+          chartView: { visibleTraceIds: ["trace_exp_2"] },
+          chartLayout: {},
+          x: 80,
+          y: 80,
+          w: 640,
+          h: 420,
+        }]}
+        initialPages={[createPage("page-1")]}
+        chartSpecs={[analysisChartSpecFixture]}
+        onSelectedChartContextChange={onSelectedChartContextChange}
+      />,
+    );
+
+    const chartFrame = document.querySelector(".canvas-block.chart");
+    fireEvent.mouseDown(chartFrame, { button: 0, clientX: 100, clientY: 100 });
+    fireEvent.mouseUp(window);
+
+    await waitFor(() => {
+      const context = onSelectedChartContextChange.mock.calls.at(-1)?.[0];
+      expect(context.chartView).toEqual({ visibleTraceIds: ["trace_exp_2"] });
+      expect(context.traceCatalog).toHaveLength(2);
+      expect(context.traceCatalog[0]).not.toHaveProperty("x");
+      expect(context.traceCatalog[0]).not.toHaveProperty("y");
+    });
+  });
+
   it("opens the insert modal from a chart spec insert request", async () => {
     const onHandled = vi.fn();
     render(
@@ -384,7 +535,7 @@ describe("ManuscriptCanvas chart specs", () => {
     expect(onHandled).toHaveBeenCalledWith("insert_request_1");
     const conversionChoices = screen.getAllByRole("button", { name: /Conversion vs Temperature/i });
     expect(conversionChoices.some((button) => button.className.includes("active"))).toBe(true);
-    expect(screen.getByText("0 of 2 experiments selected")).toBeTruthy();
+    expect(screen.getByText("2 of 2 traces visible")).toBeTruthy();
   });
 
   it("waits for chart specs before opening a requested insert modal", async () => {
@@ -419,7 +570,7 @@ describe("ManuscriptCanvas chart specs", () => {
     expect(conversionChoices.some((button) => button.className.includes("active"))).toBe(true);
   });
 
-  it("hides stale chart specs from approved chart insertion choices", () => {
+  it("hides stale chart specs from approved chart insertion choices", async () => {
     render(
       <Harness
         initialBlocks={[]}
@@ -441,7 +592,7 @@ describe("ManuscriptCanvas chart specs", () => {
     expect(screen.getByText("Selectivity vs Temperature")).toBeTruthy();
     expect(screen.queryByText("Old Selectivity Chart")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Selectivity vs Temperature/i }));
-    expect(screen.getByRole("dialog", { name: "Insert chart" })).not.toBeNull();
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "Insert chart" })).not.toBeNull());
     expect(screen.queryByText("Old Selectivity Chart")).toBeNull();
   });
 
@@ -484,13 +635,17 @@ describe("ManuscriptCanvas chart specs", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Selectivity vs Temperature/i }));
-    expect(screen.getByRole("dialog", { name: "Insert chart" })).not.toBeNull();
-    expect(screen.getByText("0 of 2 experiments selected")).not.toBeNull();
-    expect(screen.getByText("Select experiments to preview this chart.")).not.toBeNull();
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "Insert chart" })).not.toBeNull());
+    expect(screen.getByText("2 of 2 traces visible")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Insert chart" }).disabled).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(screen.getByText("0 of 2 traces visible")).not.toBeNull();
+    expect(screen.getByText("Select traces to preview this chart.")).not.toBeNull();
     expect(screen.getByRole("button", { name: "Insert chart" }).disabled).toBe(true);
 
-    fireEvent.click(screen.getByRole("button", { name: "Select experiments" }));
-    expect(screen.getByRole("dialog", { name: "Select experiments" })).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Select traces" }));
+    expect(screen.getByRole("dialog", { name: "Select traces" })).not.toBeNull();
     expect(screen.getByRole("columnheader", { name: "Label" })).toBeTruthy();
     expect(screen.getByLabelText("Select Run 1")).toBeTruthy();
     expect(screen.getByLabelText("Select Run 2")).toBeTruthy();
@@ -498,7 +653,7 @@ describe("ManuscriptCanvas chart specs", () => {
     fireEvent.click(screen.getByLabelText("Select Run 1"));
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
-    expect(screen.getByText("1 of 2 experiments selected")).not.toBeNull();
+    expect(screen.getByText("1 of 2 traces visible")).not.toBeNull();
     expect(screen.getByRole("button", { name: "Insert chart" }).disabled).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Insert chart" }));
 
@@ -509,10 +664,7 @@ describe("ManuscriptCanvas chart specs", () => {
         kind: "chart",
         chartSpecId: "chart_spec_1",
         chartView: {
-          selectedExperimentIds: ["exp_1"],
-          excludedExperimentIds: [],
-          filters: [],
-          groupBy: null,
+          visibleTraceIds: ["exp_1:selectivity"],
         },
       });
       expect(state.blocks[0].chartSpecSnapshot.title).toBe("Selectivity vs Temperature");
@@ -534,10 +686,11 @@ describe("ManuscriptCanvas chart specs", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Reaction rate comparison/i }));
-    expect(screen.getByRole("dialog", { name: "Insert chart" })).not.toBeNull();
-    expect(screen.getByText("0 of 2 experiments selected")).not.toBeNull();
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "Insert chart" })).not.toBeNull());
+    expect(screen.getByText("2 of 2 traces visible")).not.toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Select experiments" }));
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select traces" }));
     fireEvent.click(screen.getByLabelText("Select Run 2"));
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     fireEvent.click(screen.getByRole("button", { name: "Insert chart" }));
@@ -549,10 +702,7 @@ describe("ManuscriptCanvas chart specs", () => {
         kind: "chart",
         chartSpecId: "chart_spec_series",
         chartView: {
-          selectedExperimentIds: ["exp_2"],
-          excludedExperimentIds: [],
-          filters: [],
-          groupBy: null,
+          visibleTraceIds: ["exp_2:reaction_rate_mol_g_h"],
         },
       });
       expect(state.blocks[0].chartSpecSnapshot.spec.schemaVersion).toBe("labrat.chartSpec.v1.4");
@@ -560,7 +710,7 @@ describe("ManuscriptCanvas chart specs", () => {
     });
   });
 
-  it("clears draft experiment selection when switching chart specs", () => {
+  it("resets draft trace visibility when switching chart specs", async () => {
     render(
       <Harness
         initialBlocks={[]}
@@ -570,15 +720,17 @@ describe("ManuscriptCanvas chart specs", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Selectivity vs Temperature/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Select experiments" }));
+    await waitFor(() => expect(screen.getByText("2 of 2 traces visible")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select traces" }));
     fireEvent.click(screen.getByLabelText("Select Run 1"));
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
-    expect(screen.getByText("1 of 2 experiments selected")).toBeTruthy();
+    expect(screen.getByText("1 of 2 traces visible")).toBeTruthy();
 
     fireEvent.click(screen.getAllByRole("button", { name: /Conversion vs Temperature/i }).at(-1));
 
-    expect(screen.getByText("0 of 2 experiments selected")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Insert chart" }).disabled).toBe(true);
+    await waitFor(() => expect(screen.getByText("2 of 2 traces visible")).toBeTruthy());
+    expect(screen.getByRole("button", { name: "Insert chart" }).disabled).toBe(false);
   });
 
   it("requires whole-chart selection before selecting and editing chart components", async () => {
@@ -591,9 +743,7 @@ describe("ManuscriptCanvas chart specs", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Selectivity vs Temperature/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Select experiments" }));
-    fireEvent.click(screen.getByLabelText("Select Run 1"));
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "Insert chart" })).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Insert chart" }));
 
     await waitFor(() => expect(readDocState().blocks).toHaveLength(1));

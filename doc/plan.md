@@ -62,12 +62,12 @@ Use this split when deciding what to build:
 - Implemented conversational-analysis Task 5: accepted queued runs are revalidated and executed through a versioned backend adapter; static/runner Python policy and production-disabled defaults bound code execution; valid output is hash/shape/lineage/count/invariant checked before one immutable awaiting-review AnalysisResult is persisted; result previews and hash-bound replanning are available without creating a ChartSpec.
 - Implemented conversational-analysis Task 6: the existing LabRat review workspace now binds exact run/result hashes, reviews validated rows, exclusions, missing policy, warnings, invariants, lineage and source evidence, loads the complete trace domain, separates incompatible units, preserves historical runs, and supports immutable result-feedback revisions plus reviewed default trace visibility.
 - Implemented conversational-analysis Task 7: exact result/default-trace acceptance now atomically rechecks accepted heads, accepts the existing result, completes its run/thread, creates one provenance-complete analysis-result ChartSpec v2, records an idempotent receipt/audit event, exposes bounded list metadata plus full detail, and renders validated traces without a sourceSnapshot.
+- Implemented conversational-analysis Task 8: a shared trace-aware chart-view model migrates legacy source experiment selections, inherits reviewed analysis defaults, lazy-loads complete ChartSpecs before Manuscript insertion, keeps each placement's visible traces independent, exposes searchable Canvas trace controls, bounds LabRat chart context, and filters PPTX output by the placement-local view.
 
 ## Next Recommended Slices
 
-1. Execute Task 8 of `doc/plans/backend-conversational-analysis-chart-implementation-plan.md`: placement-local trace visibility, lazy full ChartSpec insertion, and trace-aware export.
-2. Complete Task 9 full workflow/browser QA and final contract verification.
-3. Preserve source-backed chart creation as a distinct evidence path and converge both forms only at the validated ChartSpec/rendering boundary.
+1. Execute Task 9 of `doc/plans/backend-conversational-analysis-chart-implementation-plan.md`: golden backend/frontend workflow coverage, final contract reconciliation, full verification, and browser QA.
+2. Preserve source-backed chart creation as a distinct evidence path and converge both forms only at the validated ChartSpec/rendering boundary.
 
 ## Operating Loop
 

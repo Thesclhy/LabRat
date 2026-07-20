@@ -108,12 +108,16 @@ describe("makeSourceChartPreview", () => {
     const filtered = makeSourceChartPreview(seriesChartSpec(), {
       chartView: { selectedExperimentIds: ["exp_34"] },
     });
+    const traceFiltered = makeSourceChartPreview(seriesChartSpec(), {
+      chartView: { visibleTraceIds: ["exp_33:percentage"] },
+    });
 
     expect(preview.traces.map((trace) => trace.name)).toEqual(["Exp33", "Exp34"]);
     expect(preview.traces.map((trace) => trace.marker.color)).toEqual(["#0072B2", "#D55E00"]);
     expect(preview.layout.barmode).toBe("group");
     expect(filtered.traces).toHaveLength(1);
     expect(filtered.traces[0].name).toBe("Exp34");
+    expect(traceFiltered.traces.map((trace) => trace.name)).toEqual(["Exp33"]);
   });
 
   it("derives experiment options only from source-backed series", () => {

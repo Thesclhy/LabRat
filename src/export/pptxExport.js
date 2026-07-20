@@ -1,6 +1,7 @@
 import PptxGenJS from "pptxgenjs";
 import JSZip from "jszip";
 import { applyChartLayout, resolveChartLayout, defaultFontFamily } from "../charts/chartLayout.js";
+import { normalizeChartView } from "../charts/chartView.js";
 import { chartSpecToProposal, makeSourceChartPreview } from "../charts/sourceChartPreview.js";
 import { defineLabRatDefaultSlideMasters, LABRAT_FIGURE_MASTER } from "./pptxTemplate.js";
 
@@ -252,34 +253,29 @@ async function addChartBlock(slide, box, block, chartSpecs) {
   const chartSpec = resolveBlockChartSpec(block, chartSpecs);
   if (!chartSpec) return;
   const chartLayout = resolveExportChartLayout(block, chartSpec);
+  const plot = chartPlotForExport(block, chartSpecs, chartLayout);
+  const image = await renderChartBlockImage(block, chartLayout, plot);
+  slide.addImage({ data: image, ...box, sizingCrop: false });
+}
+
+export function chartPlotForExport(block, chartSpecs, resolvedLayout = null) {
+  const chartSpec = resolveBlockChartSpec(block, chartSpecs);
+  if (!chartSpec) return { traces: [], layout: {}, config: {} };
+  const chartLayout = resolvedLayout || resolveExportChartLayout(block, chartSpec);
   const plotArea = chartLayout.plotArea || {};
   const plot = makeSourceChartPreview(chartSpec, {
     width: Math.max(1, Math.round(Number(plotArea.width) || Number(block.w) || 580)),
     height: Math.max(1, Math.round(Number(plotArea.height) || Number(block.h) || 380)),
-    chartView: normalizeChartView(block.chartView),
+    chartView: normalizeChartView(chartSpec, block.chartView),
     config: { displayModeBar: false, staticPlot: true, responsive: false },
   });
-  const image = await renderChartBlockImage(block, chartLayout, applyChartLayout(plot, chartLayout));
-  slide.addImage({ data: image, ...box, sizingCrop: false });
+  return applyChartLayout(plot, chartLayout);
 }
 
 function resolveBlockChartSpec(block, chartSpecs) {
   return (Array.isArray(chartSpecs) ? chartSpecs : []).find((spec) => spec?.id === block?.chartSpecId)
     || block?.chartSpecSnapshot
     || null;
-}
-
-function normalizeChartView(value) {
-  const safe = value && typeof value === "object" ? value : {};
-  const idList = (items) => (Array.isArray(items) ? items : [])
-    .map((item) => String(item || "").trim())
-    .filter(Boolean);
-  return {
-    selectedExperimentIds: idList(safe.selectedExperimentIds),
-    excludedExperimentIds: idList(safe.excludedExperimentIds),
-    filters: Array.isArray(safe.filters) ? safe.filters : [],
-    groupBy: safe.groupBy || null,
-  };
 }
 
 function chartSpecAxisTitle(axis, fallback) {

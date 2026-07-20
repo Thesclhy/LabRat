@@ -3883,6 +3883,17 @@ td button {
   grid-template-columns: 1fr;
   max-height: 220px;
 }
+.chart-trace-search {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.chart-trace-search input {
+  min-width: 0;
+  width: 100%;
+}
 .chart-view-choice-list label {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
