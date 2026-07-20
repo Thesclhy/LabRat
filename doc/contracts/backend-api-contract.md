@@ -10,7 +10,7 @@ The backend is server-first. The complete implemented project API is defined in 
 The HTTP service exposes:
 
 - `GET /health`
-- authenticated SaaS/project routes under `/api/auth`, `/api/admin`, `/api/labs`, `/api/projects`, `/api/source-documents`, `/api/source-regions`, `/api/workbook-review-sessions`, `/api/source-extract-proposals`, `/api/agent-runs`, `/api/chart-proposal-sets`, and `/api/manuscripts`
+- authenticated SaaS/project routes under `/api/auth`, `/api/admin`, `/api/labs`, `/api/projects`, `/api/source-documents`, `/api/source-regions`, `/api/workbook-review-sessions`, `/api/source-extract-proposals`, `/api/agent-runs`, `/api/analysis-threads`, `/api/analysis-plan-revisions`, `/api/chart-proposal-sets`, and `/api/manuscripts`
 - backend-only model access configured by `LABRAT_AI_PROVIDER`, `ANTHROPIC_API_KEY`, and `ANTHROPIC_MODEL`
 
 Unknown or retired routes return `404`.
@@ -73,6 +73,7 @@ Status code guidance:
 - Manuscript blocks store chart snapshots and do not recalculate scientific values.
 - LabRat intent routing directly answers resolvable project questions, sends derived analysis/chart requests to reviewed analysis planning, and opens Experiment Browser only for explicit navigation.
 - Internal analysis planning tools resolve only accepted active snapshot heads, keep unit-incompatible fields separate, return bounded source-backed selections, and cannot execute calculations.
+- AnalysisThread/AnalysisPlanRevision routes persist immutable reviewed plans. Exact-hash acceptance is idempotent and creates only a queued AnalysisRun; there is no public calculation/result route yet.
 
 ## Verification
 

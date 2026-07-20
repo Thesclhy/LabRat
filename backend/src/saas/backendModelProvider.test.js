@@ -95,3 +95,53 @@ test("rejects malformed provider JSON as a bounded warning", async () => {
   assert.equal(result.ok, false);
   assert.equal(result.warning.code, "ai_invalid_response");
 });
+
+test("draftAnalysisPlan requests the backend-reviewed selection and program shape", async () => {
+  const provider = createBackendModelProvider({
+    config: {
+      aiProvider: "anthropic",
+      anthropicApiKey: "server-secret",
+      anthropicModel: "claude-test",
+    },
+    fetchImpl: async (_url, request) => {
+      const body = JSON.parse(request.body);
+      assert.match(body.system, /selectionRequest/);
+      assert.match(body.system, /pythonProgram/);
+      assert.match(body.system, /Do not return selection hashes/);
+      return {
+        ok: true,
+        async json() {
+          return {
+            usage: { input_tokens: 20, output_tokens: 40 },
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                selectionRequest: {
+                  experimentIds: [],
+                  fieldIds: ["field_1"],
+                  includeSeries: false,
+                },
+                plan: {
+                  requestSummary: "Compare field 1.",
+                  pythonProgram: {
+                    runtime: "labrat-python-v1",
+                    entrypoint: "analyze",
+                    source: "def analyze(tables, labrat):\n    return {}",
+                  },
+                },
+              }),
+            }],
+          };
+        },
+      };
+    },
+  });
+
+  const result = await provider.draftAnalysisPlan({
+    originalRequest: "Compare the experiments.",
+    fields: [{ fieldId: "field_1" }],
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.selectionRequest.fieldIds, ["field_1"]);
+});

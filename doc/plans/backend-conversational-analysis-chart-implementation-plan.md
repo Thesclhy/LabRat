@@ -271,7 +271,7 @@ git commit -m "Add accepted-data analysis tools"
 - Produces the reviewed analysis-thread and plan-revision HTTP operations.
 - Consumes Task 2 selection, schemas, and tool registry.
 
-- [ ] **Step 1: Write failing memory-store and route tests**
+- [x] **Step 1: Write failing memory-store and route tests**
 
 ```js
 test("plan feedback creates an immutable later revision", async () => {
@@ -285,21 +285,21 @@ test("plan feedback creates an immutable later revision", async () => {
 
 Route coverage must include editor authorization, cross-project rejection, bounded lists, revision immutability, and stale dependency detection.
 
-- [ ] **Step 2: Run tests and confirm persistence methods are absent**
+- [x] **Step 2: Run tests and confirm persistence methods are absent**
 
 Run: `node --test backend/src/saas/analysisThreads.test.js backend/src/saas/routes/saasRoutes.test.js`
 
 Expected: FAIL on missing store/service methods.
 
-- [ ] **Step 3: Add migration 012**
+- [x] **Step 3: Add migration 012**
 
 Create `analysis_threads`, `analysis_plan_revisions`, `analysis_runs`, `analysis_results`, and `analysis_publications`. Use text ids, lab/project foreign keys, JSONB payload columns, explicit status/revision/hash columns, timestamps, actor columns, unique `(analysis_thread_id, revision)`, and unique `(project_id, idempotency_key)` publication receipts.
 
-- [ ] **Step 4: Implement memory/Postgres parity**
+- [x] **Step 4: Implement memory/Postgres parity**
 
 All reads return copies. Revision and result payloads are append-only. Only workflow status fields may transition. The memory-store atomic publisher must clone maps before committing, matching the existing experiment snapshot publish pattern.
 
-- [ ] **Step 5: Implement thread and revision routes**
+- [x] **Step 5: Implement thread and revision routes**
 
 Implement:
 
@@ -314,7 +314,7 @@ POST /api/analysis-plan-revisions/:planRevisionId/accept
 
 Plan acceptance requires `Idempotency-Key`, `planHash`, `selectionHash`, and `dependencyHash`; it atomically freezes the revision and creates a queued AnalysisRun but does not execute or create a ChartSpec.
 
-- [ ] **Step 6: Run backend route and optional Postgres tests**
+- [x] **Step 6: Run backend route and optional Postgres tests**
 
 Run:
 
@@ -325,7 +325,7 @@ node --test backend/src/saas/routes/saasRoutes.postgres.test.js
 
 Expected: memory tests pass; Postgres test passes when `LABRAT_TEST_DATABASE_URL` is configured and otherwise reports the repository's standard optional skip.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/migrations/012_analysis_workflow.sql backend/src/saas/memoryStore.js backend/src/saas/postgresStore.js backend/src/saas/analysisThreads.js backend/src/saas/analysisThreads.test.js backend/src/saas/routes/saasRoutes.js backend/src/saas/routes/saasRoutes.test.js backend/src/saas/routes/saasRoutes.postgres.test.js

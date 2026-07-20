@@ -2,7 +2,7 @@
 
 Status: contract
 Read when: changing server project state, source-of-truth rules, or old local-data compatibility assumptions.
-Last reviewed: 2026-07-16
+Last reviewed: 2026-07-20
 
 
 This document defines the server source-of-truth model for logged-in LabRat workspaces. It replaces older local-project migration guidance. Do not build compatibility migrations for old IndexedDB, `.labrat.json`, or previous local project shapes unless the user explicitly reopens that requirement.
@@ -30,12 +30,13 @@ dataSnapshots
 experimentSnapshotHeads
 browserViews
 agentRuns
+analysisThreads
 chartProposalSets
 chartSpecs
 manuscripts
 ```
 
-Full workbook grids, DataSnapshot point arrays, and Browser rows do not belong in project state. Frontend server mode should use dedicated bounded range, experiment projection, and experiment detail endpoints for those payloads.
+Full workbook grids, DataSnapshot point arrays, AnalysisPlanRevision selections/programs, and Browser rows do not belong in project state. Frontend server mode should use dedicated bounded range, analysis-thread/selection, experiment projection, and experiment detail endpoints for those payloads.
 
 ## Project Profile
 
@@ -64,6 +65,7 @@ Use `POST /api/projects` for the initial profile and `PATCH /api/projects/:proje
 - Accepted structured data is stored in immutable DataSnapshots produced by accepted DataPlans.
 - One `experiment_snapshot_heads` row chooses the active accepted snapshot record for each stable experiment identity.
 - Personal Browser display state is stored in `browser_views`.
+- Reviewed analysis conversations and immutable calculation plans are stored in `analysis_threads` and `analysis_plan_revisions`; accepted plans create queued `analysis_runs`.
 - Durable chart definitions are stored in `chart_specs`.
 - Manuscript canvas state is stored in `manuscripts`.
 

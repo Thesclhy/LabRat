@@ -35,6 +35,7 @@ Implemented:
 - The next architecture has been approved conversationally and written for review in `doc/plans/backend-conversational-analysis-chart-design.md`: backend intent routing, plan/revision review against Excel red boxes, exact accepted Python in a LabRat-managed sandbox, validated result review, atomic AnalysisResult/ChartSpec publication, and placement-local Canvas trace visibility.
 - Conversational-analysis Task 1 is implemented: backend-only provider configuration, bounded intent routing, direct project answers, reviewed-analysis disposition for trends/calculations/charts, explicit-only Browser navigation, and removal of frontend provider credentials/direct calls.
 - Conversational-analysis Task 2 is implemented: accepted-active-head analysis schemas and selection hashes, unit-aware field catalog, source rectangle compression/limits, plan validation, and a project-scoped six-tool planning registry with no executor.
+- Conversational-analysis Task 3 is implemented: migration 012 plus memory/Postgres parity for AnalysisThreads, immutable AnalysisPlanRevisions, queued AnalysisRuns, reserved AnalysisResults/publication receipts, and atomic future result publication; project-scoped thread/revision/selection/accept routes; feedback-only backend redrafting; AgentRun creation of durable threads and first reviewable revisions; bounded state/list/selection responses; stale-head/hash rejection; and idempotent plan acceptance with no execution or ChartSpec side effect.
 
 Not implemented yet:
 
@@ -43,11 +44,11 @@ Not implemented yet:
 
 ## Next Recommended Slice
 
-Execute `doc/plans/backend-conversational-analysis-chart-implementation-plan.md` in coherent tested tasks. The first implementation milestone should:
+Continue `doc/plans/backend-conversational-analysis-chart-implementation-plan.md` with Task 4:
 
-1. Add AnalysisThread/plan-revision persistence and routes without executing calculations yet.
-2. Make AgentRun analysis dispositions create a durable thread and first reviewable revision.
-3. Keep DataSnapshot-backed chart publication explicitly unsupported until each reviewed milestone reaches its contract boundary.
+1. Add frontend analysis API helpers for the Task 3 routes.
+2. Render the plan and revision history in the normal LabRat conversation rail beside Excel source rectangles.
+3. Keep plan acceptance separate from execution/result acceptance; a queued run must not be presented as a calculated result.
 
 ## Guardrails
 
@@ -69,7 +70,7 @@ node --test backend/src/saas/routes/saasRoutes.postgres.test.js
 git diff --check
 ```
 
-Latest local evidence: frontend 211/211, backend 150 passed plus 1 optional Postgres skip, and production build passed. Browser QA confirmed direct Chinese project summaries, accepted-review Overview state, grouped Selectivity Solid/Liquid/Gas fields with exact values, one horizontal Browser scroll owner, no page overflow, and no browser warnings/errors. The earlier 600-cell workbook QA also confirmed horizontal tile loading, local skeleton state, instant return to cached cells without another loading state, and stable workbook switching. Identity bulk review retains focused 60-item, canonical-label reuse, exact-match, selection, filter, undo, reset, and publish-gating coverage.
+Latest Task 3 evidence: `npm run codex:verify` passed with frontend 212/212, backend 192/192 plus 1 optional Postgres integration skip, and a successful production build with the existing Plotly chunk-size warning. Plan acceptance creates one queued run and zero ChartSpecs.
 
 ## Open Risks
 

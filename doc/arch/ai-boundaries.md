@@ -79,7 +79,9 @@ WorkbookUnderstanding confirmation, DataPlan publish, source extract acceptance,
 - Field ids include field key, unit, and value type; incompatible units remain separate.
 - Non-contiguous source cells remain separate review rectangles. Oversized source ranges fail before cell expansion.
 - An AnalysisPlanRevision requires an explicit missing-value policy, exact `labrat-python-v1` source/hash, manifest, expected output shape, and frozen selection/dependency hashes.
-- AnalysisPlanRevision validation rejects embedded result arrays. No calculation or persistence is implemented by this planning-tools milestone.
+- AnalysisPlanRevision validation rejects embedded result arrays. The backend persists immutable numbered revisions; feedback creates a later revision instead of patching prior payloads.
+- AgentRun analysis dispositions create a durable AnalysisThread. With accepted data and a configured provider, the backend may draft revision 1 and returns only visible artifact summaries.
+- Plan acceptance requires exact reviewed hashes plus idempotency, re-resolves active heads, and creates only a queued AnalysisRun. It does not execute Python or create an AnalysisResult/ChartSpec.
 
 ## Chart Rules
 

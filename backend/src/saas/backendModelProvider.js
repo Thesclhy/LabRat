@@ -11,6 +11,17 @@ const INTENT_SYSTEM = [
   "Never return hidden reasoning or scientific values.",
 ].join(" ");
 
+const ANALYSIS_PLAN_SYSTEM = [
+  "Draft one reviewable LabRat analysis plan as JSON only.",
+  "Return exactly {selectionRequest, plan}.",
+  "selectionRequest contains experimentIds, fieldIds, and includeSeries; use only supplied experiment and field ids.",
+  "plan contains requestSummary, processingSummary, calculationManifest, pythonProgram, expectedOutput, and warnings.",
+  "calculationManifest must declare inputs, an explicit missingValuePolicy, derivedFields, and invariants.",
+  "pythonProgram must contain runtime labrat-python-v1, entrypoint analyze, and exact Python source defining analyze(tables, labrat).",
+  "Do not return selection hashes, dependency hashes, source rectangles, source hashes, result rows, plotted arrays, or hidden reasoning.",
+  "The backend will resolve accepted data, compute all hashes, validate the plan, and require user review before execution.",
+].join(" ");
+
 function parseJsonObject(value) {
   const raw = String(value || "").trim();
   const unfenced = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
@@ -93,7 +104,7 @@ export function createBackendModelProvider({
     },
     draftAnalysisPlan(input = {}) {
       return requestStructured({
-        system: "Draft a LabRat analysis plan as bounded JSON. Do not include result arrays and do not execute code.",
+        system: ANALYSIS_PLAN_SYSTEM,
         payload: input,
         maxTokens: 2400,
       });

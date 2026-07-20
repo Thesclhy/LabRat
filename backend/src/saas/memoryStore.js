@@ -44,6 +44,11 @@ export class MemorySaasStore {
     this.experimentSnapshotPublishes = new Map();
     this.browserViews = new Map();
     this.agentRuns = new Map();
+    this.analysisThreads = new Map();
+    this.analysisPlanRevisions = new Map();
+    this.analysisRuns = new Map();
+    this.analysisResults = new Map();
+    this.analysisPublications = new Map();
     this.chartProposalSets = new Map();
     this.chartSpecs = new Map();
     this.manuscripts = new Map();
@@ -881,6 +886,396 @@ export class MemorySaasStore {
     run.updatedAt = nowIso();
     run.updatedBy = changes.updatedBy || run.updatedBy;
     return copy(run);
+  }
+
+  async createAnalysisThread(input) {
+    const createdAt = input.createdAt || nowIso();
+    const thread = {
+      id: input.id || makeId("analysis_thread"),
+      labId: input.labId,
+      projectId: input.projectId,
+      schemaVersion: input.schemaVersion || "labrat.analysisThread.v1",
+      status: input.status || "planning",
+      originalRequest: String(input.originalRequest || ""),
+      messages: copy(input.messages) || [],
+      planRevisionIds: copy(input.planRevisionIds) || [],
+      analysisRunIds: copy(input.analysisRunIds) || [],
+      acceptedAnalysisResultIds: copy(input.acceptedAnalysisResultIds) || [],
+      chartSpecIds: copy(input.chartSpecIds) || [],
+      createdAt,
+      updatedAt: input.updatedAt || createdAt,
+      createdBy: input.createdBy,
+      updatedBy: input.updatedBy || input.createdBy,
+    };
+    this.analysisThreads.set(thread.id, thread);
+    return copy(thread);
+  }
+
+  async findAnalysisThreadById(id) {
+    return copy(this.analysisThreads.get(id) || null);
+  }
+
+  async listAnalysisThreads({ projectId }) {
+    return [...this.analysisThreads.values()]
+      .filter((thread) => thread.projectId === projectId)
+      .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)) || b.id.localeCompare(a.id))
+      .map(copy);
+  }
+
+  async updateAnalysisThread(id, changes = {}) {
+    const thread = this.analysisThreads.get(id);
+    if (!thread) return null;
+    if (changes.status != null) thread.status = String(changes.status);
+    if (changes.messages != null) thread.messages = copy(changes.messages) || [];
+    if (changes.planRevisionIds != null) thread.planRevisionIds = copy(changes.planRevisionIds) || [];
+    if (changes.analysisRunIds != null) thread.analysisRunIds = copy(changes.analysisRunIds) || [];
+    if (changes.acceptedAnalysisResultIds != null) {
+      thread.acceptedAnalysisResultIds = copy(changes.acceptedAnalysisResultIds) || [];
+    }
+    if (changes.chartSpecIds != null) thread.chartSpecIds = copy(changes.chartSpecIds) || [];
+    thread.updatedAt = changes.updatedAt || nowIso();
+    thread.updatedBy = changes.updatedBy || thread.updatedBy;
+    return copy(thread);
+  }
+
+  async createAnalysisPlanRevision(input) {
+    if (this.analysisPlanRevisions.has(input.id)) {
+      throw Object.assign(new Error("Analysis plan revision already exists."), {
+        statusCode: 409,
+        code: "analysis_plan_revision_exists",
+      });
+    }
+    const revision = copy(input);
+    this.analysisPlanRevisions.set(revision.id, revision);
+    return copy(revision);
+  }
+
+  async findAnalysisPlanRevisionById(id) {
+    return copy(this.analysisPlanRevisions.get(id) || null);
+  }
+
+  async listAnalysisPlanRevisions({ analysisThreadId }) {
+    return [...this.analysisPlanRevisions.values()]
+      .filter((revision) => revision.analysisThreadId === analysisThreadId)
+      .sort((a, b) => Number(a.revision) - Number(b.revision))
+      .map(copy);
+  }
+
+  async updateAnalysisPlanRevisionStatus(id, {
+    status,
+    acceptedAt,
+    acceptedBy,
+    updatedAt,
+    updatedBy,
+  } = {}) {
+    const revision = this.analysisPlanRevisions.get(id);
+    if (!revision) return null;
+    if (status != null) revision.status = String(status);
+    if (acceptedAt !== undefined) revision.acceptedAt = acceptedAt;
+    if (acceptedBy !== undefined) revision.acceptedBy = acceptedBy;
+    revision.updatedAt = updatedAt || nowIso();
+    revision.updatedBy = updatedBy || revision.updatedBy;
+    return copy(revision);
+  }
+
+  async appendAnalysisPlanRevision({
+    threadId,
+    priorRevisionId = null,
+    revision,
+    messages = [],
+    actorUserId,
+  }) {
+    const thread = this.analysisThreads.get(threadId);
+    const prior = priorRevisionId ? this.analysisPlanRevisions.get(priorRevisionId) : null;
+    const duplicateNumber = [...this.analysisPlanRevisions.values()].some((item) => (
+      item.analysisThreadId === threadId && Number(item.revision) === Number(revision?.revision)
+    ));
+    if (
+      !thread
+      || !revision?.id
+      || revision.analysisThreadId !== threadId
+      || revision.projectId !== thread.projectId
+      || this.analysisPlanRevisions.has(revision.id)
+      || duplicateNumber
+      || priorRevisionId && (!prior || prior.analysisThreadId !== threadId || prior.status !== "awaiting_review")
+    ) {
+      throw Object.assign(new Error("The analysis plan revision package is invalid."), {
+        statusCode: 409,
+        code: "analysis_plan_revision_conflict",
+      });
+    }
+    const nextThreads = new Map(this.analysisThreads);
+    const nextRevisions = new Map(this.analysisPlanRevisions);
+    const updatedAt = revision.createdAt || nowIso();
+    if (prior) {
+      nextRevisions.set(prior.id, {
+        ...copy(prior),
+        status: "superseded",
+        updatedAt,
+        updatedBy: actorUserId,
+      });
+    }
+    nextRevisions.set(revision.id, copy(revision));
+    const updatedThread = {
+      ...copy(thread),
+      status: "awaiting_plan_review",
+      messages: [...asArray(thread.messages).map(copy), ...asArray(messages).map(copy)],
+      planRevisionIds: [...asArray(thread.planRevisionIds), revision.id],
+      updatedAt,
+      updatedBy: actorUserId,
+    };
+    nextThreads.set(thread.id, updatedThread);
+    this.analysisThreads = nextThreads;
+    this.analysisPlanRevisions = nextRevisions;
+    return copy(revision);
+  }
+
+  async createAnalysisRun(input) {
+    if (this.analysisRuns.has(input.id)) {
+      throw Object.assign(new Error("Analysis run already exists."), {
+        statusCode: 409,
+        code: "analysis_run_exists",
+      });
+    }
+    const run = copy(input);
+    this.analysisRuns.set(run.id, run);
+    return copy(run);
+  }
+
+  async findAnalysisRunById(id) {
+    return copy(this.analysisRuns.get(id) || null);
+  }
+
+  async findAnalysisRunByIdempotencyKey({ projectId, idempotencyKey }) {
+    const run = [...this.analysisRuns.values()].find((candidate) => (
+      candidate.projectId === projectId && candidate.idempotencyKey === idempotencyKey
+    ));
+    return copy(run || null);
+  }
+
+  async listAnalysisRuns({ projectId, analysisThreadId = null }) {
+    return [...this.analysisRuns.values()]
+      .filter((run) => run.projectId === projectId)
+      .filter((run) => !analysisThreadId || run.analysisThreadId === analysisThreadId)
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)) || b.id.localeCompare(a.id))
+      .map(copy);
+  }
+
+  async createAnalysisResult(input) {
+    if (this.analysisResults.has(input.id)) {
+      throw Object.assign(new Error("Analysis result already exists."), {
+        statusCode: 409,
+        code: "analysis_result_exists",
+      });
+    }
+    const result = copy(input);
+    this.analysisResults.set(result.id, result);
+    return copy(result);
+  }
+
+  async findAnalysisResultById(id) {
+    return copy(this.analysisResults.get(id) || null);
+  }
+
+  async listAnalysisResults({ projectId, analysisThreadId = null }) {
+    return [...this.analysisResults.values()]
+      .filter((result) => result.projectId === projectId)
+      .filter((result) => !analysisThreadId || result.analysisThreadId === analysisThreadId)
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)) || b.id.localeCompare(a.id))
+      .map(copy);
+  }
+
+  async acceptAnalysisPlan(input) {
+    const prior = await this.findAnalysisRunByIdempotencyKey({
+      projectId: input.projectId,
+      idempotencyKey: input.idempotencyKey,
+    });
+    if (prior) {
+      if (prior.requestHash !== input.requestHash) {
+        throw Object.assign(new Error("This idempotency key was already used for another plan acceptance."), {
+          statusCode: 409,
+          code: "idempotency_key_conflict",
+        });
+      }
+      return {
+        analysisThread: await this.findAnalysisThreadById(prior.analysisThreadId),
+        analysisPlanRevision: await this.findAnalysisPlanRevisionById(prior.acceptedPlanRevisionId),
+        analysisRun: prior,
+      };
+    }
+    const thread = this.analysisThreads.get(input.analysisThreadId);
+    const revision = this.analysisPlanRevisions.get(input.planRevisionId);
+    if (
+      !thread
+      || !revision
+      || thread.projectId !== input.projectId
+      || revision.projectId !== input.projectId
+      || revision.analysisThreadId !== thread.id
+      || revision.status !== "awaiting_review"
+      || !input.analysisRun?.id
+      || input.analysisRun.projectId !== input.projectId
+      || input.analysisRun.analysisThreadId !== thread.id
+      || input.analysisRun.acceptedPlanRevisionId !== revision.id
+      || input.analysisRun.idempotencyKey !== input.idempotencyKey
+      || input.analysisRun.requestHash !== input.requestHash
+      || this.analysisRuns.has(input.analysisRun?.id)
+    ) {
+      throw Object.assign(new Error("The analysis plan acceptance package is invalid."), {
+        statusCode: 409,
+        code: "analysis_plan_revision_mismatch",
+      });
+    }
+    const nextThreads = new Map(this.analysisThreads);
+    const nextRevisions = new Map(this.analysisPlanRevisions);
+    const nextRuns = new Map(this.analysisRuns);
+    const nextAuditEvents = new Map(this.auditEvents);
+    const acceptedAt = input.analysisRun.createdAt || nowIso();
+    const acceptedRevision = {
+      ...copy(revision),
+      status: "accepted",
+      acceptedAt,
+      acceptedBy: input.actorUserId,
+      updatedAt: acceptedAt,
+      updatedBy: input.actorUserId,
+    };
+    const updatedThread = {
+      ...copy(thread),
+      status: "executing",
+      analysisRunIds: [...asArray(thread.analysisRunIds), input.analysisRun.id],
+      updatedAt: acceptedAt,
+      updatedBy: input.actorUserId,
+    };
+    nextRevisions.set(revision.id, acceptedRevision);
+    nextThreads.set(thread.id, updatedThread);
+    nextRuns.set(input.analysisRun.id, copy(input.analysisRun));
+    asArray(input.auditEvents).forEach((auditInput) => {
+      const event = {
+        id: auditInput.id || makeId("audit"),
+        labId: auditInput.labId || null,
+        projectId: auditInput.projectId || input.projectId,
+        actorUserId: auditInput.actorUserId || input.actorUserId || null,
+        action: auditInput.action,
+        targetType: auditInput.targetType || null,
+        targetId: auditInput.targetId || null,
+        summary: auditInput.summary || null,
+        metadata: copy(auditInput.metadata) || {},
+        createdAt: auditInput.createdAt || acceptedAt,
+        ipAddress: auditInput.ipAddress || null,
+        userAgent: auditInput.userAgent || null,
+      };
+      nextAuditEvents.set(event.id, event);
+    });
+    this.analysisThreads = nextThreads;
+    this.analysisPlanRevisions = nextRevisions;
+    this.analysisRuns = nextRuns;
+    this.auditEvents = nextAuditEvents;
+    return {
+      analysisThread: copy(updatedThread),
+      analysisPlanRevision: copy(acceptedRevision),
+      analysisRun: copy(input.analysisRun),
+    };
+  }
+
+  async findAnalysisPublication({ projectId, idempotencyKey }) {
+    return copy(this.analysisPublications.get(`${projectId}:${idempotencyKey}`) || null);
+  }
+
+  async publishAnalysisResult(input) {
+    const publicationKey = `${input.projectId}:${input.idempotencyKey}`;
+    const prior = this.analysisPublications.get(publicationKey);
+    if (prior) {
+      if (prior.requestHash !== input.requestHash) {
+        throw Object.assign(new Error("This idempotency key was already used for another analysis publication."), {
+          statusCode: 409,
+          code: "idempotency_key_conflict",
+        });
+      }
+      return { ...copy(prior.response), idempotentReplay: true };
+    }
+    const thread = this.analysisThreads.get(input.analysisThreadId);
+    const result = copy(input.analysisResult);
+    const chartSpec = copy(input.chartSpec);
+    const analysisRun = this.analysisRuns.get(result?.analysisRunId);
+    if (
+      !input.idempotencyKey
+      || !input.requestHash
+      || !thread
+      || thread.projectId !== input.projectId
+      || !result?.id
+      || result.projectId !== input.projectId
+      || result.analysisThreadId !== thread.id
+      || !analysisRun
+      || analysisRun.projectId !== input.projectId
+      || analysisRun.analysisThreadId !== thread.id
+      || !chartSpec?.id
+      || chartSpec.projectId !== input.projectId
+      || chartSpec.analysisResultId !== result.id
+      || this.analysisResults.has(result.id)
+      || this.chartSpecs.has(chartSpec.id)
+    ) {
+      throw Object.assign(new Error("The analysis result publication package is invalid."), {
+        statusCode: 400,
+        code: "invalid_analysis_publication_package",
+      });
+    }
+    const nextThreads = new Map(this.analysisThreads);
+    const nextResults = new Map(this.analysisResults);
+    const nextChartSpecs = new Map(this.chartSpecs);
+    const nextPublications = new Map(this.analysisPublications);
+    const nextAuditEvents = new Map(this.auditEvents);
+    const createdAt = result.acceptedAt || result.createdAt || nowIso();
+    const updatedThread = {
+      ...copy(thread),
+      status: "completed",
+      acceptedAnalysisResultIds: [
+        ...asArray(thread.acceptedAnalysisResultIds),
+        result.id,
+      ],
+      chartSpecIds: [...asArray(thread.chartSpecIds), chartSpec.id],
+      updatedAt: createdAt,
+      updatedBy: input.actorUserId,
+    };
+    const response = { ...copy(input.response), idempotentReplay: false };
+    const publication = {
+      id: input.publicationId || makeId("analysis_publication"),
+      labId: input.labId,
+      projectId: input.projectId,
+      analysisThreadId: thread.id,
+      analysisResultId: result.id,
+      chartSpecId: chartSpec.id,
+      idempotencyKey: input.idempotencyKey,
+      requestHash: input.requestHash,
+      response,
+      createdAt,
+      createdBy: input.actorUserId,
+    };
+    nextThreads.set(thread.id, updatedThread);
+    nextResults.set(result.id, result);
+    nextChartSpecs.set(chartSpec.id, chartSpec);
+    nextPublications.set(publicationKey, publication);
+    asArray(input.auditEvents).forEach((auditInput) => {
+      const event = {
+        id: auditInput.id || makeId("audit"),
+        labId: auditInput.labId || input.labId || null,
+        projectId: auditInput.projectId || input.projectId,
+        actorUserId: auditInput.actorUserId || input.actorUserId || null,
+        action: auditInput.action,
+        targetType: auditInput.targetType || null,
+        targetId: auditInput.targetId || null,
+        summary: auditInput.summary || null,
+        metadata: copy(auditInput.metadata) || {},
+        createdAt: auditInput.createdAt || createdAt,
+        ipAddress: auditInput.ipAddress || null,
+        userAgent: auditInput.userAgent || null,
+      };
+      nextAuditEvents.set(event.id, event);
+    });
+    this.analysisThreads = nextThreads;
+    this.analysisResults = nextResults;
+    this.chartSpecs = nextChartSpecs;
+    this.analysisPublications = nextPublications;
+    this.auditEvents = nextAuditEvents;
+    return copy(response);
   }
 
   async createChartProposalSet(input) {

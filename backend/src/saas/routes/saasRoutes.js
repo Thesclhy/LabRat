@@ -49,6 +49,17 @@ import {
   executeAgentRunAction,
   markActionCompleted,
 } from "../agentRuns.js";
+import {
+  acceptAnalysisPlanRevision,
+  analysisPlanRevisionSummary,
+  analysisRunSummary,
+  analysisThreadSummary,
+  createAnalysisPlanRevision,
+  createAnalysisThread,
+  draftAnalysisPlanRevision,
+  getAnalysisPlanSelectionPage,
+  listAnalysisThreads,
+} from "../analysisThreads.js";
 import { validateChartSpecProposal } from "../chartSpecValidation.js";
 import {
   createSourceExtractProposalFromEvidence,
@@ -399,6 +410,32 @@ async function agentRunAuth(req, context, agentRunId, role = "viewer") {
   return { auth, agentRun };
 }
 
+async function analysisThreadAuth(req, context, analysisThreadId, role = "viewer") {
+  const auth = requireAuth(await authFor(req, context));
+  const analysisThread = await context.store.findAnalysisThreadById?.(analysisThreadId);
+  if (!analysisThread) {
+    throw Object.assign(new Error("Analysis thread not found."), {
+      statusCode: 404,
+      code: "analysis_thread_not_found",
+    });
+  }
+  requireLabRole(auth, analysisThread.labId, role);
+  return { auth, analysisThread };
+}
+
+async function analysisPlanRevisionAuth(req, context, planRevisionId, role = "viewer") {
+  const auth = requireAuth(await authFor(req, context));
+  const analysisPlanRevision = await context.store.findAnalysisPlanRevisionById?.(planRevisionId);
+  if (!analysisPlanRevision) {
+    throw Object.assign(new Error("Analysis plan revision not found."), {
+      statusCode: 404,
+      code: "analysis_plan_revision_not_found",
+    });
+  }
+  requireLabRole(auth, analysisPlanRevision.labId, role);
+  return { auth, analysisPlanRevision };
+}
+
 async function handleLogin(req, res, context) {
   const body = await readJsonBody(req);
   const username = String(body.username || "").trim();
@@ -733,6 +770,7 @@ async function handleProjectState(req, res, context, projectId) {
     workbookReviewSessions,
     workbookUnderstandings,
     agentRuns,
+    analysisThreads,
     dataPlans,
     dataSnapshots,
     experimentSnapshotHeads,
@@ -747,6 +785,7 @@ async function handleProjectState(req, res, context, projectId) {
     context.store.listWorkbookReviewSessions ? context.store.listWorkbookReviewSessions({ projectId }) : [],
     context.store.listWorkbookUnderstandings ? context.store.listWorkbookUnderstandings({ projectId }) : [],
     context.store.listAgentRuns ? context.store.listAgentRuns({ projectId }) : [],
+    context.store.listAnalysisThreads ? context.store.listAnalysisThreads({ projectId }) : [],
     context.store.listDataPlans ? context.store.listDataPlans({ projectId }) : [],
     context.store.listDataSnapshots ? context.store.listDataSnapshots({ projectId }) : [],
     context.store.listExperimentSnapshotHeads ? context.store.listExperimentSnapshotHeads({ projectId }) : [],
@@ -765,6 +804,7 @@ async function handleProjectState(req, res, context, projectId) {
     workbookReviewSessions: workbookReviewSessions.map(workbookReviewSessionSummary),
     workbookUnderstandings: workbookUnderstandings.map(workbookUnderstandingSummary),
     agentRuns: agentRuns.map(agentRunSummary),
+    analysisThreads: analysisThreads.slice(0, 100).map(analysisThreadSummary),
     dataPlans: dataPlans.map(dataPlanSummary),
     dataSnapshots: dataSnapshots.map(dataSnapshotSummary),
     experimentSnapshotHeads,
@@ -1134,7 +1174,7 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
     conversation: Array.isArray(body.conversation) ? body.conversation : [],
     selectedContext: isObject(body.selectedContext) ? body.selectedContext : {},
   });
-  const agentRun = await context.store.createAgentRun({
+  let agentRun = await context.store.createAgentRun({
     labId: project.labId,
     projectId: project.id,
     status: draft.status || "waiting_for_user",
@@ -1149,6 +1189,148 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
     warnings: draft.warnings || [],
     createdBy: auth.user.id,
   });
+  let analysisThread = null;
+  let currentPlanRevision = null;
+  let reply = draft.reply || "";
+  if (draft.mode === "analysis_planning") {
+    analysisThread = await createAnalysisThread({
+      store: context.store,
+      project,
+      actorUserId: auth.user.id,
+      originalRequest: body.message || "",
+      messages: [{
+        id: makeId("analysis_message"),
+        role: "user",
+        content: String(body.message || ""),
+        createdAt: agentRun.createdAt,
+        agentRunId: agentRun.id,
+      }],
+    });
+    const planningWarnings = [...asArray(agentRun.warnings)];
+    if (experimentSnapshotHeads.length) {
+      try {
+        currentPlanRevision = await draftAnalysisPlanRevision({
+          store: context.store,
+          project,
+          analysisThreadId: analysisThread.id,
+          actorUserId: auth.user.id,
+          modelProvider: context.modelProvider,
+          analysisToolRegistry: context.analysisToolRegistry,
+        });
+      } catch (error) {
+        planningWarnings.push({
+          code: error.code || "analysis_plan_draft_failed",
+          message: error.message || "The reviewed analysis plan could not be drafted.",
+          severity: "warning",
+        });
+        reply = "I created an analysis thread, but the backend could not draft a reviewable plan. The request is preserved and can be retried after the provider or accepted data is corrected.";
+      }
+    } else {
+      planningWarnings.push({
+        code: "analysis_evidence_required",
+        message: "Publish accepted experiment data before drafting an analysis plan.",
+        severity: "info",
+      });
+      reply = "I created an analysis thread, but accepted published experiment data is required before I can draft the reviewed analysis plan.";
+    }
+    const draftMetadata = currentPlanRevision?.draftMetadata || {};
+    const existingUsage = agentRun.usage || {};
+    agentRun = await context.store.updateAgentRun(agentRun.id, {
+      visibleSteps: [
+        ...asArray(agentRun.visibleSteps),
+        {
+          stepId: makeId("agent_step"),
+          label: currentPlanRevision
+            ? "Drafted reviewable analysis plan"
+            : "Created analysis thread",
+          details: {
+            analysisThreadId: analysisThread.id,
+            planRevisionId: currentPlanRevision?.id || null,
+            planHash: currentPlanRevision?.planHash || null,
+            selectionHash: currentPlanRevision?.selectionHash || null,
+          },
+          createdAt: new Date().toISOString(),
+        },
+      ],
+      toolTrace: currentPlanRevision ? [
+        ...asArray(agentRun.toolTrace),
+        {
+          tool: "list_analysis_fields",
+          observation: { projectId: project.id },
+        },
+        {
+          tool: "preview_analysis_selection",
+          observation: {
+            projectId: project.id,
+            selectionId: currentPlanRevision.selection?.selectionId || null,
+            experimentCount: asArray(currentPlanRevision.selection?.experimentIds).length,
+            fieldCount: asArray(currentPlanRevision.selection?.fieldIds).length,
+          },
+        },
+        {
+          tool: "validate_analysis_plan",
+          observation: {
+            projectId: project.id,
+            planRevisionId: currentPlanRevision.id,
+            ok: true,
+          },
+        },
+      ] : agentRun.toolTrace,
+      proposalRefs: [
+        ...asArray(agentRun.proposalRefs),
+        { type: "analysis_thread", id: analysisThread.id },
+        ...(currentPlanRevision ? [{
+          type: "analysis_plan_revision",
+          id: currentPlanRevision.id,
+        }] : []),
+      ],
+      usage: {
+        ...existingUsage,
+        provider: draftMetadata.provider || existingUsage.provider,
+        model: draftMetadata.model || existingUsage.model,
+        inputTokens: (Number(existingUsage.inputTokens) || 0)
+          + (Number(draftMetadata.usage?.inputTokens) || 0),
+        outputTokens: (Number(existingUsage.outputTokens) || 0)
+          + (Number(draftMetadata.usage?.outputTokens) || 0),
+        latencyMs: (Number(existingUsage.latencyMs) || 0)
+          + (Number(draftMetadata.latencyMs) || 0),
+      },
+      warnings: planningWarnings,
+      updatedBy: auth.user.id,
+    });
+    analysisThread = await context.store.findAnalysisThreadById(analysisThread.id);
+    await context.store.recordAuditEvent({
+      labId: project.labId,
+      projectId: project.id,
+      actorUserId: auth.user.id,
+      action: "analysis_thread.create",
+      targetType: "analysis_thread",
+      targetId: analysisThread.id,
+      summary: `Created analysis thread ${analysisThread.id} from AgentRun.`,
+      metadata: {
+        agentRunId: agentRun.id,
+        currentPlanRevisionId: currentPlanRevision?.id || null,
+      },
+    });
+    if (currentPlanRevision) {
+      await context.store.recordAuditEvent({
+        labId: project.labId,
+        projectId: project.id,
+        actorUserId: auth.user.id,
+        action: "analysis_plan_revision.create",
+        targetType: "analysis_plan_revision",
+        targetId: currentPlanRevision.id,
+        summary: `Created analysis plan revision ${currentPlanRevision.revision} from AgentRun.`,
+        metadata: {
+          agentRunId: agentRun.id,
+          analysisThreadId: analysisThread.id,
+          planHash: currentPlanRevision.planHash,
+          selectionHash: currentPlanRevision.selectionHash,
+          dependencyHash: currentPlanRevision.dependencyHash,
+        },
+      });
+    }
+  }
   await context.store.recordAuditEvent({
     labId: project.labId,
     projectId: project.id,
@@ -1161,7 +1343,11 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
   });
   sendJson(res, 201, {
     agentRun: agentRunSummary(agentRun),
-    reply: draft.reply || "",
+    reply,
+    analysisThread: analysisThread ? analysisThreadSummary(analysisThread) : null,
+    currentPlanRevision: currentPlanRevision
+      ? analysisPlanRevisionSummary(currentPlanRevision)
+      : null,
   });
 }
 
@@ -1280,6 +1466,168 @@ async function handleAgentRunCancel(req, res, context, agentRunId) {
     summary: `Cancelled AgentRun ${agentRun.id}.`,
   });
   sendJson(res, 200, { agentRun: agentRunSummary(updated) });
+}
+
+async function handleProjectAnalysisThreads(req, res, context, projectId, url) {
+  const { auth, project } = await projectAuth(
+    req,
+    context,
+    projectId,
+    req.method === "POST" ? "editor" : "viewer",
+  );
+  if (req.method === "GET") {
+    const result = await listAnalysisThreads({
+      store: context.store,
+      projectId: project.id,
+      offset: url.searchParams.get("offset"),
+      limit: url.searchParams.get("limit"),
+    });
+    sendJson(res, 200, {
+      schemaVersion: "labrat.analysisThreadList.v1",
+      projectId: project.id,
+      ...result,
+    });
+    return;
+  }
+  const body = await readJsonBody(req);
+  const analysisThread = await createAnalysisThread({
+    store: context.store,
+    project,
+    actorUserId: auth.user.id,
+    originalRequest: body.originalRequest || body.request || body.message,
+  });
+  await context.store.recordAuditEvent({
+    labId: project.labId,
+    projectId: project.id,
+    actorUserId: auth.user.id,
+    action: "analysis_thread.create",
+    targetType: "analysis_thread",
+    targetId: analysisThread.id,
+    summary: `Created analysis thread ${analysisThread.id}.`,
+  });
+  sendJson(res, 201, { analysisThread: analysisThreadSummary(analysisThread) });
+}
+
+async function handleAnalysisThreadById(req, res, context, analysisThreadId) {
+  const { analysisThread } = await analysisThreadAuth(
+    req,
+    context,
+    analysisThreadId,
+    "viewer",
+  );
+  const [planRevisions, analysisRuns] = await Promise.all([
+    context.store.listAnalysisPlanRevisions({ analysisThreadId: analysisThread.id }),
+    context.store.listAnalysisRuns({
+      projectId: analysisThread.projectId,
+      analysisThreadId: analysisThread.id,
+    }),
+  ]);
+  sendJson(res, 200, {
+    analysisThread: {
+      ...analysisThreadSummary(analysisThread),
+      messages: analysisThread.messages || [],
+    },
+    planRevisions: planRevisions.map(analysisPlanRevisionSummary),
+    analysisRuns: analysisRuns.map(analysisRunSummary),
+  });
+}
+
+async function handleAnalysisPlanRevisions(req, res, context, analysisThreadId) {
+  const { auth, analysisThread } = await analysisThreadAuth(
+    req,
+    context,
+    analysisThreadId,
+    "editor",
+  );
+  const project = await context.store.findProjectById(analysisThread.projectId);
+  if (!project) {
+    throw Object.assign(new Error("Project not found."), {
+      statusCode: 404,
+      code: "project_not_found",
+    });
+  }
+  const body = await readJsonBody(req);
+  const revision = body.plan
+    ? await createAnalysisPlanRevision({
+      store: context.store,
+      project,
+      analysisThreadId: analysisThread.id,
+      actorUserId: auth.user.id,
+      plan: body.plan,
+      selectionRequest: body.selectionRequest,
+      feedback: body.feedback,
+    })
+    : await draftAnalysisPlanRevision({
+      store: context.store,
+      project,
+      analysisThreadId: analysisThread.id,
+      actorUserId: auth.user.id,
+      modelProvider: context.modelProvider,
+      analysisToolRegistry: context.analysisToolRegistry,
+      feedback: body.feedback,
+    });
+  await context.store.recordAuditEvent({
+    labId: project.labId,
+    projectId: project.id,
+    actorUserId: auth.user.id,
+    action: "analysis_plan_revision.create",
+    targetType: "analysis_plan_revision",
+    targetId: revision.id,
+    summary: `Created analysis plan revision ${revision.revision}.`,
+    metadata: {
+      analysisThreadId: analysisThread.id,
+      planHash: revision.planHash,
+      selectionHash: revision.selectionHash,
+      dependencyHash: revision.dependencyHash,
+    },
+  });
+  sendJson(res, 201, { analysisPlanRevision: analysisPlanRevisionSummary(revision) });
+}
+
+async function handleAnalysisPlanSelection(req, res, context, planRevisionId, url) {
+  await analysisPlanRevisionAuth(req, context, planRevisionId, "viewer");
+  const selection = await getAnalysisPlanSelectionPage({
+    store: context.store,
+    planRevisionId,
+    offset: url.searchParams.get("offset"),
+    limit: url.searchParams.get("limit"),
+  });
+  sendJson(res, 200, selection);
+}
+
+async function handleAnalysisPlanAccept(req, res, context, planRevisionId) {
+  const { auth, analysisPlanRevision } = await analysisPlanRevisionAuth(
+    req,
+    context,
+    planRevisionId,
+    "editor",
+  );
+  const project = await context.store.findProjectById(analysisPlanRevision.projectId);
+  if (!project) {
+    throw Object.assign(new Error("Project not found."), {
+      statusCode: 404,
+      code: "project_not_found",
+    });
+  }
+  const body = await readJsonBody(req);
+  const result = await acceptAnalysisPlanRevision({
+    store: context.store,
+    project,
+    actorUserId: auth.user.id,
+    planRevisionId: analysisPlanRevision.id,
+    idempotencyKey: req.headers["idempotency-key"],
+    planHash: body.planHash,
+    selectionHash: body.selectionHash,
+    dependencyHash: body.dependencyHash,
+    ipAddress: clientIp(req),
+    userAgent: userAgent(req),
+  });
+  sendJson(res, result.idempotentReplay ? 200 : 201, {
+    analysisThread: analysisThreadSummary(result.analysisThread),
+    analysisPlanRevision: analysisPlanRevisionSummary(result.analysisPlanRevision),
+    analysisRun: analysisRunSummary(result.analysisRun),
+    idempotentReplay: result.idempotentReplay,
+  });
 }
 
 async function handleProjectChartInterpret(req, res, context, projectId) {
@@ -2173,6 +2521,10 @@ async function dispatch(req, res, context) {
   if (projectAgentPlanMatch && req.method === "POST") return handleProjectAgentPlan(req, res, context, projectAgentPlanMatch[1]);
   const projectAgentRunsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/agent\/runs$/);
   if (projectAgentRunsMatch && (req.method === "GET" || req.method === "POST")) return handleProjectAgentRuns(req, res, context, projectAgentRunsMatch[1]);
+  const projectAnalysisThreadsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/analysis-threads$/);
+  if (projectAnalysisThreadsMatch && (req.method === "GET" || req.method === "POST")) {
+    return handleProjectAnalysisThreads(req, res, context, projectAnalysisThreadsMatch[1], url);
+  }
   const projectChartInterpretMatch = pathName.match(/^\/api\/projects\/([^/]+)\/charts\/interpret$/);
   if (projectChartInterpretMatch && req.method === "POST") return handleProjectChartInterpret(req, res, context, projectChartInterpretMatch[1]);
   const projectMatch = pathName.match(/^\/api\/projects\/([^/]+)$/);
@@ -2221,6 +2573,22 @@ async function dispatch(req, res, context) {
   if (agentRunCancelMatch && req.method === "POST") return handleAgentRunCancel(req, res, context, agentRunCancelMatch[1]);
   const agentRunMatch = pathName.match(/^\/api\/agent-runs\/([^/]+)$/);
   if (agentRunMatch && req.method === "GET") return handleAgentRunById(req, res, context, agentRunMatch[1]);
+  const analysisPlanRevisionSelectionMatch = pathName.match(/^\/api\/analysis-plan-revisions\/([^/]+)\/selection$/);
+  if (analysisPlanRevisionSelectionMatch && req.method === "GET") {
+    return handleAnalysisPlanSelection(req, res, context, analysisPlanRevisionSelectionMatch[1], url);
+  }
+  const analysisPlanRevisionAcceptMatch = pathName.match(/^\/api\/analysis-plan-revisions\/([^/]+)\/accept$/);
+  if (analysisPlanRevisionAcceptMatch && req.method === "POST") {
+    return handleAnalysisPlanAccept(req, res, context, analysisPlanRevisionAcceptMatch[1]);
+  }
+  const analysisThreadPlanRevisionsMatch = pathName.match(/^\/api\/analysis-threads\/([^/]+)\/plan-revisions$/);
+  if (analysisThreadPlanRevisionsMatch && req.method === "POST") {
+    return handleAnalysisPlanRevisions(req, res, context, analysisThreadPlanRevisionsMatch[1]);
+  }
+  const analysisThreadMatch = pathName.match(/^\/api\/analysis-threads\/([^/]+)$/);
+  if (analysisThreadMatch && req.method === "GET") {
+    return handleAnalysisThreadById(req, res, context, analysisThreadMatch[1]);
+  }
   const chartProposalSetsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/chart-proposal-sets$/);
   if (chartProposalSetsMatch && req.method === "GET") return handleProjectChartProposalSets(req, res, context, chartProposalSetsMatch[1]);
   const chartProposalSetMatch = pathName.match(/^\/api\/chart-proposal-sets\/([^/]+)$/);
@@ -2246,6 +2614,8 @@ export async function handleSaasRoutes(req, res, context) {
     && !req.url?.startsWith("/api/workbook-review-sessions")
     && !req.url?.startsWith("/api/source-extract-proposals")
     && !req.url?.startsWith("/api/agent-runs")
+    && !req.url?.startsWith("/api/analysis-threads")
+    && !req.url?.startsWith("/api/analysis-plan-revisions")
     && !req.url?.startsWith("/api/import-runs")
     && !req.url?.startsWith("/api/chart-proposal-sets")
     && !req.url?.startsWith("/api/manuscripts")) {

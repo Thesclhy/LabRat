@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import * as XLSX from "xlsx";
 import { createServer } from "../../server.js";
+import { resolveAnalysisSelection } from "../analysisSelection.js";
+import { ANALYSIS_PLAN_REVISION_VERSION, pythonSourceHash } from "../analysisSchemas.js";
 import { loadSaasConfig } from "../config.js";
 import { PostgresSaasStore } from "../postgresStore.js";
 
@@ -57,6 +59,41 @@ async function closeServer(server) {
     server.close((error) => error ? reject(error) : resolve());
   });
 }
+
+test("migration 012 and Postgres store expose analysis persistence parity", async () => {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const migration = await fs.readFile(
+    path.resolve(here, "..", "..", "..", "migrations", "012_analysis_workflow.sql"),
+    "utf8",
+  );
+  for (const table of [
+    "analysis_threads",
+    "analysis_plan_revisions",
+    "analysis_runs",
+    "analysis_results",
+    "analysis_publications",
+  ]) {
+    assert.match(migration, new RegExp(`create table if not exists ${table}`));
+  }
+  const store = new PostgresSaasStore({ databaseUrl: "" });
+  for (const method of [
+    "createAnalysisThread",
+    "findAnalysisThreadById",
+    "listAnalysisThreads",
+    "appendAnalysisPlanRevision",
+    "findAnalysisPlanRevisionById",
+    "listAnalysisPlanRevisions",
+    "findAnalysisRunById",
+    "findAnalysisRunByIdempotencyKey",
+    "listAnalysisRuns",
+    "createAnalysisResult",
+    "findAnalysisResultById",
+    "publishAnalysisResult",
+    "acceptAnalysisPlan",
+  ]) {
+    assert.equal(typeof store[method], "function", method);
+  }
+});
 
 test("Postgres SaaS routes preserve workbook review, source documents, and source-backed chart specs", {
   skip: !process.env.LABRAT_TEST_DATABASE_URL,
@@ -241,6 +278,130 @@ test("Postgres SaaS routes preserve workbook review, source documents, and sourc
     assert.equal((await store.listDataSnapshots({ projectId: project.project.id })).length, 1);
     assert.equal((await store.listExperimentIdentities({ projectId: project.project.id })).length, 1);
     assert.equal((await store.listExperimentSnapshotHeads({ projectId: project.project.id })).length, 1);
+
+    const [
+      analysisSnapshots,
+      analysisIdentities,
+      analysisHeads,
+    ] = await Promise.all([
+      store.listDataSnapshots({ projectId: project.project.id }),
+      store.listExperimentIdentities({ projectId: project.project.id }),
+      store.listExperimentSnapshotHeads({ projectId: project.project.id }),
+    ]);
+    const fieldSelection = resolveAnalysisSelection({
+      projectId: project.project.id,
+      dataSnapshots: analysisSnapshots,
+      experimentIdentities: analysisIdentities,
+      experimentSnapshotHeads: analysisHeads,
+      selectionRequest: {
+        experimentIds: analysisHeads.map((head) => head.experimentId),
+        fieldIds: [],
+        includeSeries: false,
+      },
+    });
+    const selectedField = fieldSelection.fieldCatalog.find((field) => field.valueType === "number")
+      || fieldSelection.fieldCatalog[0];
+    assert.ok(selectedField);
+    const selectionRequest = {
+      experimentIds: analysisHeads.map((head) => head.experimentId),
+      fieldIds: [selectedField.fieldId],
+      includeSeries: false,
+    };
+    const analysisSelection = resolveAnalysisSelection({
+      projectId: project.project.id,
+      dataSnapshots: analysisSnapshots,
+      experimentIdentities: analysisIdentities,
+      experimentSnapshotHeads: analysisHeads,
+      selectionRequest,
+    });
+    const pythonSource = [
+      "def analyze(tables, labrat):",
+      "    return {'result_table': [], 'traces': [], 'lineage': {}, 'summary': {}}",
+    ].join("\n");
+    const analysisPlan = {
+      schemaVersion: ANALYSIS_PLAN_REVISION_VERSION,
+      status: "awaiting_review",
+      requestSummary: "Review one accepted numeric field.",
+      selection: {
+        selectionId: analysisSelection.selectionId,
+        experimentIds: analysisSelection.experimentIds,
+        fieldIds: analysisSelection.fieldIds,
+        dependencyHash: analysisSelection.dependencyHash,
+        selectionHash: analysisSelection.selectionHash,
+      },
+      processingSummary: ["Use the accepted numeric value once."],
+      calculationManifest: {
+        inputs: [{
+          fieldId: selectedField.fieldId,
+          fieldKey: selectedField.fieldKey,
+          unit: selectedField.unit,
+        }],
+        missingValuePolicy: {
+          mode: "exclude_record",
+          requiredFieldIds: [selectedField.fieldId],
+        },
+        derivedFields: [],
+        invariants: [],
+      },
+      pythonProgram: {
+        runtime: "labrat-python-v1",
+        entrypoint: "analyze",
+        source: pythonSource,
+        sourceHash: pythonSourceHash(pythonSource),
+      },
+      expectedOutput: {
+        shape: "experiment_traces",
+        chartType: "bar",
+        xField: "experiment_label",
+        yFields: [selectedField.fieldKey],
+      },
+      warnings: [],
+    };
+    const analysisThreadResponse = await jsonFetch(
+      `/api/projects/${project.project.id}/analysis-threads`,
+      {
+        method: "POST",
+        body: { originalRequest: "Review one accepted numeric field." },
+      },
+    );
+    assert.equal(analysisThreadResponse.status, 201);
+    const analysisThread = (await analysisThreadResponse.json()).analysisThread;
+    const analysisRevisionResponse = await jsonFetch(
+      `/api/analysis-threads/${analysisThread.id}/plan-revisions`,
+      {
+        method: "POST",
+        body: { plan: analysisPlan, selectionRequest },
+      },
+    );
+    assert.equal(analysisRevisionResponse.status, 201);
+    const analysisRevision = (await analysisRevisionResponse.json()).analysisPlanRevision;
+    const analysisAcceptRequest = {
+      method: "POST",
+      headers: { "Idempotency-Key": "postgres_analysis_accept_1" },
+      body: {
+        planHash: analysisRevision.planHash,
+        selectionHash: analysisRevision.selectionHash,
+        dependencyHash: analysisRevision.dependencyHash,
+      },
+    };
+    const analysisAccept = await jsonFetch(
+      `/api/analysis-plan-revisions/${analysisRevision.id}/accept`,
+      analysisAcceptRequest,
+    );
+    assert.equal(analysisAccept.status, 201);
+    const acceptedAnalysisBody = await analysisAccept.json();
+    assert.equal(acceptedAnalysisBody.analysisRun.status, "queued");
+    const analysisAcceptReplay = await jsonFetch(
+      `/api/analysis-plan-revisions/${analysisRevision.id}/accept`,
+      analysisAcceptRequest,
+    );
+    assert.equal(analysisAcceptReplay.status, 200);
+    assert.equal(
+      (await analysisAcceptReplay.json()).analysisRun.id,
+      acceptedAnalysisBody.analysisRun.id,
+    );
+    assert.equal((await store.listAnalysisRuns({ projectId: project.project.id })).length, 1);
+    assert.equal((await store.listChartSpecs({ projectId: project.project.id })).length, 0);
 
     const sourceExtract = await jsonFetch(`/api/projects/${project.project.id}/source-extract-proposals`, {
       method: "POST",

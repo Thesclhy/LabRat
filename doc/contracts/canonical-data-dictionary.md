@@ -224,7 +224,19 @@ Incompatible units produce different field ids and are never combined implicitly
 
 ## AnalysisPlanRevision v1
 
-A reviewable calculation proposal containing a frozen AnalysisSelection reference, visible processing summary, machine-readable calculation manifest, explicit missing-value policy, exact `labrat-python-v1` source/hash, and expected output/chart shape. It cannot contain authoritative result arrays. This milestone validates the shape only; persistence, acceptance, and execution are later workflow boundaries.
+A durable, immutable reviewable calculation proposal containing a frozen AnalysisSelection, visible processing summary, machine-readable calculation manifest, explicit missing-value policy, exact `labrat-python-v1` source/hash, and expected output/chart shape. It cannot contain authoritative result arrays. Feedback creates a later numbered revision and marks the prior awaiting-review revision superseded without modifying its payload.
+
+## AnalysisThread v1
+
+A project-scoped conversational workflow container for one analysis goal. It stores the original request, bounded visible messages, status, and ordered ids for plan revisions, runs, accepted results, and charts. It does not store hidden reasoning or duplicate full result arrays into project state.
+
+## AnalysisRun v1
+
+An immutable execution-attempt record linked to one accepted AnalysisPlanRevision. Exact-hash plan acceptance currently creates a `queued` run with input/program/runtime hashes and no result. Executor status, result preview, and validation are later milestones.
+
+## AnalysisResult v1
+
+The reserved append-only validated output record for a future completed AnalysisRun. Migration 012 defines its ownership, hash, lineage/result payload, validation, warnings, and acceptance metadata, but no public result-creation or acceptance API exists yet.
 
 ## SourceExtractProposal
 

@@ -69,6 +69,7 @@ GET   /api/projects/:projectId/state
   "experimentSnapshotHeads": [],
   "browserViews": [],
   "agentRuns": [],
+  "analysisThreads": [],
   "chartProposalSets": [],
   "chartSpecs": [],
   "manuscripts": []
@@ -236,11 +237,33 @@ POST /api/agent-runs/:agentRunId/confirm
 POST /api/agent-runs/:agentRunId/cancel
 ```
 
-Agent requests pass through the backend intent router. Explicit workbook upload, Experiment Browser navigation, Manuscript commands, and source-extract evidence requests retain deterministic priority. Project-purpose and project-overview questions may complete as a read-only `project_summary` AgentRun with no actions. Trends, comparisons, derived calculations, statistics, and accepted-data chart requests return `mode: "analysis_planning"` with no Browser action; persisted AnalysisThread creation is introduced by the next analysis-workflow contract slice. Unknown requests return clarification instead of using Experiment Browser as a fallback.
+Agent requests pass through the backend intent router. Explicit workbook upload, Experiment Browser navigation, Manuscript commands, and source-extract evidence requests retain deterministic priority. Project-purpose and project-overview questions may complete as a read-only `project_summary` AgentRun with no actions. Trends, comparisons, derived calculations, statistics, and accepted-data chart requests return `mode: "analysis_planning"` with no Browser action and create a durable AnalysisThread. When accepted active experiment data and a backend model provider are available, the response also contains the first backend-validated `currentPlanRevision`. Unknown requests return clarification instead of using Experiment Browser as a fallback.
 
-`POST /api/projects/:projectId/agent/runs` returns user-facing text in the top-level `reply` field. Provider configuration and credentials are backend-only. AgentRun usage stores provider, model, token, and latency metadata while planning records visible workflow steps rather than hidden chain-of-thought.
+`POST /api/projects/:projectId/agent/runs` returns user-facing text in the top-level `reply` field plus nullable `analysisThread` and `currentPlanRevision` fields. Provider configuration and credentials are backend-only. AgentRun usage stores provider, model, token, and latency metadata while planning records visible workflow steps rather than hidden chain-of-thought.
 
-The backend now owns an internal AnalysisToolRegistry with `get_project_analysis_context`, `list_analysis_fields`, `resolve_experiment_scope`, `preview_analysis_selection`, `inspect_analysis_selection`, and `validate_analysis_plan`. These are project-authorized planning tools, not public mutation routes. The registry exposes no execution operation. AnalysisThread/plan-revision HTTP routes remain unavailable until the next persistence slice.
+The backend owns an internal AnalysisToolRegistry with `get_project_analysis_context`, `list_analysis_fields`, `resolve_experiment_scope`, `preview_analysis_selection`, `inspect_analysis_selection`, and `validate_analysis_plan`. These are project-authorized planning tools, not public mutation routes. The registry exposes no execution operation.
+
+## Reviewed Analysis Planning
+
+```text
+POST /api/projects/:projectId/analysis-threads
+GET  /api/projects/:projectId/analysis-threads
+GET  /api/analysis-threads/:analysisThreadId
+POST /api/analysis-threads/:analysisThreadId/plan-revisions
+GET  /api/analysis-plan-revisions/:planRevisionId/selection
+POST /api/analysis-plan-revisions/:planRevisionId/accept
+```
+
+Rules:
+
+- Thread/revision mutations require `editor`; reads require `viewer`.
+- A normal modification request posts only `feedback`; the backend model chooses a revised accepted-data scope/calculation, and backend tools replace model-supplied selection/source/program hashes with exact validated values.
+- Each revision stores the exact plan, complete frozen AnalysisSelection, non-contiguous source rectangles, Python source/hash, dependency/selection/plan hashes, and visible feedback. Creating revision N marks the prior awaiting-review revision `superseded` without changing its payload.
+- `GET .../selection` is paginated with a maximum of 200 records and returns exact source rectangles plus coverage and hashes.
+- Plan acceptance requires an `Idempotency-Key` header and exact `planHash`, `selectionHash`, and `dependencyHash` request fields.
+- Acceptance re-resolves current active experiment heads. Hash changes return `409 analysis_plan_stale`; accepting a non-current revision returns `409 analysis_plan_revision_mismatch`.
+- Successful acceptance atomically marks the revision accepted, advances the thread to `executing`, writes an audit event, and creates one immutable `status: queued` AnalysisRun. Same-key/same-request retries return the same run; conflicting reuse returns `409`.
+- Plan acceptance does not run Python, create an AnalysisResult, create a ChartSpec, or place manuscript content. Those routes remain unavailable until the executor/result-review milestones.
 
 ## Source-Backed Charts
 

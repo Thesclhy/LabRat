@@ -1,7 +1,7 @@
 # SaaS Database Schema v0
 
 Status: active
-Last reviewed: 2026-07-16
+Last reviewed: 2026-07-20
 
 The executable source of truth is `backend/migrations/`. This document records ownership, invariants, and the scientific lineage between current tables.
 
@@ -114,6 +114,26 @@ agent_runs
 
 `agent_runs` stores visible workflow steps, summarized tool observations, review-gated actions, usage metadata, and status. It does not store hidden chain-of-thought.
 
+### Reviewed Analysis Layer
+
+```text
+analysis_threads
+analysis_plan_revisions
+analysis_runs
+analysis_results
+analysis_publications
+```
+
+`analysis_threads` is the durable project-scoped conversation/workflow container. It stores bounded visible messages and ordered artifact ids, not full result arrays in project state.
+
+`analysis_plan_revisions` is append-only except for workflow status. Each row stores one complete reviewed plan and frozen AnalysisSelection with exact source rectangles, manifest, missing-value policy, Python source/program hash, dependency/selection/plan hashes, validation, feedback, and actor timestamps. `(analysis_thread_id, revision)` is unique.
+
+`analysis_runs` links one accepted plan revision to an immutable execution attempt. Plan acceptance currently creates only a `queued` row. `(project_id, idempotency_key)` makes acceptance retry-safe.
+
+`analysis_results` and `analysis_publications` establish the append-only/result-publication schema for later executor and result-review milestones. They have no public creation routes yet. `analysis_publications` will key atomic accepted result plus ChartSpec receipts by `(project_id, idempotency_key)`.
+
+`chart_specs.analysis_result_id` is nullable so existing `source_extract` ChartSpecs remain valid. No analysis-result ChartSpec is created by the current persistence milestone.
+
 ## Transaction Boundary
 
 Publishing accepted workbook data is one atomic operation:
@@ -133,6 +153,21 @@ validate accepted WorkbookUnderstanding
 
 Any failure rolls back all durable writes.
 
+Accepting an analysis plan is a separate atomic operation:
+
+```text
+lock project/idempotency key
+  -> verify current awaiting-review revision
+  -> re-resolve active accepted snapshot selection
+  -> verify plan/selection/dependency hashes
+  -> mark revision accepted
+  -> create one queued AnalysisRun
+  -> update AnalysisThread artifact ids/status
+  -> record audit event
+```
+
+This transaction does not execute Python or create an AnalysisResult/ChartSpec.
+
 ## Migration Sequence
 
 ```text
@@ -144,9 +179,11 @@ Any failure rolls back all durable writes.
 009_workbook_understandings.sql
 010_data_plan_experiment_browser.sql
 011_drop_legacy_dataset_path.sql
+012_analysis_workflow.sql
 ```
 
 Migration 011 removes the obsolete aggregate dataset, mapping, analysis-view, and observation-series tables/foreign keys from development databases. New databases never need those product paths.
+Migration 012 adds reviewed analysis persistence and nullable `chart_specs.analysis_result_id` while preserving the source-backed chart path.
 
 ## Invariants
 
@@ -157,3 +194,5 @@ Migration 011 removes the obsolete aggregate dataset, mapping, analysis-view, an
 - Scientific values require source refs and deterministic provenance.
 - Browser publish must not create chart proposals, ChartSpecs, or manuscript blocks.
 - Source-backed chart creation must not mutate accepted DataSnapshots.
+- Analysis plan revisions are immutable apart from explicit status/acceptance metadata.
+- Plan acceptance is idempotent and must not execute code or create result/chart artifacts.

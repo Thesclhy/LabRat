@@ -383,6 +383,131 @@ function agentRunFromRow(row) {
   };
 }
 
+function analysisThreadFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    schemaVersion: row.schema_version || "labrat.analysisThread.v1",
+    status: row.status,
+    originalRequest: row.original_request,
+    messages: row.messages || [],
+    planRevisionIds: row.plan_revision_ids || [],
+    analysisRunIds: row.analysis_run_ids || [],
+    acceptedAnalysisResultIds: row.accepted_analysis_result_ids || [],
+    chartSpecIds: row.chart_spec_ids || [],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    createdBy: row.created_by,
+    updatedBy: row.updated_by,
+  };
+}
+
+function analysisPlanRevisionFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    analysisThreadId: row.analysis_thread_id,
+    schemaVersion: row.schema_version || "labrat.analysisPlanRevision.v1",
+    revision: Number(row.revision),
+    status: row.status,
+    requestSummary: row.request_summary,
+    plan: row.plan || {},
+    selection: row.selection || {},
+    selectionRequest: row.selection_request || {},
+    processingSummary: row.processing_summary || [],
+    calculationManifest: row.calculation_manifest || {},
+    pythonProgram: row.python_program || {},
+    expectedOutput: row.expected_output || {},
+    sourceRectangles: row.source_rectangles || [],
+    planHash: row.plan_hash,
+    dependencyHash: row.dependency_hash,
+    selectionHash: row.selection_hash,
+    programHash: row.program_hash,
+    runtimeVersion: row.runtime_version,
+    feedback: row.feedback,
+    warnings: row.warnings || [],
+    validation: row.validation || {},
+    acceptedAt: row.accepted_at,
+    acceptedBy: row.accepted_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    createdBy: row.created_by,
+    updatedBy: row.updated_by,
+  };
+}
+
+function analysisRunFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    analysisThreadId: row.analysis_thread_id,
+    acceptedPlanRevisionId: row.accepted_plan_revision_id,
+    schemaVersion: row.schema_version || "labrat.analysisRun.v1",
+    status: row.status,
+    idempotencyKey: row.idempotency_key,
+    requestHash: row.request_hash,
+    inputHash: row.input_hash,
+    programHash: row.program_hash,
+    runtimeVersion: row.runtime_version,
+    resultPreviewHash: row.result_preview_hash,
+    payload: row.payload || {},
+    warnings: row.warnings || [],
+    validation: row.validation || {},
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    createdBy: row.created_by,
+    updatedBy: row.updated_by,
+  };
+}
+
+function analysisResultFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    analysisThreadId: row.analysis_thread_id,
+    analysisRunId: row.analysis_run_id,
+    schemaVersion: row.schema_version || "labrat.analysisResult.v1",
+    status: row.status,
+    contentHash: row.content_hash,
+    resultPreviewHash: row.result_preview_hash,
+    result: row.result || {},
+    sourceRefs: row.source_refs || [],
+    warnings: row.warnings || [],
+    validation: row.validation || {},
+    acceptedAt: row.accepted_at,
+    acceptedBy: row.accepted_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    createdBy: row.created_by,
+    updatedBy: row.updated_by,
+  };
+}
+
+function analysisPublicationFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    analysisThreadId: row.analysis_thread_id,
+    analysisResultId: row.analysis_result_id,
+    chartSpecId: row.chart_spec_id,
+    idempotencyKey: row.idempotency_key,
+    requestHash: row.request_hash,
+    response: row.response || {},
+    createdAt: row.created_at,
+    createdBy: row.created_by,
+  };
+}
+
 function chartProposalSetFromRow(row) {
   if (!row) return null;
   return {
@@ -406,6 +531,7 @@ function chartSpecFromRow(row) {
     id: row.id,
     labId: row.lab_id,
     projectId: row.project_id,
+    analysisResultId: row.analysis_result_id || null,
     sourceChartProposalSetId: row.source_chart_proposal_set_id,
     sourceProposalId: row.source_proposal_id,
     title: row.title,
@@ -437,6 +563,153 @@ function manuscriptFromRow(row) {
     createdBy: row.created_by,
     updatedBy: row.updated_by,
   };
+}
+
+async function insertAnalysisPlanRevisionRow(client, input) {
+  const result = await client.query(
+    `insert into analysis_plan_revisions
+     (id, lab_id, project_id, analysis_thread_id, schema_version, revision, status,
+      request_summary, plan, selection, selection_request, processing_summary,
+      calculation_manifest, python_program, expected_output, source_rectangles,
+      plan_hash, dependency_hash, selection_hash, program_hash, runtime_version,
+      feedback, warnings, validation, accepted_at, accepted_by, created_at,
+      updated_at, created_by, updated_by)
+     values
+     ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+      $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
+     returning *`,
+    [
+      input.id,
+      input.labId,
+      input.projectId,
+      input.analysisThreadId,
+      input.schemaVersion || "labrat.analysisPlanRevision.v1",
+      input.revision,
+      input.status || "awaiting_review",
+      input.requestSummary,
+      jsonb(input.plan || {}),
+      jsonb(input.selection || {}),
+      jsonb(input.selectionRequest || {}),
+      jsonb(input.processingSummary || [], []),
+      jsonb(input.calculationManifest || {}),
+      jsonb(input.pythonProgram || {}),
+      jsonb(input.expectedOutput || {}),
+      jsonb(input.sourceRectangles || [], []),
+      input.planHash,
+      input.dependencyHash,
+      input.selectionHash,
+      input.programHash,
+      input.runtimeVersion,
+      input.feedback || null,
+      jsonb(input.warnings || [], []),
+      jsonb(input.validation || {}),
+      input.acceptedAt || null,
+      input.acceptedBy || null,
+      input.createdAt || nowIso(),
+      input.updatedAt || input.createdAt || nowIso(),
+      input.createdBy,
+      input.updatedBy || input.createdBy,
+    ],
+  );
+  return analysisPlanRevisionFromRow(result.rows[0]);
+}
+
+async function insertAnalysisRunRow(client, input) {
+  const result = await client.query(
+    `insert into analysis_runs
+     (id, lab_id, project_id, analysis_thread_id, accepted_plan_revision_id,
+      schema_version, status, idempotency_key, request_hash, input_hash,
+      program_hash, runtime_version, result_preview_hash, payload, warnings,
+      validation, created_at, updated_at, created_by, updated_by)
+     values
+     ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+      $15, $16, $17, $18, $19, $20)
+     returning *`,
+    [
+      input.id,
+      input.labId,
+      input.projectId,
+      input.analysisThreadId,
+      input.acceptedPlanRevisionId,
+      input.schemaVersion || "labrat.analysisRun.v1",
+      input.status || "queued",
+      input.idempotencyKey,
+      input.requestHash,
+      input.inputHash,
+      input.programHash,
+      input.runtimeVersion,
+      input.resultPreviewHash || null,
+      jsonb(input.payload || {}),
+      jsonb(input.warnings || [], []),
+      jsonb(input.validation || {}),
+      input.createdAt || nowIso(),
+      input.updatedAt || input.createdAt || nowIso(),
+      input.createdBy,
+      input.updatedBy || input.createdBy,
+    ],
+  );
+  return analysisRunFromRow(result.rows[0]);
+}
+
+async function insertAnalysisResultRow(client, input) {
+  const result = await client.query(
+    `insert into analysis_results
+     (id, lab_id, project_id, analysis_thread_id, analysis_run_id, schema_version,
+      status, content_hash, result_preview_hash, result, source_refs, warnings,
+      validation, accepted_at, accepted_by, created_at, updated_at, created_by,
+      updated_by)
+     values
+     ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+      $15, $16, $17, $18, $19)
+     returning *`,
+    [
+      input.id,
+      input.labId,
+      input.projectId,
+      input.analysisThreadId,
+      input.analysisRunId,
+      input.schemaVersion || "labrat.analysisResult.v1",
+      input.status || "awaiting_review",
+      input.contentHash,
+      input.resultPreviewHash || null,
+      jsonb(input.result || {}),
+      jsonb(input.sourceRefs || [], []),
+      jsonb(input.warnings || [], []),
+      jsonb(input.validation || {}),
+      input.acceptedAt || null,
+      input.acceptedBy || null,
+      input.createdAt || nowIso(),
+      input.updatedAt || input.createdAt || nowIso(),
+      input.createdBy,
+      input.updatedBy || input.createdBy,
+    ],
+  );
+  return analysisResultFromRow(result.rows[0]);
+}
+
+async function insertAuditEventRows(client, events = []) {
+  for (const event of events) {
+    await client.query(
+      `insert into audit_events
+       (id, lab_id, project_id, actor_user_id, action, target_type, target_id,
+        summary, metadata, created_at, ip_address, user_agent)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+      [
+        event.id || makeId("audit"),
+        event.labId || null,
+        event.projectId || null,
+        event.actorUserId || null,
+        event.action,
+        event.targetType || null,
+        event.targetId || null,
+        event.summary || null,
+        jsonb(event.metadata || {}),
+        event.createdAt || nowIso(),
+        event.ipAddress || null,
+        event.userAgent || null,
+      ],
+    );
+  }
 }
 
 export class PostgresSaasStore {
@@ -1497,6 +1770,501 @@ export class PostgresSaasStore {
       ],
     );
     return agentRunFromRow(result.rows[0]);
+  }
+
+  async createAnalysisThread(input) {
+    const result = await this.query(
+      `insert into analysis_threads
+       (id, lab_id, project_id, schema_version, status, original_request, messages,
+        plan_revision_ids, analysis_run_ids, accepted_analysis_result_ids,
+        chart_spec_ids, created_at, updated_at, created_by, updated_by)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+       returning *`,
+      [
+        input.id || makeId("analysis_thread"),
+        input.labId,
+        input.projectId,
+        input.schemaVersion || "labrat.analysisThread.v1",
+        input.status || "planning",
+        input.originalRequest || "",
+        jsonb(input.messages || [], []),
+        jsonb(input.planRevisionIds || [], []),
+        jsonb(input.analysisRunIds || [], []),
+        jsonb(input.acceptedAnalysisResultIds || [], []),
+        jsonb(input.chartSpecIds || [], []),
+        input.createdAt || nowIso(),
+        input.updatedAt || input.createdAt || nowIso(),
+        input.createdBy,
+        input.updatedBy || input.createdBy,
+      ],
+    );
+    return analysisThreadFromRow(result.rows[0]);
+  }
+
+  async findAnalysisThreadById(id) {
+    const result = await this.query("select * from analysis_threads where id = $1", [id]);
+    return analysisThreadFromRow(result.rows[0]);
+  }
+
+  async listAnalysisThreads({ projectId }) {
+    const result = await this.query(
+      "select * from analysis_threads where project_id = $1 order by updated_at desc, id desc",
+      [projectId],
+    );
+    return result.rows.map(analysisThreadFromRow);
+  }
+
+  async updateAnalysisThread(id, changes = {}) {
+    const current = await this.findAnalysisThreadById(id);
+    if (!current) return null;
+    const result = await this.query(
+      `update analysis_threads
+       set status = $2,
+           messages = $3,
+           plan_revision_ids = $4,
+           analysis_run_ids = $5,
+           accepted_analysis_result_ids = $6,
+           chart_spec_ids = $7,
+           updated_at = $8,
+           updated_by = $9
+       where id = $1
+       returning *`,
+      [
+        id,
+        changes.status ?? current.status,
+        jsonb(changes.messages ?? current.messages ?? [], []),
+        jsonb(changes.planRevisionIds ?? current.planRevisionIds ?? [], []),
+        jsonb(changes.analysisRunIds ?? current.analysisRunIds ?? [], []),
+        jsonb(changes.acceptedAnalysisResultIds ?? current.acceptedAnalysisResultIds ?? [], []),
+        jsonb(changes.chartSpecIds ?? current.chartSpecIds ?? [], []),
+        changes.updatedAt || nowIso(),
+        changes.updatedBy || current.updatedBy,
+      ],
+    );
+    return analysisThreadFromRow(result.rows[0]);
+  }
+
+  async createAnalysisPlanRevision(input) {
+    return insertAnalysisPlanRevisionRow(this, input);
+  }
+
+  async findAnalysisPlanRevisionById(id) {
+    const result = await this.query(
+      "select * from analysis_plan_revisions where id = $1",
+      [id],
+    );
+    return analysisPlanRevisionFromRow(result.rows[0]);
+  }
+
+  async listAnalysisPlanRevisions({ analysisThreadId }) {
+    const result = await this.query(
+      `select * from analysis_plan_revisions
+       where analysis_thread_id = $1
+       order by revision`,
+      [analysisThreadId],
+    );
+    return result.rows.map(analysisPlanRevisionFromRow);
+  }
+
+  async updateAnalysisPlanRevisionStatus(id, changes = {}) {
+    const result = await this.query(
+      `update analysis_plan_revisions
+       set status = coalesce($2, status),
+           accepted_at = case when $3::boolean then $4 else accepted_at end,
+           accepted_by = case when $5::boolean then $6 else accepted_by end,
+           updated_at = $7,
+           updated_by = coalesce($8, updated_by)
+       where id = $1
+       returning *`,
+      [
+        id,
+        changes.status === undefined ? null : String(changes.status),
+        changes.acceptedAt !== undefined,
+        changes.acceptedAt ?? null,
+        changes.acceptedBy !== undefined,
+        changes.acceptedBy ?? null,
+        changes.updatedAt || nowIso(),
+        changes.updatedBy || null,
+      ],
+    );
+    return analysisPlanRevisionFromRow(result.rows[0]);
+  }
+
+  async appendAnalysisPlanRevision({
+    threadId,
+    priorRevisionId = null,
+    revision,
+    messages = [],
+    actorUserId,
+  }) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const threadResult = await client.query(
+        "select * from analysis_threads where id = $1 for update",
+        [threadId],
+      );
+      const thread = analysisThreadFromRow(threadResult.rows[0]);
+      if (
+        !thread
+        || revision.analysisThreadId !== thread.id
+        || revision.projectId !== thread.projectId
+      ) {
+        throw Object.assign(new Error("The analysis plan revision package is invalid."), {
+          statusCode: 409,
+          code: "analysis_plan_revision_conflict",
+        });
+      }
+      if (priorRevisionId) {
+        const priorResult = await client.query(
+          "select * from analysis_plan_revisions where id = $1 for update",
+          [priorRevisionId],
+        );
+        const prior = analysisPlanRevisionFromRow(priorResult.rows[0]);
+        if (!prior || prior.analysisThreadId !== thread.id || prior.status !== "awaiting_review") {
+          throw Object.assign(new Error("The prior analysis plan revision changed."), {
+            statusCode: 409,
+            code: "analysis_plan_revision_conflict",
+          });
+        }
+        await client.query(
+          `update analysis_plan_revisions
+           set status = 'superseded', updated_at = $2, updated_by = $3
+           where id = $1`,
+          [prior.id, revision.createdAt || nowIso(), actorUserId],
+        );
+      }
+      const created = await insertAnalysisPlanRevisionRow(client, revision);
+      const updatedThreadResult = await client.query(
+        `update analysis_threads
+         set status = 'awaiting_plan_review',
+             messages = $2,
+             plan_revision_ids = $3,
+             updated_at = $4,
+             updated_by = $5
+         where id = $1
+         returning *`,
+        [
+          thread.id,
+          jsonb([...(thread.messages || []), ...messages], []),
+          jsonb([...(thread.planRevisionIds || []), created.id], []),
+          revision.createdAt || nowIso(),
+          actorUserId,
+        ],
+      );
+      if (!updatedThreadResult.rows[0]) {
+        throw Object.assign(new Error("Analysis thread changed during revision creation."), {
+          statusCode: 409,
+          code: "analysis_plan_revision_conflict",
+        });
+      }
+      await client.query("commit");
+      return created;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async createAnalysisRun(input) {
+    return insertAnalysisRunRow(this, input);
+  }
+
+  async findAnalysisRunById(id) {
+    const result = await this.query("select * from analysis_runs where id = $1", [id]);
+    return analysisRunFromRow(result.rows[0]);
+  }
+
+  async findAnalysisRunByIdempotencyKey({ projectId, idempotencyKey }) {
+    const result = await this.query(
+      `select * from analysis_runs
+       where project_id = $1 and idempotency_key = $2`,
+      [projectId, idempotencyKey],
+    );
+    return analysisRunFromRow(result.rows[0]);
+  }
+
+  async listAnalysisRuns({ projectId, analysisThreadId = null }) {
+    const result = await this.query(
+      `select * from analysis_runs
+       where project_id = $1
+         and ($2::text is null or analysis_thread_id = $2)
+       order by created_at desc, id desc`,
+      [projectId, analysisThreadId],
+    );
+    return result.rows.map(analysisRunFromRow);
+  }
+
+  async createAnalysisResult(input) {
+    return insertAnalysisResultRow(this, input);
+  }
+
+  async findAnalysisResultById(id) {
+    const result = await this.query("select * from analysis_results where id = $1", [id]);
+    return analysisResultFromRow(result.rows[0]);
+  }
+
+  async listAnalysisResults({ projectId, analysisThreadId = null }) {
+    const result = await this.query(
+      `select * from analysis_results
+       where project_id = $1
+         and ($2::text is null or analysis_thread_id = $2)
+       order by created_at desc, id desc`,
+      [projectId, analysisThreadId],
+    );
+    return result.rows.map(analysisResultFromRow);
+  }
+
+  async acceptAnalysisPlan(input) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      await client.query(
+        "select pg_advisory_xact_lock(hashtext($1), hashtext($2))",
+        [input.projectId, input.idempotencyKey],
+      );
+      const priorResult = await client.query(
+        `select * from analysis_runs
+         where project_id = $1 and idempotency_key = $2`,
+        [input.projectId, input.idempotencyKey],
+      );
+      const prior = analysisRunFromRow(priorResult.rows[0]);
+      if (prior) {
+        if (prior.requestHash !== input.requestHash) {
+          throw Object.assign(new Error("This idempotency key was already used for another plan acceptance."), {
+            statusCode: 409,
+            code: "idempotency_key_conflict",
+          });
+        }
+        const [threadResult, revisionResult] = await Promise.all([
+          client.query("select * from analysis_threads where id = $1", [prior.analysisThreadId]),
+          client.query("select * from analysis_plan_revisions where id = $1", [prior.acceptedPlanRevisionId]),
+        ]);
+        await client.query("commit");
+        return {
+          analysisThread: analysisThreadFromRow(threadResult.rows[0]),
+          analysisPlanRevision: analysisPlanRevisionFromRow(revisionResult.rows[0]),
+          analysisRun: prior,
+        };
+      }
+      const threadResult = await client.query(
+        "select * from analysis_threads where id = $1 for update",
+        [input.analysisThreadId],
+      );
+      const revisionResult = await client.query(
+        "select * from analysis_plan_revisions where id = $1 for update",
+        [input.planRevisionId],
+      );
+      const thread = analysisThreadFromRow(threadResult.rows[0]);
+      const revision = analysisPlanRevisionFromRow(revisionResult.rows[0]);
+      if (
+        !thread
+        || !revision
+        || thread.projectId !== input.projectId
+        || revision.projectId !== input.projectId
+        || revision.analysisThreadId !== thread.id
+        || revision.status !== "awaiting_review"
+        || !input.analysisRun?.id
+        || input.analysisRun.projectId !== input.projectId
+        || input.analysisRun.analysisThreadId !== thread.id
+        || input.analysisRun.acceptedPlanRevisionId !== revision.id
+        || input.analysisRun.idempotencyKey !== input.idempotencyKey
+        || input.analysisRun.requestHash !== input.requestHash
+      ) {
+        throw Object.assign(new Error("The analysis plan acceptance package is invalid."), {
+          statusCode: 409,
+          code: "analysis_plan_revision_mismatch",
+        });
+      }
+      const acceptedAt = input.analysisRun.createdAt || nowIso();
+      const acceptedRevisionResult = await client.query(
+        `update analysis_plan_revisions
+         set status = 'accepted',
+             accepted_at = $2,
+             accepted_by = $3,
+             updated_at = $2,
+             updated_by = $3
+         where id = $1 and status = 'awaiting_review'
+         returning *`,
+        [revision.id, acceptedAt, input.actorUserId],
+      );
+      if (!acceptedRevisionResult.rows[0]) {
+        throw Object.assign(new Error("The analysis plan revision changed before acceptance."), {
+          statusCode: 409,
+          code: "analysis_plan_revision_mismatch",
+        });
+      }
+      const analysisRun = await insertAnalysisRunRow(client, input.analysisRun);
+      const updatedThreadResult = await client.query(
+        `update analysis_threads
+         set status = 'executing',
+             analysis_run_ids = $2,
+             updated_at = $3,
+             updated_by = $4
+         where id = $1
+         returning *`,
+        [
+          thread.id,
+          jsonb([...(thread.analysisRunIds || []), analysisRun.id], []),
+          acceptedAt,
+          input.actorUserId,
+        ],
+      );
+      await insertAuditEventRows(client, input.auditEvents || []);
+      await client.query("commit");
+      return {
+        analysisThread: analysisThreadFromRow(updatedThreadResult.rows[0]),
+        analysisPlanRevision: analysisPlanRevisionFromRow(acceptedRevisionResult.rows[0]),
+        analysisRun,
+      };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async findAnalysisPublication({ projectId, idempotencyKey }) {
+    const result = await this.query(
+      `select * from analysis_publications
+       where project_id = $1 and idempotency_key = $2`,
+      [projectId, idempotencyKey],
+    );
+    return analysisPublicationFromRow(result.rows[0]);
+  }
+
+  async publishAnalysisResult(input) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      await client.query(
+        "select pg_advisory_xact_lock(hashtext($1), hashtext($2))",
+        [input.projectId, input.idempotencyKey],
+      );
+      const priorResult = await client.query(
+        `select * from analysis_publications
+         where project_id = $1 and idempotency_key = $2`,
+        [input.projectId, input.idempotencyKey],
+      );
+      const prior = analysisPublicationFromRow(priorResult.rows[0]);
+      if (prior) {
+        if (prior.requestHash !== input.requestHash) {
+          throw Object.assign(new Error("This idempotency key was already used for another analysis publication."), {
+            statusCode: 409,
+            code: "idempotency_key_conflict",
+          });
+        }
+        await client.query("commit");
+        return { ...prior.response, idempotentReplay: true };
+      }
+      const threadResult = await client.query(
+        "select * from analysis_threads where id = $1 for update",
+        [input.analysisThreadId],
+      );
+      const thread = analysisThreadFromRow(threadResult.rows[0]);
+      const resultPackage = input.analysisResult;
+      const chart = input.chartSpec;
+      const analysisRunResult = resultPackage?.analysisRunId
+        ? await client.query("select * from analysis_runs where id = $1", [resultPackage.analysisRunId])
+        : { rows: [] };
+      const analysisRun = analysisRunFromRow(analysisRunResult.rows[0]);
+      if (
+        !input.idempotencyKey
+        || !input.requestHash
+        || !thread
+        || thread.projectId !== input.projectId
+        || !resultPackage?.id
+        || resultPackage.projectId !== input.projectId
+        || resultPackage.analysisThreadId !== thread.id
+        || !analysisRun
+        || analysisRun.projectId !== input.projectId
+        || analysisRun.analysisThreadId !== thread.id
+        || !chart?.id
+        || chart.projectId !== input.projectId
+        || chart.analysisResultId !== resultPackage.id
+      ) {
+        throw Object.assign(new Error("The analysis result publication package is invalid."), {
+          statusCode: 400,
+          code: "invalid_analysis_publication_package",
+        });
+      }
+      const analysisResult = await insertAnalysisResultRow(client, resultPackage);
+      const chartResult = await client.query(
+        `insert into chart_specs
+         (id, lab_id, project_id, analysis_result_id, source_chart_proposal_set_id,
+          source_proposal_id, title, chart_type, spec, layout, warnings, created_at,
+          updated_at, created_by, updated_by)
+         values
+         ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+         returning *`,
+        [
+          chart.id,
+          chart.labId,
+          chart.projectId,
+          analysisResult.id,
+          chart.sourceChartProposalSetId || null,
+          chart.sourceProposalId || null,
+          chart.title || null,
+          chart.chartType,
+          jsonb(chart.spec || {}),
+          jsonb(chart.layout || {}),
+          jsonb(chart.warnings || [], []),
+          chart.createdAt || nowIso(),
+          chart.updatedAt || chart.createdAt || nowIso(),
+          chart.createdBy,
+          chart.updatedBy || chart.createdBy,
+        ],
+      );
+      const chartSpec = chartSpecFromRow(chartResult.rows[0]);
+      const completedAt = analysisResult.acceptedAt || analysisResult.createdAt || nowIso();
+      await client.query(
+        `update analysis_threads
+         set status = 'completed',
+             accepted_analysis_result_ids = $2,
+             chart_spec_ids = $3,
+             updated_at = $4,
+             updated_by = $5
+         where id = $1`,
+        [
+          thread.id,
+          jsonb([...(thread.acceptedAnalysisResultIds || []), analysisResult.id], []),
+          jsonb([...(thread.chartSpecIds || []), chartSpec.id], []),
+          completedAt,
+          input.actorUserId,
+        ],
+      );
+      const response = { ...input.response, idempotentReplay: false };
+      await client.query(
+        `insert into analysis_publications
+         (id, lab_id, project_id, analysis_thread_id, analysis_result_id,
+          chart_spec_id, idempotency_key, request_hash, response, created_at, created_by)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        [
+          input.publicationId || makeId("analysis_publication"),
+          input.labId,
+          input.projectId,
+          thread.id,
+          analysisResult.id,
+          chartSpec.id,
+          input.idempotencyKey,
+          input.requestHash,
+          jsonb(response),
+          completedAt,
+          input.actorUserId,
+        ],
+      );
+      await insertAuditEventRows(client, input.auditEvents || []);
+      await client.query("commit");
+      return response;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async createChartProposalSet(input) {

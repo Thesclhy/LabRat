@@ -1,7 +1,7 @@
 # LabRat Architecture
 
 Status: active reference
-Last reviewed: 2026-07-16
+Last reviewed: 2026-07-20
 
 LabRat is a server-first research workspace that turns workbook evidence into reviewed experiment records, cross-experiment Browser views, source-backed charts, and manuscript output while preserving provenance and review history.
 
@@ -32,6 +32,20 @@ SourceDocument range
 
 DataSnapshot-backed chart planning is the next output milestone and must not be approximated through the retired aggregate dataset model.
 
+Reviewed accepted-data analysis now begins as:
+
+```text
+natural-language analysis request
+  -> backend intent router / durable AnalysisThread
+  -> backend model chooses accepted fields, scope, calculation, and Python
+  -> backend tools resolve exact active-head selection and source rectangles
+  -> immutable AnalysisPlanRevision review
+  -> exact-hash acceptance
+  -> queued AnalysisRun
+```
+
+The queued run is not executed by this milestone and creates no AnalysisResult or ChartSpec.
+
 ## Runtime Topology
 
 ```text
@@ -57,7 +71,7 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 ## Backend Components
 
 - **Auth/Admin**: users, sessions, labs, memberships, roles, seed-account safety.
-- **Project State**: bounded summaries for files, evidence, understandings, accepted snapshots, views, source-backed output, manuscripts, and AgentRuns.
+- **Project State**: bounded summaries for files, evidence, understandings, accepted snapshots, views, source-backed output, manuscripts, AgentRuns, and AnalysisThreads.
 - **Backend Model Provider / Intent Router**: server-secret provider access, structured output validation, deterministic command priority, direct project answers, and reviewed-analysis routing without a Browser fallback.
 - **Workbook Indexer**: conservative workbook scan and SourceDocument/SourceRegion/cell-index persistence.
 - **Workbook Review Engine**: red-box revisions, bounded evidence inspection, structured interpretation, validation blockers, and accepted WorkbookUnderstanding.
@@ -66,6 +80,7 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 - **Snapshot Publisher**: idempotent atomic accepted DataPlan/DataSnapshot/identity/head/audit transaction.
 - **Experiment Projection**: unit-aware field catalog, cursor rows, filters/sort/search, and lazy detail.
 - **Analysis Tool Registry**: project-authorized, framework-independent read/plan tools for accepted field catalogs, experiment scope, selection previews/inspection, and plan validation. It exposes no calculation executor.
+- **Analysis Thread Service**: immutable plan revision persistence, backend-owned draft normalization, exact selection/program hashing, feedback revisioning, stale-head detection, and idempotent queued-run creation.
 - **Source Chart Resolver**: explicit range/experiment evidence, source extract proposals, immutable chart snapshots, and validation.
 - **Manuscript Store**: pages, blocks, references, ChartSpec snapshots, and canvas state.
 
@@ -80,7 +95,9 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 - Experiment Browser is a read model.
 - BrowserView is personal display state only.
 - AnalysisSelection is a transient accepted-head-only review artifact with dependency/selection hashes.
-- AnalysisPlanRevision is a reviewable manifest and exact program; it is not a result.
+- AnalysisThread owns one durable reviewed-analysis conversation and its artifact ids.
+- AnalysisPlanRevision is a durable immutable manifest, frozen selection, and exact program; it is not a result.
+- AnalysisRun is an immutable attempt. Its current first state is `queued`; no executor is mounted yet.
 - SourceExtractProposal/ChartProposalSet/ChartSpec are reviewed visualization artifacts.
 - Manuscript stores layout and snapshots, not a parallel scientific dataset.
 - AgentRun stores visible workflow/audit traces, not hidden chain-of-thought.
@@ -114,6 +131,8 @@ Current ChartSpecs require `origin: source_extract`, exact source refs, and immu
 ## AI Boundary
 
 AI may classify, rank, explain, and draft bounded reviewable patches. Deterministic backend code owns evidence reads, validation, identity checks, unit/value parsing, hashes, publication, and authorization. Scientific mutations require explicit user confirmation.
+
+For analysis planning, the model selects fields/scope and drafts calculation meaning plus Python. Backend services re-resolve accepted active-head data and overwrite selection, source, and Python hashes before persistence. The planning registry still exposes no execution operation.
 
 The frontend does not hold provider credentials or call provider APIs. AgentPanel submits project-scoped messages and compact selected context to the authenticated backend.
 

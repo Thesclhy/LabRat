@@ -54,14 +54,15 @@ Use this split when deciding what to build:
 - Phase 1 read-only Workbook Source Review UI in import/scan review.
 - SourceDocument, SourceRegion, SourceExtractProposal, AgentRun, and source-backed ChartSpec foundations.
 - Server project state with auth, labs, projects, files, source review, accepted snapshots/heads, BrowserViews, source-backed charts, manuscripts, and audit events.
-- Approved the backend conversational-analysis design: backend-only model access, intent routing, Excel red-box plan review, immutable plan revisions with exact Python, LabRat-managed sandbox execution, result review, atomic AnalysisResult/ChartSpec creation, and placement-local Canvas trace visibility. The written specification is awaiting review at `doc/plans/backend-conversational-analysis-chart-design.md`; no implementation has started.
+- Approved the backend conversational-analysis design: backend-only model access, intent routing, Excel red-box plan review, immutable plan revisions with exact Python, LabRat-managed sandbox execution, result review, atomic AnalysisResult/ChartSpec creation, and placement-local Canvas trace visibility.
 - Implemented conversational-analysis Task 1: provider secrets/model calls now stay on the backend, bounded intent routing replaces unknown-message Browser fallback, project purpose/overview can answer directly, derived analysis/chart requests enter analysis planning, and frontend provider credential/direct-call UI is removed.
 - Implemented conversational-analysis Task 2: accepted-head-only unit-aware selections, source review rectangles and limits, frozen plan/program schema validation, and a project-scoped six-tool planning registry without execution.
+- Implemented conversational-analysis Task 3: durable threads and immutable plan revisions, backend-only initial/feedback plan drafting, exact accepted-selection/source/Python hashes, migration/store parity, bounded review routes, AgentRun artifact links, stale-plan checks, and idempotent acceptance that creates a queued run without executing or creating a chart.
 
 ## Next Recommended Slices
 
-1. Execute `doc/plans/backend-conversational-analysis-chart-implementation-plan.md`, beginning with backend provider migration, intent routing, and frontend provider-key removal.
-2. Continue through AnalysisThread -> accepted Python plan -> validated AnalysisResult -> DataSnapshot-backed ChartSpec in coherent tested milestones.
+1. Execute Task 4 of `doc/plans/backend-conversational-analysis-chart-implementation-plan.md`: LabRat conversation plan review plus Excel source rectangles.
+2. Continue through accepted Python execution -> validated AnalysisResult -> DataSnapshot-backed ChartSpec in coherent tested milestones.
 3. Preserve source-backed chart creation as a distinct evidence path and converge both forms only at the validated ChartSpec/rendering boundary.
 
 ## Operating Loop

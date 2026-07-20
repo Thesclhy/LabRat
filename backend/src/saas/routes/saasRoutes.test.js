@@ -9,6 +9,8 @@ import {
   groupedMasterTableFixture,
 } from "../../import/fixtures/workbookFixtures.js";
 import { createServer } from "../../server.js";
+import { analysisFieldId, resolveAnalysisSelection } from "../analysisSelection.js";
+import { ANALYSIS_PLAN_REVISION_VERSION, pythonSourceHash } from "../analysisSchemas.js";
 import { loadSaasConfig } from "../config.js";
 import { MemorySaasStore } from "../memoryStore.js";
 
@@ -178,6 +180,166 @@ async function createProject(name = "Route Test Project") {
   return (await response.json()).project;
 }
 
+function seedRouteAnalysisData(project, suffix = "route") {
+  const experimentId = `experiment_analysis_${suffix}`;
+  const snapshotId = `data_snapshot_analysis_${suffix}`;
+  const headId = `head_analysis_${suffix}`;
+  const fieldId = analysisFieldId({
+    fieldKey: "yield",
+    unit: "percent",
+    valueType: "number",
+  });
+  store.experimentIdentities.set(experimentId, {
+    id: experimentId,
+    labId: project.labId,
+    projectId: project.id,
+    canonicalLabel: `Exp ${suffix}`,
+    aliases: [`Exp${suffix}`],
+  });
+  store.dataSnapshots.set(snapshotId, {
+    id: snapshotId,
+    labId: project.labId,
+    projectId: project.id,
+    status: "accepted",
+    contentHash: `sha256_snapshot_${suffix}`,
+    dependencyHash: `sha256_dependency_${suffix}`,
+    experimentRecords: [{
+      experimentId,
+      label: `Exp ${suffix}`,
+      fields: [{
+        fieldKey: "yield",
+        displayName: "Yield",
+        unit: "percent",
+        valueType: "number",
+        role: "outcome",
+        value: 37.5,
+        sourceRefs: [{
+          sourceType: "excel_cell",
+          sourceDocumentId: `source_document_${suffix}`,
+          sheet: "Runs",
+          cell: "B2",
+        }],
+        warnings: [],
+      }],
+      series: [],
+      sourceRefs: [],
+      warnings: [],
+    }],
+  });
+  store.experimentSnapshotHeads.set(headId, {
+    id: headId,
+    labId: project.labId,
+    projectId: project.id,
+    experimentId,
+    dataSnapshotId: snapshotId,
+    recordIndex: 0,
+  });
+  const selectionRequest = {
+    experimentIds: [experimentId],
+    fieldIds: [fieldId],
+    includeSeries: false,
+  };
+  const selection = resolveAnalysisSelection({
+    projectId: project.id,
+    dataSnapshots: [...store.dataSnapshots.values()],
+    experimentIdentities: [...store.experimentIdentities.values()],
+    experimentSnapshotHeads: [...store.experimentSnapshotHeads.values()],
+    selectionRequest,
+  });
+  const source = [
+    "def analyze(tables, labrat):",
+    "    return {'result_table': [], 'traces': [], 'lineage': {}, 'summary': {}}",
+  ].join("\n");
+  const plan = {
+    schemaVersion: ANALYSIS_PLAN_REVISION_VERSION,
+    status: "awaiting_review",
+    requestSummary: "Compare accepted yield values.",
+    selection: {
+      selectionId: selection.selectionId,
+      experimentIds: selection.experimentIds,
+      fieldIds: selection.fieldIds,
+      dependencyHash: selection.dependencyHash,
+      selectionHash: selection.selectionHash,
+    },
+    processingSummary: ["Use each accepted yield value once."],
+    calculationManifest: {
+      inputs: [{ fieldId, fieldKey: "yield", unit: "percent" }],
+      missingValuePolicy: { mode: "exclude_record", requiredFieldIds: [fieldId] },
+      derivedFields: [],
+      invariants: [],
+    },
+    pythonProgram: {
+      runtime: "labrat-python-v1",
+      entrypoint: "analyze",
+      source,
+      sourceHash: pythonSourceHash(source),
+    },
+    expectedOutput: {
+      shape: "experiment_traces",
+      chartType: "bar",
+      xField: "experiment_label",
+      yFields: ["yield"],
+    },
+    warnings: [],
+  };
+  return { plan, selection, selectionRequest };
+}
+
+const testModelProvider = {
+  async classifyIntent() {
+    return { ok: false };
+  },
+  async answerReadOnly() {
+    return { ok: false };
+  },
+  async draftAnalysisPlan(input) {
+    const field = input.fields?.find((candidate) => candidate.valueType === "number")
+      || input.fields?.[0];
+    if (!field) return { ok: false, warning: { code: "analysis_fields_required" } };
+    const source = [
+      "def analyze(tables, labrat):",
+      "    return {'result_table': [], 'traces': [], 'lineage': {}, 'summary': {}}",
+    ].join("\n");
+    return {
+      ok: true,
+      selectionRequest: {
+        experimentIds: [],
+        fieldIds: [field.fieldId],
+        includeSeries: false,
+      },
+      plan: {
+        requestSummary: "Compare the accepted numeric field across experiments.",
+        processingSummary: ["Use each accepted value once."],
+        calculationManifest: {
+          inputs: [{
+            fieldId: field.fieldId,
+            fieldKey: field.fieldKey,
+            unit: field.unit,
+          }],
+          missingValuePolicy: {
+            mode: "exclude_record",
+            requiredFieldIds: [field.fieldId],
+          },
+          derivedFields: [],
+          invariants: [],
+        },
+        pythonProgram: {
+          runtime: "labrat-python-v1",
+          entrypoint: "analyze",
+          source,
+        },
+        expectedOutput: {
+          shape: "experiment_traces",
+          chartType: "bar",
+          xField: "experiment_label",
+          yFields: [field.fieldKey],
+        },
+        warnings: [],
+      },
+    };
+  },
+};
+
 before(async () => {
   const config = {
     ...loadSaasConfig({
@@ -188,7 +350,7 @@ before(async () => {
     fileStorageRoot: `${os.tmpdir()}\\labrat-saas-test-${Date.now()}`,
   };
   store = new MemorySaasStore({ seedDevAccounts: true });
-  server = createServer({ config, store });
+  server = createServer({ config, store, modelProvider: testModelProvider });
   await new Promise((resolve) => {
     server.listen(0, "127.0.0.1", () => {
       const address = server.address();
@@ -1506,6 +1668,211 @@ test("experiment trend AgentRun enters reviewed analysis instead of opening Brow
   assert.deepEqual(body.agentRun.actions, []);
   assert.equal(body.reply.includes("Open Experiment Browser"), false);
   assert.match(body.reply, /reviewed analysis plan/i);
+  assert.match(body.analysisThread.id, /^analysis_thread_/);
+  assert.equal(body.currentPlanRevision, null);
+});
+
+test("analysis thread routes preserve immutable reviewed plans and queue accepted work idempotently", async () => {
+  const project = await createProject("Analysis Thread Route Project");
+  const ownerCookie = cookie;
+  const { plan, selection, selectionRequest } = seedRouteAnalysisData(project, `route_${Date.now()}`);
+
+  const agentAnalysis = await jsonFetch(`/api/projects/${project.id}/agent/runs`, {
+    method: "POST",
+    body: { message: "Compare yield across all experiments and plot it." },
+  });
+  assert.equal(agentAnalysis.status, 201);
+  const agentAnalysisBody = await agentAnalysis.json();
+  assert.match(agentAnalysisBody.analysisThread.id, /^analysis_thread_/);
+  assert.equal(agentAnalysisBody.currentPlanRevision.status, "awaiting_review");
+  assert.equal(agentAnalysisBody.currentPlanRevision.selectionHash, selection.selectionHash);
+  const modifiedAgentPlan = await jsonFetch(
+    `/api/analysis-threads/${agentAnalysisBody.analysisThread.id}/plan-revisions`,
+    {
+      method: "POST",
+      body: { feedback: "Keep the same data but use a bar chart." },
+    },
+  );
+  assert.equal(modifiedAgentPlan.status, 201);
+  const modifiedAgentRevision = (await modifiedAgentPlan.json()).analysisPlanRevision;
+  assert.equal(modifiedAgentRevision.revision, 2);
+  const modifiedAgentDetail = await jsonFetch(
+    `/api/analysis-threads/${agentAnalysisBody.analysisThread.id}`,
+  );
+  const modifiedAgentDetailBody = await modifiedAgentDetail.json();
+  assert.equal(modifiedAgentDetailBody.planRevisions[0].status, "superseded");
+  assert.equal(modifiedAgentDetailBody.planRevisions[1].status, "awaiting_review");
+
+  const configuredDraftAnalysisPlan = testModelProvider.draftAnalysisPlan;
+  testModelProvider.draftAnalysisPlan = async () => ({
+    ok: false,
+    warning: {
+      code: "ai_unavailable",
+      message: "Backend model provider is unavailable.",
+    },
+  });
+  try {
+    const providerFailureProject = await createProject("Analysis Provider Failure");
+    seedRouteAnalysisData(providerFailureProject, `provider_failure_${Date.now()}`);
+    const providerFailure = await jsonFetch(
+      `/api/projects/${providerFailureProject.id}/agent/runs`,
+      {
+        method: "POST",
+        body: { message: "Compare yield across all experiments." },
+      },
+    );
+    assert.equal(providerFailure.status, 201);
+    const providerFailureBody = await providerFailure.json();
+    assert.match(providerFailureBody.analysisThread.id, /^analysis_thread_/);
+    assert.equal(providerFailureBody.currentPlanRevision, null);
+    assert.match(providerFailureBody.reply, /could not draft/i);
+    assert.equal(
+      providerFailureBody.agentRun.warnings.some((warning) => warning.code === "analysis_plan_draft_unavailable"),
+      true,
+    );
+  } finally {
+    testModelProvider.draftAnalysisPlan = configuredDraftAnalysisPlan;
+  }
+
+  const createThread = await jsonFetch(`/api/projects/${project.id}/analysis-threads`, {
+    method: "POST",
+    body: {
+      originalRequest: "Compare accepted yield values.",
+      messages: [{
+        role: "assistant",
+        content: "Client-supplied hidden reasoning must not be persisted.",
+      }],
+    },
+  });
+  assert.equal(createThread.status, 201);
+  const thread = (await createThread.json()).analysisThread;
+  assert.match(thread.id, /^analysis_thread_/);
+  assert.equal(thread.status, "planning");
+  const initialThreadDetail = await jsonFetch(`/api/analysis-threads/${thread.id}`);
+  const initialThreadDetailBody = await initialThreadDetail.json();
+  assert.deepEqual(
+    initialThreadDetailBody.analysisThread.messages.map((message) => message.role),
+    ["user"],
+  );
+  const stateWithAnalysis = await jsonFetch(`/api/projects/${project.id}/state`);
+  const stateWithAnalysisBody = await stateWithAnalysis.json();
+  assert.equal(
+    stateWithAnalysisBody.analysisThreads.some((item) => item.id === thread.id),
+    true,
+  );
+
+  const createRevision = await jsonFetch(`/api/analysis-threads/${thread.id}/plan-revisions`, {
+    method: "POST",
+    body: { plan, selectionRequest },
+  });
+  assert.equal(createRevision.status, 201);
+  const revision = (await createRevision.json()).analysisPlanRevision;
+  assert.equal(revision.revision, 1);
+  assert.equal(revision.status, "awaiting_review");
+  assert.equal(revision.selectionHash, selection.selectionHash);
+
+  const list = await jsonFetch(`/api/projects/${project.id}/analysis-threads?limit=500`);
+  assert.equal(list.status, 200);
+  const listBody = await list.json();
+  assert.equal(listBody.analysisThreads.some((item) => item.id === thread.id), true);
+  assert.equal(listBody.page.limit, 100);
+
+  const detail = await jsonFetch(`/api/analysis-threads/${thread.id}`);
+  assert.equal(detail.status, 200);
+  const detailBody = await detail.json();
+  assert.equal(detailBody.planRevisions[0].id, revision.id);
+  assert.deepEqual(detailBody.analysisRuns, []);
+
+  const selectionResponse = await jsonFetch(
+    `/api/analysis-plan-revisions/${revision.id}/selection?offset=0&limit=500`,
+  );
+  assert.equal(selectionResponse.status, 200);
+  const selectionBody = await selectionResponse.json();
+  assert.equal(selectionBody.records[0].fields[0].value, 37.5);
+  assert.deepEqual(selectionBody.sourceRectangles.map((item) => item.range), ["B2"]);
+  assert.equal(selectionBody.page.limit, 200);
+
+  const otherProject = await createProject("Analysis Cross Project");
+  const other = seedRouteAnalysisData(otherProject, `other_${Date.now()}`);
+  const crossProjectRevision = await jsonFetch(`/api/analysis-threads/${thread.id}/plan-revisions`, {
+    method: "POST",
+    body: {
+      feedback: "Use another project's experiment.",
+      plan: other.plan,
+      selectionRequest: other.selectionRequest,
+    },
+  });
+  assert.equal(crossProjectRevision.status, 422);
+  assert.equal((await crossProjectRevision.json()).error.code, "analysis_selection_invalid");
+
+  const missingIdempotency = await jsonFetch(`/api/analysis-plan-revisions/${revision.id}/accept`, {
+    method: "POST",
+    body: {
+      planHash: revision.planHash,
+      selectionHash: revision.selectionHash,
+      dependencyHash: revision.dependencyHash,
+    },
+  });
+  assert.equal(missingIdempotency.status, 400);
+  assert.equal((await missingIdempotency.json()).error.code, "idempotency_key_required");
+
+  const acceptBody = {
+    planHash: revision.planHash,
+    selectionHash: revision.selectionHash,
+    dependencyHash: revision.dependencyHash,
+  };
+  const accepted = await jsonFetch(`/api/analysis-plan-revisions/${revision.id}/accept`, {
+    method: "POST",
+    headers: { "Idempotency-Key": "analysis_route_accept_1" },
+    body: acceptBody,
+  });
+  assert.equal(accepted.status, 201);
+  const acceptedBody = await accepted.json();
+  assert.equal(acceptedBody.analysisPlanRevision.status, "accepted");
+  assert.equal(acceptedBody.analysisRun.status, "queued");
+
+  const replay = await jsonFetch(`/api/analysis-plan-revisions/${revision.id}/accept`, {
+    method: "POST",
+    headers: { "Idempotency-Key": "analysis_route_accept_1" },
+    body: acceptBody,
+  });
+  assert.equal(replay.status, 200);
+  assert.equal((await replay.json()).analysisRun.id, acceptedBody.analysisRun.id);
+  assert.equal((await store.listAnalysisRuns({ projectId: project.id })).length, 1);
+  assert.equal((await store.listChartSpecs({ projectId: project.id })).length, 0);
+
+  const adminLogin = await jsonFetch("/api/auth/login", {
+    method: "POST",
+    body: { username: "admin", password: "LabRatAdmin123!" },
+  });
+  assert.equal(adminLogin.status, 200);
+  cookie = cookieFrom(adminLogin);
+  const viewerUsername = `analysis_viewer_${Date.now()}`;
+  const viewerPassword = "AnalysisViewer123!";
+  const createViewer = await jsonFetch("/api/admin/users", {
+    method: "POST",
+    body: {
+      username: viewerUsername,
+      displayName: "Analysis Viewer",
+      temporaryPassword: viewerPassword,
+      labId: project.labId,
+      role: "viewer",
+    },
+  });
+  assert.equal(createViewer.status, 201);
+  const viewerLogin = await jsonFetch("/api/auth/login", {
+    method: "POST",
+    body: { username: viewerUsername, password: viewerPassword },
+  });
+  assert.equal(viewerLogin.status, 200);
+  cookie = cookieFrom(viewerLogin);
+  const viewerCreate = await jsonFetch(`/api/projects/${project.id}/analysis-threads`, {
+    method: "POST",
+    body: { originalRequest: "Viewer must not create analysis." },
+  });
+  assert.equal(viewerCreate.status, 403);
+  assert.equal((await viewerCreate.json()).error.code, "forbidden");
+  cookie = ownerCookie;
 });
 
 test("experiment-purpose AgentRun answers directly without a confirmation card", async () => {
