@@ -132,6 +132,21 @@ The current local backend should remain compatible while server-first project wo
 7. Record the request, meaningful changes, verification result, and any follow-up items in `doc/PROGRESS.md`.
 8. Report changed files, verification, and any remaining risk.
 
+## Legible Commits
+
+Treat commits as decision records, not only change summaries. Before non-trivial edits, read `git log --oneline -20`, the bodies of the latest relevant commits, and the history of files you will change. Preserve the reasoning a future maintainer would need: alternatives considered, failed approaches worth avoiding, and constraints that should not be removed casually.
+
+When committing AI-assisted work:
+
+- Use a concise subject that states what changed and why.
+- Include a decision-focused body when the reasoning is not obvious from the diff.
+- Add `source: session <short-id> @ <ISO-8601 timestamp>` so the commit points to a matching file in `transcripts/`.
+- Credit the human collaborator and AI agent when their identities are known; do not invent handles or model identities.
+- Archive a reviewed, secret-free session transcript or concise session record under `transcripts/`. If the raw conversation is sensitive, keep it outside this repository and put enough redacted reasoning in the commit body to preserve the decision.
+- Stage only explicit paths you changed. Never use `git add -A` or `git add .` in a shared working tree.
+
+Transcript filenames should sort chronologically and contain the session short id, for example `transcripts/2026-07-20-auth-refactor-a1b2c3d4.md`. Review transcripts for credentials, personal data, and unrelated private context before staging them.
+
 ## Progress Logging
 
 - Maintain `doc/PROGRESS.md` as the durable project log.
