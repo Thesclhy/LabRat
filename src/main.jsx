@@ -61,7 +61,8 @@ import {
   getWorkbookTileCacheEntry,
   rememberWorkbookTileCacheEntry,
   WORKBOOK_SCROLL_DEBOUNCE_MS,
-  workbookPrefetchTileBounds,
+  workbookAllTileBounds,
+  workbookPrioritizedTileBounds,
   workbookTileCacheKey,
   workbookVisibleTileBounds,
 } from "./data/workbookRangeTiles.js";
@@ -276,6 +277,22 @@ const WORKBOOK_EXCEL_CELL_WIDTH = 112;
 const WORKBOOK_EXCEL_ROW_HEIGHT = 30;
 const WORKBOOK_EXCEL_EDGE_SCROLL_ZONE = 36;
 const WORKBOOK_EXCEL_EDGE_SCROLL_INTERVAL_MS = 80;
+const WORKBOOK_BACKGROUND_CONCURRENCY = 3;
+
+function workbookSheetCacheKey(sourceDocumentId, sheetName) {
+  return `${sourceDocumentId}::${sheetName}`;
+}
+
+function getOrCreateWorkbookSheetCache(cache, key) {
+  if (!cache.has(key)) {
+    cache.set(key, {
+      cells: new Map(),
+      completed: new Set(),
+      failed: new Map(),
+    });
+  }
+  return cache.get(key);
+}
 
 function workbookEdgeScrollDirection(clientX, clientY, rect) {
   if (!rect) return { x: 0, y: 0 };
@@ -1126,19 +1143,20 @@ export function WorkbookReviewWorkspace({
   });
   const [selectedDocumentId, setSelectedDocumentId] = useState(initialSourceDocument?.id || "");
   const [activeSheetName, setActiveSheetName] = useState("");
-  const [activeRange, setActiveRange] = useState("");
   const [rangeState, setRangeState] = useState({ loading: false, error: "" });
   const [scrollState, setScrollState] = useState({ top: 0, left: 0, width: 1100, height: 600 });
   const [settledScrollState, setSettledScrollState] = useState({ top: 0, left: 0, width: 1100, height: 600 });
-  const [rangeCacheRevision, setRangeCacheRevision] = useState(0);
+  const [sheetCacheRevision, setSheetCacheRevision] = useState(0);
+  const [hydrationRetryRevision, setHydrationRetryRevision] = useState(0);
   const [dragSelection, setDragSelection] = useState(null);
   const dragSelectionRef = useRef(null);
   const viewportRef = useRef(null);
   const gridScrollRef = useRef(null);
   const rangeCacheRef = useRef(new Map());
+  const sheetCellCacheRef = useRef(new Map());
+  const hydrationGenerationRef = useRef(0);
   const pendingScrollStateRef = useRef(scrollState);
   const scrollFrameRef = useRef(null);
-  const scrollDirectionRef = useRef({ top: 0, left: 0 });
   const edgeScrollDirectionRef = useRef({ x: 0, y: 0 });
   const appliedFocusKeyRef = useRef("");
   const sourceDocument = documentsState.items.find((document) => document.id === selectedDocumentId)
@@ -1179,12 +1197,14 @@ export function WorkbookReviewWorkspace({
     )),
     [draftRegionsForSheet, selectedDraftRegionIdSet],
   );
-  const displayBounds = parseExcelA1Range(activeRange) || excelRangeBoundsFromSheet(activeSheet);
+  const sheetUsedRange = activeSheet?.usedRange
+    || formatExcelA1Range(excelRangeBoundsFromSheet(activeSheet));
+  const displayBounds = parseExcelA1Range(sheetUsedRange) || excelRangeBoundsFromSheet(activeSheet);
   const visibleTileBounds = useMemo(() => workbookVisibleTileBounds(displayBounds, settledScrollState, {
     rowHeight: WORKBOOK_EXCEL_ROW_HEIGHT,
     columnWidth: WORKBOOK_EXCEL_CELL_WIDTH,
   }), [
-    activeRange,
+    sheetUsedRange,
     activeSheet?.name,
     settledScrollState.top,
     settledScrollState.left,
@@ -1192,22 +1212,29 @@ export function WorkbookReviewWorkspace({
     settledScrollState.height,
   ]);
   const visibleTileKey = visibleTileBounds.map(formatExcelA1Range).join("|");
-  const loadedTileEntries = useMemo(() => [...rangeCacheRef.current.values()].filter((entry) => (
-    entry?.status === "fulfilled"
-    && entry.sourceDocumentId === sourceDocument?.id
-    && entry.sheetName === activeSheetName
-  )), [rangeCacheRevision, sourceDocument?.id, activeSheetName]);
+  const allTileBounds = useMemo(
+    () => workbookAllTileBounds(displayBounds),
+    [sheetUsedRange, activeSheet?.name],
+  );
+  const activeSheetCacheKey = workbookSheetCacheKey(sourceDocument?.id || "", activeSheetName);
+  const activeSheetCache = sheetCellCacheRef.current.get(activeSheetCacheKey) || null;
+  const activeTileKeys = useMemo(
+    () => allTileBounds.map((bounds) => workbookTileCacheKey(sourceDocument?.id, activeSheetName, bounds)),
+    [allTileBounds, sourceDocument?.id, activeSheetName],
+  );
   const loadedTileBounds = useMemo(
-    () => loadedTileEntries.map((entry) => entry.bounds),
-    [loadedTileEntries],
+    () => allTileBounds.filter((bounds, index) => activeSheetCache?.completed.has(activeTileKeys[index])),
+    [allTileBounds, activeSheetCache, activeTileKeys, sheetCacheRevision],
   );
   const cellsByCoord = useMemo(() => {
-    const cells = new Map();
-    loadedTileEntries.forEach((entry) => {
-      excelCellsFromRangeResult(entry.result).forEach((cell, key) => cells.set(key, cell));
-    });
-    return cells;
-  }, [loadedTileEntries]);
+    return new Map(activeSheetCache?.cells || []);
+  }, [activeSheetCache, activeSheetCacheKey, sheetCacheRevision]);
+  const completedTileCount = activeTileKeys.filter((key) => activeSheetCache?.completed.has(key)).length;
+  const failedTileCount = activeTileKeys.filter((key) => activeSheetCache?.failed.has(key)).length;
+  const pendingTileCount = activeTileKeys.filter((key) => (
+    rangeCacheRef.current.get(key)?.status === "pending"
+  )).length;
+  const totalTileCount = allTileBounds.length;
   const rowIndexes = [];
   const colIndexes = [];
   for (let row = displayBounds.startRow; row <= displayBounds.endRow; row += 1) rowIndexes.push(row);
@@ -1251,12 +1278,6 @@ export function WorkbookReviewWorkspace({
   }, [sourceDocument?.id, sheets, activeSheetName]);
 
   useEffect(() => {
-    if (!activeSheet) return;
-    const nextRange = activeRange || activeSheet.usedRange || formatExcelA1Range(excelRangeBoundsFromSheet(activeSheet));
-    if (nextRange && nextRange !== activeRange) setActiveRange(nextRange);
-  }, [activeSheet?.name, activeSheet?.usedRange, activeRange]);
-
-  useEffect(() => {
     const scrollElement = gridScrollRef.current?.getBoundingClientRect
       ? gridScrollRef.current
       : viewportRef.current?.querySelector?.('[role="grid"]')
@@ -1272,11 +1293,10 @@ export function WorkbookReviewWorkspace({
       height: scrollElement.clientHeight || 600,
     };
     pendingScrollStateRef.current = nextScrollState;
-    scrollDirectionRef.current = { top: 0, left: 0 };
     setScrollState(nextScrollState);
     setSettledScrollState(nextScrollState);
     setRangeState((current) => ({ ...current, error: "" }));
-  }, [sourceDocument?.id, activeSheetName, activeRange]);
+  }, [sourceDocument?.id, activeSheetName, sheetUsedRange]);
 
   useEffect(() => {
     if (!focusSelection?.sourceDocumentId || !focusSelection?.sheetName || !focusSelection?.range) return;
@@ -1285,7 +1305,6 @@ export function WorkbookReviewWorkspace({
     appliedFocusKeyRef.current = focusKey;
     setSelectedDocumentId(focusSelection.sourceDocumentId);
     setActiveSheetName(focusSelection.sheetName);
-    setActiveRange(focusSelection.range);
     if (focusSelection.focusOnly) return;
     const nextRegionId = focusSelection.clientRegionId || focusSelection.draftRegionId || workbookDraftRegionId(focusSelection.sourceDocumentId, focusSelection.sheetName, focusSelection.range);
     onDraftRegionsChange?.(upsertDraftWorkbookRegion(draftRegions, {
@@ -1318,14 +1337,23 @@ export function WorkbookReviewWorkspace({
   const loadWorkbookTile = useCallback((bounds) => {
     if (!sourceDocument?.id || !activeSheetName || !bounds) return Promise.resolve(null);
     const cacheKey = workbookTileCacheKey(sourceDocument.id, activeSheetName, bounds);
+    const sheetKey = workbookSheetCacheKey(sourceDocument.id, activeSheetName);
+    const sheetCache = getOrCreateWorkbookSheetCache(sheetCellCacheRef.current, sheetKey);
+    if (sheetCache.completed.has(cacheKey)) return Promise.resolve(null);
+
     const cached = getWorkbookTileCacheEntry(rangeCacheRef.current, cacheKey);
-    if (cached?.status === "fulfilled") return Promise.resolve(cached.result);
     if (cached?.status === "pending") return cached.promise;
 
     const range = formatExcelA1Range(bounds);
+    sheetCache.failed.delete(cacheKey);
     let request;
     request = readServerSourceDocumentRange(sourceDocument.id, { sheetName: activeSheetName, range })
       .then((result) => {
+        excelCellsFromRangeResult(result).forEach((cell, key) => {
+          sheetCache.cells.set(key, cell);
+        });
+        sheetCache.completed.add(cacheKey);
+        sheetCache.failed.delete(cacheKey);
         rememberWorkbookTileCacheEntry(rangeCacheRef.current, cacheKey, {
           status: "fulfilled",
           sourceDocumentId: sourceDocument.id,
@@ -1334,13 +1362,15 @@ export function WorkbookReviewWorkspace({
           range,
           result,
         });
-        setRangeCacheRevision((value) => value + 1);
+        setSheetCacheRevision((value) => value + 1);
         return result;
       })
       .catch((err) => {
         if (rangeCacheRef.current.get(cacheKey)?.promise === request) {
           rangeCacheRef.current.delete(cacheKey);
         }
+        sheetCache.failed.set(cacheKey, err);
+        setSheetCacheRevision((value) => value + 1);
         throw err;
       });
     rememberWorkbookTileCacheEntry(rangeCacheRef.current, cacheKey, {
@@ -1355,14 +1385,18 @@ export function WorkbookReviewWorkspace({
   }, [sourceDocument?.id, activeSheetName]);
 
   useEffect(() => {
-    if (!sourceDocument?.id || !activeSheetName || !activeRange || !visibleTileBounds.length) {
+    if (!sourceDocument?.id || !activeSheetName || !sheetUsedRange || !visibleTileBounds.length) {
       setRangeState({ loading: false, error: "" });
       return undefined;
     }
     let cancelled = false;
+    const sheetCache = getOrCreateWorkbookSheetCache(
+      sheetCellCacheRef.current,
+      workbookSheetCacheKey(sourceDocument.id, activeSheetName),
+    );
     const needsLoad = visibleTileBounds.some((bounds) => {
       const cacheKey = workbookTileCacheKey(sourceDocument.id, activeSheetName, bounds);
-      return rangeCacheRef.current.get(cacheKey)?.status !== "fulfilled";
+      return !sheetCache.completed.has(cacheKey);
     });
     setRangeState({ loading: needsLoad, error: "" });
     Promise.all(visibleTileBounds.map((bounds) => loadWorkbookTile(bounds)))
@@ -1375,26 +1409,51 @@ export function WorkbookReviewWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [sourceDocument?.id, activeSheetName, activeRange, visibleTileKey, loadWorkbookTile]);
+  }, [sourceDocument?.id, activeSheetName, sheetUsedRange, visibleTileKey, loadWorkbookTile]);
 
   useEffect(() => {
-    const prefetchBounds = workbookPrefetchTileBounds(
+    if (!sourceDocument?.id || !activeSheetName || !sheetUsedRange || !allTileBounds.length) {
+      return undefined;
+    }
+    const generation = hydrationGenerationRef.current + 1;
+    hydrationGenerationRef.current = generation;
+    let cancelled = false;
+    let cursor = 0;
+    let running = 0;
+    const queue = workbookPrioritizedTileBounds(
       displayBounds,
       visibleTileBounds,
-      scrollDirectionRef.current,
     );
-    if (!prefetchBounds) return undefined;
-    const timerId = window.setTimeout(() => {
-      loadWorkbookTile(prefetchBounds).catch(() => {});
-    }, 0);
-    return () => window.clearTimeout(timerId);
+    const pump = () => {
+      if (cancelled || hydrationGenerationRef.current !== generation) return;
+      while (running < WORKBOOK_BACKGROUND_CONCURRENCY && cursor < queue.length) {
+        const bounds = queue[cursor];
+        cursor += 1;
+        const cacheKey = workbookTileCacheKey(sourceDocument.id, activeSheetName, bounds);
+        const sheetCache = getOrCreateWorkbookSheetCache(
+          sheetCellCacheRef.current,
+          workbookSheetCacheKey(sourceDocument.id, activeSheetName),
+        );
+        if (sheetCache.completed.has(cacheKey)) continue;
+        running += 1;
+        loadWorkbookTile(bounds)
+          .catch(() => null)
+          .finally(() => {
+            running -= 1;
+            pump();
+          });
+      }
+    };
+    Promise.all(visibleTileBounds.map((bounds) => loadWorkbookTile(bounds).catch(() => null)))
+      .finally(pump);
+    return () => {
+      cancelled = true;
+    };
   }, [
     sourceDocument?.id,
     activeSheetName,
-    activeRange,
-    visibleTileKey,
-    settledScrollState.top,
-    settledScrollState.left,
+    sheetUsedRange,
+    hydrationRetryRevision,
     loadWorkbookTile,
   ]);
 
@@ -1503,11 +1562,6 @@ export function WorkbookReviewWorkspace({
       width: element.clientWidth || 1100,
       height: element.clientHeight || 600,
     };
-    const previous = pendingScrollStateRef.current || nextScrollState;
-    scrollDirectionRef.current = {
-      top: nextScrollState.top - previous.top,
-      left: nextScrollState.left - previous.left,
-    };
     pendingScrollStateRef.current = nextScrollState;
     if (scrollFrameRef.current != null) return;
     const flushScrollState = () => {
@@ -1518,6 +1572,30 @@ export function WorkbookReviewWorkspace({
       ? window.requestAnimationFrame(flushScrollState)
       : window.setTimeout(flushScrollState, 16);
   };
+  useEffect(() => {
+    if (!focusSelection?.sourceDocumentId || !focusSelection?.sheetName || !focusSelection?.range) return;
+    if (focusSelection.sourceDocumentId !== sourceDocument?.id || focusSelection.sheetName !== activeSheetName) return;
+    const focusBounds = parseExcelA1Range(focusSelection.range);
+    const element = workbookGridScrollElement();
+    if (!focusBounds || !element) return;
+    element.scrollTop = Math.max(
+      0,
+      (focusBounds.startRow - displayBounds.startRow) * WORKBOOK_EXCEL_ROW_HEIGHT,
+    );
+    element.scrollLeft = Math.max(
+      0,
+      (focusBounds.startCol - displayBounds.startCol) * WORKBOOK_EXCEL_CELL_WIDTH,
+    );
+    syncWorkbookScrollState(element);
+  }, [
+    focusSelection?.requestId,
+    focusSelection?.sourceDocumentId,
+    focusSelection?.sheetName,
+    focusSelection?.range,
+    sourceDocument?.id,
+    activeSheetName,
+    sheetUsedRange,
+  ]);
   useEffect(() => () => {
     if (scrollFrameRef.current == null) return;
     if (typeof window.cancelAnimationFrame === "function") window.cancelAnimationFrame(scrollFrameRef.current);
@@ -1667,6 +1745,22 @@ export function WorkbookReviewWorkspace({
     reviewedAnalysisInputs,
     visibleTileKey,
   ]);
+  const retryFailedWorkbookTiles = () => {
+    const sheetCache = getOrCreateWorkbookSheetCache(
+      sheetCellCacheRef.current,
+      activeSheetCacheKey,
+    );
+    sheetCache.failed.clear();
+    setSheetCacheRevision((value) => value + 1);
+    setHydrationRetryRevision((value) => value + 1);
+  };
+  const sheetLoadLabel = failedTileCount > 0
+    && completedTileCount + failedTileCount >= totalTileCount
+    && pendingTileCount === 0
+    ? `Sheet incomplete: ${completedTileCount}/${totalTileCount} ranges`
+    : completedTileCount === totalTileCount && totalTileCount > 0
+      ? `Sheet loaded: ${completedTileCount}/${totalTileCount} ranges`
+      : `Loading sheet: ${completedTileCount}/${totalTileCount} ranges`;
 
   return (
     <main className="workbook-review-workspace">
@@ -1679,7 +1773,6 @@ export function WorkbookReviewWorkspace({
             onChange={(event) => {
               setSelectedDocumentId(event.target.value);
               setActiveSheetName("");
-              setActiveRange("");
             }}
           >
             {documentsState.items.map((document) => (
@@ -1695,21 +1788,27 @@ export function WorkbookReviewWorkspace({
               type="button"
               className={sheet.name === activeSheetName ? "active" : ""}
               key={sheet.name}
-              onClick={() => {
-                setActiveSheetName(sheet.name);
-                setActiveRange(sheet.usedRange || formatExcelA1Range(excelRangeBoundsFromSheet(sheet)));
-              }}
+              onClick={() => setActiveSheetName(sheet.name)}
             >
               {sheet.name}
             </button>
           ))}
         </div>
         <input
-          aria-label="Visible range"
-          value={activeRange}
-          onChange={(event) => setActiveRange(event.target.value)}
-          placeholder="A1:D20"
+          aria-label="Sheet range"
+          value={sheetUsedRange}
+          readOnly
         />
+        {!!sourceDocument && (
+          <div className="workbook-sheet-load-status" role="status" aria-live="polite">
+            <span>{sheetLoadLabel}</span>
+            {!!failedTileCount && (
+              <button type="button" onClick={retryFailedWorkbookTiles}>
+                Retry failed ranges
+              </button>
+            )}
+          </div>
+        )}
       </section>
       <div className={`workbook-review-layout${reviewDock ? " has-review-dock" : ""}`}>
         <section className="workbook-review-main" aria-label="Workbook evidence">

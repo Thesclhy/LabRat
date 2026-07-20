@@ -519,6 +519,90 @@ describe("WorkbookReviewWorkspace", () => {
     });
   }
 
+  function workbookColumnIndex(label) {
+    return [...label].reduce(
+      (value, char) => value * 26 + char.charCodeAt(0) - 64,
+      0,
+    ) - 1;
+  }
+
+  function markerForWorkbookRange(sheetName, range) {
+    const [, startCol, startRow] = range.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+    return {
+      row: Number(startRow) - 1,
+      col: workbookColumnIndex(startCol),
+      address: `${startCol}${startRow}`,
+      rawValue: `${sheetName} ${range}`,
+      formattedValue: `${sheetName} ${range}`,
+    };
+  }
+
+  function workbookRangeRequests(fetchMock, sheetName = "") {
+    return fetchMock.mock.calls
+      .filter(([url]) => url === "/api/source-documents/source_doc_1/range")
+      .map(([, init]) => JSON.parse(init.body || "{}"))
+      .filter((body) => !sheetName || body.sheetName === sheetName);
+  }
+
+  function workbookRangeCellCount(range) {
+    const [, startCol, startRow, endCol, endRow] = range.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+    return (Number(endRow) - Number(startRow) + 1)
+      * (workbookColumnIndex(endCol) - workbookColumnIndex(startCol) + 1);
+  }
+
+  function makeHydrationFetch({
+    sheets = [{
+      name: "Sheet1",
+      usedRange: "A1:X81",
+      rowCount: 81,
+      columnCount: 24,
+    }],
+    failOnceKey = "",
+    emptyKeys = [],
+    deferred = new Map(),
+  } = {}) {
+    const attempts = new Map();
+    const fetchMock = vi.fn(async (url, init = {}) => {
+      if (url === "/api/projects/project_1/source-documents") {
+        return jsonResponse({
+          sourceDocuments: [{
+            id: "source_doc_1",
+            metadata: { workbookName: "Large.xlsx", sheets },
+          }],
+        });
+      }
+      if (url === "/api/source-documents/source_doc_1/range") {
+        const body = JSON.parse(init.body || "{}");
+        const key = `${body.sheetName}!${body.range}`;
+        attempts.set(key, (attempts.get(key) || 0) + 1);
+        if (key === failOnceKey && attempts.get(key) === 1) {
+          throw new Error(`Failed ${key}`);
+        }
+        if (deferred.has(key)) return deferred.get(key);
+        return jsonResponse({
+          sheetName: body.sheetName,
+          range: body.range,
+          rows: emptyKeys.includes(key)
+            ? []
+            : [[markerForWorkbookRange(body.sheetName, body.range)]],
+          cells: [],
+        });
+      }
+      return jsonResponse({});
+    });
+    return { fetchMock, attempts };
+  }
+
+  function largeReviewState(sheets) {
+    return {
+      ...reviewState,
+      sourceDocument: {
+        id: "source_doc_1",
+        metadata: { workbookName: "Large.xlsx", sheets },
+      },
+    };
+  }
+
   const reviewState = {
     loading: false,
     error: "",
@@ -726,22 +810,28 @@ describe("WorkbookReviewWorkspace", () => {
       render(<Harness />);
       const grid = await screen.findByRole("grid", { name: "Workbook sheet preview" });
       await screen.findByText("Label");
-      const rangeInput = screen.getByLabelText("Visible range");
-      fireEvent.change(rangeInput, { target: { value: "A1:A2" } });
-      await waitFor(() => expect(screen.getByLabelText("Visible range").value).toBe("A1:A2"));
+      const rangeInput = screen.getByLabelText("Sheet range");
+      expect(rangeInput.value).toBe("A1:D5");
+      expect(rangeInput.readOnly).toBe(true);
 
       fireEvent.click(screen.getByRole("button", { name: "Update dock" }));
 
       expect(screen.getByText("Dock revision 1")).toBeTruthy();
       expect(screen.getByRole("grid", { name: "Workbook sheet preview" })).toBe(grid);
-      expect(screen.getByLabelText("Visible range").value).toBe("A1:A2");
+      expect(screen.getByLabelText("Sheet range").value).toBe("A1:D5");
     } finally {
       global.fetch = originalFetch;
     }
   });
 
-  it("focuses the workbook viewport when the active red box changes", async () => {
-    const fetchMock = makeWorkbookReviewFetch();
+  it("focuses an active red box without narrowing the sheet used range", async () => {
+    const sheets = [{
+      name: "Sheet1",
+      usedRange: "A1:X81",
+      rowCount: 81,
+      columnCount: 24,
+    }];
+    const { fetchMock } = makeHydrationFetch({ sheets });
     const originalFetch = global.fetch;
     global.fetch = fetchMock;
     const draftRegions = [{
@@ -756,29 +846,33 @@ describe("WorkbookReviewWorkspace", () => {
       draftRegionId: "draft_2",
       sourceDocumentId: "source_doc_1",
       sheetName: "Sheet1",
-      range: "C3:D4",
+      range: "M41:N42",
       status: "draft",
     }];
     try {
       const { rerender } = render(
         <WorkbookReviewWorkspace
           projectId="project_1"
-          reviewState={reviewState}
+          reviewState={largeReviewState(sheets)}
           draftRegions={draftRegions}
           activeDraftRegionId="draft_1"
+          selectedDraftRegionIds={["draft_1"]}
           onDraftRegionsChange={() => {}}
         />,
       );
 
-      await screen.findByText("Label");
-      await waitFor(() => expect(screen.getByLabelText("Visible range").value).toBe("A1:D5"));
+      await screen.findByText("Sheet1 A1:L40");
+      const grid = screen.getByRole("grid", { name: "Workbook sheet preview" });
+      Object.defineProperty(grid, "scrollTop", { configurable: true, writable: true, value: 0 });
+      Object.defineProperty(grid, "scrollLeft", { configurable: true, writable: true, value: 0 });
 
       rerender(
         <WorkbookReviewWorkspace
           projectId="project_1"
-          reviewState={reviewState}
+          reviewState={largeReviewState(sheets)}
           draftRegions={draftRegions}
           activeDraftRegionId="draft_2"
+          selectedDraftRegionIds={["draft_1"]}
           onDraftRegionsChange={() => {}}
           focusSelection={{
             requestId: "focus_draft_2",
@@ -786,13 +880,17 @@ describe("WorkbookReviewWorkspace", () => {
             draftRegionId: "draft_2",
             sourceDocumentId: "source_doc_1",
             sheetName: "Sheet1",
-            range: "C3:D4",
+            range: "M41:N42",
             selectionMethod: "red_box_click",
           }}
         />,
       );
 
-      await waitFor(() => expect(screen.getByLabelText("Visible range").value).toBe("C3:D4"));
+      await waitFor(() => {
+        expect(screen.getByLabelText("Sheet range").value).toBe("A1:X81");
+        expect(grid.scrollTop).toBeGreaterThan(0);
+        expect(grid.scrollLeft).toBeGreaterThan(0);
+      });
     } finally {
       global.fetch = originalFetch;
     }
@@ -862,19 +960,19 @@ describe("WorkbookReviewWorkspace", () => {
         />,
       );
 
-      await waitFor(() => expect(screen.getByLabelText("Visible range").value).toBe("C3:D4"));
+      await waitFor(() => expect(screen.getByLabelText("Sheet range").value).toBe("A1:D5"));
       expect(onDraftRegionsChange).not.toHaveBeenCalled();
     } finally {
       global.fetch = originalFetch;
     }
   });
 
-  it("reuses loaded workbook range windows when returning to a previous visible range", async () => {
+  it("reuses the loaded workbook sheet while focusing different source ranges", async () => {
     const fetchMock = makeWorkbookReviewFetch();
     const originalFetch = global.fetch;
     global.fetch = fetchMock;
     try {
-      render(
+      const { rerender } = render(
         <WorkbookReviewWorkspace
           projectId="project_1"
           reviewState={reviewState}
@@ -891,22 +989,43 @@ describe("WorkbookReviewWorkspace", () => {
         expect(rangeRequests).toContain("A1:D5");
       });
 
-      const rangeInput = screen.getByLabelText("Visible range");
-      fireEvent.change(rangeInput, { target: { value: "A1:B2" } });
-      await waitFor(() => {
-        const rangeRequests = fetchMock.mock.calls
-          .filter(([url]) => url === "/api/source-documents/source_doc_1/range")
-          .map(([, init]) => JSON.parse(init.body || "{}").range);
-        expect(rangeRequests).toContain("A1:B2");
-      });
-
-      fireEvent.change(rangeInput, { target: { value: "A1:D5" } });
-      await act(async () => {});
+      rerender(
+        <WorkbookReviewWorkspace
+          projectId="project_1"
+          reviewState={reviewState}
+          draftRegions={[]}
+          onDraftRegionsChange={() => {}}
+          focusSelection={{
+            requestId: "focus_first",
+            sourceDocumentId: "source_doc_1",
+            sheetName: "Sheet1",
+            range: "C3:D4",
+            focusOnly: true,
+          }}
+        />,
+      );
+      rerender(
+        <WorkbookReviewWorkspace
+          projectId="project_1"
+          reviewState={reviewState}
+          draftRegions={[]}
+          onDraftRegionsChange={() => {}}
+          focusSelection={{
+            requestId: "focus_second",
+            sourceDocumentId: "source_doc_1",
+            sheetName: "Sheet1",
+            range: "A1:B2",
+            focusOnly: true,
+          }}
+        />,
+      );
+      await waitFor(() => expect(screen.getByLabelText("Sheet range").value).toBe("A1:D5"));
 
       const rangeRequests = fetchMock.mock.calls
         .filter(([url]) => url === "/api/source-documents/source_doc_1/range")
         .map(([, init]) => JSON.parse(init.body || "{}").range);
       expect(rangeRequests.filter((range) => range === "A1:D5")).toHaveLength(1);
+      expect(rangeRequests).toEqual(["A1:D5"]);
     } finally {
       global.fetch = originalFetch;
     }
@@ -964,7 +1083,7 @@ describe("WorkbookReviewWorkspace", () => {
         />,
       );
 
-      await waitFor(() => expect(screen.getByLabelText("Visible range").value).toBe("A1:F81"));
+      await waitFor(() => expect(screen.getByLabelText("Sheet range").value).toBe("A1:F81"));
       const grid = screen.getByRole("grid", { name: "Workbook sheet preview" });
       Object.defineProperty(grid, "scrollTop", { configurable: true, writable: true, value: 900 });
       Object.defineProperty(grid, "scrollLeft", { configurable: true, writable: true, value: 240 });
@@ -972,7 +1091,7 @@ describe("WorkbookReviewWorkspace", () => {
 
       fireEvent.change(await screen.findByLabelText("Workbook"), { target: { value: "source_doc_2" } });
 
-      await waitFor(() => expect(screen.getByLabelText("Visible range").value).toBe("C3:D4"));
+      await waitFor(() => expect(screen.getByLabelText("Sheet range").value).toBe("C3:D4"));
       expect(grid.scrollTop).toBe(0);
       expect(grid.scrollLeft).toBe(0);
       await waitFor(() => {
@@ -1080,6 +1199,166 @@ describe("WorkbookReviewWorkspace", () => {
         const columnNumber = (label) => [...label].reduce((value, char) => value * 26 + char.charCodeAt(0) - 64, 0);
         expect((Number(endRow) - Number(startRow) + 1) * (columnNumber(endCol) - columnNumber(startCol) + 1)).toBeLessThanOrEqual(500);
       });
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("hydrates the complete current sheet without scrolling", async () => {
+    const sheets = [{
+      name: "Sheet1",
+      usedRange: "A1:X81",
+      rowCount: 81,
+      columnCount: 24,
+    }];
+    const { fetchMock } = makeHydrationFetch({ sheets });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    try {
+      render(
+        <WorkbookReviewWorkspace
+          projectId="project_1"
+          reviewState={largeReviewState(sheets)}
+          draftRegions={[]}
+          selectedDraftRegionIds={[]}
+          onDraftRegionsChange={() => {}}
+          onSelectedDraftRegionIdsChange={() => {}}
+        />,
+      );
+
+      expect(await screen.findByText("Sheet1 A1:L40")).toBeTruthy();
+      await screen.findByText("Sheet loaded: 6/6 ranges");
+
+      const requests = workbookRangeRequests(fetchMock).map((body) => body.range);
+      expect(requests).toEqual(expect.arrayContaining([
+        "A1:L40",
+        "M1:X40",
+        "A41:L80",
+        "M41:X80",
+        "A81:L81",
+        "M81:X81",
+      ]));
+      expect(requests[0]).toBe("A1:L40");
+      expect(new Set(requests).size).toBe(requests.length);
+      expect(requests.every((range) => workbookRangeCellCount(range) <= 500)).toBe(true);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("retains completed and empty tiles when switching sheets", async () => {
+    const sheets = [
+      { name: "Sheet1", usedRange: "A1:X81", rowCount: 81, columnCount: 24 },
+      { name: "Sheet2", usedRange: "A1:F81", rowCount: 81, columnCount: 6 },
+    ];
+    const { fetchMock } = makeHydrationFetch({
+      sheets,
+      emptyKeys: ["Sheet1!M41:X80"],
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    try {
+      render(
+        <WorkbookReviewWorkspace
+          projectId="project_1"
+          reviewState={largeReviewState(sheets)}
+          draftRegions={[]}
+          selectedDraftRegionIds={[]}
+          onDraftRegionsChange={() => {}}
+          onSelectedDraftRegionIdsChange={() => {}}
+        />,
+      );
+
+      await screen.findByText("Sheet loaded: 6/6 ranges");
+      const sheet1RequestCount = workbookRangeRequests(fetchMock, "Sheet1").length;
+      fireEvent.click(screen.getByRole("button", { name: "Sheet2" }));
+      await screen.findByText("Sheet loaded: 3/3 ranges");
+      fireEvent.click(screen.getByRole("button", { name: "Sheet1" }));
+      await screen.findByText("Sheet loaded: 6/6 ranges");
+
+      expect(workbookRangeRequests(fetchMock, "Sheet1")).toHaveLength(sheet1RequestCount);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("does not show late responses from the previous sheet", async () => {
+    const sheets = [
+      { name: "Sheet1", usedRange: "A1:X81", rowCount: 81, columnCount: 24 },
+      { name: "Sheet2", usedRange: "A1:F2", rowCount: 2, columnCount: 6 },
+    ];
+    let releaseSheet1;
+    const heldSheet1 = new Promise((resolve) => {
+      releaseSheet1 = () => resolve(jsonResponse({
+        sheetName: "Sheet1",
+        range: "A1:L40",
+        rows: [[markerForWorkbookRange("Sheet1", "A1:L40")]],
+        cells: [],
+      }));
+    });
+    const { fetchMock } = makeHydrationFetch({
+      sheets,
+      deferred: new Map([["Sheet1!A1:L40", heldSheet1]]),
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    try {
+      render(
+        <WorkbookReviewWorkspace
+          projectId="project_1"
+          reviewState={largeReviewState(sheets)}
+          draftRegions={[]}
+          selectedDraftRegionIds={[]}
+          onDraftRegionsChange={() => {}}
+          onSelectedDraftRegionIdsChange={() => {}}
+        />,
+      );
+
+      fireEvent.click(await screen.findByRole("button", { name: "Sheet2" }));
+      expect(await screen.findByText("Sheet2 A1:F2")).toBeTruthy();
+      releaseSheet1();
+      await act(async () => heldSheet1);
+
+      expect(screen.queryByText("Sheet1 A1:L40")).toBeNull();
+      expect(screen.getByLabelText("Sheet range").value).toBe("A1:F2");
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("retries only failed workbook ranges and keeps successful cells", async () => {
+    const sheets = [{
+      name: "Sheet1",
+      usedRange: "A1:X81",
+      rowCount: 81,
+      columnCount: 24,
+    }];
+    const { fetchMock, attempts } = makeHydrationFetch({
+      sheets,
+      failOnceKey: "Sheet1!M41:X80",
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    try {
+      render(
+        <WorkbookReviewWorkspace
+          projectId="project_1"
+          reviewState={largeReviewState(sheets)}
+          draftRegions={[]}
+          selectedDraftRegionIds={[]}
+          onDraftRegionsChange={() => {}}
+          onSelectedDraftRegionIdsChange={() => {}}
+        />,
+      );
+
+      expect(await screen.findByText("Sheet1 A1:L40")).toBeTruthy();
+      await screen.findByText("Sheet incomplete: 5/6 ranges");
+      expect(screen.getByText("Sheet1 A1:L40")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Retry failed ranges" }));
+      await screen.findByText("Sheet loaded: 6/6 ranges");
+
+      expect(attempts.get("Sheet1!M41:X80")).toBe(2);
+      expect(screen.getByText("Sheet1 A1:L40")).toBeTruthy();
     } finally {
       global.fetch = originalFetch;
     }

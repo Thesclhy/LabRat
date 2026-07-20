@@ -6148,6 +6148,28 @@ tbody tr:hover {
   width: 150px;
 }
 
+.workbook-sheet-load-status {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 190px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.workbook-sheet-load-status button {
+  min-height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #fff;
+  color: var(--text);
+  padding: 4px 8px;
+  font: inherit;
+}
+
 .workbook-sheet-tabs {
   display: flex;
   align-items: center;
