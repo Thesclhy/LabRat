@@ -350,7 +350,7 @@ git commit -m "Persist reviewed analysis plans"
 - Produces `AnalysisReviewWorkspace` with Source/Result/Chart tabs and a normal LabRat conversation rail.
 - Consumes SourceDocument range API and plan revision source rectangles.
 
-- [ ] **Step 1: Write failing API and component tests**
+- [x] **Step 1: Write failing API and component tests**
 
 ```jsx
 it("accepts only the visible plan revision", async () => {
@@ -369,17 +369,17 @@ it("sends modification feedback without accepting", async () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and confirm components are missing**
+- [x] **Step 2: Run tests and confirm components are missing**
 
 Run: `npm test -- src/data/analysisApi.test.js src/components/AnalysisReviewWorkspace.test.jsx src/components/AnalysisConversationCard.test.jsx`
 
 Expected: FAIL because the new modules do not exist.
 
-- [ ] **Step 3: Implement analysis API helpers**
+- [x] **Step 3: Implement analysis API helpers**
 
 Use the existing `serverApi` request/error conventions. Mutations pass idempotency through headers and keep result/source pagination bounded.
 
-- [ ] **Step 4: Implement the persistent split review**
+- [x] **Step 4: Implement the persistent split review**
 
 The left pane mounts the existing Excel-like workbook grid behavior with a source selector and labeled, non-contiguous red overlays. The right pane renders the request, processing summary, coverage, warnings, revision history, and expandable exact Python. The composer uses:
 
@@ -393,11 +393,11 @@ The left pane mounts the existing Excel-like workbook grid behavior with a sourc
 
 Use the repository's icon library only if already present; otherwise use an accessible text send control without introducing a dependency.
 
-- [ ] **Step 5: Wire AgentPanel analysis-thread responses**
+- [x] **Step 5: Wire AgentPanel analysis-thread responses**
 
 When AgentRun returns `analysisThread` and `currentPlanRevision`, render `AnalysisConversationCard` and open the review workspace. Preserve ordinary direct answers as normal messages. Remove any fallback that converts analysis requests into Browser actions.
 
-- [ ] **Step 6: Run frontend tests and build**
+- [x] **Step 6: Run frontend tests and build**
 
 Run:
 
@@ -408,7 +408,7 @@ npm run build
 
 Expected: plan review is usable at desktop and narrow widths; no calculation request occurs before plan acceptance.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/data/analysisApi.js src/data/analysisApi.test.js src/components/AnalysisReviewWorkspace.jsx src/components/AnalysisReviewWorkspace.test.jsx src/components/AnalysisConversationCard.jsx src/components/AnalysisConversationCard.test.jsx src/main.jsx src/styles.css src/components/ProjectDashboard.test.jsx

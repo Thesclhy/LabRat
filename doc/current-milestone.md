@@ -36,6 +36,7 @@ Implemented:
 - Conversational-analysis Task 1 is implemented: backend-only provider configuration, bounded intent routing, direct project answers, reviewed-analysis disposition for trends/calculations/charts, explicit-only Browser navigation, and removal of frontend provider credentials/direct calls.
 - Conversational-analysis Task 2 is implemented: accepted-active-head analysis schemas and selection hashes, unit-aware field catalog, source rectangle compression/limits, plan validation, and a project-scoped six-tool planning registry with no executor.
 - Conversational-analysis Task 3 is implemented: migration 012 plus memory/Postgres parity for AnalysisThreads, immutable AnalysisPlanRevisions, queued AnalysisRuns, reserved AnalysisResults/publication receipts, and atomic future result publication; project-scoped thread/revision/selection/accept routes; feedback-only backend redrafting; AgentRun creation of durable threads and first reviewable revisions; bounded state/list/selection responses; stale-head/hash rejection; and idempotent plan acceptance with no execution or ChartSpec side effect.
+- Conversational-analysis Task 4 is implemented: authenticated frontend analysis helpers; normal LabRat analysis-plan cards; a persistent Source/Result/Chart review workspace with Excel-backed non-contiguous red source rectangles; readable coverage, warnings, revision history, and exact Python; a split Accept/modify composer; immutable feedback revisions; exact-hash acceptance; current-revision recovery when reopening stale conversation cards; and responsive desktop/mobile layouts. Result and Chart remain disabled until later milestones.
 
 Not implemented yet:
 
@@ -44,11 +45,11 @@ Not implemented yet:
 
 ## Next Recommended Slice
 
-Continue `doc/plans/backend-conversational-analysis-chart-implementation-plan.md` with Task 4:
+Continue `doc/plans/backend-conversational-analysis-chart-implementation-plan.md` with Task 5:
 
-1. Add frontend analysis API helpers for the Task 3 routes.
-2. Render the plan and revision history in the normal LabRat conversation rail beside Excel source rectangles.
-3. Keep plan acceptance separate from execution/result acceptance; a queued run must not be presented as a calculated result.
+1. Add a versioned Python policy and executor adapter with production execution disabled by default.
+2. Execute only frozen accepted run packages in a bounded local non-production runner or configured hardened worker.
+3. Validate result shape, lineage, invariants, hashes, and limits before persisting a reviewable AnalysisResult.
 
 ## Guardrails
 
@@ -70,7 +71,7 @@ node --test backend/src/saas/routes/saasRoutes.postgres.test.js
 git diff --check
 ```
 
-Latest Task 3 evidence: `npm run codex:verify` passed with frontend 212/212, backend 192/192 plus 1 optional Postgres integration skip, and a successful production build with the existing Plotly chunk-size warning. Plan acceptance creates one queued run and zero ChartSpecs.
+Latest Task 4 evidence: targeted frontend analysis/API/workspace/AgentPanel coverage passed 51/51 and the production build succeeded with the existing Plotly chunk-size warning. Browser QA used only repository-owned synthetic workbook data plus a local deterministic provider stub; it confirmed analysis routing, two non-contiguous source rectangles, red-cell focus, feedback revision supersession, exact-plan acceptance/queueing, stale-card recovery, desktop split geometry, mobile stacked geometry, and no page-level horizontal overflow. No external provider received QA data.
 
 ## Open Risks
 

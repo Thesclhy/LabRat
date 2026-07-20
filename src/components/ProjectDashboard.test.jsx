@@ -542,6 +542,38 @@ describe("WorkbookReviewWorkspace", () => {
     }
   });
 
+  it("renders reviewed analysis inputs as red source cells without changing workbook draft styling", async () => {
+    const fetchMock = makeWorkbookReviewFetch();
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    try {
+      render(
+        <WorkbookReviewWorkspace
+          projectId="project_1"
+          reviewState={reviewState}
+          draftRegions={[{
+            draftRegionId: "analysis_rect_1",
+            clientRegionId: "analysis_rect_1",
+            sourceDocumentId: "source_doc_1",
+            sheetName: "Sheet1",
+            range: "A1:B1",
+            status: "reviewed_input",
+          }]}
+          activeDraftRegionId="analysis_rect_1"
+          onDraftRegionsChange={() => {}}
+        />,
+      );
+
+      const cell = await screen.findByLabelText("Cell A1");
+      await waitFor(() => {
+        expect(cell.closest(".rdg-cell")?.classList.contains("is-analysis-input")).toBe(true);
+        expect(cell.closest(".rdg-cell")?.classList.contains("is-draft")).toBe(false);
+      });
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   it("turns a clicked workbook suggestion into a focused local draft red box", async () => {
     const fetchMock = makeWorkbookReviewFetch();
     const originalFetch = global.fetch;
@@ -1564,6 +1596,79 @@ describe("AgentPanel", () => {
       expect(await screen.findByText("Project Catalyst Screening has 2 published experiments and 1 source document.")).toBeTruthy();
       expect(screen.queryByText("Open Experiment Browser")).toBeNull();
       expect(screen.queryByRole("button", { name: "Confirm agent action" })).toBeNull();
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("opens a reviewable analysis plan from the normal LabRat conversation without a Browser action", async () => {
+    const onOpenAnalysisReview = vi.fn();
+    const analysisThread = {
+      id: "analysis_thread_1",
+      projectId: "project_1",
+      status: "planning",
+      originalRequest: "Normalize selectivity and compare every experiment.",
+    };
+    const currentPlanRevision = {
+      id: "analysis_plan_revision_1",
+      analysisThreadId: analysisThread.id,
+      revision: 1,
+      status: "awaiting_review",
+      requestSummary: "Normalize Solid, Liquid, and Gas to 100%, then compare experiments.",
+      sourceRectangles: [
+        { sourceDocumentId: "source_1", sheetName: "Runs", range: "B2:D8" },
+      ],
+      planHash: "sha256_plan_1",
+      selectionHash: "sha256_selection_1",
+      dependencyHash: "sha256_dependency_1",
+    };
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      reply: "I drafted a reviewed analysis plan. Check the selected source cells and processing steps.",
+      analysisThread,
+      currentPlanRevision,
+      agentRun: {
+        id: "agent_run_analysis_1",
+        status: "waiting_for_user",
+        mode: "analysis_planning",
+        visibleSteps: [{ stepId: "step_analysis", label: "Drafted reviewable analysis plan", details: {} }],
+        actions: [],
+        warnings: [],
+      },
+    }, { status: 201 }));
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+
+    try {
+      render(
+        <AgentPanel
+          open
+          setOpen={() => {}}
+          blocks={[]}
+          setBlocks={() => {}}
+          references={[]}
+          selected={null}
+          selectedChartContext={null}
+          pendingChartAnalysis={null}
+          activeProjectId="project_1"
+          projectState={{ project: { id: "project_1", name: "Catalyst Screening" } }}
+          onProjectStateLoaded={() => {}}
+          onOpenAnalysisReview={onOpenAnalysisReview}
+        />,
+      );
+
+      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
+      fireEvent.change(promptInput, {
+        target: { value: "Normalize selectivity and compare every experiment." },
+      });
+      fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
+
+      expect(await screen.findByText("Analysis plan revision 1")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Review analysis plan" })).toBeTruthy();
+      expect(screen.queryByText("Open Experiment Browser")).toBeNull();
+      expect(onOpenAnalysisReview).toHaveBeenCalledWith({
+        thread: analysisThread,
+        revision: currentPlanRevision,
+      });
     } finally {
       global.fetch = originalFetch;
     }

@@ -12,6 +12,8 @@ import { ThinkingIndicator } from "./components/ThinkingIndicator.jsx";
 import { WorkbookReviewDock } from "./components/WorkbookReviewDock.jsx";
 import { DataPlanReviewPanel } from "./components/DataPlanReviewPanel.jsx";
 import { ExperimentBrowser } from "./components/ExperimentBrowser.jsx";
+import { AnalysisConversationCard } from "./components/AnalysisConversationCard.jsx";
+import { AnalysisReviewWorkspace } from "./components/AnalysisReviewWorkspace.jsx";
 import { Plot } from "./charts/Plot";
 import { ManuscriptCanvas } from "./components/ManuscriptCanvas";
 import { BLANK_PROJECT_SOURCE_NAME, blankTemplateLinks, isBlankDataMode } from "./data/appMode.js";
@@ -1150,9 +1152,20 @@ export function WorkbookReviewWorkspace({
       range: workbookSuggestionRange(region),
       sheetName: workbookSuggestionSheet(region),
     }));
-  const draftRegionsForSheet = asArray(draftRegions)
-    .filter((region) => region.sourceDocumentId === sourceDocument?.id)
-    .filter((region) => region.sheetName === activeSheetName);
+  const draftRegionsForSheet = useMemo(
+    () => asArray(draftRegions)
+      .filter((region) => region.sourceDocumentId === sourceDocument?.id)
+      .filter((region) => region.sheetName === activeSheetName),
+    [draftRegions, sourceDocument?.id, activeSheetName],
+  );
+  const reviewedAnalysisInputs = useMemo(
+    () => draftRegionsForSheet.filter((region) => region.status === "reviewed_input"),
+    [draftRegionsForSheet],
+  );
+  const editableDrafts = useMemo(
+    () => draftRegionsForSheet.filter((region) => region.status !== "reviewed_input"),
+    [draftRegionsForSheet],
+  );
   const displayBounds = parseExcelA1Range(activeRange) || excelRangeBoundsFromSheet(activeSheet);
   const visibleTileBounds = useMemo(() => workbookVisibleTileBounds(displayBounds, settledScrollState, {
     rowHeight: WORKBOOK_EXCEL_ROW_HEIGHT,
@@ -1581,7 +1594,8 @@ export function WorkbookReviewWorkspace({
       cellClass: (row) => {
         const classes = [];
         if (cellInAnyWorkbookRegion(row.__rowIndex, col, regionsForSheet)) classes.push("is-detected");
-        if (cellInAnyWorkbookRegion(row.__rowIndex, col, draftRegionsForSheet)) classes.push("is-draft");
+        if (cellInAnyWorkbookRegion(row.__rowIndex, col, reviewedAnalysisInputs)) classes.push("is-analysis-input");
+        if (cellInAnyWorkbookRegion(row.__rowIndex, col, editableDrafts)) classes.push("is-draft");
         if (dragSelection?.active) {
           const selectionBounds = normalizeExcelBounds({
             startRow: dragSelection.start.row,
@@ -1616,11 +1630,12 @@ export function WorkbookReviewWorkspace({
     })),
   ], [
     colIndexes,
-    draftRegionsForSheet,
     dragSelection,
+    editableDrafts,
     loadedTileBounds,
     rangeState.loading,
     regionsForSheet,
+    reviewedAnalysisInputs,
     visibleTileKey,
   ]);
 
@@ -1993,6 +2008,7 @@ export function AgentPanel({
   onWorkbookReviewReady,
   onWorkbookSuggestionSelect,
   onOpenExperimentBrowser,
+  onOpenAnalysisReview,
 }) {
   const chatHistoryKey = useMemo(
     () => agentChatHistoryKey(activeProjectId, projectState),
@@ -2526,12 +2542,22 @@ export function AgentPanel({
         const reply = response.reply || (actions.length
           ? "I prepared an AgentRun action. Review the trace and confirm before anything changes."
           : warningText || "I recorded an AgentRun, but I need more detail before preparing an action.");
+        const analysisThread = response.analysisThread || null;
+        const currentPlanRevision = response.currentPlanRevision || null;
         setHistory([...next, {
           role: "assistant",
           text: reply,
           agentRun,
           actions,
+          analysisThread,
+          currentPlanRevision,
         }]);
+        if (analysisThread?.id && currentPlanRevision?.id) {
+          onOpenAnalysisReview?.({
+            thread: analysisThread,
+            revision: currentPlanRevision,
+          });
+        }
       } catch (err) {
         try {
           const plan = await planServerProjectAgent(activeProjectId, {
@@ -2701,6 +2727,13 @@ export function AgentPanel({
               ))}
             </div>
           )}
+          {m.analysisThread?.id && (
+            <AnalysisConversationCard
+              thread={m.analysisThread}
+              revision={m.currentPlanRevision}
+              onOpen={onOpenAnalysisReview}
+            />
+          )}
           {asArray(m.actions).map((action) => (
             <AgentActionCard
               key={action.actionId}
@@ -2794,6 +2827,7 @@ function App() {
   const [chartSpecInsertRequest, setChartSpecInsertRequest] = useState(null);
   const [dirty, setDirty] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
+  const [analysisReviewState, setAnalysisReviewState] = useState(null);
   const [projectLoaded, setProjectLoaded] = useState(false);
   const [authState, setAuthState] = useState({ checking: true, loading: false, user: null, labs: [], error: "" });
   const [labs, setLabs] = useState([]);
@@ -2832,6 +2866,7 @@ function App() {
     setActiveWorkbookReviewDraftRegionId("");
     setWorkbookReviewFocusSelection(null);
     setBrowserSelectedExperimentIds([]);
+    setAnalysisReviewState(null);
   };
 
   const applyProjectShellState = (state) => {
@@ -3604,6 +3639,14 @@ function App() {
       setBackendChartProposalState((current) => ({ ...current, error: err.message || String(err) }));
     }
   };
+  const openAnalysisReview = ({ thread, revision }) => {
+    if (!thread?.id || !revision?.id) return;
+    setAnalysisReviewState({ thread, revision });
+    setAgentOpen(false);
+  };
+  const closeAnalysisReview = () => {
+    setAnalysisReviewState(null);
+  };
   if (authState.checking) {
     return (
       <main className="server-login">
@@ -3753,6 +3796,20 @@ function App() {
       )}
       {tab === "manuscript" && <ManuscriptCanvas blocks={blocks} setBlocks={setBlocks} staged={staged} setStaged={setStaged} references={references} chartTemplates={chartTemplates} setChartTemplates={setChartTemplates} chartSpecs={activeChartSpecsForProject(projectState)} pages={pages} setPages={setPages} canvasHeight={canvasHeight} setCanvasHeight={setCanvasHeight} pageOrientationPreference={pageOrientationPreference} setPageOrientationPreference={setPageOrientationPreference} chartSpecInsertRequest={chartSpecInsertRequest} onChartSpecInsertRequestHandled={clearChartSpecManuscriptInsertRequest} onSelectedChartContextChange={setSelectedChartContext} onRequestChartAnalysis={requestChartAnalysis} onSaveProject={save} />}
       {tab === "reference" && <ReferenceLibrary references={references} setReferences={setReferences} />}
+      {analysisReviewState?.thread?.id && (
+        <AnalysisReviewWorkspace
+          projectId={activeProjectId}
+          thread={analysisReviewState.thread}
+          revision={analysisReviewState.revision}
+          WorkbookWorkspaceComponent={WorkbookReviewWorkspace}
+          onClose={closeAnalysisReview}
+          onAccepted={() => {
+            getServerProjectState(activeProjectId)
+              .then(applyProjectWorkspaceRefresh)
+              .catch((error) => setSourceError(error?.message || String(error)));
+          }}
+        />
+      )}
       <DetailModal exp={selected} onClose={() => setSelected(null)} onStage={stage} />
       <ChartReviewModal
         open={chartReviewOpen}
@@ -3803,6 +3860,7 @@ function App() {
         onWorkbookReviewReady={handleWorkbookReviewReadyFromAgent}
         onWorkbookSuggestionSelect={handleWorkbookSuggestionSelect}
         onOpenExperimentBrowser={() => setTab("browser")}
+        onOpenAnalysisReview={openAnalysisReview}
       />
     </>
   );
