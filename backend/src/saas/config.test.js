@@ -27,3 +27,15 @@ test("loadSaasConfig enables explicit development seed accounts", () => {
   assert.equal(config.sessionSecret, "test-secret");
 });
 
+test("loadSaasConfig keeps provider credentials on the backend", () => {
+  const config = loadSaasConfig({
+    NODE_ENV: "test",
+    SESSION_SECRET: "test-secret",
+    ANTHROPIC_API_KEY: "server-only-secret",
+    ANTHROPIC_MODEL: "claude-test",
+  });
+
+  assert.equal(config.aiProvider, "anthropic");
+  assert.equal(config.anthropicApiKey, "server-only-secret");
+  assert.equal(config.anthropicModel, "claude-test");
+});

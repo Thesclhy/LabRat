@@ -2009,8 +2009,6 @@ export function AgentPanel({
       messages: typeof updater === "function" ? updater(current.messages) : updater,
     }));
   };
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem("labrat_blank_anthropic_key_v1") || "");
-  const [model, setModel] = useState(() => localStorage.getItem("labrat_blank_anthropic_model_v1") || "claude-sonnet-4-5");
   const [writingExamples, setWritingExamples] = useState(() => localStorage.getItem("labrat_blank_writing_examples_v1") || "");
   const [projectBackground, setProjectBackground] = useState(() => localStorage.getItem("labrat_blank_project_background_v1") || "");
   const [houseRules, setHouseRules] = useState(() => localStorage.getItem("labrat_blank_house_rules_v1") || "");
@@ -2026,12 +2024,15 @@ export function AgentPanel({
   const lastChatScrollTopRef = useRef(0);
   const fileActionInputRef = useRef(null);
   const [settingsDraft, setSettingsDraft] = useState({
-    apiKey,
-    model,
     writingExamples,
     projectBackground,
     houseRules,
   });
+  useEffect(() => {
+    ["key_v1", "model_v1"].forEach((suffix) => {
+      localStorage.removeItem(`labrat_blank_anthropic_${suffix}`);
+    });
+  }, []);
   useEffect(() => {
     setHistoryState((current) => {
       if (current.key === chatHistoryKey) return current;
@@ -2079,66 +2080,28 @@ export function AgentPanel({
     if (messagesRef.current) messagesRef.current.scrollTop = 0;
   };
   const openSettings = () => {
-    setSettingsDraft({ apiKey, model, writingExamples, projectBackground, houseRules });
+    setSettingsDraft({ writingExamples, projectBackground, houseRules });
     setSettingsOpen(true);
   };
   const cancelSettings = () => {
-    setSettingsDraft({ apiKey, model, writingExamples, projectBackground, houseRules });
+    setSettingsDraft({ writingExamples, projectBackground, houseRules });
     setSettingsOpen(false);
   };
   const saveSettings = () => {
     const next = {
-      apiKey: settingsDraft.apiKey,
-      model: settingsDraft.model || "claude-sonnet-4-5",
       writingExamples: settingsDraft.writingExamples,
       projectBackground: settingsDraft.projectBackground,
       houseRules: settingsDraft.houseRules,
     };
-    setApiKey(next.apiKey);
-    setModel(next.model);
     setWritingExamples(next.writingExamples);
     setProjectBackground(next.projectBackground);
     setHouseRules(next.houseRules);
-    localStorage.setItem("labrat_blank_anthropic_key_v1", next.apiKey);
-    localStorage.setItem("labrat_blank_anthropic_model_v1", next.model);
     localStorage.setItem("labrat_blank_writing_examples_v1", next.writingExamples);
     localStorage.setItem("labrat_blank_project_background_v1", next.projectBackground);
     localStorage.setItem("labrat_blank_house_rules_v1", next.houseRules);
     setSettingsOpen(false);
   };
   const updateSettingsDraft = (key, value) => setSettingsDraft((draft) => ({ ...draft, [key]: value }));
-  const context = () => ({
-    project: {
-      id: projectState?.project?.id || activeProjectId || null,
-      name: projectState?.project?.name || null,
-      profile: projectState?.projectProfile || projectState?.project?.projectProfile || {},
-    },
-    published_experiment_count: asArray(projectState?.experimentSnapshotHeads).length,
-    source_documents: asArray(projectState?.sourceDocuments).map((document) => ({
-      id: document.id,
-      filename: document.metadata?.filename || document.metadata?.workbookName || "",
-      status: document.status,
-    })),
-    approved_charts: activeChartSpecsForProject(projectState).map((chartSpec) => ({
-      id: chartSpec.id,
-      title: chartSpec.title,
-      chartType: chartSpec.chartType || chartSpec.spec?.chartType,
-    })),
-    selected: selected?.label,
-    selected_chart: selectedChartContext,
-    assistant_profile: {
-      writing_examples: writingExamples,
-      project_background: projectBackground,
-      house_rules: houseRules,
-    },
-    manuscript_blocks: blocks.map((b) => ({
-      kind: b.kind,
-      chartSpecId: b.chartSpecId,
-      title: b.chartSpecSnapshot?.title || b.opts?.title,
-      text: b.kind === "text" ? b.html : undefined,
-    })),
-    references: references.map((r) => ({ name: r.name, kind: r.kind, note: r.note })),
-  });
   const serverAgentEnabled = Boolean(activeProjectId);
   const updateActionInHistory = (actionId, patch) => {
     setHistory((current) => current.map((message) => {
@@ -2498,48 +2461,6 @@ export function AgentPanel({
     }
     setPendingSpreadsheetFile(file);
   };
-  const appendStreamDelta = (streamId, delta) => {
-    setHistory((current) => current.map((message) => (
-      message.streamId === streamId ? { ...message, text: `${message.text || ""}${delta}` } : message
-    )));
-  };
-  const finishStreamMessage = (streamId, patch = {}) => {
-    setHistory((current) => current.map((message) => {
-      if (message.streamId !== streamId) return message;
-      const { streaming, streamId: _streamId, ...rest } = message;
-      return { ...rest, ...patch };
-    }));
-  };
-  const readAnthropicStream = async (body, onText) => {
-    if (!body) throw new Error("Streaming response body is unavailable.");
-    const reader = body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    const handleEvent = (rawEvent) => {
-      const data = rawEvent
-        .split(/\r?\n/)
-        .filter((line) => line.startsWith("data:"))
-        .map((line) => line.slice(5).trimStart())
-        .join("\n");
-      if (!data || data === "[DONE]") return;
-      const event = JSON.parse(data);
-      if (event.type === "content_block_delta" && event.delta?.type === "text_delta") {
-        onText(event.delta.text || "");
-      }
-      if (event.type === "error") {
-        throw new Error(event.error?.message || "Streaming request failed.");
-      }
-    };
-    while (true) {
-      const { done, value } = await reader.read();
-      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-      const parts = buffer.split(/\r?\n\r?\n/);
-      buffer = parts.pop() || "";
-      parts.forEach((part) => part.trim() && handleEvent(part));
-      if (done) break;
-    }
-    if (buffer.trim()) handleEvent(buffer);
-  };
   const send = async (prefill, meta = null) => {
     const text = (prefill ?? input).trim();
     if (!text || busy) return;
@@ -2577,7 +2498,7 @@ export function AgentPanel({
       }
       return;
     }
-    if (serverAgentEnabled && !meta?.source) {
+    if (serverAgentEnabled) {
       setBusy(true);
       try {
         const response = await createServerAgentRun(activeProjectId, {
@@ -2590,6 +2511,13 @@ export function AgentPanel({
             tab: selectedChartContext ? "manuscript_chart" : "project",
             selectedExperimentLabel: selected?.label || "",
             selectedChartTitle: selectedChartContext?.title || "",
+            selectedChartBlockId: selectedChartContext?.blockId || "",
+            selectedChartView: selectedChartContext?.chartView || null,
+            assistantProfile: {
+              writingExamples,
+              projectBackground,
+              houseRules,
+            },
           },
         });
         const agentRun = response.agentRun || {};
@@ -2616,6 +2544,13 @@ export function AgentPanel({
               tab: selectedChartContext ? "manuscript_chart" : "project",
               selectedExperimentLabel: selected?.label || "",
               selectedChartTitle: selectedChartContext?.title || "",
+              selectedChartBlockId: selectedChartContext?.blockId || "",
+              selectedChartView: selectedChartContext?.chartView || null,
+              assistantProfile: {
+                writingExamples,
+                projectBackground,
+                houseRules,
+              },
             },
           });
           const actions = asArray(plan.actions);
@@ -2632,38 +2567,10 @@ export function AgentPanel({
       }
       return;
     }
-    if (!apiKey) {
-      setHistory([...next, { role: "assistant", text: "Add an Anthropic API key in settings to enable live answers. I can already see the selected chart context locally." }]);
-      return;
-    }
-    const streamId = uid();
-    let streamedText = "";
-    setHistory([...next, { role: "assistant", text: "", meta, streaming: true, streamId }]);
-    setBusy(true);
-    try {
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-        body: JSON.stringify({
-          model,
-          max_tokens: 1200,
-          stream: true,
-          system: `You are LabRat, a concise research assistant for HDPE hydroconversion over Ru/TiO2. Use the JSON context and experiment CSV. Do not invent mechanisms or values. Match the user's saved writing voice when examples are provided, use the project background for scope, and obey house rules. Context:\n${JSON.stringify(context())}`,
-          messages: next.map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.text })),
-        }),
-      });
-      if (!resp.ok) throw new Error(await resp.text());
-      await readAnthropicStream(resp.body, (delta) => {
-        streamedText += delta;
-        appendStreamDelta(streamId, delta);
-      });
-      finishStreamMessage(streamId, { text: streamedText || "No text response.", meta });
-    } catch (err) {
-      const failure = `Request failed: ${err.message}`;
-      finishStreamMessage(streamId, { text: streamedText ? `${streamedText}\n\n${failure}` : failure, meta });
-    } finally {
-      setBusy(false);
-    }
+    setHistory([...next, {
+      role: "assistant",
+      text: "Select a server project before asking LabRat. Model access is configured on the backend.",
+    }]);
   };
   const selectedChartMeta = selectedChartContext
     ? { source: "chart", chartBlockId: selectedChartContext.blockId, chartBox: selectedChartContext.block }
@@ -2838,25 +2745,6 @@ export function AgentPanel({
           <button type="button" aria-label="Close settings" onClick={cancelSettings}>&times;</button>
         </div>
         <div className="settings-body">
-          <section className="settings-section">
-            <h3>API</h3>
-            <label className="settings-field">
-              <span>Anthropic API key</span>
-              <input type="password" value={settingsDraft.apiKey} onChange={(e) => updateSettingsDraft("apiKey", e.target.value)} />
-            </label>
-            <p className="settings-help">Get a key at <a href="https://console.anthropic.com/" target="_blank" rel="noreferrer">console.anthropic.com</a> - API Keys. Stored only in your browser's local storage. New accounts get free credits.</p>
-            <label className="settings-field">
-              <span>Model</span>
-              <select value={settingsDraft.model} onChange={(e) => updateSettingsDraft("model", e.target.value)}>
-                {settingsDraft.model && !["claude-sonnet-4-5", "claude-opus-4-1", "claude-haiku-3-5"].includes(settingsDraft.model) && (
-                  <option value={settingsDraft.model}>{settingsDraft.model}</option>
-                )}
-                <option value="claude-sonnet-4-5">Claude Sonnet 4.5 (recommended)</option>
-                <option value="claude-opus-4-1">Claude Opus 4.1</option>
-                <option value="claude-haiku-3-5">Claude Haiku 3.5</option>
-              </select>
-            </label>
-          </section>
           <section className="settings-section">
             <h3>Voice &amp; Context</h3>
             <p className="settings-help">Anything you put here is included in every chat. The agent picks up your writing voice from the examples, learns your project from the background, and obeys the house rules.</p>

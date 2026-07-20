@@ -24,6 +24,9 @@ export function loadSaasConfig(env = process.env) {
   return {
     nodeEnv,
     databaseUrl: env.DATABASE_URL || "",
+    aiProvider: env.LABRAT_AI_PROVIDER || "anthropic",
+    anthropicApiKey: env.ANTHROPIC_API_KEY || "",
+    anthropicModel: env.ANTHROPIC_MODEL || "claude-sonnet-4-5",
     sessionSecret,
     seedDevAccounts,
     sessionCookieName: env.LABRAT_SESSION_COOKIE || "labrat_session",
@@ -32,4 +35,3 @@ export function loadSaasConfig(env = process.env) {
     secureCookies: nodeEnv === "production" || boolFromEnv(env.LABRAT_SECURE_COOKIES),
   };
 }
-

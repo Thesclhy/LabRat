@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { deterministicAnalysisIntent } from "./analysisIntentRouter.js";
 
 export const PROJECT_AGENT_PLAN_VERSION = "labrat.agentPlan.v1";
 
@@ -163,10 +164,6 @@ function projectSummaryReply({
   ].join(" ");
 }
 
-function chartPrompt(message) {
-  return String(message || "").replace(/\b(create|make|draft|plot|show|generate|please)\b/gi, " ").replace(/\s+/g, " ").trim() || String(message || "");
-}
-
 export function createProjectAgentPlan({
   project,
   projectProfile = {},
@@ -187,7 +184,9 @@ export function createProjectAgentPlan({
   const actions = [];
   let intent = "action_plan";
   let reply = "";
+  let analysisRequest = null;
   const projectSummaryRequest = isProjectSummaryRequest(text);
+  const routedIntent = deterministicAnalysisIntent({ message: text });
   const chartRequest = /\b(plot|chart|figure|graph|vs|versus)\b/.test(normalized);
   const chartSpecRequest = /\b(create|save|make)\b/.test(normalized)
     && /\b(chart spec|chartspec|chart specification)\b/.test(normalized);
@@ -220,21 +219,16 @@ export function createProjectAgentPlan({
         severity: "warning",
       }],
     }));
-  } else if (isExplicitChartActionRequest(text)) {
-    actions.push(action({
-      projectId,
+  } else if (routedIntent?.disposition === "analysis_thread" || isExplicitChartActionRequest(text) || chartRequest) {
+    intent = "analysis_thread";
+    analysisRequest = {
+      schemaVersion: "labrat.analysisRequest.v1",
+      intent: routedIntent?.intent || "create_analysis_chart",
       message: text,
-      type: "interpret_chart",
-      label: "Review source-backed chart request",
-      description: "Resolve explicit workbook source evidence and keep extracted values reviewable before chart creation.",
-      params: { prompt: chartPrompt(text) },
-      warnings: [{
-        code: "explicit_source_evidence_required",
-        message: "Accepted DataSnapshot-to-chart generation is deferred; select an explicit workbook sheet and range for charting.",
-        severity: "info",
-      }],
-    }));
-  } else if (projectSummaryRequest) {
+      selectedContext,
+    };
+    reply = "I will prepare a reviewed analysis plan using accepted experiment data. No calculation will run until you accept the exact selection and processing plan.";
+  } else if (projectSummaryRequest || ["project_purpose", "project_overview"].includes(routedIntent?.intent)) {
     intent = "project_summary";
     reply = projectSummaryReply({
       project,
@@ -245,21 +239,7 @@ export function createProjectAgentPlan({
       manuscripts,
       message: text,
     });
-  } else if (chartRequest) {
-    actions.push(action({
-      projectId,
-      message: text,
-      type: "interpret_chart",
-      label: "Review source-backed chart request",
-      description: "Resolve explicit workbook source evidence and keep extracted values reviewable before chart creation.",
-      params: { prompt: chartPrompt(text) },
-      warnings: [{
-        code: "explicit_source_evidence_required",
-        message: "Accepted DataSnapshot-to-chart generation is deferred; select an explicit workbook sheet and range for charting.",
-        severity: "info",
-      }],
-    }));
-  } else {
+  } else if (routedIntent?.actionType === "open_experiment_browser") {
     actions.push(action({
       projectId,
       message: text,
@@ -268,7 +248,7 @@ export function createProjectAgentPlan({
       description: "Browse accepted experiment snapshots, compare selected records, and inspect source-backed details.",
       requiresReview: false,
       params: {
-        search: text,
+        search: text.replace(/\b(?:open|go to|show)\b.*?\bexperiment browser\b/i, "").trim(),
         targetExperimentAliases,
       },
       warnings: asArray(experimentSnapshotHeads).length ? [] : [{
@@ -277,13 +257,20 @@ export function createProjectAgentPlan({
         severity: "info",
       }],
     }));
+  } else {
+    intent = "clarification";
+    reply = routedIntent?.clarification
+      || "Tell me which project question, experiment scope, field, calculation, chart, or navigation action you need.";
   }
 
   return {
     schemaVersion: PROJECT_AGENT_PLAN_VERSION,
     intent,
-    reply: reply || `I prepared an action for: ${actions[0].label}. Review the card before anything changes.`,
+    reply: reply || (actions.length
+      ? `I prepared an action for: ${actions[0].label}. Review the card before anything changes.`
+      : "I need more detail before preparing a project action."),
     actions,
+    analysisRequest,
     contextSummary: {
       projectId,
       projectName: project?.name || "",

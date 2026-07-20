@@ -58,6 +58,7 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 
 - **Auth/Admin**: users, sessions, labs, memberships, roles, seed-account safety.
 - **Project State**: bounded summaries for files, evidence, understandings, accepted snapshots, views, source-backed output, manuscripts, and AgentRuns.
+- **Backend Model Provider / Intent Router**: server-secret provider access, structured output validation, deterministic command priority, direct project answers, and reviewed-analysis routing without a Browser fallback.
 - **Workbook Indexer**: conservative workbook scan and SourceDocument/SourceRegion/cell-index persistence.
 - **Workbook Review Engine**: red-box revisions, bounded evidence inspection, structured interpretation, validation blockers, and accepted WorkbookUnderstanding.
 - **Evidence Retrieval Agent**: accepted-understanding-only usable results plus explicitly non-usable unconfirmed suggestions.
@@ -110,6 +111,8 @@ Current ChartSpecs require `origin: source_extract`, exact source refs, and immu
 ## AI Boundary
 
 AI may classify, rank, explain, and draft bounded reviewable patches. Deterministic backend code owns evidence reads, validation, identity checks, unit/value parsing, hashes, publication, and authorization. Scientific mutations require explicit user confirmation.
+
+The frontend does not hold provider credentials or call provider APIs. AgentPanel submits project-scoped messages and compact selected context to the authenticated backend.
 
 ## Retired Architecture
 

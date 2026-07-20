@@ -13,8 +13,15 @@ export function aiUnavailableWarning() {
   };
 }
 
-export async function requestAnthropicJson({ system, prompt, maxTokens = 1200, env = process.env, fetchImpl = globalThis.fetch } = {}) {
-  const config = anthropicConfig(env);
+export async function requestAnthropicJson({
+  system,
+  prompt,
+  maxTokens = 1200,
+  env = process.env,
+  config: explicitConfig = null,
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  const config = explicitConfig || anthropicConfig(env);
   if (!config.apiKey) {
     return { ok: false, warning: aiUnavailableWarning() };
   }
@@ -66,7 +73,14 @@ export async function requestAnthropicJson({ system, prompt, maxTokens = 1200, e
         },
       };
     }
-    return { ok: true, text };
+    return {
+      ok: true,
+      text,
+      usage: {
+        inputTokens: Number(body.usage?.input_tokens) || 0,
+        outputTokens: Number(body.usage?.output_tokens) || 0,
+      },
+    };
   } catch {
     return {
       ok: false,

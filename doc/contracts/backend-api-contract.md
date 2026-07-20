@@ -1,7 +1,7 @@
 # Backend API Contract
 
 Status: active compatibility note
-Last reviewed: 2026-07-16
+Last reviewed: 2026-07-20
 
 The backend is server-first. The complete implemented project API is defined in `doc/contracts/saas-api-contract-v0.md` and routed by `backend/src/saas/routes/saasRoutes.js`.
 
@@ -11,6 +11,7 @@ The HTTP service exposes:
 
 - `GET /health`
 - authenticated SaaS/project routes under `/api/auth`, `/api/admin`, `/api/labs`, `/api/projects`, `/api/source-documents`, `/api/source-regions`, `/api/workbook-review-sessions`, `/api/source-extract-proposals`, `/api/agent-runs`, `/api/chart-proposal-sets`, and `/api/manuscripts`
+- backend-only model access configured by `LABRAT_AI_PROVIDER`, `ANTHROPIC_API_KEY`, and `ANTHROPIC_MODEL`
 
 Unknown or retired routes return `404`.
 
@@ -70,6 +71,7 @@ Status code guidance:
 - Experiment Browser rows are derived only from active experiment snapshot heads.
 - Durable charts currently require source-backed immutable snapshots.
 - Manuscript blocks store chart snapshots and do not recalculate scientific values.
+- LabRat intent routing directly answers resolvable project questions, sends derived analysis/chart requests to reviewed analysis planning, and opens Experiment Browser only for explicit navigation.
 
 ## Verification
 

@@ -2,6 +2,7 @@ import { encodeRange } from "../import/utils/excelAddress.js";
 import { parseChartEvidenceIntent } from "../charts/services/chartEvidenceIntent.js";
 import { createSourceExtractProposalFromEvidence, resolveChartEvidenceIntent } from "./chartEvidenceResolver.js";
 import { createProjectAgentPlan } from "./projectAgentPlanner.js";
+import { routeAnalysisIntent } from "./analysisIntentRouter.js";
 import { buildSourceExtractPreview } from "./sourceExtracts.js";
 import { sha256Hex } from "./ids.js";
 
@@ -88,6 +89,18 @@ function deterministicUsage() {
     model: null,
     inputTokens: 0,
     outputTokens: 0,
+    estimatedCostUsd: 0,
+  };
+}
+
+function routedUsage(route) {
+  const routeMetadata = route?.metadata || {};
+  return {
+    provider: routeMetadata.provider || "deterministic",
+    model: routeMetadata.model || null,
+    inputTokens: Number(routeMetadata.usage?.inputTokens) || 0,
+    outputTokens: Number(routeMetadata.usage?.outputTokens) || 0,
+    latencyMs: Number(routeMetadata.latencyMs) || 0,
     estimatedCostUsd: 0,
   };
 }
@@ -385,6 +398,18 @@ export async function buildAgentRunDraft({
     };
   }
 
+  const route = await routeAnalysisIntent({
+    message: text,
+    selectedContext,
+    projectContext: {
+      projectId: project?.id || null,
+      publishedExperimentCount: asArray(experimentSnapshotHeads).length,
+      sourceDocumentCount: asArray(sourceDocuments).length,
+      chartSpecCount: asArray(chartSpecs).length,
+      manuscriptCount: asArray(manuscripts).length,
+    },
+    modelProvider: context?.modelProvider || null,
+  });
   const plan = createProjectAgentPlan({
     project,
     projectProfile,
@@ -406,7 +431,40 @@ export async function buildAgentRunDraft({
       visibleSteps: [visibleStep("Summarized project state", plan.contextSummary)],
       toolTrace: [],
       actions: [],
-      usage: deterministicUsage(),
+      usage: routedUsage(route),
+      warnings: asArray(plan.warnings),
+    };
+  }
+  if (route.disposition === "analysis_thread" || plan.intent === "analysis_thread") {
+    return {
+      mode: "analysis_planning",
+      status: "waiting_for_user",
+      reply: plan.reply || "I will prepare a reviewed analysis plan using accepted experiment data.",
+      visibleSteps: [visibleStep("Routed request to reviewed analysis", {
+        intent: route.intent,
+        publishedExperimentCount: asArray(experimentSnapshotHeads).length,
+      })],
+      toolTrace: [],
+      actions: [],
+      usage: routedUsage(route),
+      warnings: asArray(plan.warnings),
+      analysisRequest: plan.analysisRequest || {
+        schemaVersion: "labrat.analysisRequest.v1",
+        intent: route.intent,
+        message: text,
+        selectedContext,
+      },
+    };
+  }
+  if (route.disposition === "clarification" && !asArray(plan.actions).length) {
+    return {
+      mode: "clarification",
+      status: "completed",
+      reply: route.clarification || plan.reply,
+      visibleSteps: [visibleStep("Requested analysis clarification", { intent: route.intent })],
+      toolTrace: [],
+      actions: [],
+      usage: routedUsage(route),
       warnings: asArray(plan.warnings),
     };
   }
@@ -417,7 +475,7 @@ export async function buildAgentRunDraft({
     visibleSteps: [visibleStep("Created project action plan", { actionCount: asArray(plan.actions).length })],
     toolTrace: [],
     actions: asArray(plan.actions),
-    usage: deterministicUsage(),
+    usage: routedUsage(route),
     warnings: asArray(plan.warnings),
   };
 }

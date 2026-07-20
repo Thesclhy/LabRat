@@ -236,7 +236,9 @@ POST /api/agent-runs/:agentRunId/confirm
 POST /api/agent-runs/:agentRunId/cancel
 ```
 
-Current planner actions are review-gated workbook upload, Experiment Browser navigation/search/compare, and source-extract proposal creation. Project-content questions may instead complete as a read-only `project_summary` AgentRun with no actions; `POST /api/projects/:projectId/agent/runs` returns its user-facing text in the top-level `reply` field. Planning records visible workflow steps, not hidden chain-of-thought, and must not create accepted data or manuscript placements.
+Agent requests pass through the backend intent router. Explicit workbook upload, Experiment Browser navigation, Manuscript commands, and source-extract evidence requests retain deterministic priority. Project-purpose and project-overview questions may complete as a read-only `project_summary` AgentRun with no actions. Trends, comparisons, derived calculations, statistics, and accepted-data chart requests return `mode: "analysis_planning"` with no Browser action; persisted AnalysisThread creation is introduced by the next analysis-workflow contract slice. Unknown requests return clarification instead of using Experiment Browser as a fallback.
+
+`POST /api/projects/:projectId/agent/runs` returns user-facing text in the top-level `reply` field. Provider configuration and credentials are backend-only. AgentRun usage stores provider, model, token, and latency metadata while planning records visible workflow steps rather than hidden chain-of-thought.
 
 ## Source-Backed Charts
 

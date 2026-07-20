@@ -1,7 +1,7 @@
 # AI Boundaries
 
 Status: active
-Last reviewed: 2026-07-16
+Last reviewed: 2026-07-20
 
 LabRat uses AI as a proposal and workflow layer. Authorization, bounded evidence reads, schema validation, deterministic execution, hashing, and persistence remain backend responsibilities.
 
@@ -15,6 +15,7 @@ LabRat uses AI as a proposal and workflow layer. Authorization, bounded evidence
 - resolve an explicit source-chart request into reviewable source extract/chart proposals
 - explain Experiment Browser fields, comparison choices, source refs, and stale-review errors
 - draft captions or manuscript text from user-approved evidence
+- classify bounded project messages into the supported intent/disposition schema
 
 ## AI Must Not
 
@@ -91,7 +92,9 @@ They must not persist hidden reasoning. Deterministic runs record the determinis
 
 ## Provider Safety
 
-The existing direct browser-to-Anthropic key path is development-only and must not be presented as production-safe. Production model access should be server-side, permissioned, auditable, rate-limited, and configured without exposing provider secrets to the browser.
+Provider access is backend-only. The frontend contains no provider-key/model settings and never calls a provider endpoint directly. Backend configuration supplies provider secrets, while the browser receives only user-facing replies, visible workflow artifacts, warnings, and bounded provider/model/usage/latency metadata.
+
+The backend intent router applies deterministic priority to explicit upload, navigation, and source-evidence commands. Bounded model classification may resolve ambiguous messages only into the supported intent/disposition enum. Invalid model output becomes clarification and cannot create an Experiment Browser fallback action.
 
 ## Retired Inputs
 

@@ -1325,6 +1325,30 @@ describe("AgentPanel", () => {
     clearAgentChatHistoryStorage();
   });
 
+  it("does not expose browser provider credentials in LabRat settings", () => {
+    render(
+      <AgentPanel
+        open
+        setOpen={() => {}}
+        blocks={[]}
+        setBlocks={() => {}}
+        references={[]}
+        selected={null}
+        selectedChartContext={null}
+        pendingChartAnalysis={null}
+        activeProjectId="project_1"
+        projectState={{ project: { id: "project_1", name: "Catalyst Screening" }, fileObjects: [] }}
+        onProjectStateLoaded={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+
+    expect(screen.queryByText("Anthropic API key")).toBeNull();
+    expect(screen.queryByText("Model")).toBeNull();
+    expect(document.querySelector('input[type="password"]')).toBeNull();
+  });
+
   it("keeps chat history isolated per server project and ignores legacy global history", async () => {
     localStorage.setItem("labrat_blank_chat_history_v1_react", JSON.stringify([
       { role: "assistant", text: "Legacy shared answer" },
@@ -1377,7 +1401,6 @@ describe("AgentPanel", () => {
       { role: "user", text: "Follow-up question" },
       { role: "assistant", text: "Follow-up answer" },
     ]));
-    localStorage.removeItem("labrat_blank_anthropic_key_v1");
     const frameCallbacks = [];
     const originalRequestAnimationFrame = window.requestAnimationFrame;
     const originalCancelAnimationFrame = window.cancelAnimationFrame;
@@ -1425,7 +1448,7 @@ describe("AgentPanel", () => {
       fireEvent.change(promptInput, { target: { value: "Will this preserve my place?" } });
       fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
 
-      await waitFor(() => expect(screen.getByText(/Add an Anthropic API key/)).toBeTruthy());
+      await waitFor(() => expect(screen.getByText(/Select a server project before asking LabRat/)).toBeTruthy());
       expect(messages.scrollTop).toBe(240);
 
       fireEvent.click(screen.getByRole("button", { name: "Reset chat" }));
@@ -1434,7 +1457,6 @@ describe("AgentPanel", () => {
       window.requestAnimationFrame = originalRequestAnimationFrame;
       window.cancelAnimationFrame = originalCancelAnimationFrame;
       localStorage.removeItem("labrat_blank_chat_history_v2_project_project_1");
-      localStorage.removeItem("labrat_blank_anthropic_key_v1");
     }
   });
 

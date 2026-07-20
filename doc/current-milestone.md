@@ -33,6 +33,7 @@ Implemented:
 - Milestone 7 legacy retirement and golden workflow: removed aggregate dataset/mapping/analysis/observation stores, routes, helpers, and UI contracts; removed unscoped normalize/semantic-map/generic chart endpoints; added migration 011; made ChartSpec validation/rendering source-only; added golden workbook upload-review-draft-publish-reload-Browser coverage; retained source-backed chart/Manuscript workflows; accepted natural-language documentation exclusion; and stabilized local in-memory development sessions by running the backend without file-watch restarts.
 - Post-milestone regression hardening: direct project-content summaries no longer create confirmation-gated Browser actions while explicit upload/chart intent keeps priority; accepted review cards report accepted/published state and open the selected pending/accepted session; Ctrl/Meta workbook range selection supports additive/toggle behavior; Experiment Browser uses one horizontal scroll owner; and grouped two-row workbook headers preserve all child fields plus parent/leaf header provenance through publish and Browser projection.
 - The next architecture has been approved conversationally and written for review in `doc/plans/backend-conversational-analysis-chart-design.md`: backend intent routing, plan/revision review against Excel red boxes, exact accepted Python in a LabRat-managed sandbox, validated result review, atomic AnalysisResult/ChartSpec publication, and placement-local Canvas trace visibility.
+- Conversational-analysis Task 1 is implemented: backend-only provider configuration, bounded intent routing, direct project answers, reviewed-analysis disposition for trends/calculations/charts, explicit-only Browser navigation, and removal of frontend provider credentials/direct calls.
 
 Not implemented yet:
 
@@ -43,10 +44,9 @@ Not implemented yet:
 
 Execute `doc/plans/backend-conversational-analysis-chart-implementation-plan.md` in coherent tested tasks. The first implementation milestone should:
 
-1. Move all provider access to the backend and remove the frontend provider-key path.
-2. Add intent routing that directly answers resolvable read-only questions instead of defaulting to Browser actions.
-3. Establish the framework-independent analysis tool registry and AnalysisThread/plan-revision contracts without executing calculations yet.
-4. Keep DataSnapshot-backed chart requests explicitly unsupported until each reviewed milestone reaches its contract boundary.
+1. Establish accepted-snapshot analysis schemas, selection/source-rectangle resolution, and the framework-independent planning tool registry.
+2. Add AnalysisThread/plan-revision persistence and routes without executing calculations yet.
+3. Keep DataSnapshot-backed chart publication explicitly unsupported until each reviewed milestone reaches its contract boundary.
 
 ## Guardrails
 

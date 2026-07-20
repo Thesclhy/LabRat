@@ -1461,7 +1461,8 @@ test("agent planner uses one workbook upload action and no legacy upload/supplem
   });
   assert.equal(chart.status, 200);
   const chartBody = await chart.json();
-  assert.equal(chartBody.actions[0].type, "interpret_chart");
+  assert.equal(chartBody.intent, "analysis_thread");
+  assert.deepEqual(chartBody.actions, []);
 
   const compare = await jsonFetch(`/api/projects/${project.id}/agent/plan`, {
     method: "POST",
@@ -1469,7 +1470,8 @@ test("agent planner uses one workbook upload action and no legacy upload/supplem
   });
   assert.equal(compare.status, 200);
   const compareBody = await compare.json();
-  assert.equal(compareBody.actions[0].type, "open_experiment_browser");
+  assert.equal(compareBody.intent, "analysis_thread");
+  assert.deepEqual(compareBody.actions, []);
   assert.equal(compareBody.contextSummary.currentDatasetCommitId, undefined);
 });
 
@@ -1485,6 +1487,49 @@ test("project-content AgentRun returns a direct read-only answer without confirm
   assert.equal(body.agentRun.status, "completed");
   assert.deepEqual(body.agentRun.actions, []);
   assert.match(body.reply, /Agent Project Summary/);
+});
+
+test("experiment trend AgentRun enters reviewed analysis instead of opening Browser", async () => {
+  const project = await createProject("AgentRun Analysis Project");
+  const response = await jsonFetch(`/api/projects/${project.id}/agent/runs`, {
+    method: "POST",
+    body: {
+      message: "Give me a one-paragraph overview of the trends across all experiments.",
+      conversation: [],
+      selectedContext: {},
+    },
+  });
+  assert.equal(response.status, 201);
+  const body = await response.json();
+  assert.equal(body.agentRun.mode, "analysis_planning");
+  assert.equal(body.agentRun.status, "waiting_for_user");
+  assert.deepEqual(body.agentRun.actions, []);
+  assert.equal(body.reply.includes("Open Experiment Browser"), false);
+  assert.match(body.reply, /reviewed analysis plan/i);
+});
+
+test("experiment-purpose AgentRun answers directly without a confirmation card", async () => {
+  const project = await createProject("Purpose Project");
+  await jsonFetch(`/api/projects/${project.id}/profile`, {
+    method: "PATCH",
+    body: {
+      researchGoal: "Determine how reaction conditions affect selectivity.",
+    },
+  });
+  const response = await jsonFetch(`/api/projects/${project.id}/agent/runs`, {
+    method: "POST",
+    body: {
+      message: "What is this experiment for?",
+      conversation: [],
+      selectedContext: {},
+    },
+  });
+  assert.equal(response.status, 201);
+  const body = await response.json();
+  assert.equal(body.agentRun.mode, "project_summary");
+  assert.equal(body.agentRun.status, "completed");
+  assert.deepEqual(body.agentRun.actions, []);
+  assert.match(body.reply, /Determine how reaction conditions affect selectivity/);
 });
 
 test("source extract AgentRun remains review-gated and confirmable", async () => {

@@ -47,7 +47,7 @@
 - Produces: `createBackendModelProvider({ config, fetchImpl })` with `classifyIntent(input)`, `draftAnalysisPlan(input)`, and `answerReadOnly(input)`.
 - Consumes: existing deterministic project summary and explicit upload/navigation action rules.
 
-- [ ] **Step 1: Write failing intent-router and provider tests**
+- [x] **Step 1: Write failing intent-router and provider tests**
 
 ```js
 test("routes derived trend requests into reviewed analysis", async () => {
@@ -71,13 +71,13 @@ test("keeps explicit navigation deterministic", async () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and confirm the missing-module failure**
+- [x] **Step 2: Run tests and confirm the missing-module failure**
 
 Run: `node --test backend/src/saas/analysisIntentRouter.test.js backend/src/saas/backendModelProvider.test.js`
 
 Expected: FAIL because the new modules do not exist.
 
-- [ ] **Step 3: Implement bounded routing and provider structured-output validation**
+- [x] **Step 3: Implement bounded routing and provider structured-output validation**
 
 ```js
 export const ANALYSIS_INTENTS = new Set([
@@ -103,7 +103,7 @@ export async function routeAnalysisIntent(input = {}) {
 
 The deterministic router must classify explicit upload, Browser navigation, Manuscript commands, project purpose, explicit experiment lookup, chart requests, derived calculations, and ambiguity. Provider output outside the enum becomes `clarification`, never `open_experiment_browser`.
 
-- [ ] **Step 4: Route AgentRun creation through the new router**
+- [x] **Step 4: Route AgentRun creation through the new router**
 
 Update `buildAgentRunDraft` so:
 
@@ -119,11 +119,11 @@ return existingConfirmedActionDraft({ route });
 
 Persist provider, model, latency, usage, and fallback metadata in `AgentRun.usage`; do not persist reasoning text.
 
-- [ ] **Step 5: Remove browser Anthropic credentials and direct provider calls**
+- [x] **Step 5: Remove browser Anthropic credentials and direct provider calls**
 
 Delete `apiKey`, `model`, stream parsing, `anthropic-dangerous-direct-browser-access`, API settings fields, and the direct `fetch("https://api.anthropic.com/v1/messages")` branch from `AgentPanel`. Keep writing examples, project background, and house rules as project-scoped context sent to the backend.
 
-- [ ] **Step 6: Run targeted backend and frontend tests**
+- [x] **Step 6: Run targeted backend and frontend tests**
 
 Run:
 
@@ -134,7 +134,7 @@ npm test -- src/components/ProjectDashboard.test.jsx
 
 Expected: direct questions have no Browser action; chart/derived requests return an analysis-thread disposition; no frontend Anthropic-key prompt remains.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/src/ai/anthropic.js backend/src/saas/analysisIntentRouter.js backend/src/saas/analysisIntentRouter.test.js backend/src/saas/backendModelProvider.js backend/src/saas/backendModelProvider.test.js backend/src/saas/config.js backend/src/saas/config.test.js backend/src/saas/projectAgentPlanner.js backend/src/saas/projectAgentPlanner.test.js backend/src/saas/agentRuns.js backend/src/saas/routes/saasRoutes.js backend/src/saas/routes/saasRoutes.test.js src/main.jsx src/components/ProjectDashboard.test.jsx
