@@ -19,6 +19,65 @@ function tileBoundsAt(displayBounds, rowTileIndex, colTileIndex) {
   };
 }
 
+function tileGridPosition(bounds, displayBounds) {
+  return {
+    row: Math.floor((bounds.startRow - displayBounds.startRow) / WORKBOOK_TILE_ROWS),
+    col: Math.floor((bounds.startCol - displayBounds.startCol) / WORKBOOK_TILE_COLS),
+  };
+}
+
+function tileDistance(left, right, displayBounds) {
+  const leftPosition = tileGridPosition(left, displayBounds);
+  const rightPosition = tileGridPosition(right, displayBounds);
+  return Math.abs(leftPosition.row - rightPosition.row)
+    + Math.abs(leftPosition.col - rightPosition.col);
+}
+
+function tileBoundsKey(bounds) {
+  return `${bounds.startRow}:${bounds.startCol}:${bounds.endRow}:${bounds.endCol}`;
+}
+
+export function workbookAllTileBounds(displayBounds) {
+  if (!displayBounds) return [];
+  const rowTotal = displayBounds.endRow - displayBounds.startRow + 1;
+  const colTotal = displayBounds.endCol - displayBounds.startCol + 1;
+  if (rowTotal <= 0 || colTotal <= 0) return [];
+
+  const rowTileCount = Math.ceil(rowTotal / WORKBOOK_TILE_ROWS);
+  const colTileCount = Math.ceil(colTotal / WORKBOOK_TILE_COLS);
+  const tiles = [];
+  for (let rowTile = 0; rowTile < rowTileCount; rowTile += 1) {
+    for (let colTile = 0; colTile < colTileCount; colTile += 1) {
+      const bounds = tileBoundsAt(displayBounds, rowTile, colTile);
+      if (bounds) tiles.push(bounds);
+    }
+  }
+  return tiles;
+}
+
+export function workbookPrioritizedTileBounds(displayBounds, visibleTiles = []) {
+  const allTiles = workbookAllTileBounds(displayBounds);
+  if (!allTiles.length) return [];
+
+  const visibleKeys = new Set(visibleTiles.map(tileBoundsKey));
+  const visible = allTiles.filter((tile) => visibleKeys.has(tileBoundsKey(tile)));
+  const anchors = visible.length ? visible : allTiles.slice(0, 1);
+  const remaining = allTiles
+    .filter((tile) => !visibleKeys.has(tileBoundsKey(tile)))
+    .sort((left, right) => {
+      const leftDistance = Math.min(...anchors.map((anchor) => (
+        tileDistance(left, anchor, displayBounds)
+      )));
+      const rightDistance = Math.min(...anchors.map((anchor) => (
+        tileDistance(right, anchor, displayBounds)
+      )));
+      return leftDistance - rightDistance
+        || left.startRow - right.startRow
+        || left.startCol - right.startCol;
+    });
+  return [...visible, ...remaining];
+}
+
 export function workbookVisibleTileBounds(displayBounds, scrollState = {}, {
   rowHeight = 30,
   columnWidth = 112,

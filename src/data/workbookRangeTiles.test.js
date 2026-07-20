@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   getWorkbookTileCacheEntry,
   rememberWorkbookTileCacheEntry,
+  workbookAllTileBounds,
   workbookPrefetchTileBounds,
+  workbookPrioritizedTileBounds,
   workbookVisibleTileBounds,
 } from "./workbookRangeTiles.js";
 
@@ -59,6 +61,42 @@ describe("workbookRangeTiles", () => {
       startCol: 0,
       endCol: 11,
     });
+  });
+
+  it("enumerates every bounded tile in the sheet used range", () => {
+    const tiles = workbookAllTileBounds(displayBounds);
+
+    expect(tiles).toEqual([
+      { startRow: 0, endRow: 39, startCol: 0, endCol: 11 },
+      { startRow: 0, endRow: 39, startCol: 12, endCol: 23 },
+      { startRow: 40, endRow: 79, startCol: 0, endCol: 11 },
+      { startRow: 40, endRow: 79, startCol: 12, endCol: 23 },
+      { startRow: 80, endRow: 119, startCol: 0, endCol: 11 },
+      { startRow: 80, endRow: 119, startCol: 12, endCol: 23 },
+    ]);
+    expect(tiles.every((tile) => (
+      (tile.endRow - tile.startRow + 1)
+      * (tile.endCol - tile.startCol + 1) <= 500
+    ))).toBe(true);
+  });
+
+  it("puts visible tiles first and orders the rest by distance", () => {
+    const visible = [{
+      startRow: 40,
+      endRow: 79,
+      startCol: 12,
+      endCol: 23,
+    }];
+
+    const ordered = workbookPrioritizedTileBounds(displayBounds, visible);
+
+    expect(ordered[0]).toEqual(visible[0]);
+    expect(ordered).toHaveLength(6);
+    expect(new Set(ordered.map((tile) => JSON.stringify(tile))).size).toBe(6);
+    expect(ordered.slice(1, 3)).toEqual([
+      { startRow: 0, endRow: 39, startCol: 12, endCol: 23 },
+      { startRow: 40, endRow: 79, startCol: 0, endCol: 11 },
+    ]);
   });
 
   it("bounds the LRU cache while retaining pending requests when fulfilled tiles can be evicted", () => {
