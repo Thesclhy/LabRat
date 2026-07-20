@@ -39,19 +39,19 @@ Implemented:
 - Conversational-analysis Task 4 is implemented: authenticated frontend analysis helpers; normal LabRat analysis-plan cards; a persistent Source/Result/Chart review workspace with Excel-backed non-contiguous red source rectangles; readable coverage, warnings, revision history, and exact Python; a split Accept/modify composer; immutable feedback revisions; exact-hash acceptance; current-revision recovery when reopening stale conversation cards; and responsive desktop/mobile layouts. Result and Chart remain disabled until later milestones.
 - Conversational-analysis Task 5 is implemented: versioned Python policy and runner checks; canonical frozen execution packages; production-disabled local execution with a hardened-worker adapter; transactional active-head verification; claim-token lease recovery; finite/schema/id/identity/lineage/unit/input-accounting/missing-policy/limit/invariant validation; immutable awaiting-review AnalysisResult persistence only for valid output; independently paged result/evidence previews; replay-safe execute routes; and exact-result-hash feedback replanning. No ChartSpec is created.
 - Conversational-analysis Task 6 is implemented: exact run/result/preview identity binding; complete paged trace loading; Source/Result/Chart review tabs; validated values, exclusions, missing policy, warnings, invariants, hashes, per-row lineage and source navigation; independently paged evidence; unit-compatible chart panels; default-visible trace selection; stale async response protection; historical result rehydration; and exact-result-hash feedback to later immutable plan revisions. Real acceptance remains disabled until Task 7 provides the atomic publication route.
+- Conversational-analysis Task 7 is implemented: strict analysis-result ChartSpec v2 validation; exact result/default-trace acceptance; active-head rechecks inside one idempotent memory/Postgres transaction; acceptance-only result mutation; run/thread completion; complete immutable trace catalogs with accepted snapshot refs and lineage; bounded project/list metadata plus full detail reads; editor-only publication; real Analysis Review wiring; and shared rendering with local trace filtering and unit-safe axes.
 
 Not implemented yet:
 
-- Accepted DataSnapshot-backed chart proposal/ChartSpec planning.
-- Accepted-result ChartSpec publication and real application acceptance wiring.
+- Placement-local Canvas trace visibility and trace-aware PPTX export.
 
 ## Next Recommended Slice
 
-Continue `doc/plans/backend-conversational-analysis-chart-implementation-plan.md` with Task 7:
+Continue `doc/plans/backend-conversational-analysis-chart-implementation-plan.md` with Task 8:
 
-1. Atomically accept the exact AnalysisResult hash and create one DataSnapshot-backed ChartSpec.
-2. Persist the complete trace catalog plus the reviewed default-visible trace subset with idempotent retries.
-3. Wire the real application accept action and render the new analysis-result ChartSpec through the existing chart boundary.
+1. Normalize trace-aware chart views and migrate legacy experiment selection into trace ids.
+2. Keep duplicate Manuscript placements independent while exposing dense trace toggles in the selected placement inspector.
+3. Load full ChartSpec details before insertion and ensure PPTX export uses each placement's visible trace ids.
 
 ## Guardrails
 
@@ -78,6 +78,8 @@ Latest Task 4 evidence: targeted frontend analysis/API/workspace/AgentPanel cove
 Latest Task 5 evidence: full frontend passed 222/222, full backend passed 223 with 1 optional Postgres integration skip, and the production build succeeded with the existing Plotly chunk-size warning. Focused executor/policy/result-validator/analysis-thread/route tests, an actual local-runner smoke check, and Python runner/JavaScript syntax checks passed. Local execution remains a development adapter; production requires an external hardened worker.
 
 Latest Task 6 evidence: focused result-workspace edge coverage passed 14/14, related frontend API/workspace/conversation/ProjectDashboard coverage passed 63/63, and the production build succeeded with the existing Plotly chunk-size warning. The result view covers complete trace pagination, mismatched preview hashes, evidence pagination, earlier-run rehydration, exclusions, warnings, lineage, and incompatible units.
+
+Latest Task 7 evidence: full verification passed with frontend 239/239, backend 229 passed plus 1 optional Postgres integration skip, and a successful production build with the existing Plotly chunk-size warning. Focused publication/store/route coverage passed 43 backend tests and API/workspace/rendering/project coverage passed 87 frontend tests after transaction and bounded-list hardening.
 
 ## Open Risks
 

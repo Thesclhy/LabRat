@@ -127,3 +127,27 @@ export function reviseAnalysisRun(analysisRunId, request = {}, options = {}) {
     feedback,
   }, requestOptions(options));
 }
+
+export function publishAcceptedAnalysisChart(analysisRunId, request = {}, options = {}) {
+  const id = requireId(analysisRunId, "Select an analysis run before publishing its chart.");
+  const resultHash = String(request.resultHash || "").trim();
+  const idempotencyKey = String(options.idempotencyKey || "").trim();
+  if (!resultHash) {
+    throw new ServerApiError("Result publication requires the visible result hash.");
+  }
+  if (!idempotencyKey) {
+    throw new ServerApiError("Result publication requires an idempotency key.");
+  }
+  return serverJson(`/api/analysis-runs/${id}/accept-and-create-chart`, {
+    resultHash,
+    defaultVisibleTraceIds: Array.isArray(request.defaultVisibleTraceIds)
+      ? [...new Set(request.defaultVisibleTraceIds.map(String).filter(Boolean))]
+      : [],
+  }, {
+    ...requestOptions(options),
+    headers: {
+      "idempotency-key": idempotencyKey,
+      ...(options.headers || {}),
+    },
+  });
+}

@@ -92,12 +92,13 @@ test("migration 012 and Postgres store expose analysis persistence parity", asyn
     "findAnalysisResultById",
     "publishAnalysisResult",
     "acceptAnalysisPlan",
+    "findChartSpecById",
   ]) {
     assert.equal(typeof store[method], "function", method);
   }
 });
 
-test("Postgres SaaS routes preserve workbook review, source documents, and source-backed chart specs", {
+test("Postgres SaaS routes preserve workbook review, source documents, and supported chart specs", {
   skip: !process.env.LABRAT_TEST_DATABASE_URL,
 }, async () => {
   const rawUrl = process.env.LABRAT_TEST_DATABASE_URL;
@@ -449,6 +450,24 @@ test("Postgres SaaS routes preserve workbook review, source documents, and sourc
     );
     assert.equal((await store.listAnalysisRuns({ projectId: project.project.id })).length, 1);
     assert.equal((await store.listChartSpecs({ projectId: project.project.id })).length, 0);
+
+    const analysisPublication = await jsonFetch(
+      `/api/analysis-runs/${acceptedAnalysisBody.analysisRun.id}/accept-and-create-chart`,
+      {
+        method: "POST",
+        headers: { "idempotency-key": `postgres_analysis_publish_${Date.now()}` },
+        body: {
+          resultHash: analysisExecuteBody.analysisResult.contentHash,
+          defaultVisibleTraceIds: ["postgres_trace"],
+        },
+      },
+    );
+    assert.equal(analysisPublication.status, 201);
+    const analysisPublicationBody = await analysisPublication.json();
+    assert.equal(analysisPublicationBody.analysisRun.status, "completed");
+    assert.equal(analysisPublicationBody.analysisResult.status, "accepted");
+    assert.equal(analysisPublicationBody.chartSpec.spec.origin, "analysis_result");
+    assert.equal((await store.listChartSpecs({ projectId: project.project.id })).length, 1);
     const analysisExecute = await jsonFetch(
       `/api/analysis-runs/${acceptedAnalysisBody.analysisRun.id}/execute`,
       { method: "POST", body: {} },
@@ -512,6 +531,7 @@ test("Postgres SaaS routes preserve workbook review, source documents, and sourc
     assert.equal(auditEvents.some((event) => event.action === "workbook_review_session.create"), true);
     assert.equal(auditEvents.some((event) => event.action === "workbook_review.confirm_understanding"), true);
     assert.equal(auditEvents.some((event) => event.action === "chart_spec.create"), true);
+    assert.equal(auditEvents.some((event) => event.action === "analysis_result.publish_chart"), true);
   } finally {
     if (server) await closeServer(server);
     if (store?.pool) await store.pool.end();

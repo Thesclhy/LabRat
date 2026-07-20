@@ -256,6 +256,7 @@ POST /api/analysis-runs/:analysisRunId/execute
 GET  /api/analysis-runs/:analysisRunId
 GET  /api/analysis-runs/:analysisRunId/result-preview
 POST /api/analysis-runs/:analysisRunId/revise
+POST /api/analysis-runs/:analysisRunId/accept-and-create-chart
 ```
 
 Rules:
@@ -274,6 +275,8 @@ Rules:
 - Executor or validation failure records a terminal run status and audit event but creates no AnalysisResult or ChartSpec. Repeating `execute` on a terminal run returns the original state with `idempotentReplay: true`.
 - Result preview is separately paginated: result rows and source refs are capped at 200 per request and traces at 500. Lineage is limited to the returned row/trace page. Ordinary run detail returns result metadata and source-ref counts rather than full result/evidence arrays.
 - Revision requires feedback and, when a result exists, its exact visible `resultHash`. It sends bounded result/validation context to backend planning and creates a later immutable AnalysisPlanRevision; the prior result remains unchanged.
+- Result publication requires `editor`, an `Idempotency-Key`, exact `resultHash`, and reviewed `defaultVisibleTraceIds`. It rechecks accepted plan/run/result hashes and locks the selected active experiment heads. Changed heads return `409 analysis_result_stale`; invalid result state/hash/trace ids create no writes.
+- Successful result publication atomically marks the existing AnalysisResult `accepted`, moves its AnalysisRun and AnalysisThread to `completed`, creates one `labrat.chartSpec.v2` `origin: analysis_result` ChartSpec, links artifact ids, writes the audit event and publication receipt, and returns the complete ChartSpec. Same-key/same-request retries return the original artifacts; conflicting key reuse returns `409`.
 - `LABRAT_ANALYSIS_EXECUTOR` defaults to `disabled`. `local` is non-production only; production execution requires a configured HTTPS hardened worker. Executor command, endpoint, timeout, and provider credentials are backend-only configuration.
 
 ## Source-Backed Charts
@@ -288,15 +291,17 @@ GET   /api/projects/:projectId/chart-proposal-sets
 PATCH /api/chart-proposal-sets/:chartProposalSetId
 POST  /api/projects/:projectId/chart-specs/from-proposal
 GET   /api/projects/:projectId/chart-specs
+GET   /api/chart-specs/:chartSpecId
 ```
 
 Rules:
 
 - Chart interpretation may resolve only explicit SourceDocument evidence and produces reviewable source extract/chart proposals.
-- A durable ChartSpec requires `origin: "source_extract"`, exact source refs, and immutable `sourceSnapshot.rows` or `sourceSnapshot.series`.
+- A source-backed durable ChartSpec requires `origin: "source_extract"`, exact source refs, and immutable `sourceSnapshot.rows` or `sourceSnapshot.series`.
+- An analysis-result durable ChartSpec requires `labrat.chartSpec.v2`, `origin: "analysis_result"`, exact analysis/dependency hashes, accepted input snapshot refs, complete immutable trace arrays with source-record lineage, and a reviewed default-visible trace subset.
 - Cross-experiment source charts use explicit series with experiment ids/labels and source snapshot rows.
-- Non-source proposals return `409 data_snapshot_chart_not_implemented` until the DataSnapshot chart milestone exists.
-- Project ChartSpec listing exposes only source-backed specs.
+- Generic non-source proposals still return `409 data_snapshot_chart_not_implemented`; analysis-result ChartSpecs can only be created through explicit result acceptance.
+- Project ChartSpec state/list responses expose supported source- and analysis-result-backed specs. Analysis-result list entries omit large trace x/y arrays, include trace metadata/point counts and `detailRequired: true`, and load complete arrays from `GET /api/chart-specs/:chartSpecId`.
 
 ## Manuscripts
 

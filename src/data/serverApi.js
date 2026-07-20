@@ -329,6 +329,11 @@ export function listServerChartSpecs(projectId, options = {}) {
   return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/chart-specs`, options);
 }
 
+export function getServerChartSpec(chartSpecId, options = {}) {
+  if (!chartSpecId) throw new ServerApiError("Select a ChartSpec before loading it.");
+  return serverRequest(`/api/chart-specs/${encodeURIComponent(chartSpecId)}`, options);
+}
+
 export function createServerManuscript(projectId, request = {}, options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before creating a manuscript.");
   return serverJson(`/api/projects/${encodeURIComponent(projectId)}/manuscripts`, request, options);

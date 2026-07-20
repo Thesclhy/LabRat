@@ -130,9 +130,9 @@ analysis_publications
 
 `analysis_runs` links one accepted plan revision to an immutable execution attempt. Plan acceptance creates a `queued` row. Execution transactionally locks the run and selected active-head rows before moving it to `running`; changed heads instead terminally produce `validation_failed`. Running claims carry an internal token and lease metadata so an expired worker may be replaced without allowing the old worker to finalize. One atomic finalization moves the run to `failed`, `validation_failed`, or `awaiting_result_review`. The run records frozen input/program/runtime hashes, bounded executor metadata, result-preview hash, warnings, and validation. `(project_id, idempotency_key)` makes plan acceptance retry-safe.
 
-`analysis_results` stores only backend-validated immutable executor output. A valid run finalization inserts one `awaiting_review` result in the same transaction that updates its AnalysisRun and AnalysisThread; failed or invalid output inserts no result. `analysis_publications` remains reserved for the later atomic accepted-result plus ChartSpec boundary and is keyed by `(project_id, idempotency_key)`.
+`analysis_results` stores only backend-validated immutable executor output. A valid run finalization inserts one `awaiting_review` result in the same transaction that updates its AnalysisRun and AnalysisThread; failed or invalid output inserts no result. Result publication updates only acceptance workflow metadata, never the immutable result payload/hashes. `analysis_publications` records the atomic accepted-result plus ChartSpec boundary and is keyed by `(project_id, idempotency_key)`.
 
-`chart_specs.analysis_result_id` is nullable so existing `source_extract` ChartSpecs remain valid. No analysis-result ChartSpec is created by the current persistence milestone.
+`chart_specs.analysis_result_id` is nullable so existing `source_extract` ChartSpecs remain valid. Analysis-result ChartSpecs set this foreign key and carry the complete validated trace catalog in their immutable spec.
 
 ## Transaction Boundary
 
@@ -168,6 +168,23 @@ lock project/idempotency key
 
 This transaction does not execute Python or create an AnalysisResult/ChartSpec. A later explicit execution transaction claims only that queued run, validates frozen dependencies and output, and may create one awaiting-review AnalysisResult. It never creates a ChartSpec.
 
+Accepting a validated analysis result is another atomic operation:
+
+```text
+lock project/idempotency key
+  -> lock current thread, accepted plan, awaiting-result-review run, and awaiting-review result
+  -> lock and verify every selected ExperimentSnapshotHead
+  -> verify exact result/preview/selection/dependency/program/runtime hashes
+  -> mark the existing AnalysisResult accepted
+  -> mark AnalysisRun and AnalysisThread completed
+  -> create one analysis-result ChartSpec with complete trace catalog
+  -> link artifact ids
+  -> store publication receipt
+  -> record audit event
+```
+
+Any validation, stale-head, conflicting-idempotency, or insert failure rolls back all writes.
+
 ## Migration Sequence
 
 ```text
@@ -183,7 +200,7 @@ This transaction does not execute Python or create an AnalysisResult/ChartSpec. 
 ```
 
 Migration 011 removes the obsolete aggregate dataset, mapping, analysis-view, and observation-series tables/foreign keys from development databases. New databases never need those product paths.
-Migration 012 adds reviewed analysis persistence and nullable `chart_specs.analysis_result_id` while preserving the source-backed chart path.
+Migration 012 adds reviewed analysis persistence, publication receipts, and nullable `chart_specs.analysis_result_id` while preserving the source-backed chart path.
 
 ## Invariants
 

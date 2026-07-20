@@ -66,6 +66,7 @@ import {
   reviseAnalysisRun,
 } from "../analysisThreads.js";
 import { validateChartSpecProposal } from "../chartSpecValidation.js";
+import { publishAcceptedAnalysisChart } from "../analysisChartPublisher.js";
 import {
   createSourceExtractProposalFromEvidence,
   resolveChartEvidenceIntent,
@@ -338,6 +339,48 @@ function isSourceBackedChartProposal(proposal = {}) {
 function isSourceBackedChartSpec(chartSpec = {}) {
   const spec = isObject(chartSpec.spec) ? chartSpec.spec : chartSpec;
   return spec.origin === "source_extract" || isObject(spec.sourceSnapshot);
+}
+
+function isAnalysisResultChartSpec(chartSpec = {}) {
+  const spec = isObject(chartSpec.spec) ? chartSpec.spec : chartSpec;
+  return spec.origin === "analysis_result" && spec.schemaVersion === "labrat.chartSpec.v2";
+}
+
+function isSupportedChartSpec(chartSpec = {}) {
+  return isSourceBackedChartSpec(chartSpec) || isAnalysisResultChartSpec(chartSpec);
+}
+
+function chartSpecListItem(chartSpec = {}) {
+  if (!isAnalysisResultChartSpec(chartSpec)) return chartSpec;
+  const spec = chartSpec.spec || {};
+  const {
+    traceCatalog,
+    inputSnapshotRefs,
+    sourceRefs,
+    ...metadata
+  } = spec;
+  return {
+    ...chartSpec,
+    spec: {
+      ...metadata,
+      traceCatalog: asArray(traceCatalog).map((trace) => ({
+        traceId: trace?.traceId || null,
+        experimentId: trace?.experimentId || null,
+        experimentLabel: trace?.experimentLabel || trace?.name || null,
+        xField: trace?.xField || null,
+        yField: trace?.yField || null,
+        xUnit: trace?.xUnit ?? null,
+        yUnit: trace?.yUnit ?? null,
+        type: trace?.type || null,
+        mode: trace?.mode || null,
+        pointCount: Math.max(asArray(trace?.x).length, asArray(trace?.y).length),
+        sourceRecordCount: asArray(trace?.sourceRecordIds).length,
+      })),
+      inputSnapshotRefCount: asArray(inputSnapshotRefs).length,
+      sourceRefCount: asArray(sourceRefs).length,
+      detailRequired: true,
+    },
+  };
 }
 
 async function projectAuth(req, context, projectId, role = "viewer") {
@@ -810,14 +853,14 @@ async function handleProjectState(req, res, context, projectId) {
     context.store.listBrowserViews ? context.store.listBrowserViews({ projectId, ownerUserId: auth.user.id }) : [],
     context.store.listSourceDocuments ? context.store.listSourceDocuments({ projectId }) : [],
   ]);
-  const sourceBackedChartSpecs = chartSpecs.filter(isSourceBackedChartSpec);
+  const supportedChartSpecs = chartSpecs.filter(isSupportedChartSpec);
   sendJson(res, 200, {
     project: projectSummary(project),
     projectProfile: projectProfileFor(project),
     fileObjects: fileObjects.map(fileObjectSummary),
     importRuns: importRuns.map(importRunSummary),
     chartProposalSets: chartProposalSets.map(chartProposalSetSummary),
-    chartSpecs: sourceBackedChartSpecs,
+    chartSpecs: supportedChartSpecs.map(chartSpecListItem),
     manuscripts,
     workbookReviewSessions: workbookReviewSessions.map(workbookReviewSessionSummary),
     workbookUnderstandings: workbookUnderstandings.map(workbookUnderstandingSummary),
@@ -1137,7 +1180,7 @@ async function handleProjectAgentPlan(req, res, context, projectId) {
     projectProfile: projectProfileFor(project),
     fileObjects: fileObjects.map(fileObjectSummary),
     chartProposalSets: chartProposalSets.map(chartProposalSetSummary),
-    chartSpecs: chartSpecs.filter(isSourceBackedChartSpec),
+    chartSpecs: chartSpecs.filter(isSupportedChartSpec).map(chartSpecListItem),
     manuscripts,
     experimentSnapshotHeads,
     sourceDocuments: sourceDocuments.map(sourceDocumentSummary),
@@ -1184,7 +1227,7 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
     projectProfile: projectProfileFor(project),
     fileObjects: fileObjects.map(fileObjectSummary),
     chartProposalSets: chartProposalSets.map(chartProposalSetSummary),
-    chartSpecs: chartSpecs.filter(isSourceBackedChartSpec),
+    chartSpecs: chartSpecs.filter(isSupportedChartSpec).map(chartSpecListItem),
     manuscripts,
     experimentSnapshotHeads,
     sourceDocuments: sourceDocuments.map(sourceDocumentSummary),
@@ -1756,6 +1799,42 @@ async function handleAnalysisRunRevise(req, res, context, analysisRunId) {
     analysisPlanRevision: analysisPlanRevisionSummary(result.analysisPlanRevision),
     priorAnalysisRun: analysisRunSummary(result.priorAnalysisRun),
     priorAnalysisResult: analysisResultSummary(result.priorAnalysisResult),
+  });
+}
+
+async function handleAnalysisResultChartPublication(req, res, context, analysisRunId) {
+  const { auth, analysisRun } = await analysisRunAuth(
+    req,
+    context,
+    analysisRunId,
+    "editor",
+  );
+  const project = await context.store.findProjectById(analysisRun.projectId);
+  if (!project) {
+    throw Object.assign(new Error("Project not found."), {
+      statusCode: 404,
+      code: "project_not_found",
+    });
+  }
+  const body = await readJsonBody(req);
+  const result = await publishAcceptedAnalysisChart({
+    store: context.store,
+    project,
+    actorUserId: auth.user.id,
+    runId: analysisRun.id,
+    resultHash: body.resultHash,
+    defaultVisibleTraceIds: body.defaultVisibleTraceIds,
+    idempotencyKey: req.headers["idempotency-key"],
+    ipAddress: clientIp(req),
+    userAgent: userAgent(req),
+  });
+  sendJson(res, result.idempotentReplay ? 200 : 201, {
+    analysisThread: analysisThreadSummary(result.analysisThread),
+    analysisPlanRevision: analysisPlanRevisionSummary(result.analysisPlanRevision),
+    analysisRun: analysisRunSummary(result.analysisRun),
+    analysisResult: analysisResultSummary(result.analysisResult),
+    chartSpec: result.chartSpec,
+    idempotentReplay: result.idempotentReplay,
   });
 }
 
@@ -2549,7 +2628,21 @@ async function handleChartSpecFromProposal(req, res, context, projectId) {
 async function handleChartSpecs(req, res, context, projectId) {
   await projectAuth(req, context, projectId, "viewer");
   const chartSpecs = await context.store.listChartSpecs({ projectId });
-  sendJson(res, 200, { chartSpecs: chartSpecs.filter(isSourceBackedChartSpec) });
+  sendJson(res, 200, {
+    chartSpecs: chartSpecs.filter(isSupportedChartSpec).map(chartSpecListItem),
+  });
+}
+
+async function handleChartSpecById(req, res, context, chartSpecId) {
+  const chartSpec = await context.store.findChartSpecById(chartSpecId);
+  if (!chartSpec || !isSupportedChartSpec(chartSpec)) {
+    throw Object.assign(new Error("ChartSpec was not found."), {
+      statusCode: 404,
+      code: "chart_spec_not_found",
+    });
+  }
+  await projectAuth(req, context, chartSpec.projectId, "viewer");
+  sendJson(res, 200, { chartSpec });
 }
 
 async function handleManuscripts(req, res, context, projectId) {
@@ -2722,6 +2815,17 @@ async function dispatch(req, res, context) {
   if (analysisRunReviseMatch && req.method === "POST") {
     return handleAnalysisRunRevise(req, res, context, analysisRunReviseMatch[1]);
   }
+  const analysisRunPublishChartMatch = pathName.match(
+    /^\/api\/analysis-runs\/([^/]+)\/accept-and-create-chart$/,
+  );
+  if (analysisRunPublishChartMatch && req.method === "POST") {
+    return handleAnalysisResultChartPublication(
+      req,
+      res,
+      context,
+      analysisRunPublishChartMatch[1],
+    );
+  }
   const analysisRunMatch = pathName.match(/^\/api\/analysis-runs\/([^/]+)$/);
   if (analysisRunMatch && req.method === "GET") {
     return handleAnalysisRunById(req, res, context, analysisRunMatch[1]);
@@ -2742,6 +2846,8 @@ async function dispatch(req, res, context) {
   if (chartFromProposalMatch && req.method === "POST") return handleChartSpecFromProposal(req, res, context, chartFromProposalMatch[1]);
   const chartSpecsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/chart-specs$/);
   if (chartSpecsMatch && req.method === "GET") return handleChartSpecs(req, res, context, chartSpecsMatch[1]);
+  const chartSpecMatch = pathName.match(/^\/api\/chart-specs\/([^/]+)$/);
+  if (chartSpecMatch && req.method === "GET") return handleChartSpecById(req, res, context, chartSpecMatch[1]);
   const manuscriptsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/manuscripts$/);
   if (manuscriptsMatch && (req.method === "GET" || req.method === "POST")) return handleManuscripts(req, res, context, manuscriptsMatch[1]);
   const manuscriptMatch = pathName.match(/^\/api\/manuscripts\/([^/]+)$/);
@@ -2764,6 +2870,7 @@ export async function handleSaasRoutes(req, res, context) {
     && !req.url?.startsWith("/api/analysis-runs")
     && !req.url?.startsWith("/api/import-runs")
     && !req.url?.startsWith("/api/chart-proposal-sets")
+    && !req.url?.startsWith("/api/chart-specs")
     && !req.url?.startsWith("/api/manuscripts")) {
     return false;
   }

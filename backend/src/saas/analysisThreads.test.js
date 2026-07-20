@@ -399,21 +399,52 @@ test("analysis plan store transaction rejects a cross-project run package withou
 });
 
 test("analysis result publication storage is atomic, copied, and idempotent", async () => {
-  const { store, project, thread } = await setup();
-  const analysisResult = {
+  const { store, project, thread, selection } = await setup();
+  const planRevision = {
+    id: "analysis_plan_revision_publish_1",
+    labId: project.labId,
+    projectId: project.id,
+    analysisThreadId: thread.id,
+    status: "accepted",
+    planHash: "sha256_plan_publish_1",
+    selectionHash: selection.selectionHash,
+    dependencyHash: selection.dependencyHash,
+    programHash: "sha256_program_publish_1",
+    runtimeVersion: "labrat-python-v1",
+  };
+  const analysisRun = {
+    id: "analysis_run_publish_1",
+    labId: project.labId,
+    projectId: project.id,
+    analysisThreadId: thread.id,
+    acceptedPlanRevisionId: planRevision.id,
+    status: "awaiting_result_review",
+    inputHash: selection.selectionHash,
+    programHash: planRevision.programHash,
+    runtimeVersion: planRevision.runtimeVersion,
+    resultPreviewHash: "sha256_result_preview_publish_1",
+  };
+  const storedAnalysisResult = {
     id: "analysis_result_publish_1",
     labId: project.labId,
     projectId: project.id,
     analysisThreadId: thread.id,
-    analysisRunId: "analysis_run_publish_1",
-    status: "accepted",
+    analysisRunId: analysisRun.id,
+    status: "awaiting_review",
     contentHash: "sha256_result_publish_1",
+    resultPreviewHash: "sha256_result_preview_publish_1",
     result: { summary: { rowCount: 1 } },
     sourceRefs: [],
     warnings: [],
     validation: { ok: true },
     createdAt: "2026-07-20T00:00:00.000Z",
     createdBy: "user_editor",
+  };
+  const analysisResult = {
+    ...storedAnalysisResult,
+    status: "accepted",
+    acceptedAt: "2026-07-20T01:00:00.000Z",
+    acceptedBy: "user_editor",
   };
   const chartSpec = {
     id: "chart_spec_analysis_publish_1",
@@ -422,7 +453,15 @@ test("analysis result publication storage is atomic, copied, and idempotent", as
     analysisResultId: analysisResult.id,
     title: "Accepted yield",
     chartType: "bar",
-    spec: { origin: "analysis_result" },
+    spec: {
+      schemaVersion: "labrat.chartSpec.v2",
+      origin: "analysis_result",
+      analysisThreadId: thread.id,
+      analysisPlanRevisionId: planRevision.id,
+      analysisRunId: analysisRun.id,
+      analysisResultId: analysisResult.id,
+      resultHash: analysisResult.contentHash,
+    },
     layout: {},
     warnings: [],
     createdAt: "2026-07-20T00:00:00.000Z",
@@ -437,9 +476,20 @@ test("analysis result publication storage is atomic, copied, and idempotent", as
     actorUserId: "user_editor",
     idempotencyKey: "analysis_publication_1",
     requestHash: "sha256_publication_request_1",
+    analysisPlanRevision: planRevision,
+    analysisRun: { ...analysisRun, status: "completed" },
     analysisResult,
     chartSpec,
+    expectedHeadRefs: selection.records.map((record) => ({
+      headId: record.headId,
+      experimentId: record.experimentId,
+      dataSnapshotId: record.snapshotId,
+      recordIndex: record.recordIndex,
+    })),
     response: {
+      analysisThreadId: thread.id,
+      analysisPlanRevisionId: planRevision.id,
+      analysisRunId: analysisRun.id,
       analysisResultId: analysisResult.id,
       chartSpecId: chartSpec.id,
     },
@@ -450,12 +500,11 @@ test("analysis result publication storage is atomic, copied, and idempotent", as
     (error) => error.code === "invalid_analysis_publication_package",
   );
   assert.equal(await store.findAnalysisResultById(analysisResult.id), null);
-  store.analysisRuns.set(analysisResult.analysisRunId, {
-    id: analysisResult.analysisRunId,
-    labId: project.labId,
-    projectId: project.id,
-    analysisThreadId: thread.id,
-    acceptedPlanRevisionId: "analysis_plan_revision_publish_1",
+  store.analysisPlanRevisions.set(planRevision.id, planRevision);
+  store.analysisRuns.set(analysisRun.id, analysisRun);
+  store.analysisResults.set(storedAnalysisResult.id, storedAnalysisResult);
+  store.analysisThreads.set(thread.id, {
+    ...thread,
     status: "awaiting_result_review",
   });
   const published = await store.publishAnalysisResult(input);
@@ -465,6 +514,8 @@ test("analysis result publication storage is atomic, copied, and idempotent", as
   assert.equal(published.idempotentReplay, false);
   assert.equal(replay.idempotentReplay, true);
   assert.equal((await store.findAnalysisResultById(analysisResult.id)).result.summary.rowCount, 1);
+  assert.equal((await store.findAnalysisResultById(analysisResult.id)).status, "accepted");
+  assert.equal((await store.findAnalysisRunById(analysisRun.id)).status, "completed");
   assert.equal((await store.listChartSpecs({ projectId: project.id })).length, 1);
   const storedThread = await store.findAnalysisThreadById(thread.id);
   assert.deepEqual(storedThread.acceptedAnalysisResultIds, [analysisResult.id]);

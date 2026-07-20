@@ -550,7 +550,7 @@ describe("BackendScanPanel", () => {
       expect(rangeBodies.length).toBeGreaterThan(0);
       expect(rangeBodies.some((body) => body.range === "A1:Y63")).toBe(false);
       expect(rangeBodies.every((body) => testRangeCellCount(body.range) <= 480)).toBe(true);
-      expect(screen.getByText("R1C1")).toBeTruthy();
+      await waitFor(() => expect(screen.getByText("R1C1")).toBeTruthy());
     } finally {
       restoreFetch(originalFetch);
     }

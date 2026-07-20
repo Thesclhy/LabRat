@@ -13,6 +13,7 @@ import {
   draftServerProjectDataPlan,
   publishServerProjectDataPlan,
   getServerAgentRun,
+  getServerChartSpec,
   getServerProjectState,
   getServerSession,
   getServerWorkbookReviewSession,
@@ -332,14 +333,17 @@ describe("serverApi", () => {
   it("routes source chart proposal persistence", async () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ chartProposalSet: { id: "chart_set_1", status: "accepted" } }))
-      .mockResolvedValueOnce(jsonResponse({ chartSpec: { id: "chart_spec_1" } }, { status: 201 }));
+      .mockResolvedValueOnce(jsonResponse({ chartSpec: { id: "chart_spec_1" } }, { status: 201 }))
+      .mockResolvedValueOnce(jsonResponse({ chartSpec: { id: "chart_spec_1" } }));
 
     await patchServerChartProposalSet("chart_set_1", { status: "accepted" }, { fetch: fetchImpl });
     await createServerChartSpecFromProposal("project_1", { chartProposalSetId: "chart_set_1", proposalId: "chart_1" }, { fetch: fetchImpl });
+    await getServerChartSpec("chart/spec 1", { fetch: fetchImpl });
 
     expect(fetchImpl.mock.calls.map((call) => call[0])).toEqual([
       "/api/chart-proposal-sets/chart_set_1",
       "/api/projects/project_1/chart-specs/from-proposal",
+      "/api/chart-specs/chart%2Fspec%201",
     ]);
   });
 

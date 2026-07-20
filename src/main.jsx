@@ -14,6 +14,7 @@ import { DataPlanReviewPanel } from "./components/DataPlanReviewPanel.jsx";
 import { ExperimentBrowser } from "./components/ExperimentBrowser.jsx";
 import { AnalysisConversationCard } from "./components/AnalysisConversationCard.jsx";
 import { AnalysisReviewWorkspace } from "./components/AnalysisReviewWorkspace.jsx";
+import { publishAcceptedAnalysisChart } from "./data/analysisApi.js";
 import { Plot } from "./charts/Plot";
 import { ManuscriptCanvas } from "./components/ManuscriptCanvas";
 import { BLANK_PROJECT_SOURCE_NAME, blankTemplateLinks, isBlankDataMode } from "./data/appMode.js";
@@ -456,7 +457,9 @@ function isActiveChartSpecForProject(chartSpec) {
   if (!chartSpec) return false;
   if (chartSpec.isStale || chartSpec.status === "stale") return false;
   const spec = chartSpec.spec && typeof chartSpec.spec === "object" ? chartSpec.spec : chartSpec;
-  return spec?.origin === "source_extract" || Boolean(spec?.sourceSnapshot);
+  return spec?.origin === "source_extract"
+    || spec?.origin === "analysis_result"
+    || Boolean(spec?.sourceSnapshot);
 }
 
 export function activeChartSpecsForProject(projectState) {
@@ -3649,6 +3652,29 @@ function App() {
   const closeAnalysisReview = () => {
     setAnalysisReviewState(null);
   };
+  const acceptAnalysisResultChart = async ({
+    runId,
+    resultHash,
+    defaultVisibleTraceIds,
+  }) => {
+    if (!activeProjectId || !runId || !resultHash) return null;
+    const response = await publishAcceptedAnalysisChart(runId, {
+      resultHash,
+      defaultVisibleTraceIds,
+    }, {
+      idempotencyKey: `publish_analysis_${runId}_${resultHash}`,
+    });
+    const state = await getServerProjectState(activeProjectId);
+    const chartSpec = response.chartSpec;
+    const chartSpecs = chartSpec
+      ? [
+        ...asArray(state.chartSpecs).filter((item) => item.id !== chartSpec.id),
+        chartSpec,
+      ]
+      : asArray(state.chartSpecs);
+    applyProjectWorkspaceRefresh({ ...state, chartSpecs });
+    return response;
+  };
   if (authState.checking) {
     return (
       <main className="server-login">
@@ -3806,8 +3832,10 @@ function App() {
           run={analysisReviewState.run}
           result={analysisReviewState.result}
           WorkbookWorkspaceComponent={WorkbookReviewWorkspace}
+          onAcceptResult={acceptAnalysisResultChart}
           onClose={closeAnalysisReview}
-          onAccepted={() => {
+          onAccepted={(response) => {
+            if (response?.chartSpec) return;
             getServerProjectState(activeProjectId)
               .then(applyProjectWorkspaceRefresh)
               .catch((error) => setSourceError(error?.message || String(error)));

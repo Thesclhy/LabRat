@@ -45,9 +45,11 @@ natural-language analysis request
   -> frozen package execution in a versioned adapter
   -> backend shape/hash/lineage/invariant validation
   -> immutable awaiting-review AnalysisResult
+  -> user reviews result, exclusions, lineage, and default trace visibility
+  -> atomic accepted AnalysisResult + analysis-result ChartSpec v2
 ```
 
-Execution creates no ChartSpec. Result acceptance and chart publication remain a later explicit review boundary.
+Execution creates no ChartSpec. Only explicit result acceptance crosses the atomic ChartSpec publication boundary.
 
 ## Runtime Topology
 
@@ -76,7 +78,7 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 ## Backend Components
 
 - **Auth/Admin**: users, sessions, labs, memberships, roles, seed-account safety.
-- **Project State**: bounded summaries for files, evidence, understandings, accepted snapshots, views, source-backed output, manuscripts, AgentRuns, and AnalysisThreads.
+- **Project State**: bounded summaries for files, evidence, understandings, accepted snapshots, views, source- and analysis-result-backed output, manuscripts, AgentRuns, and AnalysisThreads.
 - **Backend Model Provider / Intent Router**: server-secret provider access, structured output validation, deterministic command priority, direct project answers, and reviewed-analysis routing without a Browser fallback.
 - **Workbook Indexer**: conservative workbook scan and SourceDocument/SourceRegion/cell-index persistence.
 - **Workbook Review Engine**: red-box revisions, bounded evidence inspection, structured interpretation, validation blockers, and accepted WorkbookUnderstanding.
@@ -87,6 +89,7 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 - **Analysis Tool Registry**: project-authorized, framework-independent read/plan tools for accepted field catalogs, experiment scope, selection previews/inspection, and plan validation. It exposes no calculation executor.
 - **Analysis Thread Service**: immutable plan revision persistence, backend-owned draft normalization, exact selection/program hashing, feedback revisioning, stale-head detection, idempotent queued-run creation, run orchestration, bounded result preview, and result-linked replanning.
 - **Analysis Executor/Validator**: canonical frozen run packages, transactionally checked active-head claims, internal claim-token leases, versioned static/runner Python policy, non-production local adapter, production hardened-worker adapter, and deterministic output/schema/identity/accounting/hash/lineage/unit/invariant validation before result persistence.
+- **Analysis Chart Publisher**: exact-result-hash acceptance, transactionally rechecked active heads, immutable complete trace catalogs, idempotent result/run/thread completion, ChartSpec creation, artifact links, receipts, and audit.
 - **Source Chart Resolver**: explicit range/experiment evidence, source extract proposals, immutable chart snapshots, and validation.
 - **Manuscript Store**: pages, blocks, references, ChartSpec snapshots, and canvas state.
 
@@ -104,7 +107,7 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 - AnalysisThread owns one durable reviewed-analysis conversation and its artifact ids.
 - AnalysisPlanRevision is a durable immutable manifest, frozen selection, and exact program; it is not a result.
 - AnalysisRun is an immutable attempt that is claimed once and finalized with bounded execution/validation metadata.
-- AnalysisResult is immutable validated output awaiting a separate user review; failed or invalid execution creates none.
+- AnalysisResult is immutable validated output awaiting a separate user review; acceptance changes workflow metadata only, and failed or invalid execution creates none.
 - SourceExtractProposal/ChartProposalSet/ChartSpec are reviewed visualization artifacts.
 - Manuscript stores layout and snapshots, not a parallel scientific dataset.
 - AgentRun stores visible workflow/audit traces, not hidden chain-of-thought.
@@ -131,9 +134,17 @@ explicit source evidence
   -> frontend sourceSnapshot renderer
   -> user review
   -> durable ChartSpec
+
+accepted DataSnapshot heads
+  -> reviewed AnalysisPlanRevision
+  -> validated immutable AnalysisResult
+  -> explicit result/default-trace review
+  -> atomic backend publication
+  -> durable analysis-result ChartSpec v2
+  -> shared validated trace renderer
 ```
 
-Current ChartSpecs require `origin: source_extract`, exact source refs, and immutable row/series snapshots. Non-source proposals receive `data_snapshot_chart_not_implemented` until accepted DataSnapshot chart planning is designed and implemented.
+Source ChartSpecs require `origin: source_extract`, exact source refs, and immutable row/series snapshots. Analysis ChartSpecs require `origin: analysis_result`, exact analysis/dependency hashes, accepted input snapshot refs, complete finite trace arrays with source-record lineage, and a reviewed default-visible subset. Generic non-source proposals still receive `data_snapshot_chart_not_implemented`.
 
 ## AI Boundary
 

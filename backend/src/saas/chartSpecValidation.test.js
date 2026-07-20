@@ -24,6 +24,53 @@ function sourceRowsProposal(overrides = {}) {
   };
 }
 
+function analysisResultProposal(overrides = {}) {
+  const base = {
+    schemaVersion: "labrat.chartSpec.v2",
+    origin: "analysis_result",
+    status: "accepted",
+    chartType: "scatter",
+    title: "Reaction rate over time",
+    analysisThreadId: "analysis_thread_1",
+    analysisPlanRevisionId: "analysis_plan_revision_1",
+    analysisRunId: "analysis_run_1",
+    analysisResultId: "analysis_result_1",
+    planHash: "sha256_plan_1",
+    selectionHash: "sha256_selection_1",
+    dependencyHash: "sha256_dependency_1",
+    inputHash: "sha256_selection_1",
+    programHash: "sha256_program_1",
+    resultHash: "sha256_result_1",
+    resultPreviewHash: "sha256_preview_1",
+    runtimeVersion: "labrat-python-v1",
+    inputSnapshotRefs: [{
+      experimentId: "experiment_1",
+      headId: "head_1",
+      snapshotId: "snapshot_1",
+      recordIndex: 0,
+      sourceRecordId: "snapshot_1:0",
+      contentHash: "sha256_snapshot_1",
+      dependencyHash: "sha256_snapshot_dependency_1",
+    }],
+    traceCatalog: [{
+      traceId: "trace_1",
+      experimentId: "experiment_1",
+      experimentLabel: "Exp 1",
+      xField: "reaction_time",
+      yField: "reaction_rate",
+      xUnit: "min",
+      yUnit: "mmol/g/min",
+      x: [0, 10],
+      y: [1, 2],
+      sourceRecordIds: ["snapshot_1:0"],
+    }],
+    defaultChartView: { visibleTraceIds: ["trace_1"] },
+    x: { field: "reaction_time", label: "Reaction time", unit: "min" },
+    y: { field: "reaction_rate", label: "Reaction rate", unit: "mmol/g/min" },
+  };
+  return { ...base, ...overrides };
+}
+
 test("validateChartSpecProposal accepts immutable source row snapshots", () => {
   const result = validateChartSpecProposal({ proposal: sourceRowsProposal() });
 
@@ -98,4 +145,32 @@ test("validateChartSpecProposal rejects source series without snapshot rows", ()
       },
     }),
   }), (error) => error.code === "chart_source_unresolved");
+});
+
+test("validateChartSpecProposal accepts complete analysis-result trace catalogs", () => {
+  const result = validateChartSpecProposal({
+    proposal: analysisResultProposal(),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.chartSpec.schemaVersion, "labrat.chartSpec.v2");
+  assert.equal(result.chartSpec.origin, "analysis_result");
+  assert.equal(result.chartSpec.traceCatalog.length, 1);
+});
+
+test("validateChartSpecProposal rejects incomplete analysis lineage and default views", () => {
+  assert.throws(() => validateChartSpecProposal({
+    proposal: analysisResultProposal({
+      traceCatalog: [{
+        ...analysisResultProposal().traceCatalog[0],
+        sourceRecordIds: [],
+      }],
+    }),
+  }), (error) => error.code === "analysis_chart_lineage_required");
+
+  assert.throws(() => validateChartSpecProposal({
+    proposal: analysisResultProposal({
+      defaultChartView: { visibleTraceIds: ["trace_unknown"] },
+    }),
+  }), (error) => error.code === "analysis_chart_trace_unknown");
 });

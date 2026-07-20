@@ -524,6 +524,45 @@ describe("AnalysisReviewWorkspace", () => {
     expect(screen.getByText("Row sum validation failed.")).toBeTruthy();
   });
 
+  it("publishes the exact result with the reviewed default trace subset", async () => {
+    const onAcceptResult = vi.fn().mockResolvedValue({
+      analysisRun: { ...validatedRun, status: "completed" },
+      analysisResult: { ...validatedResult, status: "accepted" },
+      chartSpec: { id: "chart_spec_1" },
+    });
+    const onAccepted = vi.fn();
+    render(
+      <AnalysisReviewWorkspace
+        projectId="project_1"
+        thread={thread}
+        revision={{ ...revision2, status: "accepted" }}
+        planRevisions={[{ ...revision2, status: "accepted" }]}
+        selection={selection}
+        run={validatedRun}
+        result={validatedResult}
+        resultPreview={resultPreview}
+        WorkbookWorkspaceComponent={WorkbookWorkspaceStub}
+        PlotComponent={({ traces }) => <div>{traces.length}</div>}
+        onAcceptResult={onAcceptResult}
+        onAccepted={onAccepted}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "Chart" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Show Exp 2 by default" }));
+    fireEvent.click(screen.getByRole("button", { name: "Accept result and create chart" }));
+
+    await waitFor(() => expect(onAcceptResult).toHaveBeenCalledWith({
+      runId: validatedRun.id,
+      resultHash: validatedResult.contentHash,
+      defaultVisibleTraceIds: ["trace_exp_1"],
+    }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Chart created" })).toBeTruthy());
+    expect(onAccepted).toHaveBeenCalledWith(expect.objectContaining({
+      chartSpec: { id: "chart_spec_1" },
+    }));
+  });
+
   it("loads the complete validated trace domain across backend preview pages", async () => {
     const acceptedRevision = { ...revision2, status: "accepted" };
     const allTraces = Array.from({ length: 1_200 }, (_, index) => ({

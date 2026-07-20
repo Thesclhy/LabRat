@@ -40,6 +40,46 @@ function seriesChartSpec(overrides = {}) {
   };
 }
 
+function analysisResultChartSpec(overrides = {}) {
+  return {
+    id: "chart_spec_analysis_1",
+    chartType: "scatter",
+    title: "Reaction rate over time",
+    spec: {
+      schemaVersion: "labrat.chartSpec.v2",
+      origin: "analysis_result",
+      chartType: "scatter",
+      title: "Reaction rate over time",
+      x: { field: "reaction_time", label: "Reaction time", unit: "min" },
+      y: { field: "reaction_rate", label: "Reaction rate", unit: "mmol/g/min" },
+      traceCatalog: [
+        {
+          traceId: "trace_exp_1",
+          experimentId: "experiment_1",
+          experimentLabel: "Exp 1",
+          x: [0, 10],
+          y: [1, 2],
+          xUnit: "min",
+          yUnit: "mmol/g/min",
+          sourceRecordIds: ["snapshot_1:0"],
+        },
+        {
+          traceId: "trace_exp_2",
+          experimentId: "experiment_2",
+          experimentLabel: "Exp 2",
+          x: [0, 10],
+          y: [2, 4],
+          xUnit: "min",
+          yUnit: "mmol/g/min",
+          sourceRecordIds: ["snapshot_2:0"],
+        },
+      ],
+      defaultChartView: { visibleTraceIds: ["trace_exp_1"] },
+    },
+    ...overrides,
+  };
+}
+
 describe("makeSourceChartPreview", () => {
   it("renders a single immutable source snapshot", () => {
     const preview = makeSourceChartPreview({
@@ -108,5 +148,34 @@ describe("makeSourceChartPreview", () => {
     expect(preview.traces[0].marker.symbol).toBe("circle-open");
     expect(preview.layout.yaxis.type).toBe("log");
     expect(preview.layout.yaxis.tickformat).toBe(".1e");
+  });
+
+  it("renders immutable analysis-result traces without a sourceSnapshot", () => {
+    const defaultPreview = makeSourceChartPreview(analysisResultChartSpec());
+    const localView = makeSourceChartPreview(analysisResultChartSpec(), {
+      chartView: { visibleTraceIds: ["trace_exp_2"] },
+    });
+
+    expect(defaultPreview.traces.map((trace) => trace.name)).toEqual(["Exp 1"]);
+    expect(defaultPreview.traces[0].x).toEqual([0, 10]);
+    expect(defaultPreview.traces[0].y).toEqual([1, 2]);
+    expect(localView.traces.map((trace) => trace.name)).toEqual(["Exp 2"]);
+    expect(localView.layout.xaxis.title).toBe("Reaction time (min)");
+    expect(localView.layout.yaxis.title).toBe("Reaction rate (mmol/g/min)");
+  });
+
+  it("keeps incompatible analysis-result units on separate Plotly axes", () => {
+    const chart = analysisResultChartSpec();
+    chart.spec.traceCatalog[1] = {
+      ...chart.spec.traceCatalog[1],
+      yUnit: "percent",
+    };
+    chart.spec.defaultChartView.visibleTraceIds = ["trace_exp_1", "trace_exp_2"];
+
+    const preview = makeSourceChartPreview(chart);
+
+    expect(preview.traces.map((trace) => trace.yaxis)).toEqual(["y", "y2"]);
+    expect(preview.layout.yaxis.title).toBe("Value (mmol/g/min)");
+    expect(preview.layout.yaxis2.title).toBe("Value (percent)");
   });
 });

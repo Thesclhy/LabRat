@@ -824,7 +824,9 @@ export function AnalysisReviewWorkspace({
   ];
   const hasResultStage = resultTabsAvailable(run, result, preview);
   const hasChartStage = asArray(preview?.traces).length > 0;
-  const canAcceptResult = resultReady(run, result, preview) && Boolean(onAcceptResult);
+  const canAcceptResult = resultReady(run, result, preview)
+    && hasChartStage
+    && Boolean(onAcceptResult);
   const resultReviewMode = hasResultStage && revision?.status === "accepted";
 
   const submitFeedback = async () => {
@@ -1012,11 +1014,14 @@ export function AnalysisReviewWorkspace({
     setPendingAction("accept_result");
     setActionError("");
     try {
-      await onAcceptResult({
+      const response = await onAcceptResult({
         runId: run.id,
         resultHash: result.contentHash,
         defaultVisibleTraceIds,
       });
+      if (response?.analysisRun) setRun(response.analysisRun);
+      if (response?.analysisResult) setResult(response.analysisResult);
+      onAccepted?.(response);
     } catch (error) {
       setActionError(error?.message || String(error));
     } finally {
@@ -1324,7 +1329,9 @@ export function AnalysisReviewWorkspace({
               disabled={resultReviewMode ? (!canAcceptResult || busy) : (!awaitingReview || busy)}
             >
               {resultReviewMode
-                ? pendingAction === "accept_result" ? "Creating..." : "Accept result and create chart"
+                ? result?.status === "accepted"
+                  ? "Chart created"
+                  : pendingAction === "accept_result" ? "Creating..." : "Accept result and create chart"
                 : pendingAction === "accept" || pendingAction === "execute" ? "Working..." : "Accept plan"}
             </button>
             <div className="analysis-review-modification">

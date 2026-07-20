@@ -2407,37 +2407,153 @@ export class PostgresSaasStore {
         return { ...prior.response, idempotentReplay: true };
       }
       const threadResult = await client.query(
-        "select * from analysis_threads where id = $1 for update",
-        [input.analysisThreadId],
+        "select * from analysis_threads where id = $1 and project_id = $2 for update",
+        [input.analysisThreadId, input.projectId],
       );
+      const revisionResult = input.analysisPlanRevision?.id
+        ? await client.query(
+          "select * from analysis_plan_revisions where id = $1 and project_id = $2 for share",
+          [input.analysisPlanRevision.id, input.projectId],
+        )
+        : { rows: [] };
+      const runResult = input.analysisRun?.id
+        ? await client.query(
+          "select * from analysis_runs where id = $1 and project_id = $2 for update",
+          [input.analysisRun.id, input.projectId],
+        )
+        : { rows: [] };
+      const storedResultQuery = input.analysisResult?.id
+        ? await client.query(
+          "select * from analysis_results where id = $1 and project_id = $2 for update",
+          [input.analysisResult.id, input.projectId],
+        )
+        : { rows: [] };
       const thread = analysisThreadFromRow(threadResult.rows[0]);
+      const revision = analysisPlanRevisionFromRow(revisionResult.rows[0]);
+      const run = analysisRunFromRow(runResult.rows[0]);
+      const storedResult = analysisResultFromRow(storedResultQuery.rows[0]);
       const resultPackage = input.analysisResult;
       const chart = input.chartSpec;
-      const analysisRunResult = resultPackage?.analysisRunId
-        ? await client.query("select * from analysis_runs where id = $1", [resultPackage.analysisRunId])
-        : { rows: [] };
-      const analysisRun = analysisRunFromRow(analysisRunResult.rows[0]);
       if (
         !input.idempotencyKey
         || !input.requestHash
         || !thread
         || thread.projectId !== input.projectId
+        || thread.status !== "awaiting_result_review"
+        || !revision
+        || revision.analysisThreadId !== thread.id
+        || revision.status !== "accepted"
+        || revision.planHash !== input.analysisPlanRevision.planHash
+        || revision.selectionHash !== input.analysisPlanRevision.selectionHash
+        || revision.dependencyHash !== input.analysisPlanRevision.dependencyHash
+        || revision.programHash !== input.analysisPlanRevision.programHash
+        || !run
+        || run.analysisThreadId !== thread.id
+        || run.acceptedPlanRevisionId !== revision.id
+        || run.status !== "awaiting_result_review"
+        || run.inputHash !== revision.selectionHash
+        || run.programHash !== revision.programHash
+        || run.runtimeVersion !== revision.runtimeVersion
+        || run.resultPreviewHash !== storedResult?.resultPreviewHash
+        || input.analysisRun.status !== "completed"
         || !resultPackage?.id
         || resultPackage.projectId !== input.projectId
         || resultPackage.analysisThreadId !== thread.id
-        || !analysisRun
-        || analysisRun.projectId !== input.projectId
-        || analysisRun.analysisThreadId !== thread.id
+        || resultPackage.analysisRunId !== run.id
+        || resultPackage.status !== "accepted"
+        || !storedResult
+        || storedResult.analysisThreadId !== thread.id
+        || storedResult.analysisRunId !== run.id
+        || storedResult.status !== "awaiting_review"
+        || storedResult.contentHash !== resultPackage.contentHash
+        || storedResult.resultPreviewHash !== resultPackage.resultPreviewHash
+        || storedResult.validation?.ok !== true
+        || (storedResult.validation?.errors || []).length
         || !chart?.id
         || chart.projectId !== input.projectId
         || chart.analysisResultId !== resultPackage.id
+        || chart.spec?.origin !== "analysis_result"
+        || chart.spec?.schemaVersion !== "labrat.chartSpec.v2"
+        || chart.spec?.analysisThreadId !== thread.id
+        || chart.spec?.analysisPlanRevisionId !== revision.id
+        || chart.spec?.analysisRunId !== run.id
+        || chart.spec?.analysisResultId !== storedResult.id
+        || chart.spec?.resultHash !== storedResult.contentHash
+        || !Array.isArray(input.expectedHeadRefs)
+        || !input.expectedHeadRefs.length
       ) {
         throw Object.assign(new Error("The analysis result publication package is invalid."), {
           statusCode: 400,
           code: "invalid_analysis_publication_package",
         });
       }
-      const analysisResult = await insertAnalysisResultRow(client, resultPackage);
+
+      const expectedRefs = Array.isArray(input.expectedHeadRefs) ? input.expectedHeadRefs : [];
+      const experimentIds = [...new Set(
+        expectedRefs.map((head) => head.experimentId).filter(Boolean),
+      )];
+      const headsResult = experimentIds.length
+        ? await client.query(
+          `select * from experiment_snapshot_heads
+           where project_id = $1 and experiment_id = any($2::text[])
+           for share`,
+          [input.projectId, experimentIds],
+        )
+        : { rows: [] };
+      const currentHeads = headsResult.rows.map(experimentSnapshotHeadFromRow);
+      const headMismatches = expectedRefs.flatMap((expected) => {
+        const current = currentHeads.find((head) => head.experimentId === expected.experimentId);
+        return (
+          current
+          && current.id === expected.headId
+          && current.dataSnapshotId === expected.dataSnapshotId
+          && Number(current.recordIndex) === Number(expected.recordIndex)
+        ) ? [] : [{
+          experimentId: expected.experimentId,
+          expected,
+          current: current ? {
+            headId: current.id,
+            dataSnapshotId: current.dataSnapshotId,
+            recordIndex: Number(current.recordIndex),
+          } : null,
+        }];
+      });
+      if (headMismatches.length) {
+        throw Object.assign(new Error("Accepted experiment snapshots changed before chart publication."), {
+          statusCode: 409,
+          code: "analysis_result_stale",
+          details: { headMismatches },
+        });
+      }
+
+      const acceptedAt = resultPackage.acceptedAt || nowIso();
+      const acceptedResultQuery = await client.query(
+        `update analysis_results
+         set status = 'accepted',
+             accepted_at = $3,
+             accepted_by = $4,
+             updated_at = $3,
+             updated_by = $4
+         where id = $1 and project_id = $2 and status = 'awaiting_review'
+         returning *`,
+        [resultPackage.id, input.projectId, acceptedAt, input.actorUserId],
+      );
+      const analysisResult = analysisResultFromRow(acceptedResultQuery.rows[0]);
+      const completedRunQuery = await client.query(
+        `update analysis_runs
+         set status = 'completed',
+             updated_at = $3,
+             updated_by = $4
+         where id = $1 and project_id = $2 and status = 'awaiting_result_review'
+         returning *`,
+        [run.id, input.projectId, acceptedAt, input.actorUserId],
+      );
+      if (!analysisResult || !completedRunQuery.rows[0]) {
+        throw Object.assign(new Error("Analysis result publication state changed concurrently."), {
+          statusCode: 409,
+          code: "analysis_result_state_conflict",
+        });
+      }
       const chartResult = await client.query(
         `insert into chart_specs
          (id, lab_id, project_id, analysis_result_id, source_chart_proposal_set_id,
@@ -2465,7 +2581,7 @@ export class PostgresSaasStore {
         ],
       );
       const chartSpec = chartSpecFromRow(chartResult.rows[0]);
-      const completedAt = analysisResult.acceptedAt || analysisResult.createdAt || nowIso();
+      const completedAt = analysisResult.acceptedAt || acceptedAt;
       await client.query(
         `update analysis_threads
          set status = 'completed',
@@ -2476,8 +2592,14 @@ export class PostgresSaasStore {
          where id = $1`,
         [
           thread.id,
-          jsonb([...(thread.acceptedAnalysisResultIds || []), analysisResult.id], []),
-          jsonb([...(thread.chartSpecIds || []), chartSpec.id], []),
+          jsonb([
+            ...(thread.acceptedAnalysisResultIds || []).filter((id) => id !== analysisResult.id),
+            analysisResult.id,
+          ], []),
+          jsonb([
+            ...(thread.chartSpecIds || []).filter((id) => id !== chartSpec.id),
+            chartSpec.id,
+          ], []),
           completedAt,
           input.actorUserId,
         ],
@@ -2586,6 +2708,11 @@ export class PostgresSaasStore {
         input.createdBy,
       ],
     );
+    return chartSpecFromRow(result.rows[0]);
+  }
+
+  async findChartSpecById(id) {
+    const result = await this.query("select * from chart_specs where id = $1", [id]);
     return chartSpecFromRow(result.rows[0]);
   }
 

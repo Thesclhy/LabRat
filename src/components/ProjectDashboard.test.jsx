@@ -412,6 +412,23 @@ describe("ProjectOverview", () => {
     expect(activeChartSpecsForProject(stateWithStaleSpec).map((chartSpec) => chartSpec.id)).toEqual(["chart_spec_active"]);
   });
 
+  it("keeps accepted analysis-result ChartSpecs in active chart choices", () => {
+    const analysisChart = {
+      id: "chart_spec_analysis",
+      spec: {
+        schemaVersion: "labrat.chartSpec.v2",
+        origin: "analysis_result",
+        status: "accepted",
+        traceCatalog: [{ traceId: "trace_1", pointCount: 2 }],
+      },
+    };
+
+    expect(activeChartSpecsForProject({
+      ...projectState,
+      chartSpecs: [analysisChart],
+    })).toEqual([analysisChart]);
+  });
+
   it("selects the newest dated proposal set when server records are returned newest-first", () => {
     const selected = latestItem([
       { id: "chart_set_new", updatedAt: "2026-06-17T12:00:00.000Z" },

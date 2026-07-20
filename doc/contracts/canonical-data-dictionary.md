@@ -248,7 +248,9 @@ A review collection of source-backed chart proposals. Proposal acceptance/reject
 
 ## ChartSpec
 
-A durable chart definition. The currently valid form is source-backed:
+A durable chart definition. Two evidence-backed forms are valid.
+
+Source-backed:
 
 - `origin: source_extract`
 - chart type/title/axis fields and units
@@ -257,11 +259,20 @@ A durable chart definition. The currently valid form is source-backed:
 - optional compatible experiment ids and series metadata
 - reviewed render style, axis options, warnings, and layout
 
-Charts without an immutable source snapshot are invalid until DataSnapshot-backed charting is implemented.
+Analysis-result-backed:
+
+- `schemaVersion: labrat.chartSpec.v2` and `origin: analysis_result`
+- exact thread/plan/run/result ids plus plan, selection, dependency, input, program, result, preview, and runtime hashes
+- accepted input DataSnapshot/head/record refs with immutable content/dependency hashes
+- a complete unique finite trace catalog with source-record lineage
+- a reviewed `defaultChartView.visibleTraceIds` subset
+- no copied or model-invented values outside the validated immutable AnalysisResult
+
+Project/list responses may omit large trace x/y arrays and set `detailRequired: true`; the ChartSpec detail endpoint returns the complete immutable artifact.
 
 ## Manuscript
 
-A project-owned editable document containing pages, blocks, canvas state, and references. Chart blocks keep `chartSpecId`, a stored `chartSpecSnapshot`, selected experiment view, and editable layout so historical figures remain renderable.
+A project-owned editable document containing pages, blocks, canvas state, and references. Chart blocks keep `chartSpecId`, a stored `chartSpecSnapshot`, placement-local chart view, and editable layout so historical figures remain renderable.
 
 ## AgentRun
 

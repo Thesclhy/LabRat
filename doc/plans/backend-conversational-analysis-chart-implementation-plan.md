@@ -579,7 +579,7 @@ git commit -m "Add validated analysis result review"
 - Extends ChartSpec validation/rendering with `origin: "analysis_result"`.
 - Consumes validated immutable AnalysisResult.
 
-- [ ] **Step 1: Write failing publication and rendering tests**
+- [x] **Step 1: Write failing publication and rendering tests**
 
 ```js
 test("publishes accepted result and complete trace catalog atomically", async () => {
@@ -595,7 +595,7 @@ it("renders analysis-result traces without sourceSnapshot", () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and confirm source-only validation rejects the fixture**
+- [x] **Step 2: Run tests and confirm source-only validation rejects the fixture**
 
 Run:
 
@@ -606,15 +606,15 @@ npm test -- src/charts/sourceChartPreview.test.js
 
 Expected: FAIL because ChartSpec validation/rendering accepts only source snapshots.
 
-- [ ] **Step 3: Implement analysis-result ChartSpec v2 validation**
+- [x] **Step 3: Implement analysis-result ChartSpec v2 validation**
 
 Require result/thread/plan/run ids and hashes, accepted input snapshot refs, unique complete trace catalog, immutable finite trace arrays, source-record lineage, compatible x/y lengths, and a default visible subset contained in the catalog.
 
-- [ ] **Step 4: Implement atomic idempotent publication**
+- [x] **Step 4: Implement atomic idempotent publication**
 
 Recheck result-review hash and active dependencies, mark result accepted, create ChartSpec, link all artifacts, and record audit/receipt in one store transaction. Idempotent replay returns the original artifact ids; conflicting request hashes return 409.
 
-- [ ] **Step 5: Render both ChartSpec origins**
+- [x] **Step 5: Render both ChartSpec origins**
 
 Branch internally by origin:
 
@@ -625,7 +625,7 @@ return sourceSnapshotTraces(spec, chartView, style);
 
 List responses stay bounded; project state may include immutable trace metadata but large arrays load from ChartSpec detail before Manuscript insertion.
 
-- [ ] **Step 6: Run targeted backend/frontend tests**
+- [x] **Step 6: Run targeted backend/frontend tests**
 
 Run:
 
@@ -636,7 +636,7 @@ npm test -- src/charts/sourceChartPreview.test.js src/components/ProjectDashboar
 
 Expected: source-backed regressions remain green; analysis-result publication is atomic and renderable.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/src/saas/analysisChartPublisher.js backend/src/saas/analysisChartPublisher.test.js backend/src/saas/chartSpecValidation.js backend/src/saas/chartSpecValidation.test.js backend/src/saas/memoryStore.js backend/src/saas/postgresStore.js backend/src/saas/routes/saasRoutes.js backend/src/saas/routes/saasRoutes.test.js src/charts/sourceChartPreview.js src/charts/sourceChartPreview.test.js src/main.jsx

@@ -226,16 +226,102 @@ function sourceSnapshotTraces(spec, chartView, style) {
   });
 }
 
+function analysisVisibleTraceIds(spec, chartView) {
+  const source = Object.hasOwn(chartView, "visibleTraceIds")
+    ? asArray(chartView.visibleTraceIds)
+    : asArray(spec.defaultChartView?.visibleTraceIds);
+  if (!source.length && !Object.hasOwn(chartView, "visibleTraceIds")
+    && !Array.isArray(spec.defaultChartView?.visibleTraceIds)) {
+    return null;
+  }
+  return new Set(source.map(String));
+}
+
+function analysisResultTraces(spec, chartView, style) {
+  const chartType = renderChartType(spec.chartType);
+  const visible = analysisVisibleTraceIds(spec, chartView);
+  const selectedCatalog = asArray(spec.traceCatalog).filter((trace) => (
+    !visible || visible.has(String(trace?.traceId || ""))
+  ));
+  const xUnits = [...new Set(selectedCatalog.map((trace) => String(trace?.xUnit ?? "")))];
+  const yUnits = [...new Set(selectedCatalog.map((trace) => String(trace?.yUnit ?? "")))];
+  return asArray(spec.traceCatalog).flatMap((trace, index) => {
+    const traceId = String(trace?.traceId || "");
+    if (visible && !visible.has(traceId)) return [];
+    const styled = traceStyle(style, index, trace);
+    const xAxisIndex = xUnits.indexOf(String(trace?.xUnit ?? ""));
+    const yAxisIndex = yUnits.indexOf(String(trace?.yUnit ?? ""));
+    return [{
+      type: isBarChart(chartType) || trace?.type === "bar" ? "bar" : "scatter",
+      ...(isBarChart(chartType) || trace?.type === "bar"
+        ? {}
+        : { mode: trace?.mode || style.traceMode || "lines+markers" }),
+      name: styled.name
+        || trace?.experimentLabel
+        || trace?.name
+        || trace?.experimentId
+        || traceId
+        || `Trace ${index + 1}`,
+      x: asArray(trace?.x),
+      y: asArray(trace?.y),
+      xaxis: xAxisIndex > 0 ? `x${xAxisIndex + 1}` : "x",
+      yaxis: yAxisIndex > 0 ? `y${yAxisIndex + 1}` : "y",
+      line: styled.line,
+      marker: styled.marker,
+      meta: {
+        traceId,
+        experimentId: trace?.experimentId || null,
+        xUnit: trace?.xUnit ?? null,
+        yUnit: trace?.yUnit ?? null,
+        sourceRecordIds: asArray(trace?.sourceRecordIds),
+      },
+    }];
+  });
+}
+
+function analysisUnitAxisLayout(traces, axis, style) {
+  const unitKey = `${axis}Unit`;
+  const units = [...new Set(asArray(traces).map((trace) => String(trace?.meta?.[unitKey] ?? "")))];
+  if (units.length <= 1) return {};
+  return Object.fromEntries(units.map((unit, index) => {
+    const axisKey = index === 0 ? `${axis}axis` : `${axis}axis${index + 1}`;
+    const option = {
+      title: unit ? `Value (${unit})` : "Value",
+      option: {},
+      showgrid: axis === "x" ? style.grid.x : style.grid.y,
+      gridcolor: style.grid.color,
+      defaultShowgrid: axis !== "x",
+    };
+    return [axisKey, {
+      ...axisLayout(option),
+      ...(index > 0 ? {
+        overlaying: axis,
+        side: index % 2 ? "right" : "left",
+        anchor: "free",
+        autoshift: true,
+      } : {}),
+    }];
+  }));
+}
+
 export function makeSourceChartPreview(chartSpecOrProposal, options = {}) {
   const spec = chartSpecToProposal(chartSpecOrProposal);
   const chartType = renderChartType(spec.chartType);
   const style = renderStyleFor(spec);
   const chartView = isObject(options.chartView) ? options.chartView : {};
-  const traces = sourceSnapshotTraces(spec, chartView, style);
+  const traces = spec.origin === "analysis_result"
+    ? analysisResultTraces(spec, chartView, style)
+    : sourceSnapshotTraces(spec, chartView, style);
   const xTitle = [spec.x?.label, spec.x?.unit ? `(${spec.x.unit})` : ""].filter(Boolean).join(" ") || "Value";
   const yTitle = yAxesFor(spec).length > 1
     ? "Value"
     : [spec.y?.label, spec.y?.unit ? `(${spec.y.unit})` : ""].filter(Boolean).join(" ") || "Value";
+  const analysisAxes = spec.origin === "analysis_result"
+    ? {
+      ...analysisUnitAxisLayout(traces, "x", style),
+      ...analysisUnitAxisLayout(traces, "y", style),
+    }
+    : {};
   return {
     traces,
     layout: plotLayout({
@@ -259,6 +345,7 @@ export function makeSourceChartPreview(chartSpecOrProposal, options = {}) {
         gridcolor: style.grid.color,
         defaultShowgrid: true,
       }),
+      ...analysisAxes,
       showlegend: style.showLegend == null ? traces.length > 1 : Boolean(style.showLegend),
       legend: style.legendPosition === "right"
         ? { orientation: "v", y: 1, x: 1.02, xanchor: "left", yanchor: "top" }

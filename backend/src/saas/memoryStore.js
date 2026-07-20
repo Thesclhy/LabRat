@@ -1405,24 +1405,56 @@ export class MemorySaasStore {
       return { ...copy(prior.response), idempotentReplay: true };
     }
     const thread = this.analysisThreads.get(input.analysisThreadId);
+    const revision = this.analysisPlanRevisions.get(input.analysisPlanRevision?.id);
+    const run = this.analysisRuns.get(input.analysisRun?.id);
+    const storedResult = this.analysisResults.get(input.analysisResult?.id);
     const result = copy(input.analysisResult);
     const chartSpec = copy(input.chartSpec);
-    const analysisRun = this.analysisRuns.get(result?.analysisRunId);
     if (
       !input.idempotencyKey
       || !input.requestHash
       || !thread
       || thread.projectId !== input.projectId
+      || thread.status !== "awaiting_result_review"
+      || !revision
+      || revision.projectId !== input.projectId
+      || revision.analysisThreadId !== thread.id
+      || revision.status !== "accepted"
+      || !run
+      || run.projectId !== input.projectId
+      || run.analysisThreadId !== thread.id
+      || run.acceptedPlanRevisionId !== revision.id
+      || run.status !== "awaiting_result_review"
+      || run.inputHash !== revision.selectionHash
+      || run.programHash !== revision.programHash
+      || run.runtimeVersion !== revision.runtimeVersion
+      || run.resultPreviewHash !== storedResult?.resultPreviewHash
+      || input.analysisRun.status !== "completed"
       || !result?.id
       || result.projectId !== input.projectId
       || result.analysisThreadId !== thread.id
-      || !analysisRun
-      || analysisRun.projectId !== input.projectId
-      || analysisRun.analysisThreadId !== thread.id
+      || result.analysisRunId !== run.id
+      || result.status !== "accepted"
+      || !storedResult
+      || storedResult.projectId !== input.projectId
+      || storedResult.analysisThreadId !== thread.id
+      || storedResult.analysisRunId !== run.id
+      || storedResult.status !== "awaiting_review"
+      || storedResult.contentHash !== result.contentHash
+      || storedResult.resultPreviewHash !== result.resultPreviewHash
+      || storedResult.validation?.ok !== true
+      || asArray(storedResult.validation?.errors).length
       || !chartSpec?.id
       || chartSpec.projectId !== input.projectId
       || chartSpec.analysisResultId !== result.id
-      || this.analysisResults.has(result.id)
+      || chartSpec.spec?.origin !== "analysis_result"
+      || chartSpec.spec?.schemaVersion !== "labrat.chartSpec.v2"
+      || chartSpec.spec?.analysisThreadId !== thread.id
+      || chartSpec.spec?.analysisPlanRevisionId !== revision.id
+      || chartSpec.spec?.analysisRunId !== run.id
+      || chartSpec.spec?.analysisResultId !== storedResult.id
+      || chartSpec.spec?.resultHash !== storedResult.contentHash
+      || !asArray(input.expectedHeadRefs).length
       || this.chartSpecs.has(chartSpec.id)
     ) {
       throw Object.assign(new Error("The analysis result publication package is invalid."), {
@@ -1430,20 +1462,64 @@ export class MemorySaasStore {
         code: "invalid_analysis_publication_package",
       });
     }
+    const headMismatches = asArray(input.expectedHeadRefs).flatMap((expected) => {
+      const current = [...this.experimentSnapshotHeads.values()].find((head) => (
+        head.projectId === input.projectId && head.experimentId === expected.experimentId
+      ));
+      return (
+        current
+        && current.id === expected.headId
+        && current.dataSnapshotId === expected.dataSnapshotId
+        && Number(current.recordIndex) === Number(expected.recordIndex)
+      ) ? [] : [{
+        experimentId: expected.experimentId,
+        expected: copy(expected),
+        current: current ? {
+          headId: current.id,
+          dataSnapshotId: current.dataSnapshotId,
+          recordIndex: Number(current.recordIndex),
+        } : null,
+      }];
+    });
+    if (headMismatches.length) {
+      throw Object.assign(new Error("Accepted experiment snapshots changed before chart publication."), {
+        statusCode: 409,
+        code: "analysis_result_stale",
+        details: { headMismatches },
+      });
+    }
     const nextThreads = new Map(this.analysisThreads);
+    const nextRuns = new Map(this.analysisRuns);
     const nextResults = new Map(this.analysisResults);
     const nextChartSpecs = new Map(this.chartSpecs);
     const nextPublications = new Map(this.analysisPublications);
     const nextAuditEvents = new Map(this.auditEvents);
-    const createdAt = result.acceptedAt || result.createdAt || nowIso();
+    const createdAt = result.acceptedAt || nowIso();
+    const acceptedResult = {
+      ...copy(storedResult),
+      status: "accepted",
+      acceptedAt: createdAt,
+      acceptedBy: input.actorUserId,
+      updatedAt: createdAt,
+      updatedBy: input.actorUserId,
+    };
+    const completedRun = {
+      ...copy(run),
+      status: "completed",
+      updatedAt: createdAt,
+      updatedBy: input.actorUserId,
+    };
     const updatedThread = {
       ...copy(thread),
       status: "completed",
       acceptedAnalysisResultIds: [
-        ...asArray(thread.acceptedAnalysisResultIds),
+        ...asArray(thread.acceptedAnalysisResultIds).filter((id) => id !== result.id),
         result.id,
       ],
-      chartSpecIds: [...asArray(thread.chartSpecIds), chartSpec.id],
+      chartSpecIds: [
+        ...asArray(thread.chartSpecIds).filter((id) => id !== chartSpec.id),
+        chartSpec.id,
+      ],
       updatedAt: createdAt,
       updatedBy: input.actorUserId,
     };
@@ -1462,7 +1538,8 @@ export class MemorySaasStore {
       createdBy: input.actorUserId,
     };
     nextThreads.set(thread.id, updatedThread);
-    nextResults.set(result.id, result);
+    nextRuns.set(run.id, completedRun);
+    nextResults.set(result.id, acceptedResult);
     nextChartSpecs.set(chartSpec.id, chartSpec);
     nextPublications.set(publicationKey, publication);
     asArray(input.auditEvents).forEach((auditInput) => {
@@ -1483,6 +1560,7 @@ export class MemorySaasStore {
       nextAuditEvents.set(event.id, event);
     });
     this.analysisThreads = nextThreads;
+    this.analysisRuns = nextRuns;
     this.analysisResults = nextResults;
     this.chartSpecs = nextChartSpecs;
     this.analysisPublications = nextPublications;
@@ -1550,6 +1628,10 @@ export class MemorySaasStore {
     };
     this.chartSpecs.set(spec.id, spec);
     return copy(spec);
+  }
+
+  async findChartSpecById(id) {
+    return copy(this.chartSpecs.get(id) || null);
   }
 
   async listChartSpecs({ projectId }) {

@@ -9,6 +9,7 @@ import {
   getAnalysisRun,
   getAnalysisThread,
   listAnalysisThreads,
+  publishAcceptedAnalysisChart,
   reviseAnalysisRun,
 } from "./analysisApi.js";
 
@@ -120,6 +121,30 @@ describe("analysisApi", () => {
     expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
       resultHash: "sha256_result_1",
       feedback: "Keep all experiments but use reaction time on x.",
+    });
+  });
+
+  it("publishes an exact reviewed result with an idempotency key", async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse({
+      analysisResult: { id: "analysis_result_1", status: "accepted" },
+      chartSpec: { id: "chart_spec_1" },
+    }, { status: 201 }));
+
+    await publishAcceptedAnalysisChart("analysis/run 1", {
+      resultHash: "sha256_result_1",
+      defaultVisibleTraceIds: ["trace_1", "trace_2"],
+    }, {
+      fetch: fetchImpl,
+      idempotencyKey: "publish_result_1",
+    });
+
+    expect(fetchImpl.mock.calls[0][0]).toBe(
+      "/api/analysis-runs/analysis%2Frun%201/accept-and-create-chart",
+    );
+    expect(fetchImpl.mock.calls[0][1].headers["idempotency-key"]).toBe("publish_result_1");
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
+      resultHash: "sha256_result_1",
+      defaultVisibleTraceIds: ["trace_1", "trace_2"],
     });
   });
 });

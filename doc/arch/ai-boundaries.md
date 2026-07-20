@@ -87,13 +87,15 @@ WorkbookUnderstanding confirmation, DataPlan publish, source extract acceptance,
 - Local execution is a non-production development adapter, not a security sandbox. Production defaults to disabled and requires an externally hardened HTTPS worker with network denial, read-only assets, isolation, and resource limits.
 - Executor output is untrusted until deterministic validation checks the supported output encoding, finite declared fields, plottable x/y types and lengths, exact experiment/snapshot identity, stable ids, accepted-record lineage, complete output-or-reasoned-exclusion accounting, missing-value behavior, size limits, hashes, units, and manifest invariants.
 - Only valid output becomes an immutable awaiting-review AnalysisResult. No executor path creates a ChartSpec. Result feedback references the exact visible result hash and creates a later plan revision without mutating prior artifacts.
+- Result acceptance is deterministic and requires the exact visible result hash plus reviewed trace ids. The backend rechecks active accepted heads and atomically accepts the existing result and creates one ChartSpec; the model cannot invoke or bypass this boundary.
 
 ## Chart Rules
 
-- Current chart interpretation is source-evidence-only.
-- Durable ChartSpecs require exact source refs and immutable `sourceSnapshot.rows` or `sourceSnapshot.series`.
+- Generic chart interpretation is source-evidence-only.
+- Source-backed ChartSpecs require exact source refs and immutable `sourceSnapshot.rows` or `sourceSnapshot.series`.
+- Analysis-result ChartSpecs derive only from one accepted backend-validated AnalysisResult and retain exact analysis hashes, accepted input snapshot refs, complete trace arrays, and source-record lineage.
 - The model may suggest chart type, axes, and style, but cannot supply uncited plotted values.
-- DataSnapshot-backed chart proposals remain unimplemented and must return an explicit unsupported transition.
+- Generic DataSnapshot-backed chart proposals remain unimplemented and must return an explicit unsupported transition; the reviewed analysis-result publication path is the only DataSnapshot-derived ChartSpec path.
 
 ## AgentRun Rules
 

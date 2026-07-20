@@ -1997,6 +1997,107 @@ test("accepted analysis runs execute once, expose a bounded result preview, and 
   assert.equal((await store.findAnalysisResultById(executedBody.analysisResult.id)).status, "awaiting_review");
 });
 
+test("accepted analysis results publish one bounded-list ChartSpec atomically", async () => {
+  const project = await createProject("Analysis Publication Route Project");
+  seedRouteAnalysisData(project, `publish_${Date.now()}`);
+  const drafted = await jsonFetch(`/api/projects/${project.id}/agent/runs`, {
+    method: "POST",
+    body: { message: "Compare yield across all experiments and plot it." },
+  });
+  const revision = (await drafted.json()).currentPlanRevision;
+  const accepted = await jsonFetch(`/api/analysis-plan-revisions/${revision.id}/accept`, {
+    method: "POST",
+    headers: { "idempotency-key": `publish_accept_${Date.now()}` },
+    body: {
+      planHash: revision.planHash,
+      selectionHash: revision.selectionHash,
+      dependencyHash: revision.dependencyHash,
+    },
+  });
+  const run = (await accepted.json()).analysisRun;
+  const executed = await jsonFetch(`/api/analysis-runs/${run.id}/execute`, {
+    method: "POST",
+    body: {},
+  });
+  const executedBody = await executed.json();
+  const publicationBody = {
+    resultHash: executedBody.analysisResult.contentHash,
+    defaultVisibleTraceIds: ["trace_yield"],
+  };
+
+  const missingKey = await jsonFetch(
+    `/api/analysis-runs/${run.id}/accept-and-create-chart`,
+    { method: "POST", body: publicationBody },
+  );
+  assert.equal(missingKey.status, 400);
+  assert.equal((await missingKey.json()).error.code, "idempotency_key_required");
+
+  const publicationKey = `publish_result_${Date.now()}`;
+  const published = await jsonFetch(
+    `/api/analysis-runs/${run.id}/accept-and-create-chart`,
+    {
+      method: "POST",
+      headers: { "idempotency-key": publicationKey },
+      body: publicationBody,
+    },
+  );
+  assert.equal(published.status, 201);
+  const publishedBody = await published.json();
+  assert.equal(publishedBody.analysisResult.status, "accepted");
+  assert.equal(publishedBody.analysisRun.status, "completed");
+  assert.equal(publishedBody.analysisThread.status, "completed");
+  assert.equal(publishedBody.chartSpec.spec.origin, "analysis_result");
+  assert.deepEqual(
+    publishedBody.chartSpec.spec.defaultChartView.visibleTraceIds,
+    ["trace_yield"],
+  );
+
+  const replay = await jsonFetch(
+    `/api/analysis-runs/${run.id}/accept-and-create-chart`,
+    {
+      method: "POST",
+      headers: { "idempotency-key": publicationKey },
+      body: publicationBody,
+    },
+  );
+  assert.equal(replay.status, 200);
+  const replayBody = await replay.json();
+  assert.equal(replayBody.idempotentReplay, true);
+  assert.equal(replayBody.chartSpec.id, publishedBody.chartSpec.id);
+
+  const list = await jsonFetch(`/api/projects/${project.id}/chart-specs`);
+  const listedChart = (await list.json()).chartSpecs.find(
+    (chartSpec) => chartSpec.id === publishedBody.chartSpec.id,
+  );
+  assert.equal(listedChart.spec.detailRequired, true);
+  assert.equal(listedChart.spec.traceCatalog[0].pointCount, 1);
+  assert.equal(Object.hasOwn(listedChart.spec.traceCatalog[0], "x"), false);
+  assert.equal(Object.hasOwn(listedChart.spec.traceCatalog[0], "y"), false);
+  assert.equal(Object.hasOwn(listedChart.spec.traceCatalog[0], "sourceRecordIds"), false);
+  assert.equal(Object.hasOwn(listedChart.spec, "inputSnapshotRefs"), false);
+  assert.equal(Object.hasOwn(listedChart.spec, "sourceRefs"), false);
+  assert.equal(listedChart.spec.inputSnapshotRefCount, 1);
+
+  const detail = await jsonFetch(`/api/chart-specs/${publishedBody.chartSpec.id}`);
+  assert.equal(detail.status, 200);
+  const detailedChart = (await detail.json()).chartSpec;
+  assert.equal(detailedChart.spec.traceCatalog[0].x.length, 1);
+  assert.equal(typeof detailedChart.spec.traceCatalog[0].x[0], "string");
+  assert.equal(detailedChart.spec.traceCatalog[0].y[0], 37.5);
+
+  const conflict = await jsonFetch(
+    `/api/analysis-runs/${run.id}/accept-and-create-chart`,
+    {
+      method: "POST",
+      headers: { "idempotency-key": publicationKey },
+      body: { ...publicationBody, defaultVisibleTraceIds: [] },
+    },
+  );
+  assert.equal(conflict.status, 409);
+  assert.equal((await conflict.json()).error.code, "idempotency_key_conflict");
+  assert.equal((await store.listChartSpecs({ projectId: project.id })).length, 1);
+});
+
 test("analysis execution terminally rejects stale active heads and remains revisable", async () => {
   const project = await createProject("Stale Analysis Execution Project");
   const seeded = seedRouteAnalysisData(project, `stale_execute_${Date.now()}`);
@@ -2095,6 +2196,14 @@ test("analysis run reads allow viewers while execution and revision require edit
     method: "POST",
     body: { feedback: "Change it." },
   })).status, 403);
+  assert.equal((await jsonFetch(
+    `/api/analysis-runs/${queuedRun.id}/accept-and-create-chart`,
+    {
+      method: "POST",
+      headers: { "idempotency-key": "viewer_cannot_publish_analysis" },
+      body: { resultHash: "sha256_not_visible", defaultVisibleTraceIds: [] },
+    },
+  )).status, 403);
 
   cookie = ownerCookie;
 });
