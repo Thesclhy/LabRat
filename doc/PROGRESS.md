@@ -15,6 +15,16 @@ Keep entries concise, newest first, and include:
 
 ## 2026-07-20
 
+- Approved the region-level Workbook Understanding redesign and documented the
+  contract cutover in
+  `doc/plans/workbook-region-understanding-redesign-design.md`. The design keeps
+  SourceDocument evidence and WorkbookReviewSession grouping, replaces aggregate
+  WorkbookUnderstanding acceptance with immutable per-region revisions and one
+  accepted pointer, adds independent create/revise/confirm/ignore/logical-delete
+  APIs, wires bounded backend model interpretation, and changes evidence/DataPlan
+  dependencies to exact accepted region revision ids. Historical source and
+  downstream artifacts never cascade-delete. Documentation-only checkpoint;
+  implementation and API/schema changes have not started.
 - Completed progressive full-sheet Workbook Review loading and
   checkbox-controlled blue highlights. The current sheet now keeps its complete
   metadata `usedRange`, loads visible 40-by-12 tiles first, hydrates every
