@@ -2731,6 +2731,8 @@ export function AgentPanel({
             <AnalysisConversationCard
               thread={m.analysisThread}
               revision={m.currentPlanRevision}
+              run={m.analysisRun}
+              result={m.analysisResult}
               onOpen={onOpenAnalysisReview}
             />
           )}
@@ -3639,9 +3641,9 @@ function App() {
       setBackendChartProposalState((current) => ({ ...current, error: err.message || String(err) }));
     }
   };
-  const openAnalysisReview = ({ thread, revision }) => {
+  const openAnalysisReview = ({ thread, revision, run = null, result = null }) => {
     if (!thread?.id || !revision?.id) return;
-    setAnalysisReviewState({ thread, revision });
+    setAnalysisReviewState({ thread, revision, run, result });
     setAgentOpen(false);
   };
   const closeAnalysisReview = () => {
@@ -3801,6 +3803,8 @@ function App() {
           projectId={activeProjectId}
           thread={analysisReviewState.thread}
           revision={analysisReviewState.revision}
+          run={analysisReviewState.run}
+          result={analysisReviewState.result}
           WorkbookWorkspaceComponent={WorkbookReviewWorkspace}
           onClose={closeAnalysisReview}
           onAccepted={() => {

@@ -3,9 +3,13 @@ import { describe, expect, it, vi } from "vitest";
 import {
   acceptAnalysisPlanRevision,
   createAnalysisPlanRevision,
+  executeAnalysisRun,
   getAnalysisPlanSelection,
+  getAnalysisResultPreview,
+  getAnalysisRun,
   getAnalysisThread,
   listAnalysisThreads,
+  reviseAnalysisRun,
 } from "./analysisApi.js";
 
 function jsonResponse(body, init = {}) {
@@ -58,6 +62,64 @@ describe("analysisApi", () => {
       planHash: "sha256_plan_2",
       selectionHash: "sha256_selection_2",
       dependencyHash: "sha256_dependency_2",
+    });
+  });
+
+  it("executes accepted runs and loads independently bounded result pages", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        analysisRun: { id: "analysis_run_1", status: "awaiting_result_review" },
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        analysisRun: { id: "analysis_run_1", status: "awaiting_result_review" },
+        analysisResult: { id: "analysis_result_1", status: "awaiting_review" },
+      }, { status: 201 }))
+      .mockResolvedValueOnce(jsonResponse({
+        rows: [],
+        traces: [],
+        sourceRefs: [],
+      }));
+
+    await getAnalysisRun("analysis/run 1", { fetch: fetchImpl });
+    await executeAnalysisRun("analysis/run 1", { fetch: fetchImpl });
+    await getAnalysisResultPreview("analysis/run 1", {
+      offset: 25,
+      limit: 200,
+      traceOffset: 10,
+      traceLimit: 500,
+      sourceOffset: 50,
+      sourceLimit: 200,
+      fetch: fetchImpl,
+    });
+
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/analysis-runs/analysis%2Frun%201");
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/analysis-runs/analysis%2Frun%201/execute");
+    expect(fetchImpl.mock.calls[1][1].method).toBe("POST");
+    expect(fetchImpl.mock.calls[2][0]).toBe(
+      "/api/analysis-runs/analysis%2Frun%201/result-preview"
+      + "?offset=25&limit=200&traceOffset=10&traceLimit=500&sourceOffset=50&sourceLimit=200",
+    );
+  });
+
+  it("revises the exact visible result without mutating it", async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse({
+      analysisPlanRevision: { id: "analysis_plan_revision_3", revision: 3 },
+      priorAnalysisResult: {
+        id: "analysis_result_1",
+        contentHash: "sha256_result_1",
+        status: "awaiting_review",
+      },
+    }, { status: 201 }));
+
+    await reviseAnalysisRun("analysis_run_1", {
+      resultHash: "sha256_result_1",
+      feedback: "Keep all experiments but use reaction time on x.",
+    }, { fetch: fetchImpl });
+
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/analysis-runs/analysis_run_1/revise");
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
+      resultHash: "sha256_result_1",
+      feedback: "Keep all experiments but use reaction time on x.",
     });
   });
 });

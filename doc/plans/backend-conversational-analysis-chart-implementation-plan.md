@@ -514,7 +514,7 @@ git commit -m "Execute accepted analysis plans"
 - Produces result review tabs and `Accept result and create chart`.
 - Consumes Task 5 result previews and revision endpoint.
 
-- [ ] **Step 1: Write failing result-review tests**
+- [x] **Step 1: Write failing result-review tests**
 
 ```jsx
 it("shows validation and exclusions before result acceptance", () => {
@@ -527,21 +527,21 @@ it("shows validation and exclusions before result acceptance", () => {
 
 Add a test that result feedback calls `reviseAnalysisRun` and returns to plan review without changing the existing result.
 
-- [ ] **Step 2: Run tests and confirm result controls are absent**
+- [x] **Step 2: Run tests and confirm result controls are absent**
 
 Run: `npm test -- src/components/AnalysisReviewWorkspace.test.jsx src/components/AnalysisConversationCard.test.jsx`
 
 Expected: FAIL on missing Result/Chart tabs and combined acceptance action.
 
-- [ ] **Step 3: Implement Source, Result, And Chart tabs**
+- [x] **Step 3: Implement Source, Result, And Chart tabs**
 
 Result rows are paginated. Chart preview renders the complete validated trace domain and allows choosing `defaultVisibleTraceIds` for publication. Show input/output counts, exclusions, missing policy, invariant status, hashes, warnings, and source links.
 
-- [ ] **Step 4: Implement immutable revision loop**
+- [x] **Step 4: Implement immutable revision loop**
 
 Modification feedback from result review posts the run id, result hash, and user feedback. Replace the active workspace pointer with the returned later plan revision while preserving prior revision/run history in the conversation.
 
-- [ ] **Step 5: Run frontend tests and build**
+- [x] **Step 5: Run frontend tests and build**
 
 Run:
 
@@ -552,7 +552,7 @@ npm run build
 
 Expected: accepted plans progress to result review; result feedback returns to planning; result acceptance remains disabled on validation failure.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/data/analysisApi.js src/data/analysisApi.test.js src/components/AnalysisReviewWorkspace.jsx src/components/AnalysisReviewWorkspace.test.jsx src/components/AnalysisConversationCard.jsx src/components/AnalysisConversationCard.test.jsx src/styles.css src/main.jsx

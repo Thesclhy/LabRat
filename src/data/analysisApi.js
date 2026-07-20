@@ -19,8 +19,29 @@ function pageQuery(options = {}) {
 }
 
 function requestOptions(options = {}) {
-  const { offset: _offset, limit: _limit, idempotencyKey: _idempotencyKey, ...rest } = options;
+  const {
+    offset: _offset,
+    limit: _limit,
+    traceOffset: _traceOffset,
+    traceLimit: _traceLimit,
+    sourceOffset: _sourceOffset,
+    sourceLimit: _sourceLimit,
+    idempotencyKey: _idempotencyKey,
+    ...rest
+  } = options;
   return rest;
+}
+
+function resultPreviewQuery(options = {}) {
+  const query = new URLSearchParams({
+    offset: String(boundedInteger(options.offset, 0, 0, Number.MAX_SAFE_INTEGER)),
+    limit: String(boundedInteger(options.limit, 50, 1, 200)),
+    traceOffset: String(boundedInteger(options.traceOffset, 0, 0, Number.MAX_SAFE_INTEGER)),
+    traceLimit: String(boundedInteger(options.traceLimit, 50, 1, 500)),
+    sourceOffset: String(boundedInteger(options.sourceOffset, 0, 0, Number.MAX_SAFE_INTEGER)),
+    sourceLimit: String(boundedInteger(options.sourceLimit, 50, 1, 200)),
+  });
+  return `?${query.toString()}`;
 }
 
 export function listAnalysisThreads(projectId, options = {}) {
@@ -74,4 +95,35 @@ export function acceptAnalysisPlanRevision(planRevisionId, request = {}, options
       ...(options.headers || {}),
     },
   });
+}
+
+export function getAnalysisRun(analysisRunId, options = {}) {
+  const id = requireId(analysisRunId, "Select an analysis run before loading it.");
+  return serverRequest(`/api/analysis-runs/${id}`, requestOptions(options));
+}
+
+export function executeAnalysisRun(analysisRunId, options = {}) {
+  const id = requireId(analysisRunId, "Select an analysis run before executing it.");
+  return serverJson(`/api/analysis-runs/${id}/execute`, {}, requestOptions(options));
+}
+
+export function getAnalysisResultPreview(analysisRunId, options = {}) {
+  const id = requireId(analysisRunId, "Select an analysis run before loading its result.");
+  return serverRequest(
+    `/api/analysis-runs/${id}/result-preview${resultPreviewQuery(options)}`,
+    requestOptions(options),
+  );
+}
+
+export function reviseAnalysisRun(analysisRunId, request = {}, options = {}) {
+  const id = requireId(analysisRunId, "Select an analysis run before revising its result.");
+  const resultHash = String(request.resultHash || "").trim();
+  const feedback = String(request.feedback || "").trim();
+  if (!feedback) {
+    throw new ServerApiError("Describe the requested result modification.");
+  }
+  return serverJson(`/api/analysis-runs/${id}/revise`, {
+    ...(resultHash ? { resultHash } : {}),
+    feedback,
+  }, requestOptions(options));
 }

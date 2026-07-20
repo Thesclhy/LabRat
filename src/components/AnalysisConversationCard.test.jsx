@@ -27,4 +27,39 @@ describe("AnalysisConversationCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Review analysis plan" }));
     expect(onOpen).toHaveBeenCalledWith({ thread, revision });
   });
+
+  it("labels an analysis with a validated result as ready for result review", () => {
+    const onOpen = vi.fn();
+    const thread = {
+      id: "analysis_thread_1",
+      originalRequest: "Compare every reaction-time curve.",
+      status: "awaiting_result_review",
+    };
+    const revision = {
+      id: "analysis_plan_revision_2",
+      revision: 2,
+      status: "accepted",
+      requestSummary: "Compare every reaction-time curve.",
+      sourceRectangles: [],
+    };
+
+    render(
+      <AnalysisConversationCard
+        thread={thread}
+        revision={revision}
+        run={{ id: "analysis_run_1", status: "awaiting_result_review" }}
+        result={{ id: "analysis_result_1", status: "awaiting_review" }}
+        onOpen={onOpen}
+      />,
+    );
+
+    expect(screen.getByText("Result ready")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Review analysis result" }));
+    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({
+      thread,
+      revision,
+      run: expect.objectContaining({ id: "analysis_run_1" }),
+      result: expect.objectContaining({ id: "analysis_result_1" }),
+    }));
+  });
 });
