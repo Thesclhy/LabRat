@@ -59,11 +59,14 @@ Run the backend import service separately when not using Docker Compose:
 
 ```bash
 npm run dev:postgres
-$env:DATABASE_URL="postgres://labrat:labrat_dev@127.0.0.1:5432/labrat"
-$env:SESSION_SECRET="dev-secret"
-$env:LABRAT_SEED_DEV_ACCOUNTS="true"
 npm --prefix backend run dev
 ```
+
+For non-Docker local development, copy the required values from
+`.env.example` into the Git-ignored `.env.local`. The backend `dev` command
+loads root `.env` and then `.env.local`; enable
+`LABRAT_SEED_DEV_ACCOUNTS=true` only for local development. Production users
+and passwords belong in the database, not in an environment file.
 
 ## Blank Project Behavior
 

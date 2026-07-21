@@ -15,6 +15,15 @@ Keep entries concise, newest first, and include:
 
 ## 2026-07-20
 
+- Fixed local backend startup so the documented development accounts are
+  actually available after `npm --prefix backend run dev`. The dev script now
+  loads root `.env` and Git-ignored `.env.local`; `.env.example` documents the
+  seed-account switch, local session secret, and optional backend model config.
+  Production startup remains environment-managed and still rejects development
+  account seeding. Direct login smoke on the restarted in-memory backend passed
+  for `labuser`; focused startup/config tests passed 7/7, the backend suite
+  passed 234 with 1 optional PostgreSQL skip, and the production build passed
+  with the existing Plotly chunk-size warning.
 - Completed region-understanding implementation Task 8 and the full cutover.
   `npm run codex:verify` passed with frontend 252/252, backend 234 passed plus
   1 optional PostgreSQL integration skip, and a successful production build

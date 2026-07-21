@@ -26,13 +26,16 @@ npm --prefix backend test
 npm --prefix backend run test:postgres
 ```
 
-For local in-memory development with seeded accounts:
+For local in-memory development with seeded accounts, create a root
+`.env.local` from `.env.example` and run:
 
 ```powershell
-$env:LABRAT_SEED_DEV_ACCOUNTS="true"
-$env:SESSION_SECRET="dev-secret"
 npm --prefix backend run dev
 ```
+
+The backend `dev` script loads root `.env` first and `.env.local` second.
+Existing process environment variables still take precedence. `.env.local` is
+ignored by Git and must not be used to configure production accounts.
 
 The backend-only `dev` command intentionally runs without automatic file watching. The default local store is in memory, so a watch restart would silently discard login sessions and review state; restart the command manually after backend source edits.
 
