@@ -45,7 +45,7 @@ function findEvidence(evidenceResults, evidenceResultId) {
   return asArray(evidenceResults).find((item) => (
     text(item.evidenceResultId || item.retrievalResultId || item.resultId) === wanted
     || text(item.regionId) === wanted
-    || text(item.factId) === wanted
+    || text(item.regionUnderstandingRevisionId) === wanted
   )) || asArray(evidenceResults)[0] || null;
 }
 
@@ -120,12 +120,13 @@ function inferExperimentAlias(evidence, query = "") {
 function buildSourceEvidence(evidence) {
   return {
     retrievalResultId: text(evidence?.retrievalResultId || evidence?.resultId),
-    workbookUnderstandingId: text(evidence?.workbookUnderstandingId),
-    factId: text(evidence?.factId),
+    regionId: text(evidence?.regionId),
+    regionUnderstandingRevisionId: text(evidence?.regionUnderstandingRevisionId),
     sourceDocumentId: text(evidence?.sourceDocumentId),
     sheetName: text(evidence?.sheetName),
     range: text(evidence?.range),
     semanticType: text(evidence?.semanticType),
+    sourceContentHash: text(evidence?.sourceContentHash),
     evidenceStatus: evidence?.evidenceStatus,
     canUseForDataPlan: evidence?.canUseForDataPlan === true,
   };

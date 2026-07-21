@@ -19,46 +19,88 @@ function workbookCells(rows) {
   })));
 }
 
-function understandingFact({ sourceDocumentId, factId, range, endRow }) {
+function regionInterpretation({ endRow }) {
   return {
-    factId,
-    sourceDocumentId,
-    sheetName: "Runs",
-    range,
     semanticType: "experiment_table",
-    interpretation: {
-      experimentAxis: "rows",
-      headerRow: 1,
-      experimentIdColumn: "A",
-      experimentLabel: null,
-      fields: [
-        {
-          column: "B",
-          headerCell: "B1",
-          semanticKey: "reaction_temperature",
-          displayName: "Temperature",
-          role: "condition",
-          valueType: "number",
-          unit: "degC",
-          confidence: 0.95,
-        },
-        {
-          column: "C",
-          headerCell: "C1",
-          semanticKey: "yield",
-          displayName: "Yield",
-          role: "outcome",
-          valueType: "number",
-          unit: "percent",
-          confidence: 0.9,
-        },
-      ],
-      series: [],
-      inclusion: { startRow: 2, endRow, skippedRows: [] },
-      confidence: 0.94,
-      excluded: false,
-    },
+    experimentAxis: "rows",
+    headerRow: 1,
+    experimentIdColumn: "A",
+    experimentLabel: null,
+    fields: [
+      {
+        column: "B",
+        headerCell: "B1",
+        semanticKey: "reaction_temperature",
+        displayName: "Temperature",
+        role: "condition",
+        valueType: "number",
+        unit: "degC",
+        confidence: 0.95,
+      },
+      {
+        column: "C",
+        headerCell: "C1",
+        semanticKey: "yield",
+        displayName: "Yield",
+        role: "outcome",
+        valueType: "number",
+        unit: "percent",
+        confidence: 0.9,
+      },
+    ],
+    series: [],
+    inclusion: { startRow: 2, endRow, skippedRows: [] },
+    confidence: 0.94,
+    excluded: false,
   };
+}
+
+async function seedAcceptedRegion({
+  store,
+  project,
+  sourceDocument,
+  regionId,
+  revisionId,
+  range,
+  endRow,
+}) {
+  const region = await store.createWorkbookReviewRegion({
+    id: regionId,
+    labId: project.labId,
+    projectId: project.id,
+    workbookReviewSessionId: `session_${regionId}`,
+    sourceDocumentId: sourceDocument.id,
+    sheetName: "Runs",
+    rangeRef: range,
+    selectionMethod: "detected_region",
+    disposition: "active",
+    reviewStatus: "awaiting_review",
+    createdBy: "user_editor",
+  });
+  const revision = await store.createRegionUnderstandingRevision({
+    id: revisionId,
+    labId: project.labId,
+    projectId: project.id,
+    workbookReviewSessionId: region.workbookReviewSessionId,
+    sourceDocumentId: sourceDocument.id,
+    regionId: region.id,
+    revisionNumber: 1,
+    trigger: "initial",
+    summary: ["Each row represents one experiment."],
+    interpretation: regionInterpretation({ endRow }),
+    sourceRefs: [{ sourceType: "excel_range", sourceDocumentId: sourceDocument.id, sheet: "Runs", range }],
+    sourceContentHash: `source_hash_${revisionId}`,
+    dependencyHash: `dependency_hash_${revisionId}`,
+    validation: { status: "ready", blockers: [] },
+    createdBy: "user_editor",
+  });
+  const acceptedRegion = await store.updateWorkbookReviewRegion(region.id, {
+    reviewStatus: "accepted",
+    currentRevisionId: revision.id,
+    acceptedRevisionId: revision.id,
+    acceptedBy: "user_editor",
+  });
+  return { region: acceptedRegion, revision };
 }
 
 async function seedProject({
@@ -67,8 +109,8 @@ async function seedProject({
     ["Exp1", 250, 31.2],
     ["Exp2", 275, 28.4],
   ],
-  understandingId = "workbook_understanding_publish_1",
-  factId = "fact_publish_1",
+  regionId = "workbook_review_region_publish_1",
+  revisionId = "region_understanding_revision_publish_1",
   range = "A1:C3",
 } = {}) {
   const store = new MemorySaasStore();
@@ -97,30 +139,23 @@ async function seedProject({
     }],
     createdBy: "user_editor",
   });
-  const understanding = await store.createWorkbookUnderstanding({
-    id: understandingId,
-    labId: project.labId,
-    projectId: project.id,
-    sourceDocumentId: sourceDocument.id,
-    workbookReviewSessionId: "workbook_review_session_publish_1",
-    status: "accepted",
-    version: 1,
-    facts: [understandingFact({
-      sourceDocumentId: sourceDocument.id,
-      factId,
-      range,
-      endRow: rows.length,
-    })],
-    createdBy: "user_editor",
+  const acceptedRegionUnderstanding = await seedAcceptedRegion({
+    store,
+    project,
+    sourceDocument,
+    regionId,
+    revisionId,
+    range,
+    endRow: rows.length,
   });
-  return { store, project, sourceDocument, understanding };
+  return { store, project, sourceDocument, acceptedRegionUnderstanding };
 }
 
-async function draftReview({ store, project, understandingIds, identityDecisions }) {
+async function draftReview({ store, project, revisionIds, identityDecisions }) {
   return loadExperimentDataPlanReview({
     store,
     project,
-    workbookUnderstandingIds: understandingIds,
+    regionUnderstandingRevisionIds: revisionIds,
     identityDecisions,
   });
 }
@@ -139,7 +174,7 @@ async function publishReview({ store, project, review, identityDecisions, idempo
 }
 
 test("publishes accepted plans, immutable snapshots, identities, heads, and audit atomically", async () => {
-  const { store, project, understanding } = await seedProject();
+  const { store, project, acceptedRegionUnderstanding } = await seedProject();
   const decisions = [
     { sourceAlias: "Exp1", action: "create" },
     { sourceAlias: "Exp2", action: "create" },
@@ -147,7 +182,7 @@ test("publishes accepted plans, immutable snapshots, identities, heads, and audi
   const review = await draftReview({
     store,
     project,
-    understandingIds: [understanding.id],
+    revisionIds: [acceptedRegionUnderstanding.revision.id],
     identityDecisions: decisions,
   });
   const result = await publishReview({
@@ -179,12 +214,12 @@ test("publishes accepted plans, immutable snapshots, identities, heads, and audi
 });
 
 test("returns exact idempotent retries and rejects reuse of a key for another request", async () => {
-  const { store, project, understanding } = await seedProject();
+  const { store, project, acceptedRegionUnderstanding } = await seedProject();
   const decisions = [
     { sourceAlias: "Exp1", action: "create" },
     { sourceAlias: "Exp2", action: "create" },
   ];
-  const review = await draftReview({ store, project, understandingIds: [understanding.id], identityDecisions: decisions });
+  const review = await draftReview({ store, project, revisionIds: [acceptedRegionUnderstanding.revision.id], identityDecisions: decisions });
   const first = await publishReview({ store, project, review, identityDecisions: decisions, idempotencyKey: "publish_retry_1" });
   const retry = await publishReview({ store, project, review, identityDecisions: decisions, idempotencyKey: "publish_retry_1" });
 
@@ -210,12 +245,12 @@ test("returns exact idempotent retries and rejects reuse of a key for another re
 });
 
 test("rejects stale source dependencies before any durable write", async () => {
-  const { store, project, sourceDocument, understanding } = await seedProject();
+  const { store, project, sourceDocument, acceptedRegionUnderstanding } = await seedProject();
   const decisions = [
     { sourceAlias: "Exp1", action: "create" },
     { sourceAlias: "Exp2", action: "create" },
   ];
-  const review = await draftReview({ store, project, understandingIds: [understanding.id], identityDecisions: decisions });
+  const review = await draftReview({ store, project, revisionIds: [acceptedRegionUnderstanding.revision.id], identityDecisions: decisions });
   await store.replaceSourceDocumentIndex({
     id: sourceDocument.id,
     labId: project.labId,
@@ -253,6 +288,31 @@ test("rejects stale source dependencies before any durable write", async () => {
   assert.equal((await store.listExperimentSnapshotHeads({ projectId: project.id })).length, 0);
 });
 
+test("rejects a reviewed plan after its accepted region is ignored", async () => {
+  const { store, project, acceptedRegionUnderstanding } = await seedProject();
+  const decisions = [
+    { sourceAlias: "Exp1", action: "create" },
+    { sourceAlias: "Exp2", action: "create" },
+  ];
+  const review = await draftReview({
+    store,
+    project,
+    revisionIds: [acceptedRegionUnderstanding.revision.id],
+    identityDecisions: decisions,
+  });
+  await store.updateWorkbookReviewRegion(acceptedRegionUnderstanding.region.id, {
+    disposition: "ignored",
+    updatedBy: "user_editor",
+  });
+
+  await assert.rejects(
+    publishReview({ store, project, review, identityDecisions: decisions, idempotencyKey: "publish_ignored_1" }),
+    (error) => error.code === "accepted_region_understanding_not_found" && error.statusCode === 422,
+  );
+  assert.equal((await store.listDataPlans({ projectId: project.id })).length, 0);
+  assert.equal((await store.listDataSnapshots({ projectId: project.id })).length, 0);
+});
+
 test("validates a memory publish package before committing any staged records", async () => {
   const store = new MemorySaasStore();
   await assert.rejects(
@@ -283,12 +343,12 @@ test("validates a memory publish package before committing any staged records", 
 });
 
 test("a later partial snapshot advances only affected experiment heads", async () => {
-  const { store, project, sourceDocument, understanding } = await seedProject();
+  const { store, project, sourceDocument, acceptedRegionUnderstanding } = await seedProject();
   const firstDecisions = [
     { sourceAlias: "Exp1", action: "create" },
     { sourceAlias: "Exp2", action: "create" },
   ];
-  const firstReview = await draftReview({ store, project, understandingIds: [understanding.id], identityDecisions: firstDecisions });
+  const firstReview = await draftReview({ store, project, revisionIds: [acceptedRegionUnderstanding.revision.id], identityDecisions: firstDecisions });
   const first = await publishReview({ store, project, review: firstReview, identityDecisions: firstDecisions, idempotencyKey: "publish_heads_1" });
   const identityByLabel = new Map(first.experimentIdentities.map((identity) => [identity.canonicalLabel, identity]));
   const firstHeadByExperiment = new Map(first.experimentSnapshotHeads.map((head) => [head.experimentId, head]));
@@ -315,21 +375,14 @@ test("a later partial snapshot advances only affected experiment heads", async (
     }],
     updatedBy: "user_editor",
   });
-  const partialUnderstanding = await store.createWorkbookUnderstanding({
-    id: "workbook_understanding_publish_partial",
-    labId: project.labId,
-    projectId: project.id,
-    sourceDocumentId: sourceDocument.id,
-    workbookReviewSessionId: "workbook_review_session_publish_partial",
-    status: "accepted",
-    version: 1,
-    facts: [understandingFact({
-      sourceDocumentId: sourceDocument.id,
-      factId: "fact_publish_partial",
-      range: "A1:C2",
-      endRow: 2,
-    })],
-    createdBy: "user_editor",
+  const partialRegionUnderstanding = await seedAcceptedRegion({
+    store,
+    project,
+    sourceDocument,
+    regionId: "workbook_review_region_publish_partial",
+    revisionId: "region_understanding_revision_publish_partial",
+    range: "A1:C2",
+    endRow: 2,
   });
   const secondDecisions = [{
     sourceAlias: "Exp1",
@@ -339,7 +392,7 @@ test("a later partial snapshot advances only affected experiment heads", async (
   const secondReview = await draftReview({
     store,
     project,
-    understandingIds: [partialUnderstanding.id],
+    revisionIds: [partialRegionUnderstanding.revision.id],
     identityDecisions: secondDecisions,
   });
   const second = await publishReview({

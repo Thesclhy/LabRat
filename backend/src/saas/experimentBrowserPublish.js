@@ -31,9 +31,9 @@ function canonicalIdentityDecisions(identityDecisions) {
   ));
 }
 
-function understandingIdsFromPlan(dataPlan) {
+function regionRevisionIdsFromPlan(dataPlan) {
   return [...new Set(asArray(dataPlan?.sourceEvidence)
-    .map((evidence) => text(evidence?.workbookUnderstandingId))
+    .map((evidence) => text(evidence?.regionUnderstandingRevisionId))
     .filter(Boolean))]
     .sort();
 }
@@ -41,29 +41,29 @@ function understandingIdsFromPlan(dataPlan) {
 export async function loadExperimentDataPlanReview({
   store,
   project,
-  workbookUnderstandingIds = [],
+  regionUnderstandingRevisionIds = [],
   identityDecisions = [],
 } = {}) {
-  const requestedIds = [...new Set(asArray(workbookUnderstandingIds).map(text).filter(Boolean))].sort();
-  const projectUnderstandings = store.listWorkbookUnderstandings
-    ? await store.listWorkbookUnderstandings({ projectId: project.id })
+  const requestedIds = [...new Set(asArray(regionUnderstandingRevisionIds).map(text).filter(Boolean))].sort();
+  const projectRegionUnderstandings = store.listAcceptedRegionUnderstandings
+    ? await store.listAcceptedRegionUnderstandings({ projectId: project.id })
     : [];
-  const understandingById = new Map(projectUnderstandings.map((understanding) => [understanding.id, understanding]));
-  const missingUnderstandingIds = requestedIds.filter((id) => !understandingById.has(id));
-  if (!requestedIds.length || missingUnderstandingIds.length) {
+  const acceptedByRevisionId = new Map(projectRegionUnderstandings.map((accepted) => [accepted.revision.id, accepted]));
+  const missingRevisionIds = requestedIds.filter((id) => !acceptedByRevisionId.has(id));
+  if (!requestedIds.length || missingRevisionIds.length) {
     return {
       resultKind: "clarification",
       clarification: {
-        code: "accepted_workbook_understanding_not_found",
-        message: "One or more accepted WorkbookUnderstanding records were not found in this project.",
-        workbookUnderstandingIds: missingUnderstandingIds.length ? missingUnderstandingIds : requestedIds,
+        code: "accepted_region_understanding_not_found",
+        message: "One or more active accepted region understanding revisions were not found in this project.",
+        regionUnderstandingRevisionIds: missingRevisionIds.length ? missingRevisionIds : requestedIds,
       },
     };
   }
-  const acceptedUnderstandings = requestedIds.map((id) => understandingById.get(id));
-  const sourceDocumentIds = [...new Set(acceptedUnderstandings.flatMap((understanding) => (
-    asArray(understanding.facts).map((fact) => text(fact?.sourceDocumentId || understanding.sourceDocumentId))
-  )).filter(Boolean))];
+  const acceptedRegionUnderstandings = requestedIds.map((id) => acceptedByRevisionId.get(id));
+  const sourceDocumentIds = [...new Set(acceptedRegionUnderstandings
+    .map(({ region, revision }) => text(region?.sourceDocumentId || revision?.sourceDocumentId))
+    .filter(Boolean))];
   const sourceDocuments = (await Promise.all(sourceDocumentIds.map((id) => store.findSourceDocumentById?.(id))))
     .filter((document) => document?.projectId === project.id);
   const sourceIndexBlobsByDocumentId = Object.fromEntries(await Promise.all(sourceDocuments.map(async (sourceDocument) => [
@@ -77,7 +77,7 @@ export async function loadExperimentDataPlanReview({
     ? await store.listExperimentIdentities({ projectId: project.id })
     : [];
   return runExperimentRecordDataPlan({
-    acceptedUnderstandings,
+    acceptedRegionUnderstandings,
     sourceDocuments,
     sourceIndexBlobsByDocumentId,
     identityDecisions,
@@ -186,18 +186,18 @@ export async function publishExperimentBrowserData({
   if (!normalizedKey || normalizedKey.length > 200 || !/^[a-zA-Z0-9._:-]+$/.test(normalizedKey)) {
     throw publishError("idempotency_key_required", "A valid idempotencyKey is required for publish.");
   }
-  const workbookUnderstandingIds = understandingIdsFromPlan(dataPlan);
-  if (!workbookUnderstandingIds.length) {
+  const regionUnderstandingRevisionIds = regionRevisionIdsFromPlan(dataPlan);
+  if (!regionUnderstandingRevisionIds.length) {
     throw publishError(
-      "accepted_workbook_understanding_required",
-      "The reviewed DataPlan must reference accepted WorkbookUnderstanding evidence.",
+      "accepted_region_understanding_required",
+      "The reviewed DataPlan must reference accepted region understanding revisions.",
       422,
     );
   }
   const canonicalDecisions = canonicalIdentityDecisions(identityDecisions);
   const requestHash = stableDataHash({
     projectId: project.id,
-    workbookUnderstandingIds,
+    regionUnderstandingRevisionIds,
     identityDecisions: canonicalDecisions,
     expectedPreviewHash: text(expectedPreviewHash),
     expectedDependencyHash: text(expectedDependencyHash),
@@ -223,7 +223,7 @@ export async function publishExperimentBrowserData({
   const currentReview = await loadExperimentDataPlanReview({
     store,
     project,
-    workbookUnderstandingIds,
+    regionUnderstandingRevisionIds,
     identityDecisions: canonicalDecisions,
   });
   if (currentReview.resultKind !== "data_plan_review") {

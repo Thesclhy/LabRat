@@ -914,10 +914,12 @@ async function handleProjectEvidenceRetrieve(req, res, context, projectId) {
   const { project } = await projectAuth(req, context, projectId, "viewer");
   const body = await readJsonBody(req);
   const [
-    workbookUnderstandings,
+    acceptedRegionUnderstandings,
     sourceDocuments,
   ] = await Promise.all([
-    context.store.listWorkbookUnderstandings ? context.store.listWorkbookUnderstandings({ projectId: project.id }) : [],
+    context.store.listAcceptedRegionUnderstandings
+      ? context.store.listAcceptedRegionUnderstandings({ projectId: project.id })
+      : [],
     context.store.listSourceDocuments ? context.store.listSourceDocuments({ projectId: project.id }) : [],
   ]);
   const sourceRegions = (await Promise.all(sourceDocuments.map((sourceDocument) => (
@@ -925,14 +927,10 @@ async function handleProjectEvidenceRetrieve(req, res, context, projectId) {
       ? context.store.listSourceRegions({ sourceDocumentId: sourceDocument.id })
       : []
   )))).flat();
-  const acceptedUnderstandings = workbookUnderstandings.filter((understanding) => (
-    understanding.status === "accepted"
-    || understanding.understanding?.status === "accepted"
-  ));
   const response = await runEvidenceRetrievalAgent({
     project,
     query: body.query || body.prompt || "",
-    acceptedUnderstandings,
+    acceptedRegionUnderstandings,
     sourceDocuments,
     sourceRegions,
     includePreview: body.includePreview !== false,
@@ -954,7 +952,7 @@ async function handleProjectDataPlanDraft(req, res, context, projectId) {
       resultKind: "clarification",
       clarification: {
         code: "invalid_data_plan_intent",
-        message: "This endpoint drafts only experiment_browser_publish DataPlans from accepted workbook understanding.",
+        message: "This endpoint drafts only experiment_browser_publish DataPlans from accepted region understanding revisions.",
       },
     });
     return;
@@ -962,7 +960,7 @@ async function handleProjectDataPlanDraft(req, res, context, projectId) {
   const response = await loadExperimentDataPlanReview({
     store: context.store,
     project,
-    workbookUnderstandingIds: body.workbookUnderstandingIds,
+    regionUnderstandingRevisionIds: body.regionUnderstandingRevisionIds,
     identityDecisions: body.identityDecisions,
   });
   sendJson(res, 200, {
@@ -2576,6 +2574,18 @@ async function handleProjectWorkbookUnderstandings(req, res, context, projectId)
   sendJson(res, 200, { workbookUnderstandings: understandings.map(workbookUnderstandingSummary) });
 }
 
+async function handleProjectRegionUnderstandings(req, res, context, projectId) {
+  const { project } = await projectAuth(req, context, projectId, "viewer");
+  const accepted = context.store.listAcceptedRegionUnderstandings
+    ? await context.store.listAcceptedRegionUnderstandings({ projectId: project.id })
+    : [];
+  const regionUnderstandings = await Promise.all(accepted.map(async ({ region, revision }) => ({
+    region: await workbookReviewRegionSummary(context, region),
+    revision: regionUnderstandingRevisionSummary(revision),
+  })));
+  sendJson(res, 200, { regionUnderstandings });
+}
+
 async function handleWorkbookReviewSessionById(req, res, context, sessionId) {
   const { workbookReviewSession } = await workbookReviewSessionAuth(req, context, sessionId, "viewer");
   const sourceDocument = await context.store.findSourceDocumentById?.(workbookReviewSession.sourceDocumentId);
@@ -3064,6 +3074,8 @@ async function dispatch(req, res, context) {
   }
   const workbookUnderstandingsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/workbook-understandings$/);
   if (workbookUnderstandingsMatch && req.method === "GET") return handleProjectWorkbookUnderstandings(req, res, context, workbookUnderstandingsMatch[1]);
+  const regionUnderstandingsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/region-understandings$/);
+  if (regionUnderstandingsMatch && req.method === "GET") return handleProjectRegionUnderstandings(req, res, context, regionUnderstandingsMatch[1]);
   const sourceExtractProposalsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/source-extract-proposals$/);
   if (sourceExtractProposalsMatch && (req.method === "GET" || req.method === "POST")) {
     return handleProjectSourceExtractProposals(req, res, context, sourceExtractProposalsMatch[1]);

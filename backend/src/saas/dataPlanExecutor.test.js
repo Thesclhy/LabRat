@@ -26,9 +26,10 @@ function evidencePlan({ axis, identity = {}, fields, series = [], range, inclusi
     dependencyHash: "sha256_dependency",
     sourceEvidence: [{
       evidenceKey,
-      workbookUnderstandingId: "wu_1",
+      regionId: "region_1",
+      regionUnderstandingRevisionId: "revision_1",
       workbookUnderstandingVersion: 1,
-      factId: "fact_1",
+      sourceContentHash: "sha256_region_source_1",
       sourceDocumentId: "source_doc_1",
       fileObjectId: "file_1",
       importRunId: "import_1",

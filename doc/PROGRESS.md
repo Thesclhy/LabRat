@@ -15,6 +15,19 @@ Keep entries concise, newest first, and include:
 
 ## 2026-07-20
 
+- Completed region-understanding implementation Tasks 1-4. Added migration 013
+  plus memory/Postgres parity for stable workbook regions and immutable
+  revisions; backend-only bounded model interpretation; independent nested
+  create/revise/confirm/ignore/logical-delete APIs; project accepted-region
+  listing; and session seeding of detected region cards. Evidence retrieval,
+  DataPlan schemas/tools/drafting, deterministic preview execution, stale
+  checks, idempotent publish, DataSnapshot lineage, Browser heads, and the
+  grouped-header golden paths now depend on exact active accepted region
+  revision ids instead of aggregate WorkbookUnderstanding facts. Verification:
+  focused evidence/DataPlan/executor/publish coverage passed 36/36, the complete
+  SaaS route suite passed 30/30, syntax and diff checks passed. Next: replace
+  the old Workbook Review dock with compact independent region cards, then
+  remove the aggregate persistence/routes and finish full QA.
 - Approved the written region-level Workbook Understanding specification and
   started the executable TDD plan at
   `doc/plans/workbook-region-understanding-redesign-implementation-plan.md`.

@@ -40,40 +40,41 @@ function normalizeAlias(value) {
   return text(value).toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
-function interpretationErrors(understanding) {
-  return asArray(understanding?.facts).flatMap((fact) => {
-    const interpretation = fact?.interpretation || {};
-    if (interpretation.excluded === true || ["ignored_region", "metadata_notes"].includes(text(fact?.semanticType))) return [];
-    const errors = [];
-    if (!["rows", "region"].includes(text(interpretation.experimentAxis))) {
-      errors.push({ code: "experiment_axis_required", factId: fact?.factId });
-    }
-    if (interpretation.experimentAxis === "rows" && !text(interpretation.experimentIdColumn)) {
-      errors.push({ code: "experiment_identity_column_required", factId: fact?.factId });
-    }
-    if (interpretation.experimentAxis === "region" && !text(interpretation.experimentLabel)) {
-      errors.push({ code: "experiment_label_required", factId: fact?.factId });
-    }
-    if (!Number.isInteger(Number(interpretation.headerRow)) || !asArray(interpretation.fields).length) {
-      errors.push({ code: "typed_fields_required", factId: fact?.factId });
-    }
-    const units = new Map();
-    asArray(interpretation.fields).forEach((field) => {
-      const key = text(field?.semanticKey);
-      const set = units.get(key) || new Set();
-      if (text(field?.unit)) set.add(text(field.unit));
-      units.set(key, set);
-    });
-    for (const [semanticKey, values] of units.entries()) {
-      if (values.size > 1) errors.push({
-        code: "incompatible_unit_ambiguity",
-        factId: fact?.factId,
-        semanticKey,
-        units: [...values],
-      });
-    }
-    return errors;
+function interpretationErrors(acceptedRegionUnderstanding) {
+  const region = acceptedRegionUnderstanding?.region || {};
+  const revision = acceptedRegionUnderstanding?.revision || {};
+  const interpretation = revision.interpretation || {};
+  if (interpretation.excluded === true || ["ignored_region", "metadata_notes"].includes(text(interpretation.semanticType))) return [];
+  const errors = [];
+  if (!["rows", "region"].includes(text(interpretation.experimentAxis))) {
+    errors.push({ code: "experiment_axis_required", regionId: region.id, revisionId: revision.id });
+  }
+  if (interpretation.experimentAxis === "rows" && !text(interpretation.experimentIdColumn)) {
+    errors.push({ code: "experiment_identity_column_required", regionId: region.id, revisionId: revision.id });
+  }
+  if (interpretation.experimentAxis === "region" && !text(interpretation.experimentLabel)) {
+    errors.push({ code: "experiment_label_required", regionId: region.id, revisionId: revision.id });
+  }
+  if (!Number.isInteger(Number(interpretation.headerRow)) || !asArray(interpretation.fields).length) {
+    errors.push({ code: "typed_fields_required", regionId: region.id, revisionId: revision.id });
+  }
+  const units = new Map();
+  asArray(interpretation.fields).forEach((field) => {
+    const key = text(field?.semanticKey);
+    const set = units.get(key) || new Set();
+    if (text(field?.unit)) set.add(text(field.unit));
+    units.set(key, set);
   });
+  for (const [semanticKey, values] of units.entries()) {
+    if (values.size > 1) errors.push({
+      code: "incompatible_unit_ambiguity",
+      regionId: region.id,
+      revisionId: revision.id,
+      semanticKey,
+      units: [...values],
+    });
+  }
+  return errors;
 }
 
 function blobsFor(sourceIndexBlobsByDocumentId, sourceDocumentId) {
@@ -103,133 +104,130 @@ function compileIdentityBindings(identityDecisions) {
   ));
 }
 
-function compileExperimentEvidence({ acceptedUnderstandings, sourceDocuments, sourceIndexBlobsByDocumentId }) {
+function compileExperimentEvidence({ acceptedRegionUnderstandings, sourceDocuments, sourceIndexBlobsByDocumentId }) {
   const sourceDocumentById = new Map(asArray(sourceDocuments).map((document) => [document.id, document]));
   const sourceEvidence = [];
   const operations = [];
   const dependencyHashes = [];
   const sourceDependencyIds = new Set();
 
-  const orderedUnderstandings = [...asArray(acceptedUnderstandings)].sort((a, b) => (
-    text(a?.createdAt).localeCompare(text(b?.createdAt))
-    || text(a?.id).localeCompare(text(b?.id))
+  const orderedRegions = [...asArray(acceptedRegionUnderstandings)].sort((a, b) => (
+    text(a?.region?.sheetName).localeCompare(text(b?.region?.sheetName))
+    || text(a?.region?.rangeRef).localeCompare(text(b?.region?.rangeRef))
+    || text(a?.revision?.id).localeCompare(text(b?.revision?.id))
   ));
-  for (const understanding of orderedUnderstandings) {
+  for (const accepted of orderedRegions) {
+    const region = accepted.region || {};
+    const revision = accepted.revision || {};
+    const interpretation = revision.interpretation || {};
+    if (interpretation.excluded === true || ["ignored_region", "metadata_notes"].includes(text(interpretation.semanticType))) continue;
     dependencyHashes.push({
-      kind: "workbook_understanding",
-      id: understanding.id,
-      version: Number(understanding.version) || 1,
-      hash: stableDataHash({
-        id: understanding.id,
-        version: Number(understanding.version) || 1,
-        facts: asArray(understanding.facts),
+      kind: "region_understanding_revision",
+      id: revision.id,
+      version: Number(revision.revisionNumber) || 1,
+      hash: revision.dependencyHash || stableDataHash({
+        id: revision.id,
+        regionId: region.id,
+        sourceContentHash: revision.sourceContentHash,
+        interpretation,
       }),
     });
-    const orderedFacts = [...asArray(understanding.facts)].sort((a, b) => (
-      text(a?.sheetName).localeCompare(text(b?.sheetName))
-      || text(a?.range).localeCompare(text(b?.range))
-      || text(a?.factId).localeCompare(text(b?.factId))
-    ));
-    for (const fact of orderedFacts) {
-      const interpretation = fact?.interpretation || {};
-      if (interpretation.excluded === true || ["ignored_region", "metadata_notes"].includes(text(fact?.semanticType))) continue;
-      const sourceDocumentId = text(fact?.sourceDocumentId || understanding.sourceDocumentId);
-      const sourceDocument = sourceDocumentById.get(sourceDocumentId);
-      if (!sourceDocument) {
-        const error = new Error(`SourceDocument ${sourceDocumentId || "unknown"} was not found for accepted workbook evidence.`);
-        error.code = "accepted_source_document_not_found";
-        throw error;
-      }
-      if (!sourceDependencyIds.has(sourceDocument.id)) {
-        const indexBlobs = blobsFor(sourceIndexBlobsByDocumentId, sourceDocument.id);
-        dependencyHashes.push({
-          kind: "source_document",
-          id: sourceDocument.id,
-          version: sourceDocument.indexVersion || null,
-          hash: stableDataHash({
-            id: sourceDocument.id,
-            indexVersion: sourceDocument.indexVersion || null,
-            updatedAt: sourceDocument.updatedAt || null,
-            checksumSha256: sourceDocument.metadata?.checksumSha256 || null,
-            indexBlobChecksums: indexBlobs.map((blob) => blob.checksumSha256 || null),
-          }),
-        });
-        sourceDependencyIds.add(sourceDocument.id);
-      }
-      const evidenceKey = `${understanding.id}:${fact.factId}`;
-      sourceEvidence.push({
-        evidenceKey,
-        workbookUnderstandingId: understanding.id,
-        workbookUnderstandingVersion: Number(understanding.version) || 1,
-        factId: fact.factId,
-        sourceDocumentId: sourceDocument.id,
-        fileObjectId: sourceDocument.fileObjectId || null,
-        importRunId: sourceDocument.importRunId || null,
-        sourceDocumentIndexVersion: sourceDocument.indexVersion || null,
-        sheetName: fact.sheetName,
-        range: fact.range,
-        semanticType: fact.semanticType,
-        evidenceStatus: "accepted",
-        interpretationHash: stableDataHash(interpretation),
-      });
-      operations.push(
-        {
-          op: "read_table_region",
-          evidenceKey,
-          sourceDocumentId: sourceDocument.id,
-          sheetName: fact.sheetName,
-          range: fact.range,
-        },
-        { op: "use_row_as_header", evidenceKey, rowNumber: Number(interpretation.headerRow) },
-        {
-          op: "bind_experiment_identity",
-          evidenceKey,
-          experimentAxis: interpretation.experimentAxis,
-          column: interpretation.experimentAxis === "rows" ? interpretation.experimentIdColumn : null,
-          experimentLabel: interpretation.experimentAxis === "region" ? interpretation.experimentLabel : null,
-        },
-        {
-          op: "bind_fields",
-          evidenceKey,
-          fields: asArray(interpretation.fields).map((field) => ({
-            column: text(field.column).toUpperCase(),
-            headerCell: field.headerCell || null,
-            fieldKey: field.semanticKey,
-            displayName: field.displayName,
-            role: field.role,
-            valueType: field.valueType,
-            unit: field.unit || null,
-            confidence: field.confidence ?? interpretation.confidence ?? null,
-            headerSourceRefs: asArray(field.sourceRefs).map((sourceRef) => ({ ...sourceRef })),
-          })),
-        },
-        ...(asArray(interpretation.series).length ? [{
-          op: "bind_series",
-          evidenceKey,
-          series: asArray(interpretation.series).map((series) => ({
-            seriesKey: series.seriesKey,
-            label: series.label,
-            xColumn: text(series.xColumn).toUpperCase(),
-            yColumn: text(series.yColumn).toUpperCase(),
-            xField: series.xSemanticKey,
-            yField: series.ySemanticKey,
-            xUnit: series.xUnit || null,
-            yUnit: series.yUnit || null,
-          })),
-        }] : []),
-        {
-          op: "select_data_rows",
-          evidenceKey,
-          startRow: Number(interpretation.inclusion?.startRow),
-          endRow: Number(interpretation.inclusion?.endRow),
-          skippedRows: asArray(interpretation.inclusion?.skippedRows).map((item) => ({
-            rowNumber: Number(item.rowNumber),
-            reason: item.reason || "user_excluded",
-          })),
-        },
-        { op: "emit_experiment_records", evidenceKey },
-      );
+    const sourceDocumentId = text(region.sourceDocumentId || revision.sourceDocumentId);
+    const sourceDocument = sourceDocumentById.get(sourceDocumentId);
+    if (!sourceDocument) {
+      const error = new Error(`SourceDocument ${sourceDocumentId || "unknown"} was not found for accepted workbook evidence.`);
+      error.code = "accepted_source_document_not_found";
+      throw error;
     }
+    if (!sourceDependencyIds.has(sourceDocument.id)) {
+      const indexBlobs = blobsFor(sourceIndexBlobsByDocumentId, sourceDocument.id);
+      dependencyHashes.push({
+        kind: "source_document",
+        id: sourceDocument.id,
+        version: sourceDocument.indexVersion || null,
+        hash: stableDataHash({
+          id: sourceDocument.id,
+          indexVersion: sourceDocument.indexVersion || null,
+          updatedAt: sourceDocument.updatedAt || null,
+          checksumSha256: sourceDocument.metadata?.checksumSha256 || null,
+          indexBlobChecksums: indexBlobs.map((blob) => blob.checksumSha256 || null),
+        }),
+      });
+      sourceDependencyIds.add(sourceDocument.id);
+    }
+    const evidenceKey = `${region.id}:${revision.id}`;
+    sourceEvidence.push({
+      evidenceKey,
+      regionId: region.id,
+      regionUnderstandingRevisionId: revision.id,
+      sourceDocumentId: sourceDocument.id,
+      fileObjectId: sourceDocument.fileObjectId || null,
+      importRunId: sourceDocument.importRunId || null,
+      sourceDocumentIndexVersion: sourceDocument.indexVersion || null,
+      sheetName: region.sheetName,
+      range: region.rangeRef,
+      semanticType: interpretation.semanticType,
+      evidenceStatus: "accepted",
+      sourceContentHash: revision.sourceContentHash,
+      interpretationHash: stableDataHash(interpretation),
+    });
+    operations.push(
+      {
+        op: "read_table_region",
+        evidenceKey,
+        sourceDocumentId: sourceDocument.id,
+        sheetName: region.sheetName,
+        range: region.rangeRef,
+      },
+      { op: "use_row_as_header", evidenceKey, rowNumber: Number(interpretation.headerRow) },
+      {
+        op: "bind_experiment_identity",
+        evidenceKey,
+        experimentAxis: interpretation.experimentAxis,
+        column: interpretation.experimentAxis === "rows" ? interpretation.experimentIdColumn : null,
+        experimentLabel: interpretation.experimentAxis === "region" ? interpretation.experimentLabel : null,
+      },
+      {
+        op: "bind_fields",
+        evidenceKey,
+        fields: asArray(interpretation.fields).map((field) => ({
+          column: text(field.column).toUpperCase(),
+          headerCell: field.headerCell || null,
+          fieldKey: field.semanticKey,
+          displayName: field.displayName,
+          role: field.role,
+          valueType: field.valueType,
+          unit: field.unit || null,
+          confidence: field.confidence ?? interpretation.confidence ?? null,
+          headerSourceRefs: asArray(field.sourceRefs).map((sourceRef) => ({ ...sourceRef })),
+        })),
+      },
+      ...(asArray(interpretation.series).length ? [{
+        op: "bind_series",
+        evidenceKey,
+        series: asArray(interpretation.series).map((series) => ({
+          seriesKey: series.seriesKey,
+          label: series.label,
+          xColumn: text(series.xColumn).toUpperCase(),
+          yColumn: text(series.yColumn).toUpperCase(),
+          xField: series.xSemanticKey,
+          yField: series.ySemanticKey,
+          xUnit: series.xUnit || null,
+          yUnit: series.yUnit || null,
+        })),
+      }] : []),
+      {
+        op: "select_data_rows",
+        evidenceKey,
+        startRow: Number(interpretation.inclusion?.startRow),
+        endRow: Number(interpretation.inclusion?.endRow),
+        skippedRows: asArray(interpretation.inclusion?.skippedRows).map((item) => ({
+          rowNumber: Number(item.rowNumber),
+          reason: item.reason || "user_excluded",
+        })),
+      },
+      { op: "emit_experiment_records", evidenceKey },
+    );
   }
   return { sourceEvidence, operations, dependencyHashes };
 }
@@ -329,30 +327,35 @@ function reviewFieldSummary(experimentRecords) {
 }
 
 export async function runExperimentRecordDataPlan({
-  acceptedUnderstandings = [],
+  acceptedRegionUnderstandings = [],
   sourceDocuments = [],
   sourceIndexBlobsByDocumentId = {},
   identityDecisions = [],
   existingExperimentIdentities = [],
   readRangePreview = null,
 } = {}) {
-  const understandings = asArray(acceptedUnderstandings);
-  if (!understandings.length || understandings.some((understanding) => understanding?.status !== "accepted")) {
+  const acceptedRegions = asArray(acceptedRegionUnderstandings);
+  if (!acceptedRegions.length || acceptedRegions.some(({ region, revision }) => (
+    !region
+    || region.disposition !== "active"
+    || !region.acceptedRevisionId
+    || region.acceptedRevisionId !== revision?.id
+  ))) {
     return {
       resultKind: "clarification",
       clarification: {
-        code: "accepted_workbook_understanding_required",
-        message: "Select project-owned accepted WorkbookUnderstanding records before drafting Browser data.",
+        code: "accepted_region_understanding_required",
+        message: "Select project-owned accepted region understanding revisions before drafting Browser data.",
       },
     };
   }
-  const structureErrors = understandings.flatMap(interpretationErrors);
+  const structureErrors = acceptedRegions.flatMap(interpretationErrors);
   if (structureErrors.length) {
     return {
       resultKind: "clarification",
       clarification: {
-        code: "workbook_understanding_incomplete",
-        message: "Accepted workbook understanding is missing required experiment, field, or unit semantics.",
+        code: "region_understanding_incomplete",
+        message: "An accepted region understanding is missing required experiment, field, or unit semantics.",
         errors: structureErrors,
       },
     };
@@ -360,7 +363,7 @@ export async function runExperimentRecordDataPlan({
 
   let compiled;
   try {
-    compiled = compileExperimentEvidence({ acceptedUnderstandings: understandings, sourceDocuments, sourceIndexBlobsByDocumentId });
+    compiled = compileExperimentEvidence({ acceptedRegionUnderstandings: acceptedRegions, sourceDocuments, sourceIndexBlobsByDocumentId });
   } catch (error) {
     return {
       resultKind: "clarification",
@@ -370,7 +373,7 @@ export async function runExperimentRecordDataPlan({
   if (!compiled.sourceEvidence.length) {
     return {
       resultKind: "clarification",
-      clarification: { code: "experiment_evidence_required", message: "Accepted understanding contains no experiment-bearing source regions." },
+      clarification: { code: "experiment_evidence_required", message: "Accepted region revisions contain no experiment-bearing source regions." },
     };
   }
   const identityBindings = compileIdentityBindings(identityDecisions);

@@ -65,14 +65,22 @@ export function validateAcceptedEvidenceInputs(results = []) {
     if (!text(item.sourceDocumentId) || !text(item.sheetName) || !text(item.range)) {
       errors.push(error("missing_source_ref", "Evidence result must include sourceDocumentId, sheetName, and range.", { index }));
     }
+    if (!text(item.regionId) || !text(item.regionUnderstandingRevisionId) || !text(item.sourceContentHash)) {
+      errors.push(error(
+        "missing_region_revision_ref",
+        "Evidence result must identify an accepted region revision and its source content hash.",
+        { index },
+      ));
+    }
     return {
       retrievalResultId: text(item.retrievalResultId || item.resultId),
-      workbookUnderstandingId: text(item.workbookUnderstandingId),
-      factId: text(item.factId),
+      regionId: text(item.regionId),
+      regionUnderstandingRevisionId: text(item.regionUnderstandingRevisionId),
       sourceDocumentId: text(item.sourceDocumentId),
       sheetName: text(item.sheetName),
       range: text(item.range),
       semanticType: text(item.semanticType),
+      sourceContentHash: text(item.sourceContentHash),
       evidenceStatus: item.evidenceStatus,
       canUseForDataPlan: item.canUseForDataPlan === true,
     };
@@ -122,25 +130,25 @@ function validateExperimentEvidence(sourceEvidence) {
   asArray(sourceEvidence).forEach((item, index) => {
     const evidenceKey = text(item?.evidenceKey);
     if (item?.evidenceStatus !== "accepted") {
-      errors.push(error("evidence_not_accepted", "Experiment-record DataPlans require accepted WorkbookUnderstanding evidence.", { index }));
+      errors.push(error("evidence_not_accepted", "Experiment-record DataPlans require accepted region understanding evidence.", { index }));
     }
-    if (!evidenceKey || !text(item?.workbookUnderstandingId) || !text(item?.factId)
+    if (!evidenceKey || !text(item?.regionId) || !text(item?.regionUnderstandingRevisionId)
       || !text(item?.sourceDocumentId) || !text(item?.sheetName) || !text(item?.range)) {
-      errors.push(error("missing_source_ref", "Accepted evidence must identify its understanding, fact, source document, sheet, and range.", { index }));
+      errors.push(error("missing_source_ref", "Accepted evidence must identify its region, revision, source document, sheet, and range.", { index }));
     }
-    if (!Number.isInteger(Number(item?.workbookUnderstandingVersion)) || Number(item.workbookUnderstandingVersion) < 1) {
-      errors.push(error("invalid_understanding_version", "Accepted evidence must include a positive WorkbookUnderstanding version.", { index }));
+    if (!text(item?.sourceContentHash)) {
+      errors.push(error("missing_source_content_hash", "Accepted evidence must include the bounded region source content hash.", { index }));
     }
     if (!text(item?.interpretationHash)) {
       errors.push(error("missing_interpretation_hash", "Accepted evidence must include an interpretation hash.", { index }));
     }
     if (evidenceKey && evidenceKeys.has(evidenceKey)) {
-      errors.push(error("duplicate_evidence_key", "Each accepted fact must have one evidence key.", { index, evidenceKey }));
+      errors.push(error("duplicate_evidence_key", "Each accepted region revision must have one evidence key.", { index, evidenceKey }));
     }
     evidenceKeys.add(evidenceKey);
   });
   if (!asArray(sourceEvidence).length) {
-    errors.push(error("accepted_evidence_required", "At least one accepted WorkbookUnderstanding fact is required."));
+    errors.push(error("accepted_evidence_required", "At least one accepted region understanding revision is required."));
   }
   return { errors, evidenceKeys };
 }

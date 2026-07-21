@@ -180,6 +180,22 @@ async function createProject(name = "Route Test Project") {
   return (await response.json()).project;
 }
 
+async function confirmReviewRegion(sessionId, reviewRegion) {
+  const response = await jsonFetch(
+    `/api/workbook-review-sessions/${sessionId}/regions/${reviewRegion.id}/confirm`,
+    {
+      method: "POST",
+      body: {
+        revisionId: reviewRegion.currentRevision.id,
+        expectedRegionVersion: reviewRegion.version,
+        idempotencyKey: `confirm_${reviewRegion.id}_${Date.now()}`,
+      },
+    },
+  );
+  assert.equal(response.status, 200);
+  return response.json();
+}
+
 async function publishGroupedSelectivityDataForAnalysis(project, suffix) {
   const upload = await uploadProjectFile(
     project.id,
@@ -193,38 +209,9 @@ async function publishGroupedSelectivityDataForAnalysis(project, suffix) {
   });
   assert.equal(created.status, 201);
   const createdBody = await created.json();
-  const revision = await jsonFetch(
-    `/api/workbook-review-sessions/${createdBody.workbookReviewSession.id}/revisions`,
-    {
-      method: "POST",
-      body: {
-        message: "This is an experiment table with grouped selectivity headers and one experiment per row.",
-        redBoxUpdates: [{
-          clientRegionId: `draft_analysis_${suffix}`,
-          operation: "upsert",
-          sourceDocumentId: createdBody.sourceDocument.id,
-          sheetName: groupedMasterTableFixture.sheetName,
-          range: "A1:N4",
-          selectionMethod: "drag_select",
-          description: "experiment table",
-        }],
-      },
-    },
-  );
-  assert.equal(revision.status, 200);
-  const revisionBody = await revision.json();
-  const confirmed = await jsonFetch(
-    `/api/workbook-review-sessions/${createdBody.workbookReviewSession.id}/confirm`,
-    {
-      method: "POST",
-      body: {
-        workbookUnderstandingId: revisionBody.workbookUnderstandingDraft.id,
-        decisionSummary: { acceptedByUser: true },
-      },
-    },
-  );
-  assert.equal(confirmed.status, 200);
-  const understanding = (await confirmed.json()).workbookUnderstanding;
+  const reviewRegion = createdBody.reviewRegions.find((region) => region.rangeRef === "A1:N4")
+    || createdBody.reviewRegions[0];
+  const confirmed = await confirmReviewRegion(createdBody.workbookReviewSession.id, reviewRegion);
   const identityDecisions = ["Exp1", "Exp2"].map((sourceAlias) => ({
     sourceAlias,
     action: "create",
@@ -233,7 +220,7 @@ async function publishGroupedSelectivityDataForAnalysis(project, suffix) {
     method: "POST",
     body: {
       intent: "experiment_browser_publish",
-      workbookUnderstandingIds: [understanding.id],
+      regionUnderstandingRevisionIds: [confirmed.acceptedRevision.id],
       identityDecisions,
     },
   });
@@ -645,6 +632,13 @@ test("workbook review region APIs independently revise confirm ignore and delete
   const confirmed = await confirmResponse.json();
   assert.equal(confirmed.region.acceptedRevisionId, revised.currentRevision.id);
 
+  const acceptedResponse = await jsonFetch(`/api/projects/${project.id}/region-understandings?status=accepted`);
+  assert.equal(acceptedResponse.status, 200);
+  const acceptedBody = await acceptedResponse.json();
+  assert.equal(acceptedBody.regionUnderstandings.length, 1);
+  assert.equal(acceptedBody.regionUnderstandings[0].region.id, created.region.id);
+  assert.equal(acceptedBody.regionUnderstandings[0].revision.id, revised.currentRevision.id);
+
   const ignoredCreateResponse = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/regions`, {
     method: "POST",
     body: {
@@ -681,6 +675,9 @@ test("workbook review region APIs independently revise confirm ignore and delete
   );
   assert.equal(deleteResponse.status, 200);
   assert.equal((await deleteResponse.json()).region.disposition, "deleted");
+
+  const acceptedAfterDelete = await jsonFetch(`/api/projects/${project.id}/region-understandings?status=accepted`);
+  assert.equal((await acceptedAfterDelete.json()).regionUnderstandings.length, 0);
 
   const listResponse = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/regions`);
   assert.equal(listResponse.status, 200);
@@ -928,7 +925,7 @@ test("workbook understanding confirmation blocks unresolved experiment axis and 
   assert.equal((await seriesConfirm.json()).error.code, "experiment_label_required");
 });
 
-test("project evidence retrieve returns accepted workbook understanding regions only as usable results", async () => {
+test("project evidence retrieve returns accepted region revisions only as usable results", async () => {
   const project = await createProject("Tool Evidence Retrieval Project");
   const upload = await uploadProjectFile(project.id, makeWorkbookBlob(), "reaction-rate-exp1.xlsx");
   const create = await jsonFetch(`/api/projects/${project.id}/workbook-review-sessions`, {
@@ -939,37 +936,14 @@ test("project evidence retrieve returns accepted workbook understanding regions 
   const createBody = await create.json();
   const sessionId = createBody.workbookReviewSession.id;
   const sourceDocumentId = createBody.sourceDocument.id;
-
-  const revision = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/revisions`, {
-    method: "POST",
-    body: {
-      message: "This red box is Exp1 reaction rate data over time.",
-      redBoxUpdates: [{
-        clientRegionId: "draft_region_exp1_rate",
-        operation: "upsert",
-        sourceDocumentId,
-        sheetName: "Runs",
-        range: "A1:D3",
-        selectionMethod: "drag_select",
-        description: "Exp1 reaction rate data over time",
-      }],
-    },
-  });
-  assert.equal(revision.status, 200);
-  const revisionBody = await revision.json();
-  const confirm = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/confirm`, {
-    method: "POST",
-    body: {
-      workbookUnderstandingId: revisionBody.workbookUnderstandingDraft.id,
-      decisionSummary: { acceptedByUser: true },
-    },
-  });
-  assert.equal(confirm.status, 200);
+  const reviewRegion = createBody.reviewRegions.find((region) => region.rangeRef === "A1:D3")
+    || createBody.reviewRegions[0];
+  await confirmReviewRegion(sessionId, reviewRegion);
 
   const retrieve = await jsonFetch(`/api/projects/${project.id}/evidence/retrieve`, {
     method: "POST",
     body: {
-      query: "draw reaction rate vs time for experiment 1",
+      query: "use experiment 1 workbook evidence",
       mode: "tool_agent",
       includePreview: true,
       includeUnconfirmedSuggestions: true,
@@ -1000,7 +974,7 @@ test("project evidence retrieve returns accepted workbook understanding regions 
   assert.equal(nonexistentBody.results.some((result) => result.sheetName === "Runs"), false);
 });
 
-test("project data plan draft reloads accepted understanding and returns a transient experiment-record preview", async () => {
+test("project data plan draft reloads accepted region revisions and returns a transient experiment-record preview", async () => {
   const project = await createProject("Tool DataPlan Agent Project");
   const upload = await uploadProjectFile(project.id, makeReactionRateWorkbookBlob(), "Reaction_Rate_Exp33.xlsx");
   const create = await jsonFetch(`/api/projects/${project.id}/workbook-review-sessions`, {
@@ -1010,41 +984,16 @@ test("project data plan draft reloads accepted understanding and returns a trans
   assert.equal(create.status, 201);
   const createBody = await create.json();
   const sessionId = createBody.workbookReviewSession.id;
-  const sourceDocumentId = createBody.sourceDocument.id;
-
-  const revision = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/revisions`, {
-    method: "POST",
-    body: {
-      message: "This red box is Exp33 reaction rate over time.",
-      redBoxUpdates: [{
-        clientRegionId: "draft_region_exp33_rate",
-        operation: "upsert",
-        sourceDocumentId,
-        sheetName: "Exp33",
-        range: "A1:C3",
-        selectionMethod: "drag_select",
-        description: "Exp33 reaction rate over time",
-      }],
-    },
-  });
-  assert.equal(revision.status, 200);
-  const revisionBody = await revision.json();
-  const confirm = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/confirm`, {
-    method: "POST",
-    body: {
-      workbookUnderstandingId: revisionBody.workbookUnderstandingDraft.id,
-      decisionSummary: { acceptedByUser: true },
-    },
-  });
-  assert.equal(confirm.status, 200);
-  const confirmBody = await confirm.json();
+  const reviewRegion = createBody.reviewRegions.find((region) => region.rangeRef === "A1:C3")
+    || createBody.reviewRegions[0];
+  const confirmBody = await confirmReviewRegion(sessionId, reviewRegion);
   const stateBefore = await (await jsonFetch(`/api/projects/${project.id}/state`)).json();
 
   const draft = await jsonFetch(`/api/projects/${project.id}/data-plans/draft`, {
     method: "POST",
     body: {
       intent: "experiment_browser_publish",
-      workbookUnderstandingIds: [confirmBody.workbookUnderstanding.id],
+      regionUnderstandingRevisionIds: [confirmBody.acceptedRevision.id],
       identityDecisions: [],
       retrievalResults: [{
         resultId: "client_supplied_values_are_ignored",
@@ -1059,7 +1008,7 @@ test("project data plan draft reloads accepted understanding and returns a trans
   assert.equal(draftBody.snapshotPreview.schemaVersion, "labrat.dataSnapshot.v2");
   assert.equal(draftBody.snapshotPreview.experimentRecords[0].label, "Exp33");
   assert.deepEqual(draftBody.snapshotPreview.experimentRecords[0].series[0].points.map((point) => [point.x, point.y]), [[0, 0.1], [5, 0.2]]);
-  assert.equal(draftBody.dataPlan.sourceEvidence[0].workbookUnderstandingId, confirmBody.workbookUnderstanding.id);
+  assert.equal(draftBody.dataPlan.sourceEvidence[0].regionUnderstandingRevisionId, confirmBody.acceptedRevision.id);
   assert.equal(JSON.stringify(draftBody.dataPlan).includes("client_supplied_values_are_ignored"), false);
   assert.equal(JSON.stringify(draftBody.dataPlan).includes('"values":[999]'), false);
   assert.deepEqual(draftBody.reviewSummary.blockers.map((item) => item.code), ["identity_decision_required"]);
@@ -1068,7 +1017,7 @@ test("project data plan draft reloads accepted understanding and returns a trans
     method: "POST",
     body: {
       intent: "experiment_browser_publish",
-      workbookUnderstandingIds: [confirmBody.workbookUnderstanding.id],
+      regionUnderstandingRevisionIds: [confirmBody.acceptedRevision.id],
       identityDecisions: [{ sourceAlias: "Exp33", action: "create" }],
     },
   });
@@ -1191,7 +1140,7 @@ test("project data plan draft reloads accepted understanding and returns a trans
     body: { ...publishRequest, idempotencyKey: "publish_cross_project_1" },
   });
   assert.equal(crossProject.status, 422);
-  assert.equal((await crossProject.json()).error.code, "accepted_workbook_understanding_not_found");
+  assert.equal((await crossProject.json()).error.code, "accepted_region_understanding_not_found");
 
   const ownerCookie = cookie;
   try {
@@ -1232,20 +1181,20 @@ test("project data plan draft reloads accepted understanding and returns a trans
     method: "POST",
     body: {
       intent: "experiment_browser_publish",
-      workbookUnderstandingIds: ["workbook_understanding_missing"],
+      regionUnderstandingRevisionIds: ["region_understanding_revision_missing"],
       identityDecisions: [],
     },
   });
   assert.equal(missingUnderstanding.status, 200);
   const missingBody = await missingUnderstanding.json();
   assert.equal(missingBody.resultKind, "clarification");
-  assert.equal(missingBody.clarification.code, "accepted_workbook_understanding_not_found");
+  assert.equal(missingBody.clarification.code, "accepted_region_understanding_not_found");
 
   const wrongIntent = await jsonFetch(`/api/projects/${project.id}/data-plans/draft`, {
     method: "POST",
     body: {
       intent: "chart_data",
-      workbookUnderstandingIds: [confirmBody.workbookUnderstanding.id],
+      regionUnderstandingRevisionIds: [confirmBody.acceptedRevision.id],
       identityDecisions: [],
     },
   });
@@ -1270,26 +1219,9 @@ test("golden workbook publishes three reviewed experiments to Browser without le
   assert.equal(create.status, 201);
   const createBody = await create.json();
   const sessionId = createBody.workbookReviewSession.id;
-  const sourceDocumentId = createBody.sourceDocument.id;
-
-  const revision = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/revisions`, {
-    method: "POST",
-    body: {
-      message: "Runs is an experiment table with one experiment per row. The first column is the experiment identity.",
-      redBoxUpdates: [],
-    },
-  });
-  assert.equal(revision.status, 200);
-  const revisionBody = await revision.json();
-  const confirm = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/confirm`, {
-    method: "POST",
-    body: {
-      workbookUnderstandingId: revisionBody.workbookUnderstandingDraft.id,
-      decisionSummary: { acceptedByUser: true },
-    },
-  });
-  assert.equal(confirm.status, 200);
-  const accepted = (await confirm.json()).workbookUnderstanding;
+  const reviewRegion = createBody.reviewRegions.find((region) => region.rangeRef === "A1:C5")
+    || createBody.reviewRegions[0];
+  const accepted = await confirmReviewRegion(sessionId, reviewRegion);
   const identityDecisions = goldenExperimentBrowserFixture.expectedExperimentLabels.map((sourceAlias) => ({
     sourceAlias,
     action: "create",
@@ -1298,7 +1230,7 @@ test("golden workbook publishes three reviewed experiments to Browser without le
     method: "POST",
     body: {
       intent: "experiment_browser_publish",
-      workbookUnderstandingIds: [accepted.id],
+      regionUnderstandingRevisionIds: [accepted.acceptedRevision.id],
       identityDecisions,
     },
   });
@@ -1365,27 +1297,9 @@ test("grouped selectivity headers publish Solid, Liquid, and Gas fields to Brows
     [["L1", "L1:N1"], ["M1", "L1:N1"], ["N1", "L1:N1"]],
   );
 
-  const revision = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/revisions`, {
-    method: "POST",
-    body: {
-      message: "This is an experiment table with grouped selectivity headers and one experiment per row.",
-      redBoxUpdates: [{
-        clientRegionId: "draft_grouped_master",
-        operation: "upsert",
-        sourceDocumentId,
-        sheetName: groupedMasterTableFixture.sheetName,
-        range: "A1:N4",
-        selectionMethod: "drag_select",
-        description: "experiment table",
-      }],
-    },
-  });
-  assert.equal(revision.status, 200);
-  const revisionBody = await revision.json();
-  const draftUnderstanding = revisionBody.workbookUnderstandingDraft;
-  const groupedFact = draftUnderstanding.facts.find((fact) => fact.range === "A1:N4");
-  assert.ok(groupedFact);
-  const interpretation = groupedFact.interpretation;
+  const reviewRegion = createBody.reviewRegions.find((region) => region.rangeRef === "A1:N4")
+    || createBody.reviewRegions[0];
+  const interpretation = reviewRegion.currentRevision.interpretation;
   assert.deepEqual(
     interpretation.fields
       .filter((field) => field.semanticKey.startsWith("selectivity_"))
@@ -1403,21 +1317,13 @@ test("grouped selectivity headers publish Solid, Liquid, and Gas fields to Brows
     }))),
   );
 
-  const confirm = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/confirm`, {
-    method: "POST",
-    body: {
-      workbookUnderstandingId: draftUnderstanding.id,
-      decisionSummary: { acceptedByUser: true },
-    },
-  });
-  assert.equal(confirm.status, 200);
-  const accepted = (await confirm.json()).workbookUnderstanding;
+  const accepted = await confirmReviewRegion(sessionId, reviewRegion);
   const identityDecisions = ["Exp1", "Exp2"].map((sourceAlias) => ({ sourceAlias, action: "create" }));
   const draft = await jsonFetch(`/api/projects/${project.id}/data-plans/draft`, {
     method: "POST",
     body: {
       intent: "experiment_browser_publish",
-      workbookUnderstandingIds: [accepted.id],
+      regionUnderstandingRevisionIds: [accepted.acceptedRevision.id],
       identityDecisions,
     },
   });

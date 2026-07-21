@@ -14,37 +14,41 @@ const sourceDocuments = [
     metadata: { workbookName: "Reaction_Rate_Exp33.xlsx" },
   },
 ];
-const acceptedUnderstandings = [
+const acceptedRegionUnderstandings = [
   {
-    id: "workbook_understanding_1",
-    projectId: "project_1",
-    sourceDocumentId: "source_doc_exp33",
-    facts: [
-      {
-        factId: "fact_exp33_rate",
-        kind: "region_description",
-        sourceDocumentId: "source_doc_exp33",
-        sheetName: "Exp33",
-        range: "A1:P61",
+    region: {
+      id: "region_exp33_rate",
+      projectId: "project_1",
+      sourceDocumentId: "source_doc_exp33",
+      sheetName: "Exp33",
+      rangeRef: "A1:P61",
+      disposition: "active",
+      acceptedRevisionId: "region_revision_exp33_rate",
+    },
+    revision: {
+      id: "region_revision_exp33_rate",
+      regionId: "region_exp33_rate",
+      sourceContentHash: "sha256_exp33_rate",
+      summary: ["Exp33 reaction rate data over time."],
+      interpretation: {
         semanticType: "reaction_rate_time_series",
-        description: "Exp33 reaction rate data over time",
-        sourceRefs: [
-          {
-            sourceType: "excel_range",
-            sourceDocumentId: "source_doc_exp33",
-            sheet: "Exp33",
-            range: "A1:P61",
-          },
-        ],
+        fields: [{ displayName: "Reaction time" }, { displayName: "Reaction rate" }],
       },
-    ],
+      sourceRefs: [{
+        sourceType: "excel_range",
+        sourceDocumentId: "source_doc_exp33",
+        sheet: "Exp33",
+        range: "A1:P61",
+      }],
+    },
   },
 ];
 
-test("buildAcceptedRegionCards creates searchable cards from accepted WorkbookUnderstanding facts", () => {
-  const cards = buildAcceptedRegionCards({ acceptedUnderstandings, sourceDocuments });
+test("buildAcceptedRegionCards creates searchable cards from accepted region revisions", () => {
+  const cards = buildAcceptedRegionCards({ acceptedRegionUnderstandings, sourceDocuments });
   assert.equal(cards.length, 1);
-  assert.equal(cards[0].regionId, "fact_exp33_rate");
+  assert.equal(cards[0].regionId, "region_exp33_rate");
+  assert.equal(cards[0].regionUnderstandingRevisionId, "region_revision_exp33_rate");
   assert.equal(cards[0].evidenceStatus, "accepted");
   assert.equal(cards[0].canUseForDataPlan, true);
   assert.equal(cards[0].sourceDocumentId, "source_doc_exp33");
@@ -56,7 +60,7 @@ test("buildAcceptedRegionCards creates searchable cards from accepted WorkbookUn
 test("semantic_search_confirmed_regions returns accepted regions as usable candidates", async () => {
   const tools = createEvidenceAgentTools({
     project,
-    acceptedUnderstandings,
+    acceptedRegionUnderstandings,
     sourceDocuments,
     sourceRegions: [],
     readRangePreview: async () => null,
@@ -68,7 +72,7 @@ test("semantic_search_confirmed_regions returns accepted regions as usable candi
   });
 
   assert.equal(response.results.length, 1);
-  assert.equal(response.results[0].regionId, "fact_exp33_rate");
+  assert.equal(response.results[0].regionId, "region_exp33_rate");
   assert.equal(response.results[0].evidenceStatus, "accepted");
   assert.equal(response.results[0].canUseForDataPlan, true);
   assert.equal(response.results[0].semanticType, "reaction_rate_time_series");
@@ -77,7 +81,7 @@ test("semantic_search_confirmed_regions returns accepted regions as usable candi
 test("semantic_search_unconfirmed_regions returns suggestions that cannot be used for DataPlan", async () => {
   const tools = createEvidenceAgentTools({
     project,
-    acceptedUnderstandings: [],
+    acceptedRegionUnderstandings: [],
     sourceDocuments,
     sourceRegions: [
       {
@@ -108,14 +112,14 @@ test("semantic_search_unconfirmed_regions returns suggestions that cannot be use
 test("verify_evidence_selection rejects a selected region from the wrong experiment", async () => {
   const tools = createEvidenceAgentTools({
     project,
-    acceptedUnderstandings,
+    acceptedRegionUnderstandings,
     sourceDocuments,
     sourceRegions: [],
     readRangePreview: async () => null,
   });
 
   const response = await tools.verify_evidence_selection({
-    selectedRegionIds: ["fact_exp33_rate"],
+    selectedRegionIds: ["region_exp33_rate"],
     requiredExperimentAliases: ["Exp35"],
     requiredSemanticTypes: ["reaction_rate_time_series"],
   });
@@ -129,7 +133,7 @@ test("runEvidenceRetrievalAgent returns verified accepted results with bounded p
   const response = await runEvidenceRetrievalAgent({
     project,
     query: "draw reaction rate vs time for experiment 33",
-    acceptedUnderstandings,
+    acceptedRegionUnderstandings,
     sourceDocuments,
     sourceRegions: [],
     includePreview: true,
@@ -142,7 +146,7 @@ test("runEvidenceRetrievalAgent returns verified accepted results with bounded p
 
   assert.equal(response.schemaVersion, "labrat.evidenceRetrieval.toolAgent.v1");
   assert.equal(response.results.length, 1);
-  assert.equal(response.results[0].regionId, "fact_exp33_rate");
+  assert.equal(response.results[0].regionId, "region_exp33_rate");
   assert.equal(response.results[0].preview.range, "A1:P10");
   assert.equal(response.toolTrace.some((step) => step.tool === "verify_evidence_selection"), true);
 });
@@ -151,7 +155,7 @@ test("runEvidenceRetrievalAgent returns confirmation suggestion when only unconf
   const response = await runEvidenceRetrievalAgent({
     project,
     query: "experiment 33 reaction rate",
-    acceptedUnderstandings: [],
+    acceptedRegionUnderstandings: [],
     sourceDocuments,
     sourceRegions: [
       {

@@ -13,8 +13,9 @@ const evidenceResults = [
     sheetName: "Exp33",
     range: "A1:C4",
     semanticType: "reaction_rate_time_series",
-    workbookUnderstandingId: "workbook_understanding_1",
-    factId: "fact_exp33_rate",
+    regionId: "workbook_review_region_1",
+    regionUnderstandingRevisionId: "region_understanding_revision_1",
+    sourceContentHash: "sha256_region_source_1",
   },
 ];
 
@@ -149,20 +150,30 @@ test("runDataPlanAgent rejects unconfirmed retrieval suggestions", async () => {
   assert.equal(response.clarification.code, "accepted_evidence_required");
 });
 
-function acceptedUnderstanding({ id, sourceDocumentId, factId, axis, label = null, idColumn = null, range = "A1:C3" }) {
+function acceptedRegionUnderstanding({ revisionId, regionId, sourceDocumentId, axis, label = null, idColumn = null, range = "A1:C3" }) {
   return {
-    id,
-    projectId: "project_1",
-    sourceDocumentId,
-    status: "accepted",
-    version: 2,
-    facts: [{
-      factId,
+    region: {
+      id: regionId,
+      projectId: "project_1",
       sourceDocumentId,
       sheetName: axis === "rows" ? "Runs" : "Exp33",
-      range,
-      semanticType: axis === "rows" ? "experiment_table" : "reaction_rate_time_series",
+      rangeRef: range,
+      disposition: "active",
+      reviewStatus: "accepted",
+      currentRevisionId: revisionId,
+      acceptedRevisionId: revisionId,
+    },
+    revision: {
+      id: revisionId,
+      regionId,
+      projectId: "project_1",
+      sourceDocumentId,
+      sourceContentHash: `source_hash_${revisionId}`,
+      dependencyHash: `dependency_hash_${revisionId}`,
+      validation: { status: "ready", blockers: [] },
+      createdAt: "2026-07-16T09:00:00.000Z",
       interpretation: {
+        semanticType: axis === "rows" ? "experiment_table" : "reaction_rate_time_series",
         experimentAxis: axis,
         headerRow: 1,
         experimentIdColumn: idColumn,
@@ -191,7 +202,7 @@ function acceptedUnderstanding({ id, sourceDocumentId, factId, axis, label = nul
         confidence: 0.9,
         excluded: false,
       },
-    }],
+    },
   };
 }
 
@@ -222,12 +233,12 @@ const experimentRangeRows = {
 };
 
 test("runExperimentRecordDataPlan compiles accepted row and region interpretations into a stable transient preview", async () => {
-  const acceptedUnderstandings = [
-    acceptedUnderstanding({ id: "wu_rows", sourceDocumentId: "source_doc_rows", factId: "fact_rows", axis: "rows", idColumn: "A" }),
-    acceptedUnderstanding({ id: "wu_region", sourceDocumentId: "source_doc_region", factId: "fact_region", axis: "region", label: "Exp33" }),
+  const acceptedRegionUnderstandings = [
+    acceptedRegionUnderstanding({ revisionId: "revision_rows", regionId: "region_rows", sourceDocumentId: "source_doc_rows", axis: "rows", idColumn: "A" }),
+    acceptedRegionUnderstanding({ revisionId: "revision_region", regionId: "region_region", sourceDocumentId: "source_doc_region", axis: "region", label: "Exp33" }),
   ];
   const request = {
-    acceptedUnderstandings,
+    acceptedRegionUnderstandings,
     sourceDocuments: experimentSourceDocuments,
     sourceIndexBlobsByDocumentId: {
       source_doc_rows: [{ checksumSha256: "rows_checksum" }],
@@ -249,7 +260,7 @@ test("runExperimentRecordDataPlan compiles accepted row and region interpretatio
   });
   const reorderedUnderstandings = await runExperimentRecordDataPlan({
     ...request,
-    acceptedUnderstandings: [...request.acceptedUnderstandings].reverse(),
+    acceptedRegionUnderstandings: [...request.acceptedRegionUnderstandings].reverse(),
   });
 
   assert.equal(first.resultKind, "data_plan_review");
@@ -274,7 +285,7 @@ test("runExperimentRecordDataPlan compiles accepted row and region interpretatio
 
 test("runExperimentRecordDataPlan returns explicit identity blockers without choosing create or reuse", async () => {
   const response = await runExperimentRecordDataPlan({
-    acceptedUnderstandings: [acceptedUnderstanding({ id: "wu_rows", sourceDocumentId: "source_doc_rows", factId: "fact_rows", axis: "rows", idColumn: "A" })],
+    acceptedRegionUnderstandings: [acceptedRegionUnderstanding({ revisionId: "revision_rows", regionId: "region_rows", sourceDocumentId: "source_doc_rows", axis: "rows", idColumn: "A" })],
     sourceDocuments: experimentSourceDocuments,
     sourceIndexBlobsByDocumentId: { source_doc_rows: [{ checksumSha256: "rows_checksum" }] },
     identityDecisions: [],
@@ -292,7 +303,7 @@ test("runExperimentRecordDataPlan returns explicit identity blockers without cho
 
 test("runExperimentRecordDataPlan exposes canonical labels for reusable experiment identities", async () => {
   const response = await runExperimentRecordDataPlan({
-    acceptedUnderstandings: [acceptedUnderstanding({ id: "wu_rows", sourceDocumentId: "source_doc_rows", factId: "fact_rows", axis: "rows", idColumn: "A" })],
+    acceptedRegionUnderstandings: [acceptedRegionUnderstanding({ revisionId: "revision_rows", regionId: "region_rows", sourceDocumentId: "source_doc_rows", axis: "rows", idColumn: "A" })],
     sourceDocuments: experimentSourceDocuments,
     sourceIndexBlobsByDocumentId: { source_doc_rows: [{ checksumSha256: "rows_checksum" }] },
     existingExperimentIdentities: [{
@@ -312,31 +323,38 @@ test("runExperimentRecordDataPlan exposes canonical labels for reusable experime
 
 test("runExperimentRecordDataPlan rejects missing or structurally incomplete accepted understanding", async () => {
   const unaccepted = await runExperimentRecordDataPlan({
-    acceptedUnderstandings: [{ ...acceptedUnderstanding({ id: "wu_rows", sourceDocumentId: "source_doc_rows", factId: "fact_rows", axis: "rows", idColumn: "A" }), status: "draft" }],
+    acceptedRegionUnderstandings: [{
+      ...acceptedRegionUnderstanding({ revisionId: "revision_rows", regionId: "region_rows", sourceDocumentId: "source_doc_rows", axis: "rows", idColumn: "A" }),
+      region: {
+        ...acceptedRegionUnderstanding({ revisionId: "revision_rows", regionId: "region_rows", sourceDocumentId: "source_doc_rows", axis: "rows", idColumn: "A" }).region,
+        acceptedRevisionId: null,
+        reviewStatus: "awaiting_review",
+      },
+    }],
     sourceDocuments: experimentSourceDocuments,
     readRangePreview: async ({ sourceDocumentId }) => experimentRangeRows[sourceDocumentId],
   });
   assert.equal(unaccepted.resultKind, "clarification");
-  assert.equal(unaccepted.clarification.code, "accepted_workbook_understanding_required");
+  assert.equal(unaccepted.clarification.code, "accepted_region_understanding_required");
 
-  const incompleteUnderstanding = acceptedUnderstanding({ id: "wu_rows", sourceDocumentId: "source_doc_rows", factId: "fact_rows", axis: "rows", idColumn: null });
+  const incompleteUnderstanding = acceptedRegionUnderstanding({ revisionId: "revision_rows", regionId: "region_rows", sourceDocumentId: "source_doc_rows", axis: "rows", idColumn: null });
   const incomplete = await runExperimentRecordDataPlan({
-    acceptedUnderstandings: [incompleteUnderstanding],
+    acceptedRegionUnderstandings: [incompleteUnderstanding],
     sourceDocuments: experimentSourceDocuments,
     readRangePreview: async ({ sourceDocumentId }) => experimentRangeRows[sourceDocumentId],
   });
   assert.equal(incomplete.resultKind, "clarification");
-  assert.equal(incomplete.clarification.code, "workbook_understanding_incomplete");
+  assert.equal(incomplete.clarification.code, "region_understanding_incomplete");
 });
 
 test("runExperimentRecordDataPlan blocks blank and normalized-duplicate source aliases", async () => {
-  const understanding = acceptedUnderstanding({ id: "wu_rows", sourceDocumentId: "source_doc_rows", factId: "fact_rows", axis: "rows", idColumn: "A" });
+  const understanding = acceptedRegionUnderstanding({ revisionId: "revision_rows", regionId: "region_rows", sourceDocumentId: "source_doc_rows", axis: "rows", idColumn: "A" });
   const duplicateRows = structuredClone(experimentRangeRows.source_doc_rows);
   duplicateRows.rows[0][0].rawValue = "Experiment";
   duplicateRows.rows[1][0].rawValue = "Exp1";
   duplicateRows.rows[2][0].rawValue = "EXP-1";
   const duplicate = await runExperimentRecordDataPlan({
-    acceptedUnderstandings: [understanding],
+    acceptedRegionUnderstandings: [understanding],
     sourceDocuments: experimentSourceDocuments,
     sourceIndexBlobsByDocumentId: { source_doc_rows: [{ checksumSha256: "rows_checksum" }] },
     identityDecisions: [{ sourceAlias: "Exp1", action: "create" }],
@@ -348,7 +366,7 @@ test("runExperimentRecordDataPlan blocks blank and normalized-duplicate source a
   const blankRows = structuredClone(experimentRangeRows.source_doc_rows);
   blankRows.rows[1][0].rawValue = null;
   const blank = await runExperimentRecordDataPlan({
-    acceptedUnderstandings: [understanding],
+    acceptedRegionUnderstandings: [understanding],
     sourceDocuments: experimentSourceDocuments,
     sourceIndexBlobsByDocumentId: { source_doc_rows: [{ checksumSha256: "rows_checksum" }] },
     identityDecisions: [{ sourceAlias: "Exp2", action: "create" }],

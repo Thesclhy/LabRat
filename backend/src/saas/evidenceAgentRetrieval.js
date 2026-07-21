@@ -82,7 +82,7 @@ async function fallbackPlanner({ query, tools, includeUnconfirmedSuggestions }) 
 export async function runEvidenceRetrievalAgent({
   project = null,
   query = "",
-  acceptedUnderstandings = [],
+  acceptedRegionUnderstandings = [],
   sourceDocuments = [],
   sourceRegions = [],
   includePreview = true,
@@ -92,7 +92,7 @@ export async function runEvidenceRetrievalAgent({
 } = {}) {
   const tools = createEvidenceAgentTools({
     project,
-    acceptedUnderstandings,
+    acceptedRegionUnderstandings,
     sourceDocuments,
     sourceRegions,
     readRangePreview,

@@ -97,48 +97,55 @@ function lexicalScore(query, card) {
   return { score, matchedSignals };
 }
 
-export function buildAcceptedRegionCards({ acceptedUnderstandings = [], sourceDocuments = [] } = {}) {
-  return asArray(acceptedUnderstandings).flatMap((understanding) => (
-    asArray(understanding.facts || understanding.understanding?.facts).map((fact) => {
-      const sourceDocumentId = fact.sourceDocumentId || understanding.sourceDocumentId;
-      const sourceDocument = sourceDocumentById(sourceDocuments, sourceDocumentId);
-      const workbookName = sourceDocumentName(sourceDocument);
-      const sourceRefs = asArray(fact.sourceRefs).length
-        ? fact.sourceRefs
-        : [{
-          sourceType: "excel_range",
-          sourceDocumentId,
-          sheet: fact.sheetName,
-          range: fact.range,
-        }];
-      const searchText = [
-        workbookName,
-        fact.sheetName,
-        fact.range,
-        fact.semanticType,
-        fact.description,
-        fact.kind,
-      ].filter(Boolean).join(" ");
-      return {
-        resultId: `evidence_result_${fact.factId || `${understanding.id}_${fact.sheetName}_${fact.range}`}`,
-        regionId: fact.factId || `${understanding.id}:${fact.sheetName}:${fact.range}`,
-        kind: "confirmed_region",
-        evidenceStatus: "accepted",
-        canUseForDataPlan: true,
-        source: "workbook_understanding",
-        workbookUnderstandingId: understanding.id,
-        factId: fact.factId || null,
+export function buildAcceptedRegionCards({ acceptedRegionUnderstandings = [], sourceDocuments = [] } = {}) {
+  return asArray(acceptedRegionUnderstandings).flatMap((accepted) => {
+    const region = accepted?.region || {};
+    const revision = accepted?.revision || {};
+    if (region.disposition !== "active" || region.acceptedRevisionId !== revision.id) return [];
+    const interpretation = revision.interpretation || {};
+    const sourceDocumentId = region.sourceDocumentId || revision.sourceDocumentId;
+    const sourceDocument = sourceDocumentById(sourceDocuments, sourceDocumentId);
+    const workbookName = sourceDocumentName(sourceDocument);
+    const description = asArray(revision.summary).map(clean).filter(Boolean).join(" ");
+    const sourceRefs = asArray(revision.sourceRefs).length
+      ? revision.sourceRefs
+      : [{
+        sourceType: "excel_range",
         sourceDocumentId,
-        workbookName,
-        sheetName: fact.sheetName,
-        range: fact.range,
-        semanticType: fact.semanticType || "unknown_region",
-        description: fact.description || "",
-        sourceRefs,
-        searchText,
-      };
-    })
-  ));
+        sheet: region.sheetName,
+        range: region.rangeRef,
+      }];
+    const semanticLabels = asArray(interpretation.fields)
+      .flatMap((field) => [field?.displayName, field?.semanticKey])
+      .map(clean)
+      .filter(Boolean);
+    const searchText = [
+      workbookName,
+      region.sheetName,
+      region.rangeRef,
+      interpretation.semanticType,
+      description,
+      ...semanticLabels,
+    ].filter(Boolean).join(" ");
+    return [{
+      resultId: `evidence_result_${revision.id}`,
+      regionId: region.id,
+      regionUnderstandingRevisionId: revision.id,
+      kind: "confirmed_region",
+      evidenceStatus: "accepted",
+      canUseForDataPlan: true,
+      source: "region_understanding_revision",
+      sourceDocumentId,
+      workbookName,
+      sheetName: region.sheetName,
+      range: region.rangeRef,
+      semanticType: interpretation.semanticType || "unknown_region",
+      description,
+      sourceContentHash: revision.sourceContentHash || "",
+      sourceRefs,
+      searchText,
+    }];
+  });
 }
 
 function buildUnconfirmedRegionCards({ sourceRegions = [], sourceDocuments = [] } = {}) {
@@ -173,12 +180,12 @@ function buildUnconfirmedRegionCards({ sourceRegions = [], sourceDocuments = [] 
 }
 
 export function createEvidenceAgentTools({
-  acceptedUnderstandings = [],
+  acceptedRegionUnderstandings = [],
   sourceDocuments = [],
   sourceRegions = [],
   readRangePreview = null,
 } = {}) {
-  const acceptedCards = buildAcceptedRegionCards({ acceptedUnderstandings, sourceDocuments });
+  const acceptedCards = buildAcceptedRegionCards({ acceptedRegionUnderstandings, sourceDocuments });
   const unconfirmedCards = buildUnconfirmedRegionCards({ sourceRegions, sourceDocuments });
 
   return {
@@ -204,7 +211,7 @@ export function createEvidenceAgentTools({
             score: scored.score,
             ranker: "fallback_region_card",
             matchedSignals: scored.matchedSignals,
-            matchedReason: "Matched against accepted workbook-understanding region text.",
+            matchedReason: "Matched against accepted region-understanding revision text.",
           };
         })
         .filter((card) => card.score > 0)
