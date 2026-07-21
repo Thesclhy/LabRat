@@ -768,6 +768,48 @@ describe("WorkbookReviewWorkspace", () => {
     }
   });
 
+  it("opens the sheet that contains the initially active server region", async () => {
+    const sheets = [{
+      name: "First",
+      usedRange: "A1:B2",
+      rowCount: 2,
+      columnCount: 2,
+    }, {
+      name: "Second",
+      usedRange: "A1:B2",
+      rowCount: 2,
+      columnCount: 2,
+    }];
+    const { fetchMock } = makeHydrationFetch({ sheets });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    try {
+      render(
+        <WorkbookReviewWorkspace
+          projectId="project_1"
+          reviewState={largeReviewState(sheets)}
+          draftRegions={[{
+            id: "region_second",
+            sourceDocumentId: "source_doc_1",
+            sheetName: "Second",
+            rangeRef: "A1:B2",
+            disposition: "active",
+          }]}
+          activeDraftRegionId="region_second"
+          onDraftRegionsChange={() => {}}
+        />,
+      );
+
+      expect(await screen.findByText("Second A1:B2")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Second" }).classList.contains("active")).toBe(true);
+      await waitFor(() => {
+        expect(screen.getByLabelText("Cell A1").closest(".rdg-cell")?.classList.contains("is-draft")).toBe(true);
+      });
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   it("focuses an existing region without mutating the region list", async () => {
     const fetchMock = makeWorkbookReviewFetch();
     const originalFetch = global.fetch;

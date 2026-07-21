@@ -1180,6 +1180,7 @@ export function WorkbookReviewWorkspace({
   const scrollFrameRef = useRef(null);
   const edgeScrollDirectionRef = useRef({ x: 0, y: 0 });
   const appliedFocusKeyRef = useRef("");
+  const appliedActiveRegionKeyRef = useRef("");
   const sourceDocument = documentsState.items.find((document) => document.id === selectedDocumentId)
     || initialSourceDocument
     || documentsState.items[0]
@@ -1294,6 +1295,16 @@ export function WorkbookReviewWorkspace({
       : sheets[0]?.name || "";
     if (nextSheet && nextSheet !== activeSheetName) setActiveSheetName(nextSheet);
   }, [sourceDocument?.id, sheets, activeSheetName]);
+
+  useEffect(() => {
+    const activeRegion = findWorkbookDraftRegionById(draftRegions, activeDraftRegionId);
+    if (!activeRegion || activeRegion.disposition === "deleted") return;
+    const activeRegionKey = `${activeDraftRegionId}:${activeRegion.sourceDocumentId || ""}:${activeRegion.sheetName || ""}`;
+    if (appliedActiveRegionKeyRef.current === activeRegionKey) return;
+    appliedActiveRegionKeyRef.current = activeRegionKey;
+    if (activeRegion.sourceDocumentId) setSelectedDocumentId(activeRegion.sourceDocumentId);
+    if (activeRegion.sheetName) setActiveSheetName(activeRegion.sheetName);
+  }, [draftRegions, activeDraftRegionId]);
 
   useEffect(() => {
     const scrollElement = gridScrollRef.current?.getBoundingClientRect

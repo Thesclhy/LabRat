@@ -15,6 +15,20 @@ Keep entries concise, newest first, and include:
 
 ## 2026-07-20
 
+- Completed region-understanding implementation Task 8 and the full cutover.
+  `npm run codex:verify` passed with frontend 252/252, backend 234 passed plus
+  1 optional PostgreSQL integration skip, and a successful production build
+  with the existing Plotly chunk-size warning. Desktop browser QA uploaded the
+  repository synthetic master workbook, reviewed backend-bounded summaries,
+  created immutable revision 2 from user feedback, confirmed Runs, ignored
+  README, bulk-created four experiment identities, published Exp28-Exp31, and
+  verified reload plus Solid/Liquid/Gas Browser columns and source values. QA
+  found and fixed initial active-region/sheet desynchronization with a focused
+  regression test. At 390x844, Overview and Workbook Review now stack without
+  page-level overflow (`scrollWidth === clientWidth`); a clean page reported
+  zero console errors or warnings. The QA provider was a local deterministic
+  stub and no workbook data was sent externally. Follow-up: exercise migrations
+  013/014 against configured PostgreSQL in CI or staging.
 - Completed region-understanding implementation Task 7. Reconciled the active
   README/agent guidance, roadmap, milestone, checklist, API/database/project-
   state/data-dictionary contracts, architecture/AI boundaries, durable

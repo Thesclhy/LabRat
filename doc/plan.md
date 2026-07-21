@@ -48,6 +48,7 @@ Use this split when deciding what to build:
 - Tool-Governed Evidence Retrieval MVP: `POST /api/projects/:projectId/evidence/retrieve` returns usable accepted evidence and non-usable unconfirmed suggestions.
 - Transient DataPlan Agent Phase 1-2: DataPlan/DataSnapshot schemas, backend DataPlan tools, deterministic preview execution, `POST /api/projects/:projectId/data-plans/draft`, and frontend helper coverage.
 - Structured region interpretation: the backend model receives only the selected bounded range, limited neighboring context, and workbook manifest; typed experiment/field/unit/inclusion proposals are independently revised and exact accepted revisions become read-only evidence.
+- Integrated region-review completion: desktop and 390x844 QA now cover upload, bounded summaries, immutable feedback revision, independent confirm/ignore, bulk identity creation, deterministic preview, publish, reload, and all three selectivity fields in Browser. Initial active-region sheet focus and narrow-screen page overflow were fixed during QA.
 - Experiment-record DataPlan preview: deterministic row/region extraction, typed values and series, canonical dependency/preview hashes, explicit identity decisions, source-backed warnings, bounded reads, and a transient review panel.
 - Transactional accepted-snapshot publish: mandatory idempotency, backend evidence re-read/re-execution, stale-preview recovery, atomic accepted DataPlan/DataSnapshot persistence, explicit experiment identity updates, affected-head advancement, and audit receipts without DatasetCommit/chart/manuscript side effects.
 - Snapshot-backed Experiment Browser: accepted-head-only rows, project-isolated cursor APIs, unit-aware recommended columns, typed search/filter/sort, virtualized large-project rendering, lazy detail, and accepted source-evidence navigation.
@@ -74,9 +75,8 @@ Use this split when deciding what to build:
 
 ## Next Recommended Slices
 
-1. Finish integrated desktop/mobile QA for independent workbook-region review through Browser publish.
-2. Run migrations 013/014 and the region-to-DataPlan path against configured Postgres in CI or staging.
-3. Deploy and exercise the hardened no-network analysis worker with production secret management, audit telemetry, timeout controls, and provider cost/latency monitoring.
+1. Run migrations 013/014 and the region-to-DataPlan path against configured Postgres in CI or staging.
+2. Deploy and exercise the hardened no-network analysis worker with production secret management, audit telemetry, timeout controls, and provider cost/latency monitoring.
 
 ## Operating Loop
 

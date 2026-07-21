@@ -1,6 +1,6 @@
 # Current Milestone
 
-Status: active
+Status: completed
 Read when: checking what the next implementation slice should be.
 Last reviewed: 2026-07-20
 
@@ -14,9 +14,9 @@ This file tracks the active execution state. Keep `doc/plan.md` as the short roa
 - Completed milestone: progressive full-sheet workbook loading and
   checkbox-controlled selection highlights.
 
-## Active Milestone
+## Completed Milestone
 
-Finalize and verify the approved region-level Workbook Understanding cutover documented
+The approved region-level Workbook Understanding cutover documented
 in `doc/plans/workbook-region-understanding-redesign-design.md` and
 `doc/plans/workbook-region-understanding-redesign-implementation-plan.md`.
 WorkbookReviewSession remains the Excel container; independently versioned and
@@ -24,8 +24,8 @@ confirmed region understandings replace aggregate WorkbookUnderstanding
 acceptance. Implementation now includes bounded backend model interpretation,
 per-region revise/confirm/ignore/logical-delete APIs, accepted-region DataPlan
 dependencies, the simplified review dock, legacy contract retirement, and the
-golden workbook-to-Browser workflow. Remaining work is full verification and
-desktop/mobile browser QA of the integrated upload/review/publish path.
+golden workbook-to-Browser workflow. Full automated verification plus desktop
+and 390x844 browser QA now cover the integrated upload/review/publish path.
 
 ## Current Position
 
@@ -47,7 +47,7 @@ Implemented:
 - Target architecture and milestone sequence are approved in `doc/plans/workbook-review-to-experiment-browser-plan.md`.
 - Milestone 0 contract cutover: active API/schema/data/architecture/AI contracts now define the Snapshot-backed Browser path and mark DatasetCommit/generic imports deprecated.
 - Workbook source range race fix: late detected-region responses no longer overwrite a manual range entered while loading.
-- Region redesign Tasks 1-6: migration/store parity, bounded backend interpretation, nested region APIs, upload-time candidate seeding, exact accepted-revision evidence/DataPlan dependencies, compact independent region cards, region-level Overview status, and aggregate WorkbookUnderstanding route/state/storage retirement are implemented.
+- Region redesign Tasks 1-8: migration/store parity, bounded backend interpretation, nested region APIs, upload-time candidate seeding, exact accepted-revision evidence/DataPlan dependencies, compact independent region cards, region-level Overview status, aggregate WorkbookUnderstanding retirement, contract reconciliation, full verification, and browser QA are complete.
 - Milestone 3 experiment-record DataPlan preview: accepted evidence compiles into deterministic row- or region-oriented records with typed values, canonical hashes, explicit identity decisions, bounded SourceDocument reads, visible warnings/source refs, and a transient review panel without Browser mutation.
 - Milestone 4 transactional publish: migration/store parity, backend evidence re-read and deterministic re-execution, mandatory idempotency, stale-preview recovery, atomic accepted DataPlan/DataSnapshot plus identity/head persistence, audit receipts, editor authorization, and a locked frontend success state.
 - Milestone 5 Snapshot-backed Experiment Browser: accepted-snapshot/head-only projection, project-isolated list/detail APIs, deterministic unit-aware recommended columns, cursor pagination, typed search/filter/sort, virtualized rows, lazy detail, selection, and read-only source evidence navigation.
@@ -72,9 +72,8 @@ Deployment work not included in this completed milestone:
 
 ## Next Recommended Slice
 
-1. Complete full automated verification and desktop/mobile browser QA for region review through Browser publish.
-2. Exercise migrations 013/014 and the region-to-DataPlan path against a configured Postgres test database.
-3. Operationalize the hardened analysis worker, secret management, timeouts, audit telemetry, and provider cost/latency monitoring in a production-like environment.
+1. Exercise migrations 013/014 and the region-to-DataPlan path against a configured Postgres test database.
+2. Operationalize the hardened analysis worker, secret management, timeouts, audit telemetry, and provider cost/latency monitoring in a production-like environment.
 
 ## Guardrails
 
@@ -118,12 +117,15 @@ removal. Frozen-request tests additionally verify that background hydration
 waits for visible cells, never exceeds three workers, and starts a newly
 selected Sheet from its top tile.
 
-Latest region-understanding evidence: Tasks 1-6 are implemented. Focused backend
-region/session/route coverage passed 37/37; frontend API, region dock, and
-ProjectDashboard coverage passed 75/75; production build passed before the
-aggregate retirement slice. Optional Postgres route execution remains skipped
-without `LABRAT_TEST_DATABASE_URL`. Full verification and browser QA remain the
-final active checks.
+Latest region-understanding evidence: Tasks 1-8 are complete. Full verification
+passed with frontend 252/252 and backend 234 passed plus 1 optional PostgreSQL
+integration skip; the production build succeeded with the existing Plotly
+chunk-size warning. Browser QA used the repository-owned two-sheet synthetic
+master workbook and a local deterministic provider stub: it revised and
+confirmed `Runs!A1:K5`, ignored README, bulk-created four identities, published
+Exp28-Exp31, reloaded state, and verified Solid/Liquid/Gas fields in Browser.
+QA found and fixed initial active-region sheet mismatch and page-level overflow
+at 390x844; clean-page console verification reported no errors or warnings.
 
 ## Open Risks
 

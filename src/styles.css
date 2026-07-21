@@ -8072,6 +8072,48 @@ tbody tr:hover {
     left: 10px;
     width: auto;
   }
+  .project-overview {
+    padding: 12px;
+  }
+  .project-overview-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .project-overview-hero,
+  .project-overview-card {
+    min-width: 0;
+  }
+  .workbook-review-workspace {
+    min-width: 0;
+    padding: 8px;
+  }
+  .workbook-excel-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+  .workbook-excel-toolbar strong,
+  .workbook-sheet-load-status {
+    min-width: 0;
+  }
+  .workbook-excel-toolbar input {
+    width: 100%;
+  }
+  .workbook-sheet-load-status {
+    justify-content: flex-start;
+    white-space: normal;
+  }
+  .workbook-review-layout,
+  .workbook-review-layout.has-review-dock,
+  .workbook-review-main,
+  .workbook-review-chat,
+  .data-plan-review-panel {
+    min-width: 0;
+    width: 100%;
+  }
+  .workbook-region-summary p,
+  .workbook-region-notices p {
+    overflow-wrap: anywhere;
+  }
   .server-select,
   .project-select {
     max-width: none;

@@ -1,6 +1,6 @@
 # Region-Level Workbook Understanding Implementation Plan
 
-Status: Tasks 1-7 implemented 2026-07-20; Task 8 final verification and browser QA in progress.
+Status: completed 2026-07-20; Tasks 1-8 implemented and verified.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -462,25 +462,25 @@ git commit -m "docs: cut over to accepted region understanding"
 **Interfaces:**
 - Produces final verification evidence and milestone status.
 
-- [ ] **Step 1: Run complete automated verification**
+- [x] **Step 1: Run complete automated verification**
 
 Run: `npm run codex:verify`
 
 Expected: all frontend tests pass, all backend tests pass with only the optional PostgreSQL skip when unconfigured, and production build succeeds with the known Plotly chunk warning.
 
-- [ ] **Step 2: Run desktop browser QA**
+- [x] **Step 2: Run desktop browser QA**
 
 Upload a real multi-header workbook, verify full-sheet progressive loading, detected region summaries, manual region creation, focus/highlight, revision, confirmation, ignore, delete, DataPlan preview, publish, reload, and Browser source navigation. Confirm no console errors.
 
-- [ ] **Step 3: Run 390x844 responsive QA**
+- [x] **Step 3: Run 390x844 responsive QA**
 
 Verify cards, sentence wrapping, feedback controls, dialogs, workbook/dock stacking, and no overlap or horizontal page overflow.
 
-- [ ] **Step 4: Update durable progress**
+- [x] **Step 4: Update durable progress**
 
 Record request, API/schema cutover, LLM boundary, frontend behavior, exact test totals, browser QA evidence, provider configuration assumptions, and residual risks in `doc/PROGRESS.md`; mark `doc/current-milestone.md` completed only when all required checks pass.
 
-- [ ] **Step 5: Final review and commit**
+- [x] **Step 5: Final review and commit**
 
 Run: `git diff --check`
 
