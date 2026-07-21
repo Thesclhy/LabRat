@@ -1,6 +1,6 @@
 # Current Milestone
 
-Status: completed
+Status: active
 Read when: checking what the next implementation slice should be.
 Last reviewed: 2026-07-20
 
@@ -13,6 +13,18 @@ This file tracks the active execution state. Keep `doc/plan.md` as the short roa
 - Completed milestone: Backend conversational analysis and chart workflow implementation.
 - Completed milestone: progressive full-sheet workbook loading and
   checkbox-controlled selection highlights.
+
+## Active Milestone
+
+Implement the approved region-level Workbook Understanding cutover documented
+in `doc/plans/workbook-region-understanding-redesign-design.md` and
+`doc/plans/workbook-region-understanding-redesign-implementation-plan.md`.
+WorkbookReviewSession remains the Excel container; independently versioned and
+confirmed region understandings replace aggregate WorkbookUnderstanding
+acceptance. The milestone includes bounded backend model interpretation,
+per-region revise/confirm/ignore/logical-delete APIs, accepted-region DataPlan
+dependencies, the simplified review dock, legacy contract retirement, and the
+golden workbook-to-Browser workflow.
 
 ## Current Position
 

@@ -15,6 +15,17 @@ Keep entries concise, newest first, and include:
 
 ## 2026-07-20
 
+- Approved the written region-level Workbook Understanding specification and
+  started the executable TDD plan at
+  `doc/plans/workbook-region-understanding-redesign-implementation-plan.md`.
+  The plan covers Region/Revision persistence, bounded backend model
+  interpretation, nested per-region APIs, accepted-region evidence/DataPlan
+  cutover, simplified cards, aggregate contract retirement, and golden QA.
+  Preflight passed. The initial full baseline run passed 260/262 frontend tests;
+  the two full-sheet timing cases failed at the five-second boundary, then both
+  passed independently (1/1 each), identifying existing full-suite concurrency
+  sensitivity rather than a product regression. Implementation now proceeds on
+  the existing feature branch; unrelated untracked tool files remain untouched.
 - Approved the region-level Workbook Understanding redesign and documented the
   contract cutover in
   `doc/plans/workbook-region-understanding-redesign-design.md`. The design keeps
