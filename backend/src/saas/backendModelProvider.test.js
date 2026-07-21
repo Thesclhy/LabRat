@@ -148,3 +148,64 @@ test("draftAnalysisPlan requests the backend-reviewed selection and program shap
   assert.equal(result.ok, true);
   assert.deepEqual(result.selectionRequest.fieldIds, ["field_1"]);
 });
+
+test("interpretWorkbookRegion requests a concise structured region explanation", async () => {
+  const provider = createBackendModelProvider({
+    config: {
+      aiProvider: "anthropic",
+      anthropicApiKey: "server-secret",
+      anthropicModel: "claude-test",
+    },
+    fetchImpl: async (_url, request) => {
+      const body = JSON.parse(request.body);
+      const payload = JSON.parse(body.messages[0].content);
+      assert.match(body.system, /two to four short sentences/i);
+      assert.match(body.system, /structured interpretation/i);
+      assert.equal(payload.region.sheetName, "Runs");
+      assert.equal(payload.region.inspection.cells.length, 4);
+      assert.equal("completeWorkbook" in payload, false);
+      return {
+        ok: true,
+        async json() {
+          return {
+            usage: { input_tokens: 50, output_tokens: 30 },
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                summary: [
+                  "Each row represents one experiment.",
+                  "The first row contains field labels.",
+                ],
+                interpretation: {
+                  semanticType: "experiment_table",
+                  experimentAxis: "rows",
+                  headerRow: 1,
+                  experimentIdColumn: "A",
+                  fields: [],
+                  series: [],
+                  inclusion: { startRow: 2, endRow: 3, skippedRows: [] },
+                  confidence: 0.9,
+                  warnings: [],
+                },
+              }),
+            }],
+          };
+        },
+      };
+    },
+  });
+
+  const result = await provider.interpretWorkbookRegion({
+    workbook: { workbookName: "Master.xlsx", sheets: [{ name: "Runs", usedRange: "A1:D3" }] },
+    region: {
+      sheetName: "Runs",
+      range: "A1:D3",
+      inspection: { cells: [{ cell: "A1" }, { cell: "B1" }, { cell: "A2" }, { cell: "B2" }] },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.summary.length, 2);
+  assert.equal(result.interpretation.experimentAxis, "rows");
+  assert.equal(result.metadata.provider, "anthropic");
+});

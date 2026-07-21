@@ -243,6 +243,8 @@ function workbookReviewRegionFromRow(row) {
     acceptedRevisionId: row.accepted_revision_id,
     version: row.version || 1,
     warnings: row.warnings || [],
+    acceptedAt: row.accepted_at,
+    acceptedBy: row.accepted_by,
     ignoredAt: row.ignored_at,
     ignoredBy: row.ignored_by,
     ignoredReason: row.ignored_reason || "",
@@ -1332,10 +1334,10 @@ export class PostgresSaasStore {
       `insert into workbook_review_regions
        (id, lab_id, project_id, workbook_review_session_id, source_document_id, source_region_id,
         sheet_name, range_ref, selection_method, disposition, review_status, current_revision_id,
-        accepted_revision_id, version, warnings, ignored_at, ignored_by, ignored_reason, deleted_at,
+        accepted_revision_id, version, warnings, accepted_at, accepted_by, ignored_at, ignored_by, ignored_reason, deleted_at,
         deleted_by, deleted_reason, created_at, updated_at, created_by, updated_by)
        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-               $16, $17, $18, $19, $20, $21, now(), now(), $22, $22)
+               $16, $17, $18, $19, $20, $21, $22, $23, now(), now(), $24, $24)
        returning *`,
       [
         input.id || makeId("workbook_review_region"),
@@ -1353,6 +1355,8 @@ export class PostgresSaasStore {
         input.acceptedRevisionId || null,
         Number(input.version) || 1,
         jsonb(input.warnings || [], []),
+        input.acceptedAt || null,
+        input.acceptedBy || null,
         input.ignoredAt || null,
         input.ignoredBy || null,
         input.ignoredReason || "",
@@ -1391,15 +1395,17 @@ export class PostgresSaasStore {
            current_revision_id = coalesce($4, current_revision_id),
            accepted_revision_id = coalesce($5, accepted_revision_id),
            warnings = coalesce($6, warnings),
-           ignored_at = coalesce($7, ignored_at),
-           ignored_by = coalesce($8, ignored_by),
-           ignored_reason = coalesce($9, ignored_reason),
-           deleted_at = coalesce($10, deleted_at),
-           deleted_by = coalesce($11, deleted_by),
-           deleted_reason = coalesce($12, deleted_reason),
+           accepted_at = coalesce($7, accepted_at),
+           accepted_by = coalesce($8, accepted_by),
+           ignored_at = coalesce($9, ignored_at),
+           ignored_by = coalesce($10, ignored_by),
+           ignored_reason = coalesce($11, ignored_reason),
+           deleted_at = coalesce($12, deleted_at),
+           deleted_by = coalesce($13, deleted_by),
+           deleted_reason = coalesce($14, deleted_reason),
            version = version + 1,
            updated_at = now(),
-           updated_by = coalesce($13, updated_by)
+           updated_by = coalesce($15, updated_by)
        where id = $1
        returning *`,
       [
@@ -1409,6 +1415,8 @@ export class PostgresSaasStore {
         patch.currentRevisionId ?? null,
         patch.acceptedRevisionId ?? null,
         patch.warnings === undefined ? null : jsonb(patch.warnings, []),
+        patch.acceptedAt ?? null,
+        patch.acceptedBy ?? null,
         patch.ignoredAt ?? null,
         patch.ignoredBy ?? null,
         patch.ignoredReason ?? null,

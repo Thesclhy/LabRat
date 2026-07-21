@@ -16,6 +16,8 @@ create table if not exists workbook_review_regions (
   accepted_revision_id text,
   version integer not null default 1,
   warnings jsonb not null default '[]'::jsonb,
+  accepted_at timestamptz,
+  accepted_by text references users(id),
   ignored_at timestamptz,
   ignored_by text references users(id),
   ignored_reason text,

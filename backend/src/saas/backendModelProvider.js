@@ -27,6 +27,16 @@ const ANALYSIS_PLAN_SYSTEM = [
   "The backend will resolve accepted data, compute all hashes, validate the plan, and require user review before execution.",
 ].join(" ");
 
+const WORKBOOK_REGION_SYSTEM = [
+  "Explain one bounded Excel region as JSON only.",
+  "Return exactly {summary, interpretation}.",
+  "summary is an array of two to four short sentences describing what the selected table contains.",
+  "interpretation is the structured interpretation of only the supplied region and may contain semanticType, experimentAxis, headerRow, experimentIdColumn, experimentLabel, fields, series, inclusion, confidence, and warnings.",
+  "Use only supplied cells, formulas, merged ranges, workbook metadata, prior visible interpretation, and user feedback.",
+  "Never invent source cells, scientific values, units, or experiment identities, and never return hidden reasoning.",
+  "Do not return source hashes or request additional workbook data.",
+].join(" ");
+
 function parseJsonObject(value) {
   const raw = String(value || "").trim();
   const unfenced = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
@@ -112,6 +122,13 @@ export function createBackendModelProvider({
         system: ANALYSIS_PLAN_SYSTEM,
         payload: input,
         maxTokens: 2400,
+      });
+    },
+    interpretWorkbookRegion(input = {}) {
+      return requestStructured({
+        system: WORKBOOK_REGION_SYSTEM,
+        payload: input,
+        maxTokens: 1800,
       });
     },
     answerReadOnly(input = {}) {
