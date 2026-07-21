@@ -31,11 +31,103 @@ const WORKBOOK_REGION_SYSTEM = [
   "Explain one bounded Excel region as JSON only.",
   "Return exactly {summary, interpretation}.",
   "summary is an array of two to four short sentences describing what the selected table contains.",
-  "interpretation is the structured interpretation of only the supplied region and may contain semanticType, experimentAxis, headerRow, experimentIdColumn, experimentLabel, fields, series, inclusion, confidence, and warnings.",
+  "interpretation is a sparse correction patch for only the supplied region.",
+  "Do not repeat deterministicCandidate fields unless correcting them; use fieldPatches for changed columns only.",
+  "The structured response requires every patch property; use an empty string, zero, or an empty array when that property is unchanged.",
+  "Each field patch requires every property; use an empty string for an unchanged field property.",
+  "The backend preserves deterministic fields, series, and row inclusion unless this core patch changes their inputs.",
   "Use only supplied cells, formulas, merged ranges, workbook metadata, prior visible interpretation, and user feedback.",
   "Never invent source cells, scientific values, units, or experiment identities, and never return hidden reasoning.",
   "Do not return source hashes or request additional workbook data.",
 ].join(" ");
+
+const WORKBOOK_REGION_OUTPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    summary: {
+      type: "array",
+      items: { type: "string" },
+    },
+    interpretation: {
+      type: "object",
+      properties: {
+        semanticType: {
+          type: "string",
+          enum: [
+            "",
+            "experiment_table",
+            "reaction_rate_time_series",
+            "component_distribution",
+            "calculation_table",
+            "metadata_notes",
+            "generic_table",
+            "ignored_region",
+            "unknown_region",
+          ],
+        },
+        experimentAxis: { type: "string", enum: ["", "rows", "region"] },
+        headerRow: { type: "integer" },
+        experimentIdColumn: { type: "string" },
+        experimentLabel: { type: "string" },
+        fieldPatches: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              column: { type: "string" },
+              semanticKey: { type: "string" },
+              displayName: { type: "string" },
+              role: { type: "string", enum: ["", "identifier", "condition", "outcome", "series_summary", "other"] },
+              valueType: { type: "string", enum: ["", "string", "number", "date", "boolean"] },
+              unit: { type: "string" },
+            },
+            required: ["column", "semanticKey", "displayName", "role", "valueType", "unit"],
+            additionalProperties: false,
+          },
+        },
+        confidence: { type: "number" },
+      },
+      required: [
+        "semanticType",
+        "experimentAxis",
+        "headerRow",
+        "experimentIdColumn",
+        "experimentLabel",
+        "fieldPatches",
+        "confidence",
+      ],
+      additionalProperties: false,
+    },
+  },
+  required: ["summary", "interpretation"],
+  additionalProperties: false,
+};
+
+function normalizeWorkbookRegionPatch(value) {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const patch = {};
+  for (const property of ["semanticType", "experimentAxis", "experimentIdColumn", "experimentLabel"]) {
+    const normalized = String(source[property] ?? "").trim();
+    if (normalized) patch[property] = normalized;
+  }
+  const headerRow = Number(source.headerRow);
+  if (Number.isInteger(headerRow) && headerRow > 0) patch.headerRow = headerRow;
+  const confidence = Number(source.confidence);
+  if (Number.isFinite(confidence) && confidence > 0) patch.confidence = confidence;
+  const fieldPatches = (Array.isArray(source.fieldPatches) ? source.fieldPatches : []).flatMap((candidate) => {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return [];
+    const column = String(candidate.column ?? "").trim().toUpperCase();
+    if (!column) return [];
+    const fieldPatch = { column };
+    for (const property of ["semanticKey", "displayName", "role", "valueType", "unit"]) {
+      const normalized = String(candidate[property] ?? "").trim();
+      if (normalized) fieldPatch[property] = normalized;
+    }
+    return [fieldPatch];
+  });
+  if (fieldPatches.length) patch.fieldPatches = fieldPatches;
+  return patch;
+}
 
 function parseJsonObject(value) {
   const raw = String(value || "").trim();
@@ -67,7 +159,7 @@ export function createBackendModelProvider({
     configured: Boolean(apiKey),
   });
 
-  const requestStructured = async ({ system, payload, maxTokens = 1200 }) => {
+  const requestStructured = async ({ system, payload, maxTokens = 1200, outputSchema = null }) => {
     if (providerName !== "anthropic") {
       return {
         ok: false,
@@ -80,6 +172,7 @@ export function createBackendModelProvider({
       system,
       prompt: JSON.stringify(payload),
       maxTokens,
+      outputSchema,
       config: { apiKey, model },
       fetchImpl,
     });
@@ -100,6 +193,7 @@ export function createBackendModelProvider({
         model,
         latencyMs,
         usage: response.usage || { inputTokens: 0, outputTokens: 0 },
+        ...(response.stopReason ? { stopReason: response.stopReason } : {}),
       },
     };
   };
@@ -124,12 +218,18 @@ export function createBackendModelProvider({
         maxTokens: 2400,
       });
     },
-    interpretWorkbookRegion(input = {}) {
-      return requestStructured({
+    async interpretWorkbookRegion(input = {}) {
+      const result = await requestStructured({
         system: WORKBOOK_REGION_SYSTEM,
         payload: input,
-        maxTokens: 1800,
+        maxTokens: 3200,
+        outputSchema: WORKBOOK_REGION_OUTPUT_SCHEMA,
       });
+      if (!result.ok) return result;
+      return {
+        ...result,
+        interpretation: normalizeWorkbookRegionPatch(result.interpretation),
+      };
     },
     answerReadOnly(input = {}) {
       return requestStructured({

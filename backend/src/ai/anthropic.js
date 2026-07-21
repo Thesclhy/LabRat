@@ -17,6 +17,7 @@ export async function requestAnthropicJson({
   system,
   prompt,
   maxTokens = 1200,
+  outputSchema = null,
   env = process.env,
   config: explicitConfig = null,
   fetchImpl = globalThis.fetch,
@@ -49,6 +50,12 @@ export async function requestAnthropicJson({
         max_tokens: maxTokens,
         system,
         messages: [{ role: "user", content: prompt }],
+        output_config: outputSchema ? {
+          format: {
+            type: "json_schema",
+            schema: outputSchema,
+          },
+        } : undefined,
       }),
     });
     if (!response.ok) {
@@ -62,6 +69,16 @@ export async function requestAnthropicJson({
       };
     }
     const body = await response.json();
+    if (body.stop_reason === "max_tokens") {
+      return {
+        ok: false,
+        warning: {
+          code: "ai_output_truncated",
+          message: "Anthropic output reached the token limit; retry with a smaller region or a shorter interpretation.",
+          severity: "warning",
+        },
+      };
+    }
     const text = (body.content || []).map((item) => item?.text || "").join("\n").trim();
     if (!text) {
       return {
@@ -80,6 +97,7 @@ export async function requestAnthropicJson({
         inputTokens: Number(body.usage?.input_tokens) || 0,
         outputTokens: Number(body.usage?.output_tokens) || 0,
       },
+      stopReason: body.stop_reason || null,
     };
   } catch {
     return {

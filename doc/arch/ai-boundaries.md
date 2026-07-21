@@ -1,7 +1,7 @@
 # AI Boundaries
 
 Status: active
-Last reviewed: 2026-07-20
+Last reviewed: 2026-07-21
 
 LabRat uses AI as a proposal and workflow layer. Authorization, bounded evidence reads, schema validation, deterministic execution, hashing, and persistence remain backend responsibilities.
 
@@ -113,6 +113,14 @@ They must not persist hidden reasoning. Deterministic runs record the determinis
 ## Provider Safety
 
 Provider access is backend-only. The frontend contains no provider-key/model settings and never calls a provider endpoint directly. Backend configuration supplies provider secrets, while the browser receives only user-facing replies, visible workflow artifacts, warnings, and bounded provider/model/usage/latency metadata.
+
+Workbook-region interpretation uses provider-enforced structured output for a
+small correction-patch Schema. The model does not repeat the deterministic
+field catalog, source series, or inclusion rows. Required empty wire values are
+removed before applying the patch, and semantic types, axes, field roles, value
+types, columns, and ranges remain subject to deterministic backend validation.
+Token-limit truncation and malformed output remain retryable failures and never
+create a RegionUnderstandingRevision.
 
 The backend intent router applies deterministic priority to explicit upload, navigation, and source-evidence commands. Bounded model classification may resolve ambiguous messages only into the supported intent/disposition enum. Invalid model output becomes clarification and cannot create an Experiment Browser fallback action.
 

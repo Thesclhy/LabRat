@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-07-20
+Last reviewed: 2026-07-21
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -12,6 +12,21 @@ Keep entries concise, newest first, and include:
 - meaningful changes
 - verification
 - follow-ups or residual risk
+
+## 2026-07-21
+
+- Fixed workbook-region interpretation failures reported for
+  `MasterTable_updated.xlsx` (`Sheet1!A1:Y63`). Anthropic region requests now
+  use provider-enforced JSON Schema output, return a compact correction patch
+  over the deterministic proposal instead of copying all detected fields, and
+  distinguish token-limit truncation from malformed output. The production
+  Schema was reduced to Anthropic's accepted complexity and constrains field
+  roles/value types to backend-supported values; empty required wire values are
+  stripped before the patch reaches scientific-data validation. A real
+  Anthropic smoke request with a synthetic 25-column, 63-row master-table shape
+  returned valid structured output. Verification: backend 235 passed plus 1
+  optional PostgreSQL skip, frontend 252/252 passed, and the production build
+  passed with the existing Plotly chunk-size warning.
 
 ## 2026-07-20
 

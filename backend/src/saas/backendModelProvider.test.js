@@ -160,7 +160,21 @@ test("interpretWorkbookRegion requests a concise structured region explanation",
       const body = JSON.parse(request.body);
       const payload = JSON.parse(body.messages[0].content);
       assert.match(body.system, /two to four short sentences/i);
-      assert.match(body.system, /structured interpretation/i);
+      assert.match(body.system, /sparse correction patch/i);
+      assert.equal(body.output_config.format.type, "json_schema");
+      assert.deepEqual(body.output_config.format.schema.required, ["summary", "interpretation"]);
+      assert.equal(body.output_config.format.schema.additionalProperties, false);
+      const interpretationSchema = body.output_config.format.schema.properties.interpretation;
+      assert.deepEqual(interpretationSchema.required, Object.keys(interpretationSchema.properties));
+      assert.deepEqual(
+        interpretationSchema.properties.fieldPatches.items.required,
+        Object.keys(interpretationSchema.properties.fieldPatches.items.properties),
+      );
+      const roleSchema = interpretationSchema.properties.fieldPatches.items.properties.role;
+      assert.ok(roleSchema.enum.includes(""));
+      assert.ok(roleSchema.enum.includes("outcome"));
+      assert.equal(roleSchema.enum.includes("measurement"), false);
+      assert.ok(body.max_tokens >= 3000);
       assert.equal(payload.region.sheetName, "Runs");
       assert.equal(payload.region.inspection.cells.length, 4);
       assert.equal("completeWorkbook" in payload, false);
@@ -181,11 +195,16 @@ test("interpretWorkbookRegion requests a concise structured region explanation",
                   experimentAxis: "rows",
                   headerRow: 1,
                   experimentIdColumn: "A",
-                  fields: [],
-                  series: [],
-                  inclusion: { startRow: 2, endRow: 3, skippedRows: [] },
+                  experimentLabel: "",
+                  fieldPatches: [{
+                    column: "B",
+                    semanticKey: "temperature",
+                    displayName: "",
+                    role: "condition",
+                    valueType: "number",
+                    unit: "",
+                  }],
                   confidence: 0.9,
-                  warnings: [],
                 },
               }),
             }],
@@ -207,5 +226,43 @@ test("interpretWorkbookRegion requests a concise structured region explanation",
   assert.equal(result.ok, true);
   assert.equal(result.summary.length, 2);
   assert.equal(result.interpretation.experimentAxis, "rows");
+  assert.equal("experimentLabel" in result.interpretation, false);
+  assert.deepEqual(result.interpretation.fieldPatches, [{
+    column: "B",
+    semanticKey: "temperature",
+    role: "condition",
+    valueType: "number",
+  }]);
   assert.equal(result.metadata.provider, "anthropic");
+});
+
+test("reports truncated workbook-region output separately from malformed JSON", async () => {
+  const provider = createBackendModelProvider({
+    config: {
+      aiProvider: "anthropic",
+      anthropicApiKey: "server-secret",
+      anthropicModel: "claude-test",
+    },
+    fetchImpl: async () => ({
+      ok: true,
+      async json() {
+        return {
+          stop_reason: "max_tokens",
+          content: [{ type: "text", text: "{\"summary\":[" }],
+        };
+      },
+    }),
+  });
+
+  const result = await provider.interpretWorkbookRegion({
+    workbook: { workbookName: "Master.xlsx", sheets: [{ name: "Runs", usedRange: "A1:Y63" }] },
+    region: {
+      sheetName: "Runs",
+      range: "A1:Y63",
+      inspection: { cells: [{ cell: "A1" }] },
+    },
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.warning.code, "ai_output_truncated");
 });
