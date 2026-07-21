@@ -161,6 +161,7 @@ test("interpretWorkbookRegion requests a concise structured region explanation",
       const payload = JSON.parse(body.messages[0].content);
       assert.match(body.system, /two to four short sentences/i);
       assert.match(body.system, /sparse correction patch/i);
+      assert.match(body.system, /do not infer experiment counts.*bounded inspection/i);
       assert.equal(body.output_config.format.type, "json_schema");
       assert.deepEqual(body.output_config.format.schema.required, ["summary", "interpretation"]);
       assert.equal(body.output_config.format.schema.additionalProperties, false);

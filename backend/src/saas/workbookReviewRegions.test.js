@@ -96,6 +96,51 @@ function sourceFixture() {
   };
 }
 
+function masterTableFixture() {
+  const rows = [
+    ["Catalytic polymer depolymerization master table", "", ""],
+    ["Experiment", "Temperature (C)", "Yield (%)"],
+    ...Array.from({ length: 61 }, (_, index) => [`Exp${index + 1}`, 250 + (index % 3) * 5, 30 + index]),
+  ];
+  const cells = rows.flatMap((row, rowIndex) => row.map((rawValue, colIndex) => ({
+    address: `${String.fromCharCode(65 + colIndex)}${rowIndex + 1}`,
+    row: rowIndex,
+    col: colIndex,
+    rawValue,
+    formattedValue: String(rawValue),
+    type: typeof rawValue === "number" ? "number" : "string",
+  })));
+  return {
+    session: {
+      id: "workbook_review_session_1",
+      labId: "lab_1",
+      projectId: "project_1",
+      sourceDocumentId: "source_document_1",
+      workbookSummary: { workbookName: "MasterTable_updated.xlsx" },
+      version: 1,
+    },
+    sourceDocument: {
+      id: "source_document_1",
+      fileObjectId: "file_1",
+      importRunId: "import_run_1",
+      metadata: {
+        workbookName: "MasterTable_updated.xlsx",
+        sheets: [{ name: "Sheet1", usedRange: "A1:C63", rowCount: 63, columnCount: 3 }],
+      },
+    },
+    indexBlobs: [{
+      payload: {
+        sheets: [{
+          name: "Sheet1",
+          rowCount: 63,
+          columnCount: 3,
+          cellGrid: { range: "A1:C63", rowCount: 63, columnCount: 3, cells },
+        }],
+      },
+    }],
+  };
+}
+
 function modelProvider({ fail = false } = {}) {
   return {
     calls: [],
@@ -234,9 +279,66 @@ test("creating a review region sends only bounded selected evidence to the model
   assert.equal("completeWorkbook" in provider.calls[0], false);
   assert.equal(result.region.reviewStatus, "awaiting_review");
   assert.equal(result.region.currentRevisionId, result.revision.id);
-  assert.equal(result.revision.summary.length, 2);
+  assert.ok(result.revision.summary.length >= 2 && result.revision.summary.length <= 4);
   assert.equal(result.revision.interpretation.semanticType, "experiment_table");
   assert.equal(result.revision.interpretation.experimentIdColumn, "A");
+});
+
+test("grounds experiment scope in the complete identity column instead of the bounded model preview", async () => {
+  const store = new MemorySaasStore();
+  const fixture = masterTableFixture();
+  const provider = {
+    calls: [],
+    async interpretWorkbookRegion(input) {
+      this.calls.push(input);
+      return {
+        ok: true,
+        summary: [
+          "This table contains experiments labeled Exp1 through Exp18, continuing beyond the visible rows.",
+          "Each row represents one experiment with catalyst and polymer specifications.",
+          "Reaction conditions range from 250-275 C in the visible sample.",
+          "Performance fields include yield and conversion measurements.",
+        ],
+        interpretation: {
+          semanticType: "experiment_table",
+          experimentAxis: "rows",
+          headerRow: 2,
+          experimentIdColumn: "A",
+          fieldPatches: [],
+          confidence: 0.98,
+        },
+        metadata: { provider: "anthropic", model: "test-model" },
+      };
+    },
+  };
+
+  const result = await createWorkbookReviewRegionDraft({
+    store,
+    ...fixture,
+    modelProvider: provider,
+    actorUserId: "user_1",
+    input: {
+      sheetName: "Sheet1",
+      range: "A1:C63",
+      semanticType: "experiment_table",
+      selectionMethod: "detected_region",
+    },
+  });
+
+  assert.deepEqual(provider.calls[0].region.identityEvidence, {
+    column: "A",
+    range: "A3:A63",
+    complete: true,
+    candidateRowCount: 61,
+    identifiedRowCount: 61,
+    firstIdentifier: "Exp1",
+    lastIdentifier: "Exp61",
+  });
+  assert.match(result.revision.summary[0], /61 identified experiment rows/i);
+  assert.match(result.revision.summary[0], /Exp1/i);
+  assert.match(result.revision.summary[0], /Exp61/i);
+  assert.equal(result.revision.summary.some((sentence) => /Exp18|250-275/i.test(sentence)), false);
+  assert.ok(result.revision.confidence <= 0.85);
 });
 
 test("provider failure preserves a retryable region without a revision", async () => {

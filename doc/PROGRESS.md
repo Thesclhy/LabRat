@@ -15,6 +15,20 @@ Keep entries concise, newest first, and include:
 
 ## 2026-07-21
 
+- Grounded row-oriented workbook summaries in a deterministic read of the
+  complete experiment-identity column when it fits the 500-cell evidence
+  boundary. A 63-row, two-header-row regression now proves `A3:A63` contains
+  61 identified rows with first/last ids `Exp1`/`Exp61`; model claims based on
+  the 25-row inspection sample (such as Exp1-Exp18 or sample-only numeric
+  ranges) are excluded from the visible summary. Full identity evidence now
+  participates in the revision source hash. Region confidence preserves the
+  deterministic structural score, capped at 85% for truncated inspections,
+  and the UI labels it as structure confidence rather than general scientific
+  confidence. Verification: backend 236 passed plus 1 optional PostgreSQL
+  skip, frontend 252/252 passed, and production build passed with the existing
+  Plotly chunk-size warning. Three known full-sheet timing tests initially
+  timed out under concurrent backend/test/build load, then passed individually
+  and in the complete standalone frontend run.
 - Fixed workbook-region interpretation failures reported for
   `MasterTable_updated.xlsx` (`Sheet1!A1:Y63`). Anthropic region requests now
   use provider-enforced JSON Schema output, return a compact correction patch

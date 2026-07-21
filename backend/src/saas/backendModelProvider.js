@@ -36,6 +36,8 @@ const WORKBOOK_REGION_SYSTEM = [
   "The structured response requires every patch property; use an empty string, zero, or an empty array when that property is unchanged.",
   "Each field patch requires every property; use an empty string for an unchanged field property.",
   "The backend preserves deterministic fields, series, and row inclusion unless this core patch changes their inputs.",
+  "Use complete identityEvidence exactly when describing experiment counts or first and last identifiers.",
+  "Do not infer experiment counts, identifier ranges, or whole-table numeric ranges from the bounded inspection sample.",
   "Use only supplied cells, formulas, merged ranges, workbook metadata, prior visible interpretation, and user feedback.",
   "Never invent source cells, scientific values, units, or experiment identities, and never return hidden reasoning.",
   "Do not return source hashes or request additional workbook data.",

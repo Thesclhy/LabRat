@@ -90,7 +90,7 @@ function RegionReviewCard({
       </div>
 
       <div className="workbook-region-meta">
-        {revision?.confidence != null && <span>{Math.round(Number(revision.confidence) * 100)}% confidence</span>}
+        {revision?.confidence != null && <span>{Math.round(Number(revision.confidence) * 100)}% structure confidence</span>}
         <span>{revision ? `Revision ${revision.revisionNumber || 1}` : "No revision"}</span>
       </div>
 

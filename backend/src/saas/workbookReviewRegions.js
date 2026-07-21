@@ -1,5 +1,6 @@
 import { decodeRange, encodeRange } from "../import/utils/excelAddress.js";
 import { sha256Hex } from "./ids.js";
+import { readSourceDocumentRange, SOURCE_RANGE_MAX_CELLS } from "./sourceDocuments.js";
 import { buildWorkbookUnderstandingPreview } from "./workbookUnderstandingPreview.js";
 
 const SUPPORTED_SEMANTIC_TYPES = new Set([
@@ -73,6 +74,70 @@ function summarySentences(value) {
   return sentences.map((sentence) => sentence.slice(0, 500));
 }
 
+function identityEvidenceFor({ sourceDocument, indexBlobs, region, interpretation }) {
+  const source = cleanObject(interpretation);
+  if (source.experimentAxis !== "rows") return null;
+  const column = text(source.experimentIdColumn).toUpperCase();
+  const inclusion = cleanObject(source.inclusion);
+  const startRow = Number(inclusion.startRow);
+  const endRow = Number(inclusion.endRow);
+  if (!/^[A-Z]+$/.test(column) || !Number.isInteger(startRow) || !Number.isInteger(endRow) || endRow < startRow) {
+    return null;
+  }
+  const range = `${column}${startRow}:${column}${endRow}`;
+  const candidateRowCount = endRow - startRow + 1;
+  if (candidateRowCount > SOURCE_RANGE_MAX_CELLS) {
+    return { column, range, complete: false, candidateRowCount };
+  }
+  try {
+    const result = readSourceDocumentRange({
+      sourceDocument,
+      indexBlobs,
+      sheetName: region.sheetName,
+      range,
+      maxCells: SOURCE_RANGE_MAX_CELLS,
+    });
+    const identifiers = asArray(result.cells).map((cell) => text(cell?.rawValue ?? cell?.formattedValue)).filter(Boolean);
+    return {
+      column,
+      range,
+      complete: true,
+      candidateRowCount,
+      identifiedRowCount: identifiers.length,
+      firstIdentifier: identifiers[0] || null,
+      lastIdentifier: identifiers[identifiers.length - 1] || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function claimsUnsampledScope(sentence) {
+  const value = text(sentence);
+  return /\bexp(?:eriment)?[\s_-]*0*\d+\b/i.test(value)
+    || /\b\d+\s+(?:identified\s+)?experiments?\b/i.test(value)
+    || /continuing beyond|visible rows?/i.test(value)
+    || /\b\d+(?:\.\d+)?\s*(?:-|\u2013|\u2014|to)\s*\d+(?:\.\d+)?\b/i.test(value);
+}
+
+function groundedSummary({ modelSummary, identityEvidence, interpretation }) {
+  const modelSentences = summarySentences(modelSummary);
+  if (!identityEvidence?.complete || !identityEvidence.identifiedRowCount) return modelSentences;
+  const count = identityEvidence.identifiedRowCount;
+  const first = identityEvidence.firstIdentifier;
+  const last = identityEvidence.lastIdentifier;
+  const identitySentence = first && last
+    ? `The selected region contains ${count} identified experiment row${count === 1 ? "" : "s"}; the first identifier is ${first} and the last is ${last}.`
+    : `The selected region contains ${count} identified experiment row${count === 1 ? "" : "s"}.`;
+  const fieldCount = asArray(interpretation?.fields).length;
+  const structureSentence = `Column ${identityEvidence.column} contains experiment identifiers, with ${fieldCount} interpreted data field${fieldCount === 1 ? "" : "s"} in the selected table.`;
+  return [
+    identitySentence,
+    structureSentence,
+    ...modelSentences.filter((sentence) => !claimsUnsampledScope(sentence)),
+  ].slice(0, 4);
+}
+
 function semanticType(value, fallback = "generic_table") {
   const normalized = text(value);
   return SUPPORTED_SEMANTIC_TYPES.has(normalized) ? normalized : fallback;
@@ -138,6 +203,12 @@ async function draftRevision({
     draftRegions: [draftRegion],
   });
   const baselineRegion = baseline.regions[0];
+  const baselineIdentityEvidence = identityEvidenceFor({
+    sourceDocument,
+    indexBlobs,
+    region,
+    interpretation: baselineRegion.interpretation,
+  });
   const otherRegions = (await store.listWorkbookReviewRegions({
     workbookReviewSessionId: region.workbookReviewSessionId,
     includeDeleted: false,
@@ -157,6 +228,7 @@ async function draftRevision({
         range: region.rangeRef,
         inspection: baselineRegion.inspection,
         deterministicCandidate: baselineRegion.interpretation,
+        ...(baselineIdentityEvidence ? { identityEvidence: baselineIdentityEvidence } : {}),
       },
       otherRegions,
       priorInterpretation: priorRevision?.interpretation || null,
@@ -213,13 +285,24 @@ async function draftRevision({
   const revisionNumber = revisions.length
     ? Math.max(...revisions.map((revision) => Number(revision.revisionNumber) || 0)) + 1
     : 1;
-  const summary = summarySentences(modelResult.summary);
+  const identityEvidence = identityEvidenceFor({
+    sourceDocument,
+    indexBlobs,
+    region,
+    interpretation: previewRegion.interpretation,
+  });
+  const summary = groundedSummary({
+    modelSummary: modelResult.summary,
+    identityEvidence,
+    interpretation: previewRegion.interpretation,
+  });
   const sourceRefs = sourceRefsFor(previewRegion);
   const sourceContentHash = sha256Hex(JSON.stringify({
     sourceDocumentId: sourceDocument.id,
     sheetName: region.sheetName,
     range: region.rangeRef,
     inspection: previewRegion.inspection,
+    identityEvidence,
   }));
   const dependencyHash = sha256Hex(JSON.stringify({
     regionId: region.id,

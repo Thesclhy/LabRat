@@ -394,7 +394,7 @@ function proposalFor({ sourceDocument, region, rangeResult, fullRange, inspectio
         fields,
       }),
     },
-    confidence: axisProposal.confidence,
+    confidence: inspectionTruncated ? Math.min(axisProposal.confidence, 0.85) : axisProposal.confidence,
     decisionSource: "deterministic_proposal",
     warnings,
     excluded: axisProposal.excluded,
@@ -556,6 +556,7 @@ function applyPatch({ sourceDocument, region, rangeResult, proposal, patch, full
         .flatMap((field) => field.sourceRefs),
     }))
     : (experimentAxis === "region" ? seriesFrom(fields) : []);
+  const decisionSource = text(source.decisionSource) || "user_patch";
   return {
     ...proposal,
     experimentAxis,
@@ -565,8 +566,8 @@ function applyPatch({ sourceDocument, region, rangeResult, proposal, patch, full
     fields,
     series,
     inclusion,
-    confidence: 0.98,
-    decisionSource: text(source.decisionSource) || "user_patch",
+    confidence: decisionSource === "backend_model" ? proposal.confidence : 0.98,
+    decisionSource,
     warnings: asArray(proposal.warnings),
     excluded: NON_EXPERIMENT_SEMANTIC_TYPES.has(region.semanticType),
   };

@@ -599,7 +599,7 @@ test("workbook review region APIs independently revise confirm ignore and delete
   const created = await createdResponse.json();
   assert.equal(created.region.rangeRef, "A1:D3");
   assert.equal(created.region.reviewStatus, "awaiting_review");
-  assert.equal(created.currentRevision.summary.length, 2);
+  assert.ok(created.currentRevision.summary.length >= 2 && created.currentRevision.summary.length <= 4);
 
   const revisionResponse = await jsonFetch(
     `/api/workbook-review-sessions/${sessionId}/regions/${created.region.id}/revisions`,

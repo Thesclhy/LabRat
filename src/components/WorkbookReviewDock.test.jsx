@@ -68,6 +68,7 @@ describe("WorkbookReviewDock", () => {
     const dock = screen.getByLabelText("Workbook review dock");
     expect(within(dock).getByText("Each row represents one experiment.")).toBeTruthy();
     expect(within(dock).getByText("The table contains temperature, time, and gas selectivity.")).toBeTruthy();
+    expect(within(dock).getByText("91% structure confidence")).toBeTruthy();
     expect(within(dock).queryByText("Structured interpretation")).toBeNull();
     expect(within(dock).queryByRole("checkbox")).toBeNull();
     expect(within(dock).queryByRole("button", { name: "Confirm understanding" })).toBeNull();

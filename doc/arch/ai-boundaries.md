@@ -122,6 +122,15 @@ types, columns, and ranges remain subject to deterministic backend validation.
 Token-limit truncation and malformed output remain retryable failures and never
 create a RegionUnderstandingRevision.
 
+For a row-oriented region whose identity column fits the bounded source-read
+limit, the backend reads that complete column and supplies only its exact count,
+range, and first/last nonblank identifiers as identity evidence. Visible
+experiment counts and identifier endpoints are generated from that evidence,
+not from the model's limited inspection rows. Model summaries that claim an
+unsupported experiment scope or whole-table numeric range are discarded.
+Region-level confidence describes structural interpretation only; a truncated
+inspection cannot receive the same confidence as a complete inspection.
+
 The backend intent router applies deterministic priority to explicit upload, navigation, and source-evidence commands. Bounded model classification may resolve ambiguous messages only into the supported intent/disposition enum. Invalid model output becomes clarification and cannot create an Experiment Browser fallback action.
 
 ## Retired Inputs
