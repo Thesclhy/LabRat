@@ -44,6 +44,13 @@ import {
   workbookReviewSessionSummary,
 } from "../workbookReviewSessions.js";
 import {
+  confirmWorkbookReviewRegion,
+  createWorkbookReviewRegionDraft,
+  deleteWorkbookReviewRegion,
+  ignoreWorkbookReviewRegion,
+  reviseWorkbookReviewRegion,
+} from "../workbookReviewRegions.js";
+import {
   agentRunSummary,
   buildAgentRunDraft,
   executeAgentRunAction,
@@ -443,6 +450,18 @@ async function workbookReviewSessionAuth(req, context, sessionId, role = "viewer
   }
   requireLabRole(auth, workbookReviewSession.labId, role);
   return { auth, workbookReviewSession };
+}
+
+async function workbookReviewRegionAuth(req, context, sessionId, regionId, role = "viewer") {
+  const { auth, workbookReviewSession } = await workbookReviewSessionAuth(req, context, sessionId, role);
+  const region = await context.store.findWorkbookReviewRegionById?.(regionId);
+  if (!region || region.workbookReviewSessionId !== workbookReviewSession.id) {
+    throw Object.assign(new Error("Workbook review region not found."), {
+      statusCode: 404,
+      code: "workbook_review_region_not_found",
+    });
+  }
+  return { auth, workbookReviewSession, region };
 }
 
 async function agentRunAuth(req, context, agentRunId, role = "viewer") {
@@ -2388,6 +2407,94 @@ async function sourceDocumentFromWorkbookReviewRequest(context, { auth, project,
   return scanFileObjectForSourceReview(context, { auth, project, fileObject });
 }
 
+function regionUnderstandingRevisionSummary(revision) {
+  if (!revision) return null;
+  return {
+    id: revision.id,
+    regionId: revision.regionId,
+    revisionNumber: revision.revisionNumber,
+    trigger: revision.trigger,
+    userFeedback: revision.userFeedback || "",
+    summary: asArray(revision.summary),
+    interpretation: revision.interpretation || {},
+    sourceRefs: asArray(revision.sourceRefs),
+    sourceContentHash: revision.sourceContentHash,
+    dependencyHash: revision.dependencyHash,
+    validation: revision.validation || {},
+    provider: revision.provider || {},
+    warnings: asArray(revision.warnings),
+    confidence: revision.confidence ?? null,
+    createdAt: revision.createdAt,
+    createdBy: revision.createdBy,
+  };
+}
+
+async function workbookReviewRegionSummary(context, region) {
+  if (!region) return null;
+  const [currentRevision, acceptedRevision] = await Promise.all([
+    region.currentRevisionId
+      ? context.store.findRegionUnderstandingRevisionById?.(region.currentRevisionId)
+      : null,
+    region.acceptedRevisionId && region.acceptedRevisionId !== region.currentRevisionId
+      ? context.store.findRegionUnderstandingRevisionById?.(region.acceptedRevisionId)
+      : null,
+  ]);
+  return {
+    id: region.id,
+    labId: region.labId,
+    projectId: region.projectId,
+    workbookReviewSessionId: region.workbookReviewSessionId,
+    sourceDocumentId: region.sourceDocumentId,
+    sourceRegionId: region.sourceRegionId,
+    sheetName: region.sheetName,
+    rangeRef: region.rangeRef,
+    selectionMethod: region.selectionMethod,
+    disposition: region.disposition,
+    reviewStatus: region.reviewStatus,
+    currentRevisionId: region.currentRevisionId,
+    acceptedRevisionId: region.acceptedRevisionId,
+    version: region.version,
+    warnings: asArray(region.warnings),
+    acceptedAt: region.acceptedAt || null,
+    acceptedBy: region.acceptedBy || null,
+    ignoredAt: region.ignoredAt || null,
+    ignoredBy: region.ignoredBy || null,
+    ignoredReason: region.ignoredReason || "",
+    deletedAt: region.deletedAt || null,
+    deletedBy: region.deletedBy || null,
+    deletedReason: region.deletedReason || "",
+    currentRevision: regionUnderstandingRevisionSummary(currentRevision),
+    acceptedRevision: regionUnderstandingRevisionSummary(
+      acceptedRevision || (region.acceptedRevisionId === region.currentRevisionId ? currentRevision : null),
+    ),
+    createdAt: region.createdAt,
+    updatedAt: region.updatedAt,
+    createdBy: region.createdBy,
+    updatedBy: region.updatedBy,
+  };
+}
+
+async function listWorkbookReviewRegionSummaries(context, sessionId, { includeDeleted = false } = {}) {
+  const regions = context.store.listWorkbookReviewRegions
+    ? await context.store.listWorkbookReviewRegions({ workbookReviewSessionId: sessionId, includeDeleted })
+    : [];
+  return Promise.all(regions.map((region) => workbookReviewRegionSummary(context, region)));
+}
+
+async function sourceContextForWorkbookReviewRegion(context, workbookReviewSession) {
+  const sourceDocument = await context.store.findSourceDocumentById?.(workbookReviewSession.sourceDocumentId);
+  if (!sourceDocument) {
+    throw Object.assign(new Error("Source document not found for this workbook review session."), {
+      statusCode: 404,
+      code: "source_document_not_found",
+    });
+  }
+  const indexBlobs = context.store.listSourceIndexBlobs
+    ? await context.store.listSourceIndexBlobs({ sourceDocumentId: sourceDocument.id })
+    : [];
+  return { sourceDocument, indexBlobs };
+}
+
 async function handleProjectWorkbookReviewSessions(req, res, context, projectId) {
   const { auth, project } = await projectAuth(req, context, projectId, req.method === "POST" ? "editor" : "viewer");
   if (req.method === "GET") {
@@ -2422,6 +2529,25 @@ async function handleProjectWorkbookReviewSessions(req, res, context, projectId)
     regions: regions.map(sourceRegionSummary),
     createdBy: auth.user.id,
   });
+  for (const detectedRegion of asArray(draft.currentUnderstanding?.draftRegions)) {
+    await createWorkbookReviewRegionDraft({
+      store: context.store,
+      session,
+      sourceDocument,
+      indexBlobs,
+      modelProvider: context.modelProvider,
+      actorUserId: auth.user.id,
+      input: {
+        sourceRegionId: detectedRegion.sourceRegionId,
+        sheetName: detectedRegion.sheetName,
+        range: detectedRegion.range,
+        selectionMethod: "detected_region",
+        semanticType: detectedRegion.semanticType,
+        description: detectedRegion.description,
+      },
+    });
+  }
+  const reviewRegions = await listWorkbookReviewRegionSummaries(context, session.id);
   await context.store.recordAuditEvent({
     labId: project.labId,
     projectId: project.id,
@@ -2437,6 +2563,7 @@ async function handleProjectWorkbookReviewSessions(req, res, context, projectId)
     session: workbookReviewSessionSummary(session),
     sourceDocument: sourceDocumentSummary(sourceDocument),
     regions: regions.map(sourceRegionSummary),
+    reviewRegions,
     importRun: importRun ? importRunSummary(importRun) : null,
   });
 }
@@ -2460,7 +2587,179 @@ async function handleWorkbookReviewSessionById(req, res, context, sessionId) {
     session: workbookReviewSessionSummary(workbookReviewSession),
     sourceDocument: sourceDocument ? sourceDocumentSummary(sourceDocument) : null,
     regions: regions.map(sourceRegionSummary),
+    reviewRegions: await listWorkbookReviewRegionSummaries(context, workbookReviewSession.id),
   });
+}
+
+async function handleWorkbookReviewSessionRegions(req, res, context, sessionId) {
+  const { auth, workbookReviewSession } = await workbookReviewSessionAuth(
+    req,
+    context,
+    sessionId,
+    req.method === "POST" ? "editor" : "viewer",
+  );
+  if (req.method === "GET") {
+    sendJson(res, 200, {
+      workbookReviewSessionId: workbookReviewSession.id,
+      regions: await listWorkbookReviewRegionSummaries(context, workbookReviewSession.id),
+    });
+    return;
+  }
+  const body = await readJsonBody(req);
+  if (body.sourceDocumentId && body.sourceDocumentId !== workbookReviewSession.sourceDocumentId) {
+    sendError(res, 409, "source_document_mismatch", "Region must target the workbook review session SourceDocument.");
+    return;
+  }
+  const { sourceDocument, indexBlobs } = await sourceContextForWorkbookReviewRegion(context, workbookReviewSession);
+  const created = await createWorkbookReviewRegionDraft({
+    store: context.store,
+    session: workbookReviewSession,
+    sourceDocument,
+    indexBlobs,
+    modelProvider: context.modelProvider,
+    actorUserId: auth.user.id,
+    input: body,
+  });
+  await context.store.recordAuditEvent({
+    labId: workbookReviewSession.labId,
+    projectId: workbookReviewSession.projectId,
+    actorUserId: auth.user.id,
+    action: "workbook_review_region.create",
+    targetType: "workbook_review_region",
+    targetId: created.region.id,
+    summary: `Created workbook review region ${created.region.sheetName}!${created.region.rangeRef}.`,
+    metadata: { sourceDocumentId: workbookReviewSession.sourceDocumentId },
+  });
+  sendJson(res, 201, {
+    region: await workbookReviewRegionSummary(context, created.region),
+    currentRevision: regionUnderstandingRevisionSummary(created.revision),
+    warning: created.warning || null,
+  });
+}
+
+async function handleWorkbookReviewRegionById(req, res, context, sessionId, regionId) {
+  const { auth, region } = await workbookReviewRegionAuth(
+    req,
+    context,
+    sessionId,
+    regionId,
+    req.method === "DELETE" ? "editor" : "viewer",
+  );
+  if (req.method === "GET") {
+    sendJson(res, 200, { region: await workbookReviewRegionSummary(context, region) });
+    return;
+  }
+  const body = await readJsonBody(req);
+  const deleted = await deleteWorkbookReviewRegion({
+    store: context.store,
+    region,
+    expectedRegionVersion: body.expectedRegionVersion,
+    reason: body.reason,
+    actorUserId: auth.user.id,
+  });
+  await context.store.recordAuditEvent({
+    labId: region.labId,
+    projectId: region.projectId,
+    actorUserId: auth.user.id,
+    action: "workbook_review_region.delete",
+    targetType: "workbook_review_region",
+    targetId: region.id,
+    summary: `Deleted workbook review region ${region.sheetName}!${region.rangeRef}.`,
+    metadata: { reason: body.reason || "" },
+  });
+  sendJson(res, 200, { region: await workbookReviewRegionSummary(context, deleted.region) });
+}
+
+async function handleWorkbookReviewRegionRevisions(req, res, context, sessionId, regionId) {
+  const { auth, workbookReviewSession, region } = await workbookReviewRegionAuth(
+    req,
+    context,
+    sessionId,
+    regionId,
+    req.method === "POST" ? "editor" : "viewer",
+  );
+  if (req.method === "GET") {
+    const revisions = context.store.listRegionUnderstandingRevisions
+      ? await context.store.listRegionUnderstandingRevisions({ regionId: region.id })
+      : [];
+    sendJson(res, 200, { revisions: revisions.map(regionUnderstandingRevisionSummary) });
+    return;
+  }
+  const body = await readJsonBody(req);
+  const { sourceDocument, indexBlobs } = await sourceContextForWorkbookReviewRegion(context, workbookReviewSession);
+  const revised = await reviseWorkbookReviewRegion({
+    store: context.store,
+    region,
+    sourceDocument,
+    indexBlobs,
+    modelProvider: context.modelProvider,
+    actorUserId: auth.user.id,
+    input: body,
+  });
+  await context.store.recordAuditEvent({
+    labId: region.labId,
+    projectId: region.projectId,
+    actorUserId: auth.user.id,
+    action: "workbook_review_region.revise",
+    targetType: "region_understanding_revision",
+    targetId: revised.revision?.id || region.id,
+    summary: `Revised workbook review region ${region.sheetName}!${region.rangeRef}.`,
+    metadata: { regionId: region.id, modelWarning: revised.warning?.code || null },
+  });
+  sendJson(res, 201, {
+    region: await workbookReviewRegionSummary(context, revised.region),
+    currentRevision: regionUnderstandingRevisionSummary(revised.revision),
+    warning: revised.warning || null,
+  });
+}
+
+async function handleWorkbookReviewRegionConfirm(req, res, context, sessionId, regionId) {
+  const { auth, region } = await workbookReviewRegionAuth(req, context, sessionId, regionId, "editor");
+  const body = await readJsonBody(req);
+  const confirmed = await confirmWorkbookReviewRegion({
+    store: context.store,
+    region,
+    revisionId: body.revisionId,
+    expectedRegionVersion: body.expectedRegionVersion,
+    actorUserId: auth.user.id,
+  });
+  await context.store.recordAuditEvent({
+    labId: region.labId,
+    projectId: region.projectId,
+    actorUserId: auth.user.id,
+    action: "workbook_review_region.confirm",
+    targetType: "region_understanding_revision",
+    targetId: confirmed.revision.id,
+    summary: `Confirmed workbook review region ${region.sheetName}!${region.rangeRef}.`,
+    metadata: { regionId: region.id },
+  });
+  sendJson(res, 200, {
+    region: await workbookReviewRegionSummary(context, confirmed.region),
+    acceptedRevision: regionUnderstandingRevisionSummary(confirmed.revision),
+  });
+}
+
+async function handleWorkbookReviewRegionIgnore(req, res, context, sessionId, regionId) {
+  const { auth, region } = await workbookReviewRegionAuth(req, context, sessionId, regionId, "editor");
+  const body = await readJsonBody(req);
+  const ignored = await ignoreWorkbookReviewRegion({
+    store: context.store,
+    region,
+    expectedRegionVersion: body.expectedRegionVersion,
+    reason: body.reason,
+    actorUserId: auth.user.id,
+  });
+  await context.store.recordAuditEvent({
+    labId: region.labId,
+    projectId: region.projectId,
+    actorUserId: auth.user.id,
+    action: "workbook_review_region.ignore",
+    targetType: "workbook_review_region",
+    targetId: region.id,
+    summary: `Ignored workbook review region ${region.sheetName}!${region.rangeRef}.`,
+    metadata: { reason: body.reason || "" },
+  });
+  sendJson(res, 200, { region: await workbookReviewRegionSummary(context, ignored.region) });
 }
 
 function sendWorkbookReviewClarification(res, statusCode, error, workbookReviewSession) {
@@ -2779,6 +3078,26 @@ async function dispatch(req, res, context) {
   if (sourceDocumentExtractPreviewMatch && req.method === "POST") return handleSourceDocumentExtractPreview(req, res, context, sourceDocumentExtractPreviewMatch[1]);
   const sourceRegionExtractPreviewMatch = pathName.match(/^\/api\/source-regions\/([^/]+)\/extract-preview$/);
   if (sourceRegionExtractPreviewMatch && req.method === "POST") return handleSourceRegionExtractPreview(req, res, context, sourceRegionExtractPreviewMatch[1]);
+  const workbookReviewRegionRevisionsMatch = pathName.match(/^\/api\/workbook-review-sessions\/([^/]+)\/regions\/([^/]+)\/revisions$/);
+  if (workbookReviewRegionRevisionsMatch && (req.method === "GET" || req.method === "POST")) {
+    return handleWorkbookReviewRegionRevisions(req, res, context, workbookReviewRegionRevisionsMatch[1], workbookReviewRegionRevisionsMatch[2]);
+  }
+  const workbookReviewRegionConfirmMatch = pathName.match(/^\/api\/workbook-review-sessions\/([^/]+)\/regions\/([^/]+)\/confirm$/);
+  if (workbookReviewRegionConfirmMatch && req.method === "POST") {
+    return handleWorkbookReviewRegionConfirm(req, res, context, workbookReviewRegionConfirmMatch[1], workbookReviewRegionConfirmMatch[2]);
+  }
+  const workbookReviewRegionIgnoreMatch = pathName.match(/^\/api\/workbook-review-sessions\/([^/]+)\/regions\/([^/]+)\/ignore$/);
+  if (workbookReviewRegionIgnoreMatch && req.method === "POST") {
+    return handleWorkbookReviewRegionIgnore(req, res, context, workbookReviewRegionIgnoreMatch[1], workbookReviewRegionIgnoreMatch[2]);
+  }
+  const workbookReviewRegionMatch = pathName.match(/^\/api\/workbook-review-sessions\/([^/]+)\/regions\/([^/]+)$/);
+  if (workbookReviewRegionMatch && (req.method === "GET" || req.method === "DELETE")) {
+    return handleWorkbookReviewRegionById(req, res, context, workbookReviewRegionMatch[1], workbookReviewRegionMatch[2]);
+  }
+  const workbookReviewSessionRegionsMatch = pathName.match(/^\/api\/workbook-review-sessions\/([^/]+)\/regions$/);
+  if (workbookReviewSessionRegionsMatch && (req.method === "GET" || req.method === "POST")) {
+    return handleWorkbookReviewSessionRegions(req, res, context, workbookReviewSessionRegionsMatch[1]);
+  }
   const workbookReviewSessionMatch = pathName.match(/^\/api\/workbook-review-sessions\/([^/]+)$/);
   if (workbookReviewSessionMatch && req.method === "GET") return handleWorkbookReviewSessionById(req, res, context, workbookReviewSessionMatch[1]);
   const workbookReviewSessionRevisionMatch = pathName.match(/^\/api\/workbook-review-sessions\/([^/]+)\/revisions$/);

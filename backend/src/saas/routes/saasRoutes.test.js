@@ -412,6 +412,32 @@ const testModelProvider = {
       },
     };
   },
+  async interpretWorkbookRegion(input) {
+    const candidate = input.region?.deterministicCandidate || {};
+    return {
+      ok: true,
+      summary: [
+        `The selected range ${input.region?.sheetName}!${input.region?.range} contains a structured table.`,
+        candidate.experimentAxis === "rows"
+          ? "Each included row represents one experiment."
+          : "The selected cells belong to one bounded workbook region.",
+      ],
+      interpretation: {
+        ...candidate,
+        semanticType: candidate.excluded
+          ? "metadata_notes"
+          : (candidate.experimentAxis ? "experiment_table" : "generic_table"),
+        confidence: 0.9,
+        warnings: [],
+      },
+      metadata: {
+        provider: "anthropic",
+        model: "test-workbook-model",
+        latencyMs: 1,
+        usage: { inputTokens: 10, outputTokens: 10 },
+      },
+    };
+  },
 };
 
 const testAnalysisExecutor = {
@@ -556,6 +582,117 @@ test("file upload can scan source documents and old import workflow endpoints ar
   assert.equal(documentsBody.sourceDocuments.length, 1);
   assert.equal(documentsBody.sourceDocuments[0].fileObjectId, fileObject.id);
   assert.equal(documentsBody.sourceDocuments[0].importRunId, importRun.id);
+});
+
+test("workbook review region APIs independently revise confirm ignore and delete selections", async () => {
+  const project = await createProject("Region Review API Project");
+  const upload = await uploadProjectFile(project.id, makeWorkbookBlob(), "regions.xlsx");
+  assert.equal(upload.response.status, 201);
+  const sessionResponse = await jsonFetch(`/api/projects/${project.id}/workbook-review-sessions`, {
+    method: "POST",
+    body: { fileObjectId: upload.body.fileObject.id },
+  });
+  assert.equal(sessionResponse.status, 201);
+  const sessionBody = await sessionResponse.json();
+  const sessionId = sessionBody.workbookReviewSession.id;
+  assert.ok(sessionBody.reviewRegions.length >= 1);
+  assert.ok(sessionBody.reviewRegions.every((region) => region.currentRevision?.summary.length >= 2));
+
+  const createdResponse = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/regions`, {
+    method: "POST",
+    body: {
+      sourceDocumentId: sessionBody.sourceDocument.id,
+      sheetName: "Runs",
+      range: "A1:D3",
+      selectionMethod: "manual",
+      idempotencyKey: `create_region_${Date.now()}`,
+    },
+  });
+  assert.equal(createdResponse.status, 201);
+  const created = await createdResponse.json();
+  assert.equal(created.region.rangeRef, "A1:D3");
+  assert.equal(created.region.reviewStatus, "awaiting_review");
+  assert.equal(created.currentRevision.summary.length, 2);
+
+  const revisionResponse = await jsonFetch(
+    `/api/workbook-review-sessions/${sessionId}/regions/${created.region.id}/revisions`,
+    {
+      method: "POST",
+      body: {
+        feedback: "Explain that temperature and selectivity are separate fields.",
+        previousRevisionId: created.currentRevision.id,
+        expectedRegionVersion: created.region.version,
+        idempotencyKey: `revise_region_${Date.now()}`,
+      },
+    },
+  );
+  assert.equal(revisionResponse.status, 201);
+  const revised = await revisionResponse.json();
+  assert.equal(revised.currentRevision.revisionNumber, created.currentRevision.revisionNumber + 1);
+
+  const confirmResponse = await jsonFetch(
+    `/api/workbook-review-sessions/${sessionId}/regions/${created.region.id}/confirm`,
+    {
+      method: "POST",
+      body: {
+        revisionId: revised.currentRevision.id,
+        expectedRegionVersion: revised.region.version,
+        idempotencyKey: `confirm_region_${Date.now()}`,
+      },
+    },
+  );
+  assert.equal(confirmResponse.status, 200);
+  const confirmed = await confirmResponse.json();
+  assert.equal(confirmed.region.acceptedRevisionId, revised.currentRevision.id);
+
+  const ignoredCreateResponse = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/regions`, {
+    method: "POST",
+    body: {
+      sourceDocumentId: sessionBody.sourceDocument.id,
+      sheetName: "Runs",
+      range: "B1:D3",
+      selectionMethod: "manual",
+      idempotencyKey: `create_ignored_region_${Date.now()}`,
+    },
+  });
+  const ignoredCreated = await ignoredCreateResponse.json();
+  const ignoreResponse = await jsonFetch(
+    `/api/workbook-review-sessions/${sessionId}/regions/${ignoredCreated.region.id}/ignore`,
+    {
+      method: "POST",
+      body: {
+        expectedRegionVersion: ignoredCreated.region.version,
+        reason: "Not part of the experiment records.",
+      },
+    },
+  );
+  assert.equal(ignoreResponse.status, 200);
+  assert.equal((await ignoreResponse.json()).region.disposition, "ignored");
+
+  const deleteResponse = await jsonFetch(
+    `/api/workbook-review-sessions/${sessionId}/regions/${created.region.id}`,
+    {
+      method: "DELETE",
+      body: {
+        expectedRegionVersion: confirmed.region.version,
+        reason: "Duplicate manual selection.",
+      },
+    },
+  );
+  assert.equal(deleteResponse.status, 200);
+  assert.equal((await deleteResponse.json()).region.disposition, "deleted");
+
+  const listResponse = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/regions`);
+  assert.equal(listResponse.status, 200);
+  const listed = await listResponse.json();
+  assert.equal(listed.regions.some((region) => region.id === created.region.id), false);
+  assert.equal(listed.regions.some((region) => region.id === ignoredCreated.region.id), true);
+
+  const historyResponse = await jsonFetch(
+    `/api/workbook-review-sessions/${sessionId}/regions/${created.region.id}/revisions`,
+  );
+  assert.equal(historyResponse.status, 200);
+  assert.equal((await historyResponse.json()).revisions.length, 2);
 });
 
 test("workbook review sessions summarize detected source regions and reuse indexed documents", async () => {
