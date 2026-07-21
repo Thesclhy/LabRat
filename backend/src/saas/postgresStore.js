@@ -225,6 +225,63 @@ function workbookReviewSessionFromRow(row) {
   };
 }
 
+function workbookReviewRegionFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    workbookReviewSessionId: row.workbook_review_session_id,
+    sourceDocumentId: row.source_document_id,
+    sourceRegionId: row.source_region_id,
+    sheetName: row.sheet_name,
+    rangeRef: row.range_ref,
+    selectionMethod: row.selection_method,
+    disposition: row.disposition,
+    reviewStatus: row.review_status,
+    currentRevisionId: row.current_revision_id,
+    acceptedRevisionId: row.accepted_revision_id,
+    version: row.version || 1,
+    warnings: row.warnings || [],
+    ignoredAt: row.ignored_at,
+    ignoredBy: row.ignored_by,
+    ignoredReason: row.ignored_reason || "",
+    deletedAt: row.deleted_at,
+    deletedBy: row.deleted_by,
+    deletedReason: row.deleted_reason || "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    createdBy: row.created_by,
+    updatedBy: row.updated_by,
+  };
+}
+
+function regionUnderstandingRevisionFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    workbookReviewSessionId: row.workbook_review_session_id,
+    sourceDocumentId: row.source_document_id,
+    regionId: row.region_id,
+    revisionNumber: row.revision_number,
+    trigger: row.trigger,
+    userFeedback: row.user_feedback || "",
+    summary: row.summary || [],
+    interpretation: row.interpretation || {},
+    sourceRefs: row.source_refs || [],
+    sourceContentHash: row.source_content_hash,
+    dependencyHash: row.dependency_hash,
+    validation: row.validation || {},
+    provider: row.provider || {},
+    warnings: row.warnings || [],
+    confidence: row.confidence,
+    createdAt: row.created_at,
+    createdBy: row.created_by,
+  };
+}
+
 function workbookUnderstandingFromRow(row) {
   if (!row) return null;
   return {
@@ -1268,6 +1325,165 @@ export class PostgresSaasStore {
       [projectId],
     );
     return result.rows.map(workbookReviewSessionFromRow);
+  }
+
+  async createWorkbookReviewRegion(input) {
+    const result = await this.query(
+      `insert into workbook_review_regions
+       (id, lab_id, project_id, workbook_review_session_id, source_document_id, source_region_id,
+        sheet_name, range_ref, selection_method, disposition, review_status, current_revision_id,
+        accepted_revision_id, version, warnings, ignored_at, ignored_by, ignored_reason, deleted_at,
+        deleted_by, deleted_reason, created_at, updated_at, created_by, updated_by)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+               $16, $17, $18, $19, $20, $21, now(), now(), $22, $22)
+       returning *`,
+      [
+        input.id || makeId("workbook_review_region"),
+        input.labId,
+        input.projectId,
+        input.workbookReviewSessionId,
+        input.sourceDocumentId,
+        input.sourceRegionId || null,
+        input.sheetName,
+        input.rangeRef,
+        input.selectionMethod || "manual",
+        input.disposition || "active",
+        input.reviewStatus || "interpreting",
+        input.currentRevisionId || null,
+        input.acceptedRevisionId || null,
+        Number(input.version) || 1,
+        jsonb(input.warnings || [], []),
+        input.ignoredAt || null,
+        input.ignoredBy || null,
+        input.ignoredReason || "",
+        input.deletedAt || null,
+        input.deletedBy || null,
+        input.deletedReason || "",
+        input.createdBy || null,
+      ],
+    );
+    return workbookReviewRegionFromRow(result.rows[0]);
+  }
+
+  async findWorkbookReviewRegionById(id) {
+    const result = await this.query("select * from workbook_review_regions where id = $1", [id]);
+    return workbookReviewRegionFromRow(result.rows[0]);
+  }
+
+  async listWorkbookReviewRegions({ projectId = null, workbookReviewSessionId = null, sourceDocumentId = null, includeDeleted = false } = {}) {
+    const result = await this.query(
+      `select * from workbook_review_regions
+       where ($1::text is null or project_id = $1)
+         and ($2::text is null or workbook_review_session_id = $2)
+         and ($3::text is null or source_document_id = $3)
+         and ($4::boolean = true or disposition <> 'deleted')
+       order by created_at asc`,
+      [projectId, workbookReviewSessionId, sourceDocumentId, includeDeleted === true],
+    );
+    return result.rows.map(workbookReviewRegionFromRow);
+  }
+
+  async updateWorkbookReviewRegion(id, patch = {}) {
+    const result = await this.query(
+      `update workbook_review_regions
+       set disposition = coalesce($2, disposition),
+           review_status = coalesce($3, review_status),
+           current_revision_id = coalesce($4, current_revision_id),
+           accepted_revision_id = coalesce($5, accepted_revision_id),
+           warnings = coalesce($6, warnings),
+           ignored_at = coalesce($7, ignored_at),
+           ignored_by = coalesce($8, ignored_by),
+           ignored_reason = coalesce($9, ignored_reason),
+           deleted_at = coalesce($10, deleted_at),
+           deleted_by = coalesce($11, deleted_by),
+           deleted_reason = coalesce($12, deleted_reason),
+           version = version + 1,
+           updated_at = now(),
+           updated_by = coalesce($13, updated_by)
+       where id = $1
+       returning *`,
+      [
+        id,
+        patch.disposition ?? null,
+        patch.reviewStatus ?? null,
+        patch.currentRevisionId ?? null,
+        patch.acceptedRevisionId ?? null,
+        patch.warnings === undefined ? null : jsonb(patch.warnings, []),
+        patch.ignoredAt ?? null,
+        patch.ignoredBy ?? null,
+        patch.ignoredReason ?? null,
+        patch.deletedAt ?? null,
+        patch.deletedBy ?? null,
+        patch.deletedReason ?? null,
+        patch.updatedBy ?? null,
+      ],
+    );
+    return workbookReviewRegionFromRow(result.rows[0]);
+  }
+
+  async createRegionUnderstandingRevision(input) {
+    const result = await this.query(
+      `insert into region_understanding_revisions
+       (id, lab_id, project_id, workbook_review_session_id, source_document_id, region_id,
+        revision_number, trigger, user_feedback, summary, interpretation, source_refs,
+        source_content_hash, dependency_hash, validation, provider, warnings, confidence,
+        created_at, created_by)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+               $15, $16, $17, $18, now(), $19)
+       returning *`,
+      [
+        input.id || makeId("region_understanding_revision"),
+        input.labId,
+        input.projectId,
+        input.workbookReviewSessionId,
+        input.sourceDocumentId,
+        input.regionId,
+        Number(input.revisionNumber) || 1,
+        input.trigger || "initial",
+        input.userFeedback || "",
+        jsonb(input.summary || [], []),
+        jsonb(input.interpretation || {}),
+        jsonb(input.sourceRefs || [], []),
+        input.sourceContentHash,
+        input.dependencyHash,
+        jsonb(input.validation || {}),
+        jsonb(input.provider || {}),
+        jsonb(input.warnings || [], []),
+        input.confidence ?? null,
+        input.createdBy || null,
+      ],
+    );
+    return regionUnderstandingRevisionFromRow(result.rows[0]);
+  }
+
+  async findRegionUnderstandingRevisionById(id) {
+    const result = await this.query("select * from region_understanding_revisions where id = $1", [id]);
+    return regionUnderstandingRevisionFromRow(result.rows[0]);
+  }
+
+  async listRegionUnderstandingRevisions({ regionId = null, projectId = null } = {}) {
+    const result = await this.query(
+      `select * from region_understanding_revisions
+       where ($1::text is null or region_id = $1)
+         and ($2::text is null or project_id = $2)
+       order by revision_number asc`,
+      [regionId, projectId],
+    );
+    return result.rows.map(regionUnderstandingRevisionFromRow);
+  }
+
+  async listAcceptedRegionUnderstandings({ projectId = null, sourceDocumentId = null, workbookReviewSessionId = null } = {}) {
+    const regions = await this.listWorkbookReviewRegions({
+      projectId,
+      sourceDocumentId,
+      workbookReviewSessionId,
+      includeDeleted: false,
+    });
+    const accepted = regions.filter((region) => region.disposition === "active" && region.acceptedRevisionId);
+    const revisions = await Promise.all(accepted.map((region) => this.findRegionUnderstandingRevisionById(region.acceptedRevisionId)));
+    return accepted.flatMap((region, index) => (
+      revisions[index] ? [{ region, revision: revisions[index] }] : []
+    ));
   }
 
   async createWorkbookUnderstanding(input) {

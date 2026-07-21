@@ -65,7 +65,7 @@ Expected: FAIL because region store methods do not exist.
 
 - [ ] **Step 3: Add migration 013**
 
-Create two project-owned tables with foreign keys to session/source evidence, JSONB interpretation/source metadata, unique `(region_id, revision_number)`, project/session indexes, accepted/current revision pointers added after both tables exist, and `drop table if exists workbook_understandings`. Remove aggregate draft columns from `workbook_review_sessions` only after routes no longer consume them; until Task 6 they remain inert JSON defaults.
+Create two project-owned tables with foreign keys to session/source evidence, JSONB interpretation/source metadata, unique `(region_id, revision_number)`, project/session indexes, and accepted/current revision pointers added after both tables exist. Keep the aggregate table and session draft columns intact until Task 6 so every intermediate commit remains runnable.
 
 - [ ] **Step 4: Implement memory and PostgreSQL parity**
 
@@ -355,6 +355,7 @@ git commit -m "feat: simplify workbook region review"
 ### Task 6: Retire Aggregate WorkbookUnderstanding
 
 **Files:**
+- Create: `backend/migrations/014_drop_aggregate_workbook_understanding.sql`
 - Modify/Delete: `backend/src/saas/workbookReviewSessions.js`
 - Modify: `backend/src/saas/memoryStore.js`
 - Modify: `backend/src/saas/postgresStore.js`
@@ -373,6 +374,8 @@ Assert all three retired endpoints return 404 and project state contains `region
 - [ ] **Step 2: Remove old code paths and symbols**
 
 Delete aggregate confirmation/revision builders and frontend calls. Keep only session summary/initial candidate helpers still needed by region seeding. Remove old store maps/mappers/SQL methods and stale tests rather than maintaining compatibility fixtures.
+
+Migration 014 drops `workbook_understandings` and removes the now-inert `current_understanding` and `regions` columns from `workbook_review_sessions` in the same release as the route/store cutover.
 
 - [ ] **Step 3: Run symbol scans**
 

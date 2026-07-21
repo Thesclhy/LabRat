@@ -37,6 +37,8 @@ export class MemorySaasStore {
     this.sourceExtractProposals = new Map();
     this.workbookReviewSessions = new Map();
     this.workbookUnderstandings = new Map();
+    this.workbookReviewRegions = new Map();
+    this.regionUnderstandingRevisions = new Map();
     this.dataPlans = new Map();
     this.dataSnapshots = new Map();
     this.experimentIdentities = new Map();
@@ -558,6 +560,135 @@ export class MemorySaasStore {
       .filter((session) => session.projectId === projectId)
       .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
       .map(copy);
+  }
+
+  async createWorkbookReviewRegion(input) {
+    const createdAt = nowIso();
+    const region = {
+      id: input.id || makeId("workbook_review_region"),
+      labId: input.labId,
+      projectId: input.projectId,
+      workbookReviewSessionId: input.workbookReviewSessionId,
+      sourceDocumentId: input.sourceDocumentId,
+      sourceRegionId: input.sourceRegionId || null,
+      sheetName: input.sheetName,
+      rangeRef: input.rangeRef,
+      selectionMethod: input.selectionMethod || "manual",
+      disposition: input.disposition || "active",
+      reviewStatus: input.reviewStatus || "interpreting",
+      currentRevisionId: input.currentRevisionId || null,
+      acceptedRevisionId: input.acceptedRevisionId || null,
+      version: Number(input.version) || 1,
+      warnings: copy(input.warnings) || [],
+      ignoredAt: input.ignoredAt || null,
+      ignoredBy: input.ignoredBy || null,
+      ignoredReason: input.ignoredReason || "",
+      deletedAt: input.deletedAt || null,
+      deletedBy: input.deletedBy || null,
+      deletedReason: input.deletedReason || "",
+      createdAt,
+      updatedAt: createdAt,
+      createdBy: input.createdBy || null,
+      updatedBy: input.createdBy || null,
+    };
+    this.workbookReviewRegions.set(region.id, region);
+    return copy(region);
+  }
+
+  async findWorkbookReviewRegionById(id) {
+    return copy(this.workbookReviewRegions.get(id) || null);
+  }
+
+  async listWorkbookReviewRegions({ projectId, workbookReviewSessionId, sourceDocumentId, includeDeleted = false } = {}) {
+    return [...this.workbookReviewRegions.values()]
+      .filter((region) => !projectId || region.projectId === projectId)
+      .filter((region) => !workbookReviewSessionId || region.workbookReviewSessionId === workbookReviewSessionId)
+      .filter((region) => !sourceDocumentId || region.sourceDocumentId === sourceDocumentId)
+      .filter((region) => includeDeleted || region.disposition !== "deleted")
+      .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))
+      .map(copy);
+  }
+
+  async updateWorkbookReviewRegion(id, patch = {}) {
+    const existing = this.workbookReviewRegions.get(id);
+    if (!existing) return null;
+    const updated = {
+      ...existing,
+      disposition: patch.disposition ?? existing.disposition,
+      reviewStatus: patch.reviewStatus ?? existing.reviewStatus,
+      currentRevisionId: patch.currentRevisionId ?? existing.currentRevisionId,
+      acceptedRevisionId: patch.acceptedRevisionId ?? existing.acceptedRevisionId,
+      warnings: patch.warnings === undefined ? existing.warnings : copy(patch.warnings),
+      ignoredAt: patch.ignoredAt ?? existing.ignoredAt,
+      ignoredBy: patch.ignoredBy ?? existing.ignoredBy,
+      ignoredReason: patch.ignoredReason ?? existing.ignoredReason,
+      deletedAt: patch.deletedAt ?? existing.deletedAt,
+      deletedBy: patch.deletedBy ?? existing.deletedBy,
+      deletedReason: patch.deletedReason ?? existing.deletedReason,
+      version: (Number(existing.version) || 1) + 1,
+      updatedAt: nowIso(),
+      updatedBy: patch.updatedBy || existing.updatedBy,
+    };
+    this.workbookReviewRegions.set(id, updated);
+    return copy(updated);
+  }
+
+  async createRegionUnderstandingRevision(input) {
+    const duplicate = [...this.regionUnderstandingRevisions.values()].find((revision) => (
+      revision.regionId === input.regionId
+      && Number(revision.revisionNumber) === Number(input.revisionNumber)
+    ));
+    if (duplicate) throw new Error("Region understanding revision number already exists.");
+    const revision = {
+      id: input.id || makeId("region_understanding_revision"),
+      labId: input.labId,
+      projectId: input.projectId,
+      workbookReviewSessionId: input.workbookReviewSessionId,
+      sourceDocumentId: input.sourceDocumentId,
+      regionId: input.regionId,
+      revisionNumber: Number(input.revisionNumber) || 1,
+      trigger: input.trigger || "initial",
+      userFeedback: input.userFeedback || "",
+      summary: copy(input.summary) || [],
+      interpretation: copy(input.interpretation) || {},
+      sourceRefs: copy(input.sourceRefs) || [],
+      sourceContentHash: input.sourceContentHash,
+      dependencyHash: input.dependencyHash,
+      validation: copy(input.validation) || {},
+      provider: copy(input.provider) || {},
+      warnings: copy(input.warnings) || [],
+      confidence: input.confidence ?? null,
+      createdAt: nowIso(),
+      createdBy: input.createdBy || null,
+    };
+    this.regionUnderstandingRevisions.set(revision.id, revision);
+    return copy(revision);
+  }
+
+  async findRegionUnderstandingRevisionById(id) {
+    return copy(this.regionUnderstandingRevisions.get(id) || null);
+  }
+
+  async listRegionUnderstandingRevisions({ regionId, projectId } = {}) {
+    return [...this.regionUnderstandingRevisions.values()]
+      .filter((revision) => !regionId || revision.regionId === regionId)
+      .filter((revision) => !projectId || revision.projectId === projectId)
+      .sort((a, b) => Number(a.revisionNumber) - Number(b.revisionNumber))
+      .map(copy);
+  }
+
+  async listAcceptedRegionUnderstandings({ projectId, sourceDocumentId, workbookReviewSessionId } = {}) {
+    const regions = await this.listWorkbookReviewRegions({
+      projectId,
+      sourceDocumentId,
+      workbookReviewSessionId,
+      includeDeleted: false,
+    });
+    return regions.flatMap((region) => {
+      if (region.disposition !== "active" || !region.acceptedRevisionId) return [];
+      const revision = this.regionUnderstandingRevisions.get(region.acceptedRevisionId);
+      return revision ? [{ region: copy(region), revision: copy(revision) }] : [];
+    });
   }
 
   async createWorkbookUnderstanding(input) {
