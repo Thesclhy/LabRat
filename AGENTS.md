@@ -28,7 +28,7 @@ read docs -> confirm current milestone -> use checklist -> implement one milesto
 
 ## Mission
 
-LabRat Blank is evolving into a multi-lab SaaS research command center for messy lab Excel/CSV evidence review, workbook understanding, charting, manuscript layout, and PPTX export. Server-first project mode is now implemented; the next active direction is documented in `doc/plan.md`: upload creates SourceDocument evidence and a WorkbookReviewSession, accepted WorkbookUnderstanding captures user-confirmed semantics, and later DataPlan/DataSnapshot, ChartSpec, FigurePackage, and Manuscript workflows use that evidence through review boundaries. Preserve scientific data integrity and avoid broad rewrites.
+LabRat Blank is evolving into a multi-lab SaaS research command center for messy lab Excel/CSV evidence review, workbook understanding, charting, manuscript layout, and PPTX export. Server-first project mode is now implemented; the next active direction is documented in `doc/plan.md`: upload creates SourceDocument evidence and a WorkbookReviewSession, independently accepted RegionUnderstandingRevisions capture user-confirmed semantics, and later DataPlan/DataSnapshot, ChartSpec, FigurePackage, and Manuscript workflows use that evidence through review boundaries. Preserve scientific data integrity and avoid broad rewrites.
 
 ## Current Stack
 
@@ -63,7 +63,7 @@ Use `npm run build` as the minimum verification after code changes. For import/b
 - `src/charts/sourceChartPreview.js`: render immutable source-backed ChartSpec rows/series.
 - `src/charts/chartLayout.js`: editable chart layout model and Plotly layout projection.
 - `src/data/serverApi.js`, `src/data/experimentBrowserApi.js`, `src/data/chartIntentClient.js`: authenticated project, Browser, and source-chart API helpers.
-- `backend/src/saas/workbookReviewSessions.js`, `backend/src/saas/workbookUnderstandingPreview.js`: conversational/structured workbook review.
+- `backend/src/saas/workbookReviewSessions.js`, `backend/src/saas/workbookReviewRegions.js`, `backend/src/saas/workbookUnderstandingPreview.js`: session grouping, bounded region interpretation, and deterministic semantic preview helpers.
 - `backend/src/saas/dataPlanAgent.js`, `backend/src/saas/dataPlanExecutor.js`, `backend/src/saas/experimentBrowserPublish.js`: deterministic accepted-data path.
 - `backend/src/saas/experimentProjection.js`: Snapshot-backed Browser projection.
 - `public/templates/`: example-only workbook templates.

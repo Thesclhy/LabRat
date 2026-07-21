@@ -11,7 +11,8 @@ This document defines the current scientific and workflow entities used by LabRa
 FileObject
   -> SourceDocument / SourceRegion
   -> WorkbookReviewSession
-  -> accepted WorkbookUnderstanding
+  -> WorkbookReviewRegion
+  -> accepted RegionUnderstandingRevision
   -> reviewed DataPlan
   -> accepted immutable DataSnapshot
   -> ExperimentIdentity + ExperimentSnapshotHead
@@ -77,33 +78,36 @@ Derived records should keep the narrowest useful cell/range ref and may also inc
 
 ## WorkbookReviewSession
 
-Mutable conversational review state for one SourceDocument.
+A grouping record for review activity belonging to one SourceDocument. It keeps
+the workbook summary, bounded messages/warnings, version, and ownership. It does
+not embed region state or have a workbook-wide accepted decision.
+
+## WorkbookReviewRegion
+
+A stable mutable anchor for one user- or detector-selected source range.
 
 Contains:
 
-- stable draft red boxes
-- active red-box id
-- user/assistant messages
-- structured interpretation draft
-- validation blockers, warnings, confidence, version, and status
+- session/source-document/source-region ownership
+- sheet name, A1 range, and selection method
+- `active`, `ignored`, or logically `deleted` disposition
+- interpretation/review status and optimistic version
+- current and accepted RegionUnderstandingRevision ids
+- warnings and decision actor/timestamps
 
-Revisions apply only to the explicit active/current region unless the request intentionally updates multiple regions.
+Ignoring or deleting a region never erases its immutable revision history or
+already-created downstream artifacts.
 
-## WorkbookUnderstanding
+## RegionUnderstandingRevision
 
-An accepted semantic interpretation of workbook evidence.
+An immutable numbered semantic interpretation of one WorkbookReviewRegion.
 
-It records facts such as:
-
-- region purpose: experiment table, series region, metadata, ignored region
-- experiment axis and source aliases
-- explicit create/reuse identity decisions
-- included and skipped rows
-- field ids, labels, roles, value types, and units
-- series x/y fields and grouping
-- source refs, warnings, confidence, acknowledgements
-
-Accepted understandings are immutable review outcomes. Corrections create a later version/session result rather than rewriting historical evidence.
+It records the human-readable summary, typed region/experiment/field/unit/series
+meaning, exact source refs, source-content and dependency hashes, validation,
+provider metadata, warnings, confidence, trigger, and optional user feedback.
+The backend model receives only the selected bounded range, limited neighboring
+context, and workbook manifest. Feedback creates a later revision. Confirmation
+moves the region's accepted pointer to one exact revision.
 
 ## DataPlan v2
 
@@ -114,7 +118,7 @@ Required semantics:
 - `schemaVersion: labrat.dataPlan.v2`
 - `task: experiment_browser_publish`
 - `outputShape: experiment_records`
-- accepted WorkbookUnderstanding/source dependencies
+- exact active accepted RegionUnderstandingRevision/source dependencies
 - row- or region-oriented operations
 - explicit experiment identity bindings
 - field/value/unit parsing instructions

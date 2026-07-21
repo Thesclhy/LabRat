@@ -11,8 +11,8 @@ LabRat is a server-first research workspace that turns workbook evidence into re
 Upload workbook
   -> immutable FileObject
   -> deterministic SourceDocument/SourceRegion index
-  -> WorkbookReviewSession with chat + red boxes
-  -> accepted WorkbookUnderstanding
+  -> WorkbookReviewSession grouping + WorkbookReviewRegions
+  -> accepted RegionUnderstandingRevisions
   -> reviewed experiment-record DataPlan preview
   -> explicit transactional publish
   -> accepted immutable DataSnapshot
@@ -66,7 +66,7 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 ## Frontend Surfaces
 
 - **Projects/Overview**: project selection, profile, evidence/workflow summaries, and routing into active review work.
-- **Workbook Review**: bounded Excel-like grid, stable red boxes, current-box conversation, structured semantic controls, blockers, and confirmation.
+- **Workbook Review**: progressively loaded Excel grid, active-card blue range, compact independent region summaries, feedback revisions, and per-region confirm/ignore/logical-delete controls.
 - **DataPlan Review**: deterministic experiment records, identity decisions, units, warnings, source navigation, stale-preview recovery, and explicit publish.
 - **Experiment Browser**: accepted-head-only rows, configurable columns, typed filters/sort/search, saved personal views, persistent selection, comparison tray, and lazy detail/source evidence.
 - **Chart Review**: source-evidence proposal review plus accepted-data analysis result review; no unreviewed generic normalized-data path.
@@ -79,8 +79,8 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 - **Project State**: bounded summaries for files, evidence, understandings, accepted snapshots, views, source- and analysis-result-backed output, manuscripts, AgentRuns, and AnalysisThreads.
 - **Backend Model Provider / Intent Router**: server-secret provider access, structured output validation, deterministic command priority, direct project answers, and reviewed-analysis routing without a Browser fallback.
 - **Workbook Indexer**: conservative workbook scan and SourceDocument/SourceRegion/cell-index persistence.
-- **Workbook Review Engine**: red-box revisions, bounded evidence inspection, structured interpretation, validation blockers, and accepted WorkbookUnderstanding.
-- **Evidence Retrieval Agent**: accepted-understanding-only usable results plus explicitly non-usable unconfirmed suggestions.
+- **Workbook Review Engine**: stable regions, bounded backend-model interpretation, immutable revisions, optimistic state changes, and exact accepted revision pointers.
+- **Evidence Retrieval Agent**: active accepted-region-revision-only usable results plus explicitly non-usable unconfirmed suggestions.
 - **DataPlan Agent/Executor**: deterministic row/region extraction, typed scalars/series, exact source refs, canonical hashes, and identity blockers.
 - **Snapshot Publisher**: idempotent atomic accepted DataPlan/DataSnapshot/identity/head/audit transaction.
 - **Experiment Projection**: unit-aware field catalog, cursor rows, filters/sort/search, and lazy detail.
@@ -94,7 +94,7 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 ## Domain Ownership
 
 - SourceDocument is the evidence layer.
-- WorkbookUnderstanding is accepted semantic interpretation.
+- WorkbookReviewRegion is the mutable source-range anchor; RegionUnderstandingRevision is immutable semantic interpretation.
 - DataPlan is the reviewed deterministic extraction recipe.
 - DataSnapshot is immutable accepted structured data.
 - ExperimentIdentity is stable project identity.

@@ -6,6 +6,35 @@ Last reviewed: 2026-07-20
 
 Durable decisions for LabRat architecture, product workflow, and Codex execution belong here. Keep entries newest first. Each entry should explain the decision, the context, the consequences, and any follow-up.
 
+## 2026-07-20 - Region-Level Workbook Understanding Replaces Aggregate Acceptance
+
+Status: Accepted
+
+Decision:
+WorkbookReviewSession only groups review activity for one SourceDocument.
+WorkbookReviewRegions own stable sheet/range identity and mutable disposition;
+immutable RegionUnderstandingRevisions own AI/user-reviewed semantics. Users
+revise, confirm, ignore, or logically delete each region independently. DataPlan
+and evidence tools consume exact active accepted revision ids. There is no
+workbook-wide confirmation, aggregate WorkbookUnderstanding, legacy migration,
+or dual-write path.
+
+Context:
+A workbook may contain unrelated tables, notes, and multiple experiment areas.
+One aggregate confirmation made partial progress ambiguous, coupled independent
+corrections, and left Overview showing the workbook as unfinished after useful
+regions were already accepted. Passing a complete workbook to the model also
+weakened context bounds and auditability.
+
+Consequences:
+
+- Backend model input is one bounded selected range, limited neighbors, and a workbook manifest; the complete workbook is not model context.
+- Region revisions preserve summaries, typed semantics, source refs, source/dependency hashes, provider metadata, confidence, warnings, and validation.
+- Confirmation targets one exact revision; ignore/delete never cascade to revision history or existing downstream artifacts.
+- Project state exposes `workbookReviewRegions` and accepted `regionUnderstandings`; aggregate routes and state fields remain retired with `404` behavior.
+- Migration 013 adds region/revision persistence and migration 014 removes the aggregate table and embedded session columns.
+- The written design is `doc/plans/workbook-region-understanding-redesign-design.md`.
+
 ## 2026-07-20 - Reviewed Backend Analysis And Placement-Local Chart Views
 
 Status: Accepted
@@ -34,7 +63,7 @@ Decision:
 The aggregate dataset commit, generic import/mapping/proposal collections, analysis views, observation-series registry, and their unscoped import/chart endpoints are removed rather than maintained as compatibility paths. Active chart creation remains source-backed until a separate accepted DataSnapshot chart milestone is implemented.
 
 Context:
-The accepted WorkbookUnderstanding -> DataPlan -> DataSnapshot -> experiment snapshot head path now passes a golden workbook workflow and powers Experiment Browser, saved views, comparison, and source provenance. Keeping the old path would preserve competing sources of truth and misleading API/schema contracts.
+The accepted RegionUnderstandingRevision -> DataPlan -> DataSnapshot -> experiment snapshot head path passes a golden workbook workflow and powers Experiment Browser, saved views, comparison, and source provenance. Keeping the old dataset path would preserve competing sources of truth and misleading API/schema contracts.
 
 Consequences:
 
@@ -52,7 +81,7 @@ The first complete workbook data path ends at Experiment Browser:
 
 ```text
 SourceDocument
-  -> accepted WorkbookUnderstanding
+  -> accepted RegionUnderstandingRevisions
   -> reviewed DataPlan preview
   -> explicit publish
   -> accepted DataSnapshot

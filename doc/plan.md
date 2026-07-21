@@ -14,9 +14,9 @@ LabRat's product direction remains Workbook Understanding First:
 Upload workbook
   -> SourceDocument / deterministic workbook index
   -> WorkbookReviewSession
-  -> LLM-drafted + backend-validated WorkbookUnderstanding
-  -> user confirms/corrects through chat + red boxes
-  -> accepted WorkbookUnderstanding
+  -> backend-LLM-drafted + backend-validated region revisions
+  -> user independently confirms/corrects/ignores/deletes each region
+  -> accepted RegionUnderstandingRevisions
   -> reviewed DataPlan / DataSnapshot preview
   -> explicit Publish to Browser
   -> accepted DataSnapshot
@@ -25,14 +25,14 @@ Upload workbook
 
 Uploading Excel defaults to evidence indexing and workbook understanding only. It does not normalize data, choose master/supplement roles, create a DatasetCommit, create a SourceExtractProposal, create a ChartSpec, or insert manuscript content. Those are later reviewed actions.
 
-The first complete product target is now reviewed workbook data in Experiment Browser. Accepted WorkbookUnderstanding evidence is compiled into reviewable experiment-record DataPlans and deterministic DataSnapshot previews. Explicit publish persists an immutable accepted DataSnapshot and advances the affected experiment identities. Experiment Browser derives its rows from those accepted snapshots.
+The first complete product target is now reviewed workbook data in Experiment Browser. Exact active accepted RegionUnderstandingRevision evidence is compiled into reviewable experiment-record DataPlans and deterministic DataSnapshot previews. Explicit publish persists an immutable accepted DataSnapshot and advances the affected experiment identities. Experiment Browser derives its rows from those accepted snapshots.
 
 The obsolete aggregate dataset/generic import implementation has been removed. No legacy local-data migration or dual-write path is required.
 
 Use this split when deciding what to build:
 
 - Product mainline: Workbook Understanding First, ending in Experiment Browser.
-- Engineering mainline: structured WorkbookUnderstanding -> experiment-record DataPlan -> accepted DataSnapshot -> Browser projection.
+- Engineering mainline: accepted RegionUnderstandingRevisions -> experiment-record DataPlan -> accepted DataSnapshot -> Browser projection.
 - Completed execution milestone: backend conversational analysis, reviewed calculation, analysis-result ChartSpec publication, and placement-local trace visibility.
 
 ## Recently Completed
@@ -40,13 +40,14 @@ Use this split when deciding what to build:
 - Progressive full-sheet Workbook Review loading: the active sheet's complete
   `usedRange` hydrates through visible-first bounded tiles with three background
   workers, persistent per-sheet cell/completion caches, late-response
-  isolation, progress and failed-range retry. Checked region ids are the sole
-  blue-highlight state; ordinary drag replaces, Ctrl/Command drag adds or
-  toggles, and card activation changes focus without changing checked ranges.
-- Workbook Understanding MVP: upload, WorkbookReviewSession, red-box/natural-language revisions, and accepted WorkbookUnderstanding persistence.
+  isolation, progress and failed-range retry. The active region card alone
+  controls the blue highlight; ordinary
+  drag creates a new active region and Ctrl/Command drag also adds a region
+  without cancelling or deleting earlier selections.
+- Region Understanding MVP: upload, WorkbookReviewSession grouping, server-owned WorkbookReviewRegions, immutable AI/user-feedback revisions, and independent confirm/ignore/logical-delete decisions.
 - Tool-Governed Evidence Retrieval MVP: `POST /api/projects/:projectId/evidence/retrieve` returns usable accepted evidence and non-usable unconfirmed suggestions.
 - Transient DataPlan Agent Phase 1-2: DataPlan/DataSnapshot schemas, backend DataPlan tools, deterministic preview execution, `POST /api/projects/:projectId/data-plans/draft`, and frontend helper coverage.
-- Structured WorkbookUnderstanding interpretation: bounded evidence inspection, typed experiment/field/unit/inclusion proposals, conversational and structured correction, confirmation blockers, and accepted read-only semantics.
+- Structured region interpretation: the backend model receives only the selected bounded range, limited neighboring context, and workbook manifest; typed experiment/field/unit/inclusion proposals are independently revised and exact accepted revisions become read-only evidence.
 - Experiment-record DataPlan preview: deterministic row/region extraction, typed values and series, canonical dependency/preview hashes, explicit identity decisions, source-backed warnings, bounded reads, and a transient review panel.
 - Transactional accepted-snapshot publish: mandatory idempotency, backend evidence re-read/re-execution, stale-preview recovery, atomic accepted DataPlan/DataSnapshot persistence, explicit experiment identity updates, affected-head advancement, and audit receipts without DatasetCommit/chart/manuscript side effects.
 - Snapshot-backed Experiment Browser: accepted-head-only rows, project-isolated cursor APIs, unit-aware recommended columns, typed search/filter/sort, virtualized large-project rendering, lazy detail, and accepted source-evidence navigation.
@@ -73,9 +74,9 @@ Use this split when deciding what to build:
 
 ## Next Recommended Slices
 
-1. Deploy and exercise the hardened no-network analysis worker with production secret management, audit telemetry, timeout controls, and provider cost/latency monitoring.
-2. Run migration 012 and the atomic publication workflow against configured Postgres in CI or a staging environment.
-3. Evaluate an optional MCP adapter only as another client of the existing backend tools and confirmation state.
+1. Finish integrated desktop/mobile QA for independent workbook-region review through Browser publish.
+2. Run migrations 013/014 and the region-to-DataPlan path against configured Postgres in CI or staging.
+3. Deploy and exercise the hardened no-network analysis worker with production secret management, audit telemetry, timeout controls, and provider cost/latency monitoring.
 
 ## Operating Loop
 
@@ -97,8 +98,8 @@ npm run codex:preflight
 - AI produces intent, explanations, and reviewable patches; it does not invent scientific values or directly write final data.
 - Raw files are immutable evidence.
 - Mutating actions require explicit user confirmation.
-- WorkbookUnderstandings, DataPlans, DataSnapshots, and later chart/manuscript artifacts must remain traceable to source refs.
-- SourceDocument is the evidence layer; WorkbookUnderstanding is the interpretation layer; DataPlan is the reviewed extraction recipe; DataSnapshot is immutable accepted structured data; Experiment Browser is a read model.
+- RegionUnderstandingRevisions, DataPlans, DataSnapshots, and later chart/manuscript artifacts must remain traceable to source refs.
+- SourceDocument is the evidence layer; accepted RegionUnderstandingRevision is the interpretation layer; DataPlan is the reviewed extraction recipe; DataSnapshot is immutable accepted structured data; Experiment Browser is a read model.
 - Browser publish must not create chart proposals, ChartSpecs, FigurePackages, or manuscript placements.
 - MCP and embedding/RAG adapters are future access layers, not the source of truth.
 

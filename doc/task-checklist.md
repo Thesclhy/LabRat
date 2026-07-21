@@ -42,9 +42,9 @@ This file is the reusable execution checklist for Codex work. It should describe
 
 ## Evidence Workflow Checklist
 
-- [ ] Identify whether the slice touches Source Workspace, WorkbookUnderstanding, DataPlan, DataSnapshot, Experiment Browser, AgentRun, ChartSpec, Manuscript, or audit behavior.
+- [ ] Identify whether the slice touches Source Workspace, WorkbookReviewRegion/RegionUnderstandingRevision, DataPlan, DataSnapshot, Experiment Browser, AgentRun, ChartSpec, Manuscript, or audit behavior.
 - [ ] Keep AI/tool actions proposal-first until explicit user confirmation.
-- [ ] Use accepted WorkbookUnderstanding or accepted/reviewed evidence only for DataPlan-ready results.
+- [ ] Use exact active accepted RegionUnderstandingRevisions or other accepted/reviewed evidence only for DataPlan-ready results.
 - [ ] For Browser work, derive rows only from accepted DataSnapshots selected by experiment snapshot heads.
 - [ ] Require explicit create/reuse decisions for ambiguous experiment identities.
 - [ ] Keep fields with incompatible units separate unless a reviewed conversion operation exists.

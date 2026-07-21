@@ -16,9 +16,9 @@ The current product direction is the Workbook Understanding First workflow:
 Upload workbook
   -> SourceDocument / deterministic workbook index
   -> WorkbookReviewSession
-  -> LLM-drafted + backend-validated WorkbookUnderstanding
-  -> user confirms/corrects through chat + red boxes
-  -> accepted WorkbookUnderstanding
+  -> backend-LLM-drafted + backend-validated region revisions
+  -> user independently confirms/corrects/ignores/deletes each region
+  -> accepted RegionUnderstandingRevisions
   -> later DataPlan / DataSnapshot
   -> reviewed ChartSpec
   -> manuscript figure placement
@@ -26,7 +26,7 @@ Upload workbook
 
 Uploading a workbook does not automatically normalize data, create a DatasetCommit, create a SourceExtractProposal, create a ChartSpec, or insert Manuscript content. Those are later review boundaries built on top of accepted understanding and source refs.
 
-The current engineering mainline is the Tool-Governed DataPlan Agent: accepted WorkbookUnderstanding evidence is retrieved through backend-owned tools, compiled into reviewable DataPlans, and executed into deterministic DataSnapshot previews before any chart proposal or ChartSpec is created. See `doc/current-milestone.md` for the active slice.
+The current engineering mainline is the Tool-Governed DataPlan Agent: exact accepted RegionUnderstandingRevisions are retrieved through backend-owned tools, compiled into reviewable DataPlans, and executed into deterministic DataSnapshot previews before any chart proposal or ChartSpec is created. See `doc/current-milestone.md` for the active slice.
 
 ## Minimal Reading Path
 

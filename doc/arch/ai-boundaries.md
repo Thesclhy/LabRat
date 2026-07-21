@@ -8,7 +8,7 @@ LabRat uses AI as a proposal and workflow layer. Authorization, bounded evidence
 ## AI May
 
 - classify workbook regions and explain confidence/warnings
-- draft structured WorkbookUnderstanding patches from bounded source cells
+- draft one structured RegionUnderstandingRevision from bounded selected source cells
 - interpret a user's correction for the active red box
 - rank accepted evidence for a stated task
 - draft DataPlan intent/operations for backend validation
@@ -36,7 +36,7 @@ Send compact project-owned context only:
 - project profile and user request
 - bounded source-document metadata/ranges
 - active red-box interpretation and validation blockers
-- accepted WorkbookUnderstanding summaries/source refs
+- accepted RegionUnderstandingRevision summaries/source refs
 - DataPlan preview summaries, hashes, warnings, and identity decisions
 - Experiment Browser field catalog and selected experiment summaries
 - approved source- and analysis-result chart/manuscript summaries, including bounded trace metadata and current visible trace ids without full x/y arrays
@@ -54,11 +54,11 @@ AI draft
   -> audit event
 ```
 
-WorkbookUnderstanding confirmation, DataPlan publish, source extract acceptance, analysis-plan acceptance, AnalysisResult acceptance/ChartSpec publication, and Manuscript save are separate boundaries. Confirmation at one stage does not authorize later stages.
+RegionUnderstandingRevision confirmation, DataPlan publish, source extract acceptance, analysis-plan acceptance, AnalysisResult acceptance/ChartSpec publication, and Manuscript save are separate boundaries. Confirmation at one stage does not authorize later stages.
 
 ## Evidence Rules
 
-- Usable DataPlan evidence must come from accepted WorkbookUnderstanding records and backend-owned SourceDocument reads.
+- Usable DataPlan evidence must come from exact active accepted RegionUnderstandingRevisions and backend-owned SourceDocument reads.
 - Unconfirmed candidates are suggestions with `canUseForDataPlan: false`.
 - Accepted values cite exact source cells/ranges and accepted snapshot records.
 - If the requested experiment, range, field, or unit cannot be resolved, return clarification rather than substitute another candidate.

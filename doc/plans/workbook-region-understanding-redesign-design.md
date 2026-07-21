@@ -1,6 +1,6 @@
 # Region-Level Workbook Understanding Redesign
 
-Status: approved design, not implemented
+Status: implemented 2026-07-20; final verification in progress
 Date: 2026-07-20
 
 ## Purpose

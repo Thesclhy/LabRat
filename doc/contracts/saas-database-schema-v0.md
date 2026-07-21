@@ -46,12 +46,13 @@ Source tables preserve workbook/sheet/range coordinates, raw values/formulas whe
 
 ```text
 workbook_review_sessions
-workbook_understandings
+workbook_review_regions
+region_understanding_revisions
 ```
 
-`workbook_review_sessions` stores the mutable review conversation: current red boxes, messages, structured draft interpretation, warnings, version, and status.
+`workbook_review_sessions` groups review activity for one SourceDocument and stores bounded summary/messages/warnings/version metadata. It has no aggregate understanding or workbook-wide accepted state.
 
-`workbook_understandings` stores accepted immutable semantic decisions for one session/source document: facts, region summaries, identity/field/unit interpretation, warnings, and decision summary. Confirmation does not create accepted experiment data.
+`workbook_review_regions` stores stable source ownership, sheet/range, selection method, active/ignored/deleted disposition, review status, optimistic version, and current/accepted revision pointers. `region_understanding_revisions` stores immutable numbered AI/user-feedback interpretations with summary, typed semantics, source refs, source/dependency hashes, validation, provider metadata, warnings, and confidence. Accepting one exact revision does not create accepted experiment data.
 
 ### Accepted Data Layer
 
@@ -139,7 +140,7 @@ analysis_publications
 Publishing accepted workbook data is one atomic operation:
 
 ```text
-validate accepted WorkbookUnderstanding
+validate exact active accepted RegionUnderstandingRevisions
   -> re-read SourceDocument evidence
   -> deterministically re-execute DataPlan
   -> validate dependency and preview hashes
@@ -197,10 +198,13 @@ Any validation, stale-head, conflicting-idempotency, or insert failure rolls bac
 010_data_plan_experiment_browser.sql
 011_drop_legacy_dataset_path.sql
 012_analysis_workflow.sql
+013_region_understandings.sql
+014_drop_aggregate_workbook_understanding.sql
 ```
 
 Migration 011 removes the obsolete aggregate dataset, mapping, analysis-view, and observation-series tables/foreign keys from development databases. New databases never need those product paths.
 Migration 012 adds reviewed analysis persistence, publication receipts, and nullable `chart_specs.analysis_result_id` while preserving the source-backed chart path.
+Migration 013 adds stable review regions and immutable region-understanding revisions. Migration 014 intentionally drops the obsolete aggregate `workbook_understandings` table and embedded session understanding/region columns; development has no legacy migration or dual-write requirement.
 
 ## Invariants
 

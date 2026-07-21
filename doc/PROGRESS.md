@@ -15,6 +15,18 @@ Keep entries concise, newest first, and include:
 
 ## 2026-07-20
 
+- Completed region-understanding implementation Task 7. Reconciled the active
+  README/agent guidance, roadmap, milestone, checklist, API/database/project-
+  state/data-dictionary contracts, architecture/AI boundaries, durable
+  decisions, and approved design/implementation plans around
+  WorkbookReviewRegion plus immutable RegionUnderstandingRevision. The docs now
+  specify bounded model context, independent lifecycle decisions, exact accepted
+  revision DataPlan dependencies, logical-delete history retention, region-only
+  project state, aggregate-route `404` behavior, migrations 013/014, and the two
+  current ChartSpec origins. Verification: documentation diff check passed with
+  line-ending notices only; region and golden route selection passed 4/4; active
+  source scanning found no aggregate production API/data dependency. Next: full
+  verification and desktop/mobile browser QA.
 - Completed region-understanding implementation Task 6. Retired aggregate
   WorkbookUnderstanding persistence, project-state fields, session revision /
   confirmation handlers, project listing route, frontend API helpers, and the

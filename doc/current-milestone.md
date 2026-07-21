@@ -9,29 +9,30 @@ This file tracks the active execution state. Keep `doc/plan.md` as the short roa
 ## Strategic Split
 
 - Product mainline: Workbook Understanding First, ending in Experiment Browser.
-- Engineering mainline: accepted WorkbookUnderstanding -> experiment-record DataPlan -> accepted DataSnapshot -> Browser projection.
+- Engineering mainline: accepted RegionUnderstandingRevisions -> experiment-record DataPlan -> accepted DataSnapshot -> Browser projection.
 - Completed milestone: Backend conversational analysis and chart workflow implementation.
 - Completed milestone: progressive full-sheet workbook loading and
   checkbox-controlled selection highlights.
 
 ## Active Milestone
 
-Implement the approved region-level Workbook Understanding cutover documented
+Finalize and verify the approved region-level Workbook Understanding cutover documented
 in `doc/plans/workbook-region-understanding-redesign-design.md` and
 `doc/plans/workbook-region-understanding-redesign-implementation-plan.md`.
 WorkbookReviewSession remains the Excel container; independently versioned and
 confirmed region understandings replace aggregate WorkbookUnderstanding
-acceptance. The milestone includes bounded backend model interpretation,
+acceptance. Implementation now includes bounded backend model interpretation,
 per-region revise/confirm/ignore/logical-delete APIs, accepted-region DataPlan
 dependencies, the simplified review dock, legacy contract retirement, and the
-golden workbook-to-Browser workflow.
+golden workbook-to-Browser workflow. Remaining work is full verification and
+desktop/mobile browser QA of the integrated upload/review/publish path.
 
 ## Current Position
 
 Implemented:
 
-- Workbook Understanding MVP: uploaded workbooks become SourceDocument evidence, WorkbookReviewSession review state, draft red boxes, natural-language revisions, and accepted WorkbookUnderstanding records.
-- Tool-Governed Evidence Retrieval MVP: `POST /api/projects/:projectId/evidence/retrieve` returns usable accepted WorkbookUnderstanding evidence and marks unconfirmed suggestions as not DataPlan-ready.
+- Region-level Workbook Understanding: WorkbookReviewSession groups one workbook; stable WorkbookReviewRegions and immutable RegionUnderstandingRevisions independently support bounded backend AI summaries, feedback revisions, exact confirmation, ignore, and logical delete.
+- Tool-Governed Evidence Retrieval MVP: `POST /api/projects/:projectId/evidence/retrieve` returns usable active accepted RegionUnderstandingRevision evidence and marks unconfirmed suggestions as not DataPlan-ready.
 - Transient DataPlan Agent Phase 1-2: DataPlan/DataSnapshot schemas, backend DataPlan tools, deterministic DataSnapshot preview execution, fallback DataPlan agent orchestration, `POST /api/projects/:projectId/data-plans/draft`, frontend `draftServerProjectDataPlan()`, and route/helper/unit coverage.
 - DataPlan identity bulk review: users can create all unmatched experiments, accept unique exact matches, apply selected-row actions, filter by decision state, inspect totals, and undo the latest batch while create/reuse remains explicit and publish-gated; reusable identities match and display their canonical labels.
 - WorkbookReviewWorkspace full-sheet loading: the complete current-sheet
@@ -40,20 +41,19 @@ Implemented:
   the rest. Per-sheet normalized cell/completion caches retain loaded and empty
   tiles across navigation, stale responses stay isolated, failed ranges can be
   retried without re-reading successful tiles, and toolbar progress reports the
-  exact loaded tile count. Checked region ids alone control editable blue
-  highlights; ordinary drag is exclusive, Ctrl/Command drag adds or toggles,
-  and active-card focus is independent.
+  exact loaded tile count. The active region card alone controls the blue
+  highlight; ordinary drag and Ctrl/Command drag create new server regions
+  without cancelling or deleting prior region records.
 - Target architecture and milestone sequence are approved in `doc/plans/workbook-review-to-experiment-browser-plan.md`.
 - Milestone 0 contract cutover: active API/schema/data/architecture/AI contracts now define the Snapshot-backed Browser path and mark DatasetCommit/generic imports deprecated.
 - Workbook source range race fix: late detected-region responses no longer overwrite a manual range entered while loading.
-- Milestone 1 continuous workbook review: the conversation, red-box list, revisions, clarification, and confirmation stay docked beside the mounted workbook grid; detected regions seed stable drafts; Project Overview can reopen the latest session; confirmation remains in place and exposes `Review extracted experiments`.
-- Milestone 2 structured WorkbookUnderstanding interpretation: bounded backend reads propose experiment axis, identity, fields, units, inclusion, series, warnings, and source refs; conversational and structured corrections share validated typed patches; unresolved identity/unit decisions block confirmation; accepted semantics become read-only.
+- Region redesign Tasks 1-6: migration/store parity, bounded backend interpretation, nested region APIs, upload-time candidate seeding, exact accepted-revision evidence/DataPlan dependencies, compact independent region cards, region-level Overview status, and aggregate WorkbookUnderstanding route/state/storage retirement are implemented.
 - Milestone 3 experiment-record DataPlan preview: accepted evidence compiles into deterministic row- or region-oriented records with typed values, canonical hashes, explicit identity decisions, bounded SourceDocument reads, visible warnings/source refs, and a transient review panel without Browser mutation.
 - Milestone 4 transactional publish: migration/store parity, backend evidence re-read and deterministic re-execution, mandatory idempotency, stale-preview recovery, atomic accepted DataPlan/DataSnapshot plus identity/head persistence, audit receipts, editor authorization, and a locked frontend success state.
 - Milestone 5 Snapshot-backed Experiment Browser: accepted-snapshot/head-only projection, project-isolated list/detail APIs, deterministic unit-aware recommended columns, cursor pagination, typed search/filter/sort, virtualized rows, lazy detail, selection, and read-only source evidence navigation.
 - Milestone 6 saved views and comparison: owner-isolated personal BrowserView CRUD, complete column configuration, default/load/save/rename/delete controls, persistent cross-query selection, and a lazy source-backed scalar/series comparison table without unit coercion.
 - Milestone 7 legacy retirement and golden workflow: removed aggregate dataset/mapping/analysis/observation stores, routes, helpers, and UI contracts; removed unscoped normalize/semantic-map/generic chart endpoints; added migration 011; made ChartSpec validation/rendering source-only; added golden workbook upload-review-draft-publish-reload-Browser coverage; retained source-backed chart/Manuscript workflows; accepted natural-language documentation exclusion; and stabilized local in-memory development sessions by running the backend without file-watch restarts.
-- Post-milestone regression hardening: direct project-content summaries no longer create confirmation-gated Browser actions while explicit upload/chart intent keeps priority; accepted review cards report accepted/published state and open the selected pending/accepted session; Ctrl/Meta workbook range selection supports additive/toggle behavior; Experiment Browser uses one horizontal scroll owner; and grouped two-row workbook headers preserve all child fields plus parent/leaf header provenance through publish and Browser projection.
+- Post-milestone regression hardening: direct project-content summaries no longer create confirmation-gated Browser actions while explicit upload/chart intent keeps priority; Project Overview reports pending/confirmed regions and opens the session containing the latest pending region; Ctrl/Meta selection adds without cancellation; Experiment Browser uses one horizontal scroll owner; and grouped two-row workbook headers preserve all child fields plus parent/leaf header provenance through publish and Browser projection.
 - The next architecture has been approved conversationally and written for review in `doc/plans/backend-conversational-analysis-chart-design.md`: backend intent routing, plan/revision review against Excel red boxes, exact accepted Python in a LabRat-managed sandbox, validated result review, atomic AnalysisResult/ChartSpec publication, and placement-local Canvas trace visibility.
 - Conversational-analysis Task 1 is implemented: backend-only provider configuration, bounded intent routing, direct project answers, reviewed-analysis disposition for trends/calculations/charts, explicit-only Browser navigation, and removal of frontend provider credentials/direct calls.
 - Conversational-analysis Task 2 is implemented: accepted-active-head analysis schemas and selection hashes, unit-aware field catalog, source rectangle compression/limits, plan validation, and a project-scoped six-tool planning registry with no executor.
@@ -72,13 +72,13 @@ Deployment work not included in this completed milestone:
 
 ## Next Recommended Slice
 
-1. Operationalize the hardened analysis worker, secret management, timeouts, audit telemetry, and provider cost/latency monitoring in a production-like environment.
-2. Exercise migration 012 and the atomic analysis publication path against a configured Postgres test database.
-3. Consider an optional MCP adapter only after the first-party workflow has production evidence; keep authorization, review, execution, and publication in the existing backend services.
+1. Complete full automated verification and desktop/mobile browser QA for region review through Browser publish.
+2. Exercise migrations 013/014 and the region-to-DataPlan path against a configured Postgres test database.
+3. Operationalize the hardened analysis worker, secret management, timeouts, audit telemetry, and provider cost/latency monitoring in a production-like environment.
 
 ## Guardrails
 
-- DataPlan inputs must come from accepted WorkbookUnderstanding evidence and backend-owned SourceDocument reads.
+- DataPlan inputs must come from exact active accepted RegionUnderstandingRevisions and backend-owned SourceDocument reads.
 - DataPlan/DataSnapshot persistence must not create ChartSpecs, chart proposals, FigurePackages, or manuscript placements.
 - DataSnapshot values must be read deterministically from SourceDocument index/range data.
 - Experiment aliases must resolve to an explicit create/reuse decision; no silent merge is allowed.
@@ -87,13 +87,13 @@ Deployment work not included in this completed milestone:
 
 ## Verification Target
 
-Conversational-analysis milestone completion verification:
+Region-understanding milestone completion verification:
 
 ```bash
 npm run codex:verify
 node --test backend/src/saas/routes/saasRoutes.postgres.test.js
 git diff --check
-rg -n "anthropic-dangerous-direct-browser-access|labrat_blank_anthropic_key_v1|Only source-backed chart proposals" src backend/src
+rg -n "workbookUnderstandingIds|workbookUnderstandingId|workbook_understandings|current_understanding" src backend/src
 ```
 
 Latest Task 4 evidence: targeted frontend analysis/API/workspace/AgentPanel coverage passed 51/51 and the production build succeeded with the existing Plotly chunk-size warning. Browser QA used only repository-owned synthetic workbook data plus a local deterministic provider stub; it confirmed analysis routing, two non-contiguous source rectangles, red-cell focus, feedback revision supersession, exact-plan acceptance/queueing, stale-card recovery, desktop split geometry, mobile stacked geometry, and no page-level horizontal overflow. No external provider received QA data.
@@ -117,6 +117,13 @@ independence, ordinary drag replacement, Ctrl addition, and Ctrl toggle
 removal. Frozen-request tests additionally verify that background hydration
 waits for visible cells, never exceeds three workers, and starts a newly
 selected Sheet from its top tile.
+
+Latest region-understanding evidence: Tasks 1-6 are implemented. Focused backend
+region/session/route coverage passed 37/37; frontend API, region dock, and
+ProjectDashboard coverage passed 75/75; production build passed before the
+aggregate retirement slice. Optional Postgres route execution remains skipped
+without `LABRAT_TEST_DATABASE_URL`. Full verification and browser QA remain the
+final active checks.
 
 ## Open Risks
 

@@ -1,18 +1,18 @@
 # SaaS API Contract v0
 
 Status: active
-Last reviewed: 2026-07-16
+Last reviewed: 2026-07-20
 
 This contract describes the server-first API that is implemented by `backend/src/saas/routes/saasRoutes.js`. The authoritative scientific path is:
 
 ```text
 FileObject -> SourceDocument -> WorkbookReviewSession
-  -> accepted WorkbookUnderstanding
+  -> WorkbookReviewRegion -> accepted RegionUnderstandingRevision
   -> reviewed DataPlan -> accepted DataSnapshot
   -> ExperimentIdentity/SnapshotHead -> Experiment Browser
 ```
 
-Chart creation is currently supported only for immutable SourceDocument extracts. DataSnapshot-backed chart planning is a later milestone.
+Durable charts use either immutable SourceDocument extracts or reviewed analysis results derived from accepted active DataSnapshot records. Both paths remain review-gated and provenance-complete.
 
 ## General Rules
 
@@ -63,7 +63,8 @@ GET   /api/projects/:projectId/state
   "importRuns": [],
   "sourceDocuments": [],
   "workbookReviewSessions": [],
-  "workbookUnderstandings": [],
+  "workbookReviewRegions": [],
+  "regionUnderstandings": [],
   "dataPlans": [],
   "dataSnapshots": [],
   "experimentSnapshotHeads": [],
@@ -107,42 +108,61 @@ Rules:
 - Query and extract preview endpoints are read-only and cannot create accepted data.
 - Oversized requests return an explicit validation error instead of silently truncating scientific evidence.
 
-## Workbook Review And Understanding
+## Workbook Region Review And Understanding
 
 ```text
 GET  /api/projects/:projectId/workbook-review-sessions
 POST /api/projects/:projectId/workbook-review-sessions
 GET  /api/workbook-review-sessions/:sessionId
-POST /api/workbook-review-sessions/:sessionId/revisions
-POST /api/workbook-review-sessions/:sessionId/confirm
-GET  /api/projects/:projectId/workbook-understandings
+GET  /api/workbook-review-sessions/:sessionId/regions
+POST /api/workbook-review-sessions/:sessionId/regions
+GET  /api/workbook-review-sessions/:sessionId/regions/:regionId/revisions
+POST /api/workbook-review-sessions/:sessionId/regions/:regionId/revisions
+POST /api/workbook-review-sessions/:sessionId/regions/:regionId/confirm
+POST /api/workbook-review-sessions/:sessionId/regions/:regionId/ignore
+DELETE /api/workbook-review-sessions/:sessionId/regions/:regionId
+GET  /api/projects/:projectId/region-understandings?status=accepted
 ```
 
-Revision request:
+Region creation request:
 
 ```json
 {
-  "message": "The first row is the header and each later row is one experiment.",
-  "revisionMode": "replace_current",
-  "activeDraftRegionId": "draft_region_1",
-  "regions": [
-    {
-      "id": "draft_region_1",
-      "sheetName": "Runs",
-      "range": "A1:H5",
-      "kind": "experiment_table"
-    }
-  ],
-  "interpretationPatch": {}
+  "sourceDocumentId": "source_document_1",
+  "sheetName": "Runs",
+  "range": "A1:H5",
+  "selectionMethod": "drag_select",
+  "idempotencyKey": "region_create_1"
 }
 ```
 
-Confirmation rules:
+Revision and confirmation requests:
 
-- Every experiment-bearing fact must have validated structured interpretation.
-- Experiment identity must be explicit; blank or duplicate aliases block confirmation.
-- Unresolved units and low-confidence semantics require user correction or acknowledgement.
-- Confirmation creates an accepted `WorkbookUnderstanding` only. It does not publish Browser rows or create output artifacts.
+```json
+{
+  "feedback": "The first row is the header and each later row is one experiment.",
+  "previousRevisionId": "region_understanding_revision_1",
+  "expectedRegionVersion": 1,
+  "idempotencyKey": "region_revision_2"
+}
+```
+
+```json
+{
+  "revisionId": "region_understanding_revision_2",
+  "expectedRegionVersion": 2,
+  "idempotencyKey": "region_confirm_2"
+}
+```
+
+Rules:
+
+- Creating or revising one region sends the backend model only that bounded range, limited neighboring cells, and a workbook manifest. The complete workbook is never model context.
+- Each region owns immutable numbered revisions plus separate current and accepted revision pointers.
+- Confirm applies to one exact revision. Ignore and logical delete apply to one exact version and do not erase revision history or downstream artifacts.
+- `WorkbookReviewSession` groups regions for one source workbook; there is no workbook-wide confirmation state.
+- The retired aggregate session revision/confirm and project `workbook-understandings` routes return `404`.
+- Region confirmation does not publish Browser rows or create output artifacts.
 
 ## Evidence Retrieval And DataPlan
 
@@ -154,14 +174,14 @@ GET  /api/projects/:projectId/data-plans
 GET  /api/projects/:projectId/data-snapshots
 ```
 
-Evidence retrieval returns accepted WorkbookUnderstanding regions as usable evidence. Unconfirmed candidates may be returned as suggestions but must use `canUseForDataPlan: false`.
+Evidence retrieval returns exact active accepted RegionUnderstandingRevisions as usable evidence. Unconfirmed candidates may be returned as suggestions but must use `canUseForDataPlan: false`.
 
 Draft request:
 
 ```json
 {
   "intent": "experiment_browser_publish",
-  "workbookUnderstandingIds": ["workbook_understanding_1"],
+  "regionUnderstandingRevisionIds": ["region_understanding_revision_2"],
   "identityDecisions": [
     {
       "sourceAlias": "Exp33",

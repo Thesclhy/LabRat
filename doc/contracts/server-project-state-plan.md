@@ -24,7 +24,8 @@ fileObjects
 importRuns
 sourceDocuments
 workbookReviewSessions
-workbookUnderstandings
+workbookReviewRegions
+regionUnderstandings
 dataPlans
 dataSnapshots
 experimentSnapshotHeads
@@ -61,7 +62,7 @@ Use `POST /api/projects` for the initial profile and `PATCH /api/projects/:proje
 
 - Raw uploaded files are immutable `file_objects`.
 - Upload/scan lifecycle is stored in `import_runs`; active workflows do not normalize/apply import runs.
-- Source evidence is stored in SourceDocuments and accepted interpretation in WorkbookUnderstandings.
+- Source evidence is stored in SourceDocuments; accepted interpretation is stored as exact RegionUnderstandingRevisions selected by active WorkbookReviewRegions.
 - Accepted structured data is stored in immutable DataSnapshots produced by accepted DataPlans.
 - One `experiment_snapshot_heads` row chooses the active accepted snapshot record for each stable experiment identity.
 - Personal Browser display state is stored in `browser_views`.
@@ -73,10 +74,10 @@ Scientific record payloads remain JSONB-first inside DataPlans/DataSnapshots whi
 
 ## Publish To Browser
 
-Upload and WorkbookUnderstanding confirmation never publish scientific data. After confirmation, the user reviews a transient experiment-record DataPlan/DataSnapshot preview and explicitly publishes it.
+Upload and region-revision confirmation never publish scientific data. After one or more exact region revisions are confirmed, the user reviews a transient experiment-record DataPlan/DataSnapshot preview and explicitly publishes it.
 
 ```text
-accepted WorkbookUnderstanding
+accepted RegionUnderstandingRevisions
   -> transient DataPlan/DataSnapshot preview
   -> explicit identity and warning decisions
   -> transactional accepted DataPlan + DataSnapshot
@@ -89,8 +90,8 @@ Publish re-reads source ranges, verifies dependency/preview hashes, and returns 
 
 - Chart interpretation resolves explicit SourceDocument evidence into a reviewable source extract/chart proposal.
 - Accepted source-backed proposals become durable ChartSpecs through chart-spec APIs.
-- ChartSpecs require immutable `sourceSnapshot.rows` or `sourceSnapshot.series` plus exact source refs.
-- A later milestone will validate chart specs against accepted DataSnapshots.
+- Source-extract ChartSpecs require immutable `sourceSnapshot.rows` or `sourceSnapshot.series` plus exact source refs.
+- Reviewed accepted-data analysis produces immutable AnalysisResults; explicit result acceptance atomically creates an `origin: analysis_result` ChartSpec with accepted input snapshot refs, complete validated traces, hashes, and lineage.
 - Existing manuscript chart blocks should keep rendering from their stored chart spec snapshots.
 
 ## Frontend Direction

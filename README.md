@@ -81,7 +81,8 @@ The intended product path is now server-first for logged-in lab workspaces:
 Upload workbook
   -> SourceDocument / deterministic workbook index
   -> WorkbookReviewSession
-  -> accepted WorkbookUnderstanding
+  -> independently reviewed WorkbookReviewRegions
+  -> accepted RegionUnderstandingRevisions
   -> Tool-Governed Evidence Retrieval
   -> reviewed DataPlan / immutable accepted DataSnapshot
   -> ExperimentIdentity / active snapshot heads
@@ -91,7 +92,7 @@ Upload workbook
   -> PPTX export
 ```
 
-The current app supports server login, lab/project selection, project profile editing, workbook source indexing, conversational red-box review, accepted WorkbookUnderstanding persistence, tool-governed evidence retrieval, deterministic experiment-record previews, transactional accepted snapshot publish, a cursor-paginated Experiment Browser with saved views/comparison/detail provenance, backend-owned durable analysis threads and reviewed immutable calculation plans, accepted-run execution with validated immutable result previews, separate result acceptance into trace-complete analysis-result ChartSpecs, source-backed chart review, Manuscript placement-local trace visibility, persistence, and PPTX export.
+The current app supports server login, lab/project selection, project profile editing, workbook source indexing, independent region review with immutable accepted revisions, tool-governed evidence retrieval, deterministic experiment-record previews, transactional accepted snapshot publish, a cursor-paginated Experiment Browser with saved views/comparison/detail provenance, backend-owned durable analysis threads and reviewed immutable calculation plans, accepted-run execution with validated immutable result previews, separate result acceptance into trace-complete analysis-result ChartSpecs, source-backed chart review, Manuscript placement-local trace visibility, persistence, and PPTX export.
 
 Analysis execution is disabled by default. For local non-production development only:
 
