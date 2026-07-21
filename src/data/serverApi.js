@@ -203,34 +203,6 @@ export function listServerRegionUnderstandings(projectId, { status = "accepted",
   return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/region-understandings${query}`, options);
 }
 
-export function reviseServerWorkbookReviewSession(sessionId, request = {}, options = {}) {
-  if (!sessionId) throw new ServerApiError("Select a workbook review session before submitting a revision.");
-  if (!String(request.message || "").trim()) {
-    throw new ServerApiError("Describe the workbook correction before submitting it.");
-  }
-  return serverJson(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}/revisions`, {
-    message: request.message,
-    redBoxUpdates: request.redBoxUpdates || [],
-    previousUnderstandingId: request.previousUnderstandingId || null,
-    revisionMode: request.revisionMode || "merge",
-    activeDraftRegionId: request.activeDraftRegionId || null,
-    interpretationPatches: request.interpretationPatches || [],
-  }, options);
-}
-
-export function confirmServerWorkbookReviewSession(sessionId, request = {}, options = {}) {
-  if (!sessionId) throw new ServerApiError("Select a workbook review session before confirming understanding.");
-  return serverJson(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}/confirm`, {
-    workbookUnderstandingId: request.workbookUnderstandingId || null,
-    decisionSummary: request.decisionSummary || {},
-  }, options);
-}
-
-export function listServerWorkbookUnderstandings(projectId, options = {}) {
-  if (!projectId) throw new ServerApiError("Select a project before listing workbook understandings.");
-  return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/workbook-understandings`, options);
-}
-
 export function interpretServerProjectChartIntent(projectId, request = {}, options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before drafting charts.");
   return serverJson(`/api/projects/${encodeURIComponent(projectId)}/charts/interpret`, {

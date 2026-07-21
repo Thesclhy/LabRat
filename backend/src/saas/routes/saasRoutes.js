@@ -37,10 +37,7 @@ import {
   sourceExtractProposalSummary,
 } from "../sourceExtracts.js";
 import {
-  applyWorkbookReviewRevision,
-  buildWorkbookUnderstandingForConfirmation,
   buildWorkbookReviewSessionDraft,
-  workbookUnderstandingSummary,
   workbookReviewSessionSummary,
 } from "../workbookReviewSessions.js";
 import {
@@ -848,7 +845,8 @@ async function handleProjectState(req, res, context, projectId) {
     chartSpecs,
     manuscripts,
     workbookReviewSessions,
-    workbookUnderstandings,
+    workbookReviewRegions,
+    regionUnderstandings,
     agentRuns,
     analysisThreads,
     dataPlans,
@@ -863,7 +861,8 @@ async function handleProjectState(req, res, context, projectId) {
     context.store.listChartSpecs({ projectId }),
     context.store.listManuscripts({ projectId }),
     context.store.listWorkbookReviewSessions ? context.store.listWorkbookReviewSessions({ projectId }) : [],
-    context.store.listWorkbookUnderstandings ? context.store.listWorkbookUnderstandings({ projectId }) : [],
+    context.store.listWorkbookReviewRegions ? context.store.listWorkbookReviewRegions({ projectId }) : [],
+    context.store.listAcceptedRegionUnderstandings ? context.store.listAcceptedRegionUnderstandings({ projectId }) : [],
     context.store.listAgentRuns ? context.store.listAgentRuns({ projectId }) : [],
     context.store.listAnalysisThreads ? context.store.listAnalysisThreads({ projectId }) : [],
     context.store.listDataPlans ? context.store.listDataPlans({ projectId }) : [],
@@ -882,7 +881,21 @@ async function handleProjectState(req, res, context, projectId) {
     chartSpecs: supportedChartSpecs.map(chartSpecListItem),
     manuscripts,
     workbookReviewSessions: workbookReviewSessions.map(workbookReviewSessionSummary),
-    workbookUnderstandings: workbookUnderstandings.map(workbookUnderstandingSummary),
+    workbookReviewRegions: await Promise.all(workbookReviewRegions.map((region) => workbookReviewRegionSummary(context, region))),
+    regionUnderstandings: regionUnderstandings.map(({ region, revision }) => ({
+      regionId: region.id,
+      regionUnderstandingRevisionId: revision.id,
+      workbookReviewSessionId: region.workbookReviewSessionId,
+      sourceDocumentId: region.sourceDocumentId,
+      sheetName: region.sheetName,
+      rangeRef: region.rangeRef,
+      summary: asArray(revision.summary),
+      semanticType: revision.interpretation?.semanticType || "unknown_region",
+      sourceContentHash: revision.sourceContentHash,
+      dependencyHash: revision.dependencyHash,
+      acceptedAt: region.acceptedAt || null,
+      acceptedBy: region.acceptedBy || null,
+    })),
     agentRuns: agentRuns.map(agentRunSummary),
     analysisThreads: analysisThreads.slice(0, 100).map(analysisThreadSummary),
     dataPlans: dataPlans.map(dataPlanSummary),
@@ -2527,7 +2540,7 @@ async function handleProjectWorkbookReviewSessions(req, res, context, projectId)
     regions: regions.map(sourceRegionSummary),
     createdBy: auth.user.id,
   });
-  for (const detectedRegion of asArray(draft.currentUnderstanding?.draftRegions)) {
+  for (const detectedRegion of asArray(draft.candidateRegions)) {
     await createWorkbookReviewRegionDraft({
       store: context.store,
       session,
@@ -2564,14 +2577,6 @@ async function handleProjectWorkbookReviewSessions(req, res, context, projectId)
     reviewRegions,
     importRun: importRun ? importRunSummary(importRun) : null,
   });
-}
-
-async function handleProjectWorkbookUnderstandings(req, res, context, projectId) {
-  const { project } = await projectAuth(req, context, projectId, "viewer");
-  const understandings = context.store.listWorkbookUnderstandings
-    ? await context.store.listWorkbookUnderstandings({ projectId: project.id })
-    : [];
-  sendJson(res, 200, { workbookUnderstandings: understandings.map(workbookUnderstandingSummary) });
 }
 
 async function handleProjectRegionUnderstandings(req, res, context, projectId) {
@@ -2772,116 +2777,6 @@ async function handleWorkbookReviewRegionIgnore(req, res, context, sessionId, re
   sendJson(res, 200, { region: await workbookReviewRegionSummary(context, ignored.region) });
 }
 
-function sendWorkbookReviewClarification(res, statusCode, error, workbookReviewSession) {
-  sendJson(res, statusCode || 400, {
-    workbookReviewSession: workbookReviewSessionSummary(workbookReviewSession),
-    session: workbookReviewSessionSummary(workbookReviewSession),
-    workbookUnderstandingDraft: workbookReviewSession?.currentUnderstanding || null,
-    messages: [],
-    clarification: error.details?.clarification || {
-      code: error.code || "workbook_review_revision_failed",
-      message: error.message || "Workbook review revision failed.",
-    },
-    validation: error.details?.validation || {
-      status: "invalid",
-      code: error.code || "workbook_review_revision_failed",
-    },
-  });
-}
-
-async function handleWorkbookReviewSessionRevision(req, res, context, sessionId) {
-  const { auth, workbookReviewSession } = await workbookReviewSessionAuth(req, context, sessionId, "editor");
-  const body = await readJsonBody(req);
-  const sourceDocument = await context.store.findSourceDocumentById?.(workbookReviewSession.sourceDocumentId);
-  const indexBlobs = sourceDocument && context.store.listSourceIndexBlobs
-    ? await context.store.listSourceIndexBlobs({ sourceDocumentId: sourceDocument.id })
-    : [];
-  if (!context.store.updateWorkbookReviewSession) {
-    sendError(res, 500, "workbook_review_session_unavailable", "Workbook review session store is unavailable.");
-    return;
-  }
-  let revision;
-  try {
-    revision = applyWorkbookReviewRevision({
-      workbookReviewSession,
-      sourceDocument,
-      indexBlobs,
-      body,
-      actorUserId: auth.user.id,
-    });
-  } catch (error) {
-    sendWorkbookReviewClarification(res, error.statusCode || 400, error, workbookReviewSession);
-    return;
-  }
-  const updated = await context.store.updateWorkbookReviewSession(workbookReviewSession.id, revision.sessionPatch);
-  await context.store.recordAuditEvent({
-    labId: workbookReviewSession.labId,
-    projectId: workbookReviewSession.projectId,
-    actorUserId: auth.user.id,
-    action: "workbook_review.revise",
-    targetType: "workbook_review_session",
-    targetId: workbookReviewSession.id,
-    summary: "Updated workbook understanding draft from user correction.",
-    metadata: {
-      sourceDocumentId: workbookReviewSession.sourceDocumentId,
-      redBoxUpdateCount: revision.validation.redBoxUpdateCount,
-      understandingDraftId: revision.workbookUnderstandingDraft.id,
-    },
-  });
-  sendJson(res, 200, {
-    workbookReviewSession: workbookReviewSessionSummary(updated),
-    session: workbookReviewSessionSummary(updated),
-    workbookUnderstandingDraft: revision.workbookUnderstandingDraft,
-    messages: revision.messages,
-    clarification: null,
-    validation: revision.validation,
-    changedRegions: revision.changedRegions,
-    revisionMode: revision.revisionMode,
-    activeDraftRegionId: revision.activeDraftRegionId,
-  });
-}
-
-async function handleWorkbookReviewSessionConfirm(req, res, context, sessionId) {
-  const { auth, workbookReviewSession } = await workbookReviewSessionAuth(req, context, sessionId, "editor");
-  const body = await readJsonBody(req);
-  if (!context.store.createWorkbookUnderstanding || !context.store.updateWorkbookReviewSession) {
-    sendError(res, 500, "workbook_understanding_unavailable", "Workbook understanding store is unavailable.");
-    return;
-  }
-  let confirmation;
-  try {
-    confirmation = buildWorkbookUnderstandingForConfirmation({
-      workbookReviewSession,
-      body,
-      actorUserId: auth.user.id,
-    });
-  } catch (error) {
-    sendError(res, error.statusCode || 400, error.code || "workbook_understanding_confirm_failed", error.message, error.details);
-    return;
-  }
-  const workbookUnderstanding = await context.store.createWorkbookUnderstanding(confirmation.understandingInput);
-  const updated = await context.store.updateWorkbookReviewSession(workbookReviewSession.id, confirmation.sessionPatch);
-  await context.store.recordAuditEvent({
-    labId: workbookReviewSession.labId,
-    projectId: workbookReviewSession.projectId,
-    actorUserId: auth.user.id,
-    action: "workbook_review.confirm_understanding",
-    targetType: "workbook_understanding",
-    targetId: workbookUnderstanding.id,
-    summary: "Confirmed workbook understanding.",
-    metadata: {
-      sourceDocumentId: workbookReviewSession.sourceDocumentId,
-      workbookReviewSessionId: workbookReviewSession.id,
-      factCount: asArray(workbookUnderstanding.facts).length,
-    },
-  });
-  sendJson(res, 200, {
-    workbookReviewSession: workbookReviewSessionSummary(updated),
-    session: workbookReviewSessionSummary(updated),
-    workbookUnderstanding: workbookUnderstandingSummary(workbookUnderstanding),
-  });
-}
-
 async function handleChartSpecFromProposal(req, res, context, projectId) {
   const { auth, project } = await projectAuth(req, context, projectId, "editor");
   const body = await readJsonBody(req);
@@ -3072,8 +2967,6 @@ async function dispatch(req, res, context) {
   if (workbookReviewSessionsMatch && (req.method === "GET" || req.method === "POST")) {
     return handleProjectWorkbookReviewSessions(req, res, context, workbookReviewSessionsMatch[1]);
   }
-  const workbookUnderstandingsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/workbook-understandings$/);
-  if (workbookUnderstandingsMatch && req.method === "GET") return handleProjectWorkbookUnderstandings(req, res, context, workbookUnderstandingsMatch[1]);
   const regionUnderstandingsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/region-understandings$/);
   if (regionUnderstandingsMatch && req.method === "GET") return handleProjectRegionUnderstandings(req, res, context, regionUnderstandingsMatch[1]);
   const sourceExtractProposalsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/source-extract-proposals$/);
@@ -3112,10 +3005,6 @@ async function dispatch(req, res, context) {
   }
   const workbookReviewSessionMatch = pathName.match(/^\/api\/workbook-review-sessions\/([^/]+)$/);
   if (workbookReviewSessionMatch && req.method === "GET") return handleWorkbookReviewSessionById(req, res, context, workbookReviewSessionMatch[1]);
-  const workbookReviewSessionRevisionMatch = pathName.match(/^\/api\/workbook-review-sessions\/([^/]+)\/revisions$/);
-  if (workbookReviewSessionRevisionMatch && req.method === "POST") return handleWorkbookReviewSessionRevision(req, res, context, workbookReviewSessionRevisionMatch[1]);
-  const workbookReviewSessionConfirmMatch = pathName.match(/^\/api\/workbook-review-sessions\/([^/]+)\/confirm$/);
-  if (workbookReviewSessionConfirmMatch && req.method === "POST") return handleWorkbookReviewSessionConfirm(req, res, context, workbookReviewSessionConfirmMatch[1]);
   const sourceExtractProposalChartMatch = pathName.match(/^\/api\/source-extract-proposals\/([^/]+)\/chart-proposal$/);
   if (sourceExtractProposalChartMatch && req.method === "POST") return handleSourceExtractChartProposal(req, res, context, sourceExtractProposalChartMatch[1]);
   const sourceExtractProposalMatch = pathName.match(/^\/api\/source-extract-proposals\/([^/]+)$/);

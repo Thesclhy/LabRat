@@ -237,6 +237,12 @@ describe("ProjectOverview", () => {
       ...projectState,
       sourceDocuments: [{ id: "source_doc_1" }],
       workbookReviewSessions: [{ id: "session_1" }],
+      workbookReviewRegions: [{
+        id: "region_1",
+        workbookReviewSessionId: "session_1",
+        disposition: "active",
+        reviewStatus: "awaiting_review",
+      }],
     };
 
     render(
@@ -263,11 +269,11 @@ describe("ProjectOverview", () => {
     expect(screen.queryByText("Supplemental Workbooks")).toBeNull();
     expect(screen.queryByText("Semantic mappings")).toBeNull();
     expect(screen.getByText("1 source documents")).toBeTruthy();
-    expect(screen.getByText(/1 review sessions/)).toBeTruthy();
+    expect(screen.getByText(/1 region needs review/)).toBeTruthy();
     expect(screen.getByText("1 accepted / 1 specs")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Open Ask LabRat" }));
-    fireEvent.click(screen.getByRole("button", { name: "Continue review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review regions" }));
     fireEvent.click(screen.getByRole("button", { name: "Open Experiment Browser" }));
     fireEvent.click(screen.getByRole("button", { name: "Review chart proposals" }));
     fireEvent.click(screen.getByRole("button", { name: "Manage approved charts" }));
@@ -339,7 +345,7 @@ describe("ProjectOverview", () => {
     expect(onOpenChartReview).toHaveBeenLastCalledWith("pending_1");
   });
 
-  it("shows accepted workbook review status after experiments are published", () => {
+  it("shows confirmed region status without requiring an accepted session", () => {
     const onUploadWorkbook = vi.fn();
     const onGoBrowser = vi.fn();
     render(
@@ -347,7 +353,13 @@ describe("ProjectOverview", () => {
         projectState={{
           ...projectState,
           sourceDocuments: [{ id: "source_doc_1" }],
-          workbookReviewSessions: [{ id: "session_1", status: "accepted" }],
+          workbookReviewSessions: [{ id: "session_1", status: "needs_user_review" }],
+          workbookReviewRegions: [{
+            id: "region_1",
+            workbookReviewSessionId: "session_1",
+            disposition: "active",
+            reviewStatus: "accepted",
+          }],
         }}
         onAskLabRat={() => {}}
         onOpenProfile={() => {}}
@@ -358,13 +370,13 @@ describe("ProjectOverview", () => {
       />,
     );
 
-    expect(screen.getByText(/1 accepted review/)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Continue review" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "View accepted review" }));
-    expect(onUploadWorkbook).toHaveBeenCalledWith({ id: "session_1", status: "accepted" });
+    expect(screen.getByText(/1 confirmed region/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Review regions" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "View confirmed regions" }));
+    expect(onUploadWorkbook).toHaveBeenCalledWith({ id: "session_1", status: "needs_user_review" });
   });
 
-  it("opens the latest pending review when pending and accepted sessions coexist", () => {
+  it("opens the session containing the latest region awaiting review", () => {
     const onUploadWorkbook = vi.fn();
     const pendingSession = {
       id: "session_pending",
@@ -379,8 +391,24 @@ describe("ProjectOverview", () => {
           workbookReviewSessions: [
             pendingSession,
             {
-              id: "session_accepted",
-              status: "accepted",
+              id: "session_confirmed",
+              status: "needs_user_review",
+              updatedAt: "2026-07-19T12:00:00.000Z",
+            },
+          ],
+          workbookReviewRegions: [
+            {
+              id: "region_pending",
+              workbookReviewSessionId: "session_pending",
+              disposition: "active",
+              reviewStatus: "awaiting_review",
+              updatedAt: "2026-07-20T12:00:00.000Z",
+            },
+            {
+              id: "region_confirmed",
+              workbookReviewSessionId: "session_confirmed",
+              disposition: "active",
+              reviewStatus: "accepted",
               updatedAt: "2026-07-19T12:00:00.000Z",
             },
           ],
@@ -394,7 +422,7 @@ describe("ProjectOverview", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Continue review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review regions" }));
     expect(onUploadWorkbook).toHaveBeenCalledWith(pendingSession);
   });
 
@@ -614,7 +642,6 @@ describe("WorkbookReviewWorkspace", () => {
       id: "session_1",
       status: "needs_user_review",
       workbookSummary: { workbookName: "Master.xlsx", sheetCount: 1, regionCount: 1, nonEmptyCellCount: 12 },
-      currentUnderstanding: {},
       messages: [{ id: "msg_1", role: "assistant", content: "I indexed Master.xlsx." }],
     },
     sourceDocument: {
@@ -1350,7 +1377,7 @@ describe("WorkbookReviewWorkspace", () => {
     } finally {
       global.fetch = originalFetch;
     }
-  });
+  }, 10_000);
 
   it("starts a newly selected sheet from its top visible tile", async () => {
     const sheets = [
@@ -1387,7 +1414,7 @@ describe("WorkbookReviewWorkspace", () => {
     } finally {
       global.fetch = originalFetch;
     }
-  });
+  }, 10_000);
 
   it("retains completed and empty tiles when switching sheets", async () => {
     const sheets = [
@@ -1413,7 +1440,7 @@ describe("WorkbookReviewWorkspace", () => {
       await screen.findByText("Sheet loaded: 6/6 ranges");
       const sheet1RequestCount = workbookRangeRequests(fetchMock, "Sheet1").length;
       fireEvent.click(screen.getByRole("button", { name: "Sheet2" }));
-      await screen.findByText("Sheet loaded: 3/3 ranges");
+      await screen.findByText("Sheet loaded: 3/3 ranges", {}, { timeout: 5_000 });
       fireEvent.click(screen.getByRole("button", { name: "Sheet1" }));
       await screen.findByText("Sheet loaded: 6/6 ranges");
 
@@ -2590,7 +2617,6 @@ describe("AgentPanel", () => {
             id: "session_1",
             status: "needs_user_review",
             workbookSummary: { workbookName: "Master.xlsx", sheetCount: 1, regionCount: 1, nonEmptyCellCount: 12 },
-            currentUnderstanding: {},
             messages: [{ id: "msg_1", role: "assistant", content: "I indexed Master.xlsx." }],
           },
           sourceDocument: {
@@ -2685,10 +2711,6 @@ describe("AgentPanel", () => {
           active: true,
           session: { id: "session_1", status: "needs_user_review" },
           workbookName: "Master.xlsx",
-          currentUnderstanding: {
-            id: "understanding_draft_1",
-            facts: [{ factId: "fact_1", kind: "region_description" }],
-          },
           pendingRedBoxes: [],
         }}
       />,

@@ -730,9 +730,9 @@ test("workbook review sessions summarize detected source regions and reuse index
   assert.equal(reusedBody.sourceDocument.id, createBody.sourceDocument.id);
 });
 
-test("workbook review revisions create and confirm accepted understandings without data/chart side effects", async () => {
-  const project = await createProject("Workbook Understanding Project");
-  const upload = await uploadProjectFile(project.id, makeWorkbookBlob(), "understanding.xlsx");
+test("aggregate workbook understanding routes stay retired", async () => {
+  const project = await createProject("Retired Workbook Understanding Project");
+  const upload = await uploadProjectFile(project.id, makeWorkbookBlob(), "retired-understanding.xlsx");
   const create = await jsonFetch(`/api/projects/${project.id}/workbook-review-sessions`, {
     method: "POST",
     body: { fileObjectId: upload.body.fileObject.id },
@@ -740,189 +740,26 @@ test("workbook review revisions create and confirm accepted understandings witho
   assert.equal(create.status, 201);
   const createBody = await create.json();
   const sessionId = createBody.workbookReviewSession.id;
-  const sourceDocumentId = createBody.sourceDocument.id;
 
   const revision = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/revisions`, {
     method: "POST",
-    body: {
-      message: "This red box is the experiment condition table; first row is the header.",
-      redBoxUpdates: [{
-        clientRegionId: "draft_region_client_1",
-        operation: "upsert",
-        sourceDocumentId,
-        sheetName: "Runs",
-        range: "A1:D3",
-        selectionMethod: "drag_select",
-        description: "experiment condition table",
-      }],
-    },
+    body: { message: "This old aggregate route must remain unavailable." },
   });
-  assert.equal(revision.status, 200);
-  const revisionBody = await revision.json();
-  assert.equal(revisionBody.validation.status, "valid");
-  assert.equal(revisionBody.workbookReviewSession.version, 2);
-  assert.equal(revisionBody.workbookUnderstandingDraft.facts[0].sheetName, "Runs");
-  assert.equal(revisionBody.workbookUnderstandingDraft.facts[0].range, "A1:D3");
-  assert.equal(revisionBody.workbookUnderstandingDraft.facts[0].semanticType, "experiment_table");
-  assert.equal(revisionBody.workbookUnderstandingDraft.facts[0].interpretation.experimentAxis, "rows");
-  assert.equal(revisionBody.workbookUnderstandingDraft.facts[0].interpretation.experimentIdColumn, "A");
-  assert.deepEqual(
-    revisionBody.workbookUnderstandingDraft.facts[0].interpretation.fields.map((field) => field.column),
-    ["B", "C", "D"],
-  );
-  assert.equal(revisionBody.workbookReviewSession.messages.some((message) => message.role === "user"), true);
-
-  const secondRevision = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/revisions`, {
-    method: "POST",
-    body: {
-      message: "Also track this second red box as notes.",
-      previousUnderstandingId: revisionBody.workbookUnderstandingDraft.id,
-      redBoxUpdates: [{
-        clientRegionId: "draft_region_client_2",
-        operation: "upsert",
-        sourceDocumentId,
-        sheetName: "Runs",
-        range: "A4:B5",
-        selectionMethod: "manual_range_input",
-        description: "notes and metadata",
-      }],
-    },
-  });
-  assert.equal(secondRevision.status, 200);
-  const secondRevisionBody = await secondRevision.json();
-  assert.equal(secondRevisionBody.workbookUnderstandingDraft.facts.length, 2);
-
-  const languageOnly = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/revisions`, {
-    method: "POST",
-    body: {
-      message: "Keep those two red boxes, but describe them as reviewed workbook evidence.",
-      previousUnderstandingId: secondRevisionBody.workbookUnderstandingDraft.id,
-      redBoxUpdates: [],
-    },
-  });
-  assert.equal(languageOnly.status, 200);
-  const languageOnlyBody = await languageOnly.json();
-  assert.equal(languageOnlyBody.workbookUnderstandingDraft.facts.length, 2);
-
-  const invalidRevision = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/revisions`, {
-    method: "POST",
-    body: {
-      message: "This sheet does not exist.",
-      redBoxUpdates: [{
-        clientRegionId: "draft_region_missing",
-        operation: "upsert",
-        sourceDocumentId,
-        sheetName: "Missing",
-        range: "A1:B2",
-      }],
-    },
-  });
-  assert.equal(invalidRevision.status, 404);
-  const invalidBody = await invalidRevision.json();
-  assert.equal(invalidBody.clarification.code, "source_sheet_not_found");
+  assert.equal(revision.status, 404);
 
   const confirm = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/confirm`, {
     method: "POST",
-    body: {
-      workbookUnderstandingId: languageOnlyBody.workbookUnderstandingDraft.id,
-      decisionSummary: { acceptedByUser: true, note: "Looks right." },
-    },
+    body: {},
   });
-  assert.equal(confirm.status, 200);
-  const confirmBody = await confirm.json();
-  assert.equal(confirmBody.workbookReviewSession.status, "accepted");
-  assert.equal(confirmBody.workbookUnderstanding.status, "accepted");
-  assert.equal(confirmBody.workbookUnderstanding.facts.length, 2);
-  assert.equal(confirmBody.workbookUnderstanding.understanding.status, "accepted");
-  assert.equal(confirmBody.workbookUnderstanding.understanding.draftRegions.every((region) => region.status === "accepted"), true);
-  assert.equal(confirmBody.workbookUnderstanding.understanding.regionSummaries.every((region) => region.status === "accepted"), true);
-  assert.equal(confirmBody.workbookUnderstanding.regionSummaries.every((region) => region.status === "accepted"), true);
+  assert.equal(confirm.status, 404);
 
   const understandings = await jsonFetch(`/api/projects/${project.id}/workbook-understandings`);
-  assert.equal(understandings.status, 200);
-  const understandingsBody = await understandings.json();
-  assert.equal(understandingsBody.workbookUnderstandings.some((item) => item.id === confirmBody.workbookUnderstanding.id), true);
-
-  const secondConfirm = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/confirm`, {
-    method: "POST",
-    body: { workbookUnderstandingId: languageOnlyBody.workbookUnderstandingDraft.id },
-  });
-  assert.equal(secondConfirm.status, 409);
+  assert.equal(understandings.status, 404);
 
   const state = await (await jsonFetch(`/api/projects/${project.id}/state`)).json();
-  assert.equal(state.datasetCommits, undefined);
-  assert.equal(state.chartSpecs.length, 0);
-  const sourceExtracts = await (await jsonFetch(`/api/projects/${project.id}/source-extract-proposals`)).json();
-  assert.equal(sourceExtracts.sourceExtractProposals.length, 0);
-});
-
-test("workbook understanding confirmation blocks unresolved experiment axis and region identity", async () => {
-  const project = await createProject("Workbook Interpretation Blockers Project");
-  const sparseUpload = await uploadProjectFile(project.id, makeSparseWorkbookBlob(), "mystery.xlsx");
-  const sparseCreate = await jsonFetch(`/api/projects/${project.id}/workbook-review-sessions`, {
-    method: "POST",
-    body: { fileObjectId: sparseUpload.body.fileObject.id },
-  });
-  assert.equal(sparseCreate.status, 201);
-  const sparseBody = await sparseCreate.json();
-  const sparseRevision = await jsonFetch(`/api/workbook-review-sessions/${sparseBody.workbookReviewSession.id}/revisions`, {
-    method: "POST",
-    body: {
-      message: "I cannot tell whether this is one experiment or several.",
-      redBoxUpdates: [{
-        clientRegionId: "draft_sparse",
-        sourceDocumentId: sparseBody.sourceDocument.id,
-        sheetName: "Mystery",
-        range: "A1:A3",
-        semanticType: "unknown_region",
-      }],
-    },
-  });
-  assert.equal(sparseRevision.status, 200);
-  const sparseRevisionBody = await sparseRevision.json();
-  assert.equal(sparseRevisionBody.workbookUnderstandingDraft.validation.blockers[0].code, "experiment_axis_required");
-
-  const sparseConfirm = await jsonFetch(`/api/workbook-review-sessions/${sparseBody.workbookReviewSession.id}/confirm`, {
-    method: "POST",
-    body: { workbookUnderstandingId: sparseRevisionBody.workbookUnderstandingDraft.id },
-  });
-  assert.equal(sparseConfirm.status, 409);
-  assert.equal((await sparseConfirm.json()).error.code, "experiment_axis_required");
-
-  const seriesUpload = await uploadProjectFile(project.id, makeUnlabelledSeriesWorkbookBlob(), "series.xlsx");
-  const seriesCreate = await jsonFetch(`/api/projects/${project.id}/workbook-review-sessions`, {
-    method: "POST",
-    body: { fileObjectId: seriesUpload.body.fileObject.id },
-  });
-  assert.equal(seriesCreate.status, 201);
-  const seriesBody = await seriesCreate.json();
-  const seriesRevision = await jsonFetch(`/api/workbook-review-sessions/${seriesBody.workbookReviewSession.id}/revisions`, {
-    method: "POST",
-    body: {
-      message: "This red box is reaction rate over time for one experiment.",
-      redBoxUpdates: [{
-        clientRegionId: "draft_series",
-        sourceDocumentId: seriesBody.sourceDocument.id,
-        sheetName: "Series",
-        range: "A1:B3",
-        semanticType: "reaction_rate_time_series",
-      }],
-      interpretationPatches: [{
-        draftRegionId: "draft_series",
-        experimentAxis: "region",
-      }],
-    },
-  });
-  assert.equal(seriesRevision.status, 200);
-  const seriesRevisionBody = await seriesRevision.json();
-  assert.equal(seriesRevisionBody.workbookUnderstandingDraft.validation.blockers[0].code, "experiment_label_required");
-
-  const seriesConfirm = await jsonFetch(`/api/workbook-review-sessions/${seriesBody.workbookReviewSession.id}/confirm`, {
-    method: "POST",
-    body: { workbookUnderstandingId: seriesRevisionBody.workbookUnderstandingDraft.id },
-  });
-  assert.equal(seriesConfirm.status, 409);
-  assert.equal((await seriesConfirm.json()).error.code, "experiment_label_required");
+  assert.equal(Array.isArray(state.workbookReviewRegions), true);
+  assert.equal(Array.isArray(state.regionUnderstandings), true);
+  assert.equal("workbookUnderstandings" in state, false);
 });
 
 test("project evidence retrieve returns accepted region revisions only as usable results", async () => {
@@ -1030,7 +867,7 @@ test("project data plan draft reloads accepted region revisions and returns a tr
   assert.equal(stateAfter.datasetCommits, undefined);
   assert.equal(stateBefore.datasetCommits, undefined);
   assert.equal(stateAfter.chartSpecs.length, stateBefore.chartSpecs.length);
-  assert.equal(stateAfter.workbookUnderstandings.length, stateBefore.workbookUnderstandings.length);
+  assert.equal(stateAfter.regionUnderstandings.length, stateBefore.regionUnderstandings.length);
   assert.equal(JSON.stringify(stateAfter).includes("data_plan_preview_"), false);
 
   const missingIdempotency = await jsonFetch(`/api/projects/${project.id}/data-plans/publish`, {
@@ -1485,68 +1322,6 @@ test("BrowserView routes persist only owner-scoped personal display state", asyn
   const deleteView = await jsonFetch(`/api/projects/${project.id}/browser-views/${secondView.id}`, { method: "DELETE" });
   assert.equal(deleteView.status, 200);
   assert.equal((await deleteView.json()).deleted, true);
-});
-
-test("workbook review revisions respond only about the current red box when replacing selection", async () => {
-  const project = await createProject("Workbook Current Selection Project");
-  const upload = await uploadProjectFile(project.id, makeWorkbookBlob(), "current-selection.xlsx");
-  const create = await jsonFetch(`/api/projects/${project.id}/workbook-review-sessions`, {
-    method: "POST",
-    body: { fileObjectId: upload.body.fileObject.id },
-  });
-  assert.equal(create.status, 201);
-  const createBody = await create.json();
-  const sessionId = createBody.workbookReviewSession.id;
-  const sourceDocumentId = createBody.sourceDocument.id;
-
-  const firstRevision = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/revisions`, {
-    method: "POST",
-    body: {
-      message: "This red box is the experiment condition table.",
-      redBoxUpdates: [{
-        clientRegionId: "draft_region_old",
-        operation: "upsert",
-        sourceDocumentId,
-        sheetName: "Runs",
-        range: "A1:D3",
-        selectionMethod: "drag_select",
-        description: "experiment condition table",
-      }],
-    },
-  });
-  assert.equal(firstRevision.status, 200);
-  const firstBody = await firstRevision.json();
-
-  const secondRevision = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/revisions`, {
-    method: "POST",
-    body: {
-      message: "new",
-      previousUnderstandingId: firstBody.workbookUnderstandingDraft.id,
-      revisionMode: "replace_current",
-      activeDraftRegionId: "draft_region_active",
-      redBoxUpdates: [{
-        clientRegionId: "draft_region_active",
-        draftRegionId: "draft_region_active",
-        operation: "upsert",
-        sourceDocumentId,
-        sheetName: "Runs",
-        range: "C1:D2",
-        selectionMethod: "drag_select",
-        description: "",
-      }],
-    },
-  });
-  assert.equal(secondRevision.status, 200);
-  const secondBody = await secondRevision.json();
-  assert.equal(secondBody.revisionMode, "replace_current");
-  assert.equal(secondBody.activeDraftRegionId, "draft_region_active");
-  assert.equal(secondBody.changedRegions.length, 1);
-  assert.equal(secondBody.changedRegions[0].range, "C1:D2");
-  const assistantMessage = secondBody.messages.find((message) => message.role === "assistant")?.content || "";
-  assert.match(assistantMessage, /I selected Runs!C1:D2/);
-  assert.doesNotMatch(assistantMessage, /A1:D3/);
-  assert.doesNotMatch(assistantMessage, /as unknown_region/);
-  assert.equal(secondBody.workbookUnderstandingDraft.pendingQuestions.some((question) => question.draftRegionId === "draft_region_active"), true);
 });
 
 test("source documents expose bounded ranges, cell search, and extract previews", async () => {

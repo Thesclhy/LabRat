@@ -245,12 +245,12 @@ describe("serverApi", () => {
 
     const clarificationFetch = vi.fn().mockResolvedValue(jsonResponse({
       resultKind: "clarification",
-      clarification: { code: "workbook_understanding_incomplete", message: "Review experiment identity first." },
+      clarification: { code: "region_understanding_incomplete", message: "Review experiment identity first." },
     }));
     await expect(draftServerProjectDataPlan("project_1", {
       regionUnderstandingRevisionIds: ["region_understanding_revision_1"],
     }, { fetch: clarificationFetch })).rejects.toMatchObject({
-      code: "workbook_understanding_incomplete",
+      code: "region_understanding_incomplete",
       message: "Review experiment identity first.",
     });
   });
@@ -275,7 +275,10 @@ describe("serverApi", () => {
         },
       }, { status: 409 }));
     const request = {
-      dataPlan: { id: "data_plan_preview_1", sourceEvidence: [{ workbookUnderstandingId: "wu_1" }] },
+      dataPlan: {
+        id: "data_plan_preview_1",
+        sourceEvidence: [{ regionUnderstandingRevisionId: "region_understanding_revision_1" }],
+      },
       identityDecisions: [{ sourceAlias: "Exp1", action: "create" }],
       expectedPreviewHash: "sha256_preview",
       expectedDependencyHash: "sha256_dependency",

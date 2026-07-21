@@ -214,8 +214,6 @@ function workbookReviewSessionFromRow(row) {
     status: row.status,
     version: row.version || 1,
     workbookSummary: row.workbook_summary || {},
-    currentUnderstanding: row.current_understanding || {},
-    regions: row.regions || [],
     messages: row.messages || [],
     warnings: row.warnings || [],
     createdAt: row.created_at,
@@ -281,29 +279,6 @@ function regionUnderstandingRevisionFromRow(row) {
     confidence: row.confidence,
     createdAt: row.created_at,
     createdBy: row.created_by,
-  };
-}
-
-function workbookUnderstandingFromRow(row) {
-  if (!row) return null;
-  return {
-    id: row.id,
-    labId: row.lab_id,
-    projectId: row.project_id,
-    sourceDocumentId: row.source_document_id,
-    workbookReviewSessionId: row.workbook_review_session_id,
-    schemaVersion: row.schema_version || "labrat.workbookUnderstanding.v1",
-    status: row.status,
-    version: row.version || 1,
-    understanding: row.understanding || {},
-    facts: row.facts || [],
-    regionSummaries: row.region_summaries || [],
-    warnings: row.warnings || [],
-    decisionSummary: row.decision_summary || {},
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    createdBy: row.created_by,
-    updatedBy: row.updated_by,
   };
 }
 
@@ -1265,8 +1240,8 @@ export class PostgresSaasStore {
   async createWorkbookReviewSession(input) {
     const result = await this.query(
       `insert into workbook_review_sessions
-       (id, lab_id, project_id, source_document_id, schema_version, status, version, workbook_summary, current_understanding, regions, messages, warnings, created_at, updated_at, created_by, updated_by)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now(), now(), $13, $13)
+       (id, lab_id, project_id, source_document_id, schema_version, status, version, workbook_summary, messages, warnings, created_at, updated_at, created_by, updated_by)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(), now(), $11, $11)
        returning *`,
       [
         input.id || makeId("workbook_review_session"),
@@ -1277,8 +1252,6 @@ export class PostgresSaasStore {
         input.status || "needs_user_review",
         input.version || 1,
         jsonb(input.workbookSummary || {}),
-        jsonb(input.currentUnderstanding || {}),
-        jsonb(input.regions || [], []),
         jsonb(input.messages || [], []),
         jsonb(input.warnings || [], []),
         input.createdBy,
@@ -1298,12 +1271,10 @@ export class PostgresSaasStore {
        set status = coalesce($2, status),
            version = coalesce($3, version),
            workbook_summary = coalesce($4, workbook_summary),
-           current_understanding = coalesce($5, current_understanding),
-           regions = coalesce($6, regions),
-           messages = coalesce($7, messages),
-           warnings = coalesce($8, warnings),
+           messages = coalesce($5, messages),
+           warnings = coalesce($6, warnings),
            updated_at = now(),
-           updated_by = coalesce($9, updated_by)
+           updated_by = coalesce($7, updated_by)
        where id = $1
        returning *`,
       [
@@ -1311,8 +1282,6 @@ export class PostgresSaasStore {
         patch.status ?? null,
         patch.version ?? null,
         patch.workbookSummary === undefined ? null : jsonb(patch.workbookSummary),
-        patch.currentUnderstanding === undefined ? null : jsonb(patch.currentUnderstanding),
-        patch.regions === undefined ? null : jsonb(patch.regions, []),
         patch.messages === undefined ? null : jsonb(patch.messages, []),
         patch.warnings === undefined ? null : jsonb(patch.warnings, []),
         patch.updatedBy ?? null,
@@ -1492,40 +1461,6 @@ export class PostgresSaasStore {
     return accepted.flatMap((region, index) => (
       revisions[index] ? [{ region, revision: revisions[index] }] : []
     ));
-  }
-
-  async createWorkbookUnderstanding(input) {
-    const result = await this.query(
-      `insert into workbook_understandings
-       (id, lab_id, project_id, source_document_id, workbook_review_session_id, schema_version, status, version, understanding, facts, region_summaries, warnings, decision_summary, created_at, updated_at, created_by, updated_by)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now(), now(), $14, $14)
-       returning *`,
-      [
-        input.id || makeId("workbook_understanding"),
-        input.labId,
-        input.projectId,
-        input.sourceDocumentId,
-        input.workbookReviewSessionId,
-        input.schemaVersion || "labrat.workbookUnderstanding.v1",
-        input.status || "accepted",
-        input.version || 1,
-        jsonb(input.understanding || {}),
-        jsonb(input.facts || [], []),
-        jsonb(input.regionSummaries || [], []),
-        jsonb(input.warnings || [], []),
-        jsonb(input.decisionSummary || {}),
-        input.createdBy,
-      ],
-    );
-    return workbookUnderstandingFromRow(result.rows[0]);
-  }
-
-  async listWorkbookUnderstandings({ projectId }) {
-    const result = await this.query(
-      "select * from workbook_understandings where project_id = $1 order by updated_at desc",
-      [projectId],
-    );
-    return result.rows.map(workbookUnderstandingFromRow);
   }
 
   async findDataPlanById(id) {

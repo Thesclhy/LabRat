@@ -36,7 +36,6 @@ export class MemorySaasStore {
     this.sourceIndexBlobs = new Map();
     this.sourceExtractProposals = new Map();
     this.workbookReviewSessions = new Map();
-    this.workbookUnderstandings = new Map();
     this.workbookReviewRegions = new Map();
     this.regionUnderstandingRevisions = new Map();
     this.dataPlans = new Map();
@@ -518,8 +517,6 @@ export class MemorySaasStore {
       status: input.status || "needs_user_review",
       version: input.version || 1,
       workbookSummary: copy(input.workbookSummary) || {},
-      currentUnderstanding: copy(input.currentUnderstanding) || {},
-      regions: copy(input.regions) || [],
       messages: copy(input.messages) || [],
       warnings: copy(input.warnings) || [],
       createdAt,
@@ -541,7 +538,11 @@ export class MemorySaasStore {
     const updatedAt = nowIso();
     const next = {
       ...existing,
-      ...copy(patch),
+      status: patch.status ?? existing.status,
+      version: patch.version ?? existing.version,
+      workbookSummary: patch.workbookSummary === undefined ? existing.workbookSummary : copy(patch.workbookSummary),
+      messages: patch.messages === undefined ? existing.messages : copy(patch.messages),
+      warnings: patch.warnings === undefined ? existing.warnings : copy(patch.warnings),
       id: existing.id,
       labId: existing.labId,
       projectId: existing.projectId,
@@ -693,38 +694,6 @@ export class MemorySaasStore {
       const revision = this.regionUnderstandingRevisions.get(region.acceptedRevisionId);
       return revision ? [{ region: copy(region), revision: copy(revision) }] : [];
     });
-  }
-
-  async createWorkbookUnderstanding(input) {
-    const createdAt = nowIso();
-    const understanding = {
-      id: input.id || makeId("workbook_understanding"),
-      labId: input.labId,
-      projectId: input.projectId,
-      sourceDocumentId: input.sourceDocumentId,
-      workbookReviewSessionId: input.workbookReviewSessionId,
-      schemaVersion: input.schemaVersion || "labrat.workbookUnderstanding.v1",
-      status: input.status || "accepted",
-      version: input.version || 1,
-      understanding: copy(input.understanding) || {},
-      facts: copy(input.facts) || [],
-      regionSummaries: copy(input.regionSummaries) || [],
-      warnings: copy(input.warnings) || [],
-      decisionSummary: copy(input.decisionSummary) || {},
-      createdAt,
-      updatedAt: createdAt,
-      createdBy: input.createdBy,
-      updatedBy: input.createdBy,
-    };
-    this.workbookUnderstandings.set(understanding.id, understanding);
-    return copy(understanding);
-  }
-
-  async listWorkbookUnderstandings({ projectId }) {
-    return [...this.workbookUnderstandings.values()]
-      .filter((understanding) => understanding.projectId === projectId)
-      .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
-      .map(copy);
   }
 
   async findDataPlanById(id) {

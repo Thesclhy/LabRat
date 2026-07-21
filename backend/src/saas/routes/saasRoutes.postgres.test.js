@@ -239,46 +239,37 @@ test("Postgres SaaS routes preserve workbook review, source documents, and suppo
     const rangeBody = await range.json();
     assert.equal(rangeBody.cells.find((cell) => cell.address === "B2").rawValue, 5);
 
-    const revision = await jsonFetch(`/api/workbook-review-sessions/${reviewBody.workbookReviewSession.id}/revisions`, {
-      method: "POST",
-      body: {
-        message: "This red box is the Exp30 carbon number distribution.",
-        redBoxUpdates: [{
-          clientRegionId: "draft_region_pg_1",
-          operation: "upsert",
-          sourceDocumentId: reviewBody.sourceDocument.id,
-          sheetName: "Sheet1",
-          range: "A1:E3",
-          selectionMethod: "drag_select",
-          description: "Exp30 carbon number distribution",
-        }],
-      },
-    });
-    assert.equal(revision.status, 200);
-    const revisionBody = await revision.json();
-    assert.equal(revisionBody.workbookUnderstandingDraft.facts[0].semanticType, "component_distribution");
+    const reviewRegion = reviewBody.reviewRegions.find((region) => region.rangeRef === "A1:E3")
+      || reviewBody.reviewRegions[0];
+    assert.equal(reviewRegion.currentRevision.semanticType, "component_distribution");
 
-    const confirmedUnderstanding = await jsonFetch(`/api/workbook-review-sessions/${reviewBody.workbookReviewSession.id}/confirm`, {
+    const confirmedUnderstanding = await jsonFetch(
+      `/api/workbook-review-sessions/${reviewBody.workbookReviewSession.id}/regions/${reviewRegion.id}/confirm`,
+      {
       method: "POST",
       body: {
-        workbookUnderstandingId: revisionBody.workbookUnderstandingDraft.id,
-        decisionSummary: { acceptedByUser: true },
+        revisionId: reviewRegion.currentRevision.id,
+        expectedRegionVersion: reviewRegion.version,
+        idempotencyKey: "postgres_confirm_region_1",
       },
-    });
+      },
+    );
     assert.equal(confirmedUnderstanding.status, 200);
     const confirmedUnderstandingBody = await confirmedUnderstanding.json();
-    assert.equal(confirmedUnderstandingBody.workbookUnderstanding.status, "accepted");
+    assert.equal(confirmedUnderstandingBody.region.reviewStatus, "confirmed");
 
-    const listedUnderstandings = await jsonFetch(`/api/projects/${project.project.id}/workbook-understandings`);
+    const listedUnderstandings = await jsonFetch(`/api/projects/${project.project.id}/region-understandings?status=accepted`);
     assert.equal(listedUnderstandings.status, 200);
     const listedUnderstandingsBody = await listedUnderstandings.json();
-    assert.equal(listedUnderstandingsBody.workbookUnderstandings.some((item) => item.id === confirmedUnderstandingBody.workbookUnderstanding.id), true);
+    assert.equal(listedUnderstandingsBody.regionUnderstandings.some(
+      (item) => item.revision.id === confirmedUnderstandingBody.acceptedRevision.id,
+    ), true);
 
     const dataPlanDraft = await jsonFetch(`/api/projects/${project.project.id}/data-plans/draft`, {
       method: "POST",
       body: {
         intent: "experiment_browser_publish",
-        workbookUnderstandingIds: [confirmedUnderstandingBody.workbookUnderstanding.id],
+        regionUnderstandingRevisionIds: [confirmedUnderstandingBody.acceptedRevision.id],
         identityDecisions: [],
       },
     });
@@ -290,7 +281,7 @@ test("Postgres SaaS routes preserve workbook review, source documents, and suppo
       method: "POST",
       body: {
         intent: "experiment_browser_publish",
-        workbookUnderstandingIds: [confirmedUnderstandingBody.workbookUnderstanding.id],
+        regionUnderstandingRevisionIds: [confirmedUnderstandingBody.acceptedRevision.id],
         identityDecisions: [{ sourceAlias: experimentAlias, action: "create" }],
       },
     });

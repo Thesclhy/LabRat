@@ -849,10 +849,20 @@ function ProjectFlowItem({ done, label, detail }) {
 export function ProjectOverview({ projectState, onAskLabRat, onOpenProfile, onUploadWorkbook, onGoBrowser, onOpenChartReview, onGoManuscript }) {
   const summary = projectWorkflowSummary(projectState?.project, projectState);
   const workbookReviewSessions = asArray(projectState?.workbookReviewSessions);
-  const pendingWorkbookReviewSessions = workbookReviewSessions.filter((session) => session?.status !== "accepted");
-  const acceptedWorkbookReviewSessions = workbookReviewSessions.filter((session) => session?.status === "accepted");
-  const pendingWorkbookReviewSession = latestItem(pendingWorkbookReviewSessions);
-  const acceptedWorkbookReviewSession = latestItem(acceptedWorkbookReviewSessions);
+  const activeWorkbookReviewRegions = asArray(projectState?.workbookReviewRegions)
+    .filter((region) => !region?.disposition || region.disposition === "active");
+  const pendingWorkbookReviewRegions = activeWorkbookReviewRegions
+    .filter((region) => region?.reviewStatus !== "accepted");
+  const confirmedWorkbookReviewRegions = activeWorkbookReviewRegions
+    .filter((region) => region?.reviewStatus === "accepted");
+  const pendingWorkbookReviewRegion = latestItem(pendingWorkbookReviewRegions);
+  const confirmedWorkbookReviewRegion = latestItem(confirmedWorkbookReviewRegions);
+  const pendingWorkbookReviewSession = workbookReviewSessions.find(
+    (session) => session?.id === pendingWorkbookReviewRegion?.workbookReviewSessionId,
+  ) || latestItem(workbookReviewSessions);
+  const confirmedWorkbookReviewSession = workbookReviewSessions.find(
+    (session) => session?.id === confirmedWorkbookReviewRegion?.workbookReviewSessionId,
+  ) || latestItem(workbookReviewSessions);
   const sourceDocumentCount = asArray(projectState?.sourceDocuments).length;
   const pendingChartProposals = pendingChartProposalsForProject(projectState);
   const activeChartProposalSummary = activeChartProposalSummaryForProject(projectState);
@@ -864,15 +874,17 @@ export function ProjectOverview({ projectState, onAskLabRat, onOpenProfile, onUp
       : "Accepted proposals and durable ChartSpecs appear here after review";
   const nextAction = !summary.profileComplete
     ? { label: "Edit profile", action: onOpenProfile }
-    : pendingWorkbookReviewSessions.length
-      ? { label: "Continue workbook review", action: () => onUploadWorkbook?.(pendingWorkbookReviewSession) }
+    : pendingWorkbookReviewRegions.length
+      ? { label: "Review workbook regions", action: () => onUploadWorkbook?.(pendingWorkbookReviewSession) }
       : !sourceDocumentCount
         ? { label: "Upload workbook", action: onAskLabRat }
         : summary.hasPublishedData
           ? { label: "Open Experiment Browser", action: onGoBrowser }
-          : acceptedWorkbookReviewSessions.length
-            ? { label: "View accepted review", action: () => onUploadWorkbook?.(acceptedWorkbookReviewSession) }
-    : !summary.chartSpecCount
+          : confirmedWorkbookReviewRegions.length
+            ? { label: "View confirmed regions", action: () => onUploadWorkbook?.(confirmedWorkbookReviewSession) }
+            : workbookReviewSessions.length
+              ? { label: "Review workbook", action: () => onUploadWorkbook?.(latestItem(workbookReviewSessions)) }
+              : !summary.chartSpecCount
         ? { label: "Review chart proposals", action: onOpenChartReview }
         : { label: "Build manuscript", action: onGoManuscript };
   return (
@@ -896,25 +908,31 @@ export function ProjectOverview({ projectState, onAskLabRat, onOpenProfile, onUp
         <ProjectOverviewCard
           title="Workbook review"
           value={`${sourceDocumentCount} source documents`}
-          detail={pendingWorkbookReviewSessions.length
-            ? `${pendingWorkbookReviewSessions.length} review sessions need confirmation before data or charts.`
-            : acceptedWorkbookReviewSessions.length
-              ? `${acceptedWorkbookReviewSessions.length} accepted review${acceptedWorkbookReviewSessions.length === 1 ? "" : "s"}. Workbook meaning is confirmed${summary.hasPublishedData ? ` and ${summary.publishedExperimentCount} experiments are published` : ""}.`
-              : "Upload any Excel workbook and review detected source regions before extracting data."}
-          action={pendingWorkbookReviewSessions.length
-            ? "Continue review"
-            : acceptedWorkbookReviewSessions.length
-              ? "View accepted review"
-              : "Upload workbook"}
+          detail={pendingWorkbookReviewRegions.length
+            ? `${pendingWorkbookReviewRegions.length} ${pendingWorkbookReviewRegions.length === 1 ? "region needs" : "regions need"} review. ${confirmedWorkbookReviewRegions.length} confirmed.`
+            : confirmedWorkbookReviewRegions.length
+              ? `${confirmedWorkbookReviewRegions.length} confirmed region${confirmedWorkbookReviewRegions.length === 1 ? "" : "s"}.${summary.hasPublishedData ? ` ${summary.publishedExperimentCount} experiments are published.` : " Confirmed selections are ready for data planning."}`
+              : workbookReviewSessions.length
+                ? "No active region has been confirmed. Open the workbook to select or review source regions."
+                : "Upload any Excel workbook and review detected source regions before extracting data."}
+          action={pendingWorkbookReviewRegions.length
+            ? "Review regions"
+            : confirmedWorkbookReviewRegions.length
+              ? "View confirmed regions"
+              : workbookReviewSessions.length
+                ? "Review workbook"
+                : "Upload workbook"}
           onClick={pendingWorkbookReviewSession
             ? () => onUploadWorkbook?.(pendingWorkbookReviewSession)
-            : acceptedWorkbookReviewSession
-              ? () => onUploadWorkbook?.(acceptedWorkbookReviewSession)
+            : confirmedWorkbookReviewSession
+              ? () => onUploadWorkbook?.(confirmedWorkbookReviewSession)
               : onAskLabRat}
-          actionTitle={pendingWorkbookReviewSessions.length
-            ? "Open the latest unfinished workbook review session"
-            : acceptedWorkbookReviewSessions.length
-              ? "Inspect the accepted workbook understanding"
+          actionTitle={pendingWorkbookReviewRegions.length
+            ? "Open the session containing the latest region awaiting review"
+            : confirmedWorkbookReviewRegions.length
+              ? "Inspect confirmed workbook regions"
+              : workbookReviewSessions.length
+                ? "Open the latest workbook review session"
               : "Open Ask LabRat, then use the + button to attach a spreadsheet"}
         />
         <ProjectOverviewCard

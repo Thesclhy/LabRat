@@ -15,6 +15,22 @@ Keep entries concise, newest first, and include:
 
 ## 2026-07-20
 
+- Completed region-understanding implementation Task 6. Retired aggregate
+  WorkbookUnderstanding persistence, project-state fields, session revision /
+  confirmation handlers, project listing route, frontend API helpers, and the
+  obsolete client review-state compatibility module. Migration 014 drops the
+  aggregate table and embedded session columns; WorkbookReviewSession now only
+  groups source review activity and exposes transient upload-time candidates.
+  Project Overview derives review progress from active region statuses, opens
+  the session containing the latest pending region, and never claims an entire
+  workbook is accepted. Tests now pin the retired routes to 404 and require
+  region-only project state. Verification: backend region/session/route coverage
+  passed 37/37; frontend API, region dock, and ProjectDashboard coverage passed
+  75/75; syntax and diff checks passed. The optional Postgres route test was
+  skipped because no test database is configured. Three full-sheet UI tests
+  were confirmed independently before their condition-wait budgets were made
+  robust for cumulative JSDOM execution. Next: reconcile active contracts and
+  golden workflow docs, then run full verification and browser QA.
 - Completed region-understanding implementation Task 5. Workbook Review now
   keeps the full progressively loaded Excel grid beside compact LabRat region
   cards. Each server-owned region independently shows its range, 2-4 sentence
