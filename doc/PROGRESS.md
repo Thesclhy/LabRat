@@ -15,6 +15,20 @@ Keep entries concise, newest first, and include:
 
 ## 2026-07-20
 
+- Completed region-understanding implementation Task 5. Workbook Review now
+  keeps the full progressively loaded Excel grid beside compact LabRat region
+  cards. Each server-owned region independently shows its range, 2-4 sentence
+  backend AI summary, confidence, notices, revision state, feedback input,
+  revise, exact-revision confirm, ignore, and logical delete; accepted deletion
+  requires confirmation. Drag/right-click creates a new backend region, card
+  focus alone controls the blue range, and Ctrl-drag no longer toggles or
+  removes prior regions. DataPlan review collects every active accepted revision
+  in the current session. Removed the checkbox set, structured fallback editor,
+  and workbook-wide confirmation from the UI. Verification: frontend API/dock/
+  complete ProjectDashboard coverage passed 75/75, the long-range focus case
+  passed independently, and the production build passed with the existing
+  Plotly chunk warning. Next: retire aggregate WorkbookUnderstanding storage,
+  routes, helpers, and project-state fields.
 - Completed region-understanding implementation Tasks 1-4. Added migration 013
   plus memory/Postgres parity for stable workbook regions and immutable
   revisions; backend-only bounded model interpretation; independent nested

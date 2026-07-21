@@ -3,7 +3,8 @@ import {
   ServerApiError,
   cancelServerAgentRun,
   confirmServerAgentRun,
-  confirmServerWorkbookReviewSession,
+  confirmServerWorkbookReviewRegion,
+  createServerWorkbookReviewRegion,
   createServerAgentRun,
   createServerChartSpecFromProposal,
   createServerManuscript,
@@ -20,7 +21,9 @@ import {
   interpretServerProjectChartIntent,
   listServerSourceDocumentRegions,
   listServerSourceDocuments,
-  listServerWorkbookUnderstandings,
+  listServerRegionUnderstandings,
+  listServerWorkbookReviewRegionRevisions,
+  listServerWorkbookReviewRegions,
   listServerWorkbookReviewSessions,
   listServerProjects,
   loginToServer,
@@ -32,7 +35,9 @@ import {
   previewServerSourceDocumentExtract,
   previewServerSourceRegionExtract,
   readServerSourceDocumentRange,
-  reviseServerWorkbookReviewSession,
+  reviseServerWorkbookReviewRegion,
+  ignoreServerWorkbookReviewRegion,
+  deleteServerWorkbookReviewRegion,
   retrieveProjectEvidence,
   createServerSourceExtractChartProposal,
   uploadServerProjectFile,
@@ -128,59 +133,64 @@ describe("serverApi", () => {
     expect(fetchImpl.mock.calls[4][0]).toBe("/api/workbook-review-sessions/session_1");
   });
 
-  it("routes workbook understanding revision and confirmation helpers", async () => {
+  it("routes independent workbook region lifecycle helpers", async () => {
     const fetchImpl = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({ workbookReviewSession: { id: "session_1" }, workbookUnderstandingDraft: { id: "draft_1" } }))
-      .mockResolvedValueOnce(jsonResponse({ workbookReviewSession: { id: "session_1", status: "accepted" }, workbookUnderstanding: { id: "understanding_1" } }))
-      .mockResolvedValueOnce(jsonResponse({ workbookUnderstandings: [{ id: "understanding_1" }] }));
+      .mockResolvedValue(jsonResponse({ region: { id: "region_1" } }));
 
-    await reviseServerWorkbookReviewSession("session_1", {
-      message: "This is the experiment table.",
-      previousUnderstandingId: "draft_previous",
-      revisionMode: "replace_current",
-      activeDraftRegionId: "draft_region_1",
-      redBoxUpdates: [{
-        clientRegionId: "draft_region_1",
-        sourceDocumentId: "source_doc_1",
-        sheetName: "Runs",
-        range: "A1:D3",
-      }],
-      interpretationPatches: [{
-        draftRegionId: "draft_region_1",
-        experimentAxis: "rows",
-        experimentIdColumn: "A",
-      }],
+    await listServerWorkbookReviewRegions("session_1", { fetch: fetchImpl });
+    await createServerWorkbookReviewRegion("session_1", {
+      sourceDocumentId: "source_doc_1",
+      sheetName: "Runs",
+      range: "A1:D3",
+      selectionMethod: "drag_select",
+      idempotencyKey: "create_region_1",
     }, { fetch: fetchImpl });
-    await confirmServerWorkbookReviewSession("session_1", {
-      workbookUnderstandingId: "draft_1",
-      decisionSummary: { acceptedByUser: true },
+    await listServerWorkbookReviewRegionRevisions("session_1", "region_1", { fetch: fetchImpl });
+    await reviseServerWorkbookReviewRegion("session_1", "region_1", {
+      feedback: "Temperature and selectivity are separate fields.",
+      previousRevisionId: "revision_1",
+      expectedRegionVersion: 2,
+      idempotencyKey: "revise_region_1",
     }, { fetch: fetchImpl });
-    await listServerWorkbookUnderstandings("project_1", { fetch: fetchImpl });
+    await confirmServerWorkbookReviewRegion("session_1", "region_1", {
+      revisionId: "revision_2",
+      expectedRegionVersion: 3,
+      idempotencyKey: "confirm_region_1",
+    }, { fetch: fetchImpl });
+    await ignoreServerWorkbookReviewRegion("session_1", "region_1", {
+      expectedRegionVersion: 4,
+      reason: "Not experiment data.",
+    }, { fetch: fetchImpl });
+    await deleteServerWorkbookReviewRegion("session_1", "region_1", {
+      expectedRegionVersion: 5,
+      reason: "Duplicate selection.",
+    }, { fetch: fetchImpl });
+    await listServerRegionUnderstandings("project_1", { status: "accepted", fetch: fetchImpl });
 
-    expect(fetchImpl.mock.calls[0][0]).toBe("/api/workbook-review-sessions/session_1/revisions");
-    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
-      message: "This is the experiment table.",
-      previousUnderstandingId: "draft_previous",
-      revisionMode: "replace_current",
-      activeDraftRegionId: "draft_region_1",
-      redBoxUpdates: [{
-        clientRegionId: "draft_region_1",
-        sourceDocumentId: "source_doc_1",
-        sheetName: "Runs",
-        range: "A1:D3",
-      }],
-      interpretationPatches: [{
-        draftRegionId: "draft_region_1",
-        experimentAxis: "rows",
-        experimentIdColumn: "A",
-      }],
-    });
-    expect(fetchImpl.mock.calls[1][0]).toBe("/api/workbook-review-sessions/session_1/confirm");
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/workbook-review-sessions/session_1/regions");
+    expect(fetchImpl.mock.calls[0][1].method).toBe("GET");
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/workbook-review-sessions/session_1/regions");
+    expect(fetchImpl.mock.calls[1][1].method).toBe("POST");
+    expect(fetchImpl.mock.calls[2][0]).toBe("/api/workbook-review-sessions/session_1/regions/region_1/revisions");
+    expect(fetchImpl.mock.calls[2][1].method).toBe("GET");
+    expect(fetchImpl.mock.calls[3][0]).toBe("/api/workbook-review-sessions/session_1/regions/region_1/revisions");
     expect(JSON.parse(fetchImpl.mock.calls[1][1].body)).toEqual({
-      workbookUnderstandingId: "draft_1",
-      decisionSummary: { acceptedByUser: true },
+      sourceDocumentId: "source_doc_1",
+      sheetName: "Runs",
+      range: "A1:D3",
+      selectionMethod: "drag_select",
+      idempotencyKey: "create_region_1",
     });
-    expect(fetchImpl.mock.calls[2][0]).toBe("/api/projects/project_1/workbook-understandings");
+    expect(JSON.parse(fetchImpl.mock.calls[3][1].body)).toEqual({
+      feedback: "Temperature and selectivity are separate fields.",
+      previousRevisionId: "revision_1",
+      expectedRegionVersion: 2,
+      idempotencyKey: "revise_region_1",
+    });
+    expect(fetchImpl.mock.calls[4][0]).toBe("/api/workbook-review-sessions/session_1/regions/region_1/confirm");
+    expect(fetchImpl.mock.calls[5][0]).toBe("/api/workbook-review-sessions/session_1/regions/region_1/ignore");
+    expect(fetchImpl.mock.calls[6][1].method).toBe("DELETE");
+    expect(fetchImpl.mock.calls[7][0]).toBe("/api/projects/project_1/region-understandings?status=accepted");
   });
 
   it("routes project evidence retrieval helper", async () => {
@@ -219,7 +229,7 @@ describe("serverApi", () => {
 
     await draftServerProjectDataPlan("project_1", {
       intent: "experiment_browser_publish",
-      workbookUnderstandingIds: ["workbook_understanding_1"],
+      regionUnderstandingRevisionIds: ["region_understanding_revision_1"],
       identityDecisions: [{ sourceAlias: "Exp1", action: "create" }],
     }, { fetch: fetchImpl });
 
@@ -227,7 +237,7 @@ describe("serverApi", () => {
     expect(fetchImpl.mock.calls[0][1].method).toBe("POST");
     expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
       intent: "experiment_browser_publish",
-      workbookUnderstandingIds: ["workbook_understanding_1"],
+      regionUnderstandingRevisionIds: ["region_understanding_revision_1"],
       identityDecisions: [{ sourceAlias: "Exp1", action: "create" }],
     });
     expect(() => draftServerProjectDataPlan("", { query: "x" }, { fetch: fetchImpl }))
@@ -238,7 +248,7 @@ describe("serverApi", () => {
       clarification: { code: "workbook_understanding_incomplete", message: "Review experiment identity first." },
     }));
     await expect(draftServerProjectDataPlan("project_1", {
-      workbookUnderstandingIds: ["workbook_understanding_1"],
+      regionUnderstandingRevisionIds: ["region_understanding_revision_1"],
     }, { fetch: clarificationFetch })).rejects.toMatchObject({
       code: "workbook_understanding_incomplete",
       message: "Review experiment identity first.",

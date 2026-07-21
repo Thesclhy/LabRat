@@ -46,16 +46,18 @@ import {
   patchServerProjectProfile,
   patchServerSourceExtractProposal,
   planServerProjectAgent,
-  reviseServerWorkbookReviewSession,
+  reviseServerWorkbookReviewRegion,
   readServerSourceDocumentRange,
-  confirmServerWorkbookReviewSession,
+  confirmServerWorkbookReviewRegion,
+  createServerWorkbookReviewRegion,
+  ignoreServerWorkbookReviewRegion,
+  deleteServerWorkbookReviewRegion,
   createServerSourceExtractChartProposal,
   uploadServerProjectFile,
 } from "./data/serverApi.js";
 import { ls } from "./storage/localStorage";
 import { experimentDateSortValue, formatExperimentDateForDisplay } from "./utils/date.js";
 import { fmt, uid } from "./utils/format";
-import { initialWorkbookDraftRegions, reconcileWorkbookDraftRegions } from "./data/workbookReviewState.js";
 import {
   boundsContainCell,
   getWorkbookTileCacheEntry,
@@ -94,7 +96,8 @@ function workbookSuggestionSheet(region) {
 function workbookReviewSuggestionsFromResponse(response = {}) {
   const sourceDocument = response.sourceDocument || null;
   const sourceDocumentId = sourceDocument?.id || response.workbookReviewSession?.sourceDocumentId || response.session?.sourceDocumentId || "";
-  const regionSuggestions = asArray(response.regions)
+  const reviewRegions = asArray(response.reviewRegions);
+  const regionSuggestions = asArray(reviewRegions.length ? reviewRegions : response.regions)
     .map((region) => {
       const sheetName = workbookSuggestionSheet(region);
       const range = workbookSuggestionRange(region);
@@ -102,13 +105,14 @@ function workbookReviewSuggestionsFromResponse(response = {}) {
       return {
         sourceDocumentId: region.sourceDocumentId || sourceDocumentId,
         sourceRegionId: region.id || "",
+        reviewRegionId: reviewRegions.length ? region.id : "",
         sheetName,
         range,
-        label: region.label || region.kind || "Detected source region",
-        confidence: region.confidence ?? null,
-        reason: region.kind || "detected_source_region",
-        description: region.label || region.kind || "",
-        selectionMethod: "suggestion_click",
+        label: region.currentRevision?.summary?.[0] || region.label || region.kind || "Detected source region",
+        confidence: region.currentRevision?.confidence ?? region.confidence ?? null,
+        reason: region.currentRevision?.interpretation?.semanticType || region.kind || "detected_source_region",
+        description: region.currentRevision?.summary?.join(" ") || region.label || region.kind || "",
+        selectionMethod: reviewRegions.length ? "red_box_click" : "suggestion_click",
       };
     })
     .filter(Boolean);
@@ -269,7 +273,7 @@ function findWorkbookDraftRegionById(regions, id) {
   const targetId = String(id || "");
   if (!targetId) return null;
   return asArray(regions).find((region) => (
-    region.draftRegionId === targetId || region.clientRegionId === targetId
+    region.id === targetId || region.draftRegionId === targetId || region.clientRegionId === targetId
   )) || null;
 }
 
@@ -1127,10 +1131,9 @@ export function WorkbookReviewWorkspace({
   reviewState,
   draftRegions = [],
   activeDraftRegionId = "",
-  selectedDraftRegionIds = [],
   onDraftRegionsChange,
   onActiveDraftRegionChange,
-  onSelectedDraftRegionIdsChange,
+  onCreateRegion,
   focusSelection = null,
   reviewDock = null,
 }) {
@@ -1186,16 +1189,13 @@ export function WorkbookReviewWorkspace({
     () => draftRegionsForSheet.filter((region) => region.status === "reviewed_input"),
     [draftRegionsForSheet],
   );
-  const selectedDraftRegionIdSet = useMemo(
-    () => new Set(selectedDraftRegionIds),
-    [selectedDraftRegionIds],
-  );
   const highlightedEditableDrafts = useMemo(
     () => draftRegionsForSheet.filter((region) => (
       region.status !== "reviewed_input"
-      && selectedDraftRegionIdSet.has(region.draftRegionId || region.clientRegionId)
+      && region.disposition !== "ignored"
+      && (region.id || region.draftRegionId || region.clientRegionId) === activeDraftRegionId
     )),
-    [draftRegionsForSheet, selectedDraftRegionIdSet],
+    [draftRegionsForSheet, activeDraftRegionId],
   );
   const sheetUsedRange = activeSheet?.usedRange
     || formatExcelA1Range(excelRangeBoundsFromSheet(activeSheet));
@@ -1306,6 +1306,15 @@ export function WorkbookReviewWorkspace({
     setSelectedDocumentId(focusSelection.sourceDocumentId);
     setActiveSheetName(focusSelection.sheetName);
     if (focusSelection.focusOnly || focusSelection.selectionMethod === "red_box_click") return;
+    if (onCreateRegion) {
+      onCreateRegion({
+        sourceDocumentId: focusSelection.sourceDocumentId,
+        sheetName: focusSelection.sheetName,
+        range: focusSelection.range,
+        selectionMethod: focusSelection.selectionMethod || "suggestion_click",
+      });
+      return;
+    }
     const nextRegionId = focusSelection.clientRegionId || focusSelection.draftRegionId || workbookDraftRegionId(focusSelection.sourceDocumentId, focusSelection.sheetName, focusSelection.range);
     onDraftRegionsChange?.(upsertDraftWorkbookRegion(draftRegions, {
       clientRegionId: nextRegionId,
@@ -1318,13 +1327,12 @@ export function WorkbookReviewWorkspace({
       status: "draft",
     }));
     onActiveDraftRegionChange?.(nextRegionId);
-    onSelectedDraftRegionIdsChange?.([nextRegionId]);
   }, [
     focusSelection,
     draftRegions,
     onDraftRegionsChange,
     onActiveDraftRegionChange,
-    onSelectedDraftRegionIdsChange,
+    onCreateRegion,
   ]);
 
   useEffect(() => {
@@ -1460,6 +1468,15 @@ export function WorkbookReviewWorkspace({
   const createCellDraftRegion = (row, col, selectionMethod = "cell_context_menu") => {
     if (!sourceDocument?.id || !activeSheetName) return;
     const range = formatExcelA1Range({ startRow: row, endRow: row, startCol: col, endCol: col });
+    if (onCreateRegion) {
+      onCreateRegion({
+        sourceDocumentId: sourceDocument.id,
+        sheetName: activeSheetName,
+        range,
+        selectionMethod,
+      });
+      return;
+    }
     const activeRegion = findWorkbookDraftRegionById(draftRegions, activeDraftRegionId);
     const nextRegionId = activeRegion?.draftRegionId || activeRegion?.clientRegionId || workbookDraftRegionId(sourceDocument.id, activeSheetName, range);
     onDraftRegionsChange?.(upsertDraftWorkbookRegion(draftRegions, {
@@ -1474,9 +1491,8 @@ export function WorkbookReviewWorkspace({
       status: "draft",
     }));
     onActiveDraftRegionChange?.(nextRegionId);
-    onSelectedDraftRegionIdsChange?.([nextRegionId]);
   };
-  const createRangeDraftRegion = (start, end, selectionMethod = "drag_select", additive = false) => {
+  const createRangeDraftRegion = (start, end, selectionMethod = "drag_select") => {
     if (!sourceDocument?.id || !activeSheetName || !start || !end) return;
     const bounds = normalizeExcelBounds({
       startRow: start.row,
@@ -1485,29 +1501,17 @@ export function WorkbookReviewWorkspace({
       endCol: end.col,
     });
     const range = formatExcelA1Range(bounds);
-    const matchingRegion = asArray(draftRegions).find((region) => (
-      region.sourceDocumentId === sourceDocument.id
-      && region.sheetName === activeSheetName
-      && region.range === range
-    ));
-    if (additive && matchingRegion) {
-      const matchingId = matchingRegion.draftRegionId || matchingRegion.clientRegionId || "";
-      const nextRegions = asArray(draftRegions).filter((region) => region !== matchingRegion);
-      const activeStillExists = findWorkbookDraftRegionById(nextRegions, activeDraftRegionId);
-      const fallbackRegion = activeStillExists || nextRegions.findLast((region) => (
-        region.sourceDocumentId === sourceDocument.id && region.sheetName === activeSheetName
-      )) || nextRegions.at(-1);
-      onDraftRegionsChange?.(nextRegions);
-      onSelectedDraftRegionIdsChange?.(
-        selectedDraftRegionIds.filter((selectedId) => selectedId !== matchingId),
-      );
-      if (matchingId === activeDraftRegionId || !activeStillExists) {
-        onActiveDraftRegionChange?.(fallbackRegion?.draftRegionId || fallbackRegion?.clientRegionId || "");
-      }
+    if (onCreateRegion) {
+      onCreateRegion({
+        sourceDocumentId: sourceDocument.id,
+        sheetName: activeSheetName,
+        range,
+        selectionMethod,
+      });
       return;
     }
     const activeRegion = findWorkbookDraftRegionById(draftRegions, activeDraftRegionId);
-    const replacedRegion = additive ? null : activeRegion;
+    const replacedRegion = activeRegion;
     const nextRegionId = replacedRegion?.draftRegionId || replacedRegion?.clientRegionId || workbookDraftRegionId(sourceDocument.id, activeSheetName, range);
     onDraftRegionsChange?.(upsertDraftWorkbookRegion(draftRegions, {
       ...replacedRegion,
@@ -1521,11 +1525,6 @@ export function WorkbookReviewWorkspace({
       status: "draft",
     }));
     onActiveDraftRegionChange?.(nextRegionId);
-    onSelectedDraftRegionIdsChange?.(
-      additive
-        ? [...selectedDraftRegionIds.filter((id) => id !== nextRegionId), nextRegionId]
-        : [nextRegionId],
-    );
   };
   const beginCellDragSelection = (event, row, col) => {
     if (event.button !== 0) return;
@@ -1638,7 +1637,7 @@ export function WorkbookReviewWorkspace({
     dragSelectionRef.current = null;
     setDragSelection(null);
     if (current?.active) {
-      createRangeDraftRegion(current.start, current.end, "drag_select", current.additive);
+      createRangeDraftRegion(current.start, current.end, "drag_select");
     }
   };
   useEffect(() => {
@@ -1651,10 +1650,9 @@ export function WorkbookReviewWorkspace({
     sourceDocument?.id,
     activeSheetName,
     activeDraftRegionId,
-    selectedDraftRegionIds,
     onDraftRegionsChange,
     onActiveDraftRegionChange,
-    onSelectedDraftRegionIdsChange,
+    onCreateRegion,
   ]);
   useEffect(() => {
     if (!dragSelection?.active) return undefined;
@@ -2991,7 +2989,6 @@ function App() {
   const [dataPlanReviewState, setDataPlanReviewState] = useState({ loading: false, error: "", review: null, identityDecisions: [] });
   const [workbookReviewDraftRegions, setWorkbookReviewDraftRegions] = useState([]);
   const [activeWorkbookReviewDraftRegionId, setActiveWorkbookReviewDraftRegionId] = useState("");
-  const [selectedWorkbookReviewDraftRegionIds, setSelectedWorkbookReviewDraftRegionIds] = useState([]);
   const [workbookReviewFocusSelection, setWorkbookReviewFocusSelection] = useState(null);
   const [browserSelectedExperimentIds, setBrowserSelectedExperimentIds] = useState([]);
   const [backendChartProposalState, setBackendChartProposalState] = useState({ loading: false, result: null, error: "" });
@@ -3005,7 +3002,6 @@ function App() {
     setDataPlanReviewState({ loading: false, error: "", review: null, identityDecisions: [] });
     setWorkbookReviewDraftRegions([]);
     setActiveWorkbookReviewDraftRegionId("");
-    setSelectedWorkbookReviewDraftRegionIds([]);
     setWorkbookReviewFocusSelection(null);
     setBrowserSelectedExperimentIds([]);
     setAnalysisReviewState(null);
@@ -3315,18 +3311,11 @@ function App() {
   const handleWorkbookReviewReadyFromAgent = ({ response, session, sourceDocument, regions = [] } = {}) => {
     const nextSession = session || response?.workbookReviewSession || response?.session || null;
     const nextSourceDocument = sourceDocument || response?.sourceDocument || null;
-    const nextDraftRegions = initialWorkbookDraftRegions({
-      sourceDocument: nextSourceDocument,
-      regions: asArray(regions.length ? regions : response?.regions),
-    }, nextSession);
-    const nextActiveRegion = nextDraftRegions.at(-1);
-    const nextActiveRegionId = response?.activeDraftRegionId
-      || nextActiveRegion?.draftRegionId
-      || nextActiveRegion?.clientRegionId
-      || "";
-    setWorkbookReviewDraftRegions(nextDraftRegions);
+    const nextReviewRegions = asArray(response?.reviewRegions);
+    const nextActiveRegion = nextReviewRegions.find((region) => region.disposition === "active") || nextReviewRegions[0];
+    const nextActiveRegionId = nextActiveRegion?.id || "";
+    setWorkbookReviewDraftRegions(nextReviewRegions);
     setActiveWorkbookReviewDraftRegionId(nextActiveRegionId);
-    setSelectedWorkbookReviewDraftRegionIds(nextActiveRegionId ? [nextActiveRegionId] : []);
     setWorkbookReviewFocusSelection(null);
     setDataPlanReviewState({ loading: false, error: "", review: null, identityDecisions: [] });
     setWorkbookReviewState({
@@ -3339,6 +3328,7 @@ function App() {
       session: nextSession,
       sourceDocument: nextSourceDocument,
       regions: asArray(regions.length ? regions : response?.regions),
+      reviewRegions: nextReviewRegions,
     });
     setTab("workbook_review");
     setAgentOpen(false);
@@ -3365,6 +3355,7 @@ function App() {
   };
   const handleWorkbookSuggestionSelect = (selection) => {
     if (!selection?.sourceDocumentId || !selection?.sheetName || !selection?.range) return;
+    if (selection.reviewRegionId) setActiveWorkbookReviewDraftRegionId(selection.reviewRegionId);
     setWorkbookReviewFocusSelection({
       ...selection,
       requestId: uid(),
@@ -3379,116 +3370,95 @@ function App() {
     if (!region) return;
     setWorkbookReviewFocusSelection({
       ...region,
+      range: region.range || region.rangeRef,
       requestId: uid(),
       selectionMethod: "red_box_click",
     });
   };
-  const submitWorkbookReviewRevision = async ({ message, redBoxUpdates = [], interpretationPatches = [], previousUnderstandingId = null, revisionMode = "merge", activeDraftRegionId = null } = {}) => {
-    const session = workbookReviewState.session || workbookReviewState.workbookReviewSession || null;
-    if (!session?.id) throw new Error("Start a workbook review session before submitting a revision.");
-    setWorkbookReviewState((current) => ({
-      ...current,
-      revisionLoading: true,
-      revisionError: "",
-      clarification: null,
-    }));
-    try {
-      const response = await reviseServerWorkbookReviewSession(session.id, {
-        message,
-        redBoxUpdates,
-        previousUnderstandingId,
-        revisionMode,
-        activeDraftRegionId,
-        interpretationPatches,
-      });
-      const updatedSession = response.workbookReviewSession || response.session || null;
+  const applyWorkbookReviewRegionResponse = (response, { activate = true } = {}) => {
+    const nextRegion = response?.region || null;
+    if (!nextRegion?.id) return response;
+    setWorkbookReviewDraftRegions((currentRegions) => {
+      const nextRegions = [
+        ...asArray(currentRegions).filter((region) => region.id !== nextRegion.id),
+        nextRegion,
+      ].filter((region) => region.disposition !== "deleted");
       setWorkbookReviewState((current) => ({
         ...current,
-        loading: false,
-        revisionLoading: false,
-        revisionError: "",
-        clarification: response.clarification || null,
-        session: updatedSession || current.session,
-      }));
-      const nextRegions = reconcileWorkbookDraftRegions(workbookReviewDraftRegions, response, updatedSession);
-      setWorkbookReviewDraftRegions(nextRegions);
-      const availableRegionIds = new Set(nextRegions.map((region) => (
-        region.draftRegionId || region.clientRegionId || ""
-      )).filter(Boolean));
-      setSelectedWorkbookReviewDraftRegionIds((currentIds) => (
-        currentIds.filter((id) => availableRegionIds.has(id))
-      ));
-      setActiveWorkbookReviewDraftRegionId((currentId) => {
-        const preferredId = response.activeDraftRegionId || activeDraftRegionId || currentId;
-        const preferredRegion = findWorkbookDraftRegionById(nextRegions, preferredId);
-        const fallbackRegion = nextRegions.at(-1);
-        return preferredRegion?.draftRegionId
-          || preferredRegion?.clientRegionId
-          || fallbackRegion?.draftRegionId
-          || fallbackRegion?.clientRegionId
-          || "";
-      });
-      return response;
-    } catch (err) {
-      const clarification = err.body?.clarification || err.body?.error?.details?.clarification || null;
-      setWorkbookReviewState((current) => ({
-        ...current,
-        revisionLoading: false,
-        revisionError: clarification?.message || err.message || String(err),
-        clarification,
-      }));
-      throw err;
-    }
-  };
-  const confirmWorkbookReviewUnderstanding = async ({ workbookUnderstandingId = "", decisionSummary = {} } = {}) => {
-    const session = workbookReviewState.session || workbookReviewState.workbookReviewSession || null;
-    if (!session?.id) throw new Error("Start a workbook review session before confirming understanding.");
-    setWorkbookReviewState((current) => ({
-      ...current,
-      confirmLoading: true,
-      revisionError: "",
-      clarification: null,
-    }));
-    try {
-      const response = await confirmServerWorkbookReviewSession(session.id, {
-        workbookUnderstandingId,
-        decisionSummary,
-      });
-      const updatedSession = response.workbookReviewSession || response.session || null;
-      setWorkbookReviewState((current) => ({
-        ...current,
-        confirmLoading: false,
+        reviewRegions: nextRegions,
         revisionError: "",
         clarification: null,
-        session: updatedSession || current.session,
-        workbookUnderstanding: response.workbookUnderstanding || current.workbookUnderstanding || null,
-        extractionReviewRequested: false,
       }));
-      setDataPlanReviewState({ loading: false, error: "", review: null, identityDecisions: [] });
-      const state = await getServerProjectState(activeProjectId);
-      applyProjectWorkspaceRefresh(state);
-      return response;
+      return nextRegions;
+    });
+    if (nextRegion.disposition === "active" && activate) {
+      setActiveWorkbookReviewDraftRegionId(nextRegion.id);
+      setWorkbookReviewFocusSelection({
+        sourceDocumentId: nextRegion.sourceDocumentId,
+        sheetName: nextRegion.sheetName,
+        range: nextRegion.rangeRef,
+        requestId: uid(),
+        selectionMethod: "red_box_click",
+      });
+    } else if (nextRegion.disposition !== "active") {
+      setActiveWorkbookReviewDraftRegionId((currentId) => (currentId === nextRegion.id ? "" : currentId));
+    }
+    setDataPlanReviewState({ loading: false, error: "", review: null, identityDecisions: [] });
+    return response;
+  };
+  const createWorkbookReviewRegion = async (input = {}) => {
+    const session = workbookReviewState.session || workbookReviewState.workbookReviewSession || null;
+    if (!session?.id) throw new Error("Start a workbook review session before selecting a region.");
+    try {
+      const response = await createServerWorkbookReviewRegion(session.id, {
+        ...input,
+        idempotencyKey: `create_region_${uid()}`,
+      });
+      return applyWorkbookReviewRegionResponse(response);
     } catch (err) {
-      setWorkbookReviewState((current) => ({
-        ...current,
-        confirmLoading: false,
-        revisionError: err.message || String(err),
-      }));
+      setWorkbookReviewState((current) => ({ ...current, revisionError: err.message || String(err) }));
       throw err;
     }
   };
-  const reviewWorkbookExperimentRecords = async (identityDecisions = []) => {
+  const reviseWorkbookReviewRegion = async (regionId, request) => {
     const session = workbookReviewState.session || workbookReviewState.workbookReviewSession || null;
-    const acceptedUnderstanding = workbookReviewState.workbookUnderstanding
-      || asArray(projectState?.workbookUnderstandings).find((understanding) => (
-        understanding.status === "accepted"
-        && (!session?.id || understanding.workbookReviewSessionId === session.id)
-      ));
+    if (!session?.id) throw new Error("Start a workbook review session before submitting feedback.");
+    const response = await reviseServerWorkbookReviewRegion(session.id, regionId, {
+      ...request,
+      idempotencyKey: `revise_region_${uid()}`,
+    });
+    return applyWorkbookReviewRegionResponse(response);
+  };
+  const confirmWorkbookReviewRegion = async (regionId, request) => {
+    const session = workbookReviewState.session || workbookReviewState.workbookReviewSession || null;
+    if (!session?.id) throw new Error("Start a workbook review session before confirming a region.");
+    const response = await confirmServerWorkbookReviewRegion(session.id, regionId, {
+      ...request,
+      idempotencyKey: `confirm_region_${uid()}`,
+    });
+    return applyWorkbookReviewRegionResponse(response);
+  };
+  const ignoreWorkbookReviewRegion = async (regionId, request) => {
+    const session = workbookReviewState.session || workbookReviewState.workbookReviewSession || null;
+    if (!session?.id) throw new Error("Start a workbook review session before ignoring a region.");
+    const response = await ignoreServerWorkbookReviewRegion(session.id, regionId, request);
+    return applyWorkbookReviewRegionResponse(response, { activate: false });
+  };
+  const deleteWorkbookReviewRegion = async (regionId, request) => {
+    const session = workbookReviewState.session || workbookReviewState.workbookReviewSession || null;
+    if (!session?.id) throw new Error("Start a workbook review session before deleting a region.");
+    const response = await deleteServerWorkbookReviewRegion(session.id, regionId, request);
+    return applyWorkbookReviewRegionResponse(response, { activate: false });
+  };
+  const reviewWorkbookExperimentRecords = async (identityDecisions = []) => {
+    const acceptedRevisionIds = asArray(workbookReviewDraftRegions)
+      .filter((region) => region.disposition === "active" && region.acceptedRevisionId)
+      .map((region) => region.acceptedRevisionId);
     setWorkbookReviewState((current) => ({ ...current, extractionReviewRequested: true }));
-    if (!acceptedUnderstanding?.id) {
+    if (!acceptedRevisionIds.length) {
       setDataPlanReviewState({
         loading: false,
-        error: "The accepted workbook understanding could not be found. Reopen the review and try again.",
+        error: "Confirm at least one workbook region before reviewing extracted experiments.",
         review: null,
         identityDecisions,
       });
@@ -3498,7 +3468,7 @@ function App() {
     try {
       const review = await draftServerProjectDataPlan(activeProjectId, {
         intent: "experiment_browser_publish",
-        workbookUnderstandingIds: [acceptedUnderstanding.id],
+        regionUnderstandingRevisionIds: acceptedRevisionIds,
         identityDecisions,
       });
       setDataPlanReviewState({ loading: false, error: "", review, identityDecisions });
@@ -3946,10 +3916,9 @@ function App() {
           reviewState={workbookReviewState}
           draftRegions={workbookReviewDraftRegions}
           activeDraftRegionId={activeWorkbookReviewDraftRegionId}
-          selectedDraftRegionIds={selectedWorkbookReviewDraftRegionIds}
           onDraftRegionsChange={setWorkbookReviewDraftRegions}
           onActiveDraftRegionChange={setActiveWorkbookReviewDraftRegionId}
-          onSelectedDraftRegionIdsChange={setSelectedWorkbookReviewDraftRegionIds}
+          onCreateRegion={createWorkbookReviewRegion}
           focusSelection={workbookReviewFocusSelection}
           reviewDock={(
             workbookReviewState.extractionReviewRequested ? (
@@ -3966,13 +3935,13 @@ function App() {
             ) : (
               <WorkbookReviewDock
                 reviewState={workbookReviewState}
-                draftRegions={workbookReviewDraftRegions}
-                activeDraftRegionId={activeWorkbookReviewDraftRegionId}
-                selectedDraftRegionIds={selectedWorkbookReviewDraftRegionIds}
-                onActiveDraftRegionChange={handleWorkbookReviewRegionActivate}
-                onSelectedDraftRegionIdsChange={setSelectedWorkbookReviewDraftRegionIds}
-                onSubmitRevision={submitWorkbookReviewRevision}
-                onConfirmUnderstanding={confirmWorkbookReviewUnderstanding}
+                reviewRegions={workbookReviewDraftRegions}
+                activeRegionId={activeWorkbookReviewDraftRegionId}
+                onActiveRegionChange={handleWorkbookReviewRegionActivate}
+                onReviseRegion={reviseWorkbookReviewRegion}
+                onConfirmRegion={confirmWorkbookReviewRegion}
+                onIgnoreRegion={ignoreWorkbookReviewRegion}
+                onDeleteRegion={deleteWorkbookReviewRegion}
                 onReviewExtractedExperiments={() => reviewWorkbookExperimentRecords([])}
               />
             )

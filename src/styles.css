@@ -6697,6 +6697,166 @@ tbody tr:hover {
   line-height: 1.45;
 }
 
+.workbook-region-list {
+  display: grid;
+  gap: 10px;
+}
+
+.workbook-region-card {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  border-radius: 6px;
+  padding: 11px;
+  background: #fff;
+}
+
+.workbook-region-card.is-active {
+  border-color: #93b4e8;
+  border-left-color: #2563a6;
+  background: #f7faff;
+}
+
+.workbook-region-card.is-confirmed:not(.is-active) {
+  border-left-color: #2f855a;
+}
+
+.workbook-region-card.is-muted {
+  background: #f8fafc;
+  color: var(--muted);
+}
+
+.workbook-region-card-head,
+.workbook-region-primary-actions,
+.workbook-region-secondary-actions,
+.workbook-region-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.workbook-region-card-head {
+  justify-content: space-between;
+}
+
+.workbook-region-focus {
+  display: grid;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.workbook-region-focus strong {
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workbook-region-focus span,
+.workbook-region-meta {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.workbook-region-status {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 7px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.workbook-region-status.is-confirmed {
+  border-color: #9bc9ad;
+  background: #f0f9f4;
+  color: #246b45;
+}
+
+.workbook-region-status.is-new-revision,
+.workbook-region-status.is-needs-retry {
+  border-color: #e4bf74;
+  background: #fffaf0;
+  color: #8a5a10;
+}
+
+.workbook-region-summary {
+  display: grid;
+  gap: 4px;
+}
+
+.workbook-region-summary p,
+.workbook-region-notices p,
+.workbook-region-error,
+.workbook-region-empty {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.workbook-region-meta {
+  justify-content: space-between;
+  font-variant-numeric: tabular-nums;
+}
+
+.workbook-region-notices {
+  display: grid;
+  gap: 4px;
+  border-left: 3px solid #d97706;
+  padding: 6px 8px;
+  background: #fffbeb;
+  color: #8a5208;
+}
+
+.workbook-region-feedback {
+  width: 100%;
+  min-height: 68px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+}
+
+.workbook-region-primary-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.workbook-region-primary-actions button,
+.workbook-region-secondary-actions button {
+  min-width: 0;
+}
+
+.workbook-region-secondary-actions {
+  justify-content: flex-end;
+}
+
+.workbook-region-secondary-actions button {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+.workbook-region-secondary-actions button:last-child {
+  color: #9b2c2c;
+}
+
+.workbook-region-error {
+  color: #9b1c1c;
+}
+
 .workbook-understanding-summary,
 .workbook-redbox-review {
   display: grid;

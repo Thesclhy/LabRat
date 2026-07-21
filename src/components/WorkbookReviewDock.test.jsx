@@ -1,360 +1,164 @@
-import React, { useState } from "react";
+import React from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { WorkbookReviewDock } from "./WorkbookReviewDock.jsx";
 
-const draftRegions = [
+const reviewRegions = [
   {
-    clientRegionId: "draft_1",
-    draftRegionId: "draft_1",
+    id: "region_1",
     sourceDocumentId: "source_doc_1",
-    sheetName: "Sheet1",
-    range: "A1:B3",
-    semanticType: "experiment_table",
-    status: "draft",
-    warnings: [],
+    sheetName: "Runs",
+    rangeRef: "A1:D3",
+    disposition: "active",
+    reviewStatus: "awaiting_review",
+    version: 2,
+    currentRevisionId: "revision_1",
+    acceptedRevisionId: null,
+    currentRevision: {
+      id: "revision_1",
+      summary: [
+        "Each row represents one experiment.",
+        "The table contains temperature, time, and gas selectivity.",
+      ],
+      confidence: 0.91,
+      validation: { status: "ready", blockers: [] },
+      warnings: [],
+    },
   },
   {
-    clientRegionId: "draft_2",
-    draftRegionId: "draft_2",
+    id: "region_2",
     sourceDocumentId: "source_doc_1",
-    sheetName: "Sheet1",
-    range: "D1:E5",
-    semanticType: "reaction_rate_time_series",
-    status: "draft",
-    warnings: [{ code: "review_units", message: "Confirm units." }],
+    sheetName: "Runs",
+    rangeRef: "F1:H5",
+    disposition: "active",
+    reviewStatus: "accepted",
+    version: 4,
+    currentRevisionId: "revision_2",
+    acceptedRevisionId: "revision_2",
+    currentRevision: {
+      id: "revision_2",
+      summary: ["This region contains reaction rate values over time."],
+      confidence: 0.74,
+      validation: { status: "ready", blockers: [] },
+      warnings: [{ code: "review_unit", message: "Confirm the rate unit." }],
+    },
   },
 ];
 
 function reviewState(overrides = {}) {
   return {
-    revisionLoading: false,
-    confirmLoading: false,
-    revisionError: "",
-    clarification: null,
-    session: {
-      id: "session_1",
-      status: "needs_user_review",
-      messages: [
-        { id: "message_1", role: "assistant", content: "I indexed the workbook." },
-        { id: "message_2", role: "user", content: "The first box is the experiment table." },
-      ],
-      currentUnderstanding: {
-        id: "understanding_draft_1",
-        facts: [{ factId: "fact_1", kind: "region_description" }],
-      },
-    },
+    session: { id: "session_1", status: "needs_user_review" },
     sourceDocument: { id: "source_doc_1", metadata: { workbookName: "Master.xlsx" } },
     ...overrides,
   };
 }
 
-function structuredReviewState(overrides = {}) {
-  return reviewState({
-    session: {
-      ...reviewState().session,
-      currentUnderstanding: {
-        id: "understanding_draft_1",
-        validation: { status: "ready", blockers: [] },
-        facts: [{
-          factId: "fact_draft_1",
-          draftRegionId: "draft_1",
-          sheetName: "Sheet1",
-          range: "A1:B3",
-          semanticType: "experiment_table",
-          interpretation: {
-            schemaVersion: "labrat.workbookRegionInterpretation.v1",
-            experimentAxis: "rows",
-            headerRow: 1,
-            experimentLabel: null,
-            experimentIdColumn: "A",
-            fields: [{
-              column: "B",
-              headerCell: "B1",
-              semanticKey: "reaction_temperature",
-              displayName: "Temperature",
-              role: "condition",
-              valueType: "number",
-              unit: "degC",
-              confidence: 0.9,
-              sourceRefs: [{ sourceType: "excel_cell", sheet: "Sheet1", cell: "B1" }],
-            }],
-            series: [],
-            inclusion: {
-              startRow: 2,
-              endRow: 3,
-              skippedRows: [{ rowNumber: 3, reason: "blank_identifier" }],
-            },
-            confidence: 0.9,
-            warnings: [{ code: "review_unit", message: "Confirm the temperature unit." }],
-          },
-        }],
-      },
-    },
-    ...overrides,
-  });
-}
-
 describe("WorkbookReviewDock", () => {
-  it("keeps the conversation and all red boxes visible while changing the active box", () => {
-    const onActiveDraftRegionChange = vi.fn();
-    const onSelectedDraftRegionIdsChange = vi.fn();
+  it("renders compact AI summaries and focuses one server region", () => {
+    const onActiveRegionChange = vi.fn();
     render(
       <WorkbookReviewDock
         reviewState={reviewState()}
-        draftRegions={draftRegions}
-        activeDraftRegionId="draft_1"
-        selectedDraftRegionIds={["draft_1"]}
-        onActiveDraftRegionChange={onActiveDraftRegionChange}
-        onSelectedDraftRegionIdsChange={onSelectedDraftRegionIdsChange}
+        reviewRegions={reviewRegions}
+        activeRegionId="region_1"
+        onActiveRegionChange={onActiveRegionChange}
       />,
     );
 
     const dock = screen.getByLabelText("Workbook review dock");
-    expect(within(dock).getByText("I indexed the workbook.")).toBeTruthy();
-    expect(within(dock).getByText("The first box is the experiment table.")).toBeTruthy();
-    expect(within(dock).getByText("A1:B3").className).toContain("is-active");
-    expect(within(dock).getByText("D1:E5")).toBeTruthy();
+    expect(within(dock).getByText("Each row represents one experiment.")).toBeTruthy();
+    expect(within(dock).getByText("The table contains temperature, time, and gas selectivity.")).toBeTruthy();
+    expect(within(dock).queryByText("Structured interpretation")).toBeNull();
+    expect(within(dock).queryByRole("checkbox")).toBeNull();
+    expect(within(dock).queryByRole("button", { name: "Confirm understanding" })).toBeNull();
 
-    fireEvent.click(within(dock).getByRole("button", { name: "Activate Sheet1!D1:E5" }));
-
-    expect(onActiveDraftRegionChange).toHaveBeenCalledWith("draft_2");
-    expect(onSelectedDraftRegionIdsChange).not.toHaveBeenCalled();
+    fireEvent.click(within(dock).getByRole("button", { name: "Focus Runs!F1:H5" }));
+    expect(onActiveRegionChange).toHaveBeenCalledWith("region_2");
   });
 
-  it("submits the active box by default and supports an explicit multi-box revision", async () => {
-    const onSubmitRevision = vi.fn(async () => ({}));
-    function Harness() {
-      const [selectedIds, setSelectedIds] = useState(["draft_1"]);
-      return (
-        <WorkbookReviewDock
-          reviewState={reviewState()}
-          draftRegions={draftRegions}
-          activeDraftRegionId="draft_1"
-          selectedDraftRegionIds={selectedIds}
-          onSelectedDraftRegionIdsChange={setSelectedIds}
-          onSubmitRevision={onSubmitRevision}
-        />
-      );
-    }
-    render(<Harness />);
+  it("submits feedback only for the card that owns the input", async () => {
+    const onReviseRegion = vi.fn(async () => ({}));
+    render(
+      <WorkbookReviewDock
+        reviewState={reviewState()}
+        reviewRegions={reviewRegions}
+        activeRegionId="region_1"
+        onReviseRegion={onReviseRegion}
+      />,
+    );
 
-    const dock = screen.getByLabelText("Workbook review dock");
-    const textarea = within(dock).getByPlaceholderText("Describe what should change about the selected red box...");
-    fireEvent.change(textarea, { target: { value: "Use both boxes for this interpretation." } });
-    fireEvent.click(within(dock).getByRole("checkbox", { name: "Include Sheet1!D1:E5 in revision" }));
-    fireEvent.click(within(dock).getByRole("button", { name: "Submit revision" }));
-
-    await waitFor(() => expect(onSubmitRevision).toHaveBeenCalledWith(expect.objectContaining({
-      message: "Use both boxes for this interpretation.",
-      previousUnderstandingId: "understanding_draft_1",
-      revisionMode: "merge",
-      activeDraftRegionId: "draft_1",
-    })));
-    expect(onSubmitRevision.mock.calls[0][0].redBoxUpdates).toHaveLength(2);
-    expect(onSubmitRevision.mock.calls[0][0].redBoxUpdates).toEqual([
-      expect.objectContaining({ description: "Use both boxes for this interpretation.", semanticType: "" }),
-      expect.objectContaining({ description: "Use both boxes for this interpretation.", semanticType: "" }),
-    ]);
-  });
-
-  it("uses controlled checked ids and allows an explicitly empty selection", () => {
-    const onSelectedDraftRegionIdsChange = vi.fn();
-    function Harness() {
-      const [selectedIds, setSelectedIds] = useState(["draft_1"]);
-      return (
-        <WorkbookReviewDock
-          reviewState={reviewState()}
-          draftRegions={draftRegions}
-          activeDraftRegionId="draft_1"
-          selectedDraftRegionIds={selectedIds}
-          onSelectedDraftRegionIdsChange={(nextIds) => {
-            setSelectedIds(nextIds);
-            onSelectedDraftRegionIdsChange(nextIds);
-          }}
-        />
-      );
-    }
-    render(<Harness />);
-
-    const checkbox = screen.getByRole("checkbox", {
-      name: "Include Sheet1!A1:B3 in revision",
+    const firstCard = screen.getByRole("article", { name: "Region Runs!A1:D3" });
+    fireEvent.change(within(firstCard).getByPlaceholderText("Describe what this region means or what should change..."), {
+      target: { value: "Column D is liquid selectivity, not gas selectivity." },
     });
-    fireEvent.click(checkbox);
+    fireEvent.click(within(firstCard).getByRole("button", { name: "Submit revision for Runs!A1:D3" }));
 
-    expect(onSelectedDraftRegionIdsChange).toHaveBeenLastCalledWith([]);
-    expect(checkbox.checked).toBe(false);
-  });
-
-  it("keeps submission progress and errors local to the dock", async () => {
-    let rejectRevision;
-    const onSubmitRevision = vi.fn(() => new Promise((resolve, reject) => {
-      rejectRevision = reject;
+    await waitFor(() => expect(onReviseRegion).toHaveBeenCalledWith("region_1", {
+      feedback: "Column D is liquid selectivity, not gas selectivity.",
+      previousRevisionId: "revision_1",
+      expectedRegionVersion: 2,
     }));
+    expect(within(firstCard).getByPlaceholderText("Describe what this region means or what should change...").value).toBe("");
+  });
+
+  it("confirms an exact current revision and disables an already accepted one", async () => {
+    const onConfirmRegion = vi.fn(async () => ({}));
     render(
       <WorkbookReviewDock
         reviewState={reviewState()}
-        draftRegions={draftRegions}
-        activeDraftRegionId="draft_1"
-        selectedDraftRegionIds={["draft_1"]}
-        onSubmitRevision={onSubmitRevision}
+        reviewRegions={reviewRegions}
+        activeRegionId="region_1"
+        onConfirmRegion={onConfirmRegion}
       />,
     );
 
-    const dock = screen.getByLabelText("Workbook review dock");
-    fireEvent.change(within(dock).getByPlaceholderText("Describe what should change about the selected red box..."), {
-      target: { value: "This is a condition table." },
-    });
-    fireEvent.click(within(dock).getByRole("button", { name: "Submit revision" }));
-    expect(within(dock).getByRole("button", { name: "Submitting revision" }).disabled).toBe(true);
-
-    rejectRevision(new Error("Revision failed."));
-
-    expect(await within(dock).findByText("Revision failed.")).toBeTruthy();
-    expect(within(dock).getByPlaceholderText("Describe what should change about the selected red box...").value).toBe("This is a condition table.");
+    fireEvent.click(screen.getByRole("button", { name: "Confirm region Runs!A1:D3" }));
+    await waitFor(() => expect(onConfirmRegion).toHaveBeenCalledWith("region_1", {
+      revisionId: "revision_1",
+      expectedRegionVersion: 2,
+    }));
+    expect(screen.getByRole("button", { name: "Region Runs!F1:H5 confirmed" }).disabled).toBe(true);
   });
 
-  it("transitions to extracted-experiment review after confirmation without closing", async () => {
+  it("keeps ignore and logical delete scoped to one region", async () => {
+    const onIgnoreRegion = vi.fn(async () => ({}));
+    const onDeleteRegion = vi.fn(async () => ({}));
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(
+      <WorkbookReviewDock
+        reviewState={reviewState()}
+        reviewRegions={reviewRegions}
+        onIgnoreRegion={onIgnoreRegion}
+        onDeleteRegion={onDeleteRegion}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Ignore region Runs!A1:D3" }));
+    await waitFor(() => expect(onIgnoreRegion).toHaveBeenCalledWith("region_1", {
+      expectedRegionVersion: 2,
+      reason: "Excluded during workbook review.",
+    }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete region Runs!F1:H5" }));
+    await waitFor(() => expect(onDeleteRegion).toHaveBeenCalledWith("region_2", {
+      expectedRegionVersion: 4,
+      reason: "Deleted during workbook review.",
+    }));
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    confirmSpy.mockRestore();
+  });
+
+  it("offers DataPlan review when at least one active region is accepted", () => {
     const onReviewExtractedExperiments = vi.fn();
+    render(
+      <WorkbookReviewDock
+        reviewState={reviewState()}
+        reviewRegions={reviewRegions}
+        onReviewExtractedExperiments={onReviewExtractedExperiments}
+      />,
+    );
 
-    function Harness() {
-      const [state, setState] = useState(reviewState());
-      return (
-        <WorkbookReviewDock
-          reviewState={state}
-          draftRegions={draftRegions}
-          activeDraftRegionId="draft_1"
-          selectedDraftRegionIds={["draft_1"]}
-          onConfirmUnderstanding={async (input) => {
-            expect(input).toMatchObject({ workbookUnderstandingId: "understanding_draft_1" });
-            const acceptedSession = { ...state.session, status: "accepted" };
-            setState({ ...state, session: acceptedSession });
-            return { workbookReviewSession: acceptedSession };
-          }}
-          onReviewExtractedExperiments={onReviewExtractedExperiments}
-        />
-      );
-    }
-
-    render(<Harness />);
-    const dock = screen.getByLabelText("Workbook review dock");
-    fireEvent.click(within(dock).getByRole("button", { name: "Confirm understanding" }));
-
-    const nextButton = await within(dock).findByRole("button", { name: "Review extracted experiments" });
-    fireEvent.click(nextButton);
-
+    fireEvent.click(screen.getByRole("button", { name: "Review extracted experiments" }));
     expect(onReviewExtractedExperiments).toHaveBeenCalledTimes(1);
-    expect(screen.getByLabelText("Workbook review dock")).toBeTruthy();
-  });
-
-  it("shows structured experiments, fields, units, included and skipped rows, warnings, and source range", () => {
-    render(
-      <WorkbookReviewDock
-        reviewState={structuredReviewState()}
-        draftRegions={draftRegions}
-        activeDraftRegionId="draft_1"
-        selectedDraftRegionIds={["draft_1"]}
-      />,
-    );
-
-    const interpretation = screen.getByRole("region", { name: "Structured interpretation" });
-    expect(within(interpretation).getByText("Sheet1!A1:B3")).toBeTruthy();
-    expect(within(interpretation).getByText("Experiments")).toBeTruthy();
-    expect(within(interpretation).getByLabelText("Experiment axis").value).toBe("rows");
-    expect(within(interpretation).getByLabelText("Experiment identity column").value).toBe("A");
-    expect(within(interpretation).getByText("Fields and units")).toBeTruthy();
-    expect(within(interpretation).getByDisplayValue("reaction_temperature")).toBeTruthy();
-    expect(within(interpretation).getByDisplayValue("degC")).toBeTruthy();
-    expect(within(interpretation).getByText("Included rows")).toBeTruthy();
-    expect(within(interpretation).getByDisplayValue("3: blank_identifier")).toBeTruthy();
-    expect(within(interpretation).getByText("Confirm the temperature unit.")).toBeTruthy();
-    expect(within(interpretation).getByText("B1")).toBeTruthy();
-  });
-
-  it("submits structured fallback controls as a typed interpretation patch", async () => {
-    const onSubmitRevision = vi.fn(async () => ({}));
-    render(
-      <WorkbookReviewDock
-        reviewState={structuredReviewState()}
-        draftRegions={draftRegions}
-        activeDraftRegionId="draft_1"
-        selectedDraftRegionIds={["draft_1"]}
-        onSubmitRevision={onSubmitRevision}
-      />,
-    );
-
-    const interpretation = screen.getByRole("region", { name: "Structured interpretation" });
-    fireEvent.change(within(interpretation).getByLabelText("Experiment axis"), { target: { value: "region" } });
-    fireEvent.change(within(interpretation).getByLabelText("Experiment label"), { target: { value: "Exp33" } });
-    fireEvent.change(within(interpretation).getByLabelText("Role for Temperature"), { target: { value: "outcome" } });
-    fireEvent.change(within(interpretation).getByLabelText("Unit for Temperature"), { target: { value: "K" } });
-    fireEvent.change(within(interpretation).getByLabelText("Skipped rows"), { target: { value: "3: user_excluded" } });
-    fireEvent.click(within(interpretation).getByRole("button", { name: "Apply structured interpretation" }));
-
-    await waitFor(() => expect(onSubmitRevision).toHaveBeenCalledTimes(1));
-    expect(onSubmitRevision.mock.calls[0][0]).toEqual(expect.objectContaining({
-      message: "Updated structured interpretation for Sheet1!A1:B3.",
-      revisionMode: "replace_current",
-      activeDraftRegionId: "draft_1",
-      redBoxUpdates: [expect.objectContaining({ draftRegionId: "draft_1", range: "A1:B3" })],
-      interpretationPatches: [expect.objectContaining({
-        draftRegionId: "draft_1",
-        experimentAxis: "region",
-        experimentLabel: "Exp33",
-        experimentIdColumn: null,
-        fields: [expect.objectContaining({
-          column: "B",
-          role: "outcome",
-          unit: "K",
-        })],
-        inclusion: expect.objectContaining({
-          skippedRows: [{ rowNumber: 3, reason: "user_excluded" }],
-        }),
-      })],
-    }));
-  });
-
-  it("disables confirmation and shows blockers until experiment identity is resolved", () => {
-    const state = structuredReviewState();
-    state.session.currentUnderstanding.validation = {
-      status: "blocked",
-      blockers: [{
-        code: "experiment_identity_column_required",
-        draftRegionId: "draft_1",
-        message: "Choose the experiment identity column.",
-      }],
-    };
-    render(
-      <WorkbookReviewDock
-        reviewState={state}
-        draftRegions={draftRegions}
-        activeDraftRegionId="draft_1"
-        selectedDraftRegionIds={["draft_1"]}
-        onConfirmUnderstanding={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByText("Choose the experiment identity column.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Confirm understanding" }).disabled).toBe(true);
-  });
-
-  it("renders an accepted structured interpretation as read-only", () => {
-    const state = structuredReviewState();
-    state.session.status = "accepted";
-    render(
-      <WorkbookReviewDock
-        reviewState={state}
-        draftRegions={draftRegions}
-        activeDraftRegionId="draft_1"
-        selectedDraftRegionIds={["draft_1"]}
-        onSubmitRevision={vi.fn()}
-        onReviewExtractedExperiments={vi.fn()}
-      />,
-    );
-
-    const interpretation = screen.getByRole("region", { name: "Structured interpretation" });
-    expect(within(interpretation).getByRole("group", { name: "Experiments" }).disabled).toBe(true);
-    expect(within(interpretation).queryByRole("button", { name: "Apply structured interpretation" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Review extracted experiments" })).toBeTruthy();
   });
 });

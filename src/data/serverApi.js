@@ -135,6 +135,74 @@ export function getServerWorkbookReviewSession(sessionId, options = {}) {
   return serverRequest(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}`, options);
 }
 
+export function listServerWorkbookReviewRegions(sessionId, options = {}) {
+  if (!sessionId) throw new ServerApiError("Select a workbook review session before listing regions.");
+  return serverRequest(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}/regions`, options);
+}
+
+export function createServerWorkbookReviewRegion(sessionId, request = {}, options = {}) {
+  if (!sessionId) throw new ServerApiError("Select a workbook review session before creating a region.");
+  if (!request.sourceDocumentId || !request.sheetName || !request.range) {
+    throw new ServerApiError("Select a source workbook range before creating a region.");
+  }
+  return serverJson(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}/regions`, {
+    sourceDocumentId: request.sourceDocumentId,
+    sheetName: request.sheetName,
+    range: request.range,
+    selectionMethod: request.selectionMethod || "manual",
+    idempotencyKey: request.idempotencyKey || null,
+  }, options);
+}
+
+export function listServerWorkbookReviewRegionRevisions(sessionId, regionId, options = {}) {
+  if (!sessionId || !regionId) throw new ServerApiError("Select a workbook review region before listing revisions.");
+  return serverRequest(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}/regions/${encodeURIComponent(regionId)}/revisions`, options);
+}
+
+export function reviseServerWorkbookReviewRegion(sessionId, regionId, request = {}, options = {}) {
+  if (!sessionId || !regionId) throw new ServerApiError("Select a workbook review region before submitting feedback.");
+  if (!String(request.feedback || "").trim()) throw new ServerApiError("Enter feedback before submitting a region revision.");
+  return serverJson(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}/regions/${encodeURIComponent(regionId)}/revisions`, {
+    feedback: request.feedback,
+    previousRevisionId: request.previousRevisionId || null,
+    expectedRegionVersion: request.expectedRegionVersion,
+    idempotencyKey: request.idempotencyKey || null,
+  }, options);
+}
+
+export function confirmServerWorkbookReviewRegion(sessionId, regionId, request = {}, options = {}) {
+  if (!sessionId || !regionId || !request.revisionId) {
+    throw new ServerApiError("Select an exact region revision before confirming it.");
+  }
+  return serverJson(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}/regions/${encodeURIComponent(regionId)}/confirm`, {
+    revisionId: request.revisionId,
+    expectedRegionVersion: request.expectedRegionVersion,
+    idempotencyKey: request.idempotencyKey || null,
+  }, options);
+}
+
+export function ignoreServerWorkbookReviewRegion(sessionId, regionId, request = {}, options = {}) {
+  if (!sessionId || !regionId) throw new ServerApiError("Select a workbook review region before ignoring it.");
+  return serverJson(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}/regions/${encodeURIComponent(regionId)}/ignore`, {
+    expectedRegionVersion: request.expectedRegionVersion,
+    reason: request.reason || "",
+  }, options);
+}
+
+export function deleteServerWorkbookReviewRegion(sessionId, regionId, request = {}, options = {}) {
+  if (!sessionId || !regionId) throw new ServerApiError("Select a workbook review region before deleting it.");
+  return serverJson(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}/regions/${encodeURIComponent(regionId)}`, {
+    expectedRegionVersion: request.expectedRegionVersion,
+    reason: request.reason || "",
+  }, { ...options, method: "DELETE" });
+}
+
+export function listServerRegionUnderstandings(projectId, { status = "accepted", ...options } = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before listing region understandings.");
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/region-understandings${query}`, options);
+}
+
 export function reviseServerWorkbookReviewSession(sessionId, request = {}, options = {}) {
   if (!sessionId) throw new ServerApiError("Select a workbook review session before submitting a revision.");
   if (!String(request.message || "").trim()) {
@@ -188,7 +256,7 @@ export function draftServerProjectDataPlan(projectId, request = {}, options = {}
   if (!projectId) throw new ServerApiError("Select a project before drafting a data plan.");
   return serverJson(`/api/projects/${encodeURIComponent(projectId)}/data-plans/draft`, {
     intent: request.intent || "experiment_browser_publish",
-    workbookUnderstandingIds: request.workbookUnderstandingIds || [],
+    regionUnderstandingRevisionIds: request.regionUnderstandingRevisionIds || [],
     identityDecisions: request.identityDecisions || [],
   }, options).then((response) => {
     if (response?.resultKind === "clarification") {
