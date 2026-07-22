@@ -15,6 +15,30 @@ Keep entries concise, newest first, and include:
 
 ## 2026-07-22
 
+- Ran the real Anthropic plus local-Python DataSnapshot-to-ChartSpec browser
+  workflow against an isolated in-memory clone of `test1` with 63 active
+  experiment heads. The UI showed exact `Sheet1!A3:A63` identity and
+  `Sheet1!L3:N63` selectivity rectangles, accepted conversational revisions,
+  executed the frozen program, validated 57 result rows and 3 traces with 6
+  explicit exclusions and a passing 100% row-sum invariant, toggled reviewed
+  default traces, published exactly one `origin: analysis_result` ChartSpec,
+  and reloaded it with 63 input snapshot refs, 246 source refs, and 3 default
+  traces. The initial AgentRun used Anthropic `claude-sonnet-4-5`, 7,901 input
+  tokens, 3,012 output tokens, and 50,249 ms latency. The browser console had
+  no warnings or errors. The acceptance gate remains open because the real run
+  exposed blocking integration defects: the model prompt incorrectly describes
+  the runtime dict as `tables.records`; the result trace and missing-policy
+  wire shapes are under-specified, causing a second validation failure; policy
+  failures hide their actionable rule; validation renders roughly one repeated
+  error per trace; `Manage approved charts` shows zero items despite one
+  persisted ChartSpec; and both the Manuscript insert preview and inserted
+  Canvas chart are blank while reporting `Missing source snapshot`. Additional
+  UX findings: project-list data/chart counts remain stale until opening the
+  project, the review composer is outside the clickable viewport at the default
+  1280px width, long provider waits show only `Thinking...`, source-order bars
+  are not experiment-number ordered, exclusions expose internal ids instead of
+  experiment labels, and the trace selector says `Default visible experiments`
+  for component traces.
 - Implemented the DataSnapshot-to-ChartSpec frontend-closure runtime slice.
   Added authenticated project analysis capabilities, an editor-only
   evidence-blocked retry with durable warning proof, required server-side

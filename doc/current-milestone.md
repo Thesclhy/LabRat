@@ -37,9 +37,13 @@ six-minute abandoned-claim recovery. Full verification passes with frontend
 263/263 and backend 245 passed plus one optional PostgreSQL skip. A fresh
 63-head local Python/persistence diagnostic also passes with 57 result rows, 6
 reasoned exclusions, 3 traces, one reloaded ChartSpec, 63 input snapshot refs,
-and 184 source refs. The acceptance gate remains open until the user explicitly
-approves bounded `test1` metadata egress and the real Anthropic plan/revision
-flow is completed through the UI.
+and 184 source refs. The real Anthropic plus local-Python browser run is now
+recorded: 4 plan revisions and 3 execution attempts eventually produced 57
+validated rows, 6 exclusions, 3 traces, and one reloaded ChartSpec from all 63
+heads. The acceptance gate remains open because `Manage approved charts`
+cannot display the persisted analysis-result ChartSpec and the Manuscript
+insertion preview and Canvas render blank despite the Chart Review preview
+rendering correctly.
 
 Implemented:
 

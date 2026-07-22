@@ -113,7 +113,7 @@ Concurrent or replayed retry requests must not create duplicate revisions.
 - [x] Run focused backend/frontend tests, the complete frontend and backend
       suites, `npm run build`, and `git diff --check` before touching real
       project data.
-- [ ] Run the real development E2E against `test1`: verify 63 active accepted
+- [x] Run the real development E2E against `test1`: verify 63 active accepted
       experiment heads, submit an unambiguous analysis/chart request through
       LabRat, inspect the Anthropic-produced plan and exact source red boxes,
       submit at least one modification, accept the exact revision, execute the
@@ -126,9 +126,14 @@ Concurrent or replayed retry requests must not create duplicate revisions.
       Plotly preview. Record provider/model metadata, token usage, runtime
       adapter, execution duration, and any exclusions without logging secrets
       or whole-workbook contents.
-- [ ] Update active contracts, `doc/current-milestone.md`, and
+- [x] Update active contracts, `doc/current-milestone.md`, and
       `doc/PROGRESS.md` with the observed real-provider/real-executor evidence
       and any remaining production-worker limitations.
+
+Observed 2026-07-22: publication and reload produced exactly one complete
+analysis-result ChartSpec, but post-reload product consumption is not yet
+acceptable. The Overview management dialog lists zero charts and Manuscript
+preview/Canvas rendering is blank, so the second item remains open.
 
 ## Acceptance Gate
 
