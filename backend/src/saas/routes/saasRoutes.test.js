@@ -2537,6 +2537,107 @@ test("analysis capabilities and missing-evidence retry stay bounded, authorized,
   });
 });
 
+test("analysis retry requires durable missing-evidence proof and releases a failed claim", async () => {
+  const originalDraftAnalysisPlan = testModelProvider.draftAnalysisPlan;
+  try {
+    const providerFailureProject = await createProject("Retry Provider Failure Project");
+    seedRouteAnalysisData(providerFailureProject, `retry_provider_failure_${Date.now()}`);
+    let providerCalls = 0;
+    testModelProvider.draftAnalysisPlan = async () => {
+      providerCalls += 1;
+      return { ok: false, warning: { code: "provider_unavailable" } };
+    };
+    const providerFailure = await jsonFetch(`/api/projects/${providerFailureProject.id}/agent/runs`, {
+      method: "POST",
+      body: { message: "Compare accepted yield across experiments." },
+    });
+    assert.equal(providerFailure.status, 201);
+    const providerFailureBody = await providerFailure.json();
+    assert.equal(providerCalls, 1);
+
+    testModelProvider.draftAnalysisPlan = async () => {
+      providerCalls += 1;
+      return originalDraftAnalysisPlan({
+        fields: [{ fieldId: "unused" }],
+      });
+    };
+    const rejected = await jsonFetch(
+      `/api/analysis-threads/${providerFailureBody.analysisThread.id}/retry`,
+      { method: "POST", body: {} },
+    );
+    assert.equal(rejected.status, 409);
+    assert.equal((await rejected.json()).error.code, "analysis_retry_not_available");
+    assert.equal(providerCalls, 1);
+
+    const retryProject = await createProject("Retry Claim Release Project");
+    const blocked = await jsonFetch(`/api/projects/${retryProject.id}/agent/runs`, {
+      method: "POST",
+      body: { message: "Compare accepted yield across experiments." },
+    });
+    assert.equal(blocked.status, 201);
+    const blockedBody = await blocked.json();
+    seedRouteAnalysisData(retryProject, `retry_claim_${Date.now()}`);
+
+    let retryCalls = 0;
+    testModelProvider.draftAnalysisPlan = async () => {
+      retryCalls += 1;
+      return { ok: false, warning: { code: "provider_unavailable" } };
+    };
+    const failedRetry = await jsonFetch(
+      `/api/analysis-threads/${blockedBody.analysisThread.id}/retry`,
+      { method: "POST", body: {} },
+    );
+    assert.equal(failedRetry.status, 503);
+    assert.equal(retryCalls, 1);
+    assert.equal(
+      (await store.findAnalysisThreadById(blockedBody.analysisThread.id)).status,
+      "planning",
+    );
+
+    let releaseFirstDraft;
+    const firstDraftStarted = new Promise((resolve) => { releaseFirstDraft = resolve; });
+    let enteredFirstDraft;
+    const entered = new Promise((resolve) => { enteredFirstDraft = resolve; });
+    testModelProvider.draftAnalysisPlan = async (input) => {
+      retryCalls += 1;
+      if (retryCalls === 2) {
+        enteredFirstDraft();
+        await firstDraftStarted;
+      }
+      return originalDraftAnalysisPlan(input);
+    };
+    const firstRetry = jsonFetch(`/api/analysis-threads/${blockedBody.analysisThread.id}/retry`, {
+      method: "POST",
+      body: {},
+    });
+    await entered;
+    const concurrentRetry = await jsonFetch(
+      `/api/analysis-threads/${blockedBody.analysisThread.id}/retry`,
+      { method: "POST", body: {} },
+    );
+    assert.equal(concurrentRetry.status, 409);
+    assert.equal((await concurrentRetry.json()).error.code, "analysis_retry_in_progress");
+    assert.equal(retryCalls, 2);
+
+    releaseFirstDraft();
+    const firstRetryResponse = await firstRetry;
+    assert.equal(firstRetryResponse.status, 201);
+    assert.equal(retryCalls, 2);
+    const replay = await jsonFetch(`/api/analysis-threads/${blockedBody.analysisThread.id}/retry`, {
+      method: "POST",
+      body: {},
+    });
+    assert.equal(replay.status, 200);
+    assert.equal((await replay.json()).idempotentReplay, true);
+    assert.equal(
+      (await store.listAnalysisPlanRevisions({ analysisThreadId: blockedBody.analysisThread.id })).length,
+      1,
+    );
+  } finally {
+    testModelProvider.draftAnalysisPlan = originalDraftAnalysisPlan;
+  }
+});
+
 test("experiment-purpose AgentRun answers directly without a confirmation card", async () => {
   const project = await createProject("Purpose Project");
   await jsonFetch(`/api/projects/${project.id}/profile`, {

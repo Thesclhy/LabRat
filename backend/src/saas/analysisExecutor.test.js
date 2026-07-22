@@ -163,6 +163,29 @@ test("public executor config never presents the local adapter as production safe
   );
 });
 
+test("worker public config requires a valid HTTPS endpoint", () => {
+  for (const workerEndpoint of ["", "not a url", "http://worker.example", "ftp://worker.example"]) {
+    assert.deepEqual(
+      createAnalysisExecutor({ mode: "worker", workerEndpoint }).publicConfig(),
+      {
+        mode: "worker",
+        configured: false,
+        adapter: "worker",
+        productionSafe: false,
+      },
+    );
+  }
+  assert.deepEqual(
+    createAnalysisExecutor({ mode: "worker", workerEndpoint: "https://worker.example" }).publicConfig(),
+    {
+      mode: "worker",
+      configured: true,
+      adapter: "worker",
+      productionSafe: true,
+    },
+  );
+});
+
 test("local non-production executor enforces policy before invoking its runner", async () => {
   let calls = 0;
   const executor = createAnalysisExecutor({

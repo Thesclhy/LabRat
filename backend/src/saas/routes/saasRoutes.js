@@ -405,6 +405,15 @@ function publicAnalysisCapabilityConfig(config, fallback) {
   };
 }
 
+function isEvidenceBlockedAnalysisThread(agentRuns, analysisThreadId) {
+  return asArray(agentRuns).some((agentRun) => (
+    asArray(agentRun.proposalRefs).some((proposalRef) => (
+      proposalRef?.type === "analysis_thread" && proposalRef.id === analysisThreadId
+    ))
+    && asArray(agentRun.warnings).some((warning) => warning?.code === "analysis_evidence_required")
+  ));
+}
+
 async function sourceDocumentAuth(req, context, sourceDocumentId, role = "viewer") {
   const auth = requireAuth(await authFor(req, context));
   const sourceDocument = await context.store.findSourceDocumentById?.(sourceDocumentId);
@@ -1678,11 +1687,18 @@ async function handleAnalysisThreadRetry(req, res, context, analysisThreadId) {
       code: "project_not_found",
     });
   }
-  const [revisions, analysisRuns, experimentSnapshotHeads] = await Promise.all([
+  const [revisions, analysisRuns, experimentSnapshotHeads, agentRuns] = await Promise.all([
     context.store.listAnalysisPlanRevisions({ analysisThreadId: analysisThread.id }),
     context.store.listAnalysisRuns({ projectId: project.id, analysisThreadId: analysisThread.id }),
     context.store.listExperimentSnapshotHeads({ projectId: project.id }),
+    context.store.listAgentRuns({ projectId: project.id }),
   ]);
+  if (!isEvidenceBlockedAnalysisThread(agentRuns, analysisThread.id)) {
+    throw Object.assign(new Error("This analysis thread was not blocked by missing accepted evidence."), {
+      statusCode: 409,
+      code: "analysis_retry_not_available",
+    });
+  }
   const currentRevision = revisions.find((revision) => revision.status === "awaiting_review");
   if (currentRevision) {
     sendJson(res, 200, {
@@ -1691,6 +1707,12 @@ async function handleAnalysisThreadRetry(req, res, context, analysisThreadId) {
       idempotentReplay: true,
     });
     return;
+  }
+  if (analysisThread.status === "retry_drafting") {
+    throw Object.assign(new Error("This analysis retry is already drafting a reviewable plan."), {
+      statusCode: 409,
+      code: "analysis_retry_in_progress",
+    });
   }
   if (analysisThread.status !== "planning" || analysisRuns.length) {
     throw Object.assign(new Error("This analysis thread is not awaiting published evidence."), {
@@ -1705,6 +1727,32 @@ async function handleAnalysisThreadRetry(req, res, context, analysisThreadId) {
     });
   }
 
+  const claimedThread = await context.store.claimAnalysisThreadRetry({
+    analysisThreadId: analysisThread.id,
+    actorUserId: auth.user.id,
+  });
+  if (!claimedThread) {
+    const [latestThread, latestRevisions] = await Promise.all([
+      context.store.findAnalysisThreadById(analysisThread.id),
+      context.store.listAnalysisPlanRevisions({ analysisThreadId: analysisThread.id }),
+    ]);
+    const replay = latestRevisions.find((item) => item.status === "awaiting_review");
+    if (replay) {
+      sendJson(res, 200, {
+        analysisThread: analysisThreadSummary(latestThread || analysisThread),
+        analysisPlanRevision: analysisPlanRevisionSummary(replay),
+        idempotentReplay: true,
+      });
+      return;
+    }
+    throw Object.assign(new Error("This analysis retry is already drafting a reviewable plan."), {
+      statusCode: 409,
+      code: latestThread?.status === "retry_drafting"
+        ? "analysis_retry_in_progress"
+        : "analysis_retry_not_available",
+    });
+  }
+
   let revision;
   let idempotentReplay = false;
   try {
@@ -1715,8 +1763,17 @@ async function handleAnalysisThreadRetry(req, res, context, analysisThreadId) {
       actorUserId: auth.user.id,
       modelProvider: context.modelProvider,
       analysisToolRegistry: context.analysisToolRegistry,
+      allowRetryClaim: true,
     });
   } catch (error) {
+    try {
+      await context.store.releaseAnalysisThreadRetry({
+        analysisThreadId: claimedThread.id,
+        actorUserId: auth.user.id,
+      });
+    } catch {
+      // Preserve the draft failure while a future retry can surface any store issue.
+    }
     if (error.code !== "analysis_plan_revision_conflict" && error.code !== "23505") throw error;
     const replay = (await context.store.listAnalysisPlanRevisions({ analysisThreadId: analysisThread.id }))
       .find((item) => item.status === "awaiting_review");

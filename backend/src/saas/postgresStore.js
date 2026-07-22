@@ -2003,6 +2003,28 @@ export class PostgresSaasStore {
     return analysisThreadFromRow(result.rows[0]);
   }
 
+  async claimAnalysisThreadRetry({ analysisThreadId, actorUserId } = {}) {
+    const result = await this.query(
+      `update analysis_threads
+       set status = 'retry_drafting', updated_at = $2, updated_by = $3
+       where id = $1 and status = 'planning'
+       returning *`,
+      [analysisThreadId, nowIso(), actorUserId || null],
+    );
+    return analysisThreadFromRow(result.rows[0]);
+  }
+
+  async releaseAnalysisThreadRetry({ analysisThreadId, actorUserId } = {}) {
+    const result = await this.query(
+      `update analysis_threads
+       set status = 'planning', updated_at = $2, updated_by = $3
+       where id = $1 and status = 'retry_drafting'
+       returning *`,
+      [analysisThreadId, nowIso(), actorUserId || null],
+    );
+    return analysisThreadFromRow(result.rows[0]);
+  }
+
   async createAnalysisPlanRevision(input) {
     return insertAnalysisPlanRevisionRow(this, input);
   }

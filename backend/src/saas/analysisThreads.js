@@ -269,6 +269,7 @@ export async function draftAnalysisPlanRevision({
   analysisToolRegistry,
   feedback = null,
   reviewContext = null,
+  allowRetryClaim = false,
 } = {}) {
   const thread = await store.findAnalysisThreadById(analysisThreadId);
   if (!thread || thread.projectId !== project?.id) {
@@ -432,6 +433,7 @@ export async function draftAnalysisPlanRevision({
     plan,
     selectionRequest,
     feedback,
+    allowRetryClaim,
   });
   return {
     ...revision,
@@ -468,6 +470,7 @@ export async function createAnalysisPlanRevision({
   plan,
   selectionRequest = {},
   feedback = null,
+  allowRetryClaim = false,
 } = {}) {
   const thread = await store.findAnalysisThreadById(analysisThreadId);
   if (!thread || thread.projectId !== project?.id) {
@@ -478,6 +481,7 @@ export async function createAnalysisPlanRevision({
     "awaiting_plan_review",
     "awaiting_result_review",
     "execution_failed",
+    ...(allowRetryClaim ? ["retry_drafting"] : []),
   ].includes(thread.status)) {
     throw analysisError(
       "analysis_thread_closed",

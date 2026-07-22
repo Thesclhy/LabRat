@@ -80,6 +80,8 @@ test("migration 012 and Postgres store expose analysis persistence parity", asyn
     "createAnalysisThread",
     "findAnalysisThreadById",
     "listAnalysisThreads",
+    "claimAnalysisThreadRetry",
+    "releaseAnalysisThreadRetry",
     "appendAnalysisPlanRevision",
     "findAnalysisPlanRevisionById",
     "listAnalysisPlanRevisions",

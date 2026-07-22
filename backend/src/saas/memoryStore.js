@@ -1042,6 +1042,24 @@ export class MemorySaasStore {
     return copy(thread);
   }
 
+  async claimAnalysisThreadRetry({ analysisThreadId, actorUserId } = {}) {
+    const thread = this.analysisThreads.get(analysisThreadId);
+    if (!thread || thread.status !== "planning") return null;
+    thread.status = "retry_drafting";
+    thread.updatedAt = nowIso();
+    thread.updatedBy = actorUserId || thread.updatedBy;
+    return copy(thread);
+  }
+
+  async releaseAnalysisThreadRetry({ analysisThreadId, actorUserId } = {}) {
+    const thread = this.analysisThreads.get(analysisThreadId);
+    if (!thread || thread.status !== "retry_drafting") return null;
+    thread.status = "planning";
+    thread.updatedAt = nowIso();
+    thread.updatedBy = actorUserId || thread.updatedBy;
+    return copy(thread);
+  }
+
   async createAnalysisPlanRevision(input) {
     if (this.analysisPlanRevisions.has(input.id)) {
       throw Object.assign(new Error("Analysis plan revision already exists."), {

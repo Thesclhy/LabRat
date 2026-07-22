@@ -39,6 +39,14 @@ function fieldValueKey(field) {
   return String(field?.fieldKey || field?.fieldId || "").trim();
 }
 
+function hasValidHttpsWorkerEndpoint(workerEndpoint) {
+  try {
+    return new URL(workerEndpoint).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export function buildAnalysisRunPackage({ run, planRevision, selection } = {}) {
   if (
     !run?.id
@@ -347,13 +355,14 @@ export function createAnalysisExecutor({
   localRunner = null,
 } = {}) {
   const normalizedMode = String(mode || "disabled").trim().toLowerCase();
+  const workerConfigured = normalizedMode === "worker" && hasValidHttpsWorkerEndpoint(workerEndpoint);
   return {
     publicConfig() {
       return {
         mode: normalizedMode,
-        configured: normalizedMode === "local" || normalizedMode === "worker" && Boolean(workerEndpoint),
+        configured: normalizedMode === "local" || workerConfigured,
         adapter: normalizedMode === "local" ? "local_non_production" : normalizedMode,
-        productionSafe: normalizedMode === "worker" && Boolean(workerEndpoint),
+        productionSafe: workerConfigured,
       };
     },
     async executeAcceptedRun(runPackage) {
