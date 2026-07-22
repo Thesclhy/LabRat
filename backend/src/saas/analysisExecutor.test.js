@@ -142,6 +142,27 @@ test("disabled and production-local executors never start a runner", async () =>
   assert.equal(calls, 0);
 });
 
+test("public executor config never presents the local adapter as production safe", () => {
+  assert.deepEqual(
+    createAnalysisExecutor({ mode: "local", nodeEnv: "test" }).publicConfig(),
+    {
+      mode: "local",
+      configured: true,
+      adapter: "local_non_production",
+      productionSafe: false,
+    },
+  );
+  assert.deepEqual(
+    createAnalysisExecutor({ mode: "worker", workerEndpoint: "https://worker.example" }).publicConfig(),
+    {
+      mode: "worker",
+      configured: true,
+      adapter: "worker",
+      productionSafe: true,
+    },
+  );
+});
+
 test("local non-production executor enforces policy before invoking its runner", async () => {
   let calls = 0;
   const executor = createAnalysisExecutor({

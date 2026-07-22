@@ -397,6 +397,14 @@ async function projectAuth(req, context, projectId, role = "viewer") {
   return { auth, project };
 }
 
+function publicAnalysisCapabilityConfig(config, fallback) {
+  const value = typeof config?.publicConfig === "function" ? config.publicConfig() : {};
+  return {
+    ...fallback,
+    ...(value && typeof value === "object" ? value : {}),
+  };
+}
+
 async function sourceDocumentAuth(req, context, sourceDocumentId, role = "viewer") {
   const auth = requireAuth(await authFor(req, context));
   const sourceDocument = await context.store.findSourceDocumentById?.(sourceDocumentId);
@@ -1599,6 +1607,44 @@ async function handleProjectAnalysisThreads(req, res, context, projectId, url) {
   sendJson(res, 201, { analysisThread: analysisThreadSummary(analysisThread) });
 }
 
+async function handleProjectAnalysisCapabilities(req, res, context, projectId) {
+  const { project } = await projectAuth(req, context, projectId, "viewer");
+  const [dataSnapshots, experimentSnapshotHeads] = await Promise.all([
+    context.store.listDataSnapshots({ projectId: project.id }),
+    context.store.listExperimentSnapshotHeads({ projectId: project.id }),
+  ]);
+  const model = publicAnalysisCapabilityConfig(context.modelProvider, {
+    provider: null,
+    model: null,
+    configured: false,
+  });
+  const executor = publicAnalysisCapabilityConfig(context.analysisExecutor, {
+    mode: "disabled",
+    adapter: "disabled",
+    configured: false,
+    productionSafe: false,
+  });
+  sendJson(res, 200, {
+    schemaVersion: "labrat.analysisCapabilities.v1",
+    projectId: project.id,
+    model: {
+      provider: model.provider || null,
+      model: model.model || null,
+      configured: Boolean(model.configured),
+    },
+    executor: {
+      mode: executor.mode || "disabled",
+      adapter: executor.adapter || "disabled",
+      configured: Boolean(executor.configured),
+      productionSafe: Boolean(executor.productionSafe),
+    },
+    acceptedData: {
+      acceptedSnapshotCount: dataSnapshots.filter((snapshot) => snapshot.status === "accepted").length,
+      activeExperimentHeadCount: experimentSnapshotHeads.length,
+    },
+  });
+}
+
 async function handleAnalysisThreadById(req, res, context, analysisThreadId) {
   const { analysisThread } = await analysisThreadAuth(
     req,
@@ -1620,6 +1666,87 @@ async function handleAnalysisThreadById(req, res, context, analysisThreadId) {
     },
     planRevisions: planRevisions.map(analysisPlanRevisionSummary),
     analysisRuns: analysisRuns.map(analysisRunSummary),
+  });
+}
+
+async function handleAnalysisThreadRetry(req, res, context, analysisThreadId) {
+  const { auth, analysisThread } = await analysisThreadAuth(req, context, analysisThreadId, "editor");
+  const project = await context.store.findProjectById(analysisThread.projectId);
+  if (!project) {
+    throw Object.assign(new Error("Project not found."), {
+      statusCode: 404,
+      code: "project_not_found",
+    });
+  }
+  const [revisions, analysisRuns, experimentSnapshotHeads] = await Promise.all([
+    context.store.listAnalysisPlanRevisions({ analysisThreadId: analysisThread.id }),
+    context.store.listAnalysisRuns({ projectId: project.id, analysisThreadId: analysisThread.id }),
+    context.store.listExperimentSnapshotHeads({ projectId: project.id }),
+  ]);
+  const currentRevision = revisions.find((revision) => revision.status === "awaiting_review");
+  if (currentRevision) {
+    sendJson(res, 200, {
+      analysisThread: analysisThreadSummary(analysisThread),
+      analysisPlanRevision: analysisPlanRevisionSummary(currentRevision),
+      idempotentReplay: true,
+    });
+    return;
+  }
+  if (analysisThread.status !== "planning" || analysisRuns.length) {
+    throw Object.assign(new Error("This analysis thread is not awaiting published evidence."), {
+      statusCode: 409,
+      code: "analysis_retry_not_available",
+    });
+  }
+  if (!experimentSnapshotHeads.length) {
+    throw Object.assign(new Error("Publish accepted experiment data before retrying this analysis plan."), {
+      statusCode: 409,
+      code: "analysis_evidence_required",
+    });
+  }
+
+  let revision;
+  let idempotentReplay = false;
+  try {
+    revision = await draftAnalysisPlanRevision({
+      store: context.store,
+      project,
+      analysisThreadId: analysisThread.id,
+      actorUserId: auth.user.id,
+      modelProvider: context.modelProvider,
+      analysisToolRegistry: context.analysisToolRegistry,
+    });
+  } catch (error) {
+    if (error.code !== "analysis_plan_revision_conflict" && error.code !== "23505") throw error;
+    const replay = (await context.store.listAnalysisPlanRevisions({ analysisThreadId: analysisThread.id }))
+      .find((item) => item.status === "awaiting_review");
+    if (!replay) throw error;
+    revision = replay;
+    idempotentReplay = true;
+  }
+
+  const updatedThread = await context.store.findAnalysisThreadById(analysisThread.id);
+  if (!idempotentReplay) {
+    await context.store.recordAuditEvent({
+      labId: project.labId,
+      projectId: project.id,
+      actorUserId: auth.user.id,
+      action: "analysis_thread.retry",
+      targetType: "analysis_plan_revision",
+      targetId: revision.id,
+      summary: `Retried analysis thread ${analysisThread.id} with published data.`,
+      metadata: {
+        analysisThreadId: analysisThread.id,
+        planHash: revision.planHash,
+        selectionHash: revision.selectionHash,
+        dependencyHash: revision.dependencyHash,
+      },
+    });
+  }
+  sendJson(res, idempotentReplay ? 200 : 201, {
+    analysisThread: analysisThreadSummary(updatedThread || analysisThread),
+    analysisPlanRevision: analysisPlanRevisionSummary(revision),
+    idempotentReplay,
   });
 }
 
@@ -2917,6 +3044,10 @@ async function dispatch(req, res, context) {
   if (projectProfileMatch && req.method === "PATCH") return handleProjectProfile(req, res, context, projectProfileMatch[1]);
   const projectStateMatch = pathName.match(/^\/api\/projects\/([^/]+)\/state$/);
   if (projectStateMatch && req.method === "GET") return handleProjectState(req, res, context, projectStateMatch[1]);
+  const projectAnalysisCapabilitiesMatch = pathName.match(/^\/api\/projects\/([^/]+)\/analysis-capabilities$/);
+  if (projectAnalysisCapabilitiesMatch && req.method === "GET") {
+    return handleProjectAnalysisCapabilities(req, res, context, projectAnalysisCapabilitiesMatch[1]);
+  }
   const projectEvidenceRetrieveMatch = pathName.match(/^\/api\/projects\/([^/]+)\/evidence\/retrieve$/);
   if (projectEvidenceRetrieveMatch && req.method === "POST") return handleProjectEvidenceRetrieve(req, res, context, projectEvidenceRetrieveMatch[1]);
   const projectDataPlanDraftMatch = pathName.match(/^\/api\/projects\/([^/]+)\/data-plans\/draft$/);
@@ -3053,6 +3184,10 @@ async function dispatch(req, res, context) {
   const analysisThreadPlanRevisionsMatch = pathName.match(/^\/api\/analysis-threads\/([^/]+)\/plan-revisions$/);
   if (analysisThreadPlanRevisionsMatch && req.method === "POST") {
     return handleAnalysisPlanRevisions(req, res, context, analysisThreadPlanRevisionsMatch[1]);
+  }
+  const analysisThreadRetryMatch = pathName.match(/^\/api\/analysis-threads\/([^/]+)\/retry$/);
+  if (analysisThreadRetryMatch && req.method === "POST") {
+    return handleAnalysisThreadRetry(req, res, context, analysisThreadRetryMatch[1]);
   }
   const analysisThreadMatch = pathName.match(/^\/api\/analysis-threads\/([^/]+)$/);
   if (analysisThreadMatch && req.method === "GET") {

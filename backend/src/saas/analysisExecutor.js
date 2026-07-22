@@ -353,6 +353,7 @@ export function createAnalysisExecutor({
         mode: normalizedMode,
         configured: normalizedMode === "local" || normalizedMode === "worker" && Boolean(workerEndpoint),
         adapter: normalizedMode === "local" ? "local_non_production" : normalizedMode,
+        productionSafe: normalizedMode === "worker" && Boolean(workerEndpoint),
       };
     },
     async executeAcceptedRun(runPackage) {

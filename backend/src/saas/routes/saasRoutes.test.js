@@ -347,6 +347,13 @@ function seedRouteAnalysisData(project, suffix = "route") {
 }
 
 const testModelProvider = {
+  publicConfig() {
+    return {
+      provider: "anthropic",
+      model: "test-analysis-model",
+      configured: true,
+    };
+  },
   async classifyIntent() {
     return { ok: false };
   },
@@ -428,6 +435,14 @@ const testModelProvider = {
 };
 
 const testAnalysisExecutor = {
+  publicConfig() {
+    return {
+      mode: "test",
+      adapter: "test_executor",
+      configured: true,
+      productionSafe: false,
+    };
+  },
   async executeAcceptedRun(runPackage) {
     const resultTable = runPackage.tables.records.map((record, index) => ({
       __result_id: `result_row_${index + 1}`,
@@ -2412,6 +2427,114 @@ test("analysis run reads allow viewers while execution and revision require edit
   )).status, 403);
 
   cookie = ownerCookie;
+});
+
+test("analysis capabilities and missing-evidence retry stay bounded, authorized, and replay-safe", async () => {
+  const project = await createProject("Analysis Retry Route Project");
+  const ownerCookie = cookie;
+
+  const initialCapabilities = await jsonFetch(`/api/projects/${project.id}/analysis-capabilities`);
+  assert.equal(initialCapabilities.status, 200);
+  assert.deepEqual(await initialCapabilities.json(), {
+    schemaVersion: "labrat.analysisCapabilities.v1",
+    projectId: project.id,
+    model: {
+      provider: "anthropic",
+      model: "test-analysis-model",
+      configured: true,
+    },
+    executor: {
+      mode: "test",
+      adapter: "test_executor",
+      configured: true,
+      productionSafe: false,
+    },
+    acceptedData: {
+      acceptedSnapshotCount: 0,
+      activeExperimentHeadCount: 0,
+    },
+  });
+
+  const blocked = await jsonFetch(`/api/projects/${project.id}/agent/runs`, {
+    method: "POST",
+    body: { message: "Compare accepted yield across the experiments." },
+  });
+  assert.equal(blocked.status, 201);
+  const blockedBody = await blocked.json();
+  assert.equal(blockedBody.currentPlanRevision, null);
+  assert.equal(
+    blockedBody.agentRun.warnings.some((warning) => warning.code === "analysis_evidence_required"),
+    true,
+  );
+
+  const unavailable = await jsonFetch(`/api/analysis-threads/${blockedBody.analysisThread.id}/retry`, {
+    method: "POST",
+    body: {},
+  });
+  assert.equal(unavailable.status, 409);
+  assert.equal((await unavailable.json()).error.code, "analysis_evidence_required");
+
+  seedRouteAnalysisData(project, `retry_${Date.now()}`);
+  const adminLogin = await jsonFetch("/api/auth/login", {
+    method: "POST",
+    body: { username: "admin", password: "LabRatAdmin123!" },
+  });
+  assert.equal(adminLogin.status, 200);
+  cookie = cookieFrom(adminLogin);
+  const viewerUsername = `analysis_retry_viewer_${Date.now()}`;
+  const viewerPassword = "AnalysisRetryViewer123!";
+  const createViewer = await jsonFetch("/api/admin/users", {
+    method: "POST",
+    body: {
+      username: viewerUsername,
+      displayName: "Analysis Retry Viewer",
+      temporaryPassword: viewerPassword,
+      labId: project.labId,
+      role: "viewer",
+    },
+  });
+  assert.equal(createViewer.status, 201);
+  const viewerLogin = await jsonFetch("/api/auth/login", {
+    method: "POST",
+    body: { username: viewerUsername, password: viewerPassword },
+  });
+  assert.equal(viewerLogin.status, 200);
+  cookie = cookieFrom(viewerLogin);
+  const viewerRetry = await jsonFetch(`/api/analysis-threads/${blockedBody.analysisThread.id}/retry`, {
+    method: "POST",
+    body: {},
+  });
+  assert.equal(viewerRetry.status, 403);
+  assert.equal((await viewerRetry.json()).error.code, "forbidden");
+
+  cookie = ownerCookie;
+  const retries = await Promise.all([
+    jsonFetch(`/api/analysis-threads/${blockedBody.analysisThread.id}/retry`, {
+      method: "POST",
+      body: {},
+    }),
+    jsonFetch(`/api/analysis-threads/${blockedBody.analysisThread.id}/retry`, {
+      method: "POST",
+      body: {},
+    }),
+  ]);
+  const retryBodies = await Promise.all(retries.map((response) => response.json()));
+  assert.deepEqual(retries.map((response) => response.status).sort(), [200, 201]);
+  assert.equal(retryBodies[0].analysisPlanRevision.id, retryBodies[1].analysisPlanRevision.id);
+  assert.equal(retryBodies.some((body) => body.idempotentReplay), true);
+  assert.equal(
+    (await store.listAnalysisPlanRevisions({ analysisThreadId: blockedBody.analysisThread.id })).length,
+    1,
+  );
+  assert.equal((await store.listAnalysisRuns({ projectId: project.id })).length, 0);
+  assert.equal((await store.listChartSpecs({ projectId: project.id })).length, 0);
+
+  const refreshedCapabilities = await jsonFetch(`/api/projects/${project.id}/analysis-capabilities`);
+  assert.equal(refreshedCapabilities.status, 200);
+  assert.deepEqual((await refreshedCapabilities.json()).acceptedData, {
+    acceptedSnapshotCount: 1,
+    activeExperimentHeadCount: 1,
+  });
 });
 
 test("experiment-purpose AgentRun answers directly without a confirmation card", async () => {
