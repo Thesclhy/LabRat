@@ -68,13 +68,15 @@ describe("AnalysisConversationCard", () => {
     const thread = {
       id: "analysis_thread_1",
       originalRequest: "Compare every reaction-time curve.",
-      status: "analysis_evidence_required",
+      status: "planning",
     };
 
     render(
       <AnalysisConversationCard
         thread={thread}
+        evidenceBlocked
         modelAvailable
+        acceptedDataAvailable
         onRetry={onRetry}
       />,
     );
@@ -82,5 +84,32 @@ describe("AnalysisConversationCard", () => {
     expect(screen.getByText("A reviewable plan could not be drafted yet.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry with published data" }));
     expect(onRetry).toHaveBeenCalledWith(thread);
+  });
+
+  it("fails closed while model availability is unknown", () => {
+    render(
+      <AnalysisConversationCard
+        thread={{ id: "analysis_thread_1", originalRequest: "Compare experiments.", status: "planning" }}
+        evidenceBlocked
+        onRetry={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Retry with published data" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByText("Model planning is unavailable.")).toBeTruthy();
+  });
+
+  it("requires active accepted data before retrying", () => {
+    render(
+      <AnalysisConversationCard
+        thread={{ id: "analysis_thread_1", originalRequest: "Compare experiments.", status: "planning" }}
+        evidenceBlocked
+        modelAvailable
+        onRetry={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Retry with published data" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByText("Publish accepted experiment data before retrying.")).toBeTruthy();
   });
 });

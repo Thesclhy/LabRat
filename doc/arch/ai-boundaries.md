@@ -81,10 +81,22 @@ RegionUnderstandingRevision confirmation, DataPlan publish, source extract accep
 - An AnalysisPlanRevision requires an explicit missing-value policy, exact `labrat-python-v1` source/hash, manifest, expected output shape, and frozen selection/dependency hashes.
 - AnalysisPlanRevision validation rejects embedded result arrays. The backend persists immutable numbered revisions; feedback creates a later revision instead of patching prior payloads.
 - AgentRun analysis dispositions create a durable AnalysisThread. With accepted data and a configured provider, the backend may draft revision 1 and returns only visible artifact summaries.
+- Analysis-plan drafting uses provider-enforced structured output for the
+  selection request, visible manifest, concise exact Python, expected chart
+  encoding, and warnings. The provider receives the bounded project context,
+  accepted experiment id/label/alias catalog, and accepted field catalog, not
+  selected scalar values or complete DataSnapshot rows. Backend resolution,
+  hashing, Python policy, and plan validation remain authoritative.
+- A thread that is durably linked to an `analysis_evidence_required` AgentRun
+  may be retried after accepted heads exist. Retry is claim-guarded so
+  concurrent requests cannot duplicate provider work. A durable idempotency
+  receipt replays completed work, rejects conflicting key reuse, and permits
+  recovery after an abandoned six-minute drafting lease. Retry cannot accept
+  a plan, execute Python, or publish a chart.
 - Plan acceptance requires exact reviewed hashes plus idempotency, re-resolves active heads, and creates only a queued AnalysisRun. It does not execute Python or create an AnalysisResult/ChartSpec.
 - A model cannot call the executor. Only the authenticated AnalysisRun endpoint can execute an accepted frozen package after active-head, dependency, selection, input, program, runtime, and Python-policy checks.
 - Static policy permits a bounded numeric-library allowlist and rejects dynamic code, direct numeric-library I/O, module/private-attribute escapes, process, network, filesystem, runtime-internal, and path-traversal operations. The runner repeats AST checks with restricted builtins.
-- Local execution is a non-production development adapter, not a security sandbox. Production defaults to disabled and requires an externally hardened HTTPS worker with network denial, read-only assets, isolation, and resource limits.
+- Local execution is a non-production development adapter, not a security sandbox. Static and runner-side AST policy reduce accidental misuse but are not an isolation boundary. Production defaults to disabled and requires an externally hardened HTTPS worker with network denial, read-only assets, isolation, and resource limits.
 - Executor output is untrusted until deterministic validation checks the supported output encoding, finite declared fields, plottable x/y types and lengths, exact experiment/snapshot identity, stable ids, accepted-record lineage, complete output-or-reasoned-exclusion accounting, missing-value behavior, size limits, hashes, units, and manifest invariants.
 - Only valid output becomes an immutable awaiting-review AnalysisResult. No executor path creates a ChartSpec. Result feedback references the exact visible result hash and creates a later plan revision without mutating prior artifacts.
 - Result acceptance is deterministic and requires the exact visible result hash plus reviewed trace ids. The backend rechecks active accepted heads and atomically accepts the existing result and creates one ChartSpec; the model cannot invoke or bypass this boundary.
@@ -113,6 +125,11 @@ They must not persist hidden reasoning. Deterministic runs record the determinis
 ## Provider Safety
 
 Provider access is backend-only. The frontend contains no provider-key/model settings and never calls a provider endpoint directly. Backend configuration supplies provider secrets, while the browser receives only user-facing replies, visible workflow artifacts, warnings, and bounded provider/model/usage/latency metadata.
+
+The frontend reads a backend-owned capability summary before retrying planning
+or accepting a plan. Unknown, loading, or failed capability state is treated as
+unavailable. A local executor may be reported only in non-production; a worker
+is production-ready only when configured with a valid HTTPS endpoint.
 
 Workbook-region interpretation uses provider-enforced structured output for a
 small correction-patch Schema. The model does not repeat the deterministic

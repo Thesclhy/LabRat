@@ -268,7 +268,9 @@ The backend owns an internal AnalysisToolRegistry with `get_project_analysis_con
 ```text
 POST /api/projects/:projectId/analysis-threads
 GET  /api/projects/:projectId/analysis-threads
+GET  /api/projects/:projectId/analysis-capabilities
 GET  /api/analysis-threads/:analysisThreadId
+POST /api/analysis-threads/:analysisThreadId/retry
 POST /api/analysis-threads/:analysisThreadId/plan-revisions
 GET  /api/analysis-plan-revisions/:planRevisionId/selection
 POST /api/analysis-plan-revisions/:planRevisionId/accept
@@ -282,6 +284,20 @@ POST /api/analysis-runs/:analysisRunId/accept-and-create-chart
 Rules:
 
 - Thread/revision mutations require `editor`; reads require `viewer`.
+- The project capability read returns only bounded public model/executor status
+  and accepted snapshot/head counts. It never returns provider credentials,
+  worker secrets, workbook values, or Python command configuration. Frontends
+  fail closed while this capability is loading or unavailable.
+- Retry is editor-only and valid only for a thread linked from an AgentRun with
+  an `analysis_evidence_required` warning, no reviewable revision/run, and at
+  least one current accepted head. It preserves the original request, drafts
+  from current heads, and never accepts, executes, or publishes automatically.
+  `Idempotency-Key` is required. A durable receipt and six-minute store lease
+  prevent concurrent provider calls; same-key/same-request replay returns the
+  existing revision, conflicting reuse returns `409`, failed drafting releases
+  the receipt for retry, and an abandoned claim becomes recoverable after its
+  lease expires. A revision durably created before receipt completion is
+  reconciled and replayed without another provider call.
 - A normal modification request posts only `feedback`; the backend model chooses a revised accepted-data scope/calculation, and backend tools replace model-supplied selection/source/program hashes with exact validated values.
 - Each revision stores the exact plan, complete frozen AnalysisSelection, non-contiguous source rectangles, Python source/hash, dependency/selection/plan hashes, and visible feedback. Creating revision N marks the prior awaiting-review revision `superseded` without changing its payload.
 - `GET .../selection` is paginated with a maximum of 200 records and returns exact source rectangles plus coverage and hashes.
@@ -297,7 +313,7 @@ Rules:
 - Revision requires feedback and, when a result exists, its exact visible `resultHash`. It sends bounded result/validation context to backend planning and creates a later immutable AnalysisPlanRevision; the prior result remains unchanged.
 - Result publication requires `editor`, an `Idempotency-Key`, exact `resultHash`, and reviewed `defaultVisibleTraceIds`. It rechecks accepted plan/run/result hashes and locks the selected active experiment heads. Changed heads return `409 analysis_result_stale`; invalid result state/hash/trace ids create no writes.
 - Successful result publication atomically marks the existing AnalysisResult `accepted`, moves its AnalysisRun and AnalysisThread to `completed`, creates one `labrat.chartSpec.v2` `origin: analysis_result` ChartSpec, links artifact ids, writes the audit event and publication receipt, and returns the complete ChartSpec. Same-key/same-request retries return the original artifacts; conflicting key reuse returns `409`.
-- `LABRAT_ANALYSIS_EXECUTOR` defaults to `disabled`. `local` is non-production only; production execution requires a configured HTTPS hardened worker. Executor command, endpoint, timeout, and provider credentials are backend-only configuration.
+- `LABRAT_ANALYSIS_EXECUTOR` defaults to `disabled`. `local` is non-production only; production execution requires a valid configured HTTPS hardened worker. Executor command, endpoint, timeout, and provider credentials are backend-only configuration.
 
 Status flow:
 

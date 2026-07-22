@@ -15,6 +15,28 @@ Keep entries concise, newest first, and include:
 
 ## 2026-07-22
 
+- Implemented the DataSnapshot-to-ChartSpec frontend-closure runtime slice.
+  Added authenticated project analysis capabilities, an editor-only
+  evidence-blocked retry with durable warning proof, required server-side
+  idempotency receipts, and atomic memory/Postgres provider-call claims with a
+  six-minute abandoned-claim lease, strict HTTPS worker readiness, and
+  development-only local executor documentation/configuration. Added compact
+  LabRat model/Python/data
+  status, real AgentRun-warning retry, project-switch isolation, and
+  fail-closed model/executor UI gates that leave feedback usable. Analysis plan
+  drafting now uses a provider-enforced JSON Schema and a 6400-token plan
+  budget after the first real 63-head attempt preserved a 2400-token truncation
+  failure. The final `npm run codex:verify` passed with frontend 263/263,
+  backend 245 passed plus 1 optional PostgreSQL skip, and a production build with the
+  existing Plotly chunk warning. A no-provider diagnostic on an isolated clone
+  of `test1` exercised the actual local `python -I` adapter across 63 active
+  heads on a fresh clone: 57 validated rows, 6 reasoned exclusions, 3 traces,
+  passing row-sum invariants, exactly one atomically persisted
+  `origin: analysis_result` ChartSpec after reload, 63 input snapshot refs, and
+  184 source refs. This diagnostic does not satisfy
+  the real-provider/UI acceptance gate. Starting the real Anthropic clone is
+  pending explicit user approval to send bounded project/experiment/field
+  metadata to the external provider; scalar DataSnapshot values remain local.
 - Approved and documented the real DataSnapshot-to-ChartSpec frontend closure
   milestone. The plan enables the local Python adapter only in development,
   preserves the production-local prohibition, adds backend model/executor

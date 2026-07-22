@@ -220,6 +220,10 @@ function WorkbookWorkspaceStub({ draftRegions, activeDraftRegionId }) {
   );
 }
 
+const readyAnalysisCapabilities = {
+  executor: { mode: "local", adapter: "local_non_production", configured: true, productionSafe: false },
+};
+
 describe("AnalysisReviewWorkspace", () => {
   it("accepts only the visible plan revision with its exact hashes", async () => {
     const acceptPlan = vi.fn().mockResolvedValue({
@@ -233,6 +237,7 @@ describe("AnalysisReviewWorkspace", () => {
         revision={revision2}
         planRevisions={[revision1, revision2]}
         selection={selection}
+        analysisCapabilities={readyAnalysisCapabilities}
         WorkbookWorkspaceComponent={WorkbookWorkspaceStub}
         acceptPlan={acceptPlan}
         createRevision={vi.fn()}
@@ -270,6 +275,7 @@ describe("AnalysisReviewWorkspace", () => {
         revision={revision2}
         planRevisions={[revision1, revision2]}
         selection={selection}
+        analysisCapabilities={readyAnalysisCapabilities}
         WorkbookWorkspaceComponent={WorkbookWorkspaceStub}
         acceptPlan={acceptPlan}
         createRevision={createRevision}
@@ -323,6 +329,25 @@ describe("AnalysisReviewWorkspace", () => {
     ));
   });
 
+  it("fails closed while Python execution availability is still loading", () => {
+    render(
+      <AnalysisReviewWorkspace
+        projectId="project_1"
+        thread={thread}
+        revision={revision2}
+        planRevisions={[revision1, revision2]}
+        selection={selection}
+        loadAnalysisCapabilities={() => new Promise(() => {})}
+        WorkbookWorkspaceComponent={WorkbookWorkspaceStub}
+        acceptPlan={vi.fn()}
+        createRevision={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Accept plan" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByText("Checking Python execution availability before this plan can be accepted.")).toBeTruthy();
+  });
+
   it("passes every non-contiguous source rectangle to the workbook as a separate red box", () => {
     render(
       <AnalysisReviewWorkspace
@@ -331,6 +356,7 @@ describe("AnalysisReviewWorkspace", () => {
         revision={revision2}
         planRevisions={[revision2]}
         selection={selection}
+        analysisCapabilities={readyAnalysisCapabilities}
         WorkbookWorkspaceComponent={WorkbookWorkspaceStub}
         acceptPlan={vi.fn()}
         createRevision={vi.fn()}
@@ -407,6 +433,34 @@ describe("AnalysisReviewWorkspace", () => {
       expect(screen.getAllByText("Accepted").length).toBeGreaterThanOrEqual(1);
     });
     expect(screen.getByRole("button", { name: "Accept plan" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("does not auto-execute a rehydrated queued run when the executor is unavailable", async () => {
+    const executeRun = vi.fn();
+    const queuedRun = { ...validatedRun, status: "queued" };
+    render(
+      <AnalysisReviewWorkspace
+        projectId="project_1"
+        thread={thread}
+        revision={revision2}
+        selection={selection}
+        loadThread={vi.fn().mockResolvedValue({
+          analysisThread: thread,
+          planRevisions: [{ ...revision2, status: "accepted" }],
+          analysisRuns: [queuedRun],
+        })}
+        loadAnalysisCapabilities={vi.fn().mockResolvedValue({
+          executor: { configured: false, adapter: "disabled" },
+        })}
+        executeRun={executeRun}
+        WorkbookWorkspaceComponent={WorkbookWorkspaceStub}
+        acceptPlan={vi.fn()}
+        createRevision={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText("Python execution is unavailable. Configure an analysis executor before accepting this plan.")).toBeTruthy());
+    expect(executeRun).not.toHaveBeenCalled();
   });
 
   it("shows validated results, exclusions, invariants, and complete trace choices before acceptance", () => {
@@ -523,6 +577,7 @@ describe("AnalysisReviewWorkspace", () => {
         WorkbookWorkspaceComponent={WorkbookWorkspaceStub}
         acceptPlan={acceptPlan}
         executeRun={executeRun}
+        analysisCapabilities={readyAnalysisCapabilities}
         loadResultPreview={loadResultPreview}
         createRevision={vi.fn()}
       />,

@@ -159,6 +159,14 @@ test("rejects unsupported or incomplete expected output encodings", () => {
       yFields: [],
     },
   }));
+  const unsupportedChart = validateAnalysisPlanRevision(validPlan({
+    expectedOutput: {
+      shape: "experiment_traces",
+      chartType: "pie",
+      xField: "experiment_label",
+      yFields: ["selectivity_normalized"],
+    },
+  }));
 
   assert.equal(
     unsupported.errors.some((item) => item.code === "analysis_output_shape_unsupported"),
@@ -166,6 +174,10 @@ test("rejects unsupported or incomplete expected output encodings", () => {
   );
   assert.equal(
     incomplete.errors.some((item) => item.code === "analysis_output_encoding_required"),
+    true,
+  );
+  assert.equal(
+    unsupportedChart.errors.some((item) => item.code === "analysis_chart_type_unsupported"),
     true,
   );
 });

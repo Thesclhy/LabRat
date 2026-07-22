@@ -1,6 +1,6 @@
 # Current Milestone
 
-Status: completed
+Status: in progress
 Read when: checking what the next implementation slice should be.
 Last reviewed: 2026-07-22
 
@@ -28,6 +28,18 @@ golden workbook-to-Browser workflow. Full automated verification plus desktop
 and 390x844 browser QA now cover the integrated upload/review/publish path.
 
 ## Current Position
+
+Active milestone: real DataSnapshot-to-ChartSpec frontend closure. Backend
+capability/retry APIs, development-only local execution configuration,
+fail-closed frontend runtime gates, and AnalysisPlan structured output are
+implemented. Retry now has durable memory/PostgreSQL idempotency receipts and
+six-minute abandoned-claim recovery. Full verification passes with frontend
+263/263 and backend 245 passed plus one optional PostgreSQL skip. A fresh
+63-head local Python/persistence diagnostic also passes with 57 result rows, 6
+reasoned exclusions, 3 traces, one reloaded ChartSpec, 63 input snapshot refs,
+and 184 source refs. The acceptance gate remains open until the user explicitly
+approves bounded `test1` metadata egress and the real Anthropic plan/revision
+flow is completed through the UI.
 
 Implemented:
 

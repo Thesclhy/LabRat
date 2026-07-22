@@ -2210,7 +2210,9 @@ export function AgentPanel({
     value: null,
   });
   const [retryingAnalysisThreadId, setRetryingAnalysisThreadId] = useState("");
+  const acceptedDataStateKey = `${asArray(projectState?.dataSnapshots).length}:${asArray(projectState?.experimentSnapshotHeads).length}`;
   const messagesRef = useRef(null);
+  const activeProjectIdRef = useRef(activeProjectId);
   const chatScrollInitializedRef = useRef(false);
   const lastChatScrollTopRef = useRef(0);
   const fileActionInputRef = useRef(null);
@@ -2219,6 +2221,9 @@ export function AgentPanel({
     projectBackground,
     houseRules,
   });
+  useEffect(() => {
+    activeProjectIdRef.current = activeProjectId;
+  }, [activeProjectId]);
   useEffect(() => {
     ["key_v1", "model_v1"].forEach((suffix) => {
       localStorage.removeItem(`labrat_blank_anthropic_${suffix}`);
@@ -2255,7 +2260,7 @@ export function AgentPanel({
     return () => {
       cancelled = true;
     };
-  }, [activeProjectId, open]);
+  }, [acceptedDataStateKey, activeProjectId, open]);
   useEffect(() => {
     if (!open) return undefined;
     const schedule = typeof window.requestAnimationFrame === "function"
@@ -2338,7 +2343,10 @@ export function AgentPanel({
   };
   const retryAnalysisWithPublishedData = async (thread) => {
     if (!thread?.id || retryingAnalysisThreadId) return;
-    if (analysisCapabilitiesState.value?.model?.configured === false) return;
+    if (analysisCapabilitiesState.loading || analysisCapabilitiesState.value?.model?.configured !== true) return;
+    if ((analysisCapabilitiesState.value?.acceptedData?.activeExperimentHeadCount || 0) < 1) return;
+    const requestedProjectId = activeProjectId;
+    const requestedHistoryKey = chatHistoryKey;
     setRetryingAnalysisThreadId(thread.id);
     try {
       const response = await retryAnalysisThread(thread.id, {
@@ -2346,23 +2354,29 @@ export function AgentPanel({
       });
       const analysisThread = response?.analysisThread || thread;
       const currentPlanRevision = response?.currentPlanRevision || response?.analysisPlanRevision || null;
-      setHistory((current) => [...current, {
-        role: "assistant",
-        text: currentPlanRevision?.id
-          ? "I drafted a new plan from the current published data. Review it before execution."
-          : "I retried planning with the current published data.",
-        analysisThread,
-        currentPlanRevision,
-        agentRun: response?.agentRun || null,
-      }]);
-      if (analysisThread?.id && currentPlanRevision?.id) {
+      setHistoryState((current) => current.key !== requestedHistoryKey ? current : ({
+        ...current,
+        messages: [...current.messages, {
+          role: "assistant",
+          text: currentPlanRevision?.id
+            ? "I drafted a new plan from the current published data. Review it before execution."
+            : "I retried planning with the current published data.",
+          analysisThread,
+          currentPlanRevision,
+          agentRun: response?.agentRun || null,
+        }],
+      }));
+      if (activeProjectIdRef.current === requestedProjectId && analysisThread?.id && currentPlanRevision?.id) {
         onOpenAnalysisReview?.({ thread: analysisThread, revision: currentPlanRevision });
       }
     } catch (error) {
-      setHistory((current) => [...current, {
-        role: "assistant",
-        text: `Analysis retry failed: ${error?.message || String(error)}`,
-      }]);
+      setHistoryState((current) => current.key !== requestedHistoryKey ? current : ({
+        ...current,
+        messages: [...current.messages, {
+          role: "assistant",
+          text: `Analysis retry failed: ${error?.message || String(error)}`,
+        }],
+      }));
     } finally {
       setRetryingAnalysisThreadId("");
     }
@@ -2980,7 +2994,9 @@ export function AgentPanel({
               revision={m.currentPlanRevision}
               run={m.analysisRun}
               result={m.analysisResult}
-              modelAvailable={analysisCapabilitiesState.value?.model?.configured !== false}
+              evidenceBlocked={asArray(m.agentRun?.warnings).some((warning) => warning?.code === "analysis_evidence_required")}
+              modelAvailable={!analysisCapabilitiesState.loading && analysisCapabilitiesState.value?.model?.configured === true}
+              acceptedDataAvailable={!analysisCapabilitiesState.loading && (analysisCapabilitiesState.value?.acceptedData?.activeExperimentHeadCount || 0) > 0}
               retrying={retryingAnalysisThreadId === m.analysisThread.id}
               onRetry={retryAnalysisWithPublishedData}
               onOpen={onOpenAnalysisReview}

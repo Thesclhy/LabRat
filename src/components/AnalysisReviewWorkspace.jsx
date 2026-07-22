@@ -686,6 +686,8 @@ export function AnalysisReviewWorkspace({
     loading: !analysisCapabilities,
     value: analysisCapabilities,
   });
+  const executorCapabilityReady = !capabilityState.loading
+    && capabilityState.value?.executor?.configured === true;
   const previewRequestRef = useRef(0);
 
   useEffect(() => {
@@ -752,6 +754,7 @@ export function AnalysisReviewWorkspace({
         setRunHistory(loadedRuns.map((item) => ({ run: item, result: null })));
         if (!latestRun?.id) return;
         setRun(latestRun);
+        if (latestRun.status === "queued" && !executorCapabilityReady) return;
         const runResponse = latestRun.status === "queued"
           ? await executeRun(latestRun.id)
           : await loadRun(latestRun.id);
@@ -786,6 +789,7 @@ export function AnalysisReviewWorkspace({
       cancelled = true;
     };
   }, [
+    executorCapabilityReady,
     executeRun,
     initialPlanRevisions,
     initialRevision,
@@ -847,8 +851,9 @@ export function AnalysisReviewWorkspace({
   } : rectangleFocusSelection;
   const busy = Boolean(pendingAction);
   const awaitingReview = revision?.status === "awaiting_review" && !run;
-  const executorUnavailable = capabilityState.value?.executor?.configured === false;
-  const planAcceptanceDisabled = !awaitingReview || busy || executorUnavailable;
+  const executorReady = executorCapabilityReady;
+  const executorUnavailable = !executorReady;
+  const planAcceptanceDisabled = !awaitingReview || busy || !executorReady;
   const preview = resultState.value;
   const validation = resultValidation(run, result, preview);
   const identityError = previewIdentityError(run, result, preview);
@@ -1370,7 +1375,9 @@ export function AnalysisReviewWorkspace({
             </button>
             {!resultReviewMode && executorUnavailable && (
               <p className="analysis-review-blocker" role="status">
-                Python execution is unavailable. Configure an analysis executor before accepting this plan.
+                {capabilityState.loading
+                  ? "Checking Python execution availability before this plan can be accepted."
+                  : "Python execution is unavailable. Configure an analysis executor before accepting this plan."}
               </p>
             )}
             <div className="analysis-review-modification">

@@ -17,7 +17,6 @@ ALLOWED_IMPORT_ROOTS = {
     "itertools",
     "math",
     "numpy",
-    "operator",
     "pandas",
     "scipy",
     "statistics",
@@ -193,6 +192,14 @@ def validate_tree(tree):
             "__spec__",
         }:
             errors.append("Runtime-internal access is not allowed.")
+        elif (
+            isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and len(node.value) > 4
+            and node.value.startswith("__")
+            and node.value.endswith("__")
+        ):
+            errors.append("Dunder-name string access is not allowed.")
     return errors
 
 

@@ -100,6 +100,25 @@ test("blocks module and private-attribute escapes through allowed libraries", ()
   );
 });
 
+test("blocks indirect dunder and module access through attrgetter", () => {
+  const result = validatePythonPolicy([
+    "import operator",
+    "import statistics",
+    "def analyze(tables, labrat):",
+    "    globals_map = operator.attrgetter('__globals__')(statistics.mean)",
+    "    importer = globals_map.get('__builtins__').get('__import__')",
+    "    return {'result_table': [importer('os').getcwd()]}",
+  ].join("\n"));
+
+  assert.equal(result.ok, false);
+  assert.equal(
+    result.errors.some((item) => (
+      item.code === "python_import_not_allowed" || item.code === "python_dunder_access_not_allowed"
+    )),
+    true,
+  );
+});
+
 test("rejects unsupported runtime versions", () => {
   const result = validatePythonPolicy(
     "def analyze(tables, labrat):\n    return {}",

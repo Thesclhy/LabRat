@@ -111,6 +111,12 @@ test("draftAnalysisPlan requests the backend-reviewed selection and program shap
       assert.match(body.system, /experiment_traces/);
       assert.match(body.system, /excludedRecords/);
       assert.match(body.system, /sourceRecordIds/);
+      assert.equal(body.output_config.format.type, "json_schema");
+      assert.deepEqual(body.output_config.format.schema.required, ["selectionRequest", "plan"]);
+      assert.equal(body.output_config.format.schema.additionalProperties, false);
+      assert.ok(body.output_config.format.schema.properties.plan.properties.expectedOutput.properties.chartType.enum.includes("stacked_bar"));
+      assert.equal(body.output_config.format.schema.properties.plan.properties.expectedOutput.properties.chartType.enum.includes("pie"), false);
+      assert.ok(body.max_tokens >= 6000);
       return {
         ok: true,
         async json() {

@@ -1,7 +1,9 @@
 import { stableDataHash } from "./dataPlanSchemas.js";
+import { SUPPORTED_CHART_TYPES } from "../charts/services/chartSpec.js";
 
 export const ANALYSIS_PLAN_REVISION_VERSION = "labrat.analysisPlanRevision.v1";
 export const ANALYSIS_RUNTIME_VERSION = "labrat-python-v1";
+const SUPPORTED_ANALYSIS_CHART_TYPES = new Set(SUPPORTED_CHART_TYPES);
 
 const FORBIDDEN_RESULT_KEYS = new Set([
   "data",
@@ -112,6 +114,15 @@ export function validateAnalysisPlanRevision(plan = {}) {
     errors.push(error(
       "analysis_output_shape_unsupported",
       "Analysis expectedOutput.shape must be experiment_traces.",
+    ));
+  }
+  if (
+    text(plan.expectedOutput?.chartType)
+    && !SUPPORTED_ANALYSIS_CHART_TYPES.has(text(plan.expectedOutput.chartType))
+  ) {
+    errors.push(error(
+      "analysis_chart_type_unsupported",
+      `Analysis chart type must be one of ${[...SUPPORTED_ANALYSIS_CHART_TYPES].join(", ")}.`,
     ));
   }
   if (

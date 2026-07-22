@@ -9,7 +9,6 @@ const ALLOWED_IMPORT_ROOTS = new Set([
   "itertools",
   "math",
   "numpy",
-  "operator",
   "pandas",
   "scipy",
   "statistics",
@@ -248,7 +247,8 @@ export function validatePythonPolicy(source, runtimeVersion = ANALYSIS_RUNTIME_V
     ));
   }
   if (/(?:^|[^\w])(?:__builtins__|__loader__|__spec__|__class__|__subclasses__)(?:$|[^\w])/m.test(executableSource)
-    || /\.__[a-zA-Z_]+__/m.test(executableSource)) {
+    || /\.__[a-zA-Z_]+__/m.test(executableSource)
+    || /(['"])__[a-zA-Z_]+__\1/m.test(value)) {
     errors.push(policyError(
       "python_dunder_access_not_allowed",
       "Python runtime internals and dunder traversal are not allowed.",

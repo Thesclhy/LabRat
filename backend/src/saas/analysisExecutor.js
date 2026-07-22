@@ -356,11 +356,12 @@ export function createAnalysisExecutor({
 } = {}) {
   const normalizedMode = String(mode || "disabled").trim().toLowerCase();
   const workerConfigured = normalizedMode === "worker" && hasValidHttpsWorkerEndpoint(workerEndpoint);
+  const localConfigured = normalizedMode === "local" && nodeEnv !== "production";
   return {
     publicConfig() {
       return {
         mode: normalizedMode,
-        configured: normalizedMode === "local" || workerConfigured,
+        configured: localConfigured || workerConfigured,
         adapter: normalizedMode === "local" ? "local_non_production" : normalizedMode,
         productionSafe: workerConfigured,
       };

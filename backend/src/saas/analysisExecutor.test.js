@@ -153,6 +153,15 @@ test("public executor config never presents the local adapter as production safe
     },
   );
   assert.deepEqual(
+    createAnalysisExecutor({ mode: "local", nodeEnv: "production" }).publicConfig(),
+    {
+      mode: "local",
+      configured: false,
+      adapter: "local_non_production",
+      productionSafe: false,
+    },
+  );
+  assert.deepEqual(
     createAnalysisExecutor({ mode: "worker", workerEndpoint: "https://worker.example" }).publicConfig(),
     {
       mode: "worker",

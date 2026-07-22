@@ -120,6 +120,7 @@ agent_runs
 ```text
 analysis_threads
 analysis_plan_revisions
+analysis_thread_retry_receipts
 analysis_runs
 analysis_results
 analysis_publications
@@ -128,6 +129,8 @@ analysis_publications
 `analysis_threads` is the durable project-scoped conversation/workflow container. It stores bounded visible messages and ordered artifact ids, not full result arrays in project state.
 
 `analysis_plan_revisions` is append-only except for workflow status. Each row stores one complete reviewed plan and frozen AnalysisSelection with exact source rectangles, manifest, missing-value policy, Python source/program hash, dependency/selection/plan hashes, validation, feedback, and actor timestamps. `(analysis_thread_id, revision)` is unique.
+
+`analysis_thread_retry_receipts` makes evidence-recovery planning durable and provider-call idempotent. `(project_id, idempotency_key)` is unique; each receipt binds the requesting actor, thread, and request hash, records `drafting`, `retryable`, or `completed`, and points completed work to exactly one AnalysisPlanRevision. A six-minute drafting lease prevents concurrent provider calls while allowing an abandoned claim to be recovered. If a revision was durably created before receipt completion, the next replay reconciles the receipt from the thread's current plan revision instead of calling the provider again.
 
 `analysis_runs` links one accepted plan revision to an immutable execution attempt. Plan acceptance creates a `queued` row. Execution transactionally locks the run and selected active-head rows before moving it to `running`; changed heads instead terminally produce `validation_failed`. Running claims carry an internal token and lease metadata so an expired worker may be replaced without allowing the old worker to finalize. One atomic finalization moves the run to `failed`, `validation_failed`, or `awaiting_result_review`. The run records frozen input/program/runtime hashes, bounded executor metadata, result-preview hash, warnings, and validation. `(project_id, idempotency_key)` makes plan acceptance retry-safe.
 
@@ -200,11 +203,13 @@ Any validation, stale-head, conflicting-idempotency, or insert failure rolls bac
 012_analysis_workflow.sql
 013_region_understandings.sql
 014_drop_aggregate_workbook_understanding.sql
+015_analysis_retry_receipts.sql
 ```
 
 Migration 011 removes the obsolete aggregate dataset, mapping, analysis-view, and observation-series tables/foreign keys from development databases. New databases never need those product paths.
 Migration 012 adds reviewed analysis persistence, publication receipts, and nullable `chart_specs.analysis_result_id` while preserving the source-backed chart path.
 Migration 013 adds stable review regions and immutable region-understanding revisions. Migration 014 intentionally drops the obsolete aggregate `workbook_understandings` table and embedded session understanding/region columns; development has no legacy migration or dual-write requirement.
+Migration 015 adds project-scoped analysis-thread retry receipts, provider-call leases, and completed-revision replay for durable `Retry with published data` idempotency.
 
 ## Invariants
 
@@ -217,6 +222,7 @@ Migration 013 adds stable review regions and immutable region-understanding revi
 - Source-backed chart creation must not mutate accepted DataSnapshots.
 - Analysis plan revisions are immutable apart from explicit status/acceptance metadata.
 - Plan acceptance is idempotent and must not execute code or create result/chart artifacts.
+- Evidence-recovery retry requires a valid idempotency key. Same-key/same-request replay returns one existing revision, conflicting reuse is rejected, and an active six-minute drafting lease permits only one provider call per thread.
 - One queued AnalysisRun may be claimed once; expired running claims rotate their internal token, and finalization requires the current token.
 - Active experiment heads are verified under the execution-claim transaction before code runs.
 - Finalization and optional valid AnalysisResult insertion are atomic.

@@ -1,4 +1,5 @@
 import { requestAnthropicJson } from "../ai/anthropic.js";
+import { SUPPORTED_CHART_TYPES } from "../charts/services/chartSpec.js";
 
 const INTENT_SYSTEM = [
   "Classify one LabRat research-workflow message.",
@@ -23,9 +24,125 @@ const ANALYSIS_PLAN_SYSTEM = [
   "Each trace has a stable traceId, finite numeric y, string-or-finite-numeric x, units, and accepted sourceRecordIds.",
   "summary declares inputRecordCount, outputRecordCount, excludedRecordCount, excludedRecords, and missingValuePolicy; each excluded record has sourceRecordId and reason.",
   "Use only tables and labrat inputs. Do not read files, URLs, environment state, processes, or network resources.",
+  "tables.records is a list of selected rows; source metadata uses __source_record_id, __experiment_id, __experiment_label, __snapshot_id, and __record_index, while values use supplied fieldKey names.",
+  "Keep Python concise and deterministic (normally under 140 lines); do not copy input rows or computed arrays into this plan JSON.",
   "Do not return selection hashes, dependency hashes, source rectangles, source hashes, result rows, plotted arrays, or hidden reasoning.",
   "The backend will resolve accepted data, compute all hashes, validate the plan, and require user review before execution.",
 ].join(" ");
+
+const ANALYSIS_PLAN_OUTPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    selectionRequest: {
+      type: "object",
+      properties: {
+        experimentIds: { type: "array", items: { type: "string" } },
+        fieldIds: { type: "array", items: { type: "string" } },
+        includeSeries: { type: "boolean" },
+      },
+      required: ["experimentIds", "fieldIds", "includeSeries"],
+      additionalProperties: false,
+    },
+    plan: {
+      type: "object",
+      properties: {
+        requestSummary: { type: "string" },
+        processingSummary: { type: "array", items: { type: "string" } },
+        calculationManifest: {
+          type: "object",
+          properties: {
+            inputs: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  fieldId: { type: "string" },
+                  fieldKey: { type: "string" },
+                  unit: { type: "string" },
+                },
+                required: ["fieldId", "fieldKey", "unit"],
+                additionalProperties: false,
+              },
+            },
+            missingValuePolicy: {
+              type: "object",
+              properties: {
+                mode: { type: "string" },
+                requiredFieldIds: { type: "array", items: { type: "string" } },
+              },
+              required: ["mode", "requiredFieldIds"],
+              additionalProperties: false,
+            },
+            derivedFields: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  fieldKey: { type: "string" },
+                  inputFieldKeys: { type: "array", items: { type: "string" } },
+                  expression: { type: "string" },
+                  outputUnit: { type: "string" },
+                },
+                required: ["fieldKey", "inputFieldKeys", "expression", "outputUnit"],
+                additionalProperties: false,
+              },
+            },
+            invariants: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  type: { type: "string", enum: ["row_sum"] },
+                  fieldKeys: { type: "array", items: { type: "string" } },
+                  target: { type: "number" },
+                  absoluteTolerance: { type: "number" },
+                },
+                required: ["type", "fieldKeys", "target", "absoluteTolerance"],
+                additionalProperties: false,
+              },
+            },
+          },
+          required: ["inputs", "missingValuePolicy", "derivedFields", "invariants"],
+          additionalProperties: false,
+        },
+        pythonProgram: {
+          type: "object",
+          properties: {
+            runtime: { type: "string", enum: ["labrat-python-v1"] },
+            entrypoint: { type: "string", enum: ["analyze"] },
+            source: { type: "string" },
+          },
+          required: ["runtime", "entrypoint", "source"],
+          additionalProperties: false,
+        },
+        expectedOutput: {
+          type: "object",
+          properties: {
+            shape: { type: "string", enum: ["experiment_traces"] },
+            chartType: { type: "string", enum: SUPPORTED_CHART_TYPES },
+            title: { type: "string" },
+            xField: { type: "string" },
+            yFields: { type: "array", items: { type: "string" } },
+          },
+          required: ["shape", "chartType", "title", "xField", "yFields"],
+          additionalProperties: false,
+        },
+        warnings: { type: "array", items: { type: "string" } },
+      },
+      required: [
+        "requestSummary",
+        "processingSummary",
+        "calculationManifest",
+        "pythonProgram",
+        "expectedOutput",
+        "warnings",
+      ],
+      additionalProperties: false,
+    },
+  },
+  required: ["selectionRequest", "plan"],
+  additionalProperties: false,
+};
 
 const WORKBOOK_REGION_SYSTEM = [
   "Explain one bounded Excel region as JSON only.",
@@ -217,7 +334,8 @@ export function createBackendModelProvider({
       return requestStructured({
         system: ANALYSIS_PLAN_SYSTEM,
         payload: input,
-        maxTokens: 2400,
+        maxTokens: 6400,
+        outputSchema: ANALYSIS_PLAN_OUTPUT_SCHEMA,
       });
     },
     async interpretWorkbookRegion(input = {}) {

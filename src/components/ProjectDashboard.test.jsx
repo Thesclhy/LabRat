@@ -1967,6 +1967,57 @@ describe("AgentPanel", () => {
     }
   });
 
+  it("refreshes analysis capabilities when accepted project evidence changes", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        model: { configured: true },
+        executor: { configured: true, adapter: "local_non_production" },
+        acceptedData: { acceptedSnapshotCount: 0, activeExperimentHeadCount: 0 },
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        model: { configured: true },
+        executor: { configured: true, adapter: "local_non_production" },
+        acceptedData: { acceptedSnapshotCount: 1, activeExperimentHeadCount: 2 },
+      }));
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    const panel = (projectState) => (
+      <AgentPanel
+        open
+        setOpen={() => {}}
+        blocks={[]}
+        setBlocks={() => {}}
+        references={[]}
+        selected={null}
+        selectedChartContext={null}
+        pendingChartAnalysis={null}
+        activeProjectId="project_1"
+        projectState={projectState}
+        onProjectStateLoaded={() => {}}
+      />
+    );
+
+    try {
+      const { rerender } = render(panel({
+        project: { id: "project_1" },
+        dataSnapshots: [],
+        experimentSnapshotHeads: [],
+      }));
+      await waitFor(() => expect(screen.getByLabelText("Analysis runtime status").textContent).toContain("0 snapshots, 0 active heads"));
+
+      rerender(panel({
+        project: { id: "project_1" },
+        dataSnapshots: [{ id: "snapshot_1" }],
+        experimentSnapshotHeads: [{ id: "head_1" }, { id: "head_2" }],
+      }));
+
+      await waitFor(() => expect(screen.getByLabelText("Analysis runtime status").textContent).toContain("1 snapshots, 2 active heads"));
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   it("keeps chat history isolated per server project and ignores legacy global history", async () => {
     localStorage.setItem("labrat_blank_chat_history_v1_react", JSON.stringify([
       { role: "assistant", text: "Legacy shared answer" },
@@ -2260,6 +2311,178 @@ describe("AgentPanel", () => {
     }
   });
 
+  it("retries an evidence-blocked analysis from its AgentRun warning after data is published", async () => {
+    const onOpenAnalysisReview = vi.fn();
+    const analysisThread = {
+      id: "analysis_thread_retry_1",
+      projectId: "project_1",
+      status: "planning",
+      originalRequest: "Compare selectivity across experiments.",
+    };
+    const retryRevision = {
+      id: "analysis_plan_revision_retry_1",
+      analysisThreadId: analysisThread.id,
+      revision: 1,
+      status: "awaiting_review",
+      requestSummary: "Compare accepted selectivity values.",
+      sourceRectangles: [],
+    };
+    const fetchMock = vi.fn(async (url, init = {}) => {
+      if (url === "/api/projects/project_1/analysis-capabilities") {
+        return jsonResponse({
+          model: { configured: true },
+          executor: { configured: true, adapter: "local_non_production" },
+          acceptedData: { acceptedSnapshotCount: 1, activeExperimentHeadCount: 2 },
+        });
+      }
+      if (url === "/api/projects/project_1/agent/runs") {
+        return jsonResponse({
+          reply: "Accepted published experiment data is required before planning.",
+          analysisThread,
+          currentPlanRevision: null,
+          agentRun: {
+            id: "agent_run_retry_1",
+            warnings: [{ code: "analysis_evidence_required", message: "Publish accepted data." }],
+            actions: [],
+            visibleSteps: [],
+          },
+        }, { status: 201 });
+      }
+      if (url === `/api/analysis-threads/${analysisThread.id}/retry`) {
+        expect(init.method).toBe("POST");
+        return jsonResponse({ analysisThread, analysisPlanRevision: retryRevision }, { status: 201 });
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+
+    try {
+      render(
+        <AgentPanel
+          open
+          setOpen={() => {}}
+          blocks={[]}
+          setBlocks={() => {}}
+          references={[]}
+          selected={null}
+          selectedChartContext={null}
+          pendingChartAnalysis={null}
+          activeProjectId="project_1"
+          projectState={{ project: { id: "project_1", name: "Catalyst Screening" } }}
+          onProjectStateLoaded={() => {}}
+          onOpenAnalysisReview={onOpenAnalysisReview}
+        />,
+      );
+
+      await waitFor(() => expect(screen.getByLabelText("Analysis runtime status").textContent).toContain("Model: configured"));
+      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
+      fireEvent.change(promptInput, { target: { value: analysisThread.originalRequest } });
+      fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
+
+      fireEvent.click(await screen.findByRole("button", { name: "Retry with published data" }));
+      await waitFor(() => expect(onOpenAnalysisReview).toHaveBeenCalledWith({
+        thread: analysisThread,
+        revision: retryRevision,
+      }));
+      expect(fetchMock).toHaveBeenCalledWith(
+        `/api/analysis-threads/${analysisThread.id}/retry`,
+        expect.objectContaining({ method: "POST" }),
+      );
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("does not append a completed retry or open its review after switching projects", async () => {
+    let resolveRetry;
+    const retryResponse = new Promise((resolve) => { resolveRetry = resolve; });
+    let resolveRetryJson;
+    const retryJsonRead = new Promise((resolve) => { resolveRetryJson = resolve; });
+    const analysisThread = {
+      id: "analysis_thread_project_switch",
+      projectId: "project_1",
+      status: "planning",
+      originalRequest: "Compare selectivity.",
+    };
+    const fetchMock = vi.fn(async (url) => {
+      if (url.endsWith("/analysis-capabilities")) {
+        return jsonResponse({
+          model: { configured: true },
+          executor: { configured: true },
+          acceptedData: { acceptedSnapshotCount: 1, activeExperimentHeadCount: 1 },
+        });
+      }
+      if (url === "/api/projects/project_1/agent/runs") {
+        return jsonResponse({
+          analysisThread,
+          agentRun: {
+            id: "agent_run_switch",
+            warnings: [{ code: "analysis_evidence_required", message: "Publish accepted data." }],
+            actions: [],
+            visibleSteps: [],
+          },
+        }, { status: 201 });
+      }
+      if (url === `/api/analysis-threads/${analysisThread.id}/retry`) return retryResponse;
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    const onOpenAnalysisReview = vi.fn();
+    const panel = (projectId) => (
+      <AgentPanel
+        open
+        setOpen={() => {}}
+        blocks={[]}
+        setBlocks={() => {}}
+        references={[]}
+        selected={null}
+        selectedChartContext={null}
+        pendingChartAnalysis={null}
+        activeProjectId={projectId}
+        projectState={{ project: { id: projectId, name: projectId } }}
+        onProjectStateLoaded={() => {}}
+        onOpenAnalysisReview={onOpenAnalysisReview}
+      />
+    );
+
+    try {
+      const { rerender } = render(panel("project_1"));
+      await waitFor(() => expect(screen.getByLabelText("Analysis runtime status").textContent).toContain("Model: configured"));
+      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
+      fireEvent.change(promptInput, { target: { value: analysisThread.originalRequest } });
+      fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
+      fireEvent.click(await screen.findByRole("button", { name: "Retry with published data" }));
+
+      rerender(panel("project_2"));
+      await waitFor(() => expect(screen.getByLabelText("Analysis runtime status").textContent).toContain("Model: configured"));
+      await act(async () => {
+        resolveRetry({
+          ok: true,
+          status: 201,
+          json: async () => {
+            resolveRetryJson();
+            return {
+              analysisThread,
+              analysisPlanRevision: {
+                id: "analysis_plan_revision_switch",
+                revision: 1,
+                status: "awaiting_review",
+                requestSummary: "Old project plan",
+              },
+            };
+          },
+        });
+        await retryJsonRead;
+      });
+      expect(screen.queryByText("Old project plan")).toBeNull();
+      expect(onOpenAnalysisReview).not.toHaveBeenCalled();
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   it("drives reviewed analysis from LabRat through Manuscript trace selection", async () => {
     const analysisThread = {
       id: "analysis_thread_golden",
@@ -2481,19 +2704,28 @@ describe("AgentPanel", () => {
       analysisResult: { ...result, status: "accepted" },
       chartSpec,
     });
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
-      reply: "I drafted a reviewed analysis plan. Check the selected source cells and processing steps.",
-      analysisThread,
-      currentPlanRevision: revision1,
-      agentRun: {
-        id: "agent_run_golden",
-        status: "waiting_for_user",
-        mode: "analysis_planning",
-        visibleSteps: [{ stepId: "draft", label: "Drafted reviewable analysis plan", details: {} }],
-        actions: [],
-        warnings: [],
-      },
-    }, { status: 201 }));
+    const fetchMock = vi.fn(async (url) => {
+      if (url === "/api/projects/project_1/analysis-capabilities") {
+        return jsonResponse({
+          model: { configured: true },
+          executor: { configured: true, adapter: "golden_test_executor" },
+          acceptedData: { acceptedSnapshotCount: 1, activeExperimentHeadCount: 2 },
+        });
+      }
+      return jsonResponse({
+        reply: "I drafted a reviewed analysis plan. Check the selected source cells and processing steps.",
+        analysisThread,
+        currentPlanRevision: revision1,
+        agentRun: {
+          id: "agent_run_golden",
+          status: "waiting_for_user",
+          mode: "analysis_planning",
+          visibleSteps: [{ stepId: "draft", label: "Drafted reviewable analysis plan", details: {} }],
+          actions: [],
+          warnings: [],
+        },
+      }, { status: 201 });
+    });
     const originalFetch = global.fetch;
     global.fetch = fetchMock;
 

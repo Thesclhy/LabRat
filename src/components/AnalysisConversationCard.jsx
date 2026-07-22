@@ -12,7 +12,9 @@ export function AnalysisConversationCard({
   revision = null,
   run = null,
   result = null,
-  modelAvailable = true,
+  evidenceBlocked = false,
+  modelAvailable = false,
+  acceptedDataAvailable = false,
   retrying = false,
   onRetry,
   onOpen,
@@ -21,7 +23,7 @@ export function AnalysisConversationCard({
   const reviewable = Boolean(revision?.id);
   const resultReady = run?.status === "awaiting_result_review" && result?.status === "awaiting_review";
   const actionLabel = resultReady ? "Review analysis result" : "Review analysis plan";
-  const canRetry = thread.status === "analysis_evidence_required" && !reviewable && typeof onRetry === "function";
+  const canRetry = evidenceBlocked && !reviewable && typeof onRetry === "function";
   return (
     <article className={`analysis-conversation-card${reviewable ? " is-reviewable" : ""}`}>
       <header>
@@ -56,11 +58,12 @@ export function AnalysisConversationCard({
           <button
             type="button"
             onClick={() => onRetry(thread)}
-            disabled={modelAvailable === false || retrying}
+            disabled={!modelAvailable || !acceptedDataAvailable || retrying}
           >
             {retrying ? "Retrying..." : "Retry with published data"}
           </button>
-          {modelAvailable === false && <small>Model planning is unavailable.</small>}
+          {!modelAvailable && <small>Model planning is unavailable.</small>}
+          {modelAvailable && !acceptedDataAvailable && <small>Publish accepted experiment data before retrying.</small>}
         </div>
       )}
     </article>

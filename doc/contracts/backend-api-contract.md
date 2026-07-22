@@ -75,6 +75,7 @@ Status code guidance:
 - LabRat intent routing directly answers resolvable project questions, sends derived analysis/chart requests to reviewed analysis planning, and opens Experiment Browser only for explicit navigation.
 - Internal analysis planning tools resolve only accepted active snapshot heads, keep unit-incompatible fields separate, return bounded source-backed selections, and cannot execute calculations.
 - AnalysisThread/AnalysisPlanRevision routes persist immutable reviewed plans. Exact-hash acceptance is idempotent and creates only a queued AnalysisRun.
+- Project analysis capabilities expose only public model/executor readiness and accepted snapshot/head counts. Evidence-blocked AnalysisThreads may be retried after publication through an editor-authorized, claim-guarded operation that cannot execute or publish.
 - AnalysisRun execution is a separate authenticated backend operation. It transactionally verifies frozen active-head refs, uses an internal claim-token lease plus a disabled-by-default executor adapter, and persists an immutable awaiting-review AnalysisResult only after bounded deterministic schema/identity/lineage/unit/input-accounting validation. Result/evidence arrays are paged independently. Execution never creates a ChartSpec.
 - Result acceptance is a second idempotent transaction: it rechecks accepted heads and the visible result hash, accepts the existing AnalysisResult, completes the run/thread, and creates exactly one analysis-result ChartSpec.
 

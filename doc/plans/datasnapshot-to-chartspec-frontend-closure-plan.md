@@ -91,26 +91,26 @@ Concurrent or replayed retry requests must not create duplicate revisions.
 
 ## Action Items
 
-- [ ] Add failing backend and frontend tests for capability reporting,
+- [x] Add failing backend and frontend tests for capability reporting,
       development/production executor policy, retry authorization and
       idempotency, unavailable-state UI, and the exact plan-acceptance guard.
-- [ ] Document `LABRAT_ANALYSIS_EXECUTOR=local` in `.env.example`, set it in the
+- [x] Document `LABRAT_ANALYSIS_EXECUTOR=local` in `.env.example`, set it in the
       ignored local development environment, verify the configured Python
       command and required numeric libraries, and retain the production-local
       rejection test.
-- [ ] Implement the authenticated analysis-capabilities service and API from
+- [x] Implement the authenticated analysis-capabilities service and API from
       `modelProvider.publicConfig()`, `analysisExecutor.publicConfig()`, and
       current accepted DataSnapshot/head counts; never serialize API keys,
       database credentials, worker credentials, or raw workbook values.
-- [ ] Implement `Retry with published data` for threads blocked by
+- [x] Implement `Retry with published data` for threads blocked by
       `analysis_evidence_required`, using the original request and current
       accepted heads to create a normal immutable plan revision. Keep ordinary
       resubmission through a new LabRat message supported.
-- [ ] Add a compact LabRat runtime-status surface and contextual review
+- [x] Add a compact LabRat runtime-status surface and contextual review
       blockers. Show model and Python availability before planning; disable
       retry when the model is unavailable and disable `Accept plan` when the
       executor is unavailable while leaving plan feedback usable.
-- [ ] Run focused backend/frontend tests, the complete frontend and backend
+- [x] Run focused backend/frontend tests, the complete frontend and backend
       suites, `npm run build`, and `git diff --check` before touching real
       project data.
 - [ ] Run the real development E2E against `test1`: verify 63 active accepted
