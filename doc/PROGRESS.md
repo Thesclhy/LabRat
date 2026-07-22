@@ -15,6 +15,17 @@ Keep entries concise, newest first, and include:
 
 ## 2026-07-22
 
+- Approved and documented the real DataSnapshot-to-ChartSpec frontend closure
+  milestone. The plan enables the local Python adapter only in development,
+  preserves the production-local prohibition, adds backend model/executor
+  capability visibility, provides `Retry with published data` for
+  `analysis_evidence_required` threads, blocks plan acceptance before an
+  executor is available, and requires a real Anthropic plus local-Python E2E
+  through red-box plan review, validated result review, and atomic ChartSpec
+  publication against all 63 active `test1` experiment heads. The focused plan
+  is `doc/plans/datasnapshot-to-chartspec-frontend-closure-plan.md`.
+  Documentation-only checkpoint; no runtime configuration, code, real model
+  request, Python execution, or project artifact was changed.
 - Approved and documented the chat workbook file-entry redesign. Future chat
   uploads will show one filename button per WorkbookReviewSession rather than
   one button per detected region. The button will reload the exact historical

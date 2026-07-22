@@ -72,12 +72,18 @@ Deployment work not included in this completed milestone:
 
 ## Next Recommended Slice
 
-1. Implement the approved chat workbook file-entry design in
+1. Execute
+   `doc/plans/datasnapshot-to-chartspec-frontend-closure-plan.md`: use the local
+   Python adapter only in development, expose backend model/executor readiness,
+   add `Retry with published data`, and pass the complete real Anthropic plus
+   local-Python workflow against all 63 active `test1` experiment heads before
+   declaring the frontend analysis path complete.
+2. Implement the approved chat workbook file-entry design in
    `doc/plans/chat-workbook-file-entry-design.md`: one filename button per
    upload, exact WorkbookReviewSession reload on click, and no region-button
    duplication in chat.
-2. Exercise migrations 013/014 and the region-to-DataPlan path against a configured Postgres test database.
-3. Operationalize the hardened analysis worker, secret management, timeouts, audit telemetry, and provider cost/latency monitoring in a production-like environment.
+3. Exercise migrations 013/014 and the region-to-DataPlan path against a configured Postgres test database.
+4. Operationalize the hardened analysis worker, secret management, timeouts, audit telemetry, and provider cost/latency monitoring in a production-like environment.
 
 ## Guardrails
 

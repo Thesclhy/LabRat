@@ -75,13 +75,19 @@ Use this split when deciding what to build:
 
 ## Next Recommended Slices
 
-1. Replace chat's per-region workbook upload buttons with one filename button
+1. Complete the real DataSnapshot-to-ChartSpec frontend workflow in
+   `doc/plans/datasnapshot-to-chartspec-frontend-closure-plan.md`: enable the
+   local executor for development only, expose model/executor readiness, retry
+   evidence-blocked conversations after DataSnapshot publication, and pass a
+   real Anthropic plus local-Python E2E against all 63 active `test1` experiment
+   heads before calling the frontend path complete.
+2. Replace chat's per-region workbook upload buttons with one filename button
    per WorkbookReviewSession. Clicking it must reload the exact session and use
    the existing Workbook Review region list as the sole selection/review
    surface. Follow
    `doc/plans/chat-workbook-file-entry-design.md`.
-2. Run migrations 013/014 and the region-to-DataPlan path against configured Postgres in CI or staging.
-3. Deploy and exercise the hardened no-network analysis worker with production secret management, audit telemetry, timeout controls, and provider cost/latency monitoring.
+3. Run migrations 013/014 and the region-to-DataPlan path against configured Postgres in CI or staging.
+4. Deploy and exercise the hardened no-network analysis worker with production secret management, audit telemetry, timeout controls, and provider cost/latency monitoring.
 
 ## Operating Loop
 
@@ -115,6 +121,7 @@ npm run codex:preflight
 - Evidence retrieval plan: `doc/plans/tool-governed-evidence-retrieval-plan.md`
 - DataPlan Agent plan: `doc/plans/tool-governed-dataplan-agent-transition-plan.md`
 - Workbook-to-Browser plan: `doc/plans/workbook-review-to-experiment-browser-plan.md`
+- DataSnapshot-to-ChartSpec frontend closure plan: `doc/plans/datasnapshot-to-chartspec-frontend-closure-plan.md`
 - Chat workbook file-entry design: `doc/plans/chat-workbook-file-entry-design.md`
 - Roadmap: `doc/plans/roadmap.md`
 - API contracts: `doc/contracts/saas-api-contract-v0.md`
