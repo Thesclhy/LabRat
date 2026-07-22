@@ -1932,6 +1932,41 @@ describe("AgentPanel", () => {
     expect(document.querySelector('input[type="password"]')).toBeNull();
   });
 
+  it("shows backend-owned model, Python, and accepted-data readiness", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      model: { provider: "anthropic", model: "claude-test", configured: true },
+      executor: { mode: "development", adapter: "local", configured: true, productionSafe: false },
+      acceptedData: { acceptedSnapshotCount: 3, activeExperimentHeadCount: 2 },
+    }));
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+
+    try {
+      render(
+        <AgentPanel
+          open
+          setOpen={() => {}}
+          blocks={[]}
+          setBlocks={() => {}}
+          references={[]}
+          selected={null}
+          selectedChartContext={null}
+          pendingChartAnalysis={null}
+          activeProjectId="project_1"
+          projectState={{ project: { id: "project_1", name: "Catalyst Screening" }, fileObjects: [] }}
+          onProjectStateLoaded={() => {}}
+        />,
+      );
+
+      await waitFor(() => expect(screen.getByLabelText("Analysis runtime status").textContent).toContain("Model: anthropic / claude-test ready"));
+      expect(screen.getByLabelText("Analysis runtime status").textContent).toContain("Python: local ready");
+      expect(screen.getByLabelText("Analysis runtime status").textContent).toContain("Accepted data: 3 snapshots, 2 active heads");
+      expect(fetchMock).toHaveBeenCalledWith("/api/projects/project_1/analysis-capabilities", expect.any(Object));
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   it("keeps chat history isolated per server project and ignores legacy global history", async () => {
     localStorage.setItem("labrat_blank_chat_history_v1_react", JSON.stringify([
       { role: "assistant", text: "Legacy shared answer" },
@@ -2647,6 +2682,13 @@ describe("AgentPanel", () => {
     const onWorkbookSuggestionSelect = vi.fn();
     const onProjectStateLoaded = vi.fn();
     const fetchMock = vi.fn(async (url, init = {}) => {
+      if (url === "/api/projects/project_1/analysis-capabilities") {
+        return jsonResponse({
+          model: { configured: true },
+          executor: { configured: true, adapter: "local" },
+          acceptedData: { acceptedSnapshotCount: 0, activeExperimentHeadCount: 0 },
+        });
+      }
       if (url === "/api/projects/project_1/files") {
         expect(init.method).toBe("POST");
         expect(init.body instanceof FormData).toBe(true);
@@ -2710,7 +2752,7 @@ describe("AgentPanel", () => {
       fireEvent.change(fileInput, { target: { files: [file] } });
 
       expect(screen.getByText("Master.xlsx")).toBeTruthy();
-      expect(fetchMock).not.toHaveBeenCalled();
+      expect(fetchMock.mock.calls.some(([url]) => url === "/api/projects/project_1/files")).toBe(false);
 
       const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
       fireEvent.change(promptInput, { target: { value: "Please help me understand this workbook" } });

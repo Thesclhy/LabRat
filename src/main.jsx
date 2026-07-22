@@ -14,7 +14,11 @@ import { DataPlanReviewPanel } from "./components/DataPlanReviewPanel.jsx";
 import { ExperimentBrowser } from "./components/ExperimentBrowser.jsx";
 import { AnalysisConversationCard } from "./components/AnalysisConversationCard.jsx";
 import { AnalysisReviewWorkspace } from "./components/AnalysisReviewWorkspace.jsx";
-import { publishAcceptedAnalysisChart } from "./data/analysisApi.js";
+import {
+  getProjectAnalysisCapabilities,
+  publishAcceptedAnalysisChart,
+  retryAnalysisThread,
+} from "./data/analysisApi.js";
 import { Plot } from "./charts/Plot";
 import { ManuscriptCanvas } from "./components/ManuscriptCanvas";
 import { BLANK_PROJECT_SOURCE_NAME, blankTemplateLinks, isBlankDataMode } from "./data/appMode.js";
@@ -2200,6 +2204,12 @@ export function AgentPanel({
   const [pendingFileActionId, setPendingFileActionId] = useState("");
   const [pendingSpreadsheetFile, setPendingSpreadsheetFile] = useState(null);
   const [busyActionId, setBusyActionId] = useState("");
+  const [analysisCapabilitiesState, setAnalysisCapabilitiesState] = useState({
+    loading: false,
+    error: "",
+    value: null,
+  });
+  const [retryingAnalysisThreadId, setRetryingAnalysisThreadId] = useState("");
   const messagesRef = useRef(null);
   const chatScrollInitializedRef = useRef(false);
   const lastChatScrollTopRef = useRef(0);
@@ -2228,6 +2238,24 @@ export function AgentPanel({
   useEffect(() => {
     ls.set(historyState.key, sanitizeStoredChatHistory(historyState.messages));
   }, [historyState]);
+  useEffect(() => {
+    if (!open || !activeProjectId) {
+      setAnalysisCapabilitiesState({ loading: false, error: "", value: null });
+      return undefined;
+    }
+    let cancelled = false;
+    setAnalysisCapabilitiesState({ loading: true, error: "", value: null });
+    getProjectAnalysisCapabilities(activeProjectId)
+      .then((value) => {
+        if (!cancelled) setAnalysisCapabilitiesState({ loading: false, error: "", value });
+      })
+      .catch((error) => {
+        if (!cancelled) setAnalysisCapabilitiesState({ loading: false, error: error?.message || String(error), value: null });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProjectId, open]);
   useEffect(() => {
     if (!open) return undefined;
     const schedule = typeof window.requestAnimationFrame === "function"
@@ -2307,6 +2335,37 @@ export function AgentPanel({
     const state = await getServerProjectState(activeProjectId);
     onProjectStateLoaded?.(state);
     return state;
+  };
+  const retryAnalysisWithPublishedData = async (thread) => {
+    if (!thread?.id || retryingAnalysisThreadId) return;
+    if (analysisCapabilitiesState.value?.model?.configured === false) return;
+    setRetryingAnalysisThreadId(thread.id);
+    try {
+      const response = await retryAnalysisThread(thread.id, {
+        idempotencyKey: `retry_analysis_${thread.id}_${uid()}`,
+      });
+      const analysisThread = response?.analysisThread || thread;
+      const currentPlanRevision = response?.currentPlanRevision || response?.analysisPlanRevision || null;
+      setHistory((current) => [...current, {
+        role: "assistant",
+        text: currentPlanRevision?.id
+          ? "I drafted a new plan from the current published data. Review it before execution."
+          : "I retried planning with the current published data.",
+        analysisThread,
+        currentPlanRevision,
+        agentRun: response?.agentRun || null,
+      }]);
+      if (analysisThread?.id && currentPlanRevision?.id) {
+        onOpenAnalysisReview?.({ thread: analysisThread, revision: currentPlanRevision });
+      }
+    } catch (error) {
+      setHistory((current) => [...current, {
+        role: "assistant",
+        text: `Analysis retry failed: ${error?.message || String(error)}`,
+      }]);
+    } finally {
+      setRetryingAnalysisThreadId("");
+    }
   };
   const recoverCompletedAgentRunAction = async (action) => {
     const response = await getServerAgentRun(action.agentRunId);
@@ -2830,6 +2889,29 @@ export function AgentPanel({
       </div>
     </div>
     <div className="agent-context">Manuscript - {blocks.length} blocks on canvas - focused: {selected?.label || "none"} - {selectedChartContext ? "1 chart selected" : "0 charts selected"}</div>
+    {activeProjectId && (
+      <div className="analysis-runtime-status" role="status" aria-label="Analysis runtime status">
+        {analysisCapabilitiesState.loading && <span>Analysis runtime: checking...</span>}
+        {!analysisCapabilitiesState.loading && analysisCapabilitiesState.value && (
+          <>
+            <span>
+              Model: {analysisCapabilitiesState.value.model?.configured
+                ? `${analysisCapabilitiesState.value.model?.provider || "configured"} / ${analysisCapabilitiesState.value.model?.model || "default"} ready`
+                : "unavailable"}
+            </span>
+            <span>
+              Python: {analysisCapabilitiesState.value.executor?.configured
+                ? `${analysisCapabilitiesState.value.executor?.adapter || "configured"} ready`
+                : "unavailable"}
+            </span>
+            <span>
+              Accepted data: {analysisCapabilitiesState.value.acceptedData?.acceptedSnapshotCount || 0} snapshots, {analysisCapabilitiesState.value.acceptedData?.activeExperimentHeadCount || 0} active heads
+            </span>
+          </>
+        )}
+        {!analysisCapabilitiesState.loading && analysisCapabilitiesState.error && <span>Analysis runtime: unavailable</span>}
+      </div>
+    )}
     {selectedChartContext && (
       <div className="agent-chart-context">
         <img className="agent-chart-avatar" src={logoSrc} alt="" />
@@ -2898,6 +2980,9 @@ export function AgentPanel({
               revision={m.currentPlanRevision}
               run={m.analysisRun}
               result={m.analysisResult}
+              modelAvailable={analysisCapabilitiesState.value?.model?.configured !== false}
+              retrying={retryingAnalysisThreadId === m.analysisThread.id}
+              onRetry={retryAnalysisWithPublishedData}
               onOpen={onOpenAnalysisReview}
             />
           )}

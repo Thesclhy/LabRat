@@ -52,6 +52,11 @@ export function listAnalysisThreads(projectId, options = {}) {
   );
 }
 
+export function getProjectAnalysisCapabilities(projectId, options = {}) {
+  const id = requireId(projectId, "Select a project before loading analysis capabilities.");
+  return serverRequest(`/api/projects/${id}/analysis-capabilities`, requestOptions(options));
+}
+
 export function getAnalysisThread(analysisThreadId, options = {}) {
   const id = requireId(analysisThreadId, "Select an analysis thread before loading it.");
   return serverRequest(`/api/analysis-threads/${id}`, requestOptions(options));
@@ -68,6 +73,21 @@ export function createAnalysisPlanRevision(analysisThreadId, request = {}, optio
     ...(request.plan ? { plan: request.plan } : {}),
     ...(request.selectionRequest ? { selectionRequest: request.selectionRequest } : {}),
   }, requestOptions(options));
+}
+
+export function retryAnalysisThread(analysisThreadId, options = {}) {
+  const id = requireId(analysisThreadId, "Select an analysis thread before retrying it.");
+  const idempotencyKey = String(options.idempotencyKey || "").trim();
+  if (!idempotencyKey) {
+    throw new ServerApiError("Analysis retry requires an idempotency key.");
+  }
+  return serverJson(`/api/analysis-threads/${id}/retry`, {}, {
+    ...requestOptions(options),
+    headers: {
+      "idempotency-key": idempotencyKey,
+      ...(options.headers || {}),
+    },
+  });
 }
 
 export function getAnalysisPlanSelection(planRevisionId, options = {}) {

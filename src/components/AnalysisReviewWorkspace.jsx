@@ -7,6 +7,7 @@ import {
   createAnalysisPlanRevision,
   executeAnalysisRun,
   getAnalysisPlanSelection,
+  getProjectAnalysisCapabilities,
   getAnalysisResultPreview,
   getAnalysisRun,
   getAnalysisThread,
@@ -646,6 +647,8 @@ export function AnalysisReviewWorkspace({
   reviseRun = reviseAnalysisRun,
   createRevision = createAnalysisPlanRevision,
   acceptPlan = acceptAnalysisPlanRevision,
+  analysisCapabilities = null,
+  loadAnalysisCapabilities = getProjectAnalysisCapabilities,
   onAcceptResult = null,
   onClose,
   onAccepted,
@@ -679,6 +682,10 @@ export function AnalysisReviewWorkspace({
     initialRun ? [{ run: initialRun, result: initialResult }] : []
   ));
   const [resultSourceFocus, setResultSourceFocus] = useState(null);
+  const [capabilityState, setCapabilityState] = useState({
+    loading: !analysisCapabilities,
+    value: analysisCapabilities,
+  });
   const previewRequestRef = useRef(0);
 
   useEffect(() => {
@@ -696,13 +703,30 @@ export function AnalysisReviewWorkspace({
     setResultSourceFocus(null);
     setActiveTab("source");
     setActionError("");
+    setCapabilityState({ loading: !analysisCapabilities, value: analysisCapabilities });
   }, [
     initialResult?.id,
     initialResultPreview?.resultPreviewHash,
     initialRevision?.id,
     initialRun?.id,
     initialThread?.id,
+    analysisCapabilities,
   ]);
+
+  useEffect(() => {
+    if (analysisCapabilities || !projectId) return undefined;
+    let cancelled = false;
+    loadAnalysisCapabilities(projectId)
+      .then((value) => {
+        if (!cancelled) setCapabilityState({ loading: false, value });
+      })
+      .catch(() => {
+        if (!cancelled) setCapabilityState({ loading: false, value: null });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [analysisCapabilities, loadAnalysisCapabilities, projectId]);
 
   useEffect(() => {
     if (initialPlanRevisions || !initialThread?.id) return undefined;
@@ -823,6 +847,8 @@ export function AnalysisReviewWorkspace({
   } : rectangleFocusSelection;
   const busy = Boolean(pendingAction);
   const awaitingReview = revision?.status === "awaiting_review" && !run;
+  const executorUnavailable = capabilityState.value?.executor?.configured === false;
+  const planAcceptanceDisabled = !awaitingReview || busy || executorUnavailable;
   const preview = resultState.value;
   const validation = resultValidation(run, result, preview);
   const identityError = previewIdentityError(run, result, preview);
@@ -866,7 +892,7 @@ export function AnalysisReviewWorkspace({
   };
 
   const acceptVisiblePlan = async () => {
-    if (!revision?.id || busy || !awaitingReview) return;
+    if (!revision?.id || busy || !awaitingReview || executorUnavailable) return;
     setPendingAction("accept");
     setActionError("");
     try {
@@ -1334,7 +1360,7 @@ export function AnalysisReviewWorkspace({
               type="button"
               className="accept-plan"
               onClick={resultReviewMode ? acceptVisibleResult : acceptVisiblePlan}
-              disabled={resultReviewMode ? (!canAcceptResult || busy) : (!awaitingReview || busy)}
+              disabled={resultReviewMode ? (!canAcceptResult || busy) : planAcceptanceDisabled}
             >
               {resultReviewMode
                 ? result?.status === "accepted"
@@ -1342,6 +1368,11 @@ export function AnalysisReviewWorkspace({
                   : pendingAction === "accept_result" ? "Creating..." : "Accept result and create chart"
                 : pendingAction === "accept" || pendingAction === "execute" ? "Working..." : "Accept plan"}
             </button>
+            {!resultReviewMode && executorUnavailable && (
+              <p className="analysis-review-blocker" role="status">
+                Python execution is unavailable. Configure an analysis executor before accepting this plan.
+              </p>
+            )}
             <div className="analysis-review-modification">
               <textarea
                 value={feedback}

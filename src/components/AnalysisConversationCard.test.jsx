@@ -62,4 +62,25 @@ describe("AnalysisConversationCard", () => {
       result: expect.objectContaining({ id: "analysis_result_1" }),
     }));
   });
+
+  it("offers a published-data retry for evidence-blocked planning", () => {
+    const onRetry = vi.fn();
+    const thread = {
+      id: "analysis_thread_1",
+      originalRequest: "Compare every reaction-time curve.",
+      status: "analysis_evidence_required",
+    };
+
+    render(
+      <AnalysisConversationCard
+        thread={thread}
+        modelAvailable
+        onRetry={onRetry}
+      />,
+    );
+
+    expect(screen.getByText("A reviewable plan could not be drafted yet.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry with published data" }));
+    expect(onRetry).toHaveBeenCalledWith(thread);
+  });
 });

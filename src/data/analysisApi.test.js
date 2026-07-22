@@ -8,8 +8,10 @@ import {
   getAnalysisResultPreview,
   getAnalysisRun,
   getAnalysisThread,
+  getProjectAnalysisCapabilities,
   listAnalysisThreads,
   publishAcceptedAnalysisChart,
+  retryAnalysisThread,
   reviseAnalysisRun,
 } from "./analysisApi.js";
 
@@ -34,6 +36,31 @@ describe("analysisApi", () => {
     expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects/project%201/analysis-threads?offset=10&limit=25");
     expect(fetchImpl.mock.calls[1][0]).toBe("/api/analysis-threads/analysis%2Fthread%201");
     expect(fetchImpl.mock.calls[2][0]).toBe("/api/analysis-plan-revisions/revision%201/selection?offset=50&limit=100");
+  });
+
+  it("reads public project analysis capabilities and retries with an idempotency key", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        model: { provider: "anthropic", model: "claude-test", configured: true },
+        executor: { mode: "development", adapter: "local", configured: true, productionSafe: false },
+        acceptedData: { acceptedSnapshotCount: 3, activeExperimentHeadCount: 2 },
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        analysisThread: { id: "thread_1", status: "planning" },
+        analysisPlanRevision: { id: "revision_1", revision: 1 },
+      }, { status: 201 }));
+
+    await getProjectAnalysisCapabilities("project 1", { fetch: fetchImpl });
+    await retryAnalysisThread("thread_1", {
+      fetch: fetchImpl,
+      idempotencyKey: "retry_thread_1",
+    });
+
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects/project%201/analysis-capabilities");
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/analysis-threads/thread_1/retry");
+    expect(fetchImpl.mock.calls[1][1].method).toBe("POST");
+    expect(fetchImpl.mock.calls[1][1].headers["idempotency-key"]).toBe("retry_thread_1");
+    expect(JSON.parse(fetchImpl.mock.calls[1][1].body)).toEqual({});
   });
 
   it("creates feedback revisions without accepting and accepts with exact hashes", async () => {

@@ -4672,6 +4672,30 @@ td button {
   border-color: #fecaca;
   background: #fff1f2;
 }
+.analysis-runtime-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 7px 12px;
+  border-bottom: 1px solid #dbe3ea;
+  color: #475569;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.analysis-runtime-status span {
+  white-space: nowrap;
+}
+.analysis-conversation-retry {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+}
+.analysis-review-blocker {
+  margin: 7px 0 0;
+  color: #9f1239;
+  font-size: 12px;
+  line-height: 1.35;
+}
 .analysis-conversation-card {
   display: grid;
   gap: 7px;

@@ -290,6 +290,39 @@ describe("AnalysisReviewWorkspace", () => {
     expect(screen.queryByText("Queued for calculation")).toBeNull();
   });
 
+  it("blocks plan acceptance when Python execution is unavailable without blocking feedback", async () => {
+    const createRevision = vi.fn().mockResolvedValue({
+      analysisPlanRevision: { ...revision2, id: "analysis_plan_revision_3", revision: 3 },
+    });
+    render(
+      <AnalysisReviewWorkspace
+        projectId="project_1"
+        thread={thread}
+        revision={revision2}
+        planRevisions={[revision1, revision2]}
+        selection={selection}
+        analysisCapabilities={{
+          executor: { mode: "development", adapter: "disabled", configured: false, productionSafe: false },
+        }}
+        WorkbookWorkspaceComponent={WorkbookWorkspaceStub}
+        acceptPlan={vi.fn()}
+        createRevision={createRevision}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Accept plan" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByText("Python execution is unavailable. Configure an analysis executor before accepting this plan.")).toBeTruthy();
+
+    fireEvent.change(screen.getByPlaceholderText("Describe a modification"), {
+      target: { value: "Use reaction time on the x-axis." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send modification" }));
+    await waitFor(() => expect(createRevision).toHaveBeenCalledWith(
+      thread.id,
+      { feedback: "Use reaction time on the x-axis." },
+    ));
+  });
+
   it("passes every non-contiguous source rectangle to the workbook as a separate red box", () => {
     render(
       <AnalysisReviewWorkspace
