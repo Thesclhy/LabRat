@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-07-21
+Last reviewed: 2026-07-22
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -12,6 +12,17 @@ Keep entries concise, newest first, and include:
 - meaningful changes
 - verification
 - follow-ups or residual risk
+
+## 2026-07-22
+
+- Approved and documented the chat workbook file-entry redesign. Future chat
+  uploads will show one filename button per WorkbookReviewSession rather than
+  one button per detected region. The button will reload the exact historical
+  session and open the existing Workbook Review region list, preventing both
+  chat clutter and cross-file active-state mistakes. The focused design is in
+  `doc/plans/chat-workbook-file-entry-design.md`; implementation is now the
+  first recommended slice. Documentation-only checkpoint; implementation and
+  behavior verification have not started.
 
 ## 2026-07-21
 

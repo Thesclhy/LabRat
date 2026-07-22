@@ -2,7 +2,7 @@
 
 Status: completed
 Read when: checking what the next implementation slice should be.
-Last reviewed: 2026-07-20
+Last reviewed: 2026-07-22
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
 
@@ -72,8 +72,12 @@ Deployment work not included in this completed milestone:
 
 ## Next Recommended Slice
 
-1. Exercise migrations 013/014 and the region-to-DataPlan path against a configured Postgres test database.
-2. Operationalize the hardened analysis worker, secret management, timeouts, audit telemetry, and provider cost/latency monitoring in a production-like environment.
+1. Implement the approved chat workbook file-entry design in
+   `doc/plans/chat-workbook-file-entry-design.md`: one filename button per
+   upload, exact WorkbookReviewSession reload on click, and no region-button
+   duplication in chat.
+2. Exercise migrations 013/014 and the region-to-DataPlan path against a configured Postgres test database.
+3. Operationalize the hardened analysis worker, secret management, timeouts, audit telemetry, and provider cost/latency monitoring in a production-like environment.
 
 ## Guardrails
 

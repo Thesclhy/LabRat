@@ -2,7 +2,7 @@
 
 Status: active
 Read when: deciding what LabRat should build next.
-Last reviewed: 2026-07-20
+Last reviewed: 2026-07-22
 
 This is the short active plan. Current execution status lives in `doc/current-milestone.md`; detailed implementation plans live under `doc/plans/`.
 
@@ -75,8 +75,13 @@ Use this split when deciding what to build:
 
 ## Next Recommended Slices
 
-1. Run migrations 013/014 and the region-to-DataPlan path against configured Postgres in CI or staging.
-2. Deploy and exercise the hardened no-network analysis worker with production secret management, audit telemetry, timeout controls, and provider cost/latency monitoring.
+1. Replace chat's per-region workbook upload buttons with one filename button
+   per WorkbookReviewSession. Clicking it must reload the exact session and use
+   the existing Workbook Review region list as the sole selection/review
+   surface. Follow
+   `doc/plans/chat-workbook-file-entry-design.md`.
+2. Run migrations 013/014 and the region-to-DataPlan path against configured Postgres in CI or staging.
+3. Deploy and exercise the hardened no-network analysis worker with production secret management, audit telemetry, timeout controls, and provider cost/latency monitoring.
 
 ## Operating Loop
 
@@ -110,6 +115,7 @@ npm run codex:preflight
 - Evidence retrieval plan: `doc/plans/tool-governed-evidence-retrieval-plan.md`
 - DataPlan Agent plan: `doc/plans/tool-governed-dataplan-agent-transition-plan.md`
 - Workbook-to-Browser plan: `doc/plans/workbook-review-to-experiment-browser-plan.md`
+- Chat workbook file-entry design: `doc/plans/chat-workbook-file-entry-design.md`
 - Roadmap: `doc/plans/roadmap.md`
 - API contracts: `doc/contracts/saas-api-contract-v0.md`
 - Data dictionary: `doc/contracts/canonical-data-dictionary.md`
