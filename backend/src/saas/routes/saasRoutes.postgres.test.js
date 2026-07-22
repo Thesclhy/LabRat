@@ -60,7 +60,7 @@ async function closeServer(server) {
   });
 }
 
-test("migration 012 and Postgres store expose analysis persistence parity", async () => {
+test("analysis migrations and Postgres store expose retry receipt persistence parity", async () => {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const migration = await fs.readFile(
     path.resolve(here, "..", "..", "..", "migrations", "012_analysis_workflow.sql"),
@@ -75,6 +75,14 @@ test("migration 012 and Postgres store expose analysis persistence parity", asyn
   ]) {
     assert.match(migration, new RegExp(`create table if not exists ${table}`));
   }
+  const retryMigration = await fs.readFile(
+    path.resolve(here, "..", "..", "..", "migrations", "015_analysis_retry_receipts.sql"),
+    "utf8",
+  );
+  assert.match(retryMigration, /create table if not exists analysis_thread_retry_receipts/);
+  assert.match(retryMigration, /unique\(project_id, idempotency_key\)/);
+  assert.match(retryMigration, /lease_expires_at timestamptz/);
+  assert.match(retryMigration, /analysis_plan_revision_id text references analysis_plan_revisions/);
   const store = new PostgresSaasStore({ databaseUrl: "" });
   for (const method of [
     "createAnalysisThread",
@@ -82,6 +90,7 @@ test("migration 012 and Postgres store expose analysis persistence parity", asyn
     "listAnalysisThreads",
     "claimAnalysisThreadRetry",
     "releaseAnalysisThreadRetry",
+    "completeAnalysisThreadRetry",
     "appendAnalysisPlanRevision",
     "findAnalysisPlanRevisionById",
     "listAnalysisPlanRevisions",
@@ -207,6 +216,42 @@ test("Postgres SaaS routes preserve workbook review, source documents, and suppo
       method: "POST",
       body: { labId, name: "Postgres Source Review Project" },
     })).json();
+
+    const retryThread = await store.createAnalysisThread({
+      labId,
+      projectId: project.project.id,
+      status: "planning",
+      originalRequest: "Exercise the Postgres retry lease.",
+      createdBy: "user_labuser",
+    });
+    const retryClaim = {
+      labId,
+      projectId: project.project.id,
+      analysisThreadId: retryThread.id,
+      actorUserId: "user_labuser",
+      idempotencyKey: "postgres_retry_lease_1",
+      requestHash: "sha256_postgres_retry_lease_1",
+      claimedAt: "2026-07-22T12:00:00.000Z",
+      leaseMs: 6 * 60 * 1000,
+    };
+    assert.equal((await store.claimAnalysisThreadRetry(retryClaim)).claimStatus, "claimed");
+    assert.equal((await store.claimAnalysisThreadRetry({
+      ...retryClaim,
+      claimedAt: "2026-07-22T12:05:59.999Z",
+    })).claimStatus, "in_progress");
+    const recoveredRetry = await store.claimAnalysisThreadRetry({
+      ...retryClaim,
+      claimedAt: "2026-07-22T12:06:00.001Z",
+    });
+    assert.equal(recoveredRetry.claimStatus, "claimed");
+    assert.equal(recoveredRetry.recovered, true);
+    assert.equal(recoveredRetry.receipt.attemptCount, 2);
+    const releasedRetry = await store.releaseAnalysisThreadRetry({
+      ...retryClaim,
+      releasedAt: "2026-07-22T12:06:01.000Z",
+    });
+    assert.equal(releasedRetry.receipt.status, "retryable");
+    assert.equal(releasedRetry.analysisThread.status, "planning");
 
     const workbook = componentDistributionWorkbookBlob();
     const firstUpload = await uploadFile(project.project.id, workbook, "Calculation_Exp30.xlsx");

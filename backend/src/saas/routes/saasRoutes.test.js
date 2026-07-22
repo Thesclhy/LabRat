@@ -2469,6 +2469,7 @@ test("analysis capabilities and missing-evidence retry stay bounded, authorized,
 
   const unavailable = await jsonFetch(`/api/analysis-threads/${blockedBody.analysisThread.id}/retry`, {
     method: "POST",
+    headers: { "idempotency-key": "analysis_retry_no_evidence_1" },
     body: {},
   });
   assert.equal(unavailable.status, 409);
@@ -2502,19 +2503,23 @@ test("analysis capabilities and missing-evidence retry stay bounded, authorized,
   cookie = cookieFrom(viewerLogin);
   const viewerRetry = await jsonFetch(`/api/analysis-threads/${blockedBody.analysisThread.id}/retry`, {
     method: "POST",
+    headers: { "idempotency-key": "analysis_retry_viewer_forbidden_1" },
     body: {},
   });
   assert.equal(viewerRetry.status, 403);
   assert.equal((await viewerRetry.json()).error.code, "forbidden");
 
   cookie = ownerCookie;
+  const retryKey = `analysis_retry_success_${Date.now()}`;
   const retries = await Promise.all([
     jsonFetch(`/api/analysis-threads/${blockedBody.analysisThread.id}/retry`, {
       method: "POST",
+      headers: { "idempotency-key": retryKey },
       body: {},
     }),
     jsonFetch(`/api/analysis-threads/${blockedBody.analysisThread.id}/retry`, {
       method: "POST",
+      headers: { "idempotency-key": retryKey },
       body: {},
     }),
   ]);
@@ -2563,7 +2568,11 @@ test("analysis retry requires durable missing-evidence proof and releases a fail
     };
     const rejected = await jsonFetch(
       `/api/analysis-threads/${providerFailureBody.analysisThread.id}/retry`,
-      { method: "POST", body: {} },
+      {
+        method: "POST",
+        headers: { "idempotency-key": "analysis_retry_without_evidence_proof_1" },
+        body: {},
+      },
     );
     assert.equal(rejected.status, 409);
     assert.equal((await rejected.json()).error.code, "analysis_retry_not_available");
@@ -2585,7 +2594,11 @@ test("analysis retry requires durable missing-evidence proof and releases a fail
     };
     const failedRetry = await jsonFetch(
       `/api/analysis-threads/${blockedBody.analysisThread.id}/retry`,
-      { method: "POST", body: {} },
+      {
+        method: "POST",
+        headers: { "idempotency-key": "analysis_retry_provider_failure_1" },
+        body: {},
+      },
     );
     assert.equal(failedRetry.status, 503);
     assert.equal(retryCalls, 1);
@@ -2608,12 +2621,17 @@ test("analysis retry requires durable missing-evidence proof and releases a fail
     };
     const firstRetry = jsonFetch(`/api/analysis-threads/${blockedBody.analysisThread.id}/retry`, {
       method: "POST",
+      headers: { "idempotency-key": "analysis_retry_provider_failure_1" },
       body: {},
     });
     await entered;
     const concurrentRetry = await jsonFetch(
       `/api/analysis-threads/${blockedBody.analysisThread.id}/retry`,
-      { method: "POST", body: {} },
+      {
+        method: "POST",
+        headers: { "idempotency-key": "analysis_retry_provider_failure_1" },
+        body: {},
+      },
     );
     assert.equal(concurrentRetry.status, 409);
     assert.equal((await concurrentRetry.json()).error.code, "analysis_retry_in_progress");
@@ -2625,10 +2643,12 @@ test("analysis retry requires durable missing-evidence proof and releases a fail
     assert.equal(retryCalls, 2);
     const replay = await jsonFetch(`/api/analysis-threads/${blockedBody.analysisThread.id}/retry`, {
       method: "POST",
+      headers: { "idempotency-key": "analysis_retry_provider_failure_1" },
       body: {},
     });
     assert.equal(replay.status, 200);
     assert.equal((await replay.json()).idempotentReplay, true);
+    assert.equal(retryCalls, 2);
     assert.equal(
       (await store.listAnalysisPlanRevisions({ analysisThreadId: blockedBody.analysisThread.id })).length,
       1,
@@ -2636,6 +2656,65 @@ test("analysis retry requires durable missing-evidence proof and releases a fail
   } finally {
     testModelProvider.draftAnalysisPlan = originalDraftAnalysisPlan;
   }
+});
+
+test("analysis retry validates idempotency keys and rejects conflicting reuse", async () => {
+  const firstProject = await createProject("Retry Idempotency First Project");
+  const firstBlocked = await jsonFetch(`/api/projects/${firstProject.id}/agent/runs`, {
+    method: "POST",
+    body: { message: "Compare accepted yield across experiments." },
+  });
+  assert.equal(firstBlocked.status, 201);
+  const firstBlockedBody = await firstBlocked.json();
+  const secondBlocked = await jsonFetch(`/api/projects/${firstProject.id}/agent/runs`, {
+    method: "POST",
+    body: { message: "Compare accepted yield across experiments." },
+  });
+  assert.equal(secondBlocked.status, 201);
+  const secondBlockedBody = await secondBlocked.json();
+  seedRouteAnalysisData(firstProject, `retry_idempotency_first_${Date.now()}`);
+
+  const missing = await jsonFetch(`/api/analysis-threads/${firstBlockedBody.analysisThread.id}/retry`, {
+    method: "POST",
+    body: {},
+  });
+  assert.equal(missing.status, 400);
+  assert.equal((await missing.json()).error.code, "idempotency_key_required");
+
+  const invalid = await jsonFetch(`/api/analysis-threads/${firstBlockedBody.analysisThread.id}/retry`, {
+    method: "POST",
+    headers: { "idempotency-key": "bad key" },
+    body: {},
+  });
+  assert.equal(invalid.status, 400);
+  assert.equal((await invalid.json()).error.code, "invalid_idempotency_key");
+
+  const key = `analysis_retry_conflict_${Date.now()}`;
+  const firstRetry = await jsonFetch(`/api/analysis-threads/${firstBlockedBody.analysisThread.id}/retry`, {
+    method: "POST",
+    headers: { "idempotency-key": key },
+    body: {},
+  });
+  assert.equal(firstRetry.status, 201);
+  const firstRevision = (await firstRetry.json()).analysisPlanRevision;
+
+  const replay = await jsonFetch(`/api/analysis-threads/${firstBlockedBody.analysisThread.id}/retry`, {
+    method: "POST",
+    headers: { "idempotency-key": key },
+    body: {},
+  });
+  assert.equal(replay.status, 200);
+  const replayBody = await replay.json();
+  assert.equal(replayBody.idempotentReplay, true);
+  assert.equal(replayBody.analysisPlanRevision.id, firstRevision.id);
+
+  const conflict = await jsonFetch(`/api/analysis-threads/${secondBlockedBody.analysisThread.id}/retry`, {
+    method: "POST",
+    headers: { "idempotency-key": key },
+    body: {},
+  });
+  assert.equal(conflict.status, 409);
+  assert.equal((await conflict.json()).error.code, "idempotency_key_conflict");
 });
 
 test("experiment-purpose AgentRun answers directly without a confirmation card", async () => {

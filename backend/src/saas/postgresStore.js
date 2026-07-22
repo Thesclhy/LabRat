@@ -438,6 +438,26 @@ function analysisThreadFromRow(row) {
   };
 }
 
+function analysisThreadRetryReceiptFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    analysisThreadId: row.analysis_thread_id,
+    actorUserId: row.actor_user_id,
+    schemaVersion: row.schema_version || "labrat.analysisThreadRetryReceipt.v1",
+    idempotencyKey: row.idempotency_key,
+    requestHash: row.request_hash,
+    status: row.status,
+    leaseExpiresAt: row.lease_expires_at,
+    attemptCount: Number(row.attempt_count || 0),
+    analysisPlanRevisionId: row.analysis_plan_revision_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 function analysisPlanRevisionFromRow(row) {
   if (!row) return null;
   return {
@@ -2003,26 +2023,310 @@ export class PostgresSaasStore {
     return analysisThreadFromRow(result.rows[0]);
   }
 
-  async claimAnalysisThreadRetry({ analysisThreadId, actorUserId } = {}) {
-    const result = await this.query(
-      `update analysis_threads
-       set status = 'retry_drafting', updated_at = $2, updated_by = $3
-       where id = $1 and status = 'planning'
-       returning *`,
-      [analysisThreadId, nowIso(), actorUserId || null],
-    );
-    return analysisThreadFromRow(result.rows[0]);
+  async claimAnalysisThreadRetry(input = {}) {
+    const claimedAt = input.claimedAt || nowIso();
+    const claimedAtMs = Date.parse(claimedAt);
+    const leaseMs = Number.isFinite(Number(input.leaseMs)) && Number(input.leaseMs) > 0
+      ? Number(input.leaseMs)
+      : 6 * 60 * 1000;
+    const required = [
+      input.labId,
+      input.projectId,
+      input.analysisThreadId,
+      input.actorUserId,
+      input.idempotencyKey,
+      input.requestHash,
+    ];
+    if (required.some((value) => !String(value || "").trim()) || !Number.isFinite(claimedAtMs)) {
+      throw Object.assign(new Error("The analysis retry claim is invalid."), {
+        statusCode: 400,
+        code: "invalid_analysis_retry_claim",
+      });
+    }
+    const leaseExpiresAt = new Date(claimedAtMs + leaseMs).toISOString();
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      await client.query(
+        "select pg_advisory_xact_lock(hashtext($1), hashtext($2))",
+        [input.projectId, `analysis_retry_thread:${input.analysisThreadId}`],
+      );
+      await client.query(
+        "select pg_advisory_xact_lock(hashtext($1), hashtext($2))",
+        [input.projectId, `analysis_retry_key:${input.idempotencyKey}`],
+      );
+      const priorResult = await client.query(
+        `select * from analysis_thread_retry_receipts
+         where project_id = $1 and idempotency_key = $2
+         for update`,
+        [input.projectId, input.idempotencyKey],
+      );
+      let receipt = analysisThreadRetryReceiptFromRow(priorResult.rows[0]);
+      if (receipt && (
+        receipt.analysisThreadId !== input.analysisThreadId
+        || receipt.actorUserId !== input.actorUserId
+        || receipt.requestHash !== input.requestHash
+      )) {
+        throw Object.assign(new Error("This idempotency key was already used for another analysis retry."), {
+          statusCode: 409,
+          code: "idempotency_key_conflict",
+        });
+      }
+      const threadResult = await client.query(
+        "select * from analysis_threads where id = $1 for update",
+        [input.analysisThreadId],
+      );
+      const thread = analysisThreadFromRow(threadResult.rows[0]);
+      if (!thread || thread.projectId !== input.projectId || thread.labId !== input.labId) {
+        await client.query("commit");
+        return { claimStatus: "not_available", receipt, analysisThread: thread };
+      }
+      if (
+        receipt?.status === "drafting"
+        && thread.status === "awaiting_plan_review"
+        && thread.planRevisionIds.length
+      ) {
+        const reconciled = await client.query(
+          `update analysis_thread_retry_receipts
+           set status = 'completed', lease_expires_at = null,
+               analysis_plan_revision_id = $2, updated_at = $3
+           where id = $1
+           returning *`,
+          [receipt.id, thread.planRevisionIds.at(-1), claimedAt],
+        );
+        receipt = analysisThreadRetryReceiptFromRow(reconciled.rows[0]);
+      }
+      if (receipt?.status === "completed") {
+        await client.query("commit");
+        return { claimStatus: "replay", receipt, analysisThread: thread };
+      }
+      if (receipt?.status === "drafting" && Date.parse(receipt.leaseExpiresAt) > claimedAtMs) {
+        await client.query("commit");
+        return { claimStatus: "in_progress", receipt, analysisThread: thread };
+      }
+      const activeResult = await client.query(
+        `select * from analysis_thread_retry_receipts
+         where project_id = $1 and analysis_thread_id = $2
+           and status = 'drafting' and lease_expires_at > $3
+         order by updated_at desc
+         limit 1`,
+        [input.projectId, input.analysisThreadId, claimedAt],
+      );
+      const activeReceipt = analysisThreadRetryReceiptFromRow(activeResult.rows[0]);
+      if (activeReceipt) {
+        await client.query("commit");
+        return { claimStatus: "in_progress", receipt: activeReceipt, analysisThread: thread };
+      }
+      await client.query(
+        `update analysis_thread_retry_receipts
+         set status = 'retryable', lease_expires_at = null, updated_at = $3
+         where project_id = $1 and analysis_thread_id = $2
+           and status = 'drafting' and lease_expires_at <= $3`,
+        [input.projectId, input.analysisThreadId, claimedAt],
+      );
+      if (!["planning", "retry_drafting"].includes(thread.status)) {
+        await client.query("commit");
+        return { claimStatus: "not_available", receipt, analysisThread: thread };
+      }
+
+      const recovered = receipt?.status === "drafting" || thread.status === "retry_drafting";
+      let claimedReceiptResult;
+      if (receipt) {
+        claimedReceiptResult = await client.query(
+          `update analysis_thread_retry_receipts
+           set status = 'drafting', lease_expires_at = $2,
+               attempt_count = attempt_count + 1,
+               analysis_plan_revision_id = null, updated_at = $3
+           where id = $1
+           returning *`,
+          [receipt.id, leaseExpiresAt, claimedAt],
+        );
+      } else {
+        claimedReceiptResult = await client.query(
+          `insert into analysis_thread_retry_receipts
+           (id, lab_id, project_id, analysis_thread_id, actor_user_id, schema_version,
+            idempotency_key, request_hash, status, lease_expires_at, attempt_count,
+            analysis_plan_revision_id, created_at, updated_at)
+           values ($1, $2, $3, $4, $5, 'labrat.analysisThreadRetryReceipt.v1',
+                   $6, $7, 'drafting', $8, 1, null, $9, $9)
+           returning *`,
+          [
+            makeId("analysis_retry_receipt"),
+            input.labId,
+            input.projectId,
+            input.analysisThreadId,
+            input.actorUserId,
+            input.idempotencyKey,
+            input.requestHash,
+            leaseExpiresAt,
+            claimedAt,
+          ],
+        );
+      }
+      const claimedThreadResult = await client.query(
+        `update analysis_threads
+         set status = 'retry_drafting', updated_at = $2, updated_by = $3
+         where id = $1
+         returning *`,
+        [input.analysisThreadId, claimedAt, input.actorUserId],
+      );
+      await client.query("commit");
+      return {
+        claimStatus: "claimed",
+        receipt: analysisThreadRetryReceiptFromRow(claimedReceiptResult.rows[0]),
+        analysisThread: analysisThreadFromRow(claimedThreadResult.rows[0]),
+        recovered,
+      };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
-  async releaseAnalysisThreadRetry({ analysisThreadId, actorUserId } = {}) {
-    const result = await this.query(
-      `update analysis_threads
-       set status = 'planning', updated_at = $2, updated_by = $3
-       where id = $1 and status = 'retry_drafting'
-       returning *`,
-      [analysisThreadId, nowIso(), actorUserId || null],
-    );
-    return analysisThreadFromRow(result.rows[0]);
+  async releaseAnalysisThreadRetry(input = {}) {
+    const releasedAt = input.releasedAt || nowIso();
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      await client.query(
+        "select pg_advisory_xact_lock(hashtext($1), hashtext($2))",
+        [input.projectId, `analysis_retry_thread:${input.analysisThreadId}`],
+      );
+      await client.query(
+        "select pg_advisory_xact_lock(hashtext($1), hashtext($2))",
+        [input.projectId, `analysis_retry_key:${input.idempotencyKey}`],
+      );
+      const receiptResult = await client.query(
+        `select * from analysis_thread_retry_receipts
+         where project_id = $1 and idempotency_key = $2
+         for update`,
+        [input.projectId, input.idempotencyKey],
+      );
+      let receipt = analysisThreadRetryReceiptFromRow(receiptResult.rows[0]);
+      if (!receipt) {
+        await client.query("commit");
+        return null;
+      }
+      if (
+        receipt.analysisThreadId !== input.analysisThreadId
+        || receipt.actorUserId !== input.actorUserId
+        || receipt.requestHash !== input.requestHash
+      ) {
+        throw Object.assign(new Error("This idempotency key was already used for another analysis retry."), {
+          statusCode: 409,
+          code: "idempotency_key_conflict",
+        });
+      }
+      if (receipt.status === "drafting") {
+        const releasedReceipt = await client.query(
+          `update analysis_thread_retry_receipts
+           set status = 'retryable', lease_expires_at = null, updated_at = $2
+           where id = $1
+           returning *`,
+          [receipt.id, releasedAt],
+        );
+        receipt = analysisThreadRetryReceiptFromRow(releasedReceipt.rows[0]);
+      }
+      const updatedThread = await client.query(
+        `update analysis_threads
+         set status = 'planning', updated_at = $2, updated_by = $3
+         where id = $1 and status = 'retry_drafting'
+         returning *`,
+        [input.analysisThreadId, releasedAt, input.actorUserId],
+      );
+      let thread = analysisThreadFromRow(updatedThread.rows[0]);
+      if (!thread) {
+        const currentThread = await client.query(
+          "select * from analysis_threads where id = $1",
+          [input.analysisThreadId],
+        );
+        thread = analysisThreadFromRow(currentThread.rows[0]);
+      }
+      await client.query("commit");
+      return { receipt, analysisThread: thread };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async completeAnalysisThreadRetry(input = {}) {
+    const completedAt = input.completedAt || nowIso();
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      await client.query(
+        "select pg_advisory_xact_lock(hashtext($1), hashtext($2))",
+        [input.projectId, `analysis_retry_thread:${input.analysisThreadId}`],
+      );
+      await client.query(
+        "select pg_advisory_xact_lock(hashtext($1), hashtext($2))",
+        [input.projectId, `analysis_retry_key:${input.idempotencyKey}`],
+      );
+      const receiptResult = await client.query(
+        `select * from analysis_thread_retry_receipts
+         where project_id = $1 and idempotency_key = $2
+         for update`,
+        [input.projectId, input.idempotencyKey],
+      );
+      const receipt = analysisThreadRetryReceiptFromRow(receiptResult.rows[0]);
+      if (!receipt) {
+        throw Object.assign(new Error("The analysis retry receipt was not found."), {
+          statusCode: 409,
+          code: "analysis_retry_receipt_conflict",
+        });
+      }
+      if (
+        receipt.analysisThreadId !== input.analysisThreadId
+        || receipt.actorUserId !== input.actorUserId
+        || receipt.requestHash !== input.requestHash
+      ) {
+        throw Object.assign(new Error("This idempotency key was already used for another analysis retry."), {
+          statusCode: 409,
+          code: "idempotency_key_conflict",
+        });
+      }
+      if (receipt.status === "completed") {
+        if (receipt.analysisPlanRevisionId !== input.analysisPlanRevisionId) {
+          throw Object.assign(new Error("The analysis retry receipt already references another revision."), {
+            statusCode: 409,
+            code: "analysis_retry_receipt_conflict",
+          });
+        }
+        await client.query("commit");
+        return receipt;
+      }
+      const revisionResult = await client.query(
+        `select id from analysis_plan_revisions
+         where id = $1 and project_id = $2 and analysis_thread_id = $3`,
+        [input.analysisPlanRevisionId, input.projectId, input.analysisThreadId],
+      );
+      if (receipt.status !== "drafting" || !revisionResult.rows[0]) {
+        throw Object.assign(new Error("The analysis retry receipt cannot complete with this revision."), {
+          statusCode: 409,
+          code: "analysis_retry_receipt_conflict",
+        });
+      }
+      const completed = await client.query(
+        `update analysis_thread_retry_receipts
+         set status = 'completed', lease_expires_at = null,
+             analysis_plan_revision_id = $2, updated_at = $3
+         where id = $1
+         returning *`,
+        [receipt.id, input.analysisPlanRevisionId, completedAt],
+      );
+      await client.query("commit");
+      return analysisThreadRetryReceiptFromRow(completed.rows[0]);
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async createAnalysisPlanRevision(input) {

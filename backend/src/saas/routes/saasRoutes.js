@@ -77,6 +77,7 @@ import {
 } from "../chartEvidenceResolver.js";
 
 const PROJECT_PROFILE_SCHEMA_VERSION = "labrat.projectProfile.v1";
+const ANALYSIS_RETRY_LEASE_MS = 6 * 60 * 1000;
 const PROJECT_PROFILE_TEXT_FIELDS = [
   "researchGoal",
   "experimentBackground",
@@ -1680,6 +1681,22 @@ async function handleAnalysisThreadById(req, res, context, analysisThreadId) {
 
 async function handleAnalysisThreadRetry(req, res, context, analysisThreadId) {
   const { auth, analysisThread } = await analysisThreadAuth(req, context, analysisThreadId, "editor");
+  const rawIdempotencyKey = req.headers["idempotency-key"];
+  const idempotencyKey = Array.isArray(rawIdempotencyKey)
+    ? String(rawIdempotencyKey[0] || "").trim()
+    : String(rawIdempotencyKey || "").trim();
+  if (!idempotencyKey) {
+    throw Object.assign(new Error("A valid Idempotency-Key header is required to retry an analysis thread."), {
+      statusCode: 400,
+      code: "idempotency_key_required",
+    });
+  }
+  if (idempotencyKey.length > 200 || !/^[A-Za-z0-9._:-]+$/.test(idempotencyKey)) {
+    throw Object.assign(new Error("Idempotency-Key must use 1-200 letters, numbers, dots, underscores, colons, or hyphens."), {
+      statusCode: 400,
+      code: "invalid_idempotency_key",
+    });
+  }
   const project = await context.store.findProjectById(analysisThread.projectId);
   if (!project) {
     throw Object.assign(new Error("Project not found."), {
@@ -1687,8 +1704,7 @@ async function handleAnalysisThreadRetry(req, res, context, analysisThreadId) {
       code: "project_not_found",
     });
   }
-  const [revisions, analysisRuns, experimentSnapshotHeads, agentRuns] = await Promise.all([
-    context.store.listAnalysisPlanRevisions({ analysisThreadId: analysisThread.id }),
+  const [analysisRuns, experimentSnapshotHeads, agentRuns] = await Promise.all([
     context.store.listAnalysisRuns({ projectId: project.id, analysisThreadId: analysisThread.id }),
     context.store.listExperimentSnapshotHeads({ projectId: project.id }),
     context.store.listAgentRuns({ projectId: project.id }),
@@ -1699,22 +1715,7 @@ async function handleAnalysisThreadRetry(req, res, context, analysisThreadId) {
       code: "analysis_retry_not_available",
     });
   }
-  const currentRevision = revisions.find((revision) => revision.status === "awaiting_review");
-  if (currentRevision) {
-    sendJson(res, 200, {
-      analysisThread: analysisThreadSummary(analysisThread),
-      analysisPlanRevision: analysisPlanRevisionSummary(currentRevision),
-      idempotentReplay: true,
-    });
-    return;
-  }
-  if (analysisThread.status === "retry_drafting") {
-    throw Object.assign(new Error("This analysis retry is already drafting a reviewable plan."), {
-      statusCode: 409,
-      code: "analysis_retry_in_progress",
-    });
-  }
-  if (analysisThread.status !== "planning" || analysisRuns.length) {
+  if (analysisRuns.length) {
     throw Object.assign(new Error("This analysis thread is not awaiting published evidence."), {
       statusCode: 409,
       code: "analysis_retry_not_available",
@@ -1727,29 +1728,44 @@ async function handleAnalysisThreadRetry(req, res, context, analysisThreadId) {
     });
   }
 
-  const claimedThread = await context.store.claimAnalysisThreadRetry({
+  const requestHash = sha256Hex(JSON.stringify({
+    operation: "analysis_thread_retry_v1",
+    projectId: project.id,
     analysisThreadId: analysisThread.id,
     actorUserId: auth.user.id,
+  }));
+  const claim = await context.store.claimAnalysisThreadRetry({
+    labId: project.labId,
+    projectId: project.id,
+    analysisThreadId: analysisThread.id,
+    actorUserId: auth.user.id,
+    idempotencyKey,
+    requestHash,
+    leaseMs: ANALYSIS_RETRY_LEASE_MS,
   });
-  if (!claimedThread) {
-    const [latestThread, latestRevisions] = await Promise.all([
-      context.store.findAnalysisThreadById(analysisThread.id),
-      context.store.listAnalysisPlanRevisions({ analysisThreadId: analysisThread.id }),
-    ]);
-    const replay = latestRevisions.find((item) => item.status === "awaiting_review");
+  if (claim?.claimStatus === "replay") {
+    const replay = await context.store.findAnalysisPlanRevisionById(
+      claim.receipt.analysisPlanRevisionId,
+    );
     if (replay) {
       sendJson(res, 200, {
-        analysisThread: analysisThreadSummary(latestThread || analysisThread),
+        analysisThread: analysisThreadSummary(claim.analysisThread || analysisThread),
         analysisPlanRevision: analysisPlanRevisionSummary(replay),
         idempotentReplay: true,
       });
       return;
     }
+  }
+  if (claim?.claimStatus === "in_progress") {
     throw Object.assign(new Error("This analysis retry is already drafting a reviewable plan."), {
       statusCode: 409,
-      code: latestThread?.status === "retry_drafting"
-        ? "analysis_retry_in_progress"
-        : "analysis_retry_not_available",
+      code: "analysis_retry_in_progress",
+    });
+  }
+  if (claim?.claimStatus !== "claimed") {
+    throw Object.assign(new Error("This analysis thread is not awaiting published evidence."), {
+      statusCode: 409,
+      code: "analysis_retry_not_available",
     });
   }
 
@@ -1768,8 +1784,11 @@ async function handleAnalysisThreadRetry(req, res, context, analysisThreadId) {
   } catch (error) {
     try {
       await context.store.releaseAnalysisThreadRetry({
-        analysisThreadId: claimedThread.id,
+        projectId: project.id,
+        analysisThreadId: analysisThread.id,
         actorUserId: auth.user.id,
+        idempotencyKey,
+        requestHash,
       });
     } catch {
       // Preserve the draft failure while a future retry can surface any store issue.
@@ -1781,6 +1800,15 @@ async function handleAnalysisThreadRetry(req, res, context, analysisThreadId) {
     revision = replay;
     idempotentReplay = true;
   }
+
+  await context.store.completeAnalysisThreadRetry({
+    projectId: project.id,
+    analysisThreadId: analysisThread.id,
+    actorUserId: auth.user.id,
+    idempotencyKey,
+    requestHash,
+    analysisPlanRevisionId: revision.id,
+  });
 
   const updatedThread = await context.store.findAnalysisThreadById(analysisThread.id);
   if (!idempotentReplay) {

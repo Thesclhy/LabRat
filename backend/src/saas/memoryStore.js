@@ -46,6 +46,7 @@ export class MemorySaasStore {
     this.browserViews = new Map();
     this.agentRuns = new Map();
     this.analysisThreads = new Map();
+    this.analysisThreadRetryReceipts = new Map();
     this.analysisPlanRevisions = new Map();
     this.analysisRuns = new Map();
     this.analysisResults = new Map();
@@ -1042,22 +1043,198 @@ export class MemorySaasStore {
     return copy(thread);
   }
 
-  async claimAnalysisThreadRetry({ analysisThreadId, actorUserId } = {}) {
-    const thread = this.analysisThreads.get(analysisThreadId);
-    if (!thread || thread.status !== "planning") return null;
+  async claimAnalysisThreadRetry(input = {}) {
+    const claimedAt = input.claimedAt || nowIso();
+    const claimedAtMs = Date.parse(claimedAt);
+    const leaseMs = Number.isFinite(Number(input.leaseMs)) && Number(input.leaseMs) > 0
+      ? Number(input.leaseMs)
+      : 6 * 60 * 1000;
+    const required = [
+      input.labId,
+      input.projectId,
+      input.analysisThreadId,
+      input.actorUserId,
+      input.idempotencyKey,
+      input.requestHash,
+    ];
+    if (required.some((value) => !String(value || "").trim()) || !Number.isFinite(claimedAtMs)) {
+      throw Object.assign(new Error("The analysis retry claim is invalid."), {
+        statusCode: 400,
+        code: "invalid_analysis_retry_claim",
+      });
+    }
+
+    const receiptKey = `${input.projectId}:${input.idempotencyKey}`;
+    let receipt = this.analysisThreadRetryReceipts.get(receiptKey) || null;
+    if (receipt && (
+      receipt.projectId !== input.projectId
+      || receipt.analysisThreadId !== input.analysisThreadId
+      || receipt.actorUserId !== input.actorUserId
+      || receipt.requestHash !== input.requestHash
+    )) {
+      throw Object.assign(new Error("This idempotency key was already used for another analysis retry."), {
+        statusCode: 409,
+        code: "idempotency_key_conflict",
+      });
+    }
+    const thread = this.analysisThreads.get(input.analysisThreadId);
+    if (!thread || thread.projectId !== input.projectId || thread.labId !== input.labId) {
+      return { claimStatus: "not_available", receipt: copy(receipt), analysisThread: copy(thread) };
+    }
+    if (
+      receipt?.status === "drafting"
+      && thread.status === "awaiting_plan_review"
+      && thread.planRevisionIds?.length
+    ) {
+      receipt = {
+        ...receipt,
+        status: "completed",
+        leaseExpiresAt: null,
+        analysisPlanRevisionId: thread.planRevisionIds.at(-1),
+        updatedAt: claimedAt,
+      };
+      this.analysisThreadRetryReceipts.set(receiptKey, receipt);
+    }
+    if (receipt?.status === "completed") {
+      return { claimStatus: "replay", receipt: copy(receipt), analysisThread: copy(thread) };
+    }
+    if (receipt?.status === "drafting" && Date.parse(receipt.leaseExpiresAt) > claimedAtMs) {
+      return { claimStatus: "in_progress", receipt: copy(receipt), analysisThread: copy(thread) };
+    }
+
+    const activeReceipt = [...this.analysisThreadRetryReceipts.values()].find((candidate) => (
+      candidate.projectId === input.projectId
+      && candidate.analysisThreadId === input.analysisThreadId
+      && candidate.status === "drafting"
+      && Date.parse(candidate.leaseExpiresAt) > claimedAtMs
+    ));
+    if (activeReceipt) {
+      return { claimStatus: "in_progress", receipt: copy(activeReceipt), analysisThread: copy(thread) };
+    }
+    for (const [key, candidate] of this.analysisThreadRetryReceipts) {
+      if (
+        candidate.projectId === input.projectId
+        && candidate.analysisThreadId === input.analysisThreadId
+        && candidate.status === "drafting"
+        && Date.parse(candidate.leaseExpiresAt) <= claimedAtMs
+      ) {
+        this.analysisThreadRetryReceipts.set(key, {
+          ...candidate,
+          status: "retryable",
+          leaseExpiresAt: null,
+          updatedAt: claimedAt,
+        });
+      }
+    }
+    if (!["planning", "retry_drafting"].includes(thread.status)) {
+      return { claimStatus: "not_available", receipt: copy(receipt), analysisThread: copy(thread) };
+    }
+
+    const recovered = Boolean(receipt?.status === "drafting") || thread.status === "retry_drafting";
+    const leaseExpiresAt = new Date(claimedAtMs + leaseMs).toISOString();
+    receipt = {
+      id: receipt?.id || makeId("analysis_retry_receipt"),
+      labId: input.labId,
+      projectId: input.projectId,
+      analysisThreadId: input.analysisThreadId,
+      actorUserId: input.actorUserId,
+      schemaVersion: "labrat.analysisThreadRetryReceipt.v1",
+      idempotencyKey: input.idempotencyKey,
+      requestHash: input.requestHash,
+      status: "drafting",
+      leaseExpiresAt,
+      attemptCount: Number(receipt?.attemptCount || 0) + 1,
+      analysisPlanRevisionId: null,
+      createdAt: receipt?.createdAt || claimedAt,
+      updatedAt: claimedAt,
+    };
+    this.analysisThreadRetryReceipts.set(receiptKey, receipt);
     thread.status = "retry_drafting";
-    thread.updatedAt = nowIso();
-    thread.updatedBy = actorUserId || thread.updatedBy;
-    return copy(thread);
+    thread.updatedAt = claimedAt;
+    thread.updatedBy = input.actorUserId;
+    return {
+      claimStatus: "claimed",
+      receipt: copy(receipt),
+      analysisThread: copy(thread),
+      recovered,
+    };
   }
 
-  async releaseAnalysisThreadRetry({ analysisThreadId, actorUserId } = {}) {
-    const thread = this.analysisThreads.get(analysisThreadId);
-    if (!thread || thread.status !== "retry_drafting") return null;
-    thread.status = "planning";
-    thread.updatedAt = nowIso();
-    thread.updatedBy = actorUserId || thread.updatedBy;
-    return copy(thread);
+  async releaseAnalysisThreadRetry(input = {}) {
+    const receiptKey = `${input.projectId}:${input.idempotencyKey}`;
+    const receipt = this.analysisThreadRetryReceipts.get(receiptKey);
+    const thread = this.analysisThreads.get(input.analysisThreadId);
+    if (!receipt || !thread) return null;
+    if (
+      receipt.analysisThreadId !== input.analysisThreadId
+      || receipt.actorUserId !== input.actorUserId
+      || receipt.requestHash !== input.requestHash
+    ) {
+      throw Object.assign(new Error("This idempotency key was already used for another analysis retry."), {
+        statusCode: 409,
+        code: "idempotency_key_conflict",
+      });
+    }
+    const releasedAt = input.releasedAt || nowIso();
+    const releasedReceipt = receipt.status === "drafting" ? {
+      ...receipt,
+      status: "retryable",
+      leaseExpiresAt: null,
+      updatedAt: releasedAt,
+    } : receipt;
+    this.analysisThreadRetryReceipts.set(receiptKey, releasedReceipt);
+    if (thread.status === "retry_drafting") {
+      thread.status = "planning";
+      thread.updatedAt = releasedAt;
+      thread.updatedBy = input.actorUserId;
+    }
+    return { receipt: copy(releasedReceipt), analysisThread: copy(thread) };
+  }
+
+  async completeAnalysisThreadRetry(input = {}) {
+    const receiptKey = `${input.projectId}:${input.idempotencyKey}`;
+    const receipt = this.analysisThreadRetryReceipts.get(receiptKey);
+    if (!receipt) return null;
+    if (
+      receipt.analysisThreadId !== input.analysisThreadId
+      || receipt.actorUserId !== input.actorUserId
+      || receipt.requestHash !== input.requestHash
+    ) {
+      throw Object.assign(new Error("This idempotency key was already used for another analysis retry."), {
+        statusCode: 409,
+        code: "idempotency_key_conflict",
+      });
+    }
+    if (receipt.status === "completed") {
+      if (receipt.analysisPlanRevisionId !== input.analysisPlanRevisionId) {
+        throw Object.assign(new Error("The analysis retry receipt already references another revision."), {
+          statusCode: 409,
+          code: "analysis_retry_receipt_conflict",
+        });
+      }
+      return copy(receipt);
+    }
+    const revision = this.analysisPlanRevisions.get(input.analysisPlanRevisionId);
+    if (
+      receipt.status !== "drafting"
+      || !revision
+      || revision.projectId !== input.projectId
+      || revision.analysisThreadId !== input.analysisThreadId
+    ) {
+      throw Object.assign(new Error("The analysis retry receipt is not drafting."), {
+        statusCode: 409,
+        code: "analysis_retry_receipt_conflict",
+      });
+    }
+    const completedReceipt = {
+      ...receipt,
+      status: "completed",
+      leaseExpiresAt: null,
+      analysisPlanRevisionId: input.analysisPlanRevisionId,
+      updatedAt: input.completedAt || nowIso(),
+    };
+    this.analysisThreadRetryReceipts.set(receiptKey, completedReceipt);
+    return copy(completedReceipt);
   }
 
   async createAnalysisPlanRevision(input) {
