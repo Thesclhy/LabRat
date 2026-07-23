@@ -8,17 +8,13 @@ import { ANALYSIS_RUNTIME_VERSION, pythonSourceHash } from "./analysisSchemas.js
 import { stableDataHash } from "./dataPlanSchemas.js";
 import { validatePythonPolicy } from "./pythonPolicy.js";
 
-const RUN_PACKAGE_VERSION = "labrat.analysisRunPackage.v1";
+const RUN_PACKAGE_VERSION = "labrat.analysisRunPackage.v2";
 const MAX_INPUT_BYTES = 100 * 1024 * 1024;
 const MAX_OUTPUT_BYTES = 100 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 60_000;
 const DEFAULT_RUNNER_PATH = fileURLToPath(
   new URL("../../scripts/labrat_python_runner.py", import.meta.url),
 );
-
-function asArray(value) {
-  return Array.isArray(value) ? value : [];
-}
 
 function copy(value) {
   return value == null ? value : structuredClone(value);
@@ -31,14 +27,6 @@ function executorFailure(code, message, details = {}) {
   };
 }
 
-function sourceRecordId(record) {
-  return `${record.snapshotId}:${Number(record.recordIndex)}`;
-}
-
-function fieldValueKey(field) {
-  return String(field?.fieldKey || field?.fieldId || "").trim();
-}
-
 function hasValidHttpsWorkerEndpoint(workerEndpoint) {
   try {
     return new URL(workerEndpoint).protocol === "https:";
@@ -47,7 +35,12 @@ function hasValidHttpsWorkerEndpoint(workerEndpoint) {
   }
 }
 
-export function buildAnalysisRunPackage({ run, planRevision, selection } = {}) {
+export function buildAnalysisRunPackage({
+  run,
+  planRevision,
+  inputs,
+  pythonProgram,
+} = {}) {
   if (
     !run?.id
     || !["queued", "running"].includes(run.status)
@@ -59,108 +52,42 @@ export function buildAnalysisRunPackage({ run, planRevision, selection } = {}) {
       statusCode: 409,
     });
   }
+  const source = String(pythonProgram?.source || "");
+  const sourceHash = pythonSourceHash(source);
   if (
     run.acceptedPlanRevisionId !== planRevision.id
-    || run.inputHash !== selection?.selectionHash
-    || run.programHash !== planRevision.programHash
-    || run.runtimeVersion !== planRevision.runtimeVersion
-    || planRevision.programHash !== pythonSourceHash(planRevision.pythonProgram?.source)
+    || planRevision.schemaVersion !== "labrat.analysisPlanRevision.v2"
+    || !Array.isArray(inputs?.tables)
+    || !inputs.tables.length
+    || pythonProgram?.runtime !== ANALYSIS_RUNTIME_VERSION
+    || pythonProgram?.entrypoint !== "analyze"
+    || !source
   ) {
-    throw Object.assign(new Error("Accepted analysis run hashes do not match the frozen plan."), {
-      code: "analysis_run_package_hash_mismatch",
-      statusCode: 409,
+    throw Object.assign(new Error("Accepted analysis run inputs or generated program are invalid."), {
+      code: "analysis_run_package_invalid",
+      statusCode: 422,
     });
   }
-
-  const records = asArray(selection.records).map((record) => {
-    const values = {};
-    asArray(record.fields).forEach((field) => {
-      const key = fieldValueKey(field);
-      if (!key) return;
-      if (Object.hasOwn(values, key)) {
-        throw Object.assign(new Error(`Selected field key ${key} is ambiguous across units or types.`), {
-          code: "analysis_input_field_collision",
-          statusCode: 422,
-        });
-      }
-      values[key] = copy(field.value);
-    });
-    return {
-      __source_record_id: sourceRecordId(record),
-      __experiment_id: record.experimentId,
-      __experiment_label: record.experimentLabel,
-      __snapshot_id: record.snapshotId,
-      __record_index: Number(record.recordIndex),
-      ...values,
-    };
-  });
-  const seriesPoints = asArray(selection.records).flatMap((record) => (
-    asArray(record.series).flatMap((series, seriesIndex) => (
-      asArray(series.points).map((point, pointIndex) => ({
-        __source_record_id: sourceRecordId(record),
-        __experiment_id: record.experimentId,
-        __experiment_label: record.experimentLabel,
-        __snapshot_id: record.snapshotId,
-        __record_index: Number(record.recordIndex),
-        __series_id: series.seriesId || series.seriesKey || `series_${seriesIndex + 1}`,
-        __series_label: series.label || series.seriesKey || null,
-        __point_index: pointIndex,
-        x: copy(point.x),
-        y: copy(point.y),
-        xUnit: series.xUnit || null,
-        yUnit: series.yUnit || null,
-      }))
-    ))
-  ));
-  const lineageRecords = Object.fromEntries(asArray(selection.records).map((record) => [
-    sourceRecordId(record),
-    {
-      experimentId: record.experimentId,
-      snapshotId: record.snapshotId,
-      recordIndex: Number(record.recordIndex),
-      fields: Object.fromEntries(asArray(record.fields).map((field) => [
-        field.fieldId,
-        copy(asArray(field.sourceRefs)),
-      ])),
-      series: Object.fromEntries(asArray(record.series).map((series, seriesIndex) => [
-        series.seriesId || series.seriesKey || `series_${seriesIndex + 1}`,
-        {
-          sourceRefs: copy(asArray(series.sourceRefs)),
-          pointSourceRefs: asArray(series.points).map((point) => copy(asArray(point.sourceRefs))),
-        },
-      ])),
-    },
-  ]));
   const runPackage = {
     schemaVersion: RUN_PACKAGE_VERSION,
     runId: run.id,
     projectId: run.projectId,
     analysisThreadId: run.analysisThreadId,
     acceptedPlanRevisionId: planRevision.id,
-    runtimeVersion: run.runtimeVersion,
-    inputHash: run.inputHash,
-    dependencyHash: planRevision.dependencyHash,
-    programHash: run.programHash,
-    selectionId: selection.selectionId,
-    fieldCatalog: copy(asArray(selection.fieldCatalog)),
-    tables: {
-      records,
-      series_points: seriesPoints,
-    },
-    lineage: {
-      records: lineageRecords,
-    },
-    calculationManifest: copy(planRevision.calculationManifest || {}),
-    expectedOutput: copy(planRevision.expectedOutput || {}),
+    runtimeVersion: ANALYSIS_RUNTIME_VERSION,
+    inputs: copy(inputs),
+    reviewPlan: copy(planRevision.reviewPlan || planRevision.plan?.reviewPlan || {}),
     program: {
-      runtime: planRevision.pythonProgram.runtime,
-      entrypoint: planRevision.pythonProgram.entrypoint,
-      source: planRevision.pythonProgram.source,
-      sourceHash: planRevision.pythonProgram.sourceHash,
+      runtime: ANALYSIS_RUNTIME_VERSION,
+      entrypoint: "analyze",
+      source,
+      sourceHash,
     },
   };
   return {
     ...runPackage,
+    inputHash: stableDataHash(inputs),
+    programHash: sourceHash,
     packageHash: stableDataHash(runPackage),
   };
 }

@@ -34,15 +34,15 @@ const projectState = {
     { experimentIdentityId: "exp_31", dataSnapshotId: "snapshot_1" },
   ],
   importRuns: [{ id: "run_1", status: "applied" }],
-  chartProposalSets: [{
-    id: "chart_set_1",
-    payload: { proposals: [{ proposalId: "chart_1", status: "accepted" }] },
-  }],
   chartSpecs: [{
     id: "chart_spec_1",
     title: "Gas vs Temperature",
-    origin: "source_extract",
-    sourceSnapshot: { rows: [{ values: { temperature: 250, gas: 0.35 } }] },
+    origin: "analysis_result",
+    spec: {
+      origin: "analysis_result",
+      traceCatalog: [{ traceId: "gas", x: [250], y: [0.35] }],
+      defaultChartView: { visibleTraceIds: ["gas"] },
+    },
   }],
   manuscripts: [{ id: "manuscript_1", updatedAt: "2026-06-15T12:00:00.000Z" }],
 };
@@ -184,6 +184,34 @@ describe("ProjectDashboard", () => {
 
     expect(screen.queryByRole("button", { name: "Delete project" })).toBeNull();
   });
+
+  it("uses server workflow summaries before a project is opened", () => {
+    render(
+      <ProjectDashboard
+        user={{ username: "labuser" }}
+        labs={[{ id: "lab_1", name: "Lab A", role: "editor" }]}
+        activeLabId="lab_1"
+        onLabChange={() => {}}
+        projects={[{
+          ...project,
+          workflowSummary: { publishedExperimentCount: 63, chartSpecCount: 1 },
+        }]}
+        selectedProjectId="project_1"
+        onSelectProject={() => {}}
+        onOpenProject={() => {}}
+        onCreateProject={() => {}}
+        onRequestDeleteProject={() => {}}
+        activeProjectId=""
+        projectState={null}
+        projectStateLoading={false}
+        sourceError=""
+      />,
+    );
+
+    expect(screen.getByText("63 experiments")).toBeTruthy();
+    expect(screen.getByText("1 specs")).toBeTruthy();
+    expect(screen.queryByText("No published data")).toBeNull();
+  });
 });
 
 describe("DeleteProjectModal", () => {
@@ -262,7 +290,7 @@ describe("ProjectOverview", () => {
     expect(screen.getByText("Workbook review")).toBeTruthy();
     expect(screen.getAllByText("Experiment Browser").length).toBeGreaterThan(0);
     expect(screen.getByText("2 published experiments")).toBeTruthy();
-    expect(screen.getAllByText("Review chart proposals").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Create and review charts").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Manage approved charts").length).toBeGreaterThan(0);
     expect(screen.getByText("Manuscript")).toBeTruthy();
     expect(screen.queryByText("Master Dataset")).toBeNull();
@@ -270,12 +298,12 @@ describe("ProjectOverview", () => {
     expect(screen.queryByText("Semantic mappings")).toBeNull();
     expect(screen.getByText("1 source documents")).toBeTruthy();
     expect(screen.getByText(/1 region needs review/)).toBeTruthy();
-    expect(screen.getByText("1 accepted / 1 specs")).toBeTruthy();
+    expect(screen.getByText("1 specs")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Open Ask LabRat" }));
     fireEvent.click(screen.getByRole("button", { name: "Review regions" }));
     fireEvent.click(screen.getByRole("button", { name: "Open Experiment Browser" }));
-    fireEvent.click(screen.getByRole("button", { name: "Review chart proposals" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create chart" }));
     fireEvent.click(screen.getByRole("button", { name: "Manage approved charts" }));
     fireEvent.click(screen.getByRole("button", { name: "Insert approved charts" }));
 
@@ -287,79 +315,43 @@ describe("ProjectOverview", () => {
     expect(onGoManuscript).toHaveBeenCalledTimes(1);
   });
 
-  it("lists pending chart proposals from the latest proposal set and opens review focused on edit", () => {
-    const onOpenChartReview = vi.fn();
-    const stateWithPendingProposals = {
-      ...projectState,
-      chartProposalSets: [
-        {
-          id: "chart_set_old",
-          updatedAt: "2026-06-14T12:00:00.000Z",
-          payload: {
-            proposals: [
-              { proposalId: "old_pending", status: "proposed", chartType: "scatter", title: "Old pending proposal" },
-            ],
-          },
-        },
-        {
-          id: "chart_set_current",
-          updatedAt: "2026-06-16T12:00:00.000Z",
-          payload: {
-            proposals: [
-              { proposalId: "pending_1", status: "proposed", chartType: "scatter", title: "Conversion vs Time", confidence: 0.88 },
-              { proposalId: "pending_2", chartType: "bar", title: "Yield by Catalyst", confidence: 0.73 },
-              { proposalId: "accepted_1", status: "accepted", chartType: "scatter", title: "Accepted Chart" },
-              { proposalId: "rejected_1", status: "rejected", chartType: "bar", title: "Rejected Chart" },
-              { proposalId: "pending_3", status: "proposed", chartType: "line", title: "Pressure vs Rate" },
-              { proposalId: "pending_4", status: "proposed", chartType: "scatter", title: "Temperature vs Rate" },
-            ],
-          },
-        },
-      ],
-    };
-
-    render(
-      <ProjectOverview
-        projectState={stateWithPendingProposals}
-        onOpenProfile={() => {}}
-        onUploadWorkbook={() => {}}
-        onOpenChartReview={onOpenChartReview}
-        onGoManuscript={() => {}}
-      />,
-    );
-
-    expect(screen.getByText("Conversion vs Time")).toBeTruthy();
-    expect(screen.getByText("scatter - 88% - proposed")).toBeTruthy();
-    expect(screen.getByText("Yield by Catalyst")).toBeTruthy();
-    expect(screen.getByText("bar - 73% - proposed")).toBeTruthy();
-    expect(screen.getByText("Pressure vs Rate")).toBeTruthy();
-    expect(screen.getByText("+1 more pending")).toBeTruthy();
-    expect(screen.getByText("1 accepted / 4 pending")).toBeTruthy();
-    expect(screen.queryByText("Old pending proposal")).toBeNull();
-    expect(screen.queryByText("Accepted Chart")).toBeNull();
-    expect(screen.queryByText("Rejected Chart")).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "Manage approved charts" }));
-    expect(onOpenChartReview).toHaveBeenCalledWith({ statusFilter: "active" });
-    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
-    expect(onOpenChartReview).toHaveBeenLastCalledWith("pending_1");
-  });
-
-  it("shows confirmed region status without requiring an accepted session", () => {
+  it("lists every uploaded workbook before opening confirmed regions", () => {
     const onUploadWorkbook = vi.fn();
     const onGoBrowser = vi.fn();
+    const firstSession = {
+      id: "session_1",
+      sourceDocumentId: "source_doc_1",
+      status: "needs_user_review",
+      workbookSummary: { workbookName: "Reaction_Rate_Exp45.xlsx", sheetCount: 3 },
+      updatedAt: "2026-07-21T12:00:00.000Z",
+    };
+    const secondSession = {
+      id: "session_2",
+      sourceDocumentId: "source_doc_2",
+      status: "needs_user_review",
+      workbookSummary: { workbookName: "MasterTable_updated.xlsx", sheetCount: 1 },
+      updatedAt: "2026-07-22T12:00:00.000Z",
+    };
     render(
       <ProjectOverview
         projectState={{
           ...projectState,
-          sourceDocuments: [{ id: "source_doc_1" }],
-          workbookReviewSessions: [{ id: "session_1", status: "needs_user_review" }],
-          workbookReviewRegions: [{
-            id: "region_1",
-            workbookReviewSessionId: "session_1",
-            disposition: "active",
-            reviewStatus: "accepted",
-          }],
+          sourceDocuments: [{ id: "source_doc_1" }, { id: "source_doc_2" }],
+          workbookReviewSessions: [firstSession, secondSession],
+          workbookReviewRegions: [
+            {
+              id: "region_1",
+              workbookReviewSessionId: "session_1",
+              disposition: "active",
+              reviewStatus: "accepted",
+            },
+            {
+              id: "region_2",
+              workbookReviewSessionId: "session_2",
+              disposition: "active",
+              reviewStatus: "accepted",
+            },
+          ],
         }}
         onAskLabRat={() => {}}
         onOpenProfile={() => {}}
@@ -370,10 +362,18 @@ describe("ProjectOverview", () => {
       />,
     );
 
-    expect(screen.getByText(/1 confirmed region/)).toBeTruthy();
+    expect(screen.getByText(/2 confirmed regions/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Review regions" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "View confirmed regions" }));
-    expect(onUploadWorkbook).toHaveBeenCalledWith({ id: "session_1", status: "needs_user_review" });
+    const dialog = screen.getByRole("dialog", { name: "Uploaded workbooks" });
+    expect(within(dialog).getByRole("button", { name: "Open Reaction_Rate_Exp45.xlsx" })).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Open MasterTable_updated.xlsx" })).toBeTruthy();
+    expect(within(dialog).getAllByText("1 confirmed")).toHaveLength(2);
+    expect(onUploadWorkbook).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Open Reaction_Rate_Exp45.xlsx" }));
+    expect(onUploadWorkbook).toHaveBeenCalledWith(firstSession);
+    expect(screen.queryByRole("dialog", { name: "Uploaded workbooks" })).toBeNull();
   });
 
   it("opens the session containing the latest region awaiting review", () => {
@@ -430,7 +430,7 @@ describe("ProjectOverview", () => {
     const stateWithStaleSpec = {
       ...projectState,
       chartSpecs: [
-        { id: "chart_spec_active", title: "Current Gas", origin: "source_extract", sourceSnapshot: { rows: [{ temperature: 300, gas: 12 }] }, status: "active", isStale: false },
+        { id: "chart_spec_active", title: "Current Gas", origin: "analysis_result", spec: { origin: "analysis_result", traceCatalog: [] }, status: "active", isStale: false },
         { id: "chart_spec_stale", title: "Old Gas", status: "stale", isStale: true },
       ],
     };
@@ -445,7 +445,7 @@ describe("ProjectOverview", () => {
       />,
     );
 
-    expect(screen.getByText("1 accepted / 1 specs")).toBeTruthy();
+    expect(screen.getByText("1 specs")).toBeTruthy();
     expect(screen.getByText(/older specs are hidden/)).toBeTruthy();
     expect(activeChartSpecsForProject(stateWithStaleSpec).map((chartSpec) => chartSpec.id)).toEqual(["chart_spec_active"]);
   });
@@ -1122,25 +1122,8 @@ describe("WorkbookReviewWorkspace", () => {
     }
   });
 
-  it("resets the real grid and adopts the next workbook range when switching workbooks", async () => {
+  it("locks sheet selection and new regions to the next review session SourceDocument", async () => {
     const fetchMock = vi.fn(async (url, init = {}) => {
-      if (url === "/api/projects/project_1/source-documents") {
-        return jsonResponse({
-          sourceDocuments: [{
-            id: "source_doc_1",
-            metadata: {
-              workbookName: "First.xlsx",
-              sheets: [{ name: "Sheet1", usedRange: "A1:F81", rowCount: 81, columnCount: 6 }],
-            },
-          }, {
-            id: "source_doc_2",
-            metadata: {
-              workbookName: "Second.xlsx",
-              sheets: [{ name: "Results", usedRange: "C3:D4", rowCount: 4, columnCount: 4 }],
-            },
-          }],
-        });
-      }
       if (url === "/api/source-documents/source_doc_1/range"
         || url === "/api/source-documents/source_doc_2/range") {
         const body = JSON.parse(init.body || "{}");
@@ -1155,12 +1138,14 @@ describe("WorkbookReviewWorkspace", () => {
     });
     const originalFetch = global.fetch;
     global.fetch = fetchMock;
+    const onCreateRegion = vi.fn();
     try {
-      render(
+      const { rerender } = render(
         <WorkbookReviewWorkspace
           projectId="project_1"
           reviewState={{
             ...reviewState,
+            session: { ...reviewState.session, id: "session_1", sourceDocumentId: "source_doc_1" },
             sourceDocument: {
               id: "source_doc_1",
               metadata: {
@@ -1171,6 +1156,7 @@ describe("WorkbookReviewWorkspace", () => {
           }}
           draftRegions={[]}
           onDraftRegionsChange={() => {}}
+          onCreateRegion={onCreateRegion}
         />,
       );
 
@@ -1180,8 +1166,32 @@ describe("WorkbookReviewWorkspace", () => {
       Object.defineProperty(grid, "scrollLeft", { configurable: true, writable: true, value: 240 });
       fireEvent.scroll(grid);
 
-      fireEvent.change(await screen.findByLabelText("Workbook"), { target: { value: "source_doc_2" } });
+      rerender(
+        <WorkbookReviewWorkspace
+          projectId="project_1"
+          reviewState={{
+            ...reviewState,
+            session: { ...reviewState.session, id: "session_2", sourceDocumentId: "source_doc_2" },
+            sourceDocument: {
+              id: "source_doc_2",
+              metadata: {
+                workbookName: "Second.xlsx",
+                sheets: [
+                  { name: "Setup", usedRange: "A1:B2", rowCount: 2, columnCount: 2 },
+                  { name: "Results", usedRange: "C3:D4", rowCount: 4, columnCount: 4 },
+                ],
+              },
+            },
+          }}
+          draftRegions={[]}
+          onDraftRegionsChange={() => {}}
+          onCreateRegion={onCreateRegion}
+        />,
+      );
 
+      await waitFor(() => expect(screen.getByLabelText("Sheet range").value).toBe("A1:B2"));
+      expect(screen.queryByLabelText("Workbook")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Results" }));
       await waitFor(() => expect(screen.getByLabelText("Sheet range").value).toBe("C3:D4"));
       expect(grid.scrollTop).toBe(0);
       expect(grid.scrollLeft).toBe(0);
@@ -1191,6 +1201,18 @@ describe("WorkbookReviewWorkspace", () => {
           .map(([, init]) => JSON.parse(init.body || "{}"));
         expect(secondWorkbookRequests).toContainEqual({ sheetName: "Results", range: "C3:D4" });
       });
+
+      const startCell = await screen.findByLabelText("Cell C3");
+      const endCell = await screen.findByLabelText("Cell D4");
+      fireEvent.mouseDown(startCell, { button: 0 });
+      fireEvent.mouseEnter(endCell);
+      fireEvent.mouseUp(endCell);
+      await waitFor(() => expect(onCreateRegion).toHaveBeenCalledWith({
+        sourceDocumentId: "source_doc_2",
+        sheetName: "Results",
+        range: "C3:D4",
+        selectionMethod: "drag_select",
+      }));
     } finally {
       global.fetch = originalFetch;
     }
@@ -1315,8 +1337,8 @@ describe("WorkbookReviewWorkspace", () => {
         />,
       );
 
-      expect(await screen.findByText("Sheet1 A1:L40")).toBeTruthy();
-      await screen.findByText("Sheet loaded: 6/6 ranges");
+      expect(await screen.findByText("Sheet1 A1:L40", {}, { timeout: 10_000 })).toBeTruthy();
+      await screen.findByText("Sheet loaded: 6/6 ranges", {}, { timeout: 10_000 });
 
       const requests = workbookRangeRequests(fetchMock).map((body) => body.range);
       expect(requests).toEqual(expect.arrayContaining([
@@ -1333,7 +1355,7 @@ describe("WorkbookReviewWorkspace", () => {
     } finally {
       global.fetch = originalFetch;
     }
-  });
+  }, 15_000);
 
   it("waits for visible cells before starting at most three background reads", async () => {
     const sheets = [{
@@ -1410,16 +1432,16 @@ describe("WorkbookReviewWorkspace", () => {
       await act(async () => {
         pendingBackground.splice(0).forEach((release) => release());
       });
-      await waitFor(() => expect(requests).toHaveLength(6));
+      await waitFor(() => expect(requests).toHaveLength(6), { timeout: 5_000 });
       expect(maxInFlight).toBe(3);
       await act(async () => {
         pendingBackground.splice(0).forEach((release) => release());
       });
-      await screen.findByText("Sheet loaded: 6/6 ranges");
+      await screen.findByText("Sheet loaded: 6/6 ranges", {}, { timeout: 10_000 });
     } finally {
       global.fetch = originalFetch;
     }
-  }, 10_000);
+  }, 20_000);
 
   it("starts a newly selected sheet from its top visible tile", async () => {
     const sheets = [
@@ -1757,86 +1779,86 @@ describe("WorkbookReviewWorkspace", () => {
 
 
 describe("ChartReviewModal", () => {
-  it("shows one-chart prompt and proposal review only in the chart review modal", () => {
+  it("shows reviewed analysis chart creation only in the chart review modal", () => {
     render(
       <ChartReviewModal
         open
         chartData={[{ importId: "import_1", fileName: "runs.xlsx" }]}
-        allowSourcePrompt
-        chartProposalState={{}}
+        allowAnalysisPrompt
         chartInterpretState={{}}
         chartSpecs={[]}
-        onChartProposalDecision={() => {}}
         onInterpretChart={() => {}}
-        onCreateChartSpec={() => {}}
         onOpenImportReview={() => {}}
         onClose={() => {}}
       />,
     );
 
-    expect(screen.getByText("Review chart proposals")).toBeTruthy();
-    expect(screen.getByText("One-chart prompt")).toBeTruthy();
-    expect(screen.getByText("Chart proposals")).toBeTruthy();
-    expect(screen.queryByText("Propose charts")).toBeNull();
+    expect(screen.getByText("Create and review charts")).toBeTruthy();
+    expect(screen.getByText("Create a chart")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Prepare plan" })).toBeTruthy();
   });
 
-  it("switches charts modal to Edit specs and forwards proposal delete", () => {
-    const onChartProposalDelete = vi.fn();
+  it("loads and manages approved ChartSpecs independently from proposals", async () => {
+    const onLoadChartSpecDetail = vi.fn().mockResolvedValue({
+      id: "chart_spec_analysis",
+      title: "Normalized selectivity",
+      chartType: "stacked_bar",
+      spec: {
+        schemaVersion: "labrat.chartSpec.v2",
+        origin: "analysis_result",
+        chartType: "stacked_bar",
+        title: "Normalized selectivity",
+        traceCatalog: [{
+          traceId: "solid",
+          name: "Solid",
+          x: ["Exp1"],
+          y: [92.8],
+          xField: "__experiment_label",
+          yField: "solid",
+          xUnit: null,
+          yUnit: "percent",
+          sourceRecordIds: ["snapshot_1:0"],
+        }],
+        defaultChartView: { visibleTraceIds: ["solid"] },
+      },
+    });
+    const onInsertChartSpec = vi.fn();
     render(
       <ChartReviewModal
         open
         chartData={[{ importId: "import_1", fileName: "runs.xlsx" }]}
-        allowSourcePrompt
-        chartProposalState={{
-          result: {
-            proposalSet: {
-              proposalSetId: "chart_set_1",
-              serverId: "chart_set_1",
-              proposals: [
-                {
-                  proposalId: "chart_pending",
-                  status: "proposed",
-                  chartType: "scatter",
-                  title: "Pending chart",
-                  x: { label: "Time", unit: "min" },
-                  y: { label: "Conversion", unit: "%" },
-                  confidence: 0.8,
-                  warnings: [],
-                },
-                {
-                  proposalId: "chart_rejected",
-                  status: "rejected",
-                  chartType: "bar",
-                  title: "Rejected chart",
-                  x: { label: "Experiment" },
-                  y: { label: "Yield" },
-                  confidence: 0.4,
-                  warnings: [],
-                },
-              ],
-              warnings: [],
-            },
-          },
-        }}
+        allowAnalysisPrompt
         chartInterpretState={{}}
-        chartSpecs={[]}
-        onChartProposalDecision={() => {}}
-        onChartProposalDelete={onChartProposalDelete}
+        chartSpecs={[{
+          id: "chart_spec_analysis",
+          title: "Normalized selectivity",
+          chartType: "stacked_bar",
+          spec: {
+            schemaVersion: "labrat.chartSpec.v2",
+            origin: "analysis_result",
+            chartType: "stacked_bar",
+            title: "Normalized selectivity",
+            traceCatalog: [{ traceId: "solid", pointCount: 1 }],
+            detailRequired: true,
+          },
+        }]}
         onInterpretChart={() => {}}
-        onCreateChartSpec={() => {}}
+        onLoadChartSpecDetail={onLoadChartSpecDetail}
+        onInsertChartSpec={onInsertChartSpec}
         onOpenImportReview={() => {}}
         onClose={() => {}}
       />,
     );
 
-    fireEvent.click(screen.getByRole("tab", { name: "Edit specs" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Approved charts" }));
 
-    expect(screen.queryByText("One-chart prompt")).toBeNull();
-    expect(screen.getByText("Pending chart")).toBeTruthy();
+    expect(screen.queryByText("Create a chart")).toBeNull();
+    expect(screen.queryByText("Pending chart")).toBeNull();
     expect(screen.queryByText("Rejected chart")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-
-    expect(onChartProposalDelete).toHaveBeenCalledWith("chart_pending");
+    expect(screen.getAllByText("Normalized selectivity").length).toBeGreaterThan(0);
+    await waitFor(() => expect(onLoadChartSpecDetail).toHaveBeenCalledWith("chart_spec_analysis"));
+    fireEvent.click(await screen.findByRole("button", { name: "Insert in Manuscript" }));
+    expect(onInsertChartSpec).toHaveBeenCalledWith("chart_spec_analysis");
   });
 
   it("shows a project-first empty state when source chart review has no project", () => {
@@ -1852,22 +1874,21 @@ describe("ChartReviewModal", () => {
     );
 
     expect(screen.getByText("Select a server project first")).toBeTruthy();
-    expect(screen.queryByText("One-chart prompt")).toBeNull();
+    expect(screen.queryByText("Create a chart")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Import workbook" }));
 
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onOpenImportReview).toHaveBeenCalledTimes(1);
   });
 
-  it("allows server project chart prompts without normalized imports for source evidence", () => {
+  it("allows server project chart prompts without a published DataSnapshot", () => {
     const onInterpretChart = vi.fn();
     render(
       <ChartReviewModal
         open
         chartData={[]}
-        allowSourcePrompt
+        allowAnalysisPrompt
         chartInterpretState={{}}
-        chartProposalState={{}}
         chartSpecs={[]}
         onInterpretChart={onInterpretChart}
         onClose={() => {}}
@@ -1875,11 +1896,11 @@ describe("ChartReviewModal", () => {
     );
 
     expect(screen.queryByText("Select a server project first")).toBeNull();
-    expect(screen.getByText("One-chart prompt")).toBeTruthy();
-    fireEvent.change(screen.getByPlaceholderText("e.g. plot carbon distribution from Sheet1!P31:BA32 in Calculation_Exp33.xlsx"), {
+    expect(screen.getByText("Create a chart")).toBeTruthy();
+    fireEvent.change(screen.getByPlaceholderText("e.g. chart the carbon number distribution for Exp31"), {
       target: { value: "draw carbon distribution from P31 to BA32" },
     });
-    fireEvent.click(screen.getByText("Draft chart proposal"));
+    fireEvent.click(screen.getByText("Prepare plan"));
 
     expect(onInterpretChart).toHaveBeenCalledWith("draw carbon distribution from P31 to BA32");
   });
@@ -1960,7 +1981,7 @@ describe("AgentPanel", () => {
 
       await waitFor(() => expect(screen.getByLabelText("Analysis runtime status").textContent).toContain("Model: anthropic / claude-test ready"));
       expect(screen.getByLabelText("Analysis runtime status").textContent).toContain("Python: local ready");
-      expect(screen.getByLabelText("Analysis runtime status").textContent).toContain("Accepted data: 3 snapshots, 2 active heads");
+      expect(screen.getByLabelText("Analysis runtime status").textContent).toContain("Evidence: 0 confirmed regions, 3 snapshots, 2 active heads");
       expect(fetchMock).toHaveBeenCalledWith("/api/projects/project_1/analysis-capabilities", expect.any(Object));
     } finally {
       global.fetch = originalFetch;
@@ -2063,6 +2084,42 @@ describe("AgentPanel", () => {
     }
   });
 
+  it("restores a workbook filename link that reopens its exact review session", async () => {
+    const workbookReviewLink = {
+      workbookReviewSessionId: "session_saved_1",
+      sourceDocumentId: "source_saved_1",
+      workbookName: "Saved Master.xlsx",
+      regionCount: 4,
+    };
+    localStorage.setItem("labrat_blank_chat_history_v2_project_project_1", JSON.stringify([{
+      role: "assistant",
+      text: "I indexed Saved Master.xlsx and found 4 potentially useful regions.",
+      workbookReviewLink,
+    }]));
+    const onWorkbookReviewLinkOpen = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <AgentPanel
+        open
+        setOpen={() => {}}
+        blocks={[]}
+        setBlocks={() => {}}
+        references={[]}
+        selected={null}
+        selectedChartContext={null}
+        pendingChartAnalysis={null}
+        activeProjectId="project_1"
+        projectState={{ project: { id: "project_1", name: "Catalyst Screening" }, fileObjects: [] }}
+        onProjectStateLoaded={() => {}}
+        onWorkbookReviewLinkOpen={onWorkbookReviewLinkOpen}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Saved Master.xlsx" }));
+    await waitFor(() => expect(onWorkbookReviewLinkOpen).toHaveBeenCalledWith(workbookReviewLink));
+    expect(screen.queryByText(/Select Sheet!/)).toBeNull();
+  });
+
   it("scrolls chat history to the bottom on first open and preserves user scroll after that", async () => {
     localStorage.setItem("labrat_blank_chat_history_v2_project_project_1", JSON.stringify([
       { role: "user", text: "Earlier question" },
@@ -2129,30 +2186,25 @@ describe("AgentPanel", () => {
     }
   });
 
-  it("creates server-backed AgentRuns and renders a confirmable action card", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        agentRun: {
-          id: "agent_run_1",
-          schemaVersion: "labrat.agentRun.v1",
-          status: "waiting_for_user",
-          mode: "action_plan",
-          visibleSteps: [{ stepId: "step_1", label: "Created compatibility action plan", details: { actionCount: 1 } }],
-          actions: [{
-            actionId: "agent_action_1",
-            type: "upload_workbook_for_review",
-            status: "requires_confirmation",
-            label: "Upload workbook for review",
-            description: "Choose a workbook and review detected source regions before data or charting.",
-            requiresFile: true,
-            requiresReview: true,
-            params: { targetExperimentAliases: ["Exp30"] },
-            warnings: [],
-          }],
-          warnings: [],
-        },
-      }),
+  it("shows request progress and cancels the active server AgentRun without falling back", async () => {
+    const fetchMock = vi.fn((url, request = {}) => {
+      if (url === "/api/projects/project_1/analysis-capabilities") {
+        return Promise.resolve(jsonResponse({
+          model: { provider: "anthropic", model: "claude-test", configured: true },
+          executor: { adapter: "local", configured: true },
+          acceptedData: { acceptedSnapshotCount: 1, activeExperimentHeadCount: 2 },
+        }));
+      }
+      if (url === "/api/projects/project_1/agent/runs") {
+        return new Promise((_resolve, reject) => {
+          request.signal.addEventListener("abort", () => {
+            const error = new Error("The operation was aborted.");
+            error.name = "AbortError";
+            reject(error);
+          }, { once: true });
+        });
+      }
+      throw new Error(`Unexpected fetch ${url}`);
     });
     const originalFetch = global.fetch;
     global.fetch = fetchMock;
@@ -2169,22 +2221,71 @@ describe("AgentPanel", () => {
           selectedChartContext={null}
           pendingChartAnalysis={null}
           activeProjectId="project_1"
-          projectState={{ project: { id: "project_1", name: "Catalyst Screening" }, fileObjects: [] }}
+          projectState={{ project: { id: "project_1", name: "Catalyst Screening" } }}
           onProjectStateLoaded={() => {}}
         />,
       );
 
       const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
-      fireEvent.change(promptInput, {
-        target: { value: "upload workbook for Exp30" },
-      });
+      fireEvent.change(promptInput, { target: { value: "Compare all accepted experiments." } });
       fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
 
-      await waitFor(() => expect(screen.getByText("Upload workbook for review")).toBeTruthy());
-      expect(screen.getByText("Created compatibility action plan")).toBeTruthy();
-      expect(screen.getByText("Target: Exp30")).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Choose file" })).toBeTruthy();
-      expect(fetchMock).toHaveBeenCalledWith("/api/projects/project_1/agent/runs", expect.objectContaining({ method: "POST" }));
+      const requestStatus = await screen.findByLabelText("LabRat request status");
+      expect(requestStatus.textContent).toContain("Routing request and drafting a reviewable plan");
+      expect(requestStatus.textContent).toContain("0s elapsed");
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(await screen.findByText("Request cancelled.")).toBeTruthy();
+      expect(fetchMock.mock.calls.some(([url]) => url === "/api/projects/project_1/agent/plan")).toBe(false);
+      expect(screen.queryByLabelText("LabRat request status")).toBeNull();
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("reports an AgentRun failure without claiming that a compatibility plan was created", async () => {
+    const fetchMock = vi.fn(async (url) => {
+      if (url === "/api/projects/project_1/analysis-capabilities") {
+        return jsonResponse({
+          model: { provider: "anthropic", configured: true },
+          executor: { adapter: "local", configured: true },
+          acceptedData: { acceptedSnapshotCount: 1, activeExperimentHeadCount: 1 },
+        });
+      }
+      if (url === "/api/projects/project_1/agent/runs") {
+        return jsonResponse({
+          error: { code: "provider_unavailable", message: "Anthropic is unavailable." },
+        }, { status: 503 });
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+
+    try {
+      render(
+        <AgentPanel
+          open
+          setOpen={() => {}}
+          blocks={[]}
+          setBlocks={() => {}}
+          references={[]}
+          selected={null}
+          selectedChartContext={null}
+          pendingChartAnalysis={null}
+          activeProjectId="project_1"
+          projectState={{ project: { id: "project_1", name: "Catalyst Screening" } }}
+          onProjectStateLoaded={() => {}}
+        />,
+      );
+
+      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
+      fireEvent.change(promptInput, { target: { value: "Chart carbon number distribution for Exp31." } });
+      fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
+
+      expect(await screen.findByText(/Anthropic is unavailable.*No plan or chart was created/)).toBeTruthy();
+      expect(fetchMock.mock.calls.some(([url]) => url === "/api/projects/project_1/agent/plan")).toBe(false);
+      expect(screen.queryByText(/I will prepare a reviewed analysis plan/)).toBeNull();
     } finally {
       global.fetch = originalFetch;
     }
@@ -2380,7 +2481,7 @@ describe("AgentPanel", () => {
       fireEvent.change(promptInput, { target: { value: analysisThread.originalRequest } });
       fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
 
-      fireEvent.click(await screen.findByRole("button", { name: "Retry with published data" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Retry with confirmed evidence" }));
       await waitFor(() => expect(onOpenAnalysisReview).toHaveBeenCalledWith({
         thread: analysisThread,
         revision: retryRevision,
@@ -2453,7 +2554,7 @@ describe("AgentPanel", () => {
       const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
       fireEvent.change(promptInput, { target: { value: analysisThread.originalRequest } });
       fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
-      fireEvent.click(await screen.findByRole("button", { name: "Retry with published data" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Retry with confirmed evidence" }));
 
       rerender(panel("project_2"));
       await waitFor(() => expect(screen.getByLabelText("Analysis runtime status").textContent).toContain("Model: configured"));
@@ -2497,24 +2598,29 @@ describe("AgentPanel", () => {
       revision: 1,
       status: "awaiting_review",
       requestSummary: "Normalize Solid, Liquid, and Gas selectivity.",
-      processingSummary: [
+      displayPlan: [
         "Read accepted selectivity values.",
         "Scale each retained row to a total of 100 percent.",
       ],
+      reviewPlan: {
+        processingSteps: [
+          "Read accepted selectivity values.",
+          "Scale each retained row to a total of 100 percent.",
+        ],
+        chart: {
+          title: "Normalized selectivity by experiment",
+          chartType: "bar",
+          xDescription: "Component",
+          yDescription: "Selectivity (%)",
+          seriesDescription: "One curve per experiment",
+        },
+      },
       sourceRectangles: [{
         sourceDocumentId: "source_document_1",
         sheetName: "Runs",
         range: "L3:N4",
         label: "Accepted selectivity inputs",
       }],
-      planHash: "sha256_plan_golden_1",
-      selectionHash: "sha256_selection_golden",
-      dependencyHash: "sha256_dependency_golden",
-      programHash: "sha256_program_golden_1",
-      pythonProgram: {
-        source: "def analyze(tables, labrat):\n    return {}",
-        sourceHash: "sha256_program_golden_1",
-      },
       warnings: [],
     };
     const feedback = "Keep both experiments and label each experiment trace clearly.";
@@ -2522,12 +2628,6 @@ describe("AgentPanel", () => {
       ...revision1,
       id: "analysis_plan_revision_golden_2",
       revision: 2,
-      planHash: "sha256_plan_golden_2",
-      programHash: "sha256_program_golden_2",
-      pythonProgram: {
-        ...revision1.pythonProgram,
-        sourceHash: "sha256_program_golden_2",
-      },
       feedback,
     };
     const selection = {
@@ -2557,27 +2657,18 @@ describe("AgentPanel", () => {
       id: "analysis_run_golden",
       acceptedPlanRevisionId: revision2.id,
       status: "awaiting_result_review",
-      inputHash: revision2.selectionHash,
-      programHash: revision2.programHash,
-      runtimeVersion: "labrat-python-v1",
-      execution: { adapter: "golden_test_executor", runtimeVersion: "labrat-python-v1" },
+      execution: { adapter: "golden_test_executor", phase: "result_ready" },
       validation: { ok: true, errors: [] },
     };
     const result = {
       id: "analysis_result_golden",
       analysisRunId: run.id,
       status: "awaiting_review",
-      contentHash: "sha256_result_golden",
-      resultPreviewHash: "sha256_preview_golden",
-      rowCount: 2,
       traceCount: 2,
-      sourceRefCount: 2,
       summary: {
-        inputRecordCount: 2,
-        outputRecordCount: 2,
-        excludedRecordCount: 0,
-        excludedRecords: [],
-        missingValuePolicy: "exclude_record",
+        pointCount: 6,
+        seriesCount: 2,
+        excludedCount: 0,
       },
       validation: {
         ok: true,
@@ -2619,36 +2710,16 @@ describe("AgentPanel", () => {
     const resultPreview = {
       analysisRunId: run.id,
       analysisResultId: result.id,
-      contentHash: result.contentHash,
-      resultPreviewHash: result.resultPreviewHash,
-      rows: [
-        {
-          __result_id: "result_1",
-          __experiment_id: "experiment_1",
-          __snapshot_id: "snapshot_1",
-          __record_index: 0,
-          solid: 99.5,
-          liquid: 0.1,
-          gas: 0.4,
+      plotly: {
+        data: traces,
+        layout: {
+          title: { text: "Normalized selectivity by experiment" },
+          xaxis: { title: { text: "Component" } },
+          yaxis: { title: { text: "Selectivity (%)" } },
         },
-        {
-          __result_id: "result_2",
-          __experiment_id: "experiment_2",
-          __snapshot_id: "snapshot_2",
-          __record_index: 0,
-          solid: 99.2,
-          liquid: 0.4,
-          gas: 0.4,
-        },
-      ],
-      traces,
-      lineage: {
-        result_1: { sourceRecordIds: ["snapshot_1:0"] },
-        result_2: { sourceRecordIds: ["snapshot_2:0"] },
-        trace_exp_1: { sourceRecordIds: ["snapshot_1:0"] },
-        trace_exp_2: { sourceRecordIds: ["snapshot_2:0"] },
       },
       summary: result.summary,
+      exclusions: [],
       validation: result.validation,
       warnings: [],
       sourceRefs: [
@@ -2665,9 +2736,7 @@ describe("AgentPanel", () => {
           sourceRecordId: "snapshot_2:0",
         },
       ],
-      rowPage: { offset: 0, limit: 50, totalCount: 2 },
       tracePage: { offset: 0, limit: 500, totalCount: 2 },
-      sourcePage: { offset: 0, limit: 200, totalCount: 2 },
     };
     const chartSpec = {
       id: "chart_spec_golden",
@@ -2675,12 +2744,11 @@ describe("AgentPanel", () => {
       chartType: "bar",
       origin: "analysis_result",
       spec: {
-        schemaVersion: "labrat.chartSpec.v2",
+        schemaVersion: "labrat.chartSpec.v3",
         origin: "analysis_result",
         chartType: "bar",
         title: "Normalized selectivity by experiment",
-        x: { field: "component", label: "Component", unit: null },
-        y: { field: "normalized_selectivity", label: "Selectivity", unit: "percent" },
+        plotly: resultPreview.plotly,
         traceCatalog: traces,
         defaultChartView: { visibleTraceIds: ["trace_exp_1", "trace_exp_2"] },
       },
@@ -2853,33 +2921,30 @@ describe("AgentPanel", () => {
         analysisThread.id,
         { feedback },
       ));
-      expect(screen.getAllByText("Analysis plan revision 2").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText("Revision 2")).toBeTruthy();
       expect(acceptPlan).not.toHaveBeenCalled();
 
       fireEvent.click(screen.getByRole("button", { name: "Accept plan" }));
       await waitFor(() => expect(acceptPlan).toHaveBeenCalledWith(
         revision2.id,
-        {
-          planHash: revision2.planHash,
-          selectionHash: revision2.selectionHash,
-          dependencyHash: revision2.dependencyHash,
-        },
+        {},
         expect.objectContaining({ idempotencyKey: expect.any(String) }),
       ));
       await waitFor(() => expect(executeRun).toHaveBeenCalledWith(run.id));
       await waitFor(() => expect(loadResultPreview).toHaveBeenCalled());
 
-      fireEvent.click(screen.getByRole("tab", { name: "Result" }));
-      expect(screen.getByText("Row sum = 100 +/- 0.000001")).toBeTruthy();
-      expect(screen.getByText("2 inputs, 2 outputs, 0 exclusions.")).toBeTruthy();
-      fireEvent.click(screen.getByRole("tab", { name: "Chart" }));
+      expect(screen.getByRole("tab", { name: "Result" }).getAttribute("aria-selected")).toBe("true");
+      expect(screen.getByLabelText("Golden analysis preview").textContent).toBe("2 traces");
+      expect(screen.getByText("no exclusions", { exact: false })).toBeTruthy();
+      expect(screen.queryByRole("tab", { name: "Chart" })).toBeNull();
+      fireEvent.click(screen.getByText("Series", { selector: "summary" }));
       expect(screen.getByRole("checkbox", { name: "Show Exp 1 by default" }).checked).toBe(true);
       expect(screen.getByRole("checkbox", { name: "Show Exp 2 by default" }).checked).toBe(true);
-      fireEvent.click(screen.getByRole("button", { name: "Accept result and create chart" }));
+      fireEvent.click(screen.getByRole("button", { name: "Accept chart" }));
 
       await waitFor(() => expect(acceptResult).toHaveBeenCalledWith({
         runId: run.id,
-        resultHash: result.contentHash,
+        analysisResultId: result.id,
         defaultVisibleTraceIds: ["trace_exp_1", "trace_exp_2"],
       }));
       expect(await screen.findByRole("dialog", { name: "Insert chart" })).toBeTruthy();
@@ -2911,7 +2976,7 @@ describe("AgentPanel", () => {
   it("attaches spreadsheet files from the plus button and uploads only after sending the chat message", async () => {
     localStorage.removeItem("labrat_blank_chat_history_v1_react");
     const onWorkbookReviewReady = vi.fn();
-    const onWorkbookSuggestionSelect = vi.fn();
+    const onWorkbookReviewLinkOpen = vi.fn().mockResolvedValue(undefined);
     const onProjectStateLoaded = vi.fn();
     const fetchMock = vi.fn(async (url, init = {}) => {
       if (url === "/api/projects/project_1/analysis-capabilities") {
@@ -2974,7 +3039,7 @@ describe("AgentPanel", () => {
           projectState={{ project: { id: "project_1", name: "Catalyst Screening" }, fileObjects: [] }}
           onProjectStateLoaded={onProjectStateLoaded}
           onWorkbookReviewReady={onWorkbookReviewReady}
-          onWorkbookSuggestionSelect={onWorkbookSuggestionSelect}
+          onWorkbookReviewLinkOpen={onWorkbookReviewLinkOpen}
         />,
       );
 
@@ -2993,14 +3058,16 @@ describe("AgentPanel", () => {
       await waitFor(() => expect(onWorkbookReviewReady).toHaveBeenCalled());
       expect(fetchMock).toHaveBeenCalledWith("/api/projects/project_1/files", expect.objectContaining({ method: "POST" }));
       expect(fetchMock).toHaveBeenCalledWith("/api/projects/project_1/workbook-review-sessions", expect.objectContaining({ method: "POST" }));
-      expect(screen.getByText(/I found potentially useful regions/)).toBeTruthy();
+      expect(screen.getByText(/found 1 potentially useful region/)).toBeTruthy();
 
-      const suggestion = screen.getByRole("button", { name: "Select Sheet1!A1:Y10" });
-      fireEvent.click(suggestion);
-      expect(onWorkbookSuggestionSelect).toHaveBeenCalledWith(expect.objectContaining({
+      expect(screen.queryByRole("button", { name: "Select Sheet1!A1:Y10" })).toBeNull();
+      const workbookLink = screen.getByRole("button", { name: "Master.xlsx" });
+      fireEvent.click(workbookLink);
+      expect(onWorkbookReviewLinkOpen).toHaveBeenCalledWith(expect.objectContaining({
+        workbookReviewSessionId: "session_1",
         sourceDocumentId: "source_doc_1",
-        sheetName: "Sheet1",
-        range: "A1:Y10",
+        workbookName: "Master.xlsx",
+        regionCount: 1,
       }));
     } finally {
       global.fetch = originalFetch;
@@ -3036,408 +3103,6 @@ describe("AgentPanel", () => {
     expect(screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...")).toBeTruthy();
   });
 
-  it("keeps server-backed interpret chart actions executable when they require confirmation", async () => {
-    localStorage.removeItem("labrat_blank_chat_history_v1_react");
-    const onProjectStateLoaded = vi.fn();
-    const fetchMock = vi.fn(async (url, init = {}) => {
-      if (url === "/api/projects/project_1/agent/runs") {
-        return jsonResponse({
-          agentRun: {
-            id: "agent_run_chart_1",
-            schemaVersion: "labrat.agentRun.v1",
-            status: "waiting_for_user",
-            mode: "action_plan",
-            visibleSteps: [{ stepId: "step_chart", label: "Created compatibility action plan", details: { actionCount: 1 } }],
-            actions: [{
-              actionId: "agent_chart_1",
-              type: "interpret_chart",
-              status: "requires_confirmation",
-              label: "Draft one chart proposal",
-              description: "Interpret the request into a source-backed ChartSpec draft, then queue it for review if confirmed.",
-              params: {
-                prompt: "i want a cross-compare chart for every experiment, x axis is reaction time, y axis is reaction rate",
-              },
-              warnings: [],
-            }],
-            warnings: [],
-          },
-        }, { status: 201 });
-      }
-      if (url === "/api/projects/project_1/charts/interpret") {
-        expect(JSON.parse(init.body)).toMatchObject({
-          prompt: "i want a cross-compare chart for every experiment, x axis is reaction time, y axis is reaction rate",
-          persistAsProposal: true,
-          entrypoint: "agent_drawer",
-          context: { actionId: "agent_chart_1" },
-        });
-        return jsonResponse({
-          schemaVersion: "labrat.chartInterpretResponse.v1",
-          chartSpecDraft: { title: "Reaction Rate vs Reaction Time for All Experiments", chartType: "scatter" },
-          chartProposalSet: {
-            id: "chart_set_cross_compare",
-            payload: {
-              proposalSetId: "proposal_set_cross_compare",
-              schemaVersion: "labrat.chartProposalSet.v1",
-              proposals: [{
-                proposalId: "proposal_cross_compare",
-                status: "proposed",
-                title: "Reaction Rate vs Reaction Time for All Experiments",
-              }],
-              warnings: [],
-            },
-          },
-          warnings: [],
-        });
-      }
-      if (url === "/api/projects/project_1/state") {
-        return jsonResponse({
-          project: { id: "project_1", name: "Catalyst Screening" },
-          projectProfile: {},
-          chartProposalSets: [],
-          chartSpecs: [],
-          manuscripts: [],
-        });
-      }
-      throw new Error(`Unexpected fetch ${url}`);
-    });
-    const originalFetch = global.fetch;
-    global.fetch = fetchMock;
-
-    try {
-      render(
-        <AgentPanel
-          open
-          setOpen={() => {}}
-          blocks={[]}
-          setBlocks={() => {}}
-          references={[]}
-          selected={null}
-          selectedChartContext={null}
-          pendingChartAnalysis={null}
-          activeProjectId="project_1"
-          projectState={{ project: { id: "project_1", name: "Catalyst Screening" }, fileObjects: [] }}
-          onProjectStateLoaded={onProjectStateLoaded}
-        />,
-      );
-
-      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
-      fireEvent.change(promptInput, {
-        target: { value: "i want a cross-compare chart for every experiment, x axis is reaction time, y axis is reaction rate" },
-      });
-      fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
-
-      await waitFor(() => expect(screen.getByText("Draft one chart proposal")).toBeTruthy());
-      expect(screen.getByText("requires_confirmation")).toBeTruthy();
-      expect(screen.queryByRole("button", { name: "Confirm agent action" })).toBeNull();
-      fireEvent.click(screen.getByRole("button", { name: "Prepare" }));
-
-      await waitFor(() => expect(screen.getByRole("button", { name: "Accept proposal" })).toBeTruthy());
-      expect(screen.getByText("Chart: Reaction Rate vs Reaction Time for All Experiments")).toBeTruthy();
-      expect(screen.getByText(/Queued chart proposal set chart_set_cross_compare/)).toBeTruthy();
-      expect(onProjectStateLoaded).toHaveBeenCalledTimes(1);
-    } finally {
-      global.fetch = originalFetch;
-      localStorage.removeItem("labrat_blank_chat_history_v1_react");
-    }
-  });
-
-  it("renders completed AgentRun source extract actions as reviewable instead of preparing again", async () => {
-    localStorage.removeItem("labrat_blank_chat_history_v1_react");
-    const onReviewSourceExtract = vi.fn();
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
-      agentRun: {
-        id: "agent_run_source_1",
-        schemaVersion: "labrat.agentRun.v1",
-        status: "completed",
-        mode: "source_extract",
-        visibleSteps: [
-          { stepId: "step_parse", label: "Parsed source evidence" },
-          { stepId: "step_resolve", label: "Resolved source evidence" },
-          { stepId: "step_validate", label: "Validated source extract preview" },
-        ],
-        actions: [{
-          actionId: "agent_source_1",
-          type: "create_source_extract_proposal",
-          status: "completed",
-          label: "Create source extract proposal",
-          description: "Create a reviewable source extract proposal from the matched source evidence.",
-          params: { prompt: "draw carbon balance distribution from P31 to BA32" },
-          result: {
-            sourceExtractProposal: {
-              id: "source_extract_33",
-              status: "proposed",
-              extractType: "component_distribution",
-              preview: {
-                chartIntentDraft: { title: "Exp33 carbon number distribution" },
-                rows: [],
-              },
-              warnings: [],
-            },
-          },
-        }],
-        warnings: [],
-      },
-    }, { status: 201 }));
-    const originalFetch = global.fetch;
-    global.fetch = fetchMock;
-
-    try {
-      render(
-        <AgentPanel
-          open
-          setOpen={() => {}}
-          blocks={[]}
-          setBlocks={() => {}}
-          references={[]}
-          selected={null}
-          selectedChartContext={null}
-          pendingChartAnalysis={null}
-          activeProjectId="project_1"
-          projectState={{ project: { id: "project_1", name: "Catalyst Screening" }, fileObjects: [] }}
-          onProjectStateLoaded={() => {}}
-          onReviewSourceExtract={onReviewSourceExtract}
-        />,
-      );
-
-      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
-      fireEvent.change(promptInput, {
-        target: { value: "draw carbon balance distribution from P31 to BA32" },
-      });
-      fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
-
-      await waitFor(() => expect(screen.getByText("Create source extract proposal")).toBeTruthy());
-      expect(screen.getByText(/Created source extract proposal source_extract_33/)).toBeTruthy();
-      expect(screen.queryByRole("button", { name: "Prepare" })).toBeNull();
-      expect(screen.queryByRole("button", { name: "Confirm agent action" })).toBeNull();
-
-      fireEvent.click(screen.getByRole("button", { name: "Review source extract" }));
-      expect(onReviewSourceExtract).toHaveBeenCalledWith(expect.objectContaining({
-        id: "source_extract_33",
-        status: "proposed",
-        extractType: "component_distribution",
-      }));
-    } finally {
-      global.fetch = originalFetch;
-      localStorage.removeItem("labrat_blank_chat_history_v1_react");
-    }
-  });
-
-  it("recovers a stale source extract AgentRun card when the run is already completed", async () => {
-    localStorage.setItem("labrat_blank_chat_history_v2_project_project_1", JSON.stringify([
-      {
-        role: "assistant",
-        text: "I prepared an AgentRun action. Review the trace and confirm before anything changes.",
-        actions: [{
-          actionId: "agent_source_1",
-          agentRunId: "agent_run_source_1",
-          type: "create_source_extract_proposal",
-          status: "failed",
-          label: "Create source extract proposal",
-          description: "Create a reviewable source extract proposal from the matched source evidence.",
-          params: { prompt: "draw carbon balance distribution from P31 to BA32" },
-          error: "AgentRun is already completed.",
-          warnings: [],
-        }],
-      },
-    ]));
-    const onProjectStateLoaded = vi.fn();
-    const onReviewSourceExtract = vi.fn();
-    const fetchMock = vi.fn(async (url) => {
-      if (url === "/api/agent-runs/agent_run_source_1/confirm") {
-        return jsonResponse({
-          error: {
-            code: "agent_run_closed",
-            message: "AgentRun is already completed.",
-          },
-        }, { status: 409 });
-      }
-      if (url === "/api/agent-runs/agent_run_source_1") {
-        return jsonResponse({
-          agentRun: {
-            id: "agent_run_source_1",
-            schemaVersion: "labrat.agentRun.v1",
-            status: "completed",
-            mode: "source_extract",
-            visibleSteps: [
-              { stepId: "step_created", label: "Created source extract proposal" },
-            ],
-            proposalRefs: [{ type: "source_extract_proposal", id: "source_extract_33" }],
-            actions: [{
-              actionId: "agent_source_1",
-              type: "create_source_extract_proposal",
-              status: "completed",
-              label: "Create source extract proposal",
-              description: "Create a reviewable source extract proposal from the matched source evidence.",
-              params: { prompt: "draw carbon balance distribution from P31 to BA32" },
-              result: { sourceExtractProposalId: "source_extract_33" },
-              warnings: [],
-            }],
-            warnings: [],
-          },
-        });
-      }
-      if (url === "/api/projects/project_1/state") {
-        return jsonResponse({
-          project: { id: "project_1", name: "Catalyst Screening" },
-          projectProfile: {},
-          chartProposalSets: [],
-          chartSpecs: [],
-          manuscripts: [],
-          sourceExtractProposals: [{
-            id: "source_extract_33",
-            status: "proposed",
-            extractType: "component_distribution",
-          }],
-        });
-      }
-      throw new Error(`Unexpected fetch ${url}`);
-    });
-    const originalFetch = global.fetch;
-    global.fetch = fetchMock;
-
-    try {
-      render(
-        <AgentPanel
-          open
-          setOpen={() => {}}
-          blocks={[]}
-          setBlocks={() => {}}
-          references={[]}
-          selected={null}
-          selectedChartContext={null}
-          pendingChartAnalysis={null}
-          activeProjectId="project_1"
-          projectState={{ project: { id: "project_1", name: "Catalyst Screening" }, fileObjects: [] }}
-          onProjectStateLoaded={onProjectStateLoaded}
-          onReviewSourceExtract={onReviewSourceExtract}
-        />,
-      );
-
-      expect(screen.queryByRole("button", { name: "Prepare" })).toBeNull();
-      fireEvent.click(screen.getByRole("button", { name: "Refresh result" }));
-
-      await waitFor(() => expect(screen.getByRole("button", { name: "Review source extract" })).toBeTruthy());
-      expect(screen.getByText(/Created source extract proposal source_extract_33/)).toBeTruthy();
-      expect(screen.queryByText("AgentRun is already completed.")).toBeNull();
-      expect(screen.queryByRole("button", { name: "Prepare" })).toBeNull();
-      expect(onProjectStateLoaded).toHaveBeenCalledTimes(1);
-
-      fireEvent.click(screen.getByRole("button", { name: "Review source extract" }));
-      expect(onReviewSourceExtract).toHaveBeenCalledWith(expect.objectContaining({
-        id: "source_extract_33",
-        status: "proposed",
-      }));
-    } finally {
-      global.fetch = originalFetch;
-      localStorage.removeItem("labrat_blank_chat_history_v2_project_project_1");
-    }
-  });
-
-  it("treats interpreted source extract proposals as completed chat actions", async () => {
-    localStorage.removeItem("labrat_blank_chat_history_v1_react");
-    const onProjectStateLoaded = vi.fn();
-    const onReviewSourceExtract = vi.fn();
-    const fetchMock = vi.fn(async (url, init = {}) => {
-      if (url === "/api/projects/project_1/agent/plan") {
-        return jsonResponse({
-          schemaVersion: "labrat.agentPlan.v1",
-          reply: "I prepared a source-backed chart action.",
-          actions: [{
-            actionId: "agent_source_chart_1",
-            type: "interpret_chart",
-            status: "proposed",
-            label: "Draft one chart proposal",
-            description: "Interpret the request into a source-backed ChartSpec draft.",
-            requiresFile: false,
-            params: { prompt: "draw carbon balance distribution of experiment 33 from P31 to BA32" },
-            warnings: [],
-          }],
-        });
-      }
-      if (url === "/api/projects/project_1/charts/interpret") {
-        expect(JSON.parse(init.body)).toMatchObject({
-          prompt: "draw carbon balance distribution of experiment 33 from P31 to BA32",
-          persistAsProposal: true,
-          entrypoint: "agent_drawer",
-          context: { actionId: "agent_source_chart_1" },
-        });
-        return jsonResponse({
-          schemaVersion: "labrat.chartInterpretResponse.v1",
-          chartSpecDraft: null,
-          chartProposalSet: null,
-          evidenceIntent: { sourceKind: "excel_range", range: "P31:BA32", extractType: "component_distribution" },
-          evidenceResolution: { status: "resolved", range: "P31:BA32" },
-          sourceExtractProposal: {
-            id: "source_extract_33",
-            status: "proposed",
-            extractType: "component_distribution",
-            preview: {
-              chartIntentDraft: { title: "Exp33 carbon number distribution" },
-              rows: [],
-            },
-            warnings: [],
-          },
-          warnings: [],
-        });
-      }
-      if (url === "/api/projects/project_1/state") {
-        return jsonResponse({
-          project: { id: "project_1", name: "Catalyst Screening" },
-          projectProfile: {},
-          chartProposalSets: [],
-          chartSpecs: [],
-          manuscripts: [],
-          sourceExtractProposals: [{ id: "source_extract_33", status: "proposed" }],
-        });
-      }
-      throw new Error(`Unexpected fetch ${url}`);
-    });
-    const originalFetch = global.fetch;
-    global.fetch = fetchMock;
-
-    try {
-      render(
-        <AgentPanel
-          open
-          setOpen={() => {}}
-          blocks={[]}
-          setBlocks={() => {}}
-          references={[]}
-          selected={null}
-          selectedChartContext={null}
-          pendingChartAnalysis={null}
-          activeProjectId="project_1"
-          projectState={{ project: { id: "project_1", name: "Catalyst Screening" }, fileObjects: [] }}
-          onProjectStateLoaded={onProjectStateLoaded}
-          onInsertChartSpec={() => {}}
-          onReviewSourceExtract={onReviewSourceExtract}
-        />,
-      );
-
-      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
-      fireEvent.change(promptInput, {
-        target: { value: "draw carbon balance distribution of experiment 33 from P31 to BA32" },
-      });
-      fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
-
-      await waitFor(() => expect(screen.getByText("Draft one chart proposal")).toBeTruthy());
-      fireEvent.click(screen.getByRole("button", { name: "Prepare" }));
-
-      await waitFor(() => expect(screen.getByText(/Created source extract proposal source_extract_33/)).toBeTruthy());
-      expect(screen.getByText("completed")).toBeTruthy();
-      expect(screen.queryByRole("button", { name: "Accept proposal" })).toBeNull();
-      fireEvent.click(screen.getByRole("button", { name: "Review source extract" }));
-      expect(onReviewSourceExtract).toHaveBeenCalledWith(expect.objectContaining({
-        id: "source_extract_33",
-        status: "proposed",
-        extractType: "component_distribution",
-      }));
-      expect(onProjectStateLoaded).toHaveBeenCalledTimes(1);
-    } finally {
-      global.fetch = originalFetch;
-      localStorage.removeItem("labrat_blank_chat_history_v1_react");
-    }
-  });
 });
 
 describe("NewProjectModal", () => {

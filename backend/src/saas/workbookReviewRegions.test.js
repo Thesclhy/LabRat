@@ -5,8 +5,10 @@ import { MemorySaasStore } from "./memoryStore.js";
 import {
   confirmWorkbookReviewRegion,
   createWorkbookReviewRegionDraft,
+  createWorkbookReviewRegionRecord,
   deleteWorkbookReviewRegion,
   ignoreWorkbookReviewRegion,
+  interpretWorkbookReviewRegion,
   reviseWorkbookReviewRegion,
 } from "./workbookReviewRegions.js";
 
@@ -282,6 +284,95 @@ test("creating a review region sends only bounded selected evidence to the model
   assert.ok(result.revision.summary.length >= 2 && result.revision.summary.length <= 4);
   assert.equal(result.revision.interpretation.semanticType, "experiment_table");
   assert.equal(result.revision.interpretation.experimentIdColumn, "A");
+});
+
+test("deferred region creation persists an interpreting record before invoking the model", async () => {
+  const store = new MemorySaasStore();
+  const fixture = sourceFixture();
+  const provider = modelProvider();
+  const region = await createWorkbookReviewRegionRecord({
+    store,
+    ...fixture,
+    actorUserId: "user_1",
+    input: { sheetName: "Runs", range: "A1:C3", selectionMethod: "drag_select" },
+  });
+
+  assert.equal(region.reviewStatus, "interpreting");
+  assert.equal(region.currentRevisionId, null);
+  assert.equal(provider.calls.length, 0);
+
+  const interpreted = await interpretWorkbookReviewRegion({
+    store,
+    region,
+    sourceDocument: fixture.sourceDocument,
+    indexBlobs: fixture.indexBlobs,
+    modelProvider: provider,
+    actorUserId: "user_1",
+    input: { expectedRegionVersion: region.version },
+  });
+
+  assert.equal(provider.calls.length, 1);
+  assert.equal(interpreted.region.reviewStatus, "awaiting_review");
+  assert.equal(interpreted.region.currentRevisionId, interpreted.revision.id);
+});
+
+test("ignore during deferred interpretation wins over a late model response", async () => {
+  const store = new MemorySaasStore();
+  const fixture = sourceFixture();
+  let releaseModel;
+  let markModelStarted;
+  const modelStarted = new Promise((resolve) => { markModelStarted = resolve; });
+  const modelGate = new Promise((resolve) => { releaseModel = resolve; });
+  const provider = {
+    async interpretWorkbookRegion() {
+      markModelStarted();
+      await modelGate;
+      return {
+        ok: true,
+        summary: ["Each row represents one experiment.", "The table records temperature and yield."],
+        interpretation: {
+          semanticType: "experiment_table",
+          experimentAxis: "rows",
+          headerRow: 1,
+          experimentIdColumn: "A",
+          inclusion: { startRow: 2, endRow: 3, skippedRows: [] },
+          confidence: 0.92,
+          warnings: [],
+        },
+        metadata: { provider: "test", model: "delayed-model" },
+      };
+    },
+  };
+  const region = await createWorkbookReviewRegionRecord({
+    store,
+    ...fixture,
+    actorUserId: "user_1",
+    input: { sheetName: "Runs", range: "A1:C3", selectionMethod: "drag_select" },
+  });
+  const pendingInterpretation = interpretWorkbookReviewRegion({
+    store,
+    region,
+    sourceDocument: fixture.sourceDocument,
+    indexBlobs: fixture.indexBlobs,
+    modelProvider: provider,
+    actorUserId: "user_1",
+    input: { expectedRegionVersion: region.version },
+  });
+  await modelStarted;
+  const ignored = await ignoreWorkbookReviewRegion({
+    store,
+    region,
+    expectedRegionVersion: region.version,
+    reason: "Not needed.",
+    actorUserId: "user_1",
+  });
+  releaseModel();
+  const interpreted = await pendingInterpretation;
+
+  assert.equal(ignored.region.disposition, "ignored");
+  assert.equal(interpreted.cancelled, true);
+  assert.equal(interpreted.region.disposition, "ignored");
+  assert.equal((await store.listRegionUnderstandingRevisions({ regionId: region.id })).length, 0);
 });
 
 test("grounds experiment scope in the complete identity column instead of the bounded model preview", async () => {

@@ -19,7 +19,7 @@ FileObject
   -> Experiment Browser row/detail
 ```
 
-Charts have two reviewed branches. Explicit SourceDocument evidence flows through SourceExtractProposal/ChartProposalSet into a source-extract ChartSpec. Accepted active DataSnapshot records flow through AnalysisSelection, an immutable reviewed AnalysisPlanRevision, a validated AnalysisResult, and explicit result acceptance into an analysis-result ChartSpec. Generic DataSnapshot chart proposals outside reviewed analysis remain unimplemented.
+Charts have one reviewed branch. Confirmed region evidence and/or accepted active DataSnapshot records flow through AnalysisSelection, an immutable reviewed AnalysisPlanRevision, a validated AnalysisResult, and explicit result acceptance into an analysis-result ChartSpec.
 
 ## FileObject
 
@@ -213,64 +213,63 @@ Personal display state owned by one user/project:
 
 It never stores authoritative values or changes accepted data.
 
-## AnalysisSelection v1
+## AnalysisSourceSelection v2
 
-A transient, deterministic selection resolved only from accepted DataSnapshots selected by active ExperimentSnapshotHeads. It contains:
+An exact rectangular range selected inside one active accepted
+RegionUnderstandingRevision. It contains:
 
-- stable experiment, snapshot, head, and record-index refs
-- unit- and value-type-aware `fieldId` values
-- selected scalar values and optional series points with exact source refs
-- field coverage, missing counts, scalar/point counts, warnings, and blockers
-- non-contiguous SourceDocument rectangles for review
-- canonical dependency and selection hashes
+- stable `sourceSelectionId`
+- accepted `regionUnderstandingRevisionId`
+- project-owned `sourceDocumentId` and workbook name
+- worksheet and canonical Excel range
+- readable label and purpose
 
-Incompatible units produce different field ids and are never combined implicitly. Selection previews are bounded to 100,000 scalar values, 1,000,000 series points, and 100,000 expanded source cells. AnalysisSelection is not accepted scientific state and is not persisted until it is frozen into a reviewed AnalysisPlanRevision.
+One selection becomes one materialized Python input table. Multiple files,
+worksheets, and non-contiguous ranges remain separate selections. Red Source
+rectangles are derived UI data rather than separately reviewed evidence.
 
-## AnalysisPlanRevision v1
+## AnalysisPlanRevision v2
 
-A durable, immutable reviewable calculation proposal containing a frozen AnalysisSelection, visible processing summary, machine-readable calculation manifest, explicit missing-value policy, exact `labrat-python-v1` source/hash, and expected output/chart shape. It cannot contain authoritative result arrays. Feedback creates a later numbered revision and marks the prior awaiting-review revision superseded without modifying its payload.
+A durable immutable review proposal containing `sourceSelections`, structured
+`reviewPlan`, user-readable `displayPlan`, warnings, validation, and feedback.
+It contains no Python, field mapping, materialized values, result rows, traces,
+Plotly, or user-review hashes. Feedback creates a later numbered revision and
+marks the prior awaiting-review revision superseded without modifying it.
 
 ## AnalysisThread v1
 
 A project-scoped conversational workflow container for one analysis goal. It stores the original request, bounded visible messages, status, and ordered ids for plan revisions, runs, accepted results, and charts. It does not store hidden reasoning or duplicate full result arrays into project state.
 
-## AnalysisRun v1
+## AnalysisRun v2
 
-An immutable execution-attempt record linked to one accepted AnalysisPlanRevision. Exact-hash plan acceptance creates a `queued` run with input/program/runtime hashes and no result. Execution transactionally verifies frozen active-head refs, uses an internal claim-token lease, and rechecks accepted hashes plus Python policy before the run moves through `running` to `failed`, `validation_failed`, or `awaiting_result_review`. Bounded executor adapter/runtime/error metadata, result-preview hash, warnings, and backend validation are recorded on the attempt; internal claim tokens are never public.
+An immutable execution-attempt record linked to one accepted PlanRevision.
+Idempotent plan acceptance creates a `queued` run with no Python. Execution
+re-resolves the source selections, materializes complete `inputs.tables`,
+generates Python against that real input, applies policy checks, and then runs
+it through the configured executor. The run records input/program/runtime
+hashes, generated Python, execution phases, bounded diagnostics, warnings, and
+validation; internal claim tokens are never public.
 
-## AnalysisResult v1
+## AnalysisResult v2
 
-An append-only backend-validated output linked to one completed AnalysisRun. It contains canonical content/result-preview hashes, normalized result rows, chart traces, lineage sidecar, execution summary with explicit exclusions, exact source refs, validation, warnings, and later acceptance metadata. It begins as `awaiting_review`; executor or validation failures create no AnalysisResult. Rows, traces, relevant lineage, and source refs are paged independently through the bounded result-preview endpoint rather than project state or ordinary run detail.
-
-## SourceExtractProposal
-
-A reviewable bounded extraction from SourceDocument evidence for source-backed visualization. It records target document/sheet/range, proposed meaning, preview rows/series, source refs, confidence, warnings, status, and review decisions.
-
-## ChartProposalSet
-
-A review collection of source-backed chart proposals. Proposal acceptance/rejection is separate from ChartSpec creation.
+An append-only backend-validated output linked to one AnalysisRun. It contains
+authoritative Plotly `data/layout`, readable exclusions, declared constraint
+checks, source refs, validation, warnings, internal content hashes, and later
+acceptance metadata. It begins as `awaiting_review`; executor or validation
+failures create no AnalysisResult. The ordinary review API returns the complete
+validated Plotly payload and no technical result table or row-lineage UI.
 
 ## ChartSpec
 
-A durable chart definition. Two evidence-backed forms are valid.
+A durable chart definition. Only the analysis-result-backed form is valid:
 
-Source-backed:
-
-- `origin: source_extract`
-- chart type/title/axis fields and units
-- exact source refs
-- immutable `sourceSnapshot.rows` or `sourceSnapshot.series`
-- optional compatible experiment ids and series metadata
-- reviewed render style, axis options, warnings, and layout
-
-Analysis-result-backed:
-
-- `schemaVersion: labrat.chartSpec.v2` and `origin: analysis_result`
-- exact thread/plan/run/result ids plus plan, selection, dependency, input, program, result, preview, and runtime hashes
-- accepted input DataSnapshot/head/record refs with immutable content/dependency hashes
-- a complete unique finite trace catalog with source-record lineage
+- `schemaVersion: labrat.chartSpec.v3` and `origin: analysis_result`
+- exact thread/plan/run/result ids
+- reviewed source selections and source refs
+- complete authoritative Plotly `data/layout`
+- a matching flat catalog of stable unique curves
 - a reviewed `defaultChartView.visibleTraceIds` subset
-- no copied or model-invented values outside the validated immutable AnalysisResult
+- no values outside the validated immutable AnalysisResult
 
 Project/list responses may omit large trace x/y arrays and set `detailRequired: true`; the ChartSpec detail endpoint returns the complete immutable artifact.
 

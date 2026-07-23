@@ -88,16 +88,40 @@ const chartSpecFixture = {
   id: "chart_spec_1",
   title: "Selectivity vs Temperature",
   chartType: "scatter",
-  origin: "source_extract",
+  origin: "analysis_result",
   spec: {
-    origin: "source_extract",
+    schemaVersion: "labrat.chartSpec.v3",
+    origin: "analysis_result",
     chartType: "scatter",
     title: "Selectivity vs Temperature",
+    plotly: {
+      data: scalarSourceSeries.map((series) => ({
+        traceId: `${series.experimentId}:selectivity`,
+        name: series.experimentLabel,
+        type: "scatter",
+        x: [series.rows[0].values.temperature],
+        y: [series.rows[0].values.selectivity],
+      })),
+      layout: {
+        xaxis: { title: "Temperature (C)" },
+        yaxis: { title: "Selectivity (%)" },
+      },
+    },
     x: { field: "temperature", label: "Temperature", unit: "C" },
     y: { field: "selectivity", label: "Selectivity", unit: "%" },
-    compatibleExperimentIds: ["exp_1", "exp_2"],
-    series: scalarSourceSeries.map(({ rows, ...series }) => series),
-    sourceSnapshot: { series: scalarSourceSeries },
+    traceCatalog: scalarSourceSeries.map((series) => ({
+      traceId: `${series.experimentId}:selectivity`,
+      experimentId: series.experimentId,
+      experimentLabel: series.experimentLabel,
+      x: [series.rows[0].values.temperature],
+      y: [series.rows[0].values.selectivity],
+      xField: "temperature",
+      yField: "selectivity",
+      xUnit: "C",
+      yUnit: "%",
+      sourceRecordIds: [`snapshot:${series.experimentId}`],
+    })),
+    defaultChartView: { visibleTraceIds: ["exp_1:selectivity", "exp_2:selectivity"] },
     sourceRefs: [{ sourceDocumentId: "source_document_1", sheetName: "Summary", range: "A1:C3" }],
   },
 };
@@ -110,6 +134,32 @@ const conversionChartSpecFixture = {
     ...chartSpecFixture.spec,
     title: "Conversion vs Temperature",
     y: { field: "conversion", label: "Conversion", unit: "%" },
+    plotly: {
+      data: scalarSourceSeries.map((series) => ({
+        traceId: `${series.experimentId}:conversion`,
+        name: series.experimentLabel,
+        type: "scatter",
+        x: [series.rows[0].values.temperature],
+        y: [series.rows[0].values.conversion],
+      })),
+      layout: {
+        xaxis: { title: "Temperature (C)" },
+        yaxis: { title: "Conversion (%)" },
+      },
+    },
+    traceCatalog: scalarSourceSeries.map((series) => ({
+      traceId: `${series.experimentId}:conversion`,
+      experimentId: series.experimentId,
+      experimentLabel: series.experimentLabel,
+      x: [series.rows[0].values.temperature],
+      y: [series.rows[0].values.conversion],
+      xField: "temperature",
+      yField: "conversion",
+      xUnit: "C",
+      yUnit: "%",
+      sourceRecordIds: [`snapshot:${series.experimentId}`],
+    })),
+    defaultChartView: { visibleTraceIds: ["exp_1:conversion", "exp_2:conversion"] },
   },
 };
 
@@ -117,47 +167,63 @@ const seriesChartSpecFixture = {
   id: "chart_spec_series",
   title: "Reaction rate comparison",
   chartType: "scatter",
-  origin: "source_extract",
+  origin: "analysis_result",
   spec: {
-    schemaVersion: "labrat.chartSpec.v1.4",
-    origin: "source_extract",
+    schemaVersion: "labrat.chartSpec.v3",
+    origin: "analysis_result",
     chartType: "scatter",
     title: "Reaction rate comparison",
-    x: { field: "reaction_time_min", label: "Reaction Time", unit: "min" },
-    y: { field: "reaction_rate_mol_g_h", label: "Reaction Rate", unit: "mol/g/h" },
-    seriesScope: {
-      seriesKind: "reaction_rate_time_series",
-      xField: "reaction_time_min",
-      yField: "reaction_rate_mol_g_h",
-      groupBy: "experiment",
-    },
-    compatibleExperimentIds: ["exp_1", "exp_2"],
-    series: [
-      { seriesId: "series_exp1", experimentId: "exp_1", experimentLabel: "Run 1" },
-      { seriesId: "series_exp2", experimentId: "exp_2", experimentLabel: "Run 2" },
-    ],
-    sourceSnapshot: {
-      series: [
+    plotly: {
+      data: [
         {
-          seriesId: "series_exp1",
-          experimentId: "exp_1",
-          experimentLabel: "Run 1",
-          rows: [
-            { values: { reaction_time_min: 0, reaction_rate_mol_g_h: 1.1 } },
-            { values: { reaction_time_min: 10, reaction_rate_mol_g_h: 1.25 } },
-          ],
+          traceId: "exp_1:reaction_rate_mol_g_h",
+          name: "Run 1",
+          type: "scatter",
+          x: [0, 10],
+          y: [1.1, 1.25],
         },
         {
-          seriesId: "series_exp2",
-          experimentId: "exp_2",
-          experimentLabel: "Run 2",
-          rows: [
-            { values: { reaction_time_min: 0, reaction_rate_mol_g_h: 1.4 } },
-            { values: { reaction_time_min: 10, reaction_rate_mol_g_h: 1.55 } },
-          ],
+          traceId: "exp_2:reaction_rate_mol_g_h",
+          name: "Run 2",
+          type: "scatter",
+          x: [0, 10],
+          y: [1.4, 1.55],
         },
       ],
+      layout: {
+        xaxis: { title: "Reaction Time (min)" },
+        yaxis: { title: "Reaction Rate (mol/g/h)" },
+      },
     },
+    x: { field: "reaction_time_min", label: "Reaction Time", unit: "min" },
+    y: { field: "reaction_rate_mol_g_h", label: "Reaction Rate", unit: "mol/g/h" },
+    traceCatalog: [
+      {
+        traceId: "exp_1:reaction_rate_mol_g_h",
+        experimentId: "exp_1",
+        experimentLabel: "Run 1",
+        x: [0, 10],
+        y: [1.1, 1.25],
+        xField: "reaction_time_min",
+        yField: "reaction_rate_mol_g_h",
+        xUnit: "min",
+        yUnit: "mol/g/h",
+        sourceRecordIds: ["snapshot:exp_1"],
+      },
+      {
+        traceId: "exp_2:reaction_rate_mol_g_h",
+        experimentId: "exp_2",
+        experimentLabel: "Run 2",
+        x: [0, 10],
+        y: [1.4, 1.55],
+        xField: "reaction_time_min",
+        yField: "reaction_rate_mol_g_h",
+        xUnit: "min",
+        yUnit: "mol/g/h",
+        sourceRecordIds: ["snapshot:exp_2"],
+      },
+    ],
+    defaultChartView: { visibleTraceIds: ["exp_1:reaction_rate_mol_g_h", "exp_2:reaction_rate_mol_g_h"] },
   },
 };
 
@@ -382,9 +448,32 @@ describe("ManuscriptCanvas chart specs", () => {
     chartType: "scatter",
     origin: "analysis_result",
     spec: {
+      schemaVersion: "labrat.chartSpec.v3",
       origin: "analysis_result",
       chartType: "scatter",
       title: "Reaction rate over time",
+      plotly: {
+        data: [
+          {
+            traceId: "trace_exp_1",
+            name: "Exp-001",
+            type: "scatter",
+            x: [0, 10],
+            y: [1, 2],
+          },
+          {
+            traceId: "trace_exp_2",
+            name: "Exp-002",
+            type: "scatter",
+            x: [0, 10],
+            y: [2, 3],
+          },
+        ],
+        layout: {
+          xaxis: { title: "Time (min)" },
+          yaxis: { title: "Rate (mmol/g/min)" },
+        },
+      },
       x: { field: "time", label: "Time", unit: "min" },
       y: { field: "rate", label: "Rate", unit: "mmol/g/min" },
       traceCatalog: [
@@ -410,6 +499,52 @@ describe("ManuscriptCanvas chart specs", () => {
       defaultChartView: { visibleTraceIds: ["trace_exp_1", "trace_exp_2"] },
     },
   };
+
+  it("loads complete analysis ChartSpec detail before preview and insertion", async () => {
+    const summary = {
+      ...analysisChartSpecFixture,
+      spec: {
+        ...analysisChartSpecFixture.spec,
+        traceCatalog: analysisChartSpecFixture.spec.traceCatalog.map(({ x, y, ...trace }) => ({
+          ...trace,
+          pointCount: Math.max(x.length, y.length),
+        })),
+        detailRequired: true,
+      },
+    };
+    const loadDetail = vi.fn().mockResolvedValue(analysisChartSpecFixture);
+
+    render(
+      <Harness
+        initialBlocks={[]}
+        initialPages={[createPage("page-1")]}
+        chartSpecs={[summary]}
+        chartSpecInsertRequest={{ chartSpecId: summary.id, requestId: "insert-analysis-summary" }}
+        onLoadChartSpecDetail={loadDetail}
+      />,
+    );
+
+    expect(await screen.findByRole("dialog", { name: "Insert chart" })).toBeTruthy();
+    expect(loadDetail).toHaveBeenCalledWith(summary.id);
+    await waitFor(() => {
+      const traces = JSON.parse(screen.getByTestId("plotly-placeholder").dataset.traces);
+      expect(traces).toHaveLength(2);
+      expect(traces[0].x).toEqual([0, 10]);
+      expect(traces[0].y).toEqual([1, 2]);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Insert chart" }));
+    await waitFor(() => {
+      const block = readDocState().blocks[0];
+      expect(block.chartSpecSnapshot.spec.detailRequired).not.toBe(true);
+      expect(block.chartSpecSnapshot.spec.traceCatalog[0].x).toEqual([0, 10]);
+    });
+    const chartFrame = document.querySelector(".canvas-block.chart");
+    fireEvent.mouseDown(chartFrame, { button: 0, clientX: 100, clientY: 100 });
+    fireEvent.mouseUp(window);
+    expect(screen.getByText("Validated analysis result")).toBeTruthy();
+    expect(screen.queryByText("Missing source snapshot")).toBeNull();
+  });
 
   it("keeps trace visibility independent between two placements of one ChartSpec", async () => {
     const chartBlock = (id, x) => ({
@@ -562,7 +697,7 @@ describe("ManuscriptCanvas chart specs", () => {
       .map((node) => JSON.parse(node.dataset.traces || "[]"));
     expect(renderedPlots.some((traces) => (
       traces.length === 1
-      && traces[0].meta?.traceId === "trace_exp_2"
+      && traces[0].traceId === "trace_exp_2"
       && traces[0].x?.join(",") === "0,10"
       && traces[0].y?.join(",") === "2,3"
     ))).toBe(true);
@@ -693,7 +828,7 @@ describe("ManuscriptCanvas chart specs", () => {
             status: "stale",
             isStale: true,
           },
-          chartView: { selectedExperimentIds: ["exp_1"], excludedExperimentIds: [], filters: [], groupBy: null },
+          chartView: { visibleTraceIds: ["exp_1:selectivity"] },
           chartLayout: {},
           x: 80,
           y: 80,
@@ -760,7 +895,7 @@ describe("ManuscriptCanvas chart specs", () => {
     });
   });
 
-  it("configures experiment selection for series-backed compare ChartSpecs", async () => {
+  it("configures trace selection for multi-experiment ChartSpecs", async () => {
     render(
       <Harness
         initialBlocks={[]}
@@ -789,8 +924,8 @@ describe("ManuscriptCanvas chart specs", () => {
           visibleTraceIds: ["exp_2:reaction_rate_mol_g_h"],
         },
       });
-      expect(state.blocks[0].chartSpecSnapshot.spec.schemaVersion).toBe("labrat.chartSpec.v1.4");
-      expect(state.blocks[0].chartSpecSnapshot.spec.seriesScope.yField).toBe("reaction_rate_mol_g_h");
+      expect(state.blocks[0].chartSpecSnapshot.spec.schemaVersion).toBe("labrat.chartSpec.v3");
+      expect(state.blocks[0].chartSpecSnapshot.spec.traceCatalog).toHaveLength(2);
     });
   });
 

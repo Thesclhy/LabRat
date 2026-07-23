@@ -75,6 +75,43 @@ test("validates and returns structured intent metadata", async () => {
   });
 });
 
+test("passes request cancellation through to the Anthropic fetch", async () => {
+  const controller = new AbortController();
+  const provider = createBackendModelProvider({
+    config: {
+      aiProvider: "anthropic",
+      anthropicApiKey: "server-secret",
+      anthropicModel: "claude-test",
+    },
+    fetchImpl: async (_url, request) => {
+      assert.equal(request.signal, controller.signal);
+      return {
+        ok: true,
+        async json() {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                intent: "project_summary",
+                disposition: "direct_answer",
+                confidence: 0.95,
+                clarification: null,
+              }),
+            }],
+          };
+        },
+      };
+    },
+  });
+
+  const result = await provider.classifyIntent(
+    { message: "Summarize this project." },
+    { signal: controller.signal },
+  );
+
+  assert.equal(result.ok, true);
+});
+
 test("rejects malformed provider JSON as a bounded warning", async () => {
   const provider = createBackendModelProvider({
     config: {
@@ -96,7 +133,7 @@ test("rejects malformed provider JSON as a bounded warning", async () => {
   assert.equal(result.warning.code, "ai_invalid_response");
 });
 
-test("draftAnalysisPlan requests the backend-reviewed selection and program shape", async () => {
+test("draftAnalysisPlan selects exact confirmed ranges without generating Python", async () => {
   const provider = createBackendModelProvider({
     config: {
       aiProvider: "anthropic",
@@ -105,17 +142,20 @@ test("draftAnalysisPlan requests the backend-reviewed selection and program shap
     },
     fetchImpl: async (_url, request) => {
       const body = JSON.parse(request.body);
-      assert.match(body.system, /selectionRequest/);
-      assert.match(body.system, /pythonProgram/);
-      assert.match(body.system, /Do not return selection hashes/);
-      assert.match(body.system, /experiment_traces/);
-      assert.match(body.system, /excludedRecords/);
-      assert.match(body.system, /sourceRecordIds/);
+      assert.match(body.system, /sourceSelections/);
+      assert.match(body.system, /confirmed workbook region/i);
+      assert.match(body.system, /Do not write Python/i);
+      assert.match(body.system, /repairContext/);
+      assert.equal(body.tools[0].name, "inspect_source_range");
       assert.equal(body.output_config.format.type, "json_schema");
-      assert.deepEqual(body.output_config.format.schema.required, ["selectionRequest", "plan"]);
+      assert.deepEqual(body.output_config.format.schema.required, [
+        "requestSummary",
+        "sourceSelections",
+        "reviewPlan",
+        "displayPlan",
+        "warnings",
+      ]);
       assert.equal(body.output_config.format.schema.additionalProperties, false);
-      assert.ok(body.output_config.format.schema.properties.plan.properties.expectedOutput.properties.chartType.enum.includes("stacked_bar"));
-      assert.equal(body.output_config.format.schema.properties.plan.properties.expectedOutput.properties.chartType.enum.includes("pie"), false);
       assert.ok(body.max_tokens >= 6000);
       return {
         ok: true,
@@ -125,19 +165,29 @@ test("draftAnalysisPlan requests the backend-reviewed selection and program shap
             content: [{
               type: "text",
               text: JSON.stringify({
-                selectionRequest: {
-                  experimentIds: [],
-                  fieldIds: ["field_1"],
-                  includeSeries: false,
-                },
-                plan: {
-                  requestSummary: "Compare field 1.",
-                  pythonProgram: {
-                    runtime: "labrat-python-v1",
-                    entrypoint: "analyze",
-                    source: "def analyze(tables, labrat):\n    return {}",
+                requestSummary: "Compare Exp32 and Exp33.",
+                sourceSelections: [{
+                  regionUnderstandingRevisionId: "region_revision_1",
+                  sourceDocumentId: "source_1",
+                  sheetName: "Carbon",
+                  range: "A2:H3",
+                  label: "Carbon distributions",
+                  purpose: "Create one series per experiment",
+                }],
+                reviewPlan: {
+                  processingSteps: ["Read the selected carbon values."],
+                  missingValueHandling: "Exclude a selected experiment only when its row is empty.",
+                  chart: {
+                    title: "Carbon distribution",
+                    chartType: "bar",
+                    xDescription: "Carbon number",
+                    yDescription: "Distribution",
+                    seriesDescription: "One series per experiment",
                   },
+                  invariants: [],
                 },
+                displayPlan: ["Use the red range and create one curve per experiment."],
+                warnings: [],
               }),
             }],
           };
@@ -148,11 +198,58 @@ test("draftAnalysisPlan requests the backend-reviewed selection and program shap
 
   const result = await provider.draftAnalysisPlan({
     originalRequest: "Compare the experiments.",
-    fields: [{ fieldId: "field_1" }],
+    confirmedRegions: [{ regionUnderstandingRevisionId: "region_revision_1" }],
+  }, {
+    inspectSourceRange: async () => ({ cells: [] }),
   });
 
   assert.equal(result.ok, true);
-  assert.deepEqual(result.selectionRequest.fieldIds, ["field_1"]);
+  assert.equal(result.sourceSelections[0].range, "A2:H3");
+  assert.equal(Object.hasOwn(result, "pythonProgram"), false);
+});
+
+test("draftAnalysisProgram sees exact inputs and returns Python only after plan acceptance", async () => {
+  const provider = createBackendModelProvider({
+    config: {
+      aiProvider: "anthropic",
+      anthropicApiKey: "server-secret",
+      anthropicModel: "claude-test",
+    },
+    fetchImpl: async (_url, request) => {
+      const body = JSON.parse(request.body);
+      assert.match(body.system, /analyze\(inputs, labrat\)/);
+      assert.match(body.system, /inputs\['tables'\]/);
+      assert.match(body.system, /Plotly data is authoritative/i);
+      assert.equal(body.tools[0].name, "inspect_run_input");
+      return {
+        ok: true,
+        async json() {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                pythonProgram: {
+                  runtime: "labrat-python-v2",
+                  entrypoint: "analyze",
+                  source: "def analyze(inputs, labrat):\n    return {'plotly': {'data': [{'type': 'bar', 'x': ['C1'], 'y': [1]}], 'layout': {}}, 'exclusions': [], 'checks': []}",
+                },
+              }),
+            }],
+          };
+        },
+      };
+    },
+  });
+
+  const result = await provider.draftAnalysisProgram({
+    acceptedPlan: { displayPlan: ["Draw one bar."] },
+    inputManifest: { tables: [{ tableId: "table_1" }] },
+  }, {
+    inspectRunInput: async () => ({ tableId: "table_1", values: [[1]] }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.pythonProgram.runtime, "labrat-python-v2");
 });
 
 test("interpretWorkbookRegion requests a concise structured region explanation", async () => {

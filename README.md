@@ -72,7 +72,7 @@ and passwords belong in the database, not in an environment file.
 
 - Starts from an empty dataset when no saved blank project exists.
 - Does not fetch `public/labratData.json`.
-- Does not create sample experiments, accepted snapshots, or chart proposals.
+- Does not create sample experiments, accepted snapshots, or charts.
 - Uses blank-specific browser storage so it does not read saved projects from the demo/research app on the same origin.
 - Uses the server-backed Upload workbook flow as the active path; old local `MasterTable.xlsx` folder import behavior is not a product path.
 

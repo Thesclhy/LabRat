@@ -20,7 +20,7 @@ import {
   repeatedBlockTableFixture,
 } from "./workbookFixtures.js";
 import {
-  chartLocalAcceptedSourceExtractScenario,
+  confirmedRegionAnalysisScenario,
   importCorrectionExamples,
   missingExperimentPromptScenario,
   syntheticWorkflowScenarios,
@@ -161,8 +161,8 @@ test("reaction-rate supplement fixtures can be generated for multiple experiment
   assert.equal(XLSX.read(exp35.buffer, { type: "buffer" }).SheetNames[0], "Exp35");
 });
 
-test("synthetic workflow scenarios cover source-backed charts and missing experiment expectations", () => {
-  assert.equal(chartLocalAcceptedSourceExtractScenario.expectedNext.dataPlanInputType, "accepted_source_extract");
+test("synthetic workflow scenarios cover reviewed region analysis and missing experiment expectations", () => {
+  assert.equal(confirmedRegionAnalysisScenario.expectedNext.selectionInputType, "confirmed_region");
   assert.equal(missingExperimentPromptScenario.expected.mustNotUseExperimentAliases.includes("Exp33"), true);
   assert.equal(importCorrectionExamples.some((example) => example.expectedPatchType === "experiment_binding"), true);
   assert.equal(JSON.stringify(syntheticWorkflowScenarios).includes("DatasetCommit"), false);

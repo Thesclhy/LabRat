@@ -1,6 +1,6 @@
 # Chat Workbook File Entry Design
 
-Status: approved for implementation planning
+Status: implemented
 Last reviewed: 2026-07-22
 
 ## Problem

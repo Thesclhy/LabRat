@@ -32,12 +32,15 @@ experimentSnapshotHeads
 browserViews
 agentRuns
 analysisThreads
-chartProposalSets
 chartSpecs
 manuscripts
 ```
 
-Full workbook grids, DataSnapshot point arrays, AnalysisPlanRevision selections/programs, and Browser rows do not belong in project state. Frontend server mode should use dedicated bounded range, analysis-thread/selection, experiment projection, and experiment detail endpoints for those payloads.
+Full workbook grids, DataSnapshot point arrays, materialized analysis inputs,
+generated Python, full Plotly payloads, and Browser rows do not belong in
+project state. Frontend server mode uses bounded range, analysis-thread/source
+selection, ChartSpec detail, experiment projection, and experiment detail
+endpoints for those payloads.
 
 ## Project Profile
 
@@ -88,10 +91,8 @@ Publish re-reads source ranges, verifies dependency/preview hashes, and returns 
 
 ## Chart State
 
-- Chart interpretation resolves explicit SourceDocument evidence into a reviewable source extract/chart proposal.
-- Accepted source-backed proposals become durable ChartSpecs through chart-spec APIs.
-- Source-extract ChartSpecs require immutable `sourceSnapshot.rows` or `sourceSnapshot.series` plus exact source refs.
-- Reviewed accepted-data analysis produces immutable AnalysisResults; explicit result acceptance atomically creates an `origin: analysis_result` ChartSpec with accepted input snapshot refs, complete validated traces, hashes, and lineage.
+- All chart requests create a reviewed analysis plan over confirmed regions and/or accepted active snapshot records.
+- Accepted plan execution produces an immutable validated AnalysisResult; explicit result acceptance atomically creates an `origin: analysis_result` ChartSpec with confirmed-region and/or accepted snapshot refs, complete validated traces, hashes, and lineage.
 - Existing manuscript chart blocks should keep rendering from their stored chart spec snapshots.
 
 ## Frontend Direction
@@ -109,4 +110,4 @@ Local IndexedDB can remain useful for logged-out experiments and development, bu
 
 ## Retired State
 
-The former project-wide dataset pointer, aggregate dataset records, mapping collections, and generic import/proposal collections have been removed. Do not add compatibility migrations, hydration fields, or dual-write logic for them.
+The former project-wide dataset pointer, aggregate dataset records, mapping collections, generic import/proposal collections, SourceExtractProposal, and ChartProposalSet have been removed. Do not add compatibility migrations, hydration fields, or dual-write logic for them.

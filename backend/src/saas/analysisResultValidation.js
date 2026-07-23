@@ -1,24 +1,26 @@
 import { ANALYSIS_RUNTIME_VERSION } from "./analysisSchemas.js";
 import { stableDataHash } from "./dataPlanSchemas.js";
 
-const MAX_RESULT_ROWS = 100_000;
 const MAX_TRACES = 10_000;
 const MAX_TRACE_POINTS = 1_000_000;
 const MAX_RESULT_BYTES = 100 * 1024 * 1024;
+const ALLOWED_TRACE_TYPES = new Set(["bar", "scatter"]);
+const UNSAFE_STRING = /(?:<\s*script\b|javascript\s*:|data\s*:\s*text\/html)/i;
+const UNSAFE_KEYS = new Set(["images", "frames"]);
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
+}
+
+function isObject(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
 function resultError(code, message, details = {}) {
   return { code, message, ...details };
 }
 
-function sourceRecordId(record) {
-  return `${record.snapshotId}:${Number(record.recordIndex)}`;
-}
-
-function finiteErrors(value, path = "result", errors = []) {
+function finiteAndSafeErrors(value, path = "result", errors = []) {
   if (typeof value === "number" && !Number.isFinite(value)) {
     errors.push(resultError(
       "analysis_non_finite_value",
@@ -27,97 +29,176 @@ function finiteErrors(value, path = "result", errors = []) {
     ));
     return errors;
   }
+  if (typeof value === "string" && UNSAFE_STRING.test(value)) {
+    errors.push(resultError(
+      "analysis_plotly_unsafe_string",
+      `Analysis output ${path} contains unsafe HTML or a script URL.`,
+      { path },
+    ));
+    return errors;
+  }
   if (Array.isArray(value)) {
-    value.forEach((item, index) => finiteErrors(item, `${path}[${index}]`, errors));
-  } else if (value && typeof value === "object") {
-    Object.entries(value).forEach(([key, item]) => finiteErrors(item, `${path}.${key}`, errors));
+    value.forEach((item, index) => finiteAndSafeErrors(item, `${path}[${index}]`, errors));
+  } else if (isObject(value)) {
+    Object.entries(value).forEach(([key, item]) => {
+      if (UNSAFE_KEYS.has(key)) {
+        errors.push(resultError(
+          "analysis_plotly_property_unsupported",
+          `Plotly property ${path}.${key} is not allowed in reviewed analysis output.`,
+          { path: `${path}.${key}` },
+        ));
+        return;
+      }
+      finiteAndSafeErrors(item, `${path}.${key}`, errors);
+    });
   }
   return errors;
 }
 
-function rowValue(row, fieldKey) {
-  if (Object.hasOwn(row || {}, fieldKey)) return row[fieldKey];
-  return row?.values?.[fieldKey];
+function traceId(trace, index) {
+  return String(
+    trace?.traceId
+      || trace?.meta?.labrat?.traceId
+      || `trace_${index + 1}`,
+  ).trim();
 }
 
-function lineageIds(value) {
-  return asArray(value?.sourceRecordIds).map((item) => String(item || "")).filter(Boolean);
+function normalizeTrace(trace, index) {
+  const id = traceId(trace, index);
+  const meta = isObject(trace?.meta) ? structuredClone(trace.meta) : {};
+  const labrat = isObject(meta.labrat) ? meta.labrat : {};
+  return {
+    ...structuredClone(trace),
+    traceId: id,
+    name: String(trace?.name || `Series ${index + 1}`),
+    meta: {
+      ...meta,
+      labrat: {
+        ...labrat,
+        traceId: id,
+      },
+    },
+  };
 }
 
-function normalizedUnit(value) {
-  return String(value ?? "").trim();
+function plottableX(value) {
+  return value == null
+    || typeof value === "string"
+    || (typeof value === "number" && Number.isFinite(value));
 }
 
-function validateLineageIds(ids, acceptedIds, errors, details) {
-  if (!ids.length) {
-    errors.push(resultError(
-      "analysis_lineage_required",
-      "Every result row and trace requires source-record lineage.",
-      details,
-    ));
-    return;
-  }
-  const unknown = ids.filter((id) => !acceptedIds.has(id));
-  if (unknown.length) {
-    errors.push(resultError(
-      "analysis_lineage_unknown",
-      "Result lineage references records outside the accepted selection.",
-      { ...details, sourceRecordIds: unknown },
-    ));
-  }
+function plottableY(value) {
+  return value == null || (typeof value === "number" && Number.isFinite(value));
 }
 
-function invariantValidation(invariants, rows, errors) {
-  return asArray(invariants).map((invariant, invariantIndex) => {
-    if (invariant?.type !== "row_sum") {
-      const item = {
-        type: invariant?.type || "unknown",
-        ok: false,
-        message: "Unsupported analysis invariant.",
-      };
-      errors.push(resultError(
-        "analysis_invariant_unsupported",
-        `Invariant ${item.type} is not supported.`,
-        { invariantIndex },
+function invariantValidation(invariants, traces, errors) {
+  return asArray(invariants).flatMap((invariant, invariantIndex) => {
+    if (invariant?.type === "x_group_y_sum") {
+      const requestedNames = asArray(invariant.traceNames)
+        .map((name) => String(name || "").trim())
+        .filter(Boolean);
+      const requestedSet = new Set(requestedNames);
+      const matching = traces.filter((trace) => requestedSet.has(String(trace.name || "")));
+      const missingNames = requestedNames.filter((name) => (
+        !matching.some((trace) => String(trace.name || "") === name)
       ));
-      return item;
-    }
-    const target = Number(invariant.target);
-    const tolerance = Number(invariant.absoluteTolerance ?? 0);
-    const failedRows = [];
-    rows.forEach((row, rowIndex) => {
-      const values = asArray(invariant.fieldKeys).map((fieldKey) => Number(rowValue(row, fieldKey)));
-      if (values.some((value) => !Number.isFinite(value))) {
-        failedRows.push({ rowIndex, reason: "missing_or_non_numeric" });
-        return;
+      if (missingNames.length) {
+        errors.push(resultError(
+          "analysis_invariant_trace_not_found",
+          `The reviewed grouped sum check could not find series: ${missingNames.join(", ")}.`,
+          { invariantIndex, traceNames: requestedNames, missingTraceNames: missingNames },
+        ));
+        return [];
       }
-      const sum = values.reduce((total, value) => total + value, 0);
-      if (Math.abs(sum - target) > tolerance) failedRows.push({ rowIndex, sum });
-    });
-    const item = {
-      type: "row_sum",
-      fieldKeys: asArray(invariant.fieldKeys),
-      target,
-      absoluteTolerance: tolerance,
-      checkedRowCount: rows.length,
-      failedRowCount: failedRows.length,
-      ok: failedRows.length === 0,
-    };
-    if (!item.ok) {
-      errors.push(resultError(
-        "analysis_invariant_failed",
-        `Row-sum invariant failed for ${failedRows.length} result row(s).`,
-        { invariantIndex, failedRows: failedRows.slice(0, 100), invariant: item },
-      ));
+
+      const groups = new Map();
+      matching.forEach((trace) => {
+        asArray(trace.x).forEach((xValue, pointIndex) => {
+          const key = `${typeof xValue}:${JSON.stringify(xValue)}`;
+          const group = groups.get(key) || { xValue, actual: 0, pointCount: 0 };
+          const yValue = asArray(trace.y)[pointIndex];
+          if (typeof yValue === "number" && Number.isFinite(yValue)) {
+            group.actual += yValue;
+          }
+          group.pointCount += 1;
+          groups.set(key, group);
+        });
+      });
+
+      const target = Number(invariant.target);
+      const absoluteTolerance = Number(invariant.absoluteTolerance);
+      const checks = [...groups.values()].map((group, groupIndex) => {
+        const passed = Math.abs(group.actual - target) <= absoluteTolerance;
+        return {
+          id: `x_group_y_sum_${invariantIndex + 1}_${groupIndex + 1}`,
+          type: "x_group_y_sum",
+          traceNames: requestedNames,
+          xValue: group.xValue,
+          actual: group.actual,
+          target,
+          absoluteTolerance,
+          passed,
+        };
+      });
+      const failed = checks.filter((check) => !check.passed);
+      if (failed.length) {
+        const examples = failed.slice(0, 3).map((check) => (
+          `${String(check.xValue)} = ${check.actual}`
+        )).join("; ");
+        errors.push(resultError(
+          "analysis_invariant_failed",
+          `${failed.length} X groups fall outside the reviewed target ${target} +/- ${absoluteTolerance}. Examples: ${examples}.`,
+          { invariantIndex, failedCount: failed.length, examples: failed.slice(0, 3) },
+        ));
+      }
+      return checks;
     }
-    return item;
+    if (invariant?.type !== "trace_y_sum") return [];
+    const requestedName = String(invariant.traceName || "").trim();
+    const matching = requestedName
+      ? traces.filter((trace) => String(trace.name || "") === requestedName)
+      : traces;
+    if (!matching.length) {
+      errors.push(resultError(
+        "analysis_invariant_trace_not_found",
+        `The reviewed sum check could not find series ${requestedName || "(all series)"}.`,
+        { invariantIndex, traceName: requestedName || null },
+      ));
+      return [];
+    }
+    return matching.map((trace) => {
+      const values = asArray(trace.y);
+      const target = Number(invariant.target);
+      const absoluteTolerance = Number(invariant.absoluteTolerance);
+      const actual = values.reduce((sum, value) => (
+        typeof value === "number" && Number.isFinite(value) ? sum + value : sum
+      ), 0);
+      const passed = Math.abs(actual - target) <= absoluteTolerance;
+      const item = {
+        id: `trace_y_sum_${trace.meta.labrat.traceId}`,
+        type: "trace_y_sum",
+        traceId: trace.meta.labrat.traceId,
+        traceName: trace.name,
+        actual,
+        target,
+        absoluteTolerance,
+        passed,
+      };
+      if (!passed) {
+        errors.push(resultError(
+          "analysis_invariant_failed",
+          `Series ${trace.name} sums to ${actual}, outside the reviewed target ${target} +/- ${absoluteTolerance}.`,
+          { invariantIndex, check: item },
+        ));
+      }
+      return item;
+    });
   });
 }
 
 export function validateAnalysisResult({
   run,
   plan,
-  selection,
   executorResult,
 } = {}) {
   const errors = [];
@@ -129,35 +210,115 @@ export function validateAnalysisResult({
       { executorError: executorResult?.error || null },
     ));
   }
-  if (run?.inputHash !== selection?.selectionHash) {
-    errors.push(resultError(
-      "analysis_input_hash_mismatch",
-      "AnalysisRun input hash differs from the accepted selection.",
-    ));
-  }
-  if (run?.programHash !== plan?.programHash) {
-    errors.push(resultError(
-      "analysis_program_hash_mismatch",
-      "AnalysisRun program hash differs from the accepted plan.",
-    ));
-  }
   if (
-    run?.runtimeVersion !== plan?.runtimeVersion
-    || run?.runtimeVersion !== ANALYSIS_RUNTIME_VERSION
-    || executorResult?.runtime?.version !== run?.runtimeVersion
+    executorResult?.runtime?.version
+    && executorResult.runtime.version !== ANALYSIS_RUNTIME_VERSION
   ) {
     errors.push(resultError(
       "analysis_runtime_mismatch",
-      "Analysis runtime differs from the accepted plan runtime.",
+      "Analysis output came from an unsupported runtime.",
+    ));
+  }
+  const rawResult = isObject(executorResult?.result) ? executorResult.result : {};
+  const rawPlotly = isObject(rawResult.plotly) ? rawResult.plotly : {};
+  const rawData = asArray(rawPlotly.data);
+  const rawLayout = isObject(rawPlotly.layout) ? rawPlotly.layout : {};
+  if (!isObject(rawResult.plotly) || !Array.isArray(rawPlotly.data) || !isObject(rawPlotly.layout)) {
+    errors.push(resultError(
+      "analysis_plotly_result_required",
+      "Python must return plotly.data and plotly.layout.",
+    ));
+  }
+  if (!rawData.length) {
+    errors.push(resultError(
+      "analysis_plotly_traces_required",
+      "Python returned no Plotly chart series.",
+    ));
+  }
+  if (rawData.length > MAX_TRACES) {
+    errors.push(resultError(
+      "analysis_trace_limit_exceeded",
+      `Analysis result contains more than ${MAX_TRACES} traces.`,
     ));
   }
 
-  const rawResult = executorResult?.result || {};
+  const traces = rawData.map(normalizeTrace);
+  const seenTraceIds = new Set();
+  let pointCount = 0;
+  traces.forEach((trace, index) => {
+    const id = trace.meta.labrat.traceId;
+    if (!id || seenTraceIds.has(id)) {
+      errors.push(resultError(
+        "analysis_trace_id_invalid",
+        id ? `Duplicate analysis trace id ${id}.` : "A Plotly trace id could not be assigned.",
+        { traceIndex: index, traceId: id || null },
+      ));
+    }
+    seenTraceIds.add(id);
+    const type = String(trace.type || "scatter").trim();
+    if (!ALLOWED_TRACE_TYPES.has(type)) {
+      errors.push(resultError(
+        "analysis_plotly_trace_type_unsupported",
+        `Plotly trace ${id} uses unsupported type ${type}.`,
+        { traceIndex: index, traceId: id, type },
+      ));
+    }
+    const x = asArray(trace.x);
+    const y = asArray(trace.y);
+    pointCount += Math.max(x.length, y.length);
+    if (!x.length || x.length !== y.length) {
+      errors.push(resultError(
+        "analysis_trace_length_mismatch",
+        `Plotly trace ${id} requires equal non-empty x and y arrays.`,
+        { traceIndex: index, traceId: id, xLength: x.length, yLength: y.length },
+      ));
+    }
+    x.forEach((value, pointIndex) => {
+      if (!plottableX(value)) {
+        errors.push(resultError(
+          "analysis_trace_x_value_invalid",
+          `Plotly trace ${id} contains an invalid x value.`,
+          { traceIndex: index, traceId: id, pointIndex },
+        ));
+      }
+    });
+    y.forEach((value, pointIndex) => {
+      if (!plottableY(value)) {
+        errors.push(resultError(
+          "analysis_trace_y_value_invalid",
+          `Plotly trace ${id} contains an invalid y value.`,
+          { traceIndex: index, traceId: id, pointIndex },
+        ));
+      }
+    });
+  });
+  if (pointCount > MAX_TRACE_POINTS) {
+    errors.push(resultError(
+      "analysis_trace_point_limit_exceeded",
+      `Analysis result contains ${pointCount} points; maximum is ${MAX_TRACE_POINTS}.`,
+      { pointCount, maxTracePoints: MAX_TRACE_POINTS },
+    ));
+  }
+
+  errors.push(...finiteAndSafeErrors(traces, "plotly.data"));
+  errors.push(...finiteAndSafeErrors(rawLayout, "plotly.layout"));
+  const exclusions = asArray(rawResult.exclusions).map((item, index) => ({
+    label: String(item?.label || `Excluded input ${index + 1}`),
+    reason: String(item?.reason || "Excluded by the accepted analysis plan."),
+  }));
+  const checks = invariantValidation(plan?.reviewPlan?.invariants, traces, errors);
   const result = {
-    resultTable: asArray(rawResult.result_table || rawResult.resultTable),
-    traces: asArray(rawResult.traces),
-    lineage: rawResult.lineage && typeof rawResult.lineage === "object" ? rawResult.lineage : {},
-    summary: rawResult.summary && typeof rawResult.summary === "object" ? rawResult.summary : {},
+    plotly: {
+      data: traces,
+      layout: structuredClone(rawLayout),
+    },
+    exclusions,
+    checks,
+    summary: {
+      pointCount,
+      seriesCount: traces.length,
+      excludedCount: exclusions.length,
+    },
     execution: {
       adapter: executorResult?.adapter || "unknown",
       runtime: executorResult?.runtime || {},
@@ -173,377 +334,34 @@ export function validateAnalysisResult({
       { resultBytes, maxBytes: MAX_RESULT_BYTES },
     ));
   }
-  if (result.resultTable.length > MAX_RESULT_ROWS) {
-    errors.push(resultError(
-      "analysis_result_row_limit_exceeded",
-      `Analysis result contains more than ${MAX_RESULT_ROWS} rows.`,
-    ));
-  }
-  if (result.traces.length > MAX_TRACES) {
-    errors.push(resultError(
-      "analysis_trace_limit_exceeded",
-      `Analysis result contains more than ${MAX_TRACES} traces.`,
-    ));
-  }
-  errors.push(...finiteErrors(result.resultTable, "result.resultTable"));
-  errors.push(...finiteErrors(result.traces, "result.traces"));
-
-  const acceptedRecordsById = new Map(asArray(selection?.records).map((record) => [
-    sourceRecordId(record),
-    record,
-  ]));
-  const acceptedSourceRecordIds = new Set(acceptedRecordsById.keys());
-  const expectedShape = String(plan?.expectedOutput?.shape || "").trim();
-  if (expectedShape !== "experiment_traces") {
-    errors.push(resultError(
-      "analysis_output_shape_unsupported",
-      `Analysis output shape ${expectedShape || "(missing)"} is not supported.`,
-    ));
-  }
-  const expectedYFields = asArray(plan?.expectedOutput?.yFields)
-    .map((fieldKey) => String(fieldKey || "").trim())
-    .filter(Boolean);
-  const resultIds = new Set();
-  const outputSourceRecordIds = new Set();
-  result.resultTable.forEach((row, rowIndex) => {
-    const resultId = String(row?.__result_id || row?.resultId || "").trim();
-    if (!resultId) {
-      errors.push(resultError(
-        "analysis_result_id_required",
-        "Every analysis result row requires a stable result id.",
-        { rowIndex },
-      ));
-    } else if (resultIds.has(resultId)) {
-      errors.push(resultError(
-        "analysis_result_id_duplicate",
-        `Duplicate analysis result id ${resultId}.`,
-        { rowIndex, resultId },
-      ));
-    }
-    resultIds.add(resultId);
-    const rowPreservingId = row?.__snapshot_id != null && row?.__record_index != null
-      ? `${row.__snapshot_id}:${Number(row.__record_index)}`
-      : null;
-    const ids = rowPreservingId
-      ? [rowPreservingId]
-      : lineageIds(result.lineage[resultId] || row);
-    if (rowPreservingId) {
-      const acceptedRecord = acceptedRecordsById.get(rowPreservingId);
-      if (!row?.__experiment_id) {
-        errors.push(resultError(
-          "analysis_experiment_identity_required",
-          "Row-preserving outputs must retain experiment identity.",
-          { rowIndex, resultId },
-        ));
-      } else if (
-        acceptedRecord
-        && String(row.__experiment_id) !== String(acceptedRecord.experimentId)
-      ) {
-        errors.push(resultError(
-          "analysis_experiment_identity_mismatch",
-          "Row-preserving output experiment identity differs from its accepted source record.",
-          {
-            rowIndex,
-            resultId,
-            actualExperimentId: row.__experiment_id,
-            expectedExperimentId: acceptedRecord.experimentId,
-          },
-        ));
-      }
-      if (outputSourceRecordIds.has(rowPreservingId)) {
-        errors.push(resultError(
-          "analysis_source_record_duplicate",
-          "An accepted source record may appear in at most one row-preserving output row.",
-          { rowIndex, resultId, sourceRecordId: rowPreservingId },
-        ));
-      }
-      outputSourceRecordIds.add(rowPreservingId);
-    }
-    expectedYFields.forEach((fieldKey) => {
-      if (!Object.hasOwn(row || {}, fieldKey) && !Object.hasOwn(row?.values || {}, fieldKey)) {
-        errors.push(resultError(
-          "analysis_expected_field_missing",
-          `Analysis result row is missing expected field ${fieldKey}.`,
-          { rowIndex, resultId, fieldKey },
-        ));
-        return;
-      }
-      const value = rowValue(row, fieldKey);
-      if (typeof value !== "number" || !Number.isFinite(value)) {
-        errors.push(resultError(
-          "analysis_expected_field_invalid",
-          `Analysis result field ${fieldKey} must be one finite number.`,
-          { rowIndex, resultId, fieldKey },
-        ));
-      }
-    });
-    validateLineageIds(ids, acceptedSourceRecordIds, errors, { rowIndex, resultId });
-  });
-
-  const traceIds = new Set();
-  let tracePointCount = 0;
-  const unitByField = new Map(
-    [
-      ...asArray(plan?.calculationManifest?.inputs),
-      ...asArray(plan?.calculationManifest?.derivedFields),
-    ]
-      .map((field) => [
-        String(field?.fieldKey || field?.outputFieldKey || "").trim(),
-        normalizedUnit(field?.unit || field?.outputUnit),
-      ])
-      .filter(([fieldKey]) => fieldKey),
-  );
-  const expectedYUnits = new Set(
-    asArray(plan?.expectedOutput?.yFields)
-      .map((fieldKey) => unitByField.get(String(fieldKey || "").trim()))
-      .filter(Boolean),
-  );
-  result.traces.forEach((trace, traceIndex) => {
-    const traceId = String(trace?.traceId || "").trim();
-    if (!traceId) {
-      errors.push(resultError(
-        "analysis_trace_id_required",
-        "Every analysis trace requires a stable traceId.",
-        { traceIndex },
-      ));
-    } else if (traceIds.has(traceId)) {
-      errors.push(resultError(
-        "analysis_trace_id_duplicate",
-        `Duplicate analysis trace id ${traceId}.`,
-        { traceIndex, traceId },
-      ));
-    }
-    traceIds.add(traceId);
-    const x = asArray(trace?.x);
-    const y = asArray(trace?.y);
-    tracePointCount += Math.max(x.length, y.length);
-    if (x.length !== y.length) {
-      errors.push(resultError(
-        "analysis_trace_length_mismatch",
-        `Trace ${traceId || traceIndex} has different x and y lengths.`,
-        { traceIndex, traceId, xLength: x.length, yLength: y.length },
-      ));
-    }
-    x.forEach((value, pointIndex) => {
-      if (
-        (typeof value !== "number" || !Number.isFinite(value))
-        && typeof value !== "string"
-      ) {
-        errors.push(resultError(
-          "analysis_trace_x_value_invalid",
-          `Trace ${traceId || traceIndex} x values must be finite numbers or strings.`,
-          { traceIndex, traceId, pointIndex },
-        ));
-      }
-    });
-    y.forEach((value, pointIndex) => {
-      if (typeof value !== "number" || !Number.isFinite(value)) {
-        errors.push(resultError(
-          "analysis_trace_y_value_invalid",
-          `Trace ${traceId || traceIndex} y values must be finite numbers.`,
-          { traceIndex, traceId, pointIndex },
-        ));
-      }
-    });
-    const traceYUnit = normalizedUnit(trace?.yUnit);
-    const traceYField = String(trace?.yField || "").trim();
-    const expectedTraceUnit = traceYField ? unitByField.get(traceYField) : null;
-    if (
-      expectedTraceUnit && traceYUnit !== expectedTraceUnit
-      || !expectedTraceUnit && expectedYUnits.size && !expectedYUnits.has(traceYUnit)
-    ) {
-      errors.push(resultError(
-        "analysis_trace_unit_mismatch",
-        `Trace ${traceId || traceIndex} unit does not match the accepted calculation manifest.`,
-        {
-          traceIndex,
-          traceId,
-          yField: traceYField || null,
-          actualUnit: traceYUnit || null,
-          expectedUnits: expectedTraceUnit ? [expectedTraceUnit] : [...expectedYUnits],
-        },
-      ));
-    }
-    const ids = lineageIds(trace);
-    validateLineageIds(ids, acceptedSourceRecordIds, errors, { traceIndex, traceId });
-    if (trace?.experimentId) {
-      const traceExperimentIds = new Set(
-        ids
-          .map((id) => acceptedRecordsById.get(id)?.experimentId)
-          .filter(Boolean),
-      );
-      if (
-        traceExperimentIds.size !== 1
-        || !traceExperimentIds.has(trace.experimentId)
-      ) {
-        errors.push(resultError(
-          "analysis_trace_experiment_mismatch",
-          `Trace ${traceId || traceIndex} experiment identity differs from its lineage.`,
-          { traceIndex, traceId, experimentId: trace.experimentId },
-        ));
-      }
-    }
-    const lineageEntryIds = lineageIds(result.lineage[traceId]);
-    if (ids.length && lineageEntryIds.length && stableDataHash(ids) !== stableDataHash(lineageEntryIds)) {
-      errors.push(resultError(
-        "analysis_lineage_mismatch",
-        `Trace ${traceId} lineage differs from the result lineage sidecar.`,
-        { traceIndex, traceId },
-      ));
-    }
-  });
-  if (tracePointCount > MAX_TRACE_POINTS) {
-    errors.push(resultError(
-      "analysis_trace_point_limit_exceeded",
-      `Analysis result contains ${tracePointCount} trace points; maximum is ${MAX_TRACE_POINTS}.`,
-      { tracePointCount, maxTracePoints: MAX_TRACE_POINTS },
-    ));
-  }
-
-  const inputRecordCount = asArray(selection?.records).length;
-  const outputRecordCount = result.resultTable.length;
-  const summary = result.summary;
-  if (Number(summary.inputRecordCount) !== inputRecordCount
-    || Number(summary.outputRecordCount) !== outputRecordCount) {
-    errors.push(resultError(
-      "analysis_result_count_mismatch",
-      "Execution summary input/output counts do not match accepted inputs and result rows.",
-      {
-        expectedInputRecordCount: inputRecordCount,
-        actualInputRecordCount: summary.inputRecordCount,
-        expectedOutputRecordCount: outputRecordCount,
-        actualOutputRecordCount: summary.outputRecordCount,
-      },
-    ));
-  }
-  const excludedRecordCount = Number(summary.excludedRecordCount);
-  if (!Number.isInteger(excludedRecordCount) || excludedRecordCount < 0
-    || outputRecordCount + excludedRecordCount > inputRecordCount) {
-    errors.push(resultError(
-      "analysis_exclusion_count_invalid",
-      "Execution summary exclusion count is invalid.",
-    ));
-  }
-  const excludedRecords = asArray(summary.excludedRecords);
-  if (
-    Number.isInteger(excludedRecordCount)
-    && excludedRecords.length !== excludedRecordCount
-  ) {
-    errors.push(resultError(
-      "analysis_exclusion_count_mismatch",
-      "Execution summary excludedRecords length differs from excludedRecordCount.",
-      {
-        excludedRecordCount,
-        excludedRecordDetailCount: excludedRecords.length,
-      },
-    ));
-  }
-  const excludedSourceRecordIds = new Set();
-  excludedRecords.forEach((excluded, excludedIndex) => {
-    const id = String(excluded?.sourceRecordId || "").trim();
-    const reason = String(excluded?.reason || "").trim();
-    if (!acceptedSourceRecordIds.has(id)) {
-      errors.push(resultError(
-        "analysis_excluded_record_unknown",
-        "An excluded record is not part of the accepted selection.",
-        { excludedIndex, sourceRecordId: id || null },
-      ));
-    }
-    if (!reason) {
-      errors.push(resultError(
-        "analysis_exclusion_reason_required",
-        "Every excluded record requires a visible reason.",
-        { excludedIndex, sourceRecordId: id || null },
-      ));
-    }
-    if (excludedSourceRecordIds.has(id)) {
-      errors.push(resultError(
-        "analysis_excluded_record_duplicate",
-        "An accepted source record may be excluded only once.",
-        { excludedIndex, sourceRecordId: id || null },
-      ));
-    }
-    if (outputSourceRecordIds.has(id)) {
-      errors.push(resultError(
-        "analysis_output_exclusion_overlap",
-        "An accepted source record cannot be both output and excluded.",
-        { excludedIndex, sourceRecordId: id || null },
-      ));
-    }
-    if (id) excludedSourceRecordIds.add(id);
-  });
-  if (expectedShape === "experiment_traces") {
-    const accountedIds = new Set([
-      ...outputSourceRecordIds,
-      ...excludedSourceRecordIds,
-    ]);
-    const missingIds = [...acceptedSourceRecordIds].filter((id) => !accountedIds.has(id));
-    const unknownIds = [...accountedIds].filter((id) => !acceptedSourceRecordIds.has(id));
-    if (missingIds.length || unknownIds.length) {
-      errors.push(resultError(
-        "analysis_input_accounting_mismatch",
-        "Every accepted input record must appear exactly once as output or a declared exclusion.",
-        {
-          missingSourceRecordIds: missingIds.slice(0, 100),
-          unknownSourceRecordIds: unknownIds.slice(0, 100),
-        },
-      ));
-    }
-  }
-  const plannedMissingMode = String(plan?.calculationManifest?.missingValuePolicy?.mode || "");
-  if (String(summary.missingValuePolicy || "") !== plannedMissingMode) {
-    errors.push(resultError(
-      "analysis_missing_value_policy_mismatch",
-      "Executed missing-value policy differs from the accepted manifest.",
-      { planned: plannedMissingMode, actual: summary.missingValuePolicy || null },
-    ));
-  }
-
-  const invariants = invariantValidation(
-    plan?.calculationManifest?.invariants,
-    result.resultTable,
-    errors,
-  );
   const validation = {
     ok: errors.length === 0,
-    inputRecordCount,
-    outputRecordCount,
-    excludedRecordCount: Number.isInteger(excludedRecordCount) ? excludedRecordCount : null,
-    traceCount: result.traces.length,
-    tracePointCount,
-    missingValuePolicy: plannedMissingMode,
-    invariants,
     errors,
     warnings,
+    runtimeVersion: ANALYSIS_RUNTIME_VERSION,
+    traceCount: traces.length,
+    pointCount,
+    excludedCount: exclusions.length,
+    checks,
   };
-  const contentHash = errors.length ? null : stableDataHash(result);
-  const resultPreviewHash = errors.length ? null : stableDataHash({
-    resultTable: result.resultTable,
-    traces: result.traces,
-    summary: result.summary,
-    validation: {
-      inputRecordCount,
-      outputRecordCount,
-      excludedRecordCount: validation.excludedRecordCount,
-      traceCount: validation.traceCount,
-      tracePointCount,
-      missingValuePolicy: plannedMissingMode,
-      invariants,
-    },
-  });
+  const contentHash = stableDataHash(result);
   return {
-    ok: errors.length === 0,
+    ok: validation.ok,
     result,
     validation,
     errors,
     warnings,
     contentHash,
-    resultPreviewHash,
+    resultPreviewHash: stableDataHash({
+      plotly: result.plotly,
+      exclusions,
+      checks,
+      validation,
+    }),
   };
 }
 
 export const analysisResultLimits = Object.freeze({
-  maxResultRows: MAX_RESULT_ROWS,
   maxTraces: MAX_TRACES,
   maxTracePoints: MAX_TRACE_POINTS,
   maxResultBytes: MAX_RESULT_BYTES,

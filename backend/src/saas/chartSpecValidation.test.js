@@ -1,176 +1,78 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
+
 import { validateChartSpecProposal } from "./chartSpecValidation.js";
 
-function sourceRowsProposal(overrides = {}) {
+function chartSpec() {
   return {
-    origin: "source_extract",
-    chartType: "bar",
-    title: "Carbon number distribution",
-    x: { field: "carbon_number", label: "Carbon number" },
-    y: { field: "percentage", label: "Percentage" },
-    sourceSnapshot: {
-      fields: [
-        { fieldId: "carbon_number", label: "Carbon number" },
-        { fieldId: "percentage", label: "Percentage" },
-      ],
-      rows: [{
-        rowId: "row_1",
-        values: { carbon_number: 1, percentage: 12.5 },
-        sourceRefs: [{ sourceDocumentId: "source_1", sheetName: "Sheet1", cell: "B2" }],
-      }],
-    },
-    ...overrides,
-  };
-}
-
-function analysisResultProposal(overrides = {}) {
-  const base = {
-    schemaVersion: "labrat.chartSpec.v2",
+    schemaVersion: "labrat.chartSpec.v3",
     origin: "analysis_result",
     status: "accepted",
-    chartType: "scatter",
-    title: "Reaction rate over time",
-    analysisThreadId: "analysis_thread_1",
-    analysisPlanRevisionId: "analysis_plan_revision_1",
-    analysisRunId: "analysis_run_1",
-    analysisResultId: "analysis_result_1",
-    planHash: "sha256_plan_1",
-    selectionHash: "sha256_selection_1",
-    dependencyHash: "sha256_dependency_1",
-    inputHash: "sha256_selection_1",
-    programHash: "sha256_program_1",
-    resultHash: "sha256_result_1",
-    resultPreviewHash: "sha256_preview_1",
-    runtimeVersion: "labrat-python-v1",
-    inputSnapshotRefs: [{
-      experimentId: "experiment_1",
-      headId: "head_1",
-      snapshotId: "snapshot_1",
-      recordIndex: 0,
-      sourceRecordId: "snapshot_1:0",
-      contentHash: "sha256_snapshot_1",
-      dependencyHash: "sha256_snapshot_dependency_1",
+    chartType: "bar",
+    title: "Carbon number distribution",
+    analysisThreadId: "thread_1",
+    analysisPlanRevisionId: "revision_1",
+    analysisRunId: "run_1",
+    analysisResultId: "result_1",
+    sourceSelections: [{
+      sourceSelectionId: "selection_1",
+      regionUnderstandingRevisionId: "region_revision_1",
+      sourceDocumentId: "source_1",
+      sheetName: "Carbon",
+      range: "Q69:AI69",
     }],
+    sourceRefs: [],
+    plotly: {
+      data: [{
+        traceId: "exp33",
+        meta: { labrat: { traceId: "exp33" } },
+        type: "bar",
+        name: "Exp33",
+        x: ["C1", "C2"],
+        y: [1, 2],
+      }],
+      layout: { title: "Carbon number distribution" },
+    },
     traceCatalog: [{
-      traceId: "trace_1",
-      experimentId: "experiment_1",
-      experimentLabel: "Exp 1",
-      xField: "reaction_time",
-      yField: "reaction_rate",
-      xUnit: "min",
-      yUnit: "mmol/g/min",
-      x: [0, 10],
-      y: [1, 2],
-      sourceRecordIds: ["snapshot_1:0"],
+      traceId: "exp33",
+      name: "Exp33",
+      type: "bar",
+      pointCount: 2,
     }],
-    defaultChartView: { visibleTraceIds: ["trace_1"] },
-    x: { field: "reaction_time", label: "Reaction time", unit: "min" },
-    y: { field: "reaction_rate", label: "Reaction rate", unit: "mmol/g/min" },
+    defaultChartView: { visibleTraceIds: ["exp33"] },
   };
-  return { ...base, ...overrides };
 }
 
-test("validateChartSpecProposal accepts immutable source row snapshots", () => {
-  const result = validateChartSpecProposal({ proposal: sourceRowsProposal() });
+test("accepts a complete Plotly-backed v3 analysis ChartSpec", () => {
+  const result = validateChartSpecProposal({ proposal: chartSpec() });
 
   assert.equal(result.ok, true);
-  assert.equal(result.chartSpec.origin, "source_extract");
-  assert.equal(result.chartSpec.sourceSnapshot.rows.length, 1);
-  assert.equal(result.chartSpec.datasetCommitId, undefined);
+  assert.deepEqual(result.chartSpec.plotly.data[0].x, ["C1", "C2"]);
 });
 
-test("validateChartSpecProposal accepts source-backed cross-experiment series", () => {
-  const result = validateChartSpecProposal({
-    proposal: sourceRowsProposal({
-      chartType: "distribution_bar",
-      seriesScope: { seriesKind: "component_distribution", xField: "carbon_number", yField: "percentage" },
-      compatibleExperimentIds: ["experiment_1"],
-      series: [{
-        seriesId: "series_1",
-        experimentId: "experiment_1",
-        xField: "carbon_number",
-        yField: "percentage",
-      }],
-      sourceSnapshot: {
-        fields: [],
-        series: [{
-          seriesId: "series_1",
-          experimentId: "experiment_1",
-          rows: [{ values: { carbon_number: 1, percentage: 12.5 } }],
-        }],
-      },
-    }),
-  });
+test("rejects missing source selections and incomplete trace catalogs", () => {
+  const proposal = chartSpec();
+  proposal.sourceSelections = [];
+  proposal.traceCatalog = [];
 
-  assert.equal(result.ok, true);
-  assert.equal(result.chartSpec.series.length, 1);
+  assert.throws(
+    () => validateChartSpecProposal({ proposal }),
+    (error) => error.code === "invalid_analysis_chart_spec",
+  );
 });
 
-test("validateChartSpecProposal rejects proposals without source evidence", () => {
-  assert.throws(() => validateChartSpecProposal({
-    proposal: {
-      chartType: "scatter",
-      x: { field: "temperature" },
-      y: { field: "conversion" },
-    },
-  }), (error) => error.code === "source_snapshot_required");
-});
+test("rejects empty, duplicate, and unknown default curve selections", () => {
+  const empty = chartSpec();
+  empty.defaultChartView.visibleTraceIds = [];
+  assert.throws(
+    () => validateChartSpecProposal({ proposal: empty }),
+    /at least one unique trace id/i,
+  );
 
-test("validateChartSpecProposal rejects empty source snapshots", () => {
-  assert.throws(() => validateChartSpecProposal({
-    proposal: sourceRowsProposal({ sourceSnapshot: { rows: [], series: [] } }),
-  }), (error) => error.code === "invalid_chart_spec");
-});
-
-test("validateChartSpecProposal rejects unsupported source chart types", () => {
-  assert.throws(() => validateChartSpecProposal({
-    proposal: sourceRowsProposal({ chartType: "radar" }),
-  }), (error) => error.code === "invalid_chart_spec");
-});
-
-test("validateChartSpecProposal rejects source series without snapshot rows", () => {
-  assert.throws(() => validateChartSpecProposal({
-    proposal: sourceRowsProposal({
-      seriesScope: { seriesKind: "component_distribution" },
-      compatibleExperimentIds: ["experiment_1"],
-      series: [{
-        seriesId: "series_1",
-        experimentId: "experiment_1",
-        xField: "carbon_number",
-        yField: "percentage",
-      }],
-      sourceSnapshot: {
-        series: [{ seriesId: "series_1", experimentId: "experiment_1", rows: [] }],
-      },
-    }),
-  }), (error) => error.code === "chart_source_unresolved");
-});
-
-test("validateChartSpecProposal accepts complete analysis-result trace catalogs", () => {
-  const result = validateChartSpecProposal({
-    proposal: analysisResultProposal(),
-  });
-
-  assert.equal(result.ok, true);
-  assert.equal(result.chartSpec.schemaVersion, "labrat.chartSpec.v2");
-  assert.equal(result.chartSpec.origin, "analysis_result");
-  assert.equal(result.chartSpec.traceCatalog.length, 1);
-});
-
-test("validateChartSpecProposal rejects incomplete analysis lineage and default views", () => {
-  assert.throws(() => validateChartSpecProposal({
-    proposal: analysisResultProposal({
-      traceCatalog: [{
-        ...analysisResultProposal().traceCatalog[0],
-        sourceRecordIds: [],
-      }],
-    }),
-  }), (error) => error.code === "analysis_chart_lineage_required");
-
-  assert.throws(() => validateChartSpecProposal({
-    proposal: analysisResultProposal({
-      defaultChartView: { visibleTraceIds: ["trace_unknown"] },
-    }),
-  }), (error) => error.code === "analysis_chart_trace_unknown");
+  const unknown = chartSpec();
+  unknown.defaultChartView.visibleTraceIds = ["other"];
+  assert.throws(
+    () => validateChartSpecProposal({ proposal: unknown }),
+    (error) => error.code === "analysis_chart_trace_unknown",
+  );
 });

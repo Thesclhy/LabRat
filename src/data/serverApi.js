@@ -151,6 +151,17 @@ export function createServerWorkbookReviewRegion(sessionId, request = {}, option
     range: request.range,
     selectionMethod: request.selectionMethod || "manual",
     idempotencyKey: request.idempotencyKey || null,
+    ...(request.deferInterpretation === true ? { deferInterpretation: true } : {}),
+  }, options);
+}
+
+export function interpretServerWorkbookReviewRegion(sessionId, regionId, request = {}, options = {}) {
+  if (!sessionId || !regionId) throw new ServerApiError("Select a workbook review region before interpreting it.");
+  return serverJson(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}/regions/${encodeURIComponent(regionId)}/interpret`, {
+    expectedRegionVersion: request.expectedRegionVersion,
+    description: request.description || "",
+    semanticType: request.semanticType || "generic_table",
+    idempotencyKey: request.idempotencyKey || null,
   }, options);
 }
 
@@ -201,16 +212,6 @@ export function listServerRegionUnderstandings(projectId, { status = "accepted",
   if (!projectId) throw new ServerApiError("Select a project before listing region understandings.");
   const query = status ? `?status=${encodeURIComponent(status)}` : "";
   return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/region-understandings${query}`, options);
-}
-
-export function interpretServerProjectChartIntent(projectId, request = {}, options = {}) {
-  if (!projectId) throw new ServerApiError("Select a project before drafting charts.");
-  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/charts/interpret`, {
-    prompt: request.prompt,
-    persistAsProposal: request.persistAsProposal !== false,
-    entrypoint: request.entrypoint || "unknown",
-    context: request.context || {},
-  }, options);
 }
 
 export function retrieveProjectEvidence(projectId, request = {}, options = {}) {
@@ -285,33 +286,6 @@ export function readServerSourceDocumentRange(sourceDocumentId, request = {}, op
   }, options);
 }
 
-export function previewServerSourceRegionExtract(sourceRegionId, request = {}, options = {}) {
-  if (!sourceRegionId) throw new ServerApiError("Select a source region before previewing an extract.");
-  return serverJson(`/api/source-regions/${encodeURIComponent(sourceRegionId)}/extract-preview`, {
-    extractType: request.extractType || "generic_table",
-    intent: request.intent || {},
-  }, options);
-}
-
-export function previewServerSourceDocumentExtract(sourceDocumentId, request = {}, options = {}) {
-  if (!sourceDocumentId) throw new ServerApiError("Select a source document before previewing an extract.");
-  return serverJson(`/api/source-documents/${encodeURIComponent(sourceDocumentId)}/extract-preview`, {
-    sheetName: request.sheetName || "",
-    range: request.range || "",
-    extractType: request.extractType || "generic_table",
-    intent: request.intent || {},
-  }, options);
-}
-
-export function planServerProjectAgent(projectId, request = {}, options = {}) {
-  if (!projectId) throw new ServerApiError("Select a project before asking LabRat to plan project actions.");
-  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/agent/plan`, {
-    message: request.message || "",
-    conversation: request.conversation || [],
-    selectedContext: request.selectedContext || {},
-  }, options);
-}
-
 export function createServerAgentRun(projectId, request = {}, options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before asking LabRat to run a project workflow.");
   return serverJson(`/api/projects/${encodeURIComponent(projectId)}/agent/runs`, {
@@ -327,41 +301,9 @@ export function getServerAgentRun(agentRunId, options = {}) {
   return serverRequest(`/api/agent-runs/${encodeURIComponent(agentRunId)}`, options);
 }
 
-export function confirmServerAgentRun(agentRunId, actionId, options = {}) {
-  if (!agentRunId) throw new ServerApiError("Select an AgentRun before confirming an action.");
-  if (!actionId) throw new ServerApiError("Select an AgentRun action before confirming it.");
-  return serverJson(`/api/agent-runs/${encodeURIComponent(agentRunId)}/confirm`, { actionId }, options);
-}
-
 export function cancelServerAgentRun(agentRunId, options = {}) {
   if (!agentRunId) throw new ServerApiError("Select an AgentRun before cancelling it.");
   return serverJson(`/api/agent-runs/${encodeURIComponent(agentRunId)}/cancel`, {}, options);
-}
-
-export function patchServerSourceExtractProposal(proposalId, request = {}, options = {}) {
-  if (!proposalId) throw new ServerApiError("Select a source extract proposal before updating decisions.");
-  return serverJson(`/api/source-extract-proposals/${encodeURIComponent(proposalId)}`, request, {
-    ...options,
-    method: "PATCH",
-  });
-}
-
-export function createServerSourceExtractChartProposal(proposalId, options = {}) {
-  if (!proposalId) throw new ServerApiError("Accept a source extract proposal before drafting a chart proposal.");
-  return serverJson(`/api/source-extract-proposals/${encodeURIComponent(proposalId)}/chart-proposal`, {}, options);
-}
-
-export function patchServerChartProposalSet(chartProposalSetId, request = {}, options = {}) {
-  if (!chartProposalSetId) throw new ServerApiError("Select a chart proposal set before updating decisions.");
-  return serverJson(`/api/chart-proposal-sets/${encodeURIComponent(chartProposalSetId)}`, request, {
-    ...options,
-    method: "PATCH",
-  });
-}
-
-export function createServerChartSpecFromProposal(projectId, request = {}, options = {}) {
-  if (!projectId) throw new ServerApiError("Select a project before creating chart specs.");
-  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/chart-specs/from-proposal`, request, options);
 }
 
 export function listServerChartSpecs(projectId, options = {}) {

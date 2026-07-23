@@ -12,7 +12,7 @@ LabRat uses AI as a proposal and workflow layer. Authorization, bounded evidence
 - interpret a user's correction for the active red box
 - rank accepted evidence for a stated task
 - draft DataPlan intent/operations for backend validation
-- resolve an explicit source-chart request into reviewable source extract/chart proposals
+- select exact ranges inside active confirmed workbook regions for a reviewable analysis/chart plan
 - explain Experiment Browser fields, comparison choices, source refs, and stale-review errors
 - draft captions or manuscript text from user-approved evidence
 - classify bounded project messages into the supported intent/disposition schema
@@ -38,8 +38,8 @@ Send compact project-owned context only:
 - active red-box interpretation and validation blockers
 - accepted RegionUnderstandingRevision summaries/source refs
 - DataPlan preview summaries, hashes, warnings, and identity decisions
-- Experiment Browser field catalog and selected experiment summaries
-- approved source- and analysis-result chart/manuscript summaries, including bounded trace metadata and current visible trace ids without full x/y arrays
+- confirmed-region summaries and bounded source-range pages
+- approved analysis-result chart/manuscript summaries, including bounded trace metadata and current visible trace ids without full x/y arrays
 
 Do not send full workbooks, entire DataSnapshot point collections, unrelated project history, credentials, or private session data.
 
@@ -54,7 +54,7 @@ AI draft
   -> audit event
 ```
 
-RegionUnderstandingRevision confirmation, DataPlan publish, source extract acceptance, analysis-plan acceptance, AnalysisResult acceptance/ChartSpec publication, and Manuscript save are separate boundaries. Confirmation at one stage does not authorize later stages.
+RegionUnderstandingRevision confirmation, DataPlan publish, analysis-plan acceptance, AnalysisResult acceptance/ChartSpec publication, and Manuscript save are separate boundaries. Confirmation at one stage does not authorize later stages.
 
 ## Evidence Rules
 
@@ -73,41 +73,59 @@ RegionUnderstandingRevision confirmation, DataPlan publish, source extract accep
 
 ## Analysis Planning Rules
 
-- The framework-independent AnalysisToolRegistry exposes project context, unit-aware accepted fields, experiment-scope resolution, bounded selection preview/inspection, and plan validation.
-- The registry has no execution tool. A model cannot run Python by issuing a planning tool call.
-- Analysis selections use only accepted DataSnapshots referenced by active ExperimentSnapshotHeads.
-- Field ids include field key, unit, and value type; incompatible units remain separate.
-- Non-contiguous source cells remain separate review rectangles. Oversized source ranges fail before cell expansion.
-- An AnalysisPlanRevision requires an explicit missing-value policy, exact `labrat-python-v1` source/hash, manifest, expected output shape, and frozen selection/dependency hashes.
-- AnalysisPlanRevision validation rejects embedded result arrays. The backend persists immutable numbered revisions; feedback creates a later revision instead of patching prior payloads.
-- AgentRun analysis dispositions create a durable AnalysisThread. With accepted data and a configured provider, the backend may draft revision 1 and returns only visible artifact summaries.
-- Analysis-plan drafting uses provider-enforced structured output for the
-  selection request, visible manifest, concise exact Python, expected chart
-  encoding, and warnings. The provider receives the bounded project context,
-  accepted experiment id/label/alias catalog, and accepted field catalog, not
-  selected scalar values or complete DataSnapshot rows. Backend resolution,
-  hashing, Python policy, and plan validation remain authoritative.
-- A thread that is durably linked to an `analysis_evidence_required` AgentRun
-  may be retried after accepted heads exist. Retry is claim-guarded so
-  concurrent requests cannot duplicate provider work. A durable idempotency
-  receipt replays completed work, rejects conflicting key reuse, and permits
-  recovery after an abandoned six-minute drafting lease. Retry cannot accept
-  a plan, execute Python, or publish a chart.
-- Plan acceptance requires exact reviewed hashes plus idempotency, re-resolves active heads, and creates only a queued AnalysisRun. It does not execute Python or create an AnalysisResult/ChartSpec.
-- A model cannot call the executor. Only the authenticated AnalysisRun endpoint can execute an accepted frozen package after active-head, dependency, selection, input, program, runtime, and Python-policy checks.
+- Analysis evidence comes only from active accepted
+  RegionUnderstandingRevisions. A DataSnapshot or Browser publication is not a
+  prerequisite for chart planning.
+- Planning receives a bounded confirmed-region catalog and may use
+  `inspect_source_range` to page through exact cells. It selects one or more
+  rectangular `sourceSelections`; each must stay inside its accepted region.
+- Multiple files, worksheets, and non-contiguous ranges remain separate
+  selections and separate red review rectangles. SourceDocument reads are
+  individually bounded to 500 cells, but there is no 500-cell aggregate
+  analysis-selection limit.
+- A PlanRevision stores only source selections, structured review meaning,
+  readable display steps, warnings, and derived rectangles. Python, input
+  values, field ids, expected result rows, traces, and Plotly are forbidden.
+- Feedback creates a later immutable numbered PlanRevision instead of patching
+  prior plans. Draft validation happens before review persistence; one
+  repairable range/plan failure may be returned to the provider for a bounded
+  rewrite.
+- Plan acceptance requires idempotency and re-resolves each source selection.
+  It creates only a queued AnalysisRun. It does not generate or execute Python
+  and does not create an AnalysisResult/ChartSpec.
+- Execution materializes one `inputs.tables` item per selection with source
+  metadata, starting row/column, typed values, display values, and optional
+  formulas. Large inputs may be paged read-only with `inspect_run_input`.
+- Only after materialization may the code-generation model produce
+  `labrat-python-v2` implementing `analyze(inputs, labrat)`. The model sees the
+  real dictionary input contract; users do not review Python.
+- A model cannot call the executor. Only the authenticated AnalysisRun endpoint
+  can policy-check and execute the accepted run package.
 - Static policy permits a bounded numeric-library allowlist and rejects dynamic code, direct numeric-library I/O, module/private-attribute escapes, process, network, filesystem, runtime-internal, and path-traversal operations. The runner repeats AST checks with restricted builtins.
 - Local execution is a non-production development adapter, not a security sandbox. Static and runner-side AST policy reduce accidental misuse but are not an isolation boundary. Production defaults to disabled and requires an externally hardened HTTPS worker with network denial, read-only assets, isolation, and resource limits.
-- Executor output is untrusted until deterministic validation checks the supported output encoding, finite declared fields, plottable x/y types and lengths, exact experiment/snapshot identity, stable ids, accepted-record lineage, complete output-or-reasoned-exclusion accounting, missing-value behavior, size limits, hashes, units, and manifest invariants.
-- Only valid output becomes an immutable awaiting-review AnalysisResult. No executor path creates a ChartSpec. Result feedback references the exact visible result hash and creates a later plan revision without mutating prior artifacts.
-- Result acceptance is deterministic and requires the exact visible result hash plus reviewed trace ids. The backend rechecks active accepted heads and atomically accepts the existing result and creates one ChartSpec; the model cannot invoke or bypass this boundary.
+- Executor output is untrusted until deterministic validation checks JSON
+  serialization, finite values, Plotly key/string safety, x/y lengths,
+  trace/point/payload limits, source ownership, stable trace ids, and only
+  calculation invariants explicitly declared in the reviewed plan. Single-series
+  totals use `trace_y_sum`; stacked components normalized per shared X category
+  use `x_group_y_sum`.
+- Only valid authoritative Plotly becomes an immutable awaiting-review
+  AnalysisResult. No executor path creates a ChartSpec. Result feedback creates
+  a later plan revision without mutating prior artifacts.
+- Result acceptance is deterministic and requires the exact AnalysisResult id
+  plus at least one known visible trace id. The backend atomically accepts the
+  existing result and creates one ChartSpec; the model cannot invoke or bypass
+  this boundary.
 
 ## Chart Rules
 
-- Generic chart interpretation is source-evidence-only.
-- Source-backed ChartSpecs require exact source refs and immutable `sourceSnapshot.rows` or `sourceSnapshot.series`.
-- Analysis-result ChartSpecs derive only from one accepted backend-validated AnalysisResult and retain exact analysis hashes, accepted input snapshot refs, complete trace arrays, and source-record lineage.
-- The model may suggest chart type, axes, and style, but cannot supply uncited plotted values.
-- Generic DataSnapshot-backed chart proposals remain unimplemented and must return an explicit unsupported transition; the reviewed analysis-result publication path is the only DataSnapshot-derived ChartSpec path.
+- Every chart request uses the reviewed analysis workflow, including explicit source-range wording.
+- Analysis-result ChartSpecs derive only from one accepted backend-validated
+  AnalysisResult and retain exact analysis artifact ids, source selections,
+  complete Plotly data/layout, and a matching flat trace catalog.
+- The planning model may select evidence and suggest chart type, axes,
+  processing, and style. The later code-generation model may produce Python,
+  but neither model can publish or bypass Plotly validation.
 - A ChartSpec owns the complete accepted trace domain. A Manuscript placement owns only its local `visibleTraceIds`; model suggestions and user visibility changes cannot remove traces from the immutable catalog.
 
 ## AgentRun Rules

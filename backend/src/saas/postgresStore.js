@@ -180,29 +180,6 @@ function sourceIndexBlobFromRow(row) {
   };
 }
 
-function sourceExtractProposalFromRow(row) {
-  if (!row) return null;
-  return {
-    id: row.id,
-    labId: row.lab_id,
-    projectId: row.project_id,
-    sourceDocumentId: row.source_document_id,
-    sourceRegionId: row.source_region_id,
-    schemaVersion: row.schema_version || "labrat.sourceExtractProposal.v1",
-    status: row.status,
-    purpose: row.purpose,
-    extractType: row.extract_type,
-    intent: row.intent || {},
-    preview: row.preview || {},
-    warnings: row.warnings || [],
-    decisionSummary: row.decision_summary || {},
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    createdBy: row.created_by,
-    updatedBy: row.updated_by,
-  };
-}
-
 function workbookReviewSessionFromRow(row) {
   if (!row) return null;
   return {
@@ -460,28 +437,21 @@ function analysisThreadRetryReceiptFromRow(row) {
 
 function analysisPlanRevisionFromRow(row) {
   if (!row) return null;
+  const plan = row.plan || {};
   return {
     id: row.id,
     labId: row.lab_id,
     projectId: row.project_id,
     analysisThreadId: row.analysis_thread_id,
-    schemaVersion: row.schema_version || "labrat.analysisPlanRevision.v1",
+    schemaVersion: row.schema_version || "labrat.analysisPlanRevision.v2",
     revision: Number(row.revision),
     status: row.status,
     requestSummary: row.request_summary,
-    plan: row.plan || {},
-    selection: row.selection || {},
-    selectionRequest: row.selection_request || {},
-    processingSummary: row.processing_summary || [],
-    calculationManifest: row.calculation_manifest || {},
-    pythonProgram: row.python_program || {},
-    expectedOutput: row.expected_output || {},
+    plan,
+    sourceSelections: plan.sourceSelections || [],
+    reviewPlan: plan.reviewPlan || {},
+    displayPlan: plan.displayPlan || [],
     sourceRectangles: row.source_rectangles || [],
-    planHash: row.plan_hash,
-    dependencyHash: row.dependency_hash,
-    selectionHash: row.selection_hash,
-    programHash: row.program_hash,
-    runtimeVersion: row.runtime_version,
     feedback: row.feedback,
     warnings: row.warnings || [],
     validation: row.validation || {},
@@ -562,23 +532,6 @@ function analysisPublicationFromRow(row) {
   };
 }
 
-function chartProposalSetFromRow(row) {
-  if (!row) return null;
-  return {
-    id: row.id,
-    labId: row.lab_id,
-    projectId: row.project_id,
-    schemaVersion: row.schema_version,
-    status: row.status,
-    payload: row.payload || {},
-    decisionSummary: row.decision_summary || {},
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    createdBy: row.created_by,
-    updatedBy: row.updated_by,
-  };
-}
-
 function chartSpecFromRow(row) {
   if (!row) return null;
   return {
@@ -586,8 +539,6 @@ function chartSpecFromRow(row) {
     labId: row.lab_id,
     projectId: row.project_id,
     analysisResultId: row.analysis_result_id || null,
-    sourceChartProposalSetId: row.source_chart_proposal_set_id,
-    sourceProposalId: row.source_proposal_id,
     title: row.title,
     chartType: row.chart_type,
     spec: row.spec || {},
@@ -623,37 +574,23 @@ async function insertAnalysisPlanRevisionRow(client, input) {
   const result = await client.query(
     `insert into analysis_plan_revisions
      (id, lab_id, project_id, analysis_thread_id, schema_version, revision, status,
-      request_summary, plan, selection, selection_request, processing_summary,
-      calculation_manifest, python_program, expected_output, source_rectangles,
-      plan_hash, dependency_hash, selection_hash, program_hash, runtime_version,
-      feedback, warnings, validation, accepted_at, accepted_by, created_at,
-      updated_at, created_by, updated_by)
+      request_summary, plan, source_rectangles, feedback, warnings, validation,
+      accepted_at, accepted_by, created_at, updated_at, created_by, updated_by)
      values
      ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-      $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
+      $16, $17, $18, $19)
      returning *`,
     [
       input.id,
       input.labId,
       input.projectId,
       input.analysisThreadId,
-      input.schemaVersion || "labrat.analysisPlanRevision.v1",
+      input.schemaVersion || "labrat.analysisPlanRevision.v2",
       input.revision,
       input.status || "awaiting_review",
       input.requestSummary,
       jsonb(input.plan || {}),
-      jsonb(input.selection || {}),
-      jsonb(input.selectionRequest || {}),
-      jsonb(input.processingSummary || [], []),
-      jsonb(input.calculationManifest || {}),
-      jsonb(input.pythonProgram || {}),
-      jsonb(input.expectedOutput || {}),
       jsonb(input.sourceRectangles || [], []),
-      input.planHash,
-      input.dependencyHash,
-      input.selectionHash,
-      input.programHash,
-      input.runtimeVersion,
       input.feedback || null,
       jsonb(input.warnings || [], []),
       jsonb(input.validation || {}),
@@ -1807,72 +1744,6 @@ export class PostgresSaasStore {
     return result.rowCount > 0;
   }
 
-  async createSourceExtractProposal(input) {
-    const result = await this.query(
-      `insert into source_extract_proposals
-       (id, lab_id, project_id, source_document_id, source_region_id, schema_version, status, purpose, extract_type, intent, preview, warnings, decision_summary, created_at, updated_at, created_by, updated_by)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now(), now(), $14, $14)
-       returning *`,
-      [
-        input.id || makeId("source_extract_proposal"),
-        input.labId,
-        input.projectId,
-        input.sourceDocumentId || null,
-        input.sourceRegionId || null,
-        input.schemaVersion || "labrat.sourceExtractProposal.v1",
-        input.status || "proposed",
-        input.purpose || null,
-        input.extractType || null,
-        jsonb(input.intent || {}),
-        jsonb(input.preview || {}),
-        jsonb(input.warnings || [], []),
-        jsonb(input.decisionSummary || {}),
-        input.createdBy,
-      ],
-    );
-    return sourceExtractProposalFromRow(result.rows[0]);
-  }
-
-  async findSourceExtractProposalById(id) {
-    const result = await this.query("select * from source_extract_proposals where id = $1", [id]);
-    return sourceExtractProposalFromRow(result.rows[0]);
-  }
-
-  async listSourceExtractProposals({ projectId }) {
-    const result = await this.query(
-      "select * from source_extract_proposals where project_id = $1 order by updated_at desc",
-      [projectId],
-    );
-    return result.rows.map(sourceExtractProposalFromRow);
-  }
-
-  async updateSourceExtractProposal(id, changes) {
-    const current = await this.findSourceExtractProposalById(id);
-    if (!current) return null;
-    const result = await this.query(
-      `update source_extract_proposals
-       set status = $2,
-           intent = $3,
-           preview = $4,
-           warnings = $5,
-           decision_summary = $6,
-           updated_by = coalesce($7, updated_by),
-           updated_at = now()
-       where id = $1
-       returning *`,
-      [
-        id,
-        changes.status ?? current.status,
-        jsonb(changes.intent ?? current.intent ?? {}),
-        jsonb(changes.preview ?? current.preview ?? {}),
-        jsonb(changes.warnings ?? current.warnings ?? [], []),
-        jsonb(changes.decisionSummary ?? current.decisionSummary ?? {}),
-        changes.updatedBy || null,
-      ],
-    );
-    return sourceExtractProposalFromRow(result.rows[0]);
-  }
-
   async createAgentRun(input) {
     const result = await this.query(
       `insert into agent_runs
@@ -2928,17 +2799,10 @@ export class PostgresSaasStore {
         || !revision
         || revision.analysisThreadId !== thread.id
         || revision.status !== "accepted"
-        || revision.planHash !== input.analysisPlanRevision.planHash
-        || revision.selectionHash !== input.analysisPlanRevision.selectionHash
-        || revision.dependencyHash !== input.analysisPlanRevision.dependencyHash
-        || revision.programHash !== input.analysisPlanRevision.programHash
         || !run
         || run.analysisThreadId !== thread.id
         || run.acceptedPlanRevisionId !== revision.id
         || run.status !== "awaiting_result_review"
-        || run.inputHash !== revision.selectionHash
-        || run.programHash !== revision.programHash
-        || run.runtimeVersion !== revision.runtimeVersion
         || run.resultPreviewHash !== storedResult?.resultPreviewHash
         || input.analysisRun.status !== "completed"
         || !resultPackage?.id
@@ -2958,14 +2822,12 @@ export class PostgresSaasStore {
         || chart.projectId !== input.projectId
         || chart.analysisResultId !== resultPackage.id
         || chart.spec?.origin !== "analysis_result"
-        || chart.spec?.schemaVersion !== "labrat.chartSpec.v2"
+        || chart.spec?.schemaVersion !== "labrat.chartSpec.v3"
         || chart.spec?.analysisThreadId !== thread.id
         || chart.spec?.analysisPlanRevisionId !== revision.id
         || chart.spec?.analysisRunId !== run.id
         || chart.spec?.analysisResultId !== storedResult.id
-        || chart.spec?.resultHash !== storedResult.contentHash
         || !Array.isArray(input.expectedHeadRefs)
-        || !input.expectedHeadRefs.length
       ) {
         throw Object.assign(new Error("The analysis result publication package is invalid."), {
           statusCode: 400,
@@ -3041,19 +2903,16 @@ export class PostgresSaasStore {
       }
       const chartResult = await client.query(
         `insert into chart_specs
-         (id, lab_id, project_id, analysis_result_id, source_chart_proposal_set_id,
-          source_proposal_id, title, chart_type, spec, layout, warnings, created_at,
+         (id, lab_id, project_id, analysis_result_id, title, chart_type, spec, layout, warnings, created_at,
           updated_at, created_by, updated_by)
          values
-         ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+         ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          returning *`,
         [
           chart.id,
           chart.labId,
           chart.projectId,
           analysisResult.id,
-          chart.sourceChartProposalSetId || null,
-          chart.sourceProposalId || null,
           chart.title || null,
           chart.chartType,
           jsonb(chart.spec || {}),
@@ -3120,71 +2979,17 @@ export class PostgresSaasStore {
     }
   }
 
-  async createChartProposalSet(input) {
-    const result = await this.query(
-      `insert into chart_proposal_sets
-       (id, lab_id, project_id, schema_version, status, payload, decision_summary, created_at, updated_at, created_by, updated_by)
-       values ($1, $2, $3, $4, $5, $6, $7, now(), now(), $8, $8)
-       returning *`,
-      [
-        input.id || makeId("chart_proposal_set"),
-        input.labId,
-        input.projectId,
-        input.schemaVersion || "labrat.chartProposalSet.v1",
-        input.status || "proposed",
-        jsonb(input.payload || {}),
-        jsonb(input.decisionSummary || {}),
-        input.createdBy,
-      ],
-    );
-    return chartProposalSetFromRow(result.rows[0]);
-  }
-
-  async findChartProposalSetById(id) {
-    const result = await this.query("select * from chart_proposal_sets where id = $1", [id]);
-    return chartProposalSetFromRow(result.rows[0]);
-  }
-
-  async listChartProposalSets({ projectId }) {
-    const result = await this.query("select * from chart_proposal_sets where project_id = $1 order by updated_at desc", [projectId]);
-    return result.rows.map(chartProposalSetFromRow);
-  }
-
-  async updateChartProposalSet(id, changes) {
-    const current = await this.findChartProposalSetById(id);
-    if (!current) return null;
-    const result = await this.query(
-      `update chart_proposal_sets
-       set status = $2,
-           payload = $3,
-           decision_summary = $4,
-           updated_by = coalesce($5, updated_by),
-           updated_at = now()
-       where id = $1
-       returning *`,
-      [
-        id,
-        changes.status ?? current.status,
-        jsonb(changes.payload ?? current.payload ?? {}),
-        jsonb(changes.decisionSummary ?? current.decisionSummary ?? {}),
-        changes.updatedBy || null,
-      ],
-    );
-    return chartProposalSetFromRow(result.rows[0]);
-  }
-
   async createChartSpec(input) {
     const result = await this.query(
       `insert into chart_specs
-       (id, lab_id, project_id, source_chart_proposal_set_id, source_proposal_id, title, chart_type, spec, layout, warnings, created_at, updated_at, created_by, updated_by)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(), now(), $11, $11)
+       (id, lab_id, project_id, analysis_result_id, title, chart_type, spec, layout, warnings, created_at, updated_at, created_by, updated_by)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, now(), now(), $10, $10)
        returning *`,
       [
         makeId("chart_spec"),
         input.labId,
         input.projectId,
-        input.sourceChartProposalSetId || null,
-        input.sourceProposalId || null,
+        input.analysisResultId || null,
         input.title || null,
         input.chartType,
         jsonb(input.spec || {}),

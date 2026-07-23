@@ -1,4 +1,5 @@
 import { validateChartSpecProposal } from "./chartSpecValidation.js";
+import { resolveAnalysisSourceSelections } from "./analysisSourceSelections.js";
 import { stableDataHash } from "./dataPlanSchemas.js";
 import { makeId } from "./ids.js";
 
@@ -7,32 +8,34 @@ function asArray(value) {
 }
 
 function text(value) {
-  return String(value || "").trim();
+  return String(value ?? "").trim();
 }
 
 function publicationError(code, message, statusCode = 400, details = undefined) {
   return Object.assign(new Error(message), {
     code,
     statusCode,
-    ...(details ? { details } : {}),
+    ...(details === undefined ? {} : { details }),
   });
 }
 
-function uniqueTexts(values) {
-  return [...new Set(asArray(values).map(text).filter(Boolean))];
+function traceId(trace, index) {
+  return text(trace?.traceId || trace?.meta?.labrat?.traceId || `trace_${index + 1}`);
 }
 
-function sourceRecordIdsForTrace(result, trace) {
-  return uniqueTexts([
-    ...asArray(trace?.sourceRecordIds),
-    ...asArray(result?.result?.lineage?.[trace?.traceId]?.sourceRecordIds),
-  ]);
+function traceCatalog(plotly) {
+  return asArray(plotly?.data).map((trace, index) => ({
+    traceId: traceId(trace, index),
+    name: text(trace?.name) || `Series ${index + 1}`,
+    type: text(trace?.type) || "scatter",
+    pointCount: Math.max(asArray(trace?.x).length, asArray(trace?.y).length),
+  }));
 }
 
-function normalizeVisibleTraceIds(traces, requested) {
-  const requestedIds = uniqueTexts(requested);
-  const traceIds = new Set(traces.map((trace) => text(trace?.traceId)).filter(Boolean));
-  const unknownTraceIds = requestedIds.filter((traceId) => !traceIds.has(traceId));
+function normalizeVisibleTraceIds(catalog, requested) {
+  const requestedIds = [...new Set(asArray(requested).map(text).filter(Boolean))];
+  const available = new Set(catalog.map((trace) => trace.traceId));
+  const unknownTraceIds = requestedIds.filter((id) => !available.has(id));
   if (unknownTraceIds.length) {
     throw publicationError(
       "analysis_chart_trace_unknown",
@@ -41,125 +44,54 @@ function normalizeVisibleTraceIds(traces, requested) {
       { unknownTraceIds },
     );
   }
-  const selected = new Set(requestedIds);
-  return traces.map((trace) => text(trace.traceId)).filter((traceId) => selected.has(traceId));
-}
-
-async function inputSnapshotRefs(store, selection) {
-  const records = asArray(selection?.records);
-  const snapshotIds = [...new Set(records.map((record) => text(record.snapshotId)).filter(Boolean))];
-  const snapshots = await Promise.all(snapshotIds.map((snapshotId) => (
-    store.findDataSnapshotById(snapshotId)
-  )));
-  const byId = new Map(snapshots.filter(Boolean).map((snapshot) => [snapshot.id, snapshot]));
-  return records.map((record, index) => {
-    const snapshot = byId.get(record.snapshotId);
-    if (
-      !snapshot
-      || snapshot.status !== "accepted"
-      || snapshot.projectId !== selection.projectId
-    ) {
-      throw publicationError(
-        "analysis_result_stale",
-        "An accepted input snapshot is no longer available for chart publication.",
-        409,
-        { recordIndex: index, snapshotId: record.snapshotId || null },
-      );
-    }
-    return {
-      experimentId: record.experimentId,
-      experimentLabel: record.experimentLabel || record.experimentId,
-      headId: record.headId,
-      snapshotId: record.snapshotId,
-      recordIndex: Number(record.recordIndex),
-      sourceRecordId: `${record.snapshotId}:${Number(record.recordIndex)}`,
-      contentHash: snapshot.contentHash,
-      dependencyHash: snapshot.dependencyHash,
-    };
-  });
-}
-
-function axisFromTraces(traces, axis, field) {
-  const fieldKey = text(field);
-  const units = uniqueTexts(traces.map((trace) => trace?.[`${axis}Unit`]));
-  return {
-    field: fieldKey || axis,
-    label: fieldKey ? fieldKey.replaceAll("_", " ") : axis.toUpperCase(),
-    unit: units.length === 1 ? units[0] : null,
-  };
-}
-
-function buildTraceCatalog(result) {
-  return asArray(result?.result?.traces).map((trace) => ({
-    ...structuredClone(trace),
-    traceId: text(trace.traceId),
-    experimentId: trace.experimentId ? text(trace.experimentId) : null,
-    experimentLabel: trace.experimentLabel || trace.name || trace.experimentId || trace.traceId,
-    x: asArray(trace.x),
-    y: asArray(trace.y),
-    xUnit: trace.xUnit ?? null,
-    yUnit: trace.yUnit ?? null,
-    sourceRecordIds: sourceRecordIdsForTrace(result, trace),
-  }));
+  if (!requestedIds.length) {
+    throw publicationError(
+      "analysis_chart_trace_required",
+      "Select at least one chart series before accepting the chart.",
+      422,
+    );
+  }
+  return catalog.map((trace) => trace.traceId).filter((id) => requestedIds.includes(id));
 }
 
 export function buildAnalysisResultChartSpec({
-  project,
   thread,
   planRevision,
   run,
   result,
-  snapshots,
   defaultVisibleTraceIds,
   actorUserId,
   createdAt,
 } = {}) {
-  const traceCatalog = buildTraceCatalog(result);
-  if (!traceCatalog.length) {
+  const plotly = structuredClone(result?.result?.plotly || { data: [], layout: {} });
+  const catalog = traceCatalog(plotly);
+  if (!catalog.length) {
     throw publicationError(
       "analysis_chart_traces_required",
       "The validated result contains no chart traces to publish.",
       422,
     );
   }
-  const visibleTraceIds = normalizeVisibleTraceIds(traceCatalog, defaultVisibleTraceIds);
-  const expectedOutput = planRevision.expectedOutput || {};
-  const base = {
-    schemaVersion: "labrat.chartSpec.v2",
+  const visibleTraceIds = normalizeVisibleTraceIds(catalog, defaultVisibleTraceIds);
+  const reviewPlan = planRevision.plan?.reviewPlan || {};
+  return {
+    schemaVersion: "labrat.chartSpec.v3",
     origin: "analysis_result",
     status: "accepted",
-    chartType: expectedOutput.chartType || "scatter",
-    title: expectedOutput.title || planRevision.requestSummary || "Analysis result",
+    chartType: reviewPlan.chart?.chartType || "scatter",
+    title: reviewPlan.chart?.title || planRevision.requestSummary || "Analysis result",
     analysisThreadId: thread.id,
     analysisPlanRevisionId: planRevision.id,
     analysisRunId: run.id,
     analysisResultId: result.id,
-    planHash: planRevision.planHash,
-    selectionHash: planRevision.selectionHash,
-    dependencyHash: planRevision.dependencyHash,
-    inputHash: run.inputHash,
-    programHash: run.programHash,
-    resultHash: result.contentHash,
-    resultPreviewHash: result.resultPreviewHash,
-    runtimeVersion: run.runtimeVersion,
-    inputSnapshotRefs: snapshots,
-    traceCatalog,
+    sourceSelections: structuredClone(planRevision.plan?.sourceSelections || []),
+    sourceRefs: structuredClone(result.sourceRefs || []),
+    plotly,
+    traceCatalog: catalog,
     defaultChartView: { visibleTraceIds },
-    x: axisFromTraces(traceCatalog, "x", expectedOutput.xField),
-    y: axisFromTraces(traceCatalog, "y", asArray(expectedOutput.yFields)[0]),
-    yFields: asArray(expectedOutput.yFields).map((field) => axisFromTraces(
-      traceCatalog.filter((trace) => !trace.yField || trace.yField === field),
-      "y",
-      field,
-    )),
-    sourceRefs: structuredClone(asArray(result.sourceRefs)),
     warnings: structuredClone(asArray(result.warnings)),
     createdAt,
     createdBy: actorUserId,
-  };
-  return {
-    ...base,
-    contentHash: stableDataHash(base),
   };
 }
 
@@ -200,7 +132,7 @@ export async function publishAcceptedAnalysisChart({
   project,
   actorUserId,
   runId,
-  resultHash,
+  analysisResultId,
   defaultVisibleTraceIds = [],
   idempotencyKey,
   ipAddress = null,
@@ -229,12 +161,20 @@ export async function publishAcceptedAnalysisChart({
       404,
     );
   }
-  const traces = buildTraceCatalog(result);
-  const visibleTraceIds = normalizeVisibleTraceIds(traces, defaultVisibleTraceIds);
+  if (analysisResultId && text(analysisResultId) !== result.id) {
+    throw publicationError(
+      "analysis_result_mismatch",
+      "The accepted result does not match this analysis run.",
+      409,
+    );
+  }
+  const catalog = traceCatalog(result.result?.plotly);
+  const visibleTraceIds = normalizeVisibleTraceIds(catalog, defaultVisibleTraceIds);
   const requestHash = stableDataHash({
+    operation: "publish_analysis_chart_v3",
     projectId: project.id,
     runId: run.id,
-    resultHash: text(resultHash),
+    analysisResultId: result.id,
     defaultVisibleTraceIds: visibleTraceIds,
   });
   const prior = await store.findAnalysisPublication({
@@ -251,53 +191,31 @@ export async function publishAcceptedAnalysisChart({
     }
     return hydratePublication(store, prior.response, true);
   }
-  if (text(resultHash) !== result.contentHash) {
-    throw publicationError(
-      "analysis_result_hash_mismatch",
-      "The accepted hash does not match the visible analysis result.",
-      409,
-      { currentResultHash: result.contentHash },
-    );
-  }
   if (
     thread.status !== "awaiting_result_review"
     || planRevision.status !== "accepted"
     || run.status !== "awaiting_result_review"
     || result.status !== "awaiting_review"
-  ) {
-    throw publicationError(
-      "analysis_result_state_conflict",
-      "Only the current awaiting-review analysis result can be published.",
-      409,
-    );
-  }
-  if (
-    run.inputHash !== planRevision.selectionHash
-    || run.programHash !== planRevision.programHash
-    || run.runtimeVersion !== planRevision.runtimeVersion
-    || run.resultPreviewHash !== result.resultPreviewHash
     || result.validation?.ok !== true
     || asArray(result.validation?.errors).length
   ) {
     throw publicationError(
-      "analysis_result_validation_failed",
-      "The analysis result no longer matches its accepted plan and validation hashes.",
+      "analysis_result_state_conflict",
+      "Only the current validated awaiting-review result can be published.",
       409,
     );
   }
-  const selection = {
-    ...(planRevision.selection || {}),
+  await resolveAnalysisSourceSelections({
+    store,
     projectId: project.id,
-  };
-  const snapshots = await inputSnapshotRefs(store, selection);
+    sourceSelections: planRevision.plan?.sourceSelections,
+  });
   const createdAt = new Date().toISOString();
   const spec = buildAnalysisResultChartSpec({
-    project,
     thread,
     planRevision,
     run,
     result,
-    snapshots,
     defaultVisibleTraceIds: visibleTraceIds,
     actorUserId,
     createdAt,
@@ -322,8 +240,6 @@ export async function publishAcceptedAnalysisChart({
     labId: project.labId,
     projectId: project.id,
     analysisResultId: result.id,
-    sourceChartProposalSetId: null,
-    sourceProposalId: null,
     title: spec.title,
     chartType: spec.chartType,
     spec,
@@ -353,12 +269,7 @@ export async function publishAcceptedAnalysisChart({
     analysisRun: completedRun,
     analysisResult: acceptedResult,
     chartSpec,
-    expectedHeadRefs: snapshots.map((snapshot) => ({
-      headId: snapshot.headId,
-      experimentId: snapshot.experimentId,
-      dataSnapshotId: snapshot.snapshotId,
-      recordIndex: snapshot.recordIndex,
-    })),
+    expectedHeadRefs: [],
     response,
     auditEvents: [{
       labId: project.labId,
@@ -367,14 +278,12 @@ export async function publishAcceptedAnalysisChart({
       action: "analysis_result.publish_chart",
       targetType: "chart_spec",
       targetId: chartSpec.id,
-      summary: "Accepted one validated analysis result and created its ChartSpec.",
+      summary: "Accepted one validated Plotly result and created its ChartSpec.",
       metadata: {
         analysisThreadId: thread.id,
         analysisPlanRevisionId: planRevision.id,
         analysisRunId: run.id,
         analysisResultId: result.id,
-        resultHash: result.contentHash,
-        chartSpecHash: spec.contentHash,
         defaultVisibleTraceIds: visibleTraceIds,
       },
       createdAt,

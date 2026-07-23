@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "re
 import { COLORS, chartTypes } from "../charts/constants";
 import { applyChartLayout, defaultChartLayout, defaultFontFamily, defaultPlotAreaForLayout, patchChartLayout, resolveChartLayout, scaleChartLayout } from "../charts/chartLayout";
 import { normalizeChartView, traceOptionsForChartSpec } from "../charts/chartView.js";
-import { chartSpecToProposal, makeSourceChartPreview } from "../charts/sourceChartPreview";
+import { chartSpecModel, makeChartSpecPreview } from "../charts/chartSpecPreview";
 import { Plot } from "../charts/Plot";
 import { exportManuscriptPagesToPptx } from "../export/pptxExport";
 import { experimentDateSortValue } from "../utils/date";
@@ -395,7 +395,9 @@ export function ManuscriptCanvas({ blocks, setBlocks, staged, setStaged, referen
     closeContextMenu();
   };
   const ensureCompleteChartSpec = async (chartSpec) => {
-    if (!chartSpec?.detailRequired) return chartSpec;
+    const detailRequired = chartSpec?.detailRequired === true
+      || chartSpec?.spec?.detailRequired === true;
+    if (!detailRequired) return chartSpec;
     if (loadedChartSpecDetails[chartSpec.id]) return loadedChartSpecDetails[chartSpec.id];
     if (!onLoadChartSpecDetail) throw new Error("Complete chart detail is required before insertion.");
     setChartDetailState({ busyId: chartSpec.id, error: "" });
@@ -776,7 +778,7 @@ export function ManuscriptCanvas({ blocks, setBlocks, staged, setStaged, referen
                     onClick={() => openInsertChartModal(null, chartSpec.id).catch(() => {})}
                   >
                     <span>{chartSpec.title || "Untitled chart"}</span>
-                    <small>{chartDetailState.busyId === chartSpec.id ? "Loading detail..." : chartSpec.chartType || chartSpecToProposal(chartSpec).chartType || "chart"}</small>
+                    <small>{chartDetailState.busyId === chartSpec.id ? "Loading detail..." : chartSpec.chartType || chartSpecModel(chartSpec).chartType || "chart"}</small>
                   </button>
                 ))}
               </div>
@@ -785,7 +787,7 @@ export function ManuscriptCanvas({ blocks, setBlocks, staged, setStaged, referen
             )}
           </div>
           {chartDetailState.error && <p className="import-review-error">{chartDetailState.error}</p>}
-          <p className="sidebar-hint">Create chart specs from accepted backend proposals, then insert them here.</p>
+          <p className="sidebar-hint">Accept a validated analysis result, then insert its chart here.</p>
           <button type="button" className="wide-action" disabled={!safePages.length} onClick={() => {
             setExportError("");
             setExportModalOpen(true);
@@ -826,7 +828,7 @@ export function ManuscriptCanvas({ blocks, setBlocks, staged, setStaged, referen
               <span className="canvas-page-label">Page {index + 1}</span>
             </section>
           ))}
-          {!safeBlocks.length && !safePages.length && <div className="empty-hint">Add a page, then insert an approved chart spec or text box. Chart specs come from backend proposals you accept.</div>}
+          {!safeBlocks.length && !safePages.length && <div className="empty-hint">Add a page, then insert an approved analysis chart or text box.</div>}
           {safeBlocks.map((b) => <CanvasBlock key={b.id} chartSpecs={safeChartSpecs} block={b} canvasWidth={effectiveCanvasWidth} canvasHeight={Math.max(effectiveCanvasHeight, visibleCanvasHeight)} selectedKey={selected} setSelected={setSelected} patch={patchBlock} patchTextRuns={patchTextRuns} remove={deleteBlock} editingTextBoxId={editingTextBoxId} setEditingTextBoxId={setEditingTextBoxId} richTextApiRef={richTextApiRef} onTextToolbarChange={setTextToolbarState} onBeginTextEdit={beginTextEditSession} onCommitTextEdit={commitTextEditSession} onBeginTransaction={beginHistoryTransaction} onCommitTransaction={commitHistoryTransaction} onUndo={undoManuscript} onRedo={redoManuscript} onChartContextMenu={handleChartContextMenu} onBlockContextMenu={handleBlockContextMenu} />)}
           {chartAssistBlock && (
             <ChartAssistBubble
@@ -1044,15 +1046,27 @@ function normalizeChartSpecs(chartSpecs) {
   return (Array.isArray(chartSpecs) ? chartSpecs : [])
     .filter((chartSpec) => chartSpec && typeof chartSpec === "object" && chartSpec.id)
     .filter((chartSpec) => !chartSpec.isStale && chartSpec.status !== "stale")
-    .map((chartSpec) => ({
-      ...chartSpec,
-      id: String(chartSpec.id),
-      title: chartSpec.title || chartSpec.spec?.title || "Untitled chart",
-      chartType: chartSpec.chartType || chartSpec.spec?.chartType || "scatter",
-      spec: chartSpec.spec && typeof chartSpec.spec === "object" ? chartSpec.spec : chartSpec,
-      layout: chartSpec.layout && typeof chartSpec.layout === "object" ? chartSpec.layout : {},
-      warnings: Array.isArray(chartSpec.warnings) ? chartSpec.warnings : [],
-    }));
+    .map((chartSpec) => {
+      const spec = chartSpec.spec && typeof chartSpec.spec === "object" ? chartSpec.spec : chartSpec;
+      return {
+        ...chartSpec,
+        id: String(chartSpec.id),
+        origin: chartSpec.origin || spec.origin || null,
+        title: chartSpec.title || spec.title || "Untitled chart",
+        chartType: chartSpec.chartType || spec.chartType || "scatter",
+        detailRequired: chartSpec.detailRequired === true || spec.detailRequired === true,
+        spec,
+        layout: chartSpec.layout && typeof chartSpec.layout === "object" ? chartSpec.layout : {},
+        warnings: Array.isArray(chartSpec.warnings) ? chartSpec.warnings : [],
+      };
+    });
+}
+
+function chartSpecEvidenceLabel(chartSpec, model) {
+  if ((model?.origin || chartSpec?.origin) === "analysis_result") {
+    return "Validated analysis result";
+  }
+  return "Analysis evidence unavailable";
 }
 
 function resolveChartSpecForBlock(block, chartSpecs) {
@@ -1068,20 +1082,20 @@ function chartSpecAxisTitle(axis, fallback) {
 }
 
 function chartSpecLayoutOpts(chartSpec) {
-  const proposal = chartSpecToProposal(chartSpec);
-  const yFields = Array.isArray(proposal.yFields) && proposal.yFields.length ? proposal.yFields : [proposal.y].filter(Boolean);
+  const model = chartSpecModel(chartSpec);
+  const yFields = Array.isArray(model.yFields) && model.yFields.length ? model.yFields : [model.y].filter(Boolean);
   return {
-    title: proposal.title || chartSpec?.title || "Chart",
-    xLabel: chartSpecAxisTitle(proposal.x, "Experiment"),
+    title: model.title || chartSpec?.title || "Chart",
+    xLabel: chartSpecAxisTitle(model.x, "Experiment"),
     yLabel: yFields.length > 1 ? "Value" : chartSpecAxisTitle(yFields[0], "Value"),
   };
 }
 
 function chartSpecLayoutBlock(block, chartSpec) {
-  const proposal = chartSpecToProposal(chartSpec);
+  const model = chartSpecModel(chartSpec);
   return {
     ...block,
-    chartKind: proposal.chartType || chartSpec?.chartType || "scatter",
+    chartKind: model.chartType || chartSpec?.chartType || "scatter",
     opts: chartSpecLayoutOpts(chartSpec),
   };
 }
@@ -1119,7 +1133,7 @@ function chartSpecBlockPlot(block, chartSpec, options = {}) {
   const plotArea = chartLayout.plotArea || {};
   const width = Math.max(1, Math.round(Number(options.width) || Number(plotArea.width) || Number(block.w) || 580));
   const height = Math.max(1, Math.round(Number(options.height) || Number(plotArea.height) || Number(block.h) || 380));
-  const plot = makeSourceChartPreview(chartSpec, {
+  const plot = makeChartSpecPreview(chartSpec, {
     width,
     height,
     chartView: normalizeChartView(chartSpec, block.chartView),
@@ -1528,23 +1542,23 @@ function buildChartContext(block, chartSpecs) {
       warnings: ["The manuscript chart references a chart spec that is not available."],
     };
   }
-  const proposal = chartSpecToProposal(chartSpec);
+  const model = chartSpecModel(chartSpec);
   const plot = chartSpecBlockPlot(block, chartSpec, { width: block.w || 580, height: block.h || 380 });
   const chartLayout = resolveChartSpecBlockLayout(block, chartSpec);
   const traceCatalog = traceOptionsForChartSpec(chartSpec);
   return {
     blockId: block.id,
     chartSpecId: chartSpec.id || block.chartSpecId || null,
-    chartType: proposal.chartType || "chart",
-    title: chartLayout.title?.text || proposal.title || "Chart",
+    chartType: model.chartType || "chart",
+    title: chartLayout.title?.text || model.title || "Chart",
     block: { x: block.x || 0, y: block.y || 0, w: block.w || 580, h: block.h || 380 },
     chartView: normalizeChartView(chartSpec, block.chartView),
     traceCatalog,
     axisTitles: {
-      x: chartLayout.xAxisTitle?.text || proposal.x?.label || proposal.x?.field || "",
-      y: chartLayout.yAxisTitle?.text || proposal.y?.label || proposal.y?.field || "",
+      x: chartLayout.xAxisTitle?.text || model.x?.label || model.x?.field || "",
+      y: chartLayout.yAxisTitle?.text || model.y?.label || model.y?.field || "",
     },
-    sourceRefs: proposal.sourceRefs || [],
+    sourceRefs: model.sourceRefs || [],
     plottedData: summarizePlotForAssistant(plot),
   };
 }
@@ -1901,11 +1915,11 @@ function CanvasOverview({ blocks, chartSpecs, selectedBlockId, pages, canvasWidt
   };
   const chartSummary = (block) => {
     const chartSpec = resolveChartSpecForBlock(block, chartSpecs);
-    const proposal = chartSpec ? chartSpecToProposal(chartSpec) : null;
-    const title = snippet(proposal?.title || chartSpec?.title, 72);
+    const model = chartSpec ? chartSpecModel(chartSpec) : null;
+    const title = snippet(model?.title || chartSpec?.title, 72);
     return {
       title: title || "Missing chart spec",
-      detail: proposal?.chartType || chartSpec?.chartType || block.chartSpecId || "chart",
+      detail: model?.chartType || chartSpec?.chartType || block.chartSpecId || "chart",
     };
   };
   const overviewContent = (block) => {
@@ -2166,7 +2180,7 @@ function InsertChartModal({ draft, chartSpecs, onPatch, onSelectChartSpec, onCan
   const canPreview = !!selectedChartSpec && (!traceOptions.length || visibleTraceIds.length > 0);
   const canInsert = !!selectedChartSpec && (!traceOptions.length || visibleTraceIds.length > 0);
   const plot = canPreview
-    ? makeSourceChartPreview(selectedChartSpec, { height: 260, chartView })
+    ? makeChartSpecPreview(selectedChartSpec, { height: 260, chartView })
     : null;
   return (
     <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
@@ -2193,12 +2207,12 @@ function InsertChartModal({ draft, chartSpecs, onPatch, onSelectChartSpec, onCan
                     onClick={() => onSelectChartSpec(chartSpec).catch(() => {})}
                   >
                     <span>{chartSpec.title || "Untitled chart"}</span>
-                    <small>{chartSpec.chartType || chartSpecToProposal(chartSpec).chartType || "chart"}</small>
+                    <small>{chartSpec.chartType || chartSpecModel(chartSpec).chartType || "chart"}</small>
                   </button>
                 ))}
               </div>
             ) : (
-              <p className="chart-empty-message">Accept a backend chart proposal and create a chart spec before inserting charts into the manuscript.</p>
+              <p className="chart-empty-message">Accept a validated analysis result to create a chart before inserting it into the manuscript.</p>
             )}
           </section>
           <section className="chart-modal-section">
@@ -3502,7 +3516,7 @@ function Inspector({ block, chartSpecs = [], patch }) {
   );
   const patchTextStyle = (patchValue) => patch(block.id, patchValue);
   const chartSpec = block.kind === "chart" ? resolveChartSpecForBlock(block, chartSpecs) : null;
-  const chartProposal = chartSpec ? chartSpecToProposal(chartSpec) : null;
+  const chartModel = chartSpec ? chartSpecModel(chartSpec) : null;
   const chartLayout = chartSpec ? resolveChartSpecBlockLayout(block, chartSpec) : null;
   const chartView = normalizeChartView(chartSpec, block.chartView);
   const chartTraceOptions = chartSpec ? traceOptionsForChartSpec(chartSpec) : [];
@@ -3566,15 +3580,15 @@ function Inspector({ block, chartSpecs = [], patch }) {
       {panel("Chart", <>
         <div className="inspector-field">
           <div className="inspector-field-label">Chart spec</div>
-          <div className="inspector-selected-list">{chartSpec?.title || chartProposal?.title || block.chartSpecId || "Missing chart spec"}</div>
+          <div className="inspector-selected-list">{chartSpec?.title || chartModel?.title || block.chartSpecId || "Missing chart spec"}</div>
         </div>
         <div className="inspector-field">
           <div className="inspector-field-label">Type</div>
-          <div className="inspector-selected-list">{chartProposal?.chartType || chartSpec?.chartType || "chart"}</div>
+          <div className="inspector-selected-list">{chartModel?.chartType || chartSpec?.chartType || "chart"}</div>
         </div>
         <div className="inspector-field">
           <div className="inspector-field-label">Source evidence</div>
-          <div className="inspector-selected-list">{chartProposal?.sourceExtractProposalId || (chartProposal?.sourceSnapshot ? "Immutable source snapshot" : "Missing source snapshot")}</div>
+          <div className="inspector-selected-list">{chartSpecEvidenceLabel(chartSpec, chartModel)}</div>
         </div>
         <div className="inspector-actions">
           <button type="button" onClick={resetChartLayout} disabled={!chartSpec}>Reset layout</button>
@@ -3620,15 +3634,15 @@ function Inspector({ block, chartSpecs = [], patch }) {
       {panel("Fields", <>
         <div className="inspector-field">
           <div className="inspector-field-label">X</div>
-          <div className="inspector-selected-list">{chartProposal?.x?.label || chartProposal?.x?.field || "n/a"}</div>
+          <div className="inspector-selected-list">{chartModel?.x?.label || chartModel?.x?.field || "n/a"}</div>
         </div>
         <div className="inspector-field">
           <div className="inspector-field-label">Y</div>
-          <div className="inspector-selected-list">{chartProposal?.y?.label || chartProposal?.y?.field || chartProposal?.yFields?.map((field) => field.label || field.field).join(", ") || "n/a"}</div>
+          <div className="inspector-selected-list">{chartModel?.y?.label || chartModel?.y?.field || chartModel?.yFields?.map((field) => field.label || field.field).join(", ") || "n/a"}</div>
         </div>
         <div className="inspector-field">
           <div className="inspector-field-label">Source refs</div>
-          <div className="inspector-selected-list">{chartProposal?.sourceRefs?.length ? chartProposal.sourceRefs.slice(0, 6).join(", ") : "n/a"}</div>
+          <div className="inspector-selected-list">{chartModel?.sourceRefs?.length ? chartModel.sourceRefs.slice(0, 6).join(", ") : "n/a"}</div>
         </div>
       </>)}
       {chartLayout && textLayerControls("title", "Title")}

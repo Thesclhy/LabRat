@@ -1,278 +1,175 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
 
-import { stableDataHash } from "./dataPlanSchemas.js";
+import {
+  buildAnalysisResultChartSpec,
+  publishAcceptedAnalysisChart,
+} from "./analysisChartPublisher.js";
 import { MemorySaasStore } from "./memoryStore.js";
-import { publishAcceptedAnalysisChart } from "./analysisChartPublisher.js";
 
-function publicationFixture({ traceCount = 60 } = {}) {
-  const store = new MemorySaasStore();
-  const project = {
-    id: "project_analysis_publish",
-    labId: "lab_analysis_publish",
+function fixture() {
+  const project = { id: "project_1", labId: "lab_1" };
+  const sourceSelection = {
+    sourceSelectionId: "source_selection_1",
+    regionUnderstandingRevisionId: "region_revision_1",
+    sourceDocumentId: "source_1",
+    workbookName: "Exp33.xlsx",
+    sheetName: "Carbon",
+    range: "Q69:AI69",
+    label: "Exp33 carbon distribution",
   };
-  const actorUserId = "user_analysis_editor";
-  const analysisThreadId = "analysis_thread_publish";
-  const planRevisionId = "analysis_plan_publish";
-  const runId = "analysis_run_publish";
-  const resultId = "analysis_result_publish";
-  const records = Array.from({ length: traceCount }, (_, index) => {
-    const number = index + 1;
-    const experimentId = `experiment_${number}`;
-    const snapshotId = `snapshot_${number}`;
-    const headId = `head_${number}`;
-    store.dataSnapshots.set(snapshotId, {
-      id: snapshotId,
-      labId: project.labId,
-      projectId: project.id,
-      status: "accepted",
-      contentHash: `sha256_snapshot_${number}`,
-      dependencyHash: `sha256_dependency_${number}`,
-    });
-    store.experimentSnapshotHeads.set(headId, {
-      id: headId,
-      labId: project.labId,
-      projectId: project.id,
-      experimentId,
-      dataSnapshotId: snapshotId,
-      recordIndex: 0,
-    });
-    return {
-      experimentId,
-      experimentLabel: `Exp ${number}`,
-      snapshotId,
-      headId,
-      recordIndex: 0,
-      fields: [],
-      series: [],
-    };
-  });
-  const selectionHash = "sha256_selection_publish";
-  const dependencyHash = "sha256_dependency_publish";
-  const planHash = "sha256_plan_publish";
-  const programHash = "sha256_program_publish";
-  const traces = records.map((record, index) => ({
-    traceId: `trace_exp_${index + 1}`,
-    experimentId: record.experimentId,
-    experimentLabel: record.experimentLabel,
-    xField: "reaction_time",
-    yField: "reaction_rate",
-    xUnit: "min",
-    yUnit: "mmol/g/min",
-    x: [0, 10],
-    y: [index + 1, index + 2],
-    sourceRecordIds: [`${record.snapshotId}:0`],
-  }));
-  const resultPayload = {
-    resultTable: [],
-    traces,
-    lineage: Object.fromEntries(traces.map((trace) => [
-      trace.traceId,
-      { sourceRecordIds: trace.sourceRecordIds },
-    ])),
-    summary: {
-      inputRecordCount: traceCount,
-      outputRecordCount: 0,
-      excludedRecordCount: traceCount,
-      excludedRecords: records.map((record) => ({
-        sourceRecordId: `${record.snapshotId}:0`,
-        reason: "Trace-only output.",
-      })),
-      missingValuePolicy: "exclude_record",
-    },
-  };
-  const resultHash = stableDataHash(resultPayload);
-  const resultPreviewHash = stableDataHash({
-    resultTable: resultPayload.resultTable,
-    traces: resultPayload.traces,
-    summary: resultPayload.summary,
-  });
-  store.analysisThreads.set(analysisThreadId, {
-    id: analysisThreadId,
-    labId: project.labId,
-    projectId: project.id,
+  const thread = {
+    id: "thread_1",
+    labId: "lab_1",
+    projectId: "project_1",
     status: "awaiting_result_review",
-    planRevisionIds: [planRevisionId],
-    analysisRunIds: [runId],
     acceptedAnalysisResultIds: [],
     chartSpecIds: [],
-    createdBy: actorUserId,
-    updatedBy: actorUserId,
-  });
-  store.analysisPlanRevisions.set(planRevisionId, {
-    id: planRevisionId,
-    labId: project.labId,
-    projectId: project.id,
-    analysisThreadId,
-    revision: 1,
+  };
+  const planRevision = {
+    id: "revision_1",
+    labId: "lab_1",
+    projectId: "project_1",
+    analysisThreadId: "thread_1",
     status: "accepted",
-    requestSummary: "Compare reaction rate over time across all experiments.",
-    planHash,
-    selectionHash,
-    dependencyHash,
-    programHash,
-    runtimeVersion: "labrat-python-v1",
-    selection: {
-      selectionHash,
-      dependencyHash,
-      records,
+    requestSummary: "Plot Exp33 carbon distribution.",
+    plan: {
+      sourceSelections: [sourceSelection],
+      reviewPlan: {
+        chart: {
+          title: "Carbon number distribution",
+          chartType: "bar",
+        },
+      },
     },
-    expectedOutput: {
-      shape: "experiment_traces",
-      chartType: "scatter",
-      xField: "reaction_time",
-      yFields: ["reaction_rate"],
-    },
-  });
-  store.analysisRuns.set(runId, {
-    id: runId,
-    labId: project.labId,
-    projectId: project.id,
-    analysisThreadId,
-    acceptedPlanRevisionId: planRevisionId,
+  };
+  const run = {
+    id: "run_1",
+    labId: "lab_1",
+    projectId: "project_1",
+    analysisThreadId: "thread_1",
+    acceptedPlanRevisionId: "revision_1",
     status: "awaiting_result_review",
-    inputHash: selectionHash,
-    programHash,
-    runtimeVersion: "labrat-python-v1",
-    resultPreviewHash,
-    validation: { ok: true, errors: [] },
-    createdBy: actorUserId,
-    updatedBy: actorUserId,
-  });
-  store.analysisResults.set(resultId, {
-    id: resultId,
-    labId: project.labId,
-    projectId: project.id,
-    analysisThreadId,
-    analysisRunId: runId,
-    schemaVersion: "labrat.analysisResult.v1",
+    resultPreviewHash: "sha256_preview_1",
+  };
+  const result = {
+    id: "result_1",
+    labId: "lab_1",
+    projectId: "project_1",
+    analysisThreadId: "thread_1",
+    analysisRunId: "run_1",
     status: "awaiting_review",
-    contentHash: resultHash,
-    resultPreviewHash,
-    result: resultPayload,
+    contentHash: "sha256_result_1",
+    resultPreviewHash: "sha256_preview_1",
+    result: {
+      plotly: {
+        data: [{
+          traceId: "exp33",
+          meta: { labrat: { traceId: "exp33" } },
+          type: "bar",
+          name: "Exp33",
+          x: ["C1", "C2", "C3"],
+          y: [1, 2, 3],
+        }, {
+          traceId: "exp32",
+          meta: { labrat: { traceId: "exp32" } },
+          type: "bar",
+          name: "Exp32",
+          x: ["C1", "C2", "C3"],
+          y: [2, 3, 4],
+        }],
+        layout: { barmode: "group" },
+      },
+      summary: { pointCount: 6, seriesCount: 2, excludedCount: 0 },
+    },
     sourceRefs: [],
     warnings: [],
     validation: { ok: true, errors: [] },
-    acceptedAt: null,
-    acceptedBy: null,
-    createdAt: "2026-07-20T00:00:00.000Z",
-    updatedAt: "2026-07-20T00:00:00.000Z",
-    createdBy: actorUserId,
-    updatedBy: actorUserId,
-  });
-  return {
-    store,
-    project,
-    actorUserId,
-    runId,
-    resultId,
-    resultHash,
-    records,
-    traces,
   };
+  return { project, sourceSelection, thread, planRevision, run, result };
 }
 
-test("publishes an accepted result and complete trace catalog atomically", async () => {
-  const fixture = publicationFixture();
-  const request = {
-    store: fixture.store,
-    project: fixture.project,
-    actorUserId: fixture.actorUserId,
-    runId: fixture.runId,
-    resultHash: fixture.resultHash,
-    defaultVisibleTraceIds: ["trace_exp_1"],
-    idempotencyKey: "publish_analysis_chart_1",
-  };
+function seededStore() {
+  const store = new MemorySaasStore();
+  const value = fixture();
+  store.sourceDocuments.set("source_1", {
+    id: "source_1",
+    projectId: "project_1",
+    originalFilename: "Exp33.xlsx",
+  });
+  store.workbookReviewRegions.set("region_1", {
+    id: "region_1",
+    projectId: "project_1",
+    sourceDocumentId: "source_1",
+    sheetName: "Carbon",
+    rangeRef: "A1:CE107",
+    disposition: "active",
+    acceptedRevisionId: "region_revision_1",
+  });
+  store.regionUnderstandingRevisions.set("region_revision_1", {
+    id: "region_revision_1",
+    projectId: "project_1",
+    regionId: "region_1",
+    interpretation: {},
+  });
+  store.analysisThreads.set(value.thread.id, structuredClone(value.thread));
+  store.analysisPlanRevisions.set(value.planRevision.id, structuredClone(value.planRevision));
+  store.analysisRuns.set(value.run.id, structuredClone(value.run));
+  store.analysisResults.set(value.result.id, structuredClone(value.result));
+  return { store, ...value };
+}
 
-  const published = await publishAcceptedAnalysisChart(request);
-  const replay = await publishAcceptedAnalysisChart(request);
-
-  assert.equal(published.analysisResult.status, "accepted");
-  assert.equal(published.analysisRun.status, "completed");
-  assert.equal(published.analysisThread.status, "completed");
-  assert.equal(published.chartSpec.spec.origin, "analysis_result");
-  assert.equal(published.chartSpec.spec.traceCatalog.length, 60);
-  assert.deepEqual(
-    published.chartSpec.spec.defaultChartView.visibleTraceIds,
-    ["trace_exp_1"],
-  );
-  assert.equal(published.chartSpec.spec.inputSnapshotRefs.length, 60);
-  assert.equal(replay.idempotentReplay, true);
-  assert.equal(replay.chartSpec.id, published.chartSpec.id);
-  assert.equal((await fixture.store.listChartSpecs({
-    projectId: fixture.project.id,
-  })).length, 1);
-  await assert.rejects(
-    publishAcceptedAnalysisChart({
-      ...request,
-      idempotencyKey: "publish_same_result_again",
-    }),
-    (error) => error.code === "analysis_result_state_conflict",
-  );
-});
-
-test("rejects changed active snapshot heads without partial publication writes", async () => {
-  const fixture = publicationFixture({ traceCount: 2 });
-  fixture.store.experimentSnapshotHeads.set("head_1", {
-    ...fixture.store.experimentSnapshotHeads.get("head_1"),
-    dataSnapshotId: "snapshot_replaced",
+test("builds a v3 ChartSpec with authoritative Plotly and a flat trace catalog", () => {
+  const value = fixture();
+  const spec = buildAnalysisResultChartSpec({
+    ...value,
+    defaultVisibleTraceIds: ["exp33"],
+    actorUserId: "user_1",
+    createdAt: "2026-07-23T00:00:00.000Z",
   });
 
-  await assert.rejects(
-    publishAcceptedAnalysisChart({
-      store: fixture.store,
-      project: fixture.project,
-      actorUserId: fixture.actorUserId,
-      runId: fixture.runId,
-      resultHash: fixture.resultHash,
-      defaultVisibleTraceIds: ["trace_exp_1"],
-      idempotencyKey: "publish_stale_analysis_chart",
-    }),
-    (error) => error.code === "analysis_result_stale" && error.statusCode === 409,
-  );
-
-  assert.equal(
-    (await fixture.store.findAnalysisResultById(fixture.resultId)).status,
-    "awaiting_review",
-  );
-  assert.equal((await fixture.store.listChartSpecs({
-    projectId: fixture.project.id,
-  })).length, 0);
-  assert.equal(await fixture.store.findAnalysisPublication({
-    projectId: fixture.project.id,
-    idempotencyKey: "publish_stale_analysis_chart",
-  }), null);
+  assert.equal(spec.schemaVersion, "labrat.chartSpec.v3");
+  assert.deepEqual(spec.plotly.data[0].x, ["C1", "C2", "C3"]);
+  assert.deepEqual(spec.traceCatalog.map((item) => item.traceId), ["exp33", "exp32"]);
+  assert.deepEqual(spec.defaultChartView.visibleTraceIds, ["exp33"]);
 });
 
-test("rejects result-hash and trace-selection mismatches before publication", async () => {
-  const fixture = publicationFixture({ traceCount: 2 });
+test("publishes a validated result atomically and replays the idempotency key", async () => {
+  const value = seededStore();
+  const request = {
+    store: value.store,
+    project: value.project,
+    actorUserId: "user_1",
+    runId: value.run.id,
+    analysisResultId: value.result.id,
+    defaultVisibleTraceIds: ["exp33", "exp32"],
+    idempotencyKey: "publish_result_1",
+  };
+
+  const first = await publishAcceptedAnalysisChart(request);
+  const replay = await publishAcceptedAnalysisChart(request);
+
+  assert.equal(first.chartSpec.spec.schemaVersion, "labrat.chartSpec.v3");
+  assert.equal(first.analysisRun.status, "completed");
+  assert.equal(first.analysisResult.status, "accepted");
+  assert.equal(replay.idempotentReplay, true);
+  assert.equal(value.store.chartSpecs.size, 1);
+});
+
+test("rejects unknown or empty visible curve selections before publication", async () => {
+  const value = seededStore();
 
   await assert.rejects(
-    publishAcceptedAnalysisChart({
-      store: fixture.store,
-      project: fixture.project,
-      actorUserId: fixture.actorUserId,
-      runId: fixture.runId,
-      resultHash: "sha256_wrong_result",
-      defaultVisibleTraceIds: ["trace_exp_1"],
-      idempotencyKey: "publish_wrong_result_hash",
-    }),
-    (error) => error.code === "analysis_result_hash_mismatch",
-  );
-  await assert.rejects(
-    publishAcceptedAnalysisChart({
-      store: fixture.store,
-      project: fixture.project,
-      actorUserId: fixture.actorUserId,
-      runId: fixture.runId,
-      resultHash: fixture.resultHash,
-      defaultVisibleTraceIds: ["trace_unknown"],
-      idempotencyKey: "publish_unknown_trace",
+    () => publishAcceptedAnalysisChart({
+      store: value.store,
+      project: value.project,
+      actorUserId: "user_1",
+      runId: value.run.id,
+      analysisResultId: value.result.id,
+      defaultVisibleTraceIds: ["unknown"],
+      idempotencyKey: "bad_trace",
     }),
     (error) => error.code === "analysis_chart_trace_unknown",
   );
-
-  assert.equal((await fixture.store.listChartSpecs({
-    projectId: fixture.project.id,
-  })).length, 0);
+  assert.equal(value.store.chartSpecs.size, 0);
 });

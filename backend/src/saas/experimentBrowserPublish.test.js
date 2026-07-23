@@ -208,7 +208,7 @@ test("publishes accepted plans, immutable snapshots, identities, heads, and audi
   assert.match(storedSnapshot.contentHash, /^sha256_/);
   assert.equal((await store.listAuditEvents({ projectId: project.id })).some((event) => event.action === "data_snapshot.publish"), true);
   assert.equal("datasetCommits" in store, false);
-  assert.equal(store.chartProposalSets.size, 0);
+  assert.equal("chartProposalSets" in store, false);
   assert.equal(store.chartSpecs.size, 0);
   assert.equal(store.manuscripts.size, 0);
 });

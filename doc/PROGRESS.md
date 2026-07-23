@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-07-22
+Last reviewed: 2026-07-23
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -13,8 +13,274 @@ Keep entries concise, newest first, and include:
 - verification
 - follow-ups or residual risk
 
+## 2026-07-23
+
+- Rebuilt reviewed chart analysis around exact confirmed workbook selections.
+  The planning model now pages through active accepted regions and persists only
+  `sourceSelections`, structured review meaning, and readable display steps.
+  Plan acceptance creates a queued run without Python; execution materializes
+  one typed/display/formula table per selection and then asks the model to write
+  `labrat-python-v2` against the real `inputs.tables` dictionary. Large source
+  selections are tiled through bounded reads, so an 8,881-cell confirmed region
+  no longer hits an aggregate 500-cell limit.
+- Replaced result-table/field/lineage output with backend-validated
+  authoritative Plotly. Validation now covers serialization, finite values,
+  Plotly safety, x/y shape, limits, stable trace ids, source ownership, and only
+  explicitly reviewed invariants. ChartSpec v3 stores complete Plotly, reviewed
+  source selections, a flat curve catalog, and default `visibleTraceIds`;
+  Result, Canvas reload, and PPTX export use placement-local curve visibility.
+- Removed the old AnalysisSelection/AnalysisToolRegistry runtime and tests,
+  stopped persisting Python and review hashes in PlanRevision, and added
+  migration 017 to clear development analysis artifacts plus drop retired plan
+  columns. Updated API, database, architecture, AI-boundary, canonical-data,
+  current-milestone, and project-state docs to the v2/v3 contracts.
+- Verification: backend 202/202 passed with one optional PostgreSQL integration
+  skip before browser QA. The final `npm run codex:verify` passed frontend
+  243/243, backend 203/203 with one optional PostgreSQL integration skip, and
+  the production build with only the existing Plotly chunk-size warning.
+- Completed a fresh real Anthropic plus local-Python browser E2E in an isolated
+  development project. The model selected two exact non-contiguous inputs,
+  `Runs!A1:A5` and `Runs!D1:F5`; Source displayed both red ranges and no Python,
+  acceptance materialized two input tables, and Python produced a validated
+  12-point, three-series stacked Plotly chart. Result Select all/Clear and the
+  zero-series acceptance guard worked, acceptance created one ChartSpec, and
+  two Canvas placements retained independent 2/3 and 3/3 curve visibility
+  after save and reload. Browser console verification reported no warnings or
+  errors.
+- The real E2E exposed one calculation-constraint bug: per-experiment stacked
+  normalization was incorrectly expressed as a whole-trace sum. Added
+  `x_group_y_sum` for cross-trace totals at each shared X category, retained
+  `trace_y_sum` for whole-series totals, updated provider instructions and
+  schemas, and added focused validation coverage. A configured PostgreSQL
+  migration run remains operational follow-up work.
+- Replaced the three-stage Analysis Review UI with a two-page `Source` and
+  `Result` workflow. Source keeps exact Excel red-box evidence and the readable
+  plan; accepting it immediately opens Result and executes Python. Result now
+  renders only the validated Plotly chart, readable point/series/exclusion
+  status, searchable multi-series defaults, and Accept chart/feedback controls.
+  Removed the old result-row table, row/source-ref pagination, lineage ids,
+  hashes, and separate Chart tab without changing AnalysisResult persistence,
+  validation, lineage, or publication APIs. Result feedback still creates an
+  immutable plan revision and returns to Source; the exact AnalysisResult id
+  and at least one visible trace id gate ChartSpec publication.
+- Added focused coverage for the Exp33 19-point wide-to-long chart, readable
+  title/axis/hover semantics, no technical-id leakage, zero-series blocking,
+  Select all/Clear, validation failures, historical-result reopening, exact
+  publication inputs, and the LabRat-to-Manuscript golden workflow. Frontend
+  verification passes 243/243, backend verification passes 246 tests with one
+  optional PostgreSQL skip, and the production build passes with the existing
+  Plotly chunk-size warning.
+- Ran a real Anthropic plus local-Python browser E2E in `test 1`. The model
+  selected `Calculation Exp33.xlsx` `Sheet1!Q69:AI69`, Source showed the exact
+  range, plan acceptance opened Result, and the validated Plotly chart rendered
+  C1-C19 as 19 points with readable Carbon number and Distribution value axes.
+  Source remained available after execution, Result reported one series and no
+  exclusions, and Accept chart created one active ChartSpec.
+
 ## 2026-07-22
 
+- Diagnosed the latest Exp33 chart-plan failure from a real Anthropic response:
+  the selected confirmed region was only 40 cells and was read correctly, but
+  generated Python imported `uuid` and used nondeterministic result ids, so the
+  backend policy rejected it. Strengthened the provider contract for
+  deterministic ids/order, Python-native literals, and exact input accounting;
+  added static rejection of JSON literals and unordered `list(set(...))`
+  output; filtered identity-only fields from the scientific catalog; and added
+  one bounded model repair attempt driven by exact backend errors. A final
+  failure now returns the concrete policy message and line occurrence to the
+  UI. Backend verification passed 246 tests with one optional PostgreSQL skip,
+  frontend verification passed 241/241, and the production build passed with
+  the existing Plotly chunk warning. Restarted the current backend, restored
+  `test 1`, `Calculation Exp33.xlsx`, and accepted `Sheet1!P68:AI69`, then ran a
+  real Anthropic request for `draw a chart of carbon number distribution`. It
+  produced revision 1 in 26.8 seconds with no warnings, selected exactly
+  `Sheet1!Q69:AI69` (19 cells), and generated policy-compliant deterministic
+  Python without UUID, random, JSON literals, or unordered set conversion. The
+  plan remains awaiting user review; it was not accepted or executed.
+- Restarted the local backend on `127.0.0.1:8787` and the Vite frontend on
+  `127.0.0.1:5173/LabRat/` from the current workspace after the user accepted
+  loss of the stale in-memory project. Both HTTP checks returned 200, the
+  seeded `labuser` login succeeded, and the fresh memory store reports zero
+  projects.
+- Diagnosed the chart-planning `Requested range contains 8881 cells; maximum
+  is 500` report as a mixed-version local runtime, not a current selection
+  contract failure. The active `test 1` project on port `8787` has one accepted
+  40-cell region (`Sheet1!P105:AI106`), but its older no-watch backend fell back
+  to the workbook used range `A1:CE107`. Added an authenticated route regression
+  covering a confirmed `A1:CE107` region and verified current analysis planning
+  completes through bounded reads without a `source_range_too_large` warning.
+  Full backend verification passed 242 tests with one optional PostgreSQL skip.
+  The stale `8787` process was intentionally
+  left running because restarting its in-memory store would discard the user's
+  current project; switch to a fresh current-code instance or persistent
+  Postgres before replacing it.
+- Fixed wide-to-long analysis validation for charts such as Exp33 carbon-number
+  distributions. Model-drafted plans now declare `one_to_one` or `one_to_many`
+  row cardinality, use long output fields for chart encoding, return
+  `result_table` as an array, keep trace lineage on accepted input ids, and
+  count exclusions by input record. The validator deterministically unwraps
+  the common `{rows: [...]}` result-table shape, permits repeated source rows
+  only for reviewed one-to-many plans, and resolves known output-row lineage
+  back to accepted source ids while preserving strict unknown-lineage blocking.
+  Failed-result UI now reads counts from run validation instead of showing
+  `Unknown / 0 / 0`. Full frontend verification passed 241/241, full backend
+  verification passed 241 tests with one optional PostgreSQL skip, the focused
+  wide-to-long validator passed 16/16, and the production build passed with the
+  existing Plotly chunk-size warning. A fresh real-provider run remains the
+  final live check.
+- Simplified the Analysis Review Chart Plan to retain only readable processing,
+  calculation, missing-value, and validation steps plus necessary warnings.
+  Removed the redundant Selected data block because the Excel red boxes already
+  identify the evidence, and removed Chart setup because raw X/Y field lists
+  were not user-readable. Field coverage counters, scalar/series counts, exact
+  Python, and source hashes also remain hidden from the ordinary plan UI while
+  the frozen backend artifacts are retained for execution and audit. Focused
+  workspace coverage passed 21/21; the preceding browser QA confirmed the same
+  Exp33 plan and `Sheet1!Q69:AI69` red-box behavior before this final reduction.
+- Verified the current confirmed-region analysis path against real Anthropic
+  with zero accepted DataSnapshots: `i want carbon number distribution of
+  exp33` selected the exact `Calculation Exp33.xlsx` `Sheet1!Q69:AI69` source
+  rectangle and produced an awaiting-review plan. The reported
+  published-data-only message came from an older no-watch in-memory backend;
+  a parallel current-source environment preserved that process and its data.
+  Fixed Analysis Review so its embedded Workbook workspace resolves the active
+  plan rectangle's SourceDocument instead of receiving an empty review state.
+  Browser QA now shows the workbook, focuses row 69, and highlights all 19
+  source cells in red. The focused workspace suite passed 21/21 and the
+  production build passed with the existing Plotly chunk-size warning.
+- Replaced LabRat chat's per-region workbook buttons with one persisted
+  filename link per upload. The link stores only the exact
+  WorkbookReviewSession id, SourceDocument id, filename, and region count;
+  clicking it reloads that session and leaves all region focus/revise/confirm/
+  ignore/delete controls in Workbook Review. Added restored-history coverage
+  and removed newly generated `Select Sheet!Range` chat controls. Also unified
+  result validation and ChartSpec publication on one reviewed record-order
+  helper, so `inputSnapshotRefs`, traces, and result rows remain aligned even
+  when experiment heads were inserted out of order.
+- Cut LabRat over to three supported chat dispositions: workbook upload/region
+  review, read-only project Q&A, and reviewed analysis/chart planning. All
+  chart wording, including explicit Excel ranges, now selects confirmed region
+  and/or active DataSnapshot evidence through one AnalysisThread plan-review,
+  Python-execution, result-review, and ChartSpec publication flow. Removed the
+  SourceExtractProposal/ChartProposalSet routes, stores, modules, migrations,
+  frontend action cards, proposal-review UI, browser API helpers, and
+  sourceSnapshot renderer compatibility. Chart Review, Manuscript, and PPTX now
+  render only validated `analysis_result.traceCatalog` data. Full
+  `npm run codex:verify` passes with frontend 239/239, backend 239 passed plus
+  one optional PostgreSQL skip, and a successful production build with the
+  existing Plotly chunk warning. Browser smoke on the live `test 1` project
+  confirms the three supported Overview entries and the reviewed chart modal;
+  a fresh real Anthropic plus local-Python replay remains the external E2E
+  gate.
+- Fixed AgentRun routing for natural-language experiment chart requests such as
+  `draw chart of carbon number distribution in experiment 33`. Distribution
+  wording plus a generic `chart` verb no longer diverts the request into the
+  legacy source-extract path or guesses an uploaded workbook's entire used
+  range. Only an explicit row/range or workbook/sheet reference selects source
+  extraction; ordinary experiment requests enter the reviewed DataSnapshot
+  analysis flow. The 500-cell source-preview safety bound remains unchanged.
+  Added a regression with an `A1:CE107` calculation workbook and preserved the
+  explicit-row source-extract case. Targeted tests passed 2/2, the full backend
+  suite passed 253 tests with one optional PostgreSQL skip, all 272 frontend
+  tests passed, and the production build passed with the existing Plotly chunk
+  warning. The running no-watch backend was not restarted because it uses the
+  in-memory store and currently contains uploaded workbook review state.
+- Made manual Workbook Review selection creation optimistic without inventing a
+  client-only region. `POST .../regions` can now persist and immediately return
+  an exact versioned `interpreting` region, while the frontend starts bounded
+  AI interpretation through a separate endpoint. The right dock immediately
+  shows the sheet/range, an AI-interpreting spinner, and usable Ignore/Delete
+  actions; interpretation results update the same card without stealing focus
+  from newer selections. Version/disposition checks discard late AI results
+  after Ignore/Delete. Targeted frontend, service, and route tests passed;
+  frontend passed 270/270 and the production build passed with the existing
+  Plotly chunk warning. Live browser QA observed the pending `Sheet1!C3` card,
+  both actions, in-place Anthropic result replacement, and no console errors.
+  The complete backend run still has one unrelated existing failure: the golden
+  conversational-analysis fixture emits source records in the reverse of its
+  required natural experiment order; the route suite containing the new region
+  coverage passes independently.
+- Changed Overview `View confirmed regions` from opening one inferred latest
+  session to an uploaded-workbook chooser backed by every project
+  WorkbookReviewSession. The dialog shows the workbook filename, sheet count,
+  updated date, confirmed-region count, and pending-region count; selecting a
+  row reuses the exact-session loader and closes the chooser. Pending-region
+  actions still open the session containing the latest pending region directly.
+  Browser QA against the live `test1` project listed
+  `Reaction_Rate_Exp45.xlsx`, `Calculation Exp31.xlsx`, and
+  `MasterTable_updated.xlsx` with their real counts, then opened the Reaction
+  Rate session on its `Exp45` sheet. Verification passed with 60/60
+  ProjectDashboard tests, 269/269 full frontend tests, and the production build
+  with the existing Plotly chunk warning.
+- Fixed workbook-region creation after opening another upload and switching its
+  worksheet. WorkbookReviewWorkspace previously exposed every project
+  SourceDocument and retained the prior selected document across review-session
+  changes, so a new red box could be posted to the current session with the old
+  SourceDocument id and correctly fail with `source_document_mismatch`. The
+  workspace is now locked to its WorkbookReviewSession SourceDocument; the
+  project document list is used only to hydrate missing metadata for that exact
+  document, while worksheet tabs remain freely switchable. A regression now
+  switches from one session/document to another, opens its `Results` sheet, and
+  verifies a `C3:D4` drag creates a region against the second SourceDocument.
+  Verification passed with 60/60 ProjectDashboard tests, 269/269 full frontend
+  tests, and the production build with the existing Plotly chunk warning.
+- Compared the current server-backed Experiment Browser with `origin/main`
+  (`UX-ExpBrowser`) and adopted its dense left-workspace and direct table-header
+  interaction model without restoring the retired local dataset path. Saved
+  views, search, filters, and hidden columns now share the sidebar; headers sort
+  on click and support context actions, resize, auto-fit, and drag reorder; full
+  rows open source-backed detail while checkboxes remain comparison-only. The
+  accepted-DataSnapshot query, virtual paging, BrowserView persistence, detail
+  drawer, and comparison tray remain authoritative. Browser QA against the
+  isolated 63-experiment `test1` data found and fixed a zero-width virtual table
+  body, then verified visible rows, backend sorting, hide/restore, full-row
+  detail, and comparison selection at 1280px. Frontend verification passed
+  269/269 tests and the production build with the existing Plotly chunk warning.
+- Re-ran the complete browser E2E against the isolated 63-head `test1` clone
+  with real Anthropic `claude-sonnet-4-5` and the development local Python
+  executor. The reviewed source correctly highlighted `Sheet1!L3:N63`; the
+  conversational revision loop worked; the final execution validated 57 rows,
+  3 traces, 6 labeled exclusions, and the 100% row-sum invariant; the chart used
+  natural Exp1-to-Exp61 order and rendered 171 bar paths; one durable
+  analysis-result ChartSpec and one one-page/one-block Manuscript survived a
+  hard reload with no browser warnings or errors. The gate is still blocked by
+  real-integration defects: the first model plan was rejected with only the
+  generic `analysis_python_policy_failed` warning, subsequent accepted programs
+  used JSON `null` and then a nonexistent `labrat.generate_result_id` runtime
+  method, and both required another paid model revision before Python succeeded.
+  At 1280px the modification textbox ends at 1313px and Send occupies
+  1313-1371px, outside the viewport. Approved-chart management loads the right
+  3-trace data but constrains Plotly to about 79px wide. Inserting before a page
+  exists creates the inconsistent `0 pages with 1 blocks` state; a page must be
+  added manually. The backend persisted one manuscript, but the project list
+  still reports `No manuscript` / 0 manuscripts. Lower-severity gaps are the
+  plan's per-field 61/63 coverage implying only two exclusions when the joint
+  intersection yields six, and validated result rows reporting `No lineage
+  returned` despite source-backed trace refs. Starting the isolated backend also
+  requires loading both `.env` (model credentials) and `.env.local` (executor),
+  otherwise the runtime status correctly reports the model as unavailable.
+- Repaired the real DataSnapshot-to-ChartSpec E2E defects found during the
+  63-head `test1` run. Analysis planning now describes the executor input as a
+  Python dictionary, requires the exact trace/unit/missing-policy contract,
+  excludes identity-only fields from scientific selection, and records an
+  explicit natural-label or workbook-index order. Validation now rejects order
+  drift, groups repeated diagnostics, exposes Python policy/rule/line details,
+  and labels exclusions with experiment names. The frontend now lazy-loads
+  nested `detailRequired` ChartSpecs, renders and snapshots their complete
+  traces for Manuscript/Canvas, distinguishes validated analysis evidence from
+  missing source snapshots, and manages durable approved ChartSpecs separately
+  from proposals. Project-list summaries report published experiments/specs
+  before a project is opened; the 1280px review layout is bounded; long AgentRun
+  requests show phase, elapsed time, and a real cancel action propagated to the
+  backend provider request. Full verification passed with frontend 268/268,
+  backend 250 passed plus 1 optional PostgreSQL skip, and the production build
+  with the existing Plotly chunk warning. Browser QA at 1280px against the
+  isolated 63-head clone confirmed 63 experiments in the unopened project row,
+  backend model/Python/data status, the separate Approved ChartSpecs surface,
+  and no console warnings/errors. Automated regressions cover complete
+  analysis ChartSpec detail loading, nonblank preview inputs, immutable Canvas
+  snapshots, insertion, cancellation, and grouped diagnostics. A fresh real
+  Anthropic plus local-Python artifact replay remains the final acceptance gate.
 - Ran the real Anthropic plus local-Python DataSnapshot-to-ChartSpec browser
   workflow against an isolated in-memory clone of `test1` with 63 active
   experiment heads. The UI showed exact `Sheet1!A3:A63` identity and

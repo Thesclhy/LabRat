@@ -1,8 +1,8 @@
 # Current Milestone
 
-Status: in progress
+Status: complete
 Read when: checking what the next implementation slice should be.
-Last reviewed: 2026-07-22
+Last reviewed: 2026-07-23
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
 
@@ -29,21 +29,30 @@ and 390x844 browser QA now cover the integrated upload/review/publish path.
 
 ## Current Position
 
-Active milestone: real DataSnapshot-to-ChartSpec frontend closure. Backend
-capability/retry APIs, development-only local execution configuration,
-fail-closed frontend runtime gates, and AnalysisPlan structured output are
-implemented. Retry now has durable memory/PostgreSQL idempotency receipts and
-six-minute abandoned-claim recovery. Full verification passes with frontend
-263/263 and backend 245 passed plus one optional PostgreSQL skip. A fresh
-63-head local Python/persistence diagnostic also passes with 57 result rows, 6
-reasoned exclusions, 3 traces, one reloaded ChartSpec, 63 input snapshot refs,
-and 184 source refs. The real Anthropic plus local-Python browser run is now
-recorded: 4 plan revisions and 3 execution attempts eventually produced 57
-validated rows, 6 exclusions, 3 traces, and one reloaded ChartSpec from all 63
-heads. The acceptance gate remains open because `Manage approved charts`
-cannot display the persisted analysis-result ChartSpec and the Manuscript
-insertion preview and Canvas render blank despite the Chart Review preview
-rendering correctly.
+Completed milestone: real-provider E2E for the new confirmed-region analysis
+chain. Workbook upload/region understanding, read-only project Q&A, and
+reviewed analysis/chart planning share one backend AgentRun entrypoint.
+Analysis planning now uses only active accepted RegionUnderstandingRevisions:
+the model pages through confirmed regions, chooses one or more exact workbook
+ranges, and persists only `sourceSelections`, structured review meaning, and
+readable display steps. After acceptance, the backend materializes one Python
+input table per selection, then asks the model to generate Python against that
+real input. The executor returns authoritative Plotly, which is checked for
+safety, structure, limits, source ownership, and only explicitly reviewed
+calculation invariants. Whole-series constraints use `trace_y_sum`; stacked
+component normalization at every shared X category uses `x_group_y_sum`.
+
+The field-mapping AnalysisSelection registry, aggregate 500-cell analysis
+limit, pre-acceptance Python, result-table/lineage UI, and user-facing hash
+review are retired. ChartSpec v3 stores complete Plotly and a flat curve
+catalog. Source/Result review, ChartSpec detail loading, Canvas reload, and PPTX
+export all honor each Canvas block's independent `visibleTraceIds`. Automated
+verification passes with frontend 243/243 and backend 203 passed plus one
+optional PostgreSQL skip; production still requires a hardened external
+executor. A real Anthropic plus local-Python browser run selected two
+non-contiguous workbook ranges as two input tables, generated and validated a
+12-point/three-series chart, published ChartSpec v3, and preserved independent
+2/3 versus 3/3 Canvas curve visibility across save and reload.
 
 Implemented:
 
@@ -70,16 +79,24 @@ Implemented:
 - Milestone 6 saved views and comparison: owner-isolated personal BrowserView CRUD, complete column configuration, default/load/save/rename/delete controls, persistent cross-query selection, and a lazy source-backed scalar/series comparison table without unit coercion.
 - Milestone 7 legacy retirement and golden workflow: removed aggregate dataset/mapping/analysis/observation stores, routes, helpers, and UI contracts; removed unscoped normalize/semantic-map/generic chart endpoints; added migration 011; made ChartSpec validation/rendering source-only; added golden workbook upload-review-draft-publish-reload-Browser coverage; retained source-backed chart/Manuscript workflows; accepted natural-language documentation exclusion; and stabilized local in-memory development sessions by running the backend without file-watch restarts.
 - Post-milestone regression hardening: direct project-content summaries no longer create confirmation-gated Browser actions while explicit upload/chart intent keeps priority; Project Overview reports pending/confirmed regions and opens the session containing the latest pending region; Ctrl/Meta selection adds without cancellation; Experiment Browser uses one horizontal scroll owner; and grouped two-row workbook headers preserve all child fields plus parent/leaf header provenance through publish and Browser projection.
-- The next architecture has been approved conversationally and written for review in `doc/plans/backend-conversational-analysis-chart-design.md`: backend intent routing, plan/revision review against Excel red boxes, exact accepted Python in a LabRat-managed sandbox, validated result review, atomic AnalysisResult/ChartSpec publication, and placement-local Canvas trace visibility.
+- The reviewed-analysis architecture is implemented: backend intent routing,
+  exact confirmed-range red-box review, post-acceptance Python from real input,
+  validated Plotly result review, atomic ChartSpec v3 publication, and
+  placement-local Canvas curve visibility.
 - Conversational-analysis Task 1 is implemented: backend-only provider configuration, bounded intent routing, direct project answers, reviewed-analysis disposition for trends/calculations/charts, explicit-only Browser navigation, and removal of frontend provider credentials/direct calls.
-- Conversational-analysis Task 2 is implemented: accepted-active-head analysis schemas and selection hashes, unit-aware field catalog, source rectangle compression/limits, plan validation, and a project-scoped six-tool planning registry with no executor.
-- Conversational-analysis Task 3 is implemented: migration 012 plus memory/Postgres parity for AnalysisThreads, immutable AnalysisPlanRevisions, queued AnalysisRuns, reserved AnalysisResults/publication receipts, and atomic future result publication; project-scoped thread/revision/selection/accept routes; feedback-only backend redrafting; AgentRun creation of durable threads and first reviewable revisions; bounded state/list/selection responses; stale-head/hash rejection; and idempotent plan acceptance with no execution or ChartSpec side effect.
-- Conversational-analysis Task 4 is implemented: authenticated frontend analysis helpers; normal LabRat analysis-plan cards; a persistent Source/Result/Chart review workspace with Excel-backed non-contiguous red source rectangles; readable coverage, warnings, revision history, and exact Python; a split Accept/modify composer; immutable feedback revisions; exact-hash acceptance; current-revision recovery when reopening stale conversation cards; and responsive desktop/mobile layouts. Result and Chart remain disabled until later milestones.
-- Conversational-analysis Task 5 is implemented: versioned Python policy and runner checks; canonical frozen execution packages; production-disabled local execution with a hardened-worker adapter; transactional active-head verification; claim-token lease recovery; finite/schema/id/identity/lineage/unit/input-accounting/missing-policy/limit/invariant validation; immutable awaiting-review AnalysisResult persistence only for valid output; independently paged result/evidence previews; replay-safe execute routes; and exact-result-hash feedback replanning. No ChartSpec is created.
-- Conversational-analysis Task 6 is implemented: exact run/result/preview identity binding; complete paged trace loading; Source/Result/Chart review tabs; validated values, exclusions, missing policy, warnings, invariants, hashes, per-row lineage and source navigation; independently paged evidence; unit-compatible chart panels; default-visible trace selection; stale async response protection; historical result rehydration; and exact-result-hash feedback to later immutable plan revisions. Real acceptance remains disabled until Task 7 provides the atomic publication route.
-- Conversational-analysis Task 7 is implemented: strict analysis-result ChartSpec v2 validation; exact result/default-trace acceptance; active-head rechecks inside one idempotent memory/Postgres transaction; acceptance-only result mutation; run/thread completion; complete immutable trace catalogs with accepted snapshot refs and lineage; bounded project/list metadata plus full detail reads; editor-only publication; real Analysis Review wiring; and shared rendering with local trace filtering and unit-safe axes.
-- Conversational-analysis Task 8 is implemented: one trace-aware chart-view normalizer migrates legacy source experiment filters into stable trace ids and applies reviewed analysis defaults; Manuscript insertion lazy-loads full ChartSpec details before snapshotting; insertion, reload, chart context, Canvas rendering, and PPTX export all use placement-local `visibleTraceIds`; the selected-chart inspector provides searchable trace toggles, counts, Select all, and Clear; duplicate placements remain independent through undo/redo; and source-backed ChartSpecs remain compatible.
-- Conversational-analysis Task 9 is implemented: a real grouped-header workbook golden route test now covers accepted experiment publication, natural-language analysis routing, feedback revision 2, exact-plan execution, invariant-validated normalized selectivity, atomic ChartSpec publication, reload, and complete source lineage without legacy artifacts. A stateful frontend golden test covers LabRat plan review through result acceptance and Manuscript trace filtering. Active contracts now describe both ChartSpec origins and the backend-only provider/executor boundary. Browser QA confirmed direct project answers, exact `Sheet1!L3:N4` red cells, no execution before revision acceptance, validated 2-input/2-output results, two default-visible experiment traces, one atomic chart, independent 2/2 and 1/2 Manuscript placements after reload, responsive review layouts, and no new console errors. Reloaded Manuscript blocks now render from their immutable complete snapshots, selected-chart context no longer loops when project summaries are recreated, and chart-review title/legend spacing is stable.
+- Conversational-analysis Tasks 2-7 are superseded by the current v2/v3
+  contracts: exact confirmed source selections, review-only PlanRevisions,
+  post-acceptance Python, authoritative validated Plotly, result-id
+  publication, and flat curve catalogs.
+- Conversational-analysis Task 8 is implemented: one trace-aware chart-view normalizer applies reviewed analysis defaults; Manuscript insertion lazy-loads full ChartSpec details before snapshotting; insertion, reload, chart context, Canvas rendering, and PPTX export all use placement-local `visibleTraceIds`; the selected-chart inspector provides searchable trace toggles, counts, Select all, and Clear; duplicate placements remain independent through undo/redo.
+- Conversational-analysis Task 9 is implemented: a real grouped-header workbook golden route test covers accepted experiment publication, natural-language analysis routing, feedback revision 2, exact-plan execution, invariant-validated normalized selectivity, atomic analysis-result ChartSpec publication, reload, and complete source lineage without legacy artifacts. A stateful frontend golden test covers LabRat plan review through result acceptance and Manuscript trace filtering.
+- Unified chart cutover is implemented: all natural-language and explicit-range chart requests use confirmed region and/or active DataSnapshot evidence through the reviewed analysis state machine. SourceExtractProposal, ChartProposalSet, direct chart interpretation, AgentRun confirmation cards, and sourceSnapshot render compatibility are retired.
+- Chat workbook file entry is implemented: one upload creates one serializable
+  filename link, clicking it reloads the exact WorkbookReviewSession, and
+  Workbook Review remains the only region-level control surface.
+- Reviewed record ordering is shared by result validation and ChartSpec
+  publication, keeping result rows, trace lineage, and input snapshot refs in
+  the accepted natural-label or workbook-index order.
 
 Deployment work not included in this completed milestone:
 
@@ -88,23 +105,16 @@ Deployment work not included in this completed milestone:
 
 ## Next Recommended Slice
 
-1. Execute
-   `doc/plans/datasnapshot-to-chartspec-frontend-closure-plan.md`: use the local
-   Python adapter only in development, expose backend model/executor readiness,
-   add `Retry with published data`, and pass the complete real Anthropic plus
-   local-Python workflow against all 63 active `test1` experiment heads before
-   declaring the frontend analysis path complete.
-2. Implement the approved chat workbook file-entry design in
-   `doc/plans/chat-workbook-file-entry-design.md`: one filename button per
-   upload, exact WorkbookReviewSession reload on click, and no region-button
-   duplication in chat.
-3. Exercise migrations 013/014 and the region-to-DataPlan path against a configured Postgres test database.
-4. Operationalize the hardened analysis worker, secret management, timeouts, audit telemetry, and provider cost/latency monitoring in a production-like environment.
+1. Exercise migrations 013/014/016/017 and the region-to-DataPlan plus
+   reviewed-analysis paths against a configured Postgres test database.
+2. Operationalize the hardened analysis worker, secret management, timeouts,
+   audit telemetry, and provider cost/latency monitoring in a production-like
+   environment.
 
 ## Guardrails
 
 - DataPlan inputs must come from exact active accepted RegionUnderstandingRevisions and backend-owned SourceDocument reads.
-- DataPlan/DataSnapshot persistence must not create ChartSpecs, chart proposals, FigurePackages, or manuscript placements.
+- DataPlan/DataSnapshot persistence must not create ChartSpecs, FigurePackages, or manuscript placements.
 - DataSnapshot values must be read deterministically from SourceDocument index/range data.
 - Experiment aliases must resolve to an explicit create/reuse decision; no silent merge is allowed.
 - Fields with incompatible units remain separate unless a reviewed conversion operation exists.
@@ -118,7 +128,6 @@ Region-understanding milestone completion verification:
 npm run codex:verify
 node --test backend/src/saas/routes/saasRoutes.postgres.test.js
 git diff --check
-rg -n "workbookUnderstandingIds|workbookUnderstandingId|workbook_understandings|current_understanding" src backend/src
 ```
 
 Latest Task 4 evidence: targeted frontend analysis/API/workspace/AgentPanel coverage passed 51/51 and the production build succeeded with the existing Plotly chunk-size warning. Browser QA used only repository-owned synthetic workbook data plus a local deterministic provider stub; it confirmed analysis routing, two non-contiguous source rectangles, red-cell focus, feedback revision supersession, exact-plan acceptance/queueing, stale-card recovery, desktop split geometry, mobile stacked geometry, and no page-level horizontal overflow. No external provider received QA data.
@@ -129,7 +138,7 @@ Latest Task 6 evidence: focused result-workspace edge coverage passed 14/14, rel
 
 Latest Task 7 evidence: full verification passed with frontend 239/239, backend 229 passed plus 1 optional Postgres integration skip, and a successful production build with the existing Plotly chunk-size warning. Focused publication/store/route coverage passed 43 backend tests and API/workspace/rendering/project coverage passed 87 frontend tests after transaction and bounded-list hardening.
 
-Latest Task 8 evidence: focused chart-view/renderer/Canvas/export/ProjectDashboard coverage passed 100/100, full frontend passed 247/247, JavaScript syntax and diff checks passed, and the production build succeeded with the existing Plotly chunk-size warning. Tests cover legacy source-view migration, reviewed analysis defaults, explicit empty views, duplicate placement independence through undo/redo, bounded LabRat context, full-detail lazy insertion, immutable snapshot retention, source and analysis export filtering, and source-backed rendering compatibility.
+Latest Task 8 evidence: focused chart-view/renderer/Canvas/export/ProjectDashboard coverage passed 100/100, full frontend passed 247/247, JavaScript syntax and diff checks passed, and the production build succeeded with the existing Plotly chunk-size warning. That checkpoint covered both source and analysis renderers; the later unified cutover removed source-view migration and source-backed rendering compatibility.
 
 Latest Task 9 evidence: the grouped-header backend golden workflow passed through one trace-complete `origin: analysis_result` ChartSpec with exact source lineage. Frontend passed 250/250 with Vitest capped at four workers for repeatable Windows execution; backend passed 230 with 1 optional Postgres integration skip; the production build succeeded with the existing Plotly chunk-size warning. Desktop and 390x844 browser QA covered direct answers, reviewed plan revision, red source cells, validated result review, chart publication, duplicate Manuscript placements, reload persistence, mobile stacking, and console stability. PPTX placement filtering remains covered by automated export tests.
 
@@ -160,7 +169,8 @@ at 390x844; clean-page console verification reported no errors or warnings.
   `usedRange`, but the grid still renders that complete row/column DOM with
   React Data Grid virtualization disabled; unusually large sheets still need a
   dedicated rendering architecture.
-- DataSnapshot-to-chart work must define unit, series, selection, and staleness rules rather than reuse removed contracts.
 - The LabRat-managed arbitrary Python runtime remains the largest security and operations risk; the local subprocess adapter is development-only and production must use the hardened worker contract.
-- Existing source-evidence chart flows must remain intact while the new chart path is added.
+- Retired SourceExtractProposal, ChartProposalSet, direct chart interpretation,
+  and sourceSnapshot rendering routes must remain absent rather than returning
+  as compatibility paths.
 - Local in-memory backend development intentionally does not auto-reload; restart `npm --prefix backend run dev` after backend source edits so sessions are not silently discarded.

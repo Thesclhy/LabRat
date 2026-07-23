@@ -116,7 +116,7 @@ const FORBIDDEN_MODULE_ATTRIBUTES = new Set([
 ]);
 
 function policyError(code, message, details = {}) {
-  return { code, message, ...details };
+  return { code, message, policy: "labrat-python-v2-static-policy", ...details };
 }
 
 function importRoots(source) {
@@ -180,7 +180,7 @@ export function validatePythonPolicy(source, runtimeVersion = ANALYSIS_RUNTIME_V
   if (!entrypoints.length) {
     errors.push(policyError(
       "python_entrypoint_required",
-      "Python source must define analyze(tables, labrat).",
+      "Python source must define analyze(inputs, labrat).",
     ));
   } else {
     if (entrypoints.length !== 1) {
@@ -191,15 +191,33 @@ export function validatePythonPolicy(source, runtimeVersion = ANALYSIS_RUNTIME_V
       ));
     }
     const parameters = entrypoints[0][1].split(",").map((item) => item.trim()).filter(Boolean);
-    if (parameters.length !== 2 || parameters[0] !== "tables" || parameters[1] !== "labrat") {
+    if (parameters.length !== 2 || parameters[0] !== "inputs" || parameters[1] !== "labrat") {
       errors.push(policyError(
         "python_entrypoint_signature_invalid",
-        "Python entrypoint signature must be analyze(tables, labrat).",
+        "Python entrypoint signature must be analyze(inputs, labrat).",
       ));
     }
   }
 
   const executableSource = sourceWithoutStrings(value);
+  const invalidInputAttributes = [];
+  executableSource.split(/\r?\n/).forEach((lineSource, index) => {
+    const pattern = /\binputs\s*\.\s*(tables)\b/g;
+    for (const match of lineSource.matchAll(pattern)) {
+      invalidInputAttributes.push({ attribute: match[1], line: index + 1 });
+    }
+  });
+  invalidInputAttributes.forEach(({ attribute, line }) => {
+    errors.push(policyError(
+      "python_inputs_attribute_access_invalid",
+      'inputs is a dictionary; read selected tables with inputs["tables"] or inputs.get("tables", []).',
+      {
+        attribute,
+        line,
+        policy: "labrat-python-v2-input-contract",
+      },
+    ));
+  });
   FORBIDDEN_CALLS.forEach((name) => {
     const pattern = new RegExp(`(^|[^.\\w])${name}\\s*\\(`, "m");
     if (pattern.test(executableSource)) {
@@ -258,6 +276,28 @@ export function validatePythonPolicy(source, runtimeVersion = ANALYSIS_RUNTIME_V
     errors.push(policyError(
       "python_path_traversal_not_allowed",
       "Filesystem paths and path traversal are not allowed.",
+    ));
+  }
+  const jsonLiteralLines = executableSource.split(/\r?\n/).flatMap((lineSource, index) => {
+    const literals = [...lineSource.matchAll(/(^|[^\w])(null|true|false)(?=$|[^\w])/g)]
+      .map((match) => match[2]);
+    return literals.length ? [{ line: index + 1, literals: [...new Set(literals)] }] : [];
+  });
+  if (jsonLiteralLines.length) {
+    errors.push(policyError(
+      "python_json_literal_invalid",
+      "Python source must use None, True, and False instead of JSON null, true, and false.",
+      { occurrences: jsonLiteralLines },
+    ));
+  }
+  const unorderedSetConversions = executableSource.split(/\r?\n/).flatMap((lineSource, index) => (
+    /\blist\s*\(\s*set\s*\(/.test(lineSource) ? [{ line: index + 1 }] : []
+  ));
+  if (unorderedSetConversions.length) {
+    errors.push(policyError(
+      "python_unordered_set_output",
+      "Output arrays must preserve accepted input order; replace list(set(values)) with an order-preserving deduplication.",
+      { occurrences: unorderedSetConversions },
     ));
   }
 

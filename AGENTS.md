@@ -57,7 +57,7 @@ Use `npm run build` as the minimum verification after code changes. For import/b
 
 - `src/main.jsx`: app shell, tabs, Experiment Browser, import review modal wiring, reference library, detail modal, assistant panel, and project state wiring.
 - `src/components/ManuscriptCanvas.jsx`: manuscript canvas, block insertion, chart-layer selection, inspector, and text/image/chart editing.
-- `src/components/BackendScanPanel.jsx`: SourceDocument workbook review, bounded range preview, source extract review, and source-backed chart proposal review UI.
+- `src/components/BackendScanPanel.jsx`: reviewed analysis prompt and accepted analysis-result ChartSpec management UI.
 - `src/components/SelectionFrame.jsx`: reusable move/resize/keyboard frame.
 - `src/charts/makePlot.js`: experiment-to-Plotly trace conversion.
 - `src/charts/sourceChartPreview.js`: render immutable source-backed ChartSpec rows/series.
@@ -118,7 +118,7 @@ The current backend should remain compatible with the server-first project workf
 
 1. Read `README.md`, this file, `doc/START_HERE.md`, `doc/plan.md`, `doc/current-milestone.md`, `doc/PROGRESS.md`, and `doc/task-checklist.md`.
    - For auth/database/project persistence work, also read `doc/arch/architecture.md`, `doc/plans/roadmap.md`, `doc/plan.md`, `doc/contracts/saas-database-schema-v0.md`, `doc/contracts/saas-api-contract-v0.md`, and `doc/contracts/server-project-state-plan.md`.
-   - For import/parser/chart proposal compatibility work, also read `doc/contracts/backend-api-contract.md`, `doc/contracts/canonical-data-dictionary.md`, and `doc/arch/ai-boundaries.md`.
+   - For import/parser/chart workflow work, also read `doc/contracts/backend-api-contract.md`, `doc/contracts/canonical-data-dictionary.md`, and `doc/arch/ai-boundaries.md`.
 2. Inspect the specific source files touched by the request.
 3. Make the smallest coherent change.
 4. Run relevant tests; `npm run build` is the minimum after code changes.

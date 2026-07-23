@@ -6,8 +6,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import * as XLSX from "xlsx";
 import { createServer } from "../../server.js";
-import { resolveAnalysisSelection } from "../analysisSelection.js";
-import { ANALYSIS_PLAN_REVISION_VERSION, pythonSourceHash } from "../analysisSchemas.js";
+import { ANALYSIS_PLAN_REVISION_VERSION } from "../analysisSchemas.js";
 import { loadSaasConfig } from "../config.js";
 import { PostgresSaasStore } from "../postgresStore.js";
 
@@ -83,6 +82,13 @@ test("analysis migrations and Postgres store expose retry receipt persistence pa
   assert.match(retryMigration, /unique\(project_id, idempotency_key\)/);
   assert.match(retryMigration, /lease_expires_at timestamptz/);
   assert.match(retryMigration, /analysis_plan_revision_id text references analysis_plan_revisions/);
+  const resetMigration = await fs.readFile(
+    path.resolve(here, "..", "..", "..", "migrations", "017_reset_analysis_v2.sql"),
+    "utf8",
+  );
+  assert.match(resetMigration, /drop column if exists selection/);
+  assert.match(resetMigration, /drop column if exists python_program/);
+  assert.match(resetMigration, /drop column if exists plan_hash/);
   const store = new PostgresSaasStore({ databaseUrl: "" });
   for (const method of [
     "createAnalysisThread",
@@ -133,52 +139,48 @@ test("Postgres SaaS routes preserve workbook review, source documents, and suppo
     };
     store = new PostgresSaasStore(config);
     await store.initialize();
+    const modelProvider = {
+      async draftAnalysisProgram() {
+        return {
+          ok: true,
+          pythonProgram: {
+            runtime: "labrat-python-v2",
+            entrypoint: "analyze",
+            source: [
+              "def analyze(inputs, labrat):",
+              "    return {'plotly': {'data': [], 'layout': {}}, 'exclusions': [], 'checks': []}",
+            ].join("\n"),
+          },
+        };
+      },
+    };
     const analysisExecutor = {
       async executeAcceptedRun(runPackage) {
-        const field = runPackage.fieldCatalog[0];
-        const resultTable = runPackage.tables.records.map((record, index) => ({
-          __result_id: `postgres_result_${index + 1}`,
-          __experiment_id: record.__experiment_id,
-          __snapshot_id: record.__snapshot_id,
-          __record_index: record.__record_index,
-          [field.fieldKey]: record[field.fieldKey],
-        }));
-        const sourceRecordIds = runPackage.tables.records.map(
-          (record) => record.__source_record_id,
-        );
+        const table = runPackage.inputs.tables[0];
         return {
           ok: true,
           adapter: "postgres_test",
           runtime: { version: runPackage.runtimeVersion, exitCode: 0 },
           result: {
-            result_table: resultTable,
-            traces: [{
-              traceId: "postgres_trace",
-              x: runPackage.tables.records.map((record) => record.__experiment_label),
-              y: runPackage.tables.records.map((record) => record[field.fieldKey]),
-              xUnit: null,
-              yUnit: field.unit || null,
-              sourceRecordIds,
-            }],
-            lineage: {
-              ...Object.fromEntries(resultTable.map((row, index) => [
-                row.__result_id,
-                { sourceRecordIds: [sourceRecordIds[index]] },
-              ])),
-              postgres_trace: { sourceRecordIds },
+            plotly: {
+              data: [{
+                traceId: "postgres_trace",
+                type: "bar",
+                name: "Calculation Exp30",
+                x: table.displayValues[0].slice(1),
+                y: table.values[1].slice(1),
+              }],
+              layout: {
+                title: { text: "Carbon number distribution" },
+              },
             },
-            summary: {
-              inputRecordCount: resultTable.length,
-              outputRecordCount: resultTable.length,
-              excludedRecordCount: 0,
-              excludedRecords: [],
-              missingValuePolicy: runPackage.calculationManifest.missingValuePolicy.mode,
-            },
+            exclusions: [],
+            checks: [],
           },
         };
       },
     };
-    server = createServer({ config, store, analysisExecutor });
+    server = createServer({ config, store, modelProvider, analysisExecutor });
     await new Promise((resolve) => {
       server.listen(0, "127.0.0.1", resolve);
     });
@@ -365,82 +367,38 @@ test("Postgres SaaS routes preserve workbook review, source documents, and suppo
     assert.equal((await store.listExperimentIdentities({ projectId: project.project.id })).length, 1);
     assert.equal((await store.listExperimentSnapshotHeads({ projectId: project.project.id })).length, 1);
 
-    const [
-      analysisSnapshots,
-      analysisIdentities,
-      analysisHeads,
-    ] = await Promise.all([
-      store.listDataSnapshots({ projectId: project.project.id }),
-      store.listExperimentIdentities({ projectId: project.project.id }),
-      store.listExperimentSnapshotHeads({ projectId: project.project.id }),
-    ]);
-    const fieldSelection = resolveAnalysisSelection({
-      projectId: project.project.id,
-      dataSnapshots: analysisSnapshots,
-      experimentIdentities: analysisIdentities,
-      experimentSnapshotHeads: analysisHeads,
-      selectionRequest: {
-        experimentIds: analysisHeads.map((head) => head.experimentId),
-        fieldIds: [],
-        includeSeries: false,
-      },
-    });
-    const selectedField = fieldSelection.fieldCatalog.find((field) => field.valueType === "number")
-      || fieldSelection.fieldCatalog[0];
-    assert.ok(selectedField);
-    const selectionRequest = {
-      experimentIds: analysisHeads.map((head) => head.experimentId),
-      fieldIds: [selectedField.fieldId],
-      includeSeries: false,
-    };
-    const analysisSelection = resolveAnalysisSelection({
-      projectId: project.project.id,
-      dataSnapshots: analysisSnapshots,
-      experimentIdentities: analysisIdentities,
-      experimentSnapshotHeads: analysisHeads,
-      selectionRequest,
-    });
-    const pythonSource = [
-      "def analyze(tables, labrat):",
-      "    return {'result_table': [], 'traces': [], 'lineage': {}, 'summary': {}}",
-    ].join("\n");
     const analysisPlan = {
       schemaVersion: ANALYSIS_PLAN_REVISION_VERSION,
       status: "awaiting_review",
-      requestSummary: "Review one accepted numeric field.",
-      selection: {
-        selectionId: analysisSelection.selectionId,
-        experimentIds: analysisSelection.experimentIds,
-        fieldIds: analysisSelection.fieldIds,
-        dependencyHash: analysisSelection.dependencyHash,
-        selectionHash: analysisSelection.selectionHash,
-      },
-      processingSummary: ["Use the accepted numeric value once."],
-      calculationManifest: {
-        inputs: [{
-          fieldId: selectedField.fieldId,
-          fieldKey: selectedField.fieldKey,
-          unit: selectedField.unit,
-        }],
-        missingValuePolicy: {
-          mode: "exclude_record",
-          requiredFieldIds: [selectedField.fieldId],
+      requestSummary: "Review the confirmed carbon distribution range.",
+      sourceSelections: [{
+        sourceSelectionId: "postgres_source_selection",
+        regionUnderstandingRevisionId: confirmedUnderstandingBody.acceptedRevision.id,
+        sourceDocumentId: reviewBody.sourceDocument.id,
+        sheetName: reviewRegion.sheetName,
+        range: reviewRegion.rangeRef,
+        label: "Calculation Exp30",
+        purpose: "Plot carbon number distribution",
+      }],
+      reviewPlan: {
+        processingSteps: [
+          "Read carbon labels and values from the confirmed workbook range.",
+          "Create one bar trace from the selected table.",
+        ],
+        missingValueHandling: "Skip blank plotted cells.",
+        chart: {
+          title: "Carbon number distribution",
+          chartType: "bar",
+          xDescription: "Carbon number",
+          yDescription: "Distribution",
+          seriesDescription: "Calculation Exp30",
         },
-        derivedFields: [],
         invariants: [],
       },
-      pythonProgram: {
-        runtime: "labrat-python-v1",
-        entrypoint: "analyze",
-        source: pythonSource,
-        sourceHash: pythonSourceHash(pythonSource),
-      },
-      expectedOutput: {
-        shape: "experiment_traces",
-        chartType: "bar",
-        xField: "experiment_label",
-        yFields: [selectedField.fieldKey],
-      },
+      displayPlan: [
+        "Use the confirmed workbook range.",
+        "Plot carbon number on X and distribution on Y.",
+      ],
       warnings: [],
     };
     const analysisThreadResponse = await jsonFetch(
@@ -456,7 +414,7 @@ test("Postgres SaaS routes preserve workbook review, source documents, and suppo
       `/api/analysis-threads/${analysisThread.id}/plan-revisions`,
       {
         method: "POST",
-        body: { plan: analysisPlan, selectionRequest },
+        body: { plan: analysisPlan },
       },
     );
     assert.equal(analysisRevisionResponse.status, 201);
@@ -464,11 +422,7 @@ test("Postgres SaaS routes preserve workbook review, source documents, and suppo
     const analysisAcceptRequest = {
       method: "POST",
       headers: { "Idempotency-Key": "postgres_analysis_accept_1" },
-      body: {
-        planHash: analysisRevision.planHash,
-        selectionHash: analysisRevision.selectionHash,
-        dependencyHash: analysisRevision.dependencyHash,
-      },
+      body: {},
     };
     const analysisAccept = await jsonFetch(
       `/api/analysis-plan-revisions/${analysisRevision.id}/accept`,
@@ -489,23 +443,6 @@ test("Postgres SaaS routes preserve workbook review, source documents, and suppo
     assert.equal((await store.listAnalysisRuns({ projectId: project.project.id })).length, 1);
     assert.equal((await store.listChartSpecs({ projectId: project.project.id })).length, 0);
 
-    const analysisPublication = await jsonFetch(
-      `/api/analysis-runs/${acceptedAnalysisBody.analysisRun.id}/accept-and-create-chart`,
-      {
-        method: "POST",
-        headers: { "idempotency-key": `postgres_analysis_publish_${Date.now()}` },
-        body: {
-          resultHash: analysisExecuteBody.analysisResult.contentHash,
-          defaultVisibleTraceIds: ["postgres_trace"],
-        },
-      },
-    );
-    assert.equal(analysisPublication.status, 201);
-    const analysisPublicationBody = await analysisPublication.json();
-    assert.equal(analysisPublicationBody.analysisRun.status, "completed");
-    assert.equal(analysisPublicationBody.analysisResult.status, "accepted");
-    assert.equal(analysisPublicationBody.chartSpec.spec.origin, "analysis_result");
-    assert.equal((await store.listChartSpecs({ projectId: project.project.id })).length, 1);
     const analysisExecute = await jsonFetch(
       `/api/analysis-runs/${acceptedAnalysisBody.analysisRun.id}/execute`,
       { method: "POST", body: {} },
@@ -522,53 +459,28 @@ test("Postgres SaaS routes preserve workbook review, source documents, and suppo
       1,
     );
     assert.equal((await store.listChartSpecs({ projectId: project.project.id })).length, 0);
-
-    const sourceExtract = await jsonFetch(`/api/projects/${project.project.id}/source-extract-proposals`, {
-      method: "POST",
-      body: {
-        sourceDocumentId: reviewBody.sourceDocument.id,
-        sheetName: "Sheet1",
-        range: "A1:E3",
-        extractType: "component_distribution",
-        purpose: "chart_source",
+    const analysisPublication = await jsonFetch(
+      `/api/analysis-runs/${acceptedAnalysisBody.analysisRun.id}/accept-and-create-chart`,
+      {
+        method: "POST",
+        headers: { "idempotency-key": `postgres_analysis_publish_${Date.now()}` },
+        body: {
+          analysisResultId: analysisExecuteBody.analysisResult.id,
+          defaultVisibleTraceIds: ["postgres_trace"],
+        },
       },
-    });
-    assert.equal(sourceExtract.status, 201);
-    const sourceExtractProposal = (await sourceExtract.json()).sourceExtractProposal;
-    assert.equal(sourceExtractProposal.preview.rows.length, 4);
-
-    const accepted = await jsonFetch(`/api/source-extract-proposals/${sourceExtractProposal.id}`, {
-      method: "PATCH",
-      body: { status: "accepted", decisionSummary: { acceptedByUser: true } },
-    });
-    assert.equal(accepted.status, 200);
-
-    const chartProposal = await jsonFetch(`/api/source-extract-proposals/${sourceExtractProposal.id}/chart-proposal`, {
-      method: "POST",
-      body: {},
-    });
-    assert.equal(chartProposal.status, 201);
-    const chartProposalSet = (await chartProposal.json()).chartProposalSet;
-    const proposal = chartProposalSet.payload.proposals[0];
-    assert.equal(proposal.origin, "source_extract");
-
-    const chartSpec = await jsonFetch(`/api/projects/${project.project.id}/chart-specs/from-proposal`, {
-      method: "POST",
-      body: {
-        chartProposalSetId: chartProposalSet.id,
-        proposalId: proposal.proposalId,
-      },
-    });
-    assert.equal(chartSpec.status, 201);
-    const chartSpecBody = await chartSpec.json();
-    assert.equal(chartSpecBody.chartSpec.datasetCommitId, undefined);
-    assert.equal(chartSpecBody.chartSpec.spec.sourceSnapshot.rows.length, 4);
+    );
+    assert.equal(analysisPublication.status, 201);
+    const analysisPublicationBody = await analysisPublication.json();
+    assert.equal(analysisPublicationBody.analysisRun.status, "completed");
+    assert.equal(analysisPublicationBody.analysisResult.status, "accepted");
+    assert.equal(analysisPublicationBody.chartSpec.spec.origin, "analysis_result");
+    assert.equal((await store.listChartSpecs({ projectId: project.project.id })).length, 1);
 
     const auditEvents = await store.listAuditEvents({ projectId: project.project.id });
     assert.equal(auditEvents.some((event) => event.action === "file.reuse"), true);
     assert.equal(auditEvents.some((event) => event.action === "workbook_review_session.create"), true);
     assert.equal(auditEvents.some((event) => event.action === "workbook_review.confirm_understanding"), true);
-    assert.equal(auditEvents.some((event) => event.action === "chart_spec.create"), true);
     assert.equal(auditEvents.some((event) => event.action === "analysis_result.publish_chart"), true);
   } finally {
     if (server) await closeServer(server);

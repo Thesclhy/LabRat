@@ -98,18 +98,16 @@ BrowserViews are scoped by `(lab_id, project_id, owner_user_id)`. `payload` may 
 ### Evidence-Backed Output Layer
 
 ```text
-source_extract_proposals
-chart_proposal_sets
 chart_specs
 manuscripts
 agent_runs
 ```
 
-`source_extract_proposals` stores reviewable bounded source selections and interpretation before chart creation.
-
-`chart_proposal_sets` stores proposal/review state. Active proposal creation is source-backed only.
-
-`chart_specs` stores durable evidence-backed chart definitions. `origin: source_extract` specs contain exact source refs and immutable source snapshot rows/series. `origin: analysis_result` specs use `labrat.chartSpec.v2`, set `analysis_result_id`, and contain exact analysis hashes, accepted input snapshot refs, a complete validated trace catalog, source-record lineage, and reviewed default trace visibility. There is no aggregate dataset foreign key.
+`chart_specs` stores durable `origin: analysis_result` chart definitions. Each
+spec uses `labrat.chartSpec.v3`, sets `analysis_result_id`, and contains exact
+analysis artifact ids, reviewed source selections, complete validated Plotly
+`data/layout`, a matching flat trace catalog, and reviewed default trace
+visibility. There is no proposal or aggregate dataset foreign key.
 
 `manuscripts` stores blocks, pages, canvas state, and references. Chart blocks carry their own complete ChartSpec snapshot plus placement-local `chartView.visibleTraceIds` for stable independent rendering and export.
 
@@ -128,15 +126,29 @@ analysis_publications
 
 `analysis_threads` is the durable project-scoped conversation/workflow container. It stores bounded visible messages and ordered artifact ids, not full result arrays in project state.
 
-`analysis_plan_revisions` is append-only except for workflow status. Each row stores one complete reviewed plan and frozen AnalysisSelection with exact source rectangles, manifest, missing-value policy, Python source/program hash, dependency/selection/plan hashes, validation, feedback, and actor timestamps. `(analysis_thread_id, revision)` is unique.
+`analysis_plan_revisions` is append-only except for workflow status. Each row
+stores one complete reviewed `sourceSelections + reviewPlan + displayPlan`
+payload, derived source rectangles, validation, feedback, and actor timestamps.
+It stores no Python, materialized values, field mapping, expected result table,
+or plan/selection/dependency/program review hashes.
+`(analysis_thread_id, revision)` is unique.
 
 `analysis_thread_retry_receipts` makes evidence-recovery planning durable and provider-call idempotent. `(project_id, idempotency_key)` is unique; each receipt binds the requesting actor, thread, and request hash, records `drafting`, `retryable`, or `completed`, and points completed work to exactly one AnalysisPlanRevision. A six-minute drafting lease prevents concurrent provider calls while allowing an abandoned claim to be recovered. If a revision was durably created before receipt completion, the next replay reconciles the receipt from the thread's current plan revision instead of calling the provider again.
 
-`analysis_runs` links one accepted plan revision to an immutable execution attempt. Plan acceptance creates a `queued` row. Execution transactionally locks the run and selected active-head rows before moving it to `running`; changed heads instead terminally produce `validation_failed`. Running claims carry an internal token and lease metadata so an expired worker may be replaced without allowing the old worker to finalize. One atomic finalization moves the run to `failed`, `validation_failed`, or `awaiting_result_review`. The run records frozen input/program/runtime hashes, bounded executor metadata, result-preview hash, warnings, and validation. `(project_id, idempotency_key)` makes plan acceptance retry-safe.
+`analysis_runs` links one accepted plan revision to an immutable execution
+attempt. Plan acceptance creates a `queued` row without Python. Execution
+re-resolves accepted source selections, materializes the exact multi-table
+input, generates policy-checked Python against that input, and moves the run
+through `running` to `failed`, `validation_failed`, or
+`awaiting_result_review`. Running claims carry an internal token and lease
+metadata so an expired worker may be replaced without allowing the old worker
+to finalize. The run records the materialized input, generated Python,
+input/program/runtime hashes, execution phases, diagnostics, warnings, and
+validation. `(project_id, idempotency_key)` makes acceptance retry-safe.
 
 `analysis_results` stores only backend-validated immutable executor output. A valid run finalization inserts one `awaiting_review` result in the same transaction that updates its AnalysisRun and AnalysisThread; failed or invalid output inserts no result. Result publication updates only acceptance workflow metadata, never the immutable result payload/hashes. `analysis_publications` records the atomic accepted-result plus ChartSpec boundary and is keyed by `(project_id, idempotency_key)`.
 
-`chart_specs.analysis_result_id` is nullable so existing `source_extract` ChartSpecs remain valid. Analysis-result ChartSpecs set this foreign key and carry the complete validated trace catalog in their immutable spec.
+`chart_specs.analysis_result_id` identifies the accepted AnalysisResult that owns the complete validated trace catalog in the immutable spec.
 
 ## Transaction Boundary
 
@@ -162,23 +174,25 @@ Accepting an analysis plan is a separate atomic operation:
 ```text
 lock project/idempotency key
   -> verify current awaiting-review revision
-  -> re-resolve active accepted snapshot selection
-  -> verify plan/selection/dependency hashes
+  -> verify every source selection still belongs to its active accepted region
   -> mark revision accepted
   -> create one queued AnalysisRun
   -> update AnalysisThread artifact ids/status
   -> record audit event
 ```
 
-This transaction does not execute Python or create an AnalysisResult/ChartSpec. A later explicit execution transaction claims only that queued run, validates frozen dependencies and output, and may create one awaiting-review AnalysisResult. It never creates a ChartSpec.
+This transaction does not generate or execute Python and does not create an
+AnalysisResult/ChartSpec. A later explicit execution transaction claims only
+that queued run, materializes the selected SourceDocument ranges, generates and
+policy-checks Python, validates its Plotly output, and may create one
+awaiting-review AnalysisResult. It never creates a ChartSpec.
 
 Accepting a validated analysis result is another atomic operation:
 
 ```text
 lock project/idempotency key
   -> lock current thread, accepted plan, awaiting-result-review run, and awaiting-review result
-  -> lock and verify every selected ExperimentSnapshotHead
-  -> verify exact result/preview/selection/dependency/program/runtime hashes
+  -> verify exact AnalysisResult id and reviewed visible trace ids
   -> mark the existing AnalysisResult accepted
   -> mark AnalysisRun and AnalysisThread completed
   -> create one analysis-result ChartSpec with complete trace catalog
@@ -194,7 +208,6 @@ Any validation, stale-head, conflicting-idempotency, or insert failure rolls bac
 ```text
 001_saas_auth_v0.sql
 005_source_documents.sql
-006_source_extract_proposals.sql
 007_agent_runs.sql
 008_workbook_review_sessions.sql
 009_workbook_understandings.sql
@@ -204,12 +217,18 @@ Any validation, stale-head, conflicting-idempotency, or insert failure rolls bac
 013_region_understandings.sql
 014_drop_aggregate_workbook_understanding.sql
 015_analysis_retry_receipts.sql
+016_drop_legacy_chart_proposals.sql
+017_reset_analysis_v2.sql
 ```
 
 Migration 011 removes the obsolete aggregate dataset, mapping, analysis-view, and observation-series tables/foreign keys from development databases. New databases never need those product paths.
-Migration 012 adds reviewed analysis persistence, publication receipts, and nullable `chart_specs.analysis_result_id` while preserving the source-backed chart path.
+Migration 012 adds reviewed analysis persistence, publication receipts, and `chart_specs.analysis_result_id`.
 Migration 013 adds stable review regions and immutable region-understanding revisions. Migration 014 intentionally drops the obsolete aggregate `workbook_understandings` table and embedded session understanding/region columns; development has no legacy migration or dual-write requirement.
 Migration 015 adds project-scoped analysis-thread retry receipts, provider-call leases, and completed-revision replay for durable `Retry with published data` idempotency.
+Migration 016 drops the retired source-extract/chart-proposal tables and ChartSpec proposal columns.
+Migration 017 removes development-time analysis artifacts and drops the retired
+AnalysisSelection, pre-acceptance Python, expected-output, runtime, and plan
+hash columns from `analysis_plan_revisions`.
 
 ## Invariants
 
@@ -218,8 +237,7 @@ Migration 015 adds project-scoped analysis-thread retry receipts, provider-call 
 - Browser rows are derived only from active experiment snapshot heads.
 - Fields with incompatible units remain distinct unless a reviewed conversion operation exists.
 - Scientific values require source refs and deterministic provenance.
-- Browser publish must not create chart proposals, ChartSpecs, or manuscript blocks.
-- Source-backed chart creation must not mutate accepted DataSnapshots.
+- Browser publish must not create ChartSpecs or manuscript blocks.
 - Analysis plan revisions are immutable apart from explicit status/acceptance metadata.
 - Plan acceptance is idempotent and must not execute code or create result/chart artifacts.
 - Evidence-recovery retry requires a valid idempotency key. Same-key/same-request replay returns one existing revision, conflicting reuse is rejected, and an active six-minute drafting lease permits only one provider call per thread.
@@ -227,6 +245,8 @@ Migration 015 adds project-scoped analysis-thread retry receipts, provider-call 
 - Active experiment heads are verified under the execution-claim transaction before code runs.
 - Finalization and optional valid AnalysisResult insertion are atomic.
 - Failed execution or result validation must not persist an AnalysisResult.
-- Result acceptance is idempotent, must recheck selected active heads, and atomically creates exactly one ChartSpec while linking the accepted result/run/thread.
+- Result acceptance is idempotent, requires the exact result id plus a non-empty
+  known curve set, and atomically creates exactly one ChartSpec while linking
+  the accepted result/run/thread.
 - Analysis-result ChartSpec list projections must not duplicate full trace arrays into project state; full arrays remain in the immutable stored spec and detail response.
 - Placement-local trace visibility belongs to manuscript block payloads, never to a ChartSpec mutation.

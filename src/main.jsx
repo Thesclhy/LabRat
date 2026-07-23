@@ -22,20 +22,15 @@ import {
 import { Plot } from "./charts/Plot";
 import { ManuscriptCanvas } from "./components/ManuscriptCanvas";
 import { BLANK_PROJECT_SOURCE_NAME, blankTemplateLinks, isBlankDataMode } from "./data/appMode.js";
-import { interpretProjectChartIntent } from "./data/chartIntentClient.js";
-import { removeChartProposal, setChartProposalStatus } from "./data/chartProposalViewState.js";
 import { emptyDataset } from "./data/loadEmbeddedDataset.js";
 import {
-  confirmServerAgentRun,
   createServerAgentRun,
-  createServerChartSpecFromProposal,
   createServerManuscript,
   createServerProject,
   createServerWorkbookReviewSession,
   draftServerProjectDataPlan,
   publishServerProjectDataPlan,
   deleteServerProject,
-  getServerAgentRun,
   getServerChartSpec,
   getServerProjectState,
   getServerSession,
@@ -45,18 +40,15 @@ import {
   listServerProjects,
   loginToServer,
   logoutFromServer,
-  patchServerChartProposalSet,
   patchServerManuscript,
   patchServerProjectProfile,
-  patchServerSourceExtractProposal,
-  planServerProjectAgent,
   reviseServerWorkbookReviewRegion,
   readServerSourceDocumentRange,
   confirmServerWorkbookReviewRegion,
   createServerWorkbookReviewRegion,
+  interpretServerWorkbookReviewRegion,
   ignoreServerWorkbookReviewRegion,
   deleteServerWorkbookReviewRegion,
-  createServerSourceExtractChartProposal,
   uploadServerProjectFile,
 } from "./data/serverApi.js";
 import { ls } from "./storage/localStorage";
@@ -80,13 +72,8 @@ function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
-function payloadWithServerId(record, idKey) {
-  const payload = record?.payload && typeof record.payload === "object" ? record.payload : {};
-  return {
-    ...payload,
-    serverId: record?.id || payload.serverId || null,
-    [idKey]: payload[idKey] || record?.id || payload.serverId || null,
-  };
+function isAbortError(error) {
+  return error?.name === "AbortError" || error?.code === "ABORT_ERR";
 }
 
 function workbookSuggestionRange(region) {
@@ -95,56 +82,6 @@ function workbookSuggestionRange(region) {
 
 function workbookSuggestionSheet(region) {
   return region?.sheetName || region?.sheet_name || region?.sheet || "";
-}
-
-function workbookReviewSuggestionsFromResponse(response = {}) {
-  const sourceDocument = response.sourceDocument || null;
-  const sourceDocumentId = sourceDocument?.id || response.workbookReviewSession?.sourceDocumentId || response.session?.sourceDocumentId || "";
-  const reviewRegions = asArray(response.reviewRegions);
-  const regionSuggestions = asArray(reviewRegions.length ? reviewRegions : response.regions)
-    .map((region) => {
-      const sheetName = workbookSuggestionSheet(region);
-      const range = workbookSuggestionRange(region);
-      if (!sheetName || !range) return null;
-      return {
-        sourceDocumentId: region.sourceDocumentId || sourceDocumentId,
-        sourceRegionId: region.id || "",
-        reviewRegionId: reviewRegions.length ? region.id : "",
-        sheetName,
-        range,
-        label: region.currentRevision?.summary?.[0] || region.label || region.kind || "Detected source region",
-        confidence: region.currentRevision?.confidence ?? region.confidence ?? null,
-        reason: region.currentRevision?.interpretation?.semanticType || region.kind || "detected_source_region",
-        description: region.currentRevision?.summary?.join(" ") || region.label || region.kind || "",
-        selectionMethod: reviewRegions.length ? "red_box_click" : "suggestion_click",
-      };
-    })
-    .filter(Boolean);
-  if (regionSuggestions.length) return regionSuggestions.slice(0, 6);
-  const fallbackSheets = asArray(sourceDocument?.metadata?.sheets);
-  return fallbackSheets
-    .map((sheet) => {
-      const sheetName = sheet?.name || "";
-      const range = sheet?.usedRange || "";
-      if (!sheetName || !range) return null;
-      return {
-        sourceDocumentId,
-        sourceRegionId: "",
-        sheetName,
-        range,
-        label: "Used range",
-        confidence: null,
-        reason: "sheet_used_range",
-        description: "Workbook used range",
-        selectionMethod: "suggestion_click",
-      };
-    })
-    .filter(Boolean)
-    .slice(0, 3);
-}
-
-function workbookSuggestionButtonLabel(selection) {
-  return `Select ${selection.sheetName}!${selection.range}`;
 }
 
 function excelColumnLabelToIndex(label) {
@@ -317,72 +254,6 @@ function workbookEdgeScrollDirection(clientX, clientY, rect) {
   return { x, y };
 }
 
-function normalizeAgentRunActionForChat(action, agentRun = {}) {
-  const result = action?.result && typeof action.result === "object" ? action.result : {};
-  const proposalRefs = asArray(agentRun?.proposalRefs);
-  const chartProposalSet = result.chartProposalSet || action?.chartProposalSet || null;
-  const chartProposalPayload = chartProposalSet?.payload || action?.chartProposalSetPayload || null;
-  const chartProposal = asArray(chartProposalPayload?.proposals)[0] || null;
-  const chartProposalSetId = chartProposalSet?.id
-    || result.chartProposalSetId
-    || action?.chartProposalSetId
-    || "";
-  const sourceExtractProposal = result.sourceExtractProposal || action?.sourceExtractProposal || null;
-  const sourceExtractProposalId = sourceExtractProposal?.id
-    || result.sourceExtractProposalId
-    || action?.sourceExtractProposalId
-    || (action?.type === "create_source_extract_proposal"
-      ? proposalRefs.find((ref) => ref?.type === "source_extract_proposal")?.id
-      : "")
-    || "";
-  const warnings = [
-    ...asArray(action?.warnings),
-    ...asArray(agentRun?.warnings),
-    ...asArray(chartProposalPayload?.warnings),
-    ...asArray(sourceExtractProposal?.warnings),
-  ];
-  const previewPatch = {};
-  if (chartProposal?.title || sourceExtractProposal?.preview?.chartIntentDraft?.title) {
-    previewPatch.chartTitle = chartProposal?.title || sourceExtractProposal?.preview?.chartIntentDraft?.title || "";
-  }
-  if (chartProposalSetId || sourceExtractProposalId) {
-    previewPatch.message = chartProposalSetId
-      ? `Queued chart proposal set ${chartProposalSetId}.`
-      : `Created source extract proposal ${sourceExtractProposalId}. Review the extracted source data before charting.`;
-  }
-  if (warnings.length) previewPatch.warnings = warnings;
-
-  return {
-    ...action,
-    agentRunId: agentRun?.id || action?.agentRunId || "",
-    ...(chartProposalSetId ? { chartProposalSetId } : {}),
-    ...(chartProposalPayload ? { chartProposalSetPayload: chartProposalSet ? payloadWithServerId(chartProposalSet, "proposalSetId") : chartProposalPayload } : {}),
-    ...(chartProposal?.proposalId ? { proposalId: chartProposal.proposalId, proposalStatus: chartProposal.status || "proposed" } : {}),
-    ...(sourceExtractProposalId ? { sourceExtractProposalId, sourceExtractProposalStatus: sourceExtractProposal?.status || action?.sourceExtractProposalStatus || "proposed" } : {}),
-    ...(sourceExtractProposal ? { sourceExtractProposal } : {}),
-    preview: {
-      ...(action?.preview || {}),
-      ...previewPatch,
-    },
-  };
-}
-
-function decisionSummary(items = []) {
-  const values = asArray(items);
-  return {
-    accepted: values.filter((item) => item?.status === "accepted").length,
-    rejected: values.filter((item) => item?.status === "rejected").length,
-    proposed: values.filter((item) => !item?.status || item.status === "proposed").length,
-    decisions: values
-      .filter((item) => item?.proposalId || item?.mappingId)
-      .map((item) => ({
-        proposalId: item.proposalId,
-        mappingId: item.mappingId,
-        status: item.status || "proposed",
-      })),
-  };
-}
-
 function datasetFromServerProjectState() {
   return emptyDataset();
 }
@@ -427,37 +298,6 @@ export function latestItem(items) {
 }
 
 
-function proposalPayloadFromRecord(record) {
-  if (!record) return null;
-  return payloadWithServerId(record, "proposalSetId");
-}
-
-function latestChartProposalSetForProject(projectState) {
-  return proposalPayloadFromRecord(latestItem(projectState?.chartProposalSets));
-}
-
-function pendingChartProposalsForProject(projectState, limit = 3) {
-  const proposalSet = latestChartProposalSetForProject(projectState);
-  const pending = asArray(proposalSet?.proposals).filter((proposal) => !proposal?.status || proposal.status === "proposed");
-  return {
-    proposals: pending.slice(0, limit),
-    remaining: Math.max(0, pending.length - limit),
-    total: pending.length,
-  };
-}
-
-function activeChartProposalSummaryForProject(projectState) {
-  const proposalSet = latestChartProposalSetForProject(projectState);
-  const proposals = asArray(proposalSet?.proposals);
-  const pending = proposals.filter((proposal) => !proposal?.status || proposal.status === "proposed").length;
-  const accepted = proposals.filter((proposal) => proposal?.status === "accepted").length;
-  return {
-    accepted,
-    pending,
-    total: accepted + pending,
-  };
-}
-
 function upsertServerRecordById(items, incoming) {
   if (!incoming?.id) return asArray(items);
   const values = asArray(items);
@@ -483,9 +323,7 @@ function isActiveChartSpecForProject(chartSpec) {
   if (!chartSpec) return false;
   if (chartSpec.isStale || chartSpec.status === "stale") return false;
   const spec = chartSpec.spec && typeof chartSpec.spec === "object" ? chartSpec.spec : chartSpec;
-  return spec?.origin === "source_extract"
-    || spec?.origin === "analysis_result"
-    || Boolean(spec?.sourceSnapshot);
+  return spec?.origin === "analysis_result";
 }
 
 export function activeChartSpecsForProject(projectState) {
@@ -498,15 +336,20 @@ function staleChartSpecCountForProject(projectState) {
 
 function projectWorkflowSummary(project, state = null) {
   const projectProfile = state?.projectProfile || project?.projectProfile || {};
+  const serverSummary = project?.workflowSummary || {};
   const profileCount = completedProfileFields(projectProfile);
-  const publishedExperimentCount = asArray(state?.experimentSnapshotHeads).length;
+  const publishedExperimentCount = state
+    ? asArray(state.experimentSnapshotHeads).length
+    : Number(serverSummary.publishedExperimentCount) || 0;
   const hasPublishedData = publishedExperimentCount > 0;
   const importRuns = asArray(state?.importRuns);
   const latestImportRun = latestItem(importRuns);
-  const chartProposalSets = asArray(state?.chartProposalSets);
-  const proposalPayloads = chartProposalSets.flatMap((set) => asArray(set?.payload?.proposals));
-  const acceptedCharts = proposalPayloads.filter((proposal) => proposal.status === "accepted").length;
+  const analysisThreads = asArray(state?.analysisThreads);
+  const pendingAnalyses = analysisThreads.filter((thread) => !["completed", "cancelled"].includes(thread?.status)).length;
   const chartSpecs = activeChartSpecsForProject(state);
+  const chartSpecCount = state
+    ? chartSpecs.length
+    : Number(serverSummary.chartSpecCount) || 0;
   const staleChartSpecs = staleChartSpecCountForProject(state);
   const manuscripts = asArray(state?.manuscripts);
   return {
@@ -515,9 +358,9 @@ function projectWorkflowSummary(project, state = null) {
     hasPublishedData,
     publishedExperimentCount,
     importStatus: latestImportRun?.status || (hasPublishedData ? "published" : "not started"),
-    chartProposalCount: proposalPayloads.length,
-    acceptedCharts,
-    chartSpecCount: chartSpecs.length,
+    analysisCount: analysisThreads.length,
+    pendingAnalysisCount: pendingAnalyses,
+    chartSpecCount,
     staleChartSpecCount: staleChartSpecs,
     manuscriptCount: manuscripts.length,
     manuscriptUpdatedAt: latestItem(manuscripts)?.updatedAt || null,
@@ -814,7 +657,7 @@ export function ProjectDashboard({
             <div className="project-flow-stack">
               <ProjectFlowItem done={summary.profileComplete} label="Project background" detail={summary.profileComplete ? "Ready for AI context" : "Needs more context"} />
               <ProjectFlowItem done={summary.hasPublishedData} label="Experiment Browser" detail={summary.hasPublishedData ? `${summary.publishedExperimentCount} accepted experiment records` : "Review and publish workbook experiments"} />
-              <ProjectFlowItem done={summary.chartSpecCount > 0} label="Approved charts" detail={summary.chartSpecCount ? `${summary.chartSpecCount} chart specs` : `${summary.chartProposalCount} proposals, ${summary.acceptedCharts} accepted`} />
+              <ProjectFlowItem done={summary.chartSpecCount > 0} label="Approved charts" detail={summary.chartSpecCount ? `${summary.chartSpecCount} chart specs` : `${summary.pendingAnalysisCount} analyses need review`} />
               <ProjectFlowItem done={summary.manuscriptCount > 0} label="Manuscript" detail={summary.manuscriptUpdatedAt ? `Updated ${formatShortDate(summary.manuscriptUpdatedAt)}` : "Not started"} />
             </div>
             <div className="project-detail-actions">
@@ -850,7 +693,70 @@ function ProjectFlowItem({ done, label, detail }) {
   );
 }
 
+function workbookReviewSessionFileName(session, sourceDocuments = []) {
+  const sourceDocument = asArray(sourceDocuments)
+    .find((document) => document?.id === session?.sourceDocumentId);
+  return session?.workbookSummary?.workbookName
+    || sourceDocument?.metadata?.workbookName
+    || sourceDocument?.fileName
+    || "Workbook";
+}
+
+function WorkbookReviewSessionDialog({ open, sessions = [], sourceDocuments = [], regions = [], onOpenSession, onClose }) {
+  if (!open) return null;
+  const activeRegions = asArray(regions).filter((region) => !region?.disposition || region.disposition === "active");
+  const orderedSessions = [...asArray(sessions)].sort((left, right) => (
+    new Date(right?.updatedAt || right?.createdAt || 0).getTime()
+      - new Date(left?.updatedAt || left?.createdAt || 0).getTime()
+  ));
+  return (
+    <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose?.(); }}>
+      <section className="modal workbook-session-browser-modal" role="dialog" aria-modal="true" aria-label="Uploaded workbooks">
+        <div className="modal-head">
+          <div>
+            <h2>Uploaded workbooks</h2>
+            <p>Select a workbook to browse its reviewed regions.</p>
+          </div>
+          <button type="button" aria-label="Close uploaded workbooks" onClick={onClose}>x</button>
+        </div>
+        <div className="workbook-session-browser-list">
+          {orderedSessions.map((session) => {
+            const sessionRegions = activeRegions.filter((region) => region?.workbookReviewSessionId === session.id);
+            const confirmedCount = sessionRegions.filter((region) => region?.reviewStatus === "accepted").length;
+            const pendingCount = sessionRegions.length - confirmedCount;
+            const fileName = workbookReviewSessionFileName(session, sourceDocuments);
+            return (
+              <button
+                type="button"
+                className="workbook-session-browser-row"
+                aria-label={`Open ${fileName}`}
+                key={session.id}
+                onClick={() => onOpenSession?.(session)}
+              >
+                <span className="workbook-session-browser-file">
+                  <strong>{fileName}</strong>
+                  <small>
+                    {session?.workbookSummary?.sheetCount || 0} sheets
+                    {session?.updatedAt || session?.createdAt ? ` - Updated ${formatShortDate(session.updatedAt || session.createdAt)}` : ""}
+                  </small>
+                </span>
+                <span className="workbook-session-browser-counts">
+                  <span>{confirmedCount} confirmed</span>
+                  <span>{pendingCount} need review</span>
+                </span>
+                <span className="workbook-session-browser-open" aria-hidden="true">Open</span>
+              </button>
+            );
+          })}
+          {!orderedSessions.length && <p className="browser-muted">No uploaded workbooks are available.</p>}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export function ProjectOverview({ projectState, onAskLabRat, onOpenProfile, onUploadWorkbook, onGoBrowser, onOpenChartReview, onGoManuscript }) {
+  const [workbookListOpen, setWorkbookListOpen] = useState(false);
   const summary = projectWorkflowSummary(projectState?.project, projectState);
   const workbookReviewSessions = asArray(projectState?.workbookReviewSessions);
   const activeWorkbookReviewRegions = asArray(projectState?.workbookReviewRegions)
@@ -860,22 +766,23 @@ export function ProjectOverview({ projectState, onAskLabRat, onOpenProfile, onUp
   const confirmedWorkbookReviewRegions = activeWorkbookReviewRegions
     .filter((region) => region?.reviewStatus === "accepted");
   const pendingWorkbookReviewRegion = latestItem(pendingWorkbookReviewRegions);
-  const confirmedWorkbookReviewRegion = latestItem(confirmedWorkbookReviewRegions);
   const pendingWorkbookReviewSession = workbookReviewSessions.find(
     (session) => session?.id === pendingWorkbookReviewRegion?.workbookReviewSessionId,
   ) || latestItem(workbookReviewSessions);
-  const confirmedWorkbookReviewSession = workbookReviewSessions.find(
-    (session) => session?.id === confirmedWorkbookReviewRegion?.workbookReviewSessionId,
-  ) || latestItem(workbookReviewSessions);
   const sourceDocumentCount = asArray(projectState?.sourceDocuments).length;
-  const pendingChartProposals = pendingChartProposalsForProject(projectState);
-  const activeChartProposalSummary = activeChartProposalSummaryForProject(projectState);
-  const chartReviewDetail = "Use the one-chart prompt or queued proposals; source extracts stay reviewable before charting";
+  const openWorkbookList = () => setWorkbookListOpen(true);
+  const openWorkbookSession = (session) => {
+    setWorkbookListOpen(false);
+    onUploadWorkbook?.(session);
+  };
+  const chartReviewDetail = summary.pendingAnalysisCount
+    ? `${summary.pendingAnalysisCount} analysis request${summary.pendingAnalysisCount === 1 ? "" : "s"} still need review`
+    : "Describe a chart, review the exact source ranges and processing plan, then run it";
   const manageChartDetail = summary.staleChartSpecCount
     ? `${summary.chartSpecCount} active ChartSpecs. Some older specs are hidden until regenerated.`
     : summary.chartSpecCount
       ? `${summary.chartSpecCount} active ChartSpecs are available for Manuscript insertion`
-      : "Accepted proposals and durable ChartSpecs appear here after review";
+      : "Accepted analysis results become durable ChartSpecs after review";
   const nextAction = !summary.profileComplete
     ? { label: "Edit profile", action: onOpenProfile }
     : pendingWorkbookReviewRegions.length
@@ -885,11 +792,11 @@ export function ProjectOverview({ projectState, onAskLabRat, onOpenProfile, onUp
         : summary.hasPublishedData
           ? { label: "Open Experiment Browser", action: onGoBrowser }
           : confirmedWorkbookReviewRegions.length
-            ? { label: "View confirmed regions", action: () => onUploadWorkbook?.(confirmedWorkbookReviewSession) }
+            ? { label: "View confirmed regions", action: openWorkbookList }
             : workbookReviewSessions.length
               ? { label: "Review workbook", action: () => onUploadWorkbook?.(latestItem(workbookReviewSessions)) }
               : !summary.chartSpecCount
-        ? { label: "Review chart proposals", action: onOpenChartReview }
+        ? { label: "Create chart", action: onOpenChartReview }
         : { label: "Build manuscript", action: onGoManuscript };
   return (
     <main className="project-overview">
@@ -926,10 +833,10 @@ export function ProjectOverview({ projectState, onAskLabRat, onOpenProfile, onUp
               : workbookReviewSessions.length
                 ? "Review workbook"
                 : "Upload workbook"}
-          onClick={pendingWorkbookReviewSession
+          onClick={pendingWorkbookReviewRegions.length && pendingWorkbookReviewSession
             ? () => onUploadWorkbook?.(pendingWorkbookReviewSession)
-            : confirmedWorkbookReviewSession
-              ? () => onUploadWorkbook?.(confirmedWorkbookReviewSession)
+            : confirmedWorkbookReviewRegions.length
+              ? openWorkbookList
               : onAskLabRat}
           actionTitle={pendingWorkbookReviewRegions.length
             ? "Open the session containing the latest region awaiting review"
@@ -948,20 +855,18 @@ export function ProjectOverview({ projectState, onAskLabRat, onOpenProfile, onUp
           actionDisabled={!summary.hasPublishedData}
           actionTitle={summary.hasPublishedData ? "Open accepted experiment records" : "Publish reviewed workbook experiments first"}
         />
-        <ProjectOverviewCard title="Review chart proposals" value={`${summary.chartProposalCount} proposals`} detail={chartReviewDetail} action="Review chart proposals" onClick={onOpenChartReview}>
-          <PendingChartProposalList
-            proposals={pendingChartProposals.proposals}
-            remaining={pendingChartProposals.remaining}
-            onEditProposal={(proposalId) => onOpenChartReview?.(proposalId)}
-          />
-        </ProjectOverviewCard>
-        <ProjectOverviewCard title="Manage approved charts" value={`${summary.acceptedCharts} accepted / ${summary.chartSpecCount} specs`} detail={manageChartDetail} action="Manage approved charts" onClick={() => onOpenChartReview?.({ statusFilter: "active" })}>
-          <ActiveChartProposalSummary
-            summary={activeChartProposalSummary}
-          />
-        </ProjectOverviewCard>
+        <ProjectOverviewCard title="Create and review charts" value={`${summary.analysisCount} analyses`} detail={chartReviewDetail} action="Create chart" onClick={onOpenChartReview} />
+        <ProjectOverviewCard title="Manage approved charts" value={`${summary.chartSpecCount} specs`} detail={manageChartDetail} action="Manage approved charts" onClick={() => onOpenChartReview?.({ statusFilter: "active" })} />
         <ProjectOverviewCard title="Manuscript" value={summary.manuscriptCount ? "Draft" : "Not started"} detail={summary.manuscriptUpdatedAt ? `Updated ${formatShortDate(summary.manuscriptUpdatedAt)}. Insert approved ChartSpecs only.` : "Insert approved ChartSpecs or future FigurePackages into the canvas"} action="Insert approved charts" onClick={onGoManuscript} />
       </section>
+      <WorkbookReviewSessionDialog
+        open={workbookListOpen}
+        sessions={workbookReviewSessions}
+        sourceDocuments={projectState?.sourceDocuments}
+        regions={projectState?.workbookReviewRegions}
+        onOpenSession={openWorkbookSession}
+        onClose={() => setWorkbookListOpen(false)}
+      />
     </main>
   );
 }
@@ -988,38 +893,6 @@ function ProjectOverviewCard({ title, value, detail, action, onClick, actionDisa
         )}
       </div>
     </article>
-  );
-}
-
-function proposalConfidenceLabel(proposal) {
-  return typeof proposal?.confidence === "number" ? `${Math.round(proposal.confidence * 100)}%` : "n/a";
-}
-
-function PendingChartProposalList({ proposals = [], remaining = 0, onEditProposal }) {
-  const items = asArray(proposals);
-  if (!items.length) return null;
-  return (
-    <div className="overview-mini-list">
-      {items.map((proposal) => (
-        <div className="overview-mini-row" key={proposal.proposalId || proposal.title}>
-          <div>
-            <strong>{proposal.title || proposal.proposalId}</strong>
-            <small>{proposal.chartType || "chart"} - {proposalConfidenceLabel(proposal)} - {proposal.status || "proposed"}</small>
-          </div>
-          <button type="button" onClick={() => onEditProposal?.(proposal.proposalId)}>Edit</button>
-        </div>
-      ))}
-      {remaining > 0 && <small className="overview-mini-more">+{remaining} more pending</small>}
-    </div>
-  );
-}
-
-function ActiveChartProposalSummary({ summary }) {
-  if (!summary?.total) return null;
-  return (
-    <div className="overview-mini-list">
-      <small>{summary.accepted} accepted / {summary.pending} pending</small>
-    </div>
   );
 }
 
@@ -1161,12 +1034,8 @@ export function WorkbookReviewWorkspace({
 }) {
   const session = reviewState?.session || reviewState?.workbookReviewSession || null;
   const initialSourceDocument = reviewState?.sourceDocument || null;
-  const [documentsState, setDocumentsState] = useState({
-    loading: false,
-    error: "",
-    items: initialSourceDocument?.id ? [initialSourceDocument] : [],
-  });
-  const [selectedDocumentId, setSelectedDocumentId] = useState(initialSourceDocument?.id || "");
+  const [resolvedSourceDocument, setResolvedSourceDocument] = useState(initialSourceDocument);
+  const [sourceDocumentError, setSourceDocumentError] = useState("");
   const [activeSheetName, setActiveSheetName] = useState("");
   const [rangeState, setRangeState] = useState({ loading: false, error: "" });
   const [scrollState, setScrollState] = useState({ top: 0, left: 0, width: 1100, height: 600 });
@@ -1185,10 +1054,10 @@ export function WorkbookReviewWorkspace({
   const edgeScrollDirectionRef = useRef({ x: 0, y: 0 });
   const appliedFocusKeyRef = useRef("");
   const appliedActiveRegionKeyRef = useRef("");
-  const sourceDocument = documentsState.items.find((document) => document.id === selectedDocumentId)
-    || initialSourceDocument
-    || documentsState.items[0]
-    || null;
+  const sessionSourceDocumentId = session?.sourceDocumentId || initialSourceDocument?.id || "";
+  const sourceDocument = resolvedSourceDocument?.id === sessionSourceDocumentId
+    ? resolvedSourceDocument
+    : initialSourceDocument;
   const workbookName = sourceDocument?.metadata?.workbookName
     || session?.workbookSummary?.workbookName
     || "Workbook";
@@ -1264,33 +1133,27 @@ export function WorkbookReviewWorkspace({
   for (let col = displayBounds.startCol; col <= displayBounds.endCol; col += 1) colIndexes.push(col);
 
   useEffect(() => {
-    setDocumentsState((current) => {
-      if (!initialSourceDocument?.id) return current;
-      if (current.items.some((document) => document.id === initialSourceDocument.id)) return current;
-      return { ...current, items: [initialSourceDocument, ...current.items] };
-    });
-    if (initialSourceDocument?.id) setSelectedDocumentId((current) => current || initialSourceDocument.id);
-  }, [initialSourceDocument?.id]);
+    setResolvedSourceDocument(initialSourceDocument);
+    setSourceDocumentError("");
+  }, [initialSourceDocument?.id, session?.id]);
 
   useEffect(() => {
-    if (!projectId) return undefined;
+    if (!projectId || !sessionSourceDocumentId) return undefined;
     let cancelled = false;
-    setDocumentsState((current) => ({ ...current, loading: true, error: "" }));
     listServerSourceDocuments(projectId)
       .then((body) => {
         if (cancelled) return;
-        const items = asArray(body?.sourceDocuments);
-        setDocumentsState({ loading: false, error: "", items: items.length ? items : (initialSourceDocument?.id ? [initialSourceDocument] : []) });
-        setSelectedDocumentId((current) => current || items[0]?.id || initialSourceDocument?.id || "");
+        const exactDocument = asArray(body?.sourceDocuments)
+          .find((document) => document.id === sessionSourceDocumentId);
+        if (exactDocument) setResolvedSourceDocument(exactDocument);
       })
       .catch((err) => {
-        if (cancelled) return;
-        setDocumentsState((current) => ({ ...current, loading: false, error: err.message || String(err) }));
+        if (!cancelled) setSourceDocumentError(err.message || String(err));
       });
     return () => {
       cancelled = true;
     };
-  }, [projectId, initialSourceDocument?.id]);
+  }, [projectId, sessionSourceDocumentId]);
 
   useEffect(() => {
     if (!sourceDocument?.id) return;
@@ -1303,12 +1166,12 @@ export function WorkbookReviewWorkspace({
   useEffect(() => {
     const activeRegion = findWorkbookDraftRegionById(draftRegions, activeDraftRegionId);
     if (!activeRegion || activeRegion.disposition === "deleted") return;
+    if (activeRegion.sourceDocumentId && activeRegion.sourceDocumentId !== sourceDocument?.id) return;
     const activeRegionKey = `${activeDraftRegionId}:${activeRegion.sourceDocumentId || ""}:${activeRegion.sheetName || ""}`;
     if (appliedActiveRegionKeyRef.current === activeRegionKey) return;
     appliedActiveRegionKeyRef.current = activeRegionKey;
-    if (activeRegion.sourceDocumentId) setSelectedDocumentId(activeRegion.sourceDocumentId);
     if (activeRegion.sheetName) setActiveSheetName(activeRegion.sheetName);
-  }, [draftRegions, activeDraftRegionId]);
+  }, [draftRegions, activeDraftRegionId, sourceDocument?.id]);
 
   useEffect(() => {
     const scrollElement = gridScrollRef.current?.getBoundingClientRect
@@ -1333,10 +1196,10 @@ export function WorkbookReviewWorkspace({
 
   useEffect(() => {
     if (!focusSelection?.sourceDocumentId || !focusSelection?.sheetName || !focusSelection?.range) return;
+    if (focusSelection.sourceDocumentId !== sourceDocument?.id) return;
     const focusKey = `${focusSelection.requestId || ""}:${focusSelection.sourceDocumentId}:${focusSelection.sheetName}:${focusSelection.range}`;
     if (appliedFocusKeyRef.current === focusKey) return;
     appliedFocusKeyRef.current = focusKey;
-    setSelectedDocumentId(focusSelection.sourceDocumentId);
     setActiveSheetName(focusSelection.sheetName);
     if (focusSelection.focusOnly || focusSelection.selectionMethod === "red_box_click") return;
     if (onCreateRegion) {
@@ -1366,6 +1229,7 @@ export function WorkbookReviewWorkspace({
     onDraftRegionsChange,
     onActiveDraftRegionChange,
     onCreateRegion,
+    sourceDocument?.id,
   ]);
 
   useEffect(() => {
@@ -1807,22 +1671,6 @@ export function WorkbookReviewWorkspace({
     <main className="workbook-review-workspace">
       <section className="workbook-excel-toolbar" aria-label="Workbook controls">
         <strong>{workbookName}</strong>
-        {documentsState.items.length > 1 && (
-          <select
-            aria-label="Workbook"
-            value={selectedDocumentId}
-            onChange={(event) => {
-              setSelectedDocumentId(event.target.value);
-              setActiveSheetName("");
-            }}
-          >
-            {documentsState.items.map((document) => (
-              <option value={document.id} key={document.id}>
-                {document.metadata?.workbookName || document.fileName || document.id}
-              </option>
-            ))}
-          </select>
-        )}
         <div className="workbook-sheet-tabs" aria-label="Workbook sheets">
           {sheets.map((sheet) => (
             <button
@@ -1854,9 +1702,9 @@ export function WorkbookReviewWorkspace({
       <div className={`workbook-review-layout${reviewDock ? " has-review-dock" : ""}`}>
         <section className="workbook-review-main" aria-label="Workbook evidence">
           {reviewState?.error && <p className="import-review-error">{reviewState.error}</p>}
-          {documentsState.error && <p className="import-review-error">{documentsState.error}</p>}
+          {sourceDocumentError && <p className="import-review-error">{sourceDocumentError}</p>}
           {rangeState.error && <p className="import-review-error">{rangeState.error}</p>}
-          {!sourceDocument && !documentsState.loading && (
+          {!sourceDocument && (
             <div className="import-review-empty">Open Ask LabRat and attach a spreadsheet to start workbook review.</div>
           )}
           {sourceDocument && (
@@ -1905,18 +1753,13 @@ export function WorkbookReviewWorkspace({
 
 export function ChartReviewModal({
   open,
-  allowSourcePrompt = false,
-  chartProposalState,
+  allowAnalysisPrompt = false,
   chartInterpretState,
   chartSpecs,
-  focusProposalId,
   statusFilter,
-  onChartProposalDecision,
-  onChartProposalDelete,
   onInterpretChart,
-  onSourceExtractDecision,
-  onCreateChartProposalFromSourceExtract,
-  onCreateChartSpec,
+  onLoadChartSpecDetail,
+  onInsertChartSpec,
   onOpenImportReview,
   onClose,
 }) {
@@ -1925,18 +1768,18 @@ export function ChartReviewModal({
     if (open) setReviewMode(statusFilter === "active" ? "edit" : "review");
   }, [open, statusFilter]);
   if (!open) return null;
-  const canReviewCharts = allowSourcePrompt;
-  const title = statusFilter === "active" ? "Accepted + pending charts" : "Review chart proposals";
+  const canReviewCharts = allowAnalysisPrompt;
+  const title = statusFilter === "active" ? "Manage approved charts" : "Create and review charts";
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <section className="modal wide chart-review-modal" role="dialog" aria-modal="true" aria-label={title}>
         <div className="modal-head">
           <span>{title}</span>
-          <button type="button" aria-label="Close chart proposal review" onClick={onClose}>x</button>
+          <button type="button" aria-label="Close chart review" onClick={onClose}>x</button>
         </div>
         <div className="modal-body">
           <p className="import-review-note">
-            Draft one chart proposal from a prompt, review chart proposals, then create ChartSpecs for Manuscript.
+            Describe a chart, review the exact source ranges and processing plan, then accept the validated result to create a ChartSpec.
           </p>
           <div className="chart-review-mode-tabs" role="tablist" aria-label="Chart review mode">
             <button
@@ -1946,7 +1789,7 @@ export function ChartReviewModal({
               className={reviewMode === "review" ? "active" : ""}
               onClick={() => setReviewMode("review")}
             >
-              Review proposals
+              Create chart
             </button>
             <button
               type="button"
@@ -1955,24 +1798,18 @@ export function ChartReviewModal({
               className={reviewMode === "edit" ? "active" : ""}
               onClick={() => setReviewMode("edit")}
             >
-              Edit specs
+              Approved charts
             </button>
           </div>
           {canReviewCharts ? (
             <ChartReviewPanel
-              allowSourcePrompt={allowSourcePrompt}
-              chartProposalState={chartProposalState}
+              allowAnalysisPrompt={allowAnalysisPrompt}
               chartInterpretState={chartInterpretState}
               chartSpecs={chartSpecs}
-              focusProposalId={focusProposalId}
-              statusFilter={statusFilter}
               viewMode={reviewMode}
-              onChartProposalDecision={onChartProposalDecision}
-              onChartProposalDelete={onChartProposalDelete}
               onInterpretChart={onInterpretChart}
-              onSourceExtractDecision={onSourceExtractDecision}
-              onCreateChartProposalFromSourceExtract={onCreateChartProposalFromSourceExtract}
-              onCreateChartSpec={onCreateChartSpec}
+              onLoadChartSpecDetail={onLoadChartSpecDetail}
+              onInsertChartSpec={onInsertChartSpec}
             />
           ) : (
             <div className="import-review-empty chart-review-empty">
@@ -1992,151 +1829,6 @@ export function ChartReviewModal({
           )}
         </div>
       </section>
-    </div>
-  );
-}
-
-function AgentActionCard({ action, projectState, busyActionId, onChooseFile, onUseExistingFile, onExecute, onConfirm, onAcceptChartProposal, onCreateChartSpec, onInsertChartSpec, onReviewSourceExtract }) {
-  const params = action.params || {};
-  const preview = action.preview || null;
-  const fileOptions = asArray(params.existingFiles);
-  const isBusy = busyActionId === action.actionId || ["previewing", "executing", "accepting_proposal", "creating_chart_spec"].includes(action.status);
-  const isBackendAgentRunAction = Boolean(action.agentRunId);
-  const isAgentRunConfirmable = Boolean(action.agentRunId)
-    && ["create_compare_chart_proposal", "create_source_extract_proposal"].includes(action.type)
-    && action.status === "requires_confirmation";
-  const isFrontendExecutableAgentRunAction = isBackendAgentRunAction
-    && ["interpret_chart"].includes(action.type)
-    && action.status === "requires_confirmation";
-  const canRefreshClosedAgentRun = isBackendAgentRunAction
-    && action.status === "failed"
-    && /AgentRun is already (completed|cancelled)/i.test(action.error || "");
-  const canConfirm = isAgentRunConfirmable || ["ready_to_apply", "ready_to_persist", "ready_to_create"].includes(action.status);
-  const hasChatChartProposal = ["interpret_chart", "compare_series", "create_compare_chart_proposal"].includes(action.type) && action.chartProposalSetId && action.proposalId;
-  const hasSourceExtractProposal = Boolean(action.sourceExtractProposalId) && !hasChatChartProposal;
-  const proposalAccepted = action.proposalStatus === "accepted" || ["proposal_accepted", "chart_spec_created"].includes(action.status);
-  const chartSpecCreated = action.status === "chart_spec_created" || Boolean(action.chartSpecId);
-  const warnings = [...asArray(action.warnings), ...asArray(preview?.warnings)];
-  const targetAliases = asArray(params.targetExperimentAliases).length
-    ? asArray(params.targetExperimentAliases)
-    : asArray(params.experimentAliases);
-  return (
-    <div className={`agent-action-card is-${action.status || "proposed"}`}>
-      <div className="agent-action-head">
-        <strong>{action.label || action.type}</strong>
-        <span>{action.status || "proposed"}</span>
-      </div>
-      {action.description && <p>{action.description}</p>}
-      {targetAliases.length > 0 && <small>Target: {targetAliases.join(", ")}</small>}
-      {params.prompt && <small>Prompt: {params.prompt}</small>}
-      {preview?.summary && (
-        <div className="agent-action-summary">
-          {Object.entries(preview.summary).map(([key, value]) => (
-            <span key={key}>{key}: {String(value)}</span>
-          ))}
-        </div>
-      )}
-      {preview?.relationshipProposal && (
-        <small>
-          Relationship: {preview.relationshipProposal.supplementType || preview.relationshipProposal.proposedRelationship}
-          {" -> "}
-          {asArray(preview.relationshipProposal.targetExperimentIds).join(", ")}
-        </small>
-      )}
-      {preview?.chartTitle && <small>Chart: {preview.chartTitle}</small>}
-      {preview?.message && <small>{preview.message}</small>}
-      {warnings.length > 0 && (
-        <ul className="agent-action-warnings">
-          {warnings.map((warning, index) => (
-            <li key={`${warning.code || "warning"}-${index}`}>{warning.message || warning.code || String(warning)}</li>
-          ))}
-        </ul>
-      )}
-      {action.error && <p className="import-review-error">{action.error}</p>}
-      <div className="agent-action-buttons">
-        {action.requiresFile && !canConfirm && action.status !== "completed" && (
-          <>
-            <button type="button" disabled={isBusy} onClick={() => onChooseFile?.(action.actionId)}>
-              {isBusy ? "Working..." : "Choose file"}
-            </button>
-            {fileOptions.length > 0 && (
-              <select
-                disabled={isBusy}
-                defaultValue=""
-                onChange={(event) => {
-                  if (event.target.value) onUseExistingFile?.(action.actionId, event.target.value);
-                  event.target.value = "";
-                }}
-              >
-                <option value="">Use existing file...</option>
-                {fileOptions.map((file) => (
-                  <option key={file.fileObjectId} value={file.fileObjectId}>{file.name}</option>
-                ))}
-              </select>
-            )}
-          </>
-        )}
-        {!action.requiresFile && (!isBackendAgentRunAction || isFrontendExecutableAgentRunAction) && !canConfirm && action.status !== "completed" && !hasChatChartProposal && (
-          <button type="button" disabled={isBusy} onClick={() => onExecute?.(action.actionId)}>
-            {isBusy ? "Working..." : action.type === "resolve_data_query" ? "Resolve query" : "Prepare"}
-          </button>
-        )}
-        {canConfirm && (
-          <button type="button" className="primary" disabled={isBusy} onClick={() => onConfirm?.(action.actionId)}>
-            {isBusy ? "Applying..." : isAgentRunConfirmable ? "Confirm agent action" : action.type === "create_chart_spec_from_proposal" ? "Create ChartSpec" : action.type?.includes("chart") ? "Confirm chart action" : "Confirm apply"}
-          </button>
-        )}
-        {canRefreshClosedAgentRun && (
-          <button type="button" className="primary" disabled={isBusy} onClick={() => onConfirm?.(action.actionId)}>
-            {isBusy ? "Refreshing..." : "Refresh result"}
-          </button>
-        )}
-        {hasChatChartProposal && !chartSpecCreated && (
-          <>
-            {proposalAccepted ? (
-              <span className="workflow-status is-applied">Proposal accepted</span>
-            ) : (
-              <button type="button" disabled={isBusy} onClick={() => onAcceptChartProposal?.(action.actionId)}>
-                {isBusy ? "Accepting..." : "Accept proposal"}
-              </button>
-            )}
-            <button
-              type="button"
-              className="primary"
-              disabled={isBusy || !proposalAccepted}
-              title={proposalAccepted ? "Create a durable ChartSpec for Manuscript insertion" : "Accept the proposal before creating a ChartSpec"}
-              onClick={() => onCreateChartSpec?.(action.actionId)}
-            >
-              {isBusy ? "Working..." : "Create ChartSpec"}
-            </button>
-          </>
-        )}
-        {chartSpecCreated && <span className="workflow-status is-applied">ChartSpec created</span>}
-        {chartSpecCreated && action.chartSpecId && (
-          <button
-            type="button"
-            className="primary"
-            disabled={isBusy}
-            onClick={() => onInsertChartSpec?.(action.chartSpecId)}
-          >
-            Insert into Manuscript
-          </button>
-        )}
-        {hasSourceExtractProposal && (
-          <button
-            type="button"
-            disabled={isBusy}
-            onClick={() => onReviewSourceExtract?.(action.sourceExtractProposal || {
-              id: action.sourceExtractProposalId,
-              status: action.sourceExtractProposalStatus || "proposed",
-            })}
-          >
-            Review source extract
-          </button>
-        )}
-        {action.status === "completed" && !hasChatChartProposal && <span className="workflow-status is-applied">Completed</span>}
-      </div>
-      {projectState?.project?.name && <small>Project: {projectState.project.name}</small>}
     </div>
   );
 }
@@ -2172,11 +1864,8 @@ export function AgentPanel({
   activeProjectId,
   projectState,
   onProjectStateLoaded,
-  onInsertChartSpec,
-  onReviewSourceExtract,
   onWorkbookReviewReady,
-  onWorkbookSuggestionSelect,
-  onOpenExperimentBrowser,
+  onWorkbookReviewLinkOpen,
   onOpenAnalysisReview,
 }) {
   const chatHistoryKey = useMemo(
@@ -2199,23 +1888,24 @@ export function AgentPanel({
   const [houseRules, setHouseRules] = useState(() => localStorage.getItem("labrat_blank_house_rules_v1") || "");
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [busyOperation, setBusyOperation] = useState(null);
   const [expanded, setExpanded] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [pendingFileActionId, setPendingFileActionId] = useState("");
   const [pendingSpreadsheetFile, setPendingSpreadsheetFile] = useState(null);
-  const [busyActionId, setBusyActionId] = useState("");
   const [analysisCapabilitiesState, setAnalysisCapabilitiesState] = useState({
     loading: false,
     error: "",
     value: null,
   });
   const [retryingAnalysisThreadId, setRetryingAnalysisThreadId] = useState("");
-  const acceptedDataStateKey = `${asArray(projectState?.dataSnapshots).length}:${asArray(projectState?.experimentSnapshotHeads).length}`;
+  const [openingWorkbookReviewSessionId, setOpeningWorkbookReviewSessionId] = useState("");
+  const acceptedDataStateKey = `${asArray(projectState?.dataSnapshots).length}:${asArray(projectState?.experimentSnapshotHeads).length}:${asArray(projectState?.regionUnderstandings).length}`;
   const messagesRef = useRef(null);
   const activeProjectIdRef = useRef(activeProjectId);
   const chatScrollInitializedRef = useRef(false);
   const lastChatScrollTopRef = useRef(0);
   const fileActionInputRef = useRef(null);
+  const agentRequestAbortRef = useRef(null);
   const [settingsDraft, setSettingsDraft] = useState({
     writingExamples,
     projectBackground,
@@ -2224,6 +1914,19 @@ export function AgentPanel({
   useEffect(() => {
     activeProjectIdRef.current = activeProjectId;
   }, [activeProjectId]);
+  useEffect(() => {
+    if (!busyOperation) return undefined;
+    const updateElapsed = () => {
+      setBusyOperation((current) => current ? {
+        ...current,
+        elapsedSeconds: Math.max(0, Math.floor((Date.now() - current.startedAt) / 1000)),
+      } : current);
+    };
+    updateElapsed();
+    const timer = window.setInterval(updateElapsed, 1000);
+    return () => window.clearInterval(timer);
+  }, [busyOperation?.startedAt]);
+  useEffect(() => () => agentRequestAbortRef.current?.abort(), []);
   useEffect(() => {
     ["key_v1", "model_v1"].forEach((suffix) => {
       localStorage.removeItem(`labrat_blank_anthropic_${suffix}`);
@@ -2317,24 +2020,6 @@ export function AgentPanel({
   };
   const updateSettingsDraft = (key, value) => setSettingsDraft((draft) => ({ ...draft, [key]: value }));
   const serverAgentEnabled = Boolean(activeProjectId);
-  const updateActionInHistory = (actionId, patch) => {
-    setHistory((current) => current.map((message) => {
-      if (!Array.isArray(message.actions)) return message;
-      return {
-        ...message,
-        actions: message.actions.map((action) => (
-          action.actionId === actionId ? { ...action, ...patch } : action
-        )),
-      };
-    }));
-  };
-  const actionById = (actionId) => {
-    for (const message of history) {
-      const action = asArray(message.actions).find((item) => item.actionId === actionId);
-      if (action) return action;
-    }
-    return null;
-  };
   const reloadProjectAfterAgentAction = async () => {
     if (!activeProjectId) return null;
     const state = await getServerProjectState(activeProjectId);
@@ -2344,7 +2029,9 @@ export function AgentPanel({
   const retryAnalysisWithPublishedData = async (thread) => {
     if (!thread?.id || retryingAnalysisThreadId) return;
     if (analysisCapabilitiesState.loading || analysisCapabilitiesState.value?.model?.configured !== true) return;
-    if ((analysisCapabilitiesState.value?.acceptedData?.activeExperimentHeadCount || 0) < 1) return;
+    const acceptedEvidenceCount = (analysisCapabilitiesState.value?.acceptedData?.activeExperimentHeadCount || 0)
+      + (analysisCapabilitiesState.value?.acceptedData?.confirmedRegionCount || 0);
+    if (acceptedEvidenceCount < 1) return;
     const requestedProjectId = activeProjectId;
     const requestedHistoryKey = chatHistoryKey;
     setRetryingAnalysisThreadId(thread.id);
@@ -2358,9 +2045,9 @@ export function AgentPanel({
         ...current,
         messages: [...current.messages, {
           role: "assistant",
-          text: currentPlanRevision?.id
-            ? "I drafted a new plan from the current published data. Review it before execution."
-            : "I retried planning with the current published data.",
+            text: currentPlanRevision?.id
+              ? "I drafted a new plan from the current confirmed evidence. Review it before execution."
+              : "I retried planning with the current confirmed evidence.",
           analysisThread,
           currentPlanRevision,
           agentRun: response?.agentRun || null,
@@ -2381,149 +2068,6 @@ export function AgentPanel({
       setRetryingAnalysisThreadId("");
     }
   };
-  const recoverCompletedAgentRunAction = async (action) => {
-    const response = await getServerAgentRun(action.agentRunId);
-    const latestRun = response.agentRun || {};
-    const latestAction = asArray(latestRun.actions).find((candidate) => candidate.actionId === action.actionId);
-    if (!latestAction) throw new Error("The completed AgentRun action could not be found.");
-    const normalizedAction = normalizeAgentRunActionForChat(latestAction, latestRun);
-    updateActionInHistory(action.actionId, {
-      ...normalizedAction,
-      error: "",
-      preview: {
-        ...(action.preview || {}),
-        ...(normalizedAction.preview || {}),
-      },
-    });
-    await reloadProjectAfterAgentAction();
-  };
-  const chartProposalActionPayload = (action) => action.chartProposalSetPayload
-    || action.chartProposalSet?.payload
-    || action.preview?.chartProposalSetPayload
-    || null;
-  const acceptAgentChartProposal = async (actionId) => {
-    const action = actionById(actionId);
-    if (!action || busyActionId) return;
-    if (!action.chartProposalSetId || !action.proposalId) {
-      updateActionInHistory(actionId, { error: "No chart proposal is available to accept." });
-      return;
-    }
-    const proposalSetPayload = chartProposalActionPayload(action);
-    if (!proposalSetPayload?.proposals?.length) {
-      updateActionInHistory(actionId, { error: "The chart proposal payload is missing. Open Chart proposals to review it." });
-      return;
-    }
-    setBusyActionId(actionId);
-    updateActionInHistory(actionId, { status: "accepting_proposal", error: "" });
-    try {
-      const baseProposalSet = {
-        ...proposalSetPayload,
-        proposalSetId: proposalSetPayload.proposalSetId || action.chartProposalSetId,
-        serverId: action.chartProposalSetId,
-      };
-      const nextProposalSet = setChartProposalStatus(baseProposalSet, action.proposalId, "accepted");
-      const saved = await patchServerChartProposalSet(action.chartProposalSetId, {
-        status: "proposed",
-        payload: nextProposalSet,
-        decisionSummary: decisionSummary(nextProposalSet.proposals),
-      });
-      const savedPayload = saved.chartProposalSet
-        ? payloadWithServerId(saved.chartProposalSet, "proposalSetId")
-        : nextProposalSet;
-      updateActionInHistory(actionId, {
-        status: "proposal_accepted",
-        proposalStatus: "accepted",
-        chartProposalSetPayload: savedPayload,
-        preview: {
-          ...(action.preview || {}),
-          message: "Proposal accepted. Create a ChartSpec to use it in Manuscript.",
-        },
-        error: "",
-      });
-      await reloadProjectAfterAgentAction();
-    } catch (err) {
-      updateActionInHistory(actionId, {
-        status: action.status || "completed",
-        error: err.message || String(err),
-      });
-    } finally {
-      setBusyActionId("");
-    }
-  };
-  const createAgentChartSpec = async (actionId) => {
-    const action = actionById(actionId);
-    if (!action || busyActionId) return;
-    if (!action.chartProposalSetId || !action.proposalId) {
-      updateActionInHistory(actionId, { error: "No accepted proposal is available for ChartSpec creation." });
-      return;
-    }
-    if (action.proposalStatus !== "accepted" && action.status !== "proposal_accepted") {
-      updateActionInHistory(actionId, { error: "Accept the proposal before creating a ChartSpec." });
-      return;
-    }
-    setBusyActionId(actionId);
-    updateActionInHistory(actionId, { status: "creating_chart_spec", error: "" });
-    try {
-      const response = await createServerChartSpecFromProposal(activeProjectId, {
-        chartProposalSetId: action.chartProposalSetId,
-        proposalId: action.proposalId,
-      });
-      const chartSpec = response.chartSpec || null;
-      updateActionInHistory(actionId, {
-        status: "chart_spec_created",
-        proposalStatus: "accepted",
-        chartSpecId: chartSpec?.id || action.chartSpecId || "",
-        preview: {
-          ...(action.preview || {}),
-          message: chartSpec?.id
-            ? `Created ChartSpec ${chartSpec.id}. It is available in Manuscript Approved Charts.`
-            : "Created a ChartSpec. It is available in Manuscript Approved Charts.",
-        },
-        error: "",
-      });
-      await reloadProjectAfterAgentAction();
-    } catch (err) {
-      updateActionInHistory(actionId, {
-        status: "proposal_accepted",
-        error: err.message || String(err),
-      });
-    } finally {
-      setBusyActionId("");
-    }
-  };
-  const createWorkbookReviewSessionFromAgentFile = async (action, { file = null, fileObjectId = "" } = {}) => {
-    if (!activeProjectId) throw new Error("Select a server project first.");
-    let nextFileObjectId = fileObjectId;
-    if (!nextFileObjectId && file) {
-      const uploaded = await uploadServerProjectFile(activeProjectId, file);
-      nextFileObjectId = uploaded.fileObject?.id;
-    }
-    if (!nextFileObjectId) throw new Error("Choose a workbook file first.");
-    const response = await createServerWorkbookReviewSession(activeProjectId, { fileObjectId: nextFileObjectId });
-    const session = response.workbookReviewSession || response.session || null;
-    const sourceDocument = response.sourceDocument || null;
-    const workbookName = sourceDocument?.metadata?.workbookName || session?.workbookSummary?.workbookName || file?.name || "workbook";
-    onWorkbookReviewReady?.({
-      response,
-      session,
-      sourceDocument,
-      regions: asArray(response.regions),
-      file,
-      suggestions: workbookReviewSuggestionsFromResponse(response),
-    });
-    updateActionInHistory(action.actionId, {
-      status: "completed",
-      workbookReviewSessionId: session?.id || "",
-      sourceDocumentId: sourceDocument?.id || "",
-      preview: {
-        summary: session?.workbookSummary || {},
-        message: `Created workbook review session for ${workbookName}. Review the source workbook before extracting data or charting.`,
-        warnings: session?.warnings || [],
-      },
-      error: "",
-    });
-    await reloadProjectAfterAgentAction();
-  };
   const createWorkbookReviewSessionFromChatAttachment = async (file) => {
     if (!activeProjectId) throw new Error("Select a server project first.");
     if (!file) throw new Error("Choose a workbook file first.");
@@ -2533,186 +2077,68 @@ export function AgentPanel({
     const response = await createServerWorkbookReviewSession(activeProjectId, { fileObjectId });
     const session = response.workbookReviewSession || response.session || null;
     const sourceDocument = response.sourceDocument || null;
-    const suggestions = workbookReviewSuggestionsFromResponse(response);
+    if (!session?.id) throw new Error("The server did not return a workbook review session id.");
+    const workbookName = sourceDocument?.metadata?.workbookName
+      || session?.workbookSummary?.workbookName
+      || file.name
+      || "workbook";
+    const workbookReviewLink = {
+      workbookReviewSessionId: session.id,
+      sourceDocumentId: sourceDocument?.id || session.sourceDocumentId || "",
+      workbookName,
+      regionCount: asArray(response.reviewRegions).length || asArray(response.regions).length,
+    };
     onWorkbookReviewReady?.({
       response,
       session,
       sourceDocument,
       regions: asArray(response.regions),
       file,
-      suggestions,
     });
     await reloadProjectAfterAgentAction();
     return {
       response,
       session,
       sourceDocument,
-      suggestions,
+      workbookReviewLink,
     };
   };
-  const executeAgentAction = async (actionId, filePayload = {}) => {
-    const action = actionById(actionId);
-    if (!action || busyActionId) return;
-    setBusyActionId(actionId);
-    updateActionInHistory(actionId, { status: action.requiresFile ? "previewing" : "executing", error: "" });
-    try {
-      if (action.requiresFile) {
-        await createWorkbookReviewSessionFromAgentFile(action, filePayload);
-      } else if (action.type === "open_experiment_browser") {
-        onOpenExperimentBrowser?.(action.params || {});
-        updateActionInHistory(actionId, {
-          status: "completed",
-          preview: {
-            message: "Opened Experiment Browser for source-backed comparison.",
-            warnings: action.warnings || [],
-          },
-          error: "",
-        });
-      } else if (["resolve_data_query", "propose_charts", "compare_series"].includes(action.type)) {
-        throw new Error("This legacy dataset action is retired. Use Experiment Browser for comparison or select workbook source evidence for charting.");
-      } else if (action.type === "interpret_chart") {
-        const intentResult = await interpretProjectChartIntent(activeProjectId, {
-          prompt: action.params?.prompt || "",
-          persistAsProposal: true,
-          entrypoint: "agent_drawer",
-          context: { actionId },
-        });
-        const response = intentResult.response;
-        const chartProposalSet = response.chartProposalSet || null;
-        const proposalPayload = chartProposalSet?.payload || null;
-        const proposal = asArray(proposalPayload?.proposals)[0] || null;
-        const sourceExtractProposal = response.sourceExtractProposal || null;
-        const completed = Boolean(chartProposalSet || sourceExtractProposal);
-        updateActionInHistory(actionId, {
-          status: completed ? "completed" : "failed",
-          chartIntentKind: intentResult.kind,
-          chartProposalSetId: chartProposalSet?.id || "",
-          chartProposalSetPayload: proposalPayload ? payloadWithServerId(chartProposalSet, "proposalSetId") : null,
-          proposalId: proposal?.proposalId || "",
-          proposalStatus: proposal?.status || "proposed",
-          sourceExtractProposalId: sourceExtractProposal?.id || "",
-          sourceExtractProposalStatus: sourceExtractProposal?.status || "",
-          sourceExtractProposal,
-          preview: {
-            chartTitle: proposal?.title || response.chartSpecDraft?.title || sourceExtractProposal?.preview?.chartIntentDraft?.title || "",
-            message: chartProposalSet
-              ? `Queued chart proposal set ${chartProposalSet.id}.`
-              : sourceExtractProposal
-                ? `Created source extract proposal ${sourceExtractProposal.id}. Review the extracted source data before charting.`
-                : response.clarification?.message || "Chart could not be drafted.",
-            warnings: [
-              ...asArray(response.warnings),
-              ...asArray(sourceExtractProposal?.warnings),
-            ],
-          },
-          error: completed ? "" : response.clarification?.message || "Chart draft requires clarification.",
-        });
-        if (completed) await reloadProjectAfterAgentAction();
-      } else if (action.type === "create_chart_spec_from_proposal") {
-        if (!action.params?.chartProposalSetId || !action.params?.proposalId) throw new Error("No accepted proposal is available for ChartSpec creation.");
-        updateActionInHistory(actionId, { status: "ready_to_create" });
-      }
-    } catch (err) {
-      const alreadyClosedAgentRun = Boolean(action.agentRunId)
-        && (err?.code === "agent_run_closed" || /AgentRun is already (completed|cancelled)/i.test(err?.message || ""));
-      if (alreadyClosedAgentRun) {
-        try {
-          await recoverCompletedAgentRunAction(action);
-          return;
-        } catch (recoverErr) {
-          updateActionInHistory(actionId, { status: "failed", error: recoverErr.message || err.message || String(recoverErr || err) });
-          return;
-        }
-      }
-      updateActionInHistory(actionId, { status: "failed", error: err.message || String(err) });
-    } finally {
-      setBusyActionId("");
+  const openWorkbookReviewLink = async (link) => {
+    const sessionId = String(link?.workbookReviewSessionId || "").trim();
+    if (!sessionId) {
+      setHistory((current) => [...current, {
+        role: "assistant",
+        text: "This workbook link is missing its review session and cannot be opened.",
+      }]);
+      return;
     }
-  };
-  const confirmAgentAction = async (actionId) => {
-    const action = actionById(actionId);
-    if (!action || busyActionId) return;
-    setBusyActionId(actionId);
-    updateActionInHistory(actionId, { status: "executing", error: "" });
-    try {
-      if (action.agentRunId) {
-        const response = await confirmServerAgentRun(action.agentRunId, actionId);
-        const chartProposalSet = response.chartProposalSet || null;
-        const proposalPayload = chartProposalSet?.payload || null;
-        const proposal = asArray(proposalPayload?.proposals)[0] || null;
-        const sourceExtractProposal = response.sourceExtractProposal || null;
-        updateActionInHistory(actionId, {
-          status: "completed",
-          chartProposalSetId: chartProposalSet?.id || "",
-          chartProposalSetPayload: chartProposalSet?.payload ? payloadWithServerId(chartProposalSet, "proposalSetId") : null,
-          proposalId: proposal?.proposalId || "",
-          proposalStatus: proposal?.status || "proposed",
-          sourceExtractProposalId: sourceExtractProposal?.id || "",
-          sourceExtractProposalStatus: sourceExtractProposal?.status || "",
-          sourceExtractProposal,
-          preview: {
-            ...(action.preview || {}),
-            chartTitle: proposal?.title || sourceExtractProposal?.preview?.chartIntentDraft?.title || "",
-            message: chartProposalSet?.id
-              ? `Queued chart proposal set ${chartProposalSet.id}.`
-              : sourceExtractProposal?.id
-                ? `Created source extract proposal ${sourceExtractProposal.id}.`
-                : "AgentRun action completed.",
-            warnings: [
-              ...asArray(response.agentRun?.warnings),
-              ...asArray(response.chartProposalSet?.payload?.warnings),
-              ...asArray(sourceExtractProposal?.warnings),
-            ],
-          },
-          error: "",
-        });
-        await reloadProjectAfterAgentAction();
-        return;
-      }
-
-      if (action.type === "create_chart_spec_from_proposal") {
-        await createServerChartSpecFromProposal(activeProjectId, {
-          chartProposalSetId: action.params?.chartProposalSetId,
-          proposalId: action.params?.proposalId,
-        });
-        await reloadProjectAfterAgentAction();
-      }
-      updateActionInHistory(actionId, { status: "completed", error: "" });
-    } catch (err) {
-      const alreadyClosedAgentRun = Boolean(action.agentRunId)
-        && (err?.code === "agent_run_closed" || /AgentRun is already (completed|cancelled)/i.test(err?.message || ""));
-      if (alreadyClosedAgentRun) {
-        try {
-          await recoverCompletedAgentRunAction(action);
-          return;
-        } catch (recoverErr) {
-          updateActionInHistory(actionId, { status: "failed", error: recoverErr.message || err.message || String(recoverErr || err) });
-          return;
-        }
-      }
-      updateActionInHistory(actionId, { status: "failed", error: err.message || String(err) });
-    } finally {
-      setBusyActionId("");
+    if (!onWorkbookReviewLinkOpen) {
+      setHistory((current) => [...current, {
+        role: "assistant",
+        text: "Workbook review is not available in the current workspace.",
+      }]);
+      return;
     }
-  };
-  const chooseFileForAgentAction = (actionId) => {
-    setPendingFileActionId(actionId);
-    fileActionInputRef.current?.click();
+    if (openingWorkbookReviewSessionId) return;
+    setOpeningWorkbookReviewSessionId(sessionId);
+    try {
+      await onWorkbookReviewLinkOpen(link);
+    } catch (error) {
+      setHistory((current) => [...current, {
+        role: "assistant",
+        text: `Workbook review could not be opened: ${error?.message || String(error)}`,
+      }]);
+    } finally {
+      setOpeningWorkbookReviewSessionId("");
+    }
   };
   const chooseSpreadsheetAttachment = () => {
-    setPendingFileActionId("");
     fileActionInputRef.current?.click();
   };
   const onAgentFileSelected = async (event) => {
     const file = event.target.files?.[0];
-    const actionId = pendingFileActionId;
     event.target.value = "";
-    setPendingFileActionId("");
     if (!file) return;
-    if (actionId) {
-      await executeAgentAction(actionId, { file });
-      return;
-    }
     setPendingSpreadsheetFile(file);
   };
   const send = async (prefill, meta = null) => {
@@ -2732,17 +2158,15 @@ export function AgentPanel({
       setBusy(true);
       try {
         const result = await createWorkbookReviewSessionFromChatAttachment(spreadsheetAttachment);
-        const suggestions = asArray(result.suggestions);
-        const workbookName = result.sourceDocument?.metadata?.workbookName
-          || result.session?.workbookSummary?.workbookName
-          || spreadsheetAttachment.name
-          || "workbook";
+        const workbookReviewLink = result.workbookReviewLink;
+        const workbookName = workbookReviewLink.workbookName;
+        const regionCount = workbookReviewLink.regionCount;
         setHistory([...next, {
           role: "assistant",
-          text: suggestions.length
-            ? `I indexed ${workbookName}. I found potentially useful regions; click a range to highlight it in the Excel preview.`
+          text: regionCount
+            ? `I indexed ${workbookName} and found ${regionCount} potentially useful ${regionCount === 1 ? "region" : "regions"}. Open the workbook to review them.`
             : `I indexed ${workbookName}. You can inspect the workbook in the preview; select a range and describe it if you want LabRat to revise its understanding.`,
-          workbookSuggestions: suggestions,
+          workbookReviewLink,
         }]);
       } catch (err) {
         setPendingSpreadsheetFile(spreadsheetAttachment);
@@ -2753,6 +2177,14 @@ export function AgentPanel({
       return;
     }
     if (serverAgentEnabled) {
+      const requestAbortController = new AbortController();
+      agentRequestAbortRef.current = requestAbortController;
+      setBusyOperation({
+        stage: "Routing request and drafting a reviewable plan",
+        startedAt: Date.now(),
+        elapsedSeconds: 0,
+        cancelling: false,
+      });
       setBusy(true);
       try {
         const response = await createServerAgentRun(activeProjectId, {
@@ -2773,20 +2205,16 @@ export function AgentPanel({
               houseRules,
             },
           },
-        });
+        }, { signal: requestAbortController.signal });
         const agentRun = response.agentRun || {};
-        const actions = asArray(agentRun.actions).map((action) => normalizeAgentRunActionForChat(action, agentRun));
         const warningText = asArray(agentRun.warnings).map((warning) => warning.message || warning.code).filter(Boolean).join(" ");
-        const reply = response.reply || (actions.length
-          ? "I prepared an AgentRun action. Review the trace and confirm before anything changes."
-          : warningText || "I recorded an AgentRun, but I need more detail before preparing an action.");
+        const reply = response.reply || warningText || "I need more detail before I can answer or prepare an analysis plan.";
         const analysisThread = response.analysisThread || null;
         const currentPlanRevision = response.currentPlanRevision || null;
         setHistory([...next, {
           role: "assistant",
           text: reply,
           agentRun,
-          actions,
           analysisThread,
           currentPlanRevision,
         }]);
@@ -2797,36 +2225,19 @@ export function AgentPanel({
           });
         }
       } catch (err) {
-        try {
-          const plan = await planServerProjectAgent(activeProjectId, {
-            message: text,
-            conversation: next.slice(-10).map((message) => ({
-              role: message.role === "assistant" ? "assistant" : "user",
-              text: message.text,
-            })),
-            selectedContext: {
-              tab: selectedChartContext ? "manuscript_chart" : "project",
-              selectedExperimentLabel: selected?.label || "",
-              selectedChartTitle: selectedChartContext?.title || "",
-              selectedChartBlockId: selectedChartContext?.blockId || "",
-              selectedChartView: selectedChartContext?.chartView || null,
-              assistantProfile: {
-                writingExamples,
-                projectBackground,
-                houseRules,
-              },
-            },
-          });
-          const actions = asArray(plan.actions);
-          setHistory([...next, {
-            role: "assistant",
-            text: plan.reply || (actions.length ? "I prepared a project action for review." : "I could not identify a project action yet."),
-            actions,
-          }]);
-        } catch (fallbackErr) {
-          setHistory([...next, { role: "assistant", text: `Project agent failed: ${fallbackErr.message || err.message || String(fallbackErr || err)}` }]);
+        if (isAbortError(err)) {
+          setHistory([...next, { role: "assistant", text: "Request cancelled." }]);
+          return;
         }
+        setHistory([...next, {
+          role: "assistant",
+          text: `LabRat could not create a reviewable plan or action: ${err.message || String(err)} No plan or chart was created.`,
+        }]);
       } finally {
+        if (agentRequestAbortRef.current === requestAbortController) {
+          agentRequestAbortRef.current = null;
+        }
+        setBusyOperation(null);
         setBusy(false);
       }
       return;
@@ -2888,6 +2299,15 @@ export function AgentPanel({
     setExpanded(false);
     setOpen(false);
   };
+  const cancelBusyOperation = () => {
+    if (!agentRequestAbortRef.current) return;
+    setBusyOperation((current) => current ? {
+      ...current,
+      stage: "Cancelling request",
+      cancelling: true,
+    } : current);
+    agentRequestAbortRef.current.abort();
+  };
   return <>
   <aside className={`agent ${open ? "open" : ""} ${expanded ? "expanded" : ""}`}>
     <div className="agent-head">
@@ -2919,7 +2339,7 @@ export function AgentPanel({
                 : "unavailable"}
             </span>
             <span>
-              Accepted data: {analysisCapabilitiesState.value.acceptedData?.acceptedSnapshotCount || 0} snapshots, {analysisCapabilitiesState.value.acceptedData?.activeExperimentHeadCount || 0} active heads
+              Evidence: {analysisCapabilitiesState.value.acceptedData?.confirmedRegionCount || 0} confirmed regions, {analysisCapabilitiesState.value.acceptedData?.acceptedSnapshotCount || 0} snapshots, {analysisCapabilitiesState.value.acceptedData?.activeExperimentHeadCount || 0} active heads
             </span>
           </>
         )}
@@ -2963,17 +2383,15 @@ export function AgentPanel({
               ))}
             </div>
           )}
-          {!!asArray(m.workbookSuggestions).length && (
-            <div className="agent-workbook-suggestions">
-              {asArray(m.workbookSuggestions).map((selection, selectionIndex) => (
-                <button
-                  type="button"
-                  key={`${selection.sourceDocumentId}-${selection.sheetName}-${selection.range}-${selectionIndex}`}
-                  onClick={() => onWorkbookSuggestionSelect?.(selection)}
-                >
-                  {workbookSuggestionButtonLabel(selection)}
-                </button>
-              ))}
+          {m.workbookReviewLink && (
+            <div className="agent-workbook-link">
+              <button
+                type="button"
+                disabled={openingWorkbookReviewSessionId === m.workbookReviewLink.workbookReviewSessionId}
+                onClick={() => openWorkbookReviewLink(m.workbookReviewLink)}
+              >
+                {m.workbookReviewLink.workbookName || "Open workbook"}
+              </button>
             </div>
           )}
           {m.agentRun?.visibleSteps?.length > 0 && (
@@ -2996,32 +2414,31 @@ export function AgentPanel({
               result={m.analysisResult}
               evidenceBlocked={asArray(m.agentRun?.warnings).some((warning) => warning?.code === "analysis_evidence_required")}
               modelAvailable={!analysisCapabilitiesState.loading && analysisCapabilitiesState.value?.model?.configured === true}
-              acceptedDataAvailable={!analysisCapabilitiesState.loading && (analysisCapabilitiesState.value?.acceptedData?.activeExperimentHeadCount || 0) > 0}
+              acceptedDataAvailable={!analysisCapabilitiesState.loading && (
+                (analysisCapabilitiesState.value?.acceptedData?.activeExperimentHeadCount || 0)
+                + (analysisCapabilitiesState.value?.acceptedData?.confirmedRegionCount || 0)
+              ) > 0}
               retrying={retryingAnalysisThreadId === m.analysisThread.id}
               onRetry={retryAnalysisWithPublishedData}
               onOpen={onOpenAnalysisReview}
             />
           )}
-          {asArray(m.actions).map((action) => (
-            <AgentActionCard
-              key={action.actionId}
-              action={action}
-              projectState={projectState}
-              busyActionId={busyActionId}
-              onChooseFile={chooseFileForAgentAction}
-              onUseExistingFile={(actionId, fileObjectId) => executeAgentAction(actionId, { fileObjectId })}
-              onExecute={executeAgentAction}
-              onConfirm={confirmAgentAction}
-              onAcceptChartProposal={acceptAgentChartProposal}
-              onCreateChartSpec={createAgentChartSpec}
-              onInsertChartSpec={onInsertChartSpec}
-              onReviewSourceExtract={onReviewSourceExtract}
-            />
-          ))}
           {m.role === "assistant" && m.meta?.source === "chart" && m.text && !m.streaming && !m.text.startsWith("Request failed:") && <button className="insert-chat-text" onClick={() => insertAssistantText(m)}>Insert as text box</button>}
         </div>
       </div>)}
-      {busy && !history.some((m) => m.role === "assistant" && m.streaming && m.text) && <div className="typing">Thinking...</div>}
+      {busy && !history.some((m) => m.role === "assistant" && m.streaming && m.text) && (
+        busyOperation ? (
+          <div className="agent-busy-operation" role="status" aria-label="LabRat request status">
+            <div>
+              <strong>{busyOperation.stage}</strong>
+              <span>{busyOperation.elapsedSeconds}s elapsed</span>
+            </div>
+            <button type="button" onClick={cancelBusyOperation} disabled={busyOperation.cancelling}>
+              {busyOperation.cancelling ? "Cancelling" : "Cancel"}
+            </button>
+          </div>
+        ) : <div className="typing">Working...</div>
+      )}
     </div>
     <div className="agent-foot">
       {pendingSpreadsheetFile && (
@@ -3113,7 +2530,6 @@ function App() {
   const [deleteProjectError, setDeleteProjectError] = useState("");
   const [profileChatOpen, setProfileChatOpen] = useState(false);
   const [chartReviewOpen, setChartReviewOpen] = useState(false);
-  const [focusedChartProposalId, setFocusedChartProposalId] = useState("");
   const [chartReviewStatusFilter, setChartReviewStatusFilter] = useState("");
   const [workbookReviewState, setWorkbookReviewState] = useState({ loading: false, error: "", revisionLoading: false, confirmLoading: false, revisionError: "", clarification: null, session: null, sourceDocument: null, regions: [] });
   const [dataPlanReviewState, setDataPlanReviewState] = useState({ loading: false, error: "", review: null, identityDecisions: [] });
@@ -3121,12 +2537,9 @@ function App() {
   const [activeWorkbookReviewDraftRegionId, setActiveWorkbookReviewDraftRegionId] = useState("");
   const [workbookReviewFocusSelection, setWorkbookReviewFocusSelection] = useState(null);
   const [browserSelectedExperimentIds, setBrowserSelectedExperimentIds] = useState([]);
-  const [backendChartProposalState, setBackendChartProposalState] = useState({ loading: false, result: null, error: "" });
   const [backendChartInterpretState, setBackendChartInterpretState] = useState({ loading: false, result: null, error: "" });
   const resetReviewState = () => {
-    setBackendChartProposalState({ loading: false, result: null, error: "" });
     setBackendChartInterpretState({ loading: false, result: null, error: "" });
-    setFocusedChartProposalId("");
     setChartReviewStatusFilter("");
     setWorkbookReviewState({ loading: false, error: "", revisionLoading: false, confirmLoading: false, revisionError: "", clarification: null, session: null, sourceDocument: null, regions: [] });
     setDataPlanReviewState({ loading: false, error: "", review: null, identityDecisions: [] });
@@ -3147,16 +2560,7 @@ function App() {
     setDataset(nextDataset);
   };
 
-  const applyReviewState = (state) => {
-    const latestChartProposal = latestItem(state?.chartProposalSets);
-    setBackendChartProposalState(latestChartProposal?.payload ? {
-      loading: false,
-      result: {
-        chartProposalSet: latestChartProposal,
-        proposalSet: payloadWithServerId(latestChartProposal, "proposalSetId"),
-      },
-      error: "",
-    } : { loading: false, result: null, error: "" });
+  const applyReviewState = () => {
     setBackendChartInterpretState({ loading: false, result: null, error: "" });
   };
 
@@ -3177,6 +2581,13 @@ function App() {
     applyDatasetState(state);
     applyReviewState(state);
     applyManuscriptState(state);
+    setProjectList((current) => current.map((project) => project.id === state?.project?.id ? {
+      ...project,
+      workflowSummary: {
+        publishedExperimentCount: asArray(state?.experimentSnapshotHeads).length,
+        chartSpecCount: activeChartSpecsForProject(state).length,
+      },
+    } : project));
   };
 
   const applyProjectWorkspaceRefresh = (state) => {
@@ -3184,6 +2595,13 @@ function App() {
     applyProjectShellState(state);
     applyDatasetState(state);
     applyReviewState(state);
+    setProjectList((current) => current.map((project) => project.id === state?.project?.id ? {
+      ...project,
+      workflowSummary: {
+        publishedExperimentCount: asArray(state?.experimentSnapshotHeads).length,
+        chartSpecCount: activeChartSpecsForProject(state).length,
+      },
+    } : project));
   };
 
   const refreshProjectWorkspace = async () => {
@@ -3395,7 +2813,6 @@ function App() {
   const openProjectDashboard = () => {
     setWorkspaceMode("dashboard");
     setChartReviewOpen(false);
-    setFocusedChartProposalId("");
     setChartReviewStatusFilter("");
     setProfileChatOpen(false);
     setSelectedProjectId(activeProjectId || selectedProjectId || projectList[0]?.id || "");
@@ -3413,13 +2830,11 @@ function App() {
   const stage = (label) => setStaged((s) => s.includes(label) ? s.filter((x) => x !== label) : [...s, label]);
   const openChartReview = (options = "") => {
     const isOptionsObject = options && typeof options === "object" && !("currentTarget" in options);
-    setFocusedChartProposalId(typeof options === "string" ? options : (isOptionsObject && typeof options.proposalId === "string" ? options.proposalId : ""));
     setChartReviewStatusFilter(isOptionsObject && options.statusFilter === "active" ? "active" : "");
     setChartReviewOpen(true);
   };
   const closeChartReview = () => {
     setChartReviewOpen(false);
-    setFocusedChartProposalId("");
     setChartReviewStatusFilter("");
   };
   const openWorkbookUpload = () => {
@@ -3483,16 +2898,21 @@ function App() {
       }));
     }
   };
-  const handleWorkbookSuggestionSelect = (selection) => {
-    if (!selection?.sourceDocumentId || !selection?.sheetName || !selection?.range) return;
-    if (selection.reviewRegionId) setActiveWorkbookReviewDraftRegionId(selection.reviewRegionId);
-    setWorkbookReviewFocusSelection({
-      ...selection,
-      requestId: uid(),
-      selectionMethod: selection.selectionMethod || "suggestion_click",
-    });
-    setTab("workbook_review");
-    setAgentOpen(false);
+  const handleWorkbookReviewLinkOpen = async (link) => {
+    const sessionId = String(link?.workbookReviewSessionId || "").trim();
+    if (!sessionId) throw new Error("Workbook review session is missing.");
+    setWorkbookReviewState((current) => ({ ...current, loading: true, error: "" }));
+    try {
+      const response = await getServerWorkbookReviewSession(sessionId);
+      handleWorkbookReviewReadyFromAgent({ response });
+    } catch (error) {
+      setWorkbookReviewState((current) => ({
+        ...current,
+        loading: false,
+        error: error?.message || String(error),
+      }));
+      throw error;
+    }
   };
   const handleWorkbookReviewRegionActivate = (regionId) => {
     setActiveWorkbookReviewDraftRegionId(regionId);
@@ -3539,15 +2959,54 @@ function App() {
   const createWorkbookReviewRegion = async (input = {}) => {
     const session = workbookReviewState.session || workbookReviewState.workbookReviewSession || null;
     if (!session?.id) throw new Error("Start a workbook review session before selecting a region.");
+    let createdRegion = null;
     try {
-      const response = await createServerWorkbookReviewRegion(session.id, {
+      const createdResponse = await createServerWorkbookReviewRegion(session.id, {
         ...input,
+        deferInterpretation: true,
         idempotencyKey: `create_region_${uid()}`,
       });
-      return applyWorkbookReviewRegionResponse(response);
+      createdRegion = createdResponse?.region || null;
+      applyWorkbookReviewRegionResponse(createdResponse);
+      if (!createdRegion?.id) return createdResponse;
+      const interpretedResponse = await interpretServerWorkbookReviewRegion(session.id, createdRegion.id, {
+        expectedRegionVersion: createdRegion.version,
+        description: input.description || "",
+        semanticType: input.semanticType || "generic_table",
+        idempotencyKey: `interpret_region_${uid()}`,
+      });
+      return applyWorkbookReviewRegionResponse(interpretedResponse, { activate: false });
     } catch (err) {
-      setWorkbookReviewState((current) => ({ ...current, revisionError: err.message || String(err) }));
-      throw err;
+      const superseded = [
+        "stale_workbook_review_region",
+        "workbook_review_region_inactive",
+        "workbook_review_region_not_pending",
+      ].includes(err?.code);
+      if (!createdRegion?.id || superseded) {
+        if (!superseded) {
+          setWorkbookReviewState((current) => ({ ...current, revisionError: err.message || String(err) }));
+        }
+        if (!superseded) throw err;
+        return null;
+      }
+      const warning = {
+        code: err?.code || "region_interpretation_request_failed",
+        message: err?.message || String(err),
+      };
+      setWorkbookReviewDraftRegions((currentRegions) => {
+        const nextRegions = asArray(currentRegions).map((region) => (
+          region.id === createdRegion.id && region.disposition === "active" && region.reviewStatus === "interpreting"
+            ? { ...region, reviewStatus: "interpretation_failed", warnings: [warning] }
+            : region
+        ));
+        setWorkbookReviewState((current) => ({
+          ...current,
+          reviewRegions: nextRegions,
+          revisionError: "",
+        }));
+        return nextRegions;
+      });
+      return null;
     }
   };
   const reviseWorkbookReviewRegion = async (regionId, request) => {
@@ -3685,167 +3144,32 @@ function App() {
     if (!activeProjectId) return;
     setBackendChartInterpretState({ loading: true, result: null, error: "" });
     try {
-      const intentResult = await interpretProjectChartIntent(activeProjectId, {
-        prompt,
-        persistAsProposal: true,
-        entrypoint: "chart_review",
+      const response = await createServerAgentRun(activeProjectId, {
+        message: prompt,
+        conversation: [],
+        selectedContext: {
+          tab: "chart_review",
+          requestedWorkflow: "reviewed_analysis_chart",
+        },
       });
-      const result = intentResult.response || intentResult;
-      const normalizedResult = { ...result, chartIntentKind: intentResult.kind, chartIntentEntrypoint: intentResult.entrypoint };
-      setBackendChartInterpretState({ loading: false, result: normalizedResult, error: "" });
-      if (result.chartProposalSet) {
-        const proposalSet = payloadWithServerId(result.chartProposalSet, "proposalSetId");
-        setBackendChartProposalState({
-          loading: false,
-          result: { ...result, chartProposalSet: result.chartProposalSet, proposalSet },
-          error: "",
-        });
-        setProjectState((current) => current ? {
-          ...current,
-          chartProposalSets: upsertServerRecordById(current.chartProposalSets, result.chartProposalSet),
-        } : current);
-        setDirty(true);
+      const analysisThread = response.analysisThread || null;
+      const currentPlanRevision = response.currentPlanRevision || null;
+      if (analysisThread?.id && currentPlanRevision?.id) {
+        setBackendChartInterpretState({ loading: false, result: null, error: "" });
+        openAnalysisReview({ thread: analysisThread, revision: currentPlanRevision });
+        return;
       }
-      if (result.sourceExtractProposal) {
-        setProjectState((current) => current ? {
-          ...current,
-          sourceExtractProposals: upsertServerRecordById(current.sourceExtractProposals, result.sourceExtractProposal),
-        } : current);
-        setDirty(true);
-      }
+      const warningText = asArray(response.agentRun?.warnings)
+        .map((warning) => warning.message || warning.code)
+        .filter(Boolean)
+        .join(" ");
+      throw new Error([
+        response.reply || "The backend did not create a reviewable analysis plan.",
+        warningText,
+      ].filter(Boolean).join(" "));
     } catch (err) {
       setBackendChartInterpretState({ loading: false, result: null, error: err.message || String(err) });
     }
-  };
-  const updateSourceExtractProposalInState = (sourceExtractProposal) => {
-    if (!sourceExtractProposal?.id) return;
-    setBackendChartInterpretState((current) => current.result?.sourceExtractProposal?.id === sourceExtractProposal.id ? ({
-      ...current,
-      result: {
-        ...current.result,
-        sourceExtractProposal,
-      },
-    }) : current);
-    setProjectState((current) => current ? {
-      ...current,
-      sourceExtractProposals: upsertServerRecordById(current.sourceExtractProposals, sourceExtractProposal),
-    } : current);
-  };
-  const setSourceExtractProposalDecision = async (proposalId, status) => {
-    if (!proposalId || !activeProjectId) return;
-    const busy = status === "accepted" ? "accepting_source_extract" : "rejecting_source_extract";
-    setBackendChartInterpretState((current) => ({ ...current, sourceExtractBusy: busy, error: "" }));
-    try {
-      const response = await patchServerSourceExtractProposal(proposalId, {
-        status,
-        decisionSummary: {
-          acceptedByUser: status === "accepted",
-          rejectedByUser: status === "rejected",
-        },
-      });
-      updateSourceExtractProposalInState(response.sourceExtractProposal);
-      setDirty(true);
-    } catch (err) {
-      setBackendChartInterpretState((current) => ({ ...current, error: err.message || String(err) }));
-    } finally {
-      setBackendChartInterpretState((current) => ({ ...current, sourceExtractBusy: "" }));
-    }
-  };
-  const createChartProposalFromSourceExtract = async (proposalId) => {
-    if (!proposalId || !activeProjectId) return;
-    setBackendChartInterpretState((current) => ({ ...current, sourceExtractBusy: "creating_source_chart_proposal", error: "" }));
-    try {
-      const response = await createServerSourceExtractChartProposal(proposalId);
-      if (response.sourceExtractProposal) updateSourceExtractProposalInState(response.sourceExtractProposal);
-      const chartProposalSet = response.chartProposalSet || null;
-      if (chartProposalSet) {
-        const proposalSet = payloadWithServerId(chartProposalSet, "proposalSetId");
-        setBackendChartProposalState({
-          loading: false,
-          result: { ...response, chartProposalSet, proposalSet },
-          error: "",
-        });
-        setProjectState((current) => current ? {
-          ...current,
-          chartProposalSets: upsertServerRecordById(current.chartProposalSets, chartProposalSet),
-        } : current);
-      }
-      setDirty(true);
-    } catch (err) {
-      setBackendChartInterpretState((current) => ({ ...current, error: err.message || String(err) }));
-    } finally {
-      setBackendChartInterpretState((current) => ({ ...current, sourceExtractBusy: "" }));
-    }
-  };
-  const reviewSourceExtractProposal = (proposal) => {
-    const proposalId = typeof proposal === "string" ? proposal : proposal?.id;
-    const fullProposal = asArray(projectState?.sourceExtractProposals).find((item) => item.id === proposalId) || (typeof proposal === "object" ? proposal : null);
-    if (!fullProposal?.id) return;
-    setBackendChartInterpretState({
-      loading: false,
-      sourceExtractBusy: "",
-      result: {
-        schemaVersion: "labrat.chartInterpretResponse.v1",
-        chartSpecDraft: null,
-        chartProposalSet: null,
-        sourceExtractProposal: fullProposal,
-        warnings: fullProposal.warnings || [],
-      },
-      error: "",
-    });
-    setFocusedChartProposalId("");
-    setChartReviewStatusFilter("");
-    setChartReviewOpen(true);
-  };
-  const setBackendChartProposalDecision = async (proposalId, status) => {
-    const proposalSet = backendChartProposalState.result?.proposalSet;
-    if (!proposalSet) return;
-    const nextProposalSet = setChartProposalStatus(proposalSet, proposalId, status);
-    setBackendChartProposalState((current) => current.result ? ({
-      ...current,
-      result: { ...current.result, proposalSet: nextProposalSet },
-    }) : current);
-    if (nextProposalSet.serverId) {
-      try {
-        const saved = await patchServerChartProposalSet(nextProposalSet.serverId, {
-          status: "proposed",
-          payload: nextProposalSet,
-          decisionSummary: decisionSummary(nextProposalSet.proposals),
-        });
-        setProjectState((current) => current ? {
-          ...current,
-          chartProposalSets: asArray(current.chartProposalSets).map((set) => set.id === saved.chartProposalSet.id ? saved.chartProposalSet : set),
-        } : current);
-      } catch (err) {
-        setBackendChartProposalState((current) => ({ ...current, error: err.message || String(err) }));
-      }
-    }
-    setDirty(true);
-  };
-  const deleteBackendChartProposal = async (proposalId) => {
-    const proposalSet = backendChartProposalState.result?.proposalSet;
-    if (!proposalSet || !proposalId) return;
-    const nextProposalSet = removeChartProposal(proposalSet, proposalId);
-    setBackendChartProposalState((current) => current.result ? ({
-      ...current,
-      result: { ...current.result, proposalSet: nextProposalSet },
-    }) : current);
-    if (nextProposalSet.serverId) {
-      try {
-        const saved = await patchServerChartProposalSet(nextProposalSet.serverId, {
-          status: "proposed",
-          payload: nextProposalSet,
-          decisionSummary: decisionSummary(nextProposalSet.proposals),
-        });
-        setProjectState((current) => current ? {
-          ...current,
-          chartProposalSets: asArray(current.chartProposalSets).map((set) => set.id === saved.chartProposalSet.id ? saved.chartProposalSet : set),
-        } : current);
-      } catch (err) {
-        setBackendChartProposalState((current) => ({ ...current, error: err.message || String(err) }));
-      }
-    }
-    setDirty(true);
   };
   const save = async () => {
     if (!activeProjectId) return;
@@ -3873,22 +3197,9 @@ function App() {
       setSourceError(err.message || String(err));
     }
   };
-  const createChartSpecFromProposal = async (chartProposalSetId, proposalId) => {
-    if (!activeProjectId || !chartProposalSetId || !proposalId) return;
-    setBackendChartProposalState((current) => ({ ...current, error: "" }));
-    try {
-      await createServerChartSpecFromProposal(activeProjectId, {
-        chartProposalSetId,
-        proposalId,
-      });
-      const state = await getServerProjectState(activeProjectId);
-      applyProjectWorkspaceRefresh(state);
-    } catch (err) {
-      setBackendChartProposalState((current) => ({ ...current, error: err.message || String(err) }));
-    }
-  };
   const openAnalysisReview = ({ thread, revision, run = null, result = null }) => {
     if (!thread?.id || !revision?.id) return;
+    closeChartReview();
     setAnalysisReviewState({ thread, revision, run, result });
     setAgentOpen(false);
   };
@@ -3897,15 +3208,15 @@ function App() {
   };
   const acceptAnalysisResultChart = async ({
     runId,
-    resultHash,
+    analysisResultId,
     defaultVisibleTraceIds,
   }) => {
-    if (!activeProjectId || !runId || !resultHash) return null;
+    if (!activeProjectId || !runId || !analysisResultId) return null;
     const response = await publishAcceptedAnalysisChart(runId, {
-      resultHash,
+      analysisResultId,
       defaultVisibleTraceIds,
     }, {
-      idempotencyKey: `publish_analysis_${runId}_${resultHash}`,
+      idempotencyKey: `publish_analysis_${runId}_${analysisResultId}`,
     });
     const state = await getServerProjectState(activeProjectId);
     const chartSpec = response.chartSpec;
@@ -4101,18 +3412,16 @@ function App() {
       <DetailModal exp={selected} onClose={() => setSelected(null)} onStage={stage} />
       <ChartReviewModal
         open={chartReviewOpen}
-        allowSourcePrompt={Boolean(activeProjectId)}
-        chartProposalState={backendChartProposalState}
+        allowAnalysisPrompt={Boolean(activeProjectId)}
         chartInterpretState={backendChartInterpretState}
         chartSpecs={activeChartSpecsForProject(projectState)}
-        focusProposalId={focusedChartProposalId}
         statusFilter={chartReviewStatusFilter}
-        onChartProposalDecision={setBackendChartProposalDecision}
-        onChartProposalDelete={deleteBackendChartProposal}
         onInterpretChart={interpretBackendChart}
-        onSourceExtractDecision={setSourceExtractProposalDecision}
-        onCreateChartProposalFromSourceExtract={createChartProposalFromSourceExtract}
-        onCreateChartSpec={createChartSpecFromProposal}
+        onLoadChartSpecDetail={loadChartSpecDetailForManuscript}
+        onInsertChartSpec={(chartSpecId) => {
+          requestChartSpecManuscriptInsert(chartSpecId);
+          closeChartReview();
+        }}
         onOpenImportReview={openWorkbookUpload}
         onClose={closeChartReview}
       />
@@ -4143,11 +3452,8 @@ function App() {
         activeProjectId={activeProjectId}
         projectState={projectState}
         onProjectStateLoaded={applyProjectWorkspaceRefresh}
-        onInsertChartSpec={requestChartSpecManuscriptInsert}
-        onReviewSourceExtract={reviewSourceExtractProposal}
         onWorkbookReviewReady={handleWorkbookReviewReadyFromAgent}
-        onWorkbookSuggestionSelect={handleWorkbookSuggestionSelect}
-        onOpenExperimentBrowser={() => setTab("browser")}
+        onWorkbookReviewLinkOpen={handleWorkbookReviewLinkOpen}
         onOpenAnalysisReview={openAnalysisReview}
       />
     </>

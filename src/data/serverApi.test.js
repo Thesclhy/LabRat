@@ -2,11 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import {
   ServerApiError,
   cancelServerAgentRun,
-  confirmServerAgentRun,
   confirmServerWorkbookReviewRegion,
   createServerWorkbookReviewRegion,
   createServerAgentRun,
-  createServerChartSpecFromProposal,
   createServerManuscript,
   createServerProject,
   createServerWorkbookReviewSession,
@@ -18,7 +16,7 @@ import {
   getServerProjectState,
   getServerSession,
   getServerWorkbookReviewSession,
-  interpretServerProjectChartIntent,
+  interpretServerWorkbookReviewRegion,
   listServerSourceDocumentRegions,
   listServerSourceDocuments,
   listServerRegionUnderstandings,
@@ -27,19 +25,13 @@ import {
   listServerWorkbookReviewSessions,
   listServerProjects,
   loginToServer,
-  patchServerChartProposalSet,
   patchServerManuscript,
   patchServerProjectProfile,
-  patchServerSourceExtractProposal,
-  planServerProjectAgent,
-  previewServerSourceDocumentExtract,
-  previewServerSourceRegionExtract,
   readServerSourceDocumentRange,
   reviseServerWorkbookReviewRegion,
   ignoreServerWorkbookReviewRegion,
   deleteServerWorkbookReviewRegion,
   retrieveProjectEvidence,
-  createServerSourceExtractChartProposal,
   uploadServerProjectFile,
 } from "./serverApi.js";
 
@@ -143,6 +135,7 @@ describe("serverApi", () => {
       sheetName: "Runs",
       range: "A1:D3",
       selectionMethod: "drag_select",
+      deferInterpretation: true,
       idempotencyKey: "create_region_1",
     }, { fetch: fetchImpl });
     await listServerWorkbookReviewRegionRevisions("session_1", "region_1", { fetch: fetchImpl });
@@ -166,6 +159,11 @@ describe("serverApi", () => {
       reason: "Duplicate selection.",
     }, { fetch: fetchImpl });
     await listServerRegionUnderstandings("project_1", { status: "accepted", fetch: fetchImpl });
+    await interpretServerWorkbookReviewRegion("session_1", "region_1", {
+      expectedRegionVersion: 1,
+      semanticType: "experiment_table",
+      idempotencyKey: "interpret_region_1",
+    }, { fetch: fetchImpl });
 
     expect(fetchImpl.mock.calls[0][0]).toBe("/api/workbook-review-sessions/session_1/regions");
     expect(fetchImpl.mock.calls[0][1].method).toBe("GET");
@@ -180,6 +178,7 @@ describe("serverApi", () => {
       range: "A1:D3",
       selectionMethod: "drag_select",
       idempotencyKey: "create_region_1",
+      deferInterpretation: true,
     });
     expect(JSON.parse(fetchImpl.mock.calls[3][1].body)).toEqual({
       feedback: "Temperature and selectivity are separate fields.",
@@ -191,6 +190,13 @@ describe("serverApi", () => {
     expect(fetchImpl.mock.calls[5][0]).toBe("/api/workbook-review-sessions/session_1/regions/region_1/ignore");
     expect(fetchImpl.mock.calls[6][1].method).toBe("DELETE");
     expect(fetchImpl.mock.calls[7][0]).toBe("/api/projects/project_1/region-understandings?status=accepted");
+    expect(fetchImpl.mock.calls[8][0]).toBe("/api/workbook-review-sessions/session_1/regions/region_1/interpret");
+    expect(JSON.parse(fetchImpl.mock.calls[8][1].body)).toEqual({
+      expectedRegionVersion: 1,
+      description: "",
+      semanticType: "experiment_table",
+      idempotencyKey: "interpret_region_1",
+    });
   });
 
   it("routes project evidence retrieval helper", async () => {
@@ -304,140 +310,44 @@ describe("serverApi", () => {
 
   it("routes AgentRun operations", async () => {
     const fetchImpl = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({ schemaVersion: "labrat.agentPlan.v1", actions: [] }))
       .mockResolvedValueOnce(jsonResponse({ agentRun: { id: "agent_run_1", actions: [] } }, { status: 201 }))
-      .mockResolvedValueOnce(jsonResponse({ agentRun: { id: "agent_run_1", status: "completed" } }))
       .mockResolvedValueOnce(jsonResponse({ agentRun: { id: "agent_run_1", status: "completed" } }))
       .mockResolvedValueOnce(jsonResponse({ agentRun: { id: "agent_run_2", status: "cancelled" } }));
 
-    await planServerProjectAgent("project_1", {
-      message: "upload supplement for Exp30",
-      conversation: [{ role: "user", text: "hello" }],
-      selectedContext: { tab: "overview" },
-    }, { fetch: fetchImpl });
     await createServerAgentRun("project_1", {
       message: "compare reaction rate for Exp1 and Exp2",
       conversation: [{ role: "user", text: "hello" }],
       selectedContext: { tab: "overview" },
     }, { fetch: fetchImpl });
     await getServerAgentRun("agent_run_1", { fetch: fetchImpl });
-    await confirmServerAgentRun("agent_run_1", "agent_run_action_1", { fetch: fetchImpl });
     await cancelServerAgentRun("agent_run_2", { fetch: fetchImpl });
 
-    expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects/project_1/agent/plan");
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects/project_1/agent/runs");
     expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
-      message: "upload supplement for Exp30",
-      conversation: [{ role: "user", text: "hello" }],
-      selectedContext: { tab: "overview" },
-    });
-    expect(fetchImpl.mock.calls[1][0]).toBe("/api/projects/project_1/agent/runs");
-    expect(JSON.parse(fetchImpl.mock.calls[1][1].body)).toEqual({
       message: "compare reaction rate for Exp1 and Exp2",
       conversation: [{ role: "user", text: "hello" }],
       selectedContext: { tab: "overview" },
       modeHint: "auto",
     });
-    expect(fetchImpl.mock.calls[2][0]).toBe("/api/agent-runs/agent_run_1");
-    expect(fetchImpl.mock.calls[3][0]).toBe("/api/agent-runs/agent_run_1/confirm");
-    expect(JSON.parse(fetchImpl.mock.calls[3][1].body)).toEqual({ actionId: "agent_run_action_1" });
-    expect(fetchImpl.mock.calls[4][0]).toBe("/api/agent-runs/agent_run_2/cancel");
-  });
-
-  it("routes source chart proposal persistence", async () => {
-    const fetchImpl = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({ chartProposalSet: { id: "chart_set_1", status: "accepted" } }))
-      .mockResolvedValueOnce(jsonResponse({ chartSpec: { id: "chart_spec_1" } }, { status: 201 }))
-      .mockResolvedValueOnce(jsonResponse({ chartSpec: { id: "chart_spec_1" } }));
-
-    await patchServerChartProposalSet("chart_set_1", { status: "accepted" }, { fetch: fetchImpl });
-    await createServerChartSpecFromProposal("project_1", { chartProposalSetId: "chart_set_1", proposalId: "chart_1" }, { fetch: fetchImpl });
-    await getServerChartSpec("chart/spec 1", { fetch: fetchImpl });
-
-    expect(fetchImpl.mock.calls.map((call) => call[0])).toEqual([
-      "/api/chart-proposal-sets/chart_set_1",
-      "/api/projects/project_1/chart-specs/from-proposal",
-      "/api/chart-specs/chart%2Fspec%201",
-    ]);
-  });
-
-  it("routes project chart intent gateway requests with frontend entrypoint metadata", async () => {
-    const fetchImpl = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({ sourceExtractProposal: { id: "source_extract_1" } }));
-
-    await interpretServerProjectChartIntent("project_1", {
-      prompt: "draw carbon distribution from P31 to BA32",
-      entrypoint: "chart_review",
-      context: { selectedWorkbookId: "file_1" },
-    }, { fetch: fetchImpl });
-
-    expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects/project_1/charts/interpret");
-    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
-      prompt: "draw carbon distribution from P31 to BA32",
-      persistAsProposal: true,
-      entrypoint: "chart_review",
-      context: { selectedWorkbookId: "file_1" },
-    });
-  });
-
-  it("updates source extract proposals and creates chart proposals from accepted extracts", async () => {
-    const fetchImpl = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({ sourceExtractProposal: { id: "source_extract_1", status: "accepted" } }))
-      .mockResolvedValueOnce(jsonResponse({ chartProposalSet: { id: "chart_set_source_1" } }, { status: 201 }));
-
-    await patchServerSourceExtractProposal("source_extract_1", {
-      status: "accepted",
-      decisionSummary: { acceptedByUser: true },
-    }, { fetch: fetchImpl });
-    await createServerSourceExtractChartProposal("source_extract_1", { fetch: fetchImpl });
-
-    expect(fetchImpl.mock.calls[0][0]).toBe("/api/source-extract-proposals/source_extract_1");
-    expect(fetchImpl.mock.calls[0][1].method).toBe("PATCH");
-    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
-      status: "accepted",
-      decisionSummary: { acceptedByUser: true },
-    });
-    expect(fetchImpl.mock.calls[1][0]).toBe("/api/source-extract-proposals/source_extract_1/chart-proposal");
-    expect(JSON.parse(fetchImpl.mock.calls[1][1].body)).toEqual({});
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/agent-runs/agent_run_1");
+    expect(fetchImpl.mock.calls[2][0]).toBe("/api/agent-runs/agent_run_2/cancel");
   });
 
   it("routes read-only source document inspection helpers", async () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ sourceDocuments: [{ id: "source_doc_1" }] }))
       .mockResolvedValueOnce(jsonResponse({ regions: [] }))
-      .mockResolvedValueOnce(jsonResponse({ schemaVersion: "labrat.sourceRange.v1", rows: [] }))
-      .mockResolvedValueOnce(jsonResponse({ preview: { extractType: "table_range" } }))
-      .mockResolvedValueOnce(jsonResponse({ preview: { extractType: "generic_table" } }));
+      .mockResolvedValueOnce(jsonResponse({ schemaVersion: "labrat.sourceRange.v1", rows: [] }));
 
     await listServerSourceDocuments("project_1", { fetch: fetchImpl });
     await listServerSourceDocumentRegions("source_doc_1", { fetch: fetchImpl });
     await readServerSourceDocumentRange("source_doc_1", { sheetName: "Runs", range: "A1:B2" }, { fetch: fetchImpl });
-    await previewServerSourceDocumentExtract("source_doc_1", {
-      sheetName: "Runs",
-      range: "B2:C3",
-      extractType: "table_range",
-    }, { fetch: fetchImpl });
-    await previewServerSourceRegionExtract("source_region_1", {
-      extractType: "component_distribution",
-      intent: { title: "Carbon distribution" },
-    }, { fetch: fetchImpl });
 
     expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects/project_1/source-documents");
     expect(fetchImpl.mock.calls[0][1].method).toBe("GET");
     expect(fetchImpl.mock.calls[1][0]).toBe("/api/source-documents/source_doc_1/regions");
     expect(fetchImpl.mock.calls[2][0]).toBe("/api/source-documents/source_doc_1/range");
     expect(JSON.parse(fetchImpl.mock.calls[2][1].body)).toEqual({ sheetName: "Runs", range: "A1:B2" });
-    expect(fetchImpl.mock.calls[3][0]).toBe("/api/source-documents/source_doc_1/extract-preview");
-    expect(JSON.parse(fetchImpl.mock.calls[3][1].body)).toEqual({
-      sheetName: "Runs",
-      range: "B2:C3",
-      extractType: "table_range",
-      intent: {},
-    });
-    expect(fetchImpl.mock.calls[4][0]).toBe("/api/source-regions/source_region_1/extract-preview");
-    expect(JSON.parse(fetchImpl.mock.calls[4][1].body)).toEqual({
-      extractType: "component_distribution",
-      intent: { title: "Carbon distribution" },
-    });
   });
 
   it("surfaces source range backend errors", async () => {

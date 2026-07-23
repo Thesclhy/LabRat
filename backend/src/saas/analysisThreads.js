@@ -1,21 +1,26 @@
-import { resolveAnalysisSelection } from "./analysisSelection.js";
 import {
   ANALYSIS_PLAN_REVISION_VERSION,
-  frozenPlanHash,
+  ANALYSIS_RUNTIME_VERSION,
   pythonSourceHash,
   validateAnalysisPlanRevision,
 } from "./analysisSchemas.js";
-import { stableDataHash } from "./dataPlanSchemas.js";
-import { makeId } from "./ids.js";
+import {
+  confirmedSourceRegionCatalog,
+  inspectConfirmedSourceRange,
+  inspectRunInput,
+  materializeAnalysisInputs,
+  resolveAnalysisSourceSelections,
+  sourceRectanglesForSelections,
+} from "./analysisSourceSelections.js";
 import { buildAnalysisRunPackage } from "./analysisExecutor.js";
 import { validateAnalysisResult } from "./analysisResultValidation.js";
+import { stableDataHash } from "./dataPlanSchemas.js";
+import { makeId } from "./ids.js";
 import { validatePythonPolicy } from "./pythonPolicy.js";
 
 const THREAD_LIST_LIMIT = 100;
-const SELECTION_PAGE_LIMIT = 200;
-const RESULT_PAGE_LIMIT = 200;
-const TRACE_PAGE_LIMIT = 500;
 const ANALYSIS_RUN_LEASE_MS = 360_000;
+const MODEL_DRAFT_ATTEMPT_LIMIT = 2;
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -33,10 +38,6 @@ function analysisError(code, message, statusCode = 400, details = undefined) {
   });
 }
 
-function sameValues(left, right) {
-  return stableDataHash(asArray(left)) === stableDataHash(asArray(right));
-}
-
 function validIdempotencyKey(value) {
   const key = text(value);
   return key.length > 0
@@ -44,71 +45,23 @@ function validIdempotencyKey(value) {
     && /^[a-zA-Z0-9._:-]+$/.test(key);
 }
 
-async function activeAnalysisInputs(store, projectId) {
-  const [dataSnapshots, experimentIdentities, experimentSnapshotHeads] = await Promise.all([
-    store.listDataSnapshots({ projectId }),
-    store.listExperimentIdentities({ projectId }),
-    store.listExperimentSnapshotHeads({ projectId }),
-  ]);
-  return {
-    projectId,
-    dataSnapshots,
-    experimentIdentities,
-    experimentSnapshotHeads,
-  };
+function diagnostics(error) {
+  const values = asArray(error?.details?.errors);
+  if (values.length) return values.slice(0, 20);
+  return [{
+    code: error?.code || "analysis_failed",
+    message: error?.message || "Analysis failed.",
+  }];
 }
 
-async function currentSelection(store, projectId, selectionRequest) {
-  const selection = resolveAnalysisSelection({
-    ...(await activeAnalysisInputs(store, projectId)),
-    selectionRequest,
-  });
-  if (!selection.ok) {
-    throw analysisError(
-      "analysis_selection_invalid",
-      "The analysis selection could not be resolved from this project's active accepted data.",
-      422,
-      { errors: selection.errors || [] },
-    );
-  }
-  return selection;
-}
-
-function validatePlanSelection(plan, selection) {
-  const validation = validateAnalysisPlanRevision(plan);
-  if (!validation.ok) {
-    throw analysisError(
-      "analysis_plan_invalid",
-      "The analysis plan did not pass backend validation.",
-      422,
-      { errors: validation.errors },
-    );
-  }
-  const selected = plan.selection || {};
-  const matches = (
-    text(selected.selectionId) === selection.selectionId
-    && text(selected.selectionHash) === selection.selectionHash
-    && text(selected.dependencyHash) === selection.dependencyHash
-    && sameValues(selected.experimentIds, selection.experimentIds)
-    && sameValues(selected.fieldIds, selection.fieldIds)
-  );
-  if (!matches) {
-    throw analysisError(
-      "analysis_plan_selection_mismatch",
-      "The plan selection does not match the backend-resolved accepted data.",
-      422,
-      {
-        expected: {
-          selectionId: selection.selectionId,
-          selectionHash: selection.selectionHash,
-          dependencyHash: selection.dependencyHash,
-          experimentIds: selection.experimentIds,
-          fieldIds: selection.fieldIds,
-        },
-      },
-    );
-  }
-  return validation;
+function publicExecution(payload = {}) {
+  const {
+    claimToken: _claimToken,
+    pythonProgram: _pythonProgram,
+    inputs: _inputs,
+    ...value
+  } = payload;
+  return value;
 }
 
 export function analysisThreadSummary(thread) {
@@ -132,6 +85,7 @@ export function analysisThreadSummary(thread) {
 }
 
 export function analysisPlanRevisionSummary(revision) {
+  const plan = revision.plan || {};
   return {
     id: revision.id,
     labId: revision.labId,
@@ -141,16 +95,10 @@ export function analysisPlanRevisionSummary(revision) {
     revision: revision.revision,
     status: revision.status,
     requestSummary: revision.requestSummary,
-    processingSummary: revision.processingSummary || [],
-    calculationManifest: revision.calculationManifest || {},
-    pythonProgram: revision.pythonProgram || {},
-    expectedOutput: revision.expectedOutput || {},
+    sourceSelections: revision.sourceSelections || plan.sourceSelections || [],
+    reviewPlan: revision.reviewPlan || plan.reviewPlan || {},
+    displayPlan: revision.displayPlan || plan.displayPlan || [],
     sourceRectangles: revision.sourceRectangles || [],
-    planHash: revision.planHash,
-    dependencyHash: revision.dependencyHash,
-    selectionHash: revision.selectionHash,
-    programHash: revision.programHash,
-    runtimeVersion: revision.runtimeVersion,
     feedback: revision.feedback || null,
     warnings: revision.warnings || [],
     validation: revision.validation || {},
@@ -164,7 +112,6 @@ export function analysisPlanRevisionSummary(revision) {
 }
 
 export function analysisRunSummary(run) {
-  const { claimToken: _claimToken, ...execution } = run.payload || {};
   return {
     id: run.id,
     labId: run.labId,
@@ -173,11 +120,7 @@ export function analysisRunSummary(run) {
     acceptedPlanRevisionId: run.acceptedPlanRevisionId,
     schemaVersion: run.schemaVersion,
     status: run.status,
-    inputHash: run.inputHash,
-    programHash: run.programHash,
-    runtimeVersion: run.runtimeVersion,
-    resultPreviewHash: run.resultPreviewHash || null,
-    execution,
+    execution: publicExecution(run.payload || {}),
     warnings: run.warnings || [],
     validation: run.validation || {},
     createdAt: run.createdAt,
@@ -189,6 +132,7 @@ export function analysisRunSummary(run) {
 
 export function analysisResultSummary(result) {
   if (!result) return null;
+  const summary = result.result?.summary || {};
   return {
     id: result.id,
     labId: result.labId,
@@ -197,12 +141,10 @@ export function analysisResultSummary(result) {
     analysisRunId: result.analysisRunId,
     schemaVersion: result.schemaVersion,
     status: result.status,
-    contentHash: result.contentHash,
-    resultPreviewHash: result.resultPreviewHash || null,
-    summary: result.result?.summary || {},
-    rowCount: asArray(result.result?.resultTable).length,
-    traceCount: asArray(result.result?.traces).length,
-    sourceRefCount: asArray(result.sourceRefs).length,
+    summary,
+    pointCount: Number(summary.pointCount) || 0,
+    traceCount: Number(summary.seriesCount) || 0,
+    exclusionCount: Number(summary.excludedCount) || 0,
     warnings: result.warnings || [],
     validation: result.validation || {},
     acceptedAt: result.acceptedAt || null,
@@ -240,7 +182,7 @@ export async function createAnalysisThread({
     id: makeId("analysis_thread"),
     labId: project.labId,
     projectId: project.id,
-    schemaVersion: "labrat.analysisThread.v1",
+    schemaVersion: "labrat.analysisThread.v2",
     status: "planning",
     originalRequest: request,
     messages: asArray(messages).length ? messages : [{
@@ -260,16 +202,28 @@ export async function createAnalysisThread({
   });
 }
 
+function modelPlanCandidate(rawDraft, originalRequest) {
+  return {
+    schemaVersion: ANALYSIS_PLAN_REVISION_VERSION,
+    status: "awaiting_review",
+    requestSummary: text(rawDraft?.requestSummary) || originalRequest,
+    sourceSelections: asArray(rawDraft?.sourceSelections),
+    reviewPlan: rawDraft?.reviewPlan || {},
+    displayPlan: asArray(rawDraft?.displayPlan).map(text).filter(Boolean),
+    warnings: asArray(rawDraft?.warnings),
+  };
+}
+
 export async function draftAnalysisPlanRevision({
   store,
   project,
   analysisThreadId,
   actorUserId,
   modelProvider,
-  analysisToolRegistry,
   feedback = null,
   reviewContext = null,
   allowRetryClaim = false,
+  signal = undefined,
 } = {}) {
   const thread = await store.findAnalysisThreadById(analysisThreadId);
   if (!thread || thread.projectId !== project?.id) {
@@ -282,67 +236,27 @@ export async function draftAnalysisPlanRevision({
       503,
     );
   }
-  if (typeof analysisToolRegistry?.call !== "function") {
-    throw analysisError(
-      "analysis_plan_tools_unavailable",
-      "Analysis planning tools are not configured.",
-      503,
-    );
-  }
-  const authContext = { projectId: project.id, actorUserId };
-  const [
-    projectContext,
-    fieldResult,
-    experimentIdentities,
-    experimentSnapshotHeads,
-  ] = await Promise.all([
-    analysisToolRegistry.call(
-      "get_project_analysis_context",
-      { projectId: project.id },
-      authContext,
-    ),
-    analysisToolRegistry.call(
-      "list_analysis_fields",
-      { projectId: project.id },
-      authContext,
-    ),
-    store.listExperimentIdentities({ projectId: project.id }),
-    store.listExperimentSnapshotHeads({ projectId: project.id }),
-  ]);
-  const fields = asArray(fieldResult.fields).slice(0, 500);
-  const activeExperimentIds = new Set(
-    asArray(experimentSnapshotHeads).map((head) => head.experimentId),
-  );
-  const experiments = asArray(experimentIdentities)
-    .filter((identity) => activeExperimentIds.has(identity.id))
-    .slice(0, 500)
-    .map((identity) => ({
-      experimentId: identity.id,
-      label: identity.canonicalLabel || identity.id,
-      aliases: asArray(identity.aliases),
-    }));
-  if (!fields.length) {
+  const confirmedRegions = await confirmedSourceRegionCatalog({
+    store,
+    projectId: project.id,
+  });
+  if (!confirmedRegions.length) {
     throw analysisError(
       "analysis_evidence_required",
-      "Publish accepted experiment data before drafting an analysis plan.",
+      "Confirm workbook regions before drafting an analysis plan.",
       409,
     );
   }
   const priorRevisions = await store.listAnalysisPlanRevisions({
     analysisThreadId: thread.id,
   });
-  const draft = await modelProvider.draftAnalysisPlan({
-    schemaVersion: "labrat.analysisPlanDraftRequest.v1",
-    project: projectContext.project || {
+  const request = {
+    schemaVersion: "labrat.analysisPlanDraftRequest.v2",
+    project: {
       id: project.id,
       name: project.name,
       description: project.description || "",
-    },
-    projectContext: {
-      publishedExperimentCount: projectContext.publishedExperimentCount,
-      sourceDocumentCount: projectContext.sourceDocumentCount,
-      chartSpecCount: projectContext.chartSpecCount,
-      manuscriptCount: projectContext.manuscriptCount,
+      projectProfile: project.metadata?.projectProfile || {},
     },
     originalRequest: thread.originalRequest,
     feedback: text(feedback) || null,
@@ -352,78 +266,62 @@ export async function draftAnalysisPlanRevision({
       revision: revision.revision,
       status: revision.status,
       requestSummary: revision.requestSummary,
-      processingSummary: revision.processingSummary,
-      warnings: revision.warnings,
+      sourceSelections: revision.plan?.sourceSelections || [],
+      displayPlan: revision.plan?.displayPlan || [],
     })),
-    fields,
-    experiments,
-  });
-  if (!draft?.ok) {
-    throw analysisError(
-      "analysis_plan_draft_unavailable",
-      draft?.warning?.message || "The backend model could not draft an analysis plan.",
-      503,
-      { warning: draft?.warning || null },
-    );
-  }
-  const selectionRequest = draft.selectionRequest || draft.plan?.selectionRequest;
-  if (!selectionRequest || !asArray(selectionRequest.fieldIds).length) {
-    throw analysisError(
-      "analysis_plan_selection_required",
-      "The drafted plan did not choose any accepted analysis fields.",
-      422,
-    );
-  }
-  const selection = await analysisToolRegistry.call(
-    "preview_analysis_selection",
-    { projectId: project.id, selectionRequest },
-    authContext,
-  );
-  if (!selection?.ok) {
-    throw analysisError(
-      "analysis_selection_invalid",
-      "The drafted selection could not be resolved from active accepted data.",
-      422,
-      { errors: selection?.errors || [] },
-    );
-  }
-  const rawPlan = draft.plan && typeof draft.plan === "object" ? draft.plan : draft;
-  const source = text(rawPlan.pythonProgram?.source);
-  const plan = {
-    schemaVersion: ANALYSIS_PLAN_REVISION_VERSION,
-    status: "awaiting_review",
-    requestSummary: text(rawPlan.requestSummary) || thread.originalRequest,
-    selection: {
-      selectionId: selection.selectionId,
-      experimentIds: selection.experimentIds,
-      fieldIds: selection.fieldIds,
-      dependencyHash: selection.dependencyHash,
-      selectionHash: selection.selectionHash,
-    },
-    processingSummary: asArray(rawPlan.processingSummary),
-    calculationManifest: rawPlan.calculationManifest || {},
-    pythonProgram: {
-      ...(rawPlan.pythonProgram || {}),
-      runtime: text(rawPlan.pythonProgram?.runtime) || "labrat-python-v1",
-      entrypoint: text(rawPlan.pythonProgram?.entrypoint) || "analyze",
-      source,
-      sourceHash: pythonSourceHash(source),
-    },
-    expectedOutput: rawPlan.expectedOutput || {},
-    warnings: asArray(rawPlan.warnings),
+    confirmedRegions,
   };
-  const planValidation = await analysisToolRegistry.call(
-    "validate_analysis_plan",
-    { projectId: project.id, plan },
-    authContext,
-  );
-  if (!planValidation?.ok) {
-    throw analysisError(
-      "analysis_plan_invalid",
-      "The drafted analysis plan did not pass backend validation.",
-      422,
-      { errors: planValidation?.errors || [] },
-    );
+  let draft = null;
+  let plan = null;
+  let repairContext = null;
+  let repairCount = 0;
+  for (let attempt = 1; attempt <= MODEL_DRAFT_ATTEMPT_LIMIT; attempt += 1) {
+    draft = await modelProvider.draftAnalysisPlan({
+      ...request,
+      ...(repairContext ? { repairContext } : {}),
+    }, {
+      signal,
+      inspectSourceRange: (input) => inspectConfirmedSourceRange({
+        store,
+        projectId: project.id,
+        ...input,
+      }),
+    });
+    if (!draft?.ok) {
+      throw analysisError(
+        "analysis_plan_draft_unavailable",
+        draft?.warning?.message || "The backend model could not draft an analysis plan.",
+        503,
+        { warning: draft?.warning || null },
+      );
+    }
+    try {
+      const candidate = modelPlanCandidate(draft, thread.originalRequest);
+      const sourceSelections = await resolveAnalysisSourceSelections({
+        store,
+        projectId: project.id,
+        sourceSelections: candidate.sourceSelections,
+      });
+      plan = { ...candidate, sourceSelections };
+      const validation = validateAnalysisPlanRevision(plan);
+      if (!validation.ok) {
+        throw analysisError(
+          "analysis_plan_invalid",
+          "The drafted analysis plan did not pass backend validation.",
+          422,
+          { errors: validation.errors },
+        );
+      }
+      break;
+    } catch (error) {
+      if (attempt >= MODEL_DRAFT_ATTEMPT_LIMIT) throw error;
+      repairCount += 1;
+      repairContext = {
+        attempt: repairCount,
+        instruction: "Return a complete replacement plan that corrects every backend error.",
+        errors: diagnostics(error),
+      };
+    }
   }
   const revision = await createAnalysisPlanRevision({
     store,
@@ -431,13 +329,15 @@ export async function draftAnalysisPlanRevision({
     analysisThreadId: thread.id,
     actorUserId,
     plan,
-    selectionRequest,
     feedback,
     allowRetryClaim,
   });
   return {
     ...revision,
-    draftMetadata: draft.metadata || {},
+    draftMetadata: {
+      ...(draft?.metadata || {}),
+      repairCount,
+    },
   };
 }
 
@@ -468,7 +368,6 @@ export async function createAnalysisPlanRevision({
   analysisThreadId,
   actorUserId,
   plan,
-  selectionRequest = {},
   feedback = null,
   allowRetryClaim = false,
 } = {}) {
@@ -489,47 +388,46 @@ export async function createAnalysisPlanRevision({
       409,
     );
   }
-  const selection = await currentSelection(store, project.id, selectionRequest);
-  const validation = validatePlanSelection(plan, selection);
-  const policy = validatePythonPolicy(
-    plan.pythonProgram?.source,
-    plan.pythonProgram?.runtime,
-  );
-  if (!policy.ok) {
+  const sourceSelections = await resolveAnalysisSourceSelections({
+    store,
+    projectId: project.id,
+    sourceSelections: plan?.sourceSelections,
+  });
+  const normalizedPlan = {
+    ...plan,
+    schemaVersion: ANALYSIS_PLAN_REVISION_VERSION,
+    status: "awaiting_review",
+    sourceSelections,
+  };
+  const validation = validateAnalysisPlanRevision(normalizedPlan);
+  if (!validation.ok) {
     throw analysisError(
-      "analysis_python_policy_failed",
-      "The analysis Python program did not pass the backend runtime policy.",
+      "analysis_plan_invalid",
+      "The analysis plan did not pass backend validation.",
       422,
-      { errors: policy.errors },
+      { errors: validation.errors },
     );
   }
   const revisions = await store.listAnalysisPlanRevisions({ analysisThreadId: thread.id });
   const prior = revisions.find((item) => item.status === "awaiting_review") || null;
   const createdAt = new Date().toISOString();
+  const sourceRectangles = sourceRectanglesForSelections(sourceSelections);
   const revision = {
     id: makeId("analysis_plan_revision"),
     labId: project.labId,
     projectId: project.id,
     analysisThreadId: thread.id,
-    schemaVersion: plan.schemaVersion,
+    schemaVersion: ANALYSIS_PLAN_REVISION_VERSION,
     revision: revisions.reduce((largest, item) => Math.max(largest, Number(item.revision) || 0), 0) + 1,
     status: "awaiting_review",
-    requestSummary: plan.requestSummary,
-    plan,
-    selection,
-    selectionRequest,
-    processingSummary: plan.processingSummary,
-    calculationManifest: plan.calculationManifest,
-    pythonProgram: plan.pythonProgram,
-    expectedOutput: plan.expectedOutput,
-    sourceRectangles: selection.sourceRectangles,
-    planHash: validation.planHash || frozenPlanHash(plan),
-    dependencyHash: selection.dependencyHash,
-    selectionHash: selection.selectionHash,
-    programHash: plan.pythonProgram.sourceHash,
-    runtimeVersion: plan.pythonProgram.runtime,
+    requestSummary: normalizedPlan.requestSummary,
+    plan: normalizedPlan,
+    sourceSelections,
+    reviewPlan: normalizedPlan.reviewPlan,
+    displayPlan: normalizedPlan.displayPlan,
+    sourceRectangles,
     feedback: text(feedback) || null,
-    warnings: asArray(plan.warnings),
+    warnings: asArray(normalizedPlan.warnings),
     validation: { ok: true, errors: [] },
     acceptedAt: null,
     acceptedBy: null,
@@ -549,7 +447,7 @@ export async function createAnalysisPlanRevision({
     {
       id: makeId("analysis_message"),
       role: "assistant",
-      content: plan.requestSummary,
+      content: normalizedPlan.requestSummary,
       createdAt,
       planRevisionId: revision.id,
     },
@@ -574,27 +472,21 @@ export async function getAnalysisPlanSelectionPage({
     throw analysisError("analysis_plan_revision_not_found", "Analysis plan revision was not found.", 404);
   }
   const boundedOffset = Math.max(Number.parseInt(offset, 10) || 0, 0);
-  const boundedLimit = Math.min(Math.max(Number.parseInt(limit, 10) || 50, 1), SELECTION_PAGE_LIMIT);
-  const records = asArray(revision.selection?.records);
+  const boundedLimit = Math.min(Math.max(Number.parseInt(limit, 10) || 50, 1), 200);
+  const sourceSelections = revision.plan?.sourceSelections || [];
   return {
-    schemaVersion: "labrat.analysisSelectionPage.v1",
+    schemaVersion: "labrat.analysisSourceSelectionPage.v2",
     projectId: revision.projectId,
     analysisThreadId: revision.analysisThreadId,
     planRevisionId: revision.id,
-    selectionId: revision.selection?.selectionId || null,
-    fieldCatalog: revision.selection?.fieldCatalog || [],
-    experimentIds: revision.selection?.experimentIds || [],
-    fieldIds: revision.selection?.fieldIds || [],
-    records: records.slice(boundedOffset, boundedOffset + boundedLimit),
+    sourceSelections,
     sourceRectangles: revision.sourceRectangles || [],
-    dependencyHash: revision.dependencyHash,
-    selectionHash: revision.selectionHash,
-    coverage: revision.selection?.coverage || {},
-    warnings: revision.selection?.warnings || [],
+    records: [],
+    warnings: revision.warnings || [],
     page: {
       offset: boundedOffset,
       limit: boundedLimit,
-      totalCount: records.length,
+      totalCount: sourceSelections.length,
     },
   };
 }
@@ -605,9 +497,6 @@ export async function acceptAnalysisPlanRevision({
   actorUserId,
   planRevisionId,
   idempotencyKey,
-  planHash,
-  selectionHash,
-  dependencyHash,
   ipAddress = null,
   userAgent = null,
 } = {}) {
@@ -623,11 +512,9 @@ export async function acceptAnalysisPlanRevision({
     throw analysisError("analysis_plan_revision_not_found", "Analysis plan revision was not found.", 404);
   }
   const requestHash = stableDataHash({
+    operation: "accept_analysis_plan_v2",
     projectId: project.id,
     planRevisionId: revision.id,
-    planHash: text(planHash),
-    selectionHash: text(selectionHash),
-    dependencyHash: text(dependencyHash),
   });
   const prior = await store.findAnalysisRunByIdempotencyKey?.({
     projectId: project.id,
@@ -651,70 +538,15 @@ export async function acceptAnalysisPlanRevision({
   if (revision.status !== "awaiting_review") {
     throw analysisError(
       "analysis_plan_revision_mismatch",
-      "Only the current visible plan revision can be accepted.",
+      "Only the current awaiting-review plan can be accepted.",
       409,
     );
   }
-  if (
-    text(planHash) !== revision.planHash
-    || text(selectionHash) !== revision.selectionHash
-    || text(dependencyHash) !== revision.dependencyHash
-  ) {
-    throw analysisError(
-      "analysis_plan_revision_mismatch",
-      "The accepted hashes do not match the visible plan revision.",
-      409,
-      {
-        currentPlanHash: revision.planHash,
-        currentSelectionHash: revision.selectionHash,
-        currentDependencyHash: revision.dependencyHash,
-      },
-    );
-  }
-  const policy = validatePythonPolicy(
-    revision.pythonProgram?.source,
-    revision.runtimeVersion,
-  );
-  if (!policy.ok) {
-    throw analysisError(
-      "analysis_python_policy_failed",
-      "The reviewed analysis Python program did not pass the backend runtime policy.",
-      422,
-      { errors: policy.errors },
-    );
-  }
-  let selection;
-  try {
-    selection = await currentSelection(store, project.id, revision.selectionRequest);
-  } catch (error) {
-    if (error.code !== "analysis_selection_invalid") throw error;
-    throw analysisError(
-      "analysis_plan_stale",
-      "The accepted experiment data changed after this plan was reviewed.",
-      409,
-      {
-        reviewedSelectionHash: revision.selectionHash,
-        reviewedDependencyHash: revision.dependencyHash,
-        selectionErrors: error.details?.errors || [],
-      },
-    );
-  }
-  if (
-    selection.selectionHash !== revision.selectionHash
-    || selection.dependencyHash !== revision.dependencyHash
-  ) {
-    throw analysisError(
-      "analysis_plan_stale",
-      "The accepted experiment data changed after this plan was reviewed.",
-      409,
-      {
-        reviewedSelectionHash: revision.selectionHash,
-        currentSelectionHash: selection.selectionHash,
-        reviewedDependencyHash: revision.dependencyHash,
-        currentDependencyHash: selection.dependencyHash,
-      },
-    );
-  }
+  await resolveAnalysisSourceSelections({
+    store,
+    projectId: project.id,
+    sourceSelections: revision.plan?.sourceSelections,
+  });
   const createdAt = new Date().toISOString();
   const analysisRun = {
     id: makeId("analysis_run"),
@@ -722,15 +554,15 @@ export async function acceptAnalysisPlanRevision({
     projectId: project.id,
     analysisThreadId: revision.analysisThreadId,
     acceptedPlanRevisionId: revision.id,
-    schemaVersion: "labrat.analysisRun.v1",
+    schemaVersion: "labrat.analysisRun.v2",
     status: "queued",
     idempotencyKey: key,
     requestHash,
-    inputHash: revision.selectionHash,
-    programHash: revision.programHash,
-    runtimeVersion: revision.runtimeVersion,
+    inputHash: "pending",
+    programHash: "pending",
+    runtimeVersion: ANALYSIS_RUNTIME_VERSION,
     resultPreviewHash: null,
-    payload: {},
+    payload: { phase: "queued" },
     warnings: [],
     validation: {},
     createdAt,
@@ -757,9 +589,6 @@ export async function acceptAnalysisPlanRevision({
       metadata: {
         analysisThreadId: revision.analysisThreadId,
         analysisRunId: analysisRun.id,
-        planHash: revision.planHash,
-        selectionHash: revision.selectionHash,
-        dependencyHash: revision.dependencyHash,
       },
       createdAt,
       ipAddress,
@@ -776,27 +605,6 @@ async function analysisResultForRun(store, run) {
     analysisThreadId: run.analysisThreadId,
   });
   return results.find((result) => result.analysisRunId === run.id) || null;
-}
-
-function collectedSelectionSourceRefs(selection) {
-  const candidates = [
-    ...asArray(selection?.sourceRectangles),
-    ...asArray(selection?.records).flatMap((record) => [
-      ...asArray(record.sourceRefs),
-      ...asArray(record.fields).flatMap((field) => asArray(field.sourceRefs)),
-      ...asArray(record.series).flatMap((series) => [
-        ...asArray(series.sourceRefs),
-        ...asArray(series.points).flatMap((point) => asArray(point.sourceRefs)),
-      ]),
-    ]),
-  ];
-  const seen = new Set();
-  return candidates.filter((sourceRef) => {
-    const hash = stableDataHash(sourceRef);
-    if (seen.has(hash)) return false;
-    seen.add(hash);
-    return true;
-  });
 }
 
 function executionAuditEvent({
@@ -826,12 +634,160 @@ function executionAuditEvent({
   };
 }
 
+function inputManifest(inputs) {
+  return {
+    schemaVersion: inputs.schemaVersion,
+    tables: asArray(inputs.tables).map((table) => ({
+      tableId: table.tableId,
+      sourceSelectionId: table.sourceSelectionId,
+      source: table.source,
+      startRow: table.startRow,
+      startColumn: table.startColumn,
+      rowCount: table.rowCount,
+      columnCount: table.columnCount,
+    })),
+  };
+}
+
+async function draftPythonProgram({
+  modelProvider,
+  thread,
+  revision,
+  inputs,
+} = {}) {
+  if (typeof modelProvider?.draftAnalysisProgram !== "function") {
+    throw analysisError(
+      "analysis_program_draft_unavailable",
+      "The backend model provider is not configured to generate analysis Python.",
+      503,
+    );
+  }
+  const manifest = inputManifest(inputs);
+  const initialInputPages = manifest.tables.map((table) => inspectRunInput(inputs, {
+    tableId: table.tableId,
+    rowOffset: 0,
+    rowLimit: Math.min(table.rowCount, 50),
+    columnOffset: 0,
+    columnLimit: Math.min(table.columnCount, 50),
+  }));
+  let repairContext = null;
+  let response = null;
+  for (let attempt = 1; attempt <= MODEL_DRAFT_ATTEMPT_LIMIT; attempt += 1) {
+    response = await modelProvider.draftAnalysisProgram({
+      schemaVersion: "labrat.analysisProgramDraftRequest.v2",
+      originalRequest: thread.originalRequest,
+      acceptedPlan: {
+        requestSummary: revision.requestSummary,
+        sourceSelections: revision.plan?.sourceSelections || [],
+        reviewPlan: revision.plan?.reviewPlan || {},
+        displayPlan: revision.plan?.displayPlan || [],
+      },
+      inputManifest: manifest,
+      initialInputPages,
+      ...(repairContext ? { repairContext } : {}),
+    }, {
+      inspectRunInput: (request) => inspectRunInput(inputs, request),
+    });
+    if (!response?.ok) {
+      throw analysisError(
+        "analysis_program_draft_unavailable",
+        response?.warning?.message || "The backend model could not generate analysis Python.",
+        503,
+        { warning: response?.warning || null },
+      );
+    }
+    const pythonProgram = {
+      runtime: text(response.pythonProgram?.runtime) || ANALYSIS_RUNTIME_VERSION,
+      entrypoint: text(response.pythonProgram?.entrypoint) || "analyze",
+      source: String(response.pythonProgram?.source || ""),
+    };
+    const policy = validatePythonPolicy(pythonProgram.source, pythonProgram.runtime);
+    if (policy.ok) {
+      return {
+        ...pythonProgram,
+        sourceHash: pythonSourceHash(pythonProgram.source),
+        modelMetadata: response.metadata || {},
+      };
+    }
+    if (attempt >= MODEL_DRAFT_ATTEMPT_LIMIT) {
+      throw analysisError(
+        "analysis_python_policy_failed",
+        "Generated analysis Python did not pass the backend runtime policy.",
+        422,
+        { errors: policy.errors },
+      );
+    }
+    repairContext = {
+      attempt,
+      instruction: "Return a complete replacement Python program correcting every policy error.",
+      errors: policy.errors,
+    };
+  }
+  throw analysisError(
+    "analysis_program_draft_unavailable",
+    "The backend model could not generate analysis Python.",
+    503,
+  );
+}
+
+async function finalizeFailedRun({
+  store,
+  project,
+  actorUserId,
+  run,
+  revision,
+  status,
+  error,
+  payload = {},
+  ipAddress,
+  userAgent,
+} = {}) {
+  const completedAt = new Date().toISOString();
+  const errors = diagnostics(error);
+  const validation = { ok: false, errors, warnings: [] };
+  const finalized = await store.finalizeAnalysisRun({
+    projectId: project.id,
+    analysisRunId: run.id,
+    actorUserId,
+    claimToken: run.payload?.claimToken,
+    status,
+    payload: {
+      startedAt: run.payload?.startedAt || null,
+      completedAt,
+      phase: "failed",
+      ...payload,
+      error: errors[0],
+    },
+    warnings: [],
+    validation,
+    completedAt,
+    auditEvents: [executionAuditEvent({
+      project,
+      actorUserId,
+      action: "analysis_run.failed",
+      targetType: "analysis_run",
+      targetId: run.id,
+      summary: errors[0]?.message || "Analysis execution failed.",
+      metadata: {
+        analysisThreadId: run.analysisThreadId,
+        acceptedPlanRevisionId: revision.id,
+        errorCodes: errors.map((item) => item.code),
+      },
+      createdAt: completedAt,
+      ipAddress,
+      userAgent,
+    })],
+  });
+  return { ...finalized, analysisPlanRevision: revision, idempotentReplay: false };
+}
+
 export async function executeAnalysisRun({
   store,
   project,
   actorUserId,
   analysisRunId,
   executor,
+  modelProvider,
   ipAddress = null,
   userAgent = null,
 } = {}) {
@@ -863,128 +819,55 @@ export async function executeAnalysisRun({
       409,
     );
   }
-  const selection = revision.selection || {};
-  const staleValidation = {
-    ok: false,
-    errors: [{
-      code: "analysis_run_stale",
-      message: "Active accepted experiment heads changed before execution claim.",
-    }],
-    warnings: [],
-  };
-  const claimAt = new Date().toISOString();
+  const startedAt = new Date().toISOString();
   run = await store.claimAnalysisRun({
     projectId: project.id,
     analysisRunId: run.id,
     actorUserId,
-    expectedHeadRefs: asArray(selection.records).map((record) => ({
-      headId: record.headId,
-      experimentId: record.experimentId,
-      dataSnapshotId: record.snapshotId,
-      recordIndex: Number(record.recordIndex),
-    })),
-    staleValidation,
-    staleAuditEvents: [executionAuditEvent({
-      project,
-      actorUserId,
-      action: "analysis_run.stale",
-      targetType: "analysis_run",
-      targetId: run.id,
-      summary: "Analysis execution stopped because active accepted experiment heads changed.",
-      metadata: {
-        analysisThreadId: run.analysisThreadId,
-        acceptedPlanRevisionId: revision.id,
-      },
-      createdAt: claimAt,
-      ipAddress,
-      userAgent,
-    })],
-    startedAt: claimAt,
+    expectedHeadRefs: [],
+    staleValidation: {},
+    staleAuditEvents: [],
+    startedAt,
     staleAfterMs: ANALYSIS_RUN_LEASE_MS,
   });
-  if (run.status === "validation_failed") {
-    return {
-      analysisThread: await store.findAnalysisThreadById(run.analysisThreadId),
-      analysisPlanRevision: revision,
-      analysisRun: run,
-      analysisResult: null,
-      idempotentReplay: false,
-    };
-  }
-
-  const preparationErrors = [];
-  if (
-    selection.selectionHash !== revision.selectionHash
-    || selection.dependencyHash !== revision.dependencyHash
-    || run.inputHash !== revision.selectionHash
-    || run.programHash !== revision.programHash
-    || run.runtimeVersion !== revision.runtimeVersion
-  ) {
-    preparationErrors.push({
-      code: "analysis_run_hash_mismatch",
-      message: "Frozen execution hashes differ from the accepted plan revision.",
-    });
-  }
-  const policy = validatePythonPolicy(
-    revision.pythonProgram?.source,
-    revision.runtimeVersion,
-  );
-  if (!policy.ok) preparationErrors.push(...policy.errors);
-  let runPackage = null;
+  let inputs;
+  let pythonProgram;
+  let runPackage;
   try {
-    runPackage = buildAnalysisRunPackage({ run, planRevision: revision, selection });
-  } catch (error) {
-    preparationErrors.push({
-      code: error.code || "analysis_run_package_invalid",
-      message: error.message || "Accepted analysis run package is invalid.",
-    });
-  }
-  if (preparationErrors.length) {
-    const completedAt = new Date().toISOString();
-    const validation = {
-      ok: false,
-      errors: preparationErrors,
-      warnings: [],
-    };
-    const finalized = await store.finalizeAnalysisRun({
+    inputs = await materializeAnalysisInputs({
+      store,
       projectId: project.id,
-      analysisRunId: run.id,
-      actorUserId,
-      claimToken: run.payload?.claimToken,
-      status: "validation_failed",
-      payload: {
-        startedAt: run.payload?.startedAt || null,
-        completedAt,
-        packageHash: runPackage?.packageHash || null,
-        adapter: "not_started",
-        runtime: {},
-        error: preparationErrors[0],
-      },
-      warnings: [],
-      validation,
-      completedAt,
-      auditEvents: [executionAuditEvent({
-        project,
-        actorUserId,
-        action: "analysis_run.preparation_failed",
-        targetType: "analysis_run",
-        targetId: run.id,
-        summary: "Analysis execution stopped because its frozen package failed validation.",
-        metadata: {
-          analysisThreadId: run.analysisThreadId,
-          acceptedPlanRevisionId: revision.id,
-          errorCodes: preparationErrors.map((error) => error.code),
-        },
-        createdAt: completedAt,
-        ipAddress,
-        userAgent,
-      })],
+      sourceSelections: revision.plan?.sourceSelections,
     });
-    return {
-      ...finalized,
-      analysisPlanRevision: revision,
-      idempotentReplay: false,
-    };
+    pythonProgram = await draftPythonProgram({
+      modelProvider,
+      thread: await store.findAnalysisThreadById(run.analysisThreadId),
+      revision,
+      inputs,
+    });
+    runPackage = buildAnalysisRunPackage({
+      run,
+      planRevision: revision,
+      inputs,
+      pythonProgram,
+    });
+  } catch (error) {
+    return finalizeFailedRun({
+      store,
+      project,
+      actorUserId,
+      run,
+      revision,
+      status: error?.code === "analysis_python_policy_failed" ? "validation_failed" : "failed",
+      error,
+      payload: {
+        phase: error?.code === "analysis_python_policy_failed" ? "policy_check" : "generating_python",
+        inputManifest: inputs ? inputManifest(inputs) : null,
+        pythonProgram: pythonProgram || null,
+      },
+      ipAddress,
+      userAgent,
+    });
   }
 
   let executorResult;
@@ -1005,119 +888,79 @@ export async function executeAnalysisRun({
       adapter: "unknown",
       error: {
         code: "analysis_executor_failed",
-        message: "Analysis executor failed unexpectedly.",
-        detail: text(error?.message),
+        message: error?.message || "Analysis executor failed unexpectedly.",
       },
     };
   }
-
-  const completedAt = new Date().toISOString();
-  const executionPayload = {
-    startedAt: run.payload?.startedAt || null,
-    completedAt,
-    packageHash: runPackage.packageHash,
-    adapter: executorResult?.adapter || "unknown",
-    runtime: executorResult?.runtime || {},
-    error: executorResult?.ok ? null : executorResult?.error || null,
-  };
   if (!executorResult?.ok) {
-    const validation = {
-      ok: false,
-      errors: [{
-        code: executorResult?.error?.code || "analysis_executor_failed",
-        message: executorResult?.error?.message || "Analysis execution failed.",
-      }],
-      warnings: [],
-    };
-    const finalized = await store.finalizeAnalysisRun({
-      projectId: project.id,
-      analysisRunId: run.id,
+    return finalizeFailedRun({
+      store,
+      project,
       actorUserId,
-      claimToken: run.payload?.claimToken,
+      run,
+      revision,
       status: "failed",
-      payload: executionPayload,
-      warnings: [],
-      validation,
-      completedAt,
-      auditEvents: [executionAuditEvent({
-        project,
-        actorUserId,
-        action: "analysis_run.execute_failed",
-        targetType: "analysis_run",
-        targetId: run.id,
-        summary: "Analysis execution failed before producing a reviewable result.",
-        metadata: {
-          analysisThreadId: run.analysisThreadId,
-          acceptedPlanRevisionId: revision.id,
-          packageHash: runPackage.packageHash,
-          errorCode: validation.errors[0].code,
-        },
-        createdAt: completedAt,
-        ipAddress,
-        userAgent,
-      })],
+      error: executorResult?.error || {
+        code: "analysis_executor_failed",
+        message: "Analysis execution failed.",
+      },
+      payload: {
+        phase: "executing_python",
+        inputManifest: inputManifest(inputs),
+        inputHash: runPackage.inputHash,
+        programHash: runPackage.programHash,
+        pythonProgram,
+        adapter: executorResult?.adapter || "unknown",
+        runtime: executorResult?.runtime || {},
+      },
+      ipAddress,
+      userAgent,
     });
-    return {
-      ...finalized,
-      analysisPlanRevision: revision,
-      idempotentReplay: false,
-    };
   }
-
   const checked = validateAnalysisResult({
     run,
     plan: revision,
-    selection,
     executorResult,
   });
   if (!checked.ok) {
-    const finalized = await store.finalizeAnalysisRun({
-      projectId: project.id,
-      analysisRunId: run.id,
+    return finalizeFailedRun({
+      store,
+      project,
       actorUserId,
-      claimToken: run.payload?.claimToken,
+      run,
+      revision,
       status: "validation_failed",
-      payload: executionPayload,
-      warnings: checked.warnings,
-      validation: checked.validation,
-      completedAt,
-      auditEvents: [executionAuditEvent({
-        project,
-        actorUserId,
-        action: "analysis_run.validation_failed",
-        targetType: "analysis_run",
-        targetId: run.id,
-        summary: "Analysis output failed backend validation and was not persisted as a result.",
-        metadata: {
-          analysisThreadId: run.analysisThreadId,
-          acceptedPlanRevisionId: revision.id,
-          packageHash: runPackage.packageHash,
-          errorCodes: checked.errors.map((error) => error.code),
-        },
-        createdAt: completedAt,
-        ipAddress,
-        userAgent,
-      })],
+      error: {
+        code: "analysis_plotly_validation_failed",
+        message: "Python returned a chart that did not pass backend Plotly validation.",
+        details: { errors: checked.errors },
+      },
+      payload: {
+        phase: "validating_plotly",
+        inputManifest: inputManifest(inputs),
+        inputHash: runPackage.inputHash,
+        programHash: runPackage.programHash,
+        pythonProgram,
+        adapter: executorResult?.adapter || "unknown",
+        runtime: executorResult?.runtime || {},
+      },
+      ipAddress,
+      userAgent,
     });
-    return {
-      ...finalized,
-      analysisPlanRevision: revision,
-      idempotentReplay: false,
-    };
   }
-
+  const completedAt = new Date().toISOString();
   const analysisResult = {
     id: makeId("analysis_result"),
     labId: project.labId,
     projectId: project.id,
     analysisThreadId: run.analysisThreadId,
     analysisRunId: run.id,
-    schemaVersion: "labrat.analysisResult.v1",
+    schemaVersion: "labrat.analysisResult.v2",
     status: "awaiting_review",
     contentHash: checked.contentHash,
     resultPreviewHash: checked.resultPreviewHash,
     result: checked.result,
-    sourceRefs: collectedSelectionSourceRefs(selection),
+    sourceRefs: revision.sourceRectangles || [],
     warnings: checked.warnings,
     validation: checked.validation,
     acceptedAt: null,
@@ -1134,7 +977,19 @@ export async function executeAnalysisRun({
     claimToken: run.payload?.claimToken,
     status: "awaiting_result_review",
     resultPreviewHash: checked.resultPreviewHash,
-    payload: executionPayload,
+    payload: {
+      startedAt: run.payload?.startedAt || startedAt,
+      completedAt,
+      phase: "result_ready",
+      inputManifest: inputManifest(inputs),
+      inputHash: runPackage.inputHash,
+      programHash: runPackage.programHash,
+      pythonProgram,
+      packageHash: runPackage.packageHash,
+      adapter: executorResult?.adapter || "unknown",
+      runtime: executorResult?.runtime || {},
+      error: null,
+    },
     warnings: checked.warnings,
     validation: checked.validation,
     analysisResult,
@@ -1145,14 +1000,13 @@ export async function executeAnalysisRun({
       action: "analysis_run.execute",
       targetType: "analysis_result",
       targetId: analysisResult.id,
-      summary: "Executed one accepted analysis plan and created a reviewable result.",
+      summary: "Generated Python from accepted source tables and created a reviewable Plotly result.",
       metadata: {
         analysisThreadId: run.analysisThreadId,
         analysisRunId: run.id,
         acceptedPlanRevisionId: revision.id,
-        packageHash: runPackage.packageHash,
-        resultHash: analysisResult.contentHash,
-        resultPreviewHash: analysisResult.resultPreviewHash,
+        traceCount: checked.validation.traceCount,
+        pointCount: checked.validation.pointCount,
       },
       createdAt: completedAt,
       ipAddress,
@@ -1187,12 +1041,6 @@ export async function getAnalysisRunDetail({ store, analysisRunId } = {}) {
 export async function getAnalysisResultPreview({
   store,
   analysisRunId,
-  offset = 0,
-  limit = 50,
-  traceOffset = 0,
-  traceLimit = 50,
-  sourceOffset = 0,
-  sourceLimit = 50,
 } = {}) {
   const detail = await getAnalysisRunDetail({ store, analysisRunId });
   if (!detail.analysisResult) {
@@ -1203,69 +1051,26 @@ export async function getAnalysisResultPreview({
       { runStatus: detail.analysisRun.status },
     );
   }
-  const rows = asArray(detail.analysisResult.result?.resultTable);
-  const traces = asArray(detail.analysisResult.result?.traces);
-  const sourceRefs = asArray(detail.analysisResult.sourceRefs);
-  const boundedOffset = Math.max(Number.parseInt(offset, 10) || 0, 0);
-  const boundedLimit = Math.min(
-    Math.max(Number.parseInt(limit, 10) || 50, 1),
-    RESULT_PAGE_LIMIT,
-  );
-  const boundedTraceOffset = Math.max(Number.parseInt(traceOffset, 10) || 0, 0);
-  const boundedTraceLimit = Math.min(
-    Math.max(Number.parseInt(traceLimit, 10) || 50, 1),
-    TRACE_PAGE_LIMIT,
-  );
-  const boundedSourceOffset = Math.max(Number.parseInt(sourceOffset, 10) || 0, 0);
-  const boundedSourceLimit = Math.min(
-    Math.max(Number.parseInt(sourceLimit, 10) || 50, 1),
-    RESULT_PAGE_LIMIT,
-  );
-  const pagedRows = rows.slice(boundedOffset, boundedOffset + boundedLimit);
-  const pagedTraces = traces.slice(
-    boundedTraceOffset,
-    boundedTraceOffset + boundedTraceLimit,
-  );
-  const visibleLineageIds = new Set([
-    ...pagedRows.map((row) => String(row?.__result_id || row?.resultId || "").trim()),
-    ...pagedTraces.map((trace) => String(trace?.traceId || "").trim()),
-  ].filter(Boolean));
-  const lineage = Object.fromEntries(
-    Object.entries(detail.analysisResult.result?.lineage || {})
-      .filter(([id]) => visibleLineageIds.has(id)),
-  );
+  const plotly = detail.analysisResult.result?.plotly || { data: [], layout: {} };
+  const traces = asArray(plotly.data);
   return {
-    schemaVersion: "labrat.analysisResultPreview.v1",
+    schemaVersion: "labrat.analysisResultPreview.v2",
     projectId: detail.analysisRun.projectId,
     analysisThreadId: detail.analysisRun.analysisThreadId,
     analysisRunId: detail.analysisRun.id,
     analysisResultId: detail.analysisResult.id,
-    contentHash: detail.analysisResult.contentHash,
-    resultPreviewHash: detail.analysisResult.resultPreviewHash,
-    rows: pagedRows,
-    traces: pagedTraces,
-    lineage,
+    plotly,
+    traces,
     summary: detail.analysisResult.result?.summary || {},
+    exclusions: detail.analysisResult.result?.exclusions || [],
+    checks: detail.analysisResult.result?.checks || [],
     validation: detail.analysisResult.validation || {},
     warnings: detail.analysisResult.warnings || [],
-    sourceRefs: sourceRefs.slice(
-      boundedSourceOffset,
-      boundedSourceOffset + boundedSourceLimit,
-    ),
-    rowPage: {
-      offset: boundedOffset,
-      limit: boundedLimit,
-      totalCount: rows.length,
-    },
+    sourceRefs: detail.analysisResult.sourceRefs || [],
     tracePage: {
-      offset: boundedTraceOffset,
-      limit: boundedTraceLimit,
+      offset: 0,
+      limit: traces.length,
       totalCount: traces.length,
-    },
-    sourcePage: {
-      offset: boundedSourceOffset,
-      limit: boundedSourceLimit,
-      totalCount: sourceRefs.length,
     },
   };
 }
@@ -1275,10 +1080,8 @@ export async function reviseAnalysisRun({
   project,
   actorUserId,
   analysisRunId,
-  resultHash,
   feedback,
   modelProvider,
-  analysisToolRegistry,
 } = {}) {
   const value = text(feedback);
   if (!value) {
@@ -1298,24 +1101,12 @@ export async function reviseAnalysisRun({
       409,
     );
   }
-  if (
-    detail.analysisResult
-    && text(resultHash) !== detail.analysisResult.contentHash
-  ) {
-    throw analysisError(
-      "analysis_result_hash_mismatch",
-      "Revision feedback must reference the exact visible analysis result.",
-      409,
-      { currentResultHash: detail.analysisResult.contentHash },
-    );
-  }
   const analysisPlanRevision = await draftAnalysisPlanRevision({
     store,
     project,
     analysisThreadId: detail.analysisRun.analysisThreadId,
     actorUserId,
     modelProvider,
-    analysisToolRegistry,
     feedback: value,
     reviewContext: {
       analysisRun: analysisRunSummary(detail.analysisRun),

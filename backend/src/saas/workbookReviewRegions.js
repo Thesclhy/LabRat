@@ -238,6 +238,10 @@ async function draftRevision({
       ok: false,
       warning: { code: "ai_unavailable", message: "Backend workbook-region model provider is unavailable." },
     };
+  const latestRegion = await currentRegion(store, region);
+  if (latestRegion.disposition !== "active" || Number(latestRegion.version) !== Number(region.version)) {
+    return { region: latestRegion, revision: null, warning: null, cancelled: true };
+  }
   if (!modelResult?.ok) {
     const warning = modelResult?.warning || { code: "ai_unavailable", message: "Backend workbook-region model provider is unavailable." };
     const failedRegion = await store.updateWorkbookReviewRegion(region.id, {
@@ -343,19 +347,17 @@ async function draftRevision({
   return { region: updatedRegion, revision, warning: null };
 }
 
-export async function createWorkbookReviewRegionDraft({
+export async function createWorkbookReviewRegionRecord({
   store,
   session,
   sourceDocument,
-  indexBlobs = [],
   input = {},
-  modelProvider,
   actorUserId = null,
 } = {}) {
   assertOwnership({ session, sourceDocument });
   const sheet = sheetFor(sourceDocument, input.sheetName);
   const rangeRef = canonicalRange(input.range || input.rangeRef);
-  const region = await store.createWorkbookReviewRegion({
+  return store.createWorkbookReviewRegion({
     labId: session.labId,
     projectId: session.projectId,
     workbookReviewSessionId: session.id,
@@ -369,17 +371,73 @@ export async function createWorkbookReviewRegionDraft({
     warnings: [],
     createdBy: actorUserId,
   });
+}
+
+export async function interpretWorkbookReviewRegion({
+  store,
+  region,
+  sourceDocument,
+  indexBlobs = [],
+  input = {},
+  modelProvider,
+  actorUserId = null,
+} = {}) {
+  const loaded = await currentRegion(store, region);
+  assertRegionVersion(loaded, input.expectedRegionVersion);
+  if (loaded.sourceDocumentId !== sourceDocument?.id) {
+    fail("source_document_mismatch", "Workbook review region must belong to the session SourceDocument.", 409);
+  }
+  if (loaded.disposition !== "active") {
+    fail("workbook_review_region_inactive", "Only an active workbook review region can be interpreted.", 409);
+  }
+  if (!["interpreting", "interpretation_failed"].includes(loaded.reviewStatus)) {
+    fail("workbook_review_region_not_pending", "This workbook review region already has an interpretation.", 409);
+  }
+  const priorRevision = loaded.currentRevisionId
+    ? await store.findRegionUnderstandingRevisionById(loaded.currentRevisionId)
+    : null;
   return draftRevision({
+    store,
+    region: loaded,
+    sourceDocument,
+    indexBlobs,
+    modelProvider,
+    actorUserId,
+    trigger: priorRevision ? "retry" : "initial",
+    userFeedback: input.description || "",
+    priorRevision,
+    initialSemanticType: input.semanticType || priorRevision?.interpretation?.semanticType || "generic_table",
+  });
+}
+
+export async function createWorkbookReviewRegionDraft({
+  store,
+  session,
+  sourceDocument,
+  indexBlobs = [],
+  input = {},
+  modelProvider,
+  actorUserId = null,
+} = {}) {
+  const region = await createWorkbookReviewRegionRecord({
+    store,
+    session,
+    sourceDocument,
+    input,
+    actorUserId,
+  });
+  return interpretWorkbookReviewRegion({
     store,
     region,
     sourceDocument,
     indexBlobs,
     modelProvider,
     actorUserId,
-    trigger: "initial",
-    userFeedback: input.description || "",
-    priorRevision: null,
-    initialSemanticType: input.semanticType || "generic_table",
+    input: {
+      expectedRegionVersion: region.version,
+      description: input.description || "",
+      semanticType: input.semanticType || "generic_table",
+    },
   });
 }
 

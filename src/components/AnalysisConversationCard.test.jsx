@@ -54,7 +54,7 @@ describe("AnalysisConversationCard", () => {
     );
 
     expect(screen.getByText("Result ready")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Review analysis result" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review result" }));
     expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({
       thread,
       revision,
@@ -63,7 +63,7 @@ describe("AnalysisConversationCard", () => {
     }));
   });
 
-  it("offers a published-data retry for evidence-blocked planning", () => {
+  it("offers a confirmed-evidence retry for evidence-blocked planning", () => {
     const onRetry = vi.fn();
     const thread = {
       id: "analysis_thread_1",
@@ -82,7 +82,7 @@ describe("AnalysisConversationCard", () => {
     );
 
     expect(screen.getByText("A reviewable plan could not be drafted yet.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Retry with published data" }));
+    fireEvent.click(screen.getByRole("button", { name: "Retry with confirmed evidence" }));
     expect(onRetry).toHaveBeenCalledWith(thread);
   });
 
@@ -95,7 +95,7 @@ describe("AnalysisConversationCard", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Retry with published data" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Retry with confirmed evidence" }).hasAttribute("disabled")).toBe(true);
     expect(screen.getByText("Model planning is unavailable.")).toBeTruthy();
   });
 
@@ -109,7 +109,7 @@ describe("AnalysisConversationCard", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Retry with published data" }).hasAttribute("disabled")).toBe(true);
-    expect(screen.getByText("Publish accepted experiment data before retrying.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry with confirmed evidence" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByText("Confirm a workbook region or publish accepted experiment data before retrying.")).toBeTruthy();
   });
 });

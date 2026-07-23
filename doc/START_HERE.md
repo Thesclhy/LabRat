@@ -24,9 +24,9 @@ Upload workbook
   -> manuscript figure placement
 ```
 
-Uploading a workbook does not automatically normalize data, create a DatasetCommit, create a SourceExtractProposal, create a ChartSpec, or insert Manuscript content. Those are later review boundaries built on top of accepted understanding and source refs.
+Uploading a workbook does not automatically publish a DataSnapshot, create a ChartSpec, or insert Manuscript content. The retired SourceExtractProposal/ChartProposalSet path is not a supported product flow.
 
-The current engineering mainline is the Tool-Governed DataPlan Agent: exact accepted RegionUnderstandingRevisions are retrieved through backend-owned tools, compiled into reviewable DataPlans, and executed into deterministic DataSnapshot previews before any chart proposal or ChartSpec is created. See `doc/current-milestone.md` for the active slice.
+LabRat chat has three supported dispositions: workbook upload and region review, read-only project question answering, and reviewed analysis/chart planning. Chart requests select confirmed regions and/or accepted active DataSnapshot records, then pass through plan review, accepted Python execution, result review, and analysis-result ChartSpec publication.
 
 ## Minimal Reading Path
 

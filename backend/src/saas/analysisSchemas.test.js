@@ -1,183 +1,119 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "node:test";
 
 import {
   ANALYSIS_PLAN_REVISION_VERSION,
   frozenPlanHash,
-  pythonSourceHash,
   validateAnalysisPlanRevision,
 } from "./analysisSchemas.js";
 
-function validPlan(overrides = {}) {
-  const source = [
-    "def analyze(tables, labrat):",
-    "    return {'result_table': [], 'traces': [], 'lineage': {}, 'summary': {}}",
-  ].join("\n");
+function validPlan() {
   return {
     schemaVersion: ANALYSIS_PLAN_REVISION_VERSION,
     status: "awaiting_review",
-    requestSummary: "Normalize selectivity.",
-    selection: {
-      selectionId: "analysis_selection_1",
-      experimentIds: ["experiment_1"],
-      fieldIds: ["field_selectivity_percent_number"],
-      dependencyHash: "sha256_dependency",
-      selectionHash: "sha256_selection",
-    },
-    processingSummary: [
-      "Require all three selectivity components.",
-      "Normalize retained rows to 100 percent.",
-    ],
-    calculationManifest: {
-      inputs: [{
-        fieldId: "field_selectivity_percent_number",
-        fieldKey: "selectivity",
-        unit: "percent",
-      }],
-      missingValuePolicy: {
-        mode: "exclude_record",
-        requiredFieldIds: ["field_selectivity_percent_number"],
+    requestSummary: "Compare carbon-number distributions for Exp32 and Exp33.",
+    sourceSelections: [{
+      sourceSelectionId: "selection_exp32",
+      regionUnderstandingRevisionId: "revision_exp32",
+      sourceDocumentId: "source_exp32",
+      workbookName: "Exp32.xlsx",
+      sheetName: "Carbon",
+      range: "B4:H5",
+    }, {
+      sourceSelectionId: "selection_exp33",
+      regionUnderstandingRevisionId: "revision_exp33",
+      sourceDocumentId: "source_exp33",
+      workbookName: "Exp33.xlsx",
+      sheetName: "Carbon",
+      range: "Q69:AI69",
+    }],
+    reviewPlan: {
+      processingSteps: [
+        "Read carbon labels and values from both selected ranges.",
+        "Create one bar series per experiment.",
+      ],
+      chart: {
+        title: "Carbon number distribution",
+        chartType: "bar",
+        xDescription: "Carbon number",
+        yDescription: "Distribution",
+        seriesDescription: "One series per selected experiment",
       },
-      derivedFields: [{
-        fieldKey: "selectivity_normalized",
-        inputFieldIds: ["field_selectivity_percent_number"],
-        expression: "selectivity / total * 100",
-        outputUnit: "percent",
-      }],
-      invariants: [{
-        type: "row_sum",
-        fieldKeys: ["selectivity_normalized"],
-        target: 100,
-        absoluteTolerance: 0.000001,
-      }],
+      invariants: [],
     },
-    pythonProgram: {
-      runtime: "labrat-python-v1",
-      entrypoint: "analyze",
-      source,
-      sourceHash: pythonSourceHash(source),
-    },
-    expectedOutput: {
-      shape: "experiment_traces",
-      chartType: "stacked_bar",
-      xField: "experiment_label",
-      yFields: ["selectivity_normalized"],
-    },
+    displayPlan: [
+      "Use the two red source ranges.",
+      "Plot carbon number on X and distribution on Y.",
+    ],
     warnings: [],
-    ...overrides,
   };
 }
 
-test("accepts one frozen calculation manifest and exact Python program", () => {
+test("accepts source selections and a readable review plan without Python", () => {
   const plan = validPlan();
   const result = validateAnalysisPlanRevision(plan);
 
   assert.equal(result.ok, true);
-  assert.deepEqual(result.errors, []);
-  assert.match(frozenPlanHash(plan), /^sha256_/);
-  assert.equal(frozenPlanHash(plan), frozenPlanHash({
-    ...plan,
-    warnings: [{ code: "display_only" }],
-  }));
+  assert.equal(result.planHash, frozenPlanHash(plan));
+  assert.equal(Object.hasOwn(plan, "pythonProgram"), false);
 });
 
-test("rejects mismatched Python hashes and missing-value policy", () => {
-  const plan = validPlan({
-    calculationManifest: {
-      inputs: [{ fieldId: "field_selectivity_percent_number", fieldKey: "selectivity", unit: "percent" }],
-      derivedFields: [],
-      invariants: [],
-    },
-    pythonProgram: {
-      runtime: "labrat-python-v1",
-      entrypoint: "analyze",
-      source: "def analyze(tables, labrat):\n    return {}",
-      sourceHash: "sha256_wrong",
-    },
-  });
-  const result = validateAnalysisPlanRevision(plan);
-
-  assert.equal(result.ok, false);
-  assert.deepEqual(result.errors.map((item) => item.code), [
-    "analysis_missing_value_policy_required",
-    "analysis_python_hash_mismatch",
-  ]);
-});
-
-test("rejects embedded authoritative result arrays", () => {
-  const plan = validPlan({
-    expectedOutput: {
-      shape: "experiment_traces",
-      chartType: "scatter",
-      xValues: [1, 2],
-      yValues: [3, 4],
-    },
-    resultRows: [{ experimentId: "experiment_1", value: 3 }],
-  });
-  const result = validateAnalysisPlanRevision(plan);
-
-  assert.equal(result.ok, false);
-  assert.equal(result.errors.some((item) => item.code === "analysis_result_payload_forbidden"), true);
-});
-
-test("rejects authoritative arrays outside expectedOutput", () => {
-  const result = validateAnalysisPlanRevision(validPlan({
-    resultRows: [{ experimentId: "experiment_1", value: 3 }],
-  }));
-
-  assert.equal(result.ok, false);
-  assert.equal(result.errors.some((item) => item.code === "analysis_result_payload_forbidden"), true);
-});
-
-test("rejects unsupported runtime and non-analyze entrypoint", () => {
+test("rejects plans without exact source selections or readable chart semantics", () => {
   const plan = validPlan();
-  plan.pythonProgram.runtime = "python-latest";
-  plan.pythonProgram.entrypoint = "main";
+  plan.sourceSelections = [];
+  plan.reviewPlan.chart.xDescription = "";
+
   const result = validateAnalysisPlanRevision(plan);
 
   assert.equal(result.ok, false);
-  assert.deepEqual(result.errors.map((item) => item.code), [
-    "analysis_runtime_unsupported",
-    "analysis_entrypoint_invalid",
-  ]);
+  assert.deepEqual(
+    result.errors.map((item) => item.code),
+    ["analysis_source_selection_required", "analysis_chart_plan_required"],
+  );
 });
 
-test("rejects unsupported or incomplete expected output encodings", () => {
-  const unsupported = validateAnalysisPlanRevision(validPlan({
-    expectedOutput: {
-      shape: "arbitrary_rows",
-      chartType: "bar",
-      xField: "experiment_label",
-      yFields: ["selectivity_normalized"],
-    },
-  }));
-  const incomplete = validateAnalysisPlanRevision(validPlan({
-    expectedOutput: {
-      shape: "experiment_traces",
-      chartType: "bar",
-      xField: "",
-      yFields: [],
-    },
-  }));
-  const unsupportedChart = validateAnalysisPlanRevision(validPlan({
-    expectedOutput: {
-      shape: "experiment_traces",
-      chartType: "pie",
-      xField: "experiment_label",
-      yFields: ["selectivity_normalized"],
-    },
-  }));
+test("rejects Python, result values, and traces inside a reviewable plan", () => {
+  const plan = validPlan();
+  plan.pythonProgram = { source: "def analyze(inputs, labrat): pass" };
+  plan.reviewPlan.values = [1, 2, 3];
 
+  const result = validateAnalysisPlanRevision(plan);
+
+  assert.equal(result.ok, false);
   assert.equal(
-    unsupported.errors.some((item) => item.code === "analysis_output_shape_unsupported"),
+    result.errors.some((item) => item.code === "analysis_plan_execution_payload_forbidden"),
     true,
   );
-  assert.equal(
-    incomplete.errors.some((item) => item.code === "analysis_output_encoding_required"),
-    true,
-  );
-  assert.equal(
-    unsupportedChart.errors.some((item) => item.code === "analysis_chart_type_unsupported"),
-    true,
-  );
+});
+
+test("accepts only explicit supported result invariants", () => {
+  const plan = validPlan();
+  plan.reviewPlan.invariants = [{
+    type: "trace_y_sum",
+    traceName: "Exp33",
+    target: 100,
+    absoluteTolerance: 0.01,
+  }];
+  assert.equal(validateAnalysisPlanRevision(plan).ok, true);
+
+  plan.reviewPlan.invariants = [{
+    type: "x_group_y_sum",
+    traceNames: ["Solid", "Liquid", "Gas"],
+    target: 100,
+    absoluteTolerance: 0.01,
+  }];
+  assert.equal(validateAnalysisPlanRevision(plan).ok, true);
+
+  plan.reviewPlan.invariants = [{
+    type: "x_group_y_sum",
+    traceNames: [],
+    target: 100,
+    absoluteTolerance: 0.01,
+  }];
+  assert.equal(validateAnalysisPlanRevision(plan).ok, false);
+
+  plan.reviewPlan.invariants = [{ type: "row_count" }];
+  const result = validateAnalysisPlanRevision(plan);
+  assert.equal(result.ok, false);
+  assert.equal(result.errors[0].code, "analysis_invariant_unsupported");
 });

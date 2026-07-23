@@ -22,7 +22,7 @@ export function AnalysisConversationCard({
   if (!thread?.id) return null;
   const reviewable = Boolean(revision?.id);
   const resultReady = run?.status === "awaiting_result_review" && result?.status === "awaiting_review";
-  const actionLabel = resultReady ? "Review analysis result" : "Review analysis plan";
+  const actionLabel = resultReady ? "Review result" : "Review analysis plan";
   const canRetry = evidenceBlocked && !reviewable && typeof onRetry === "function";
   return (
     <article className={`analysis-conversation-card${reviewable ? " is-reviewable" : ""}`}>
@@ -35,7 +35,7 @@ export function AnalysisConversationCard({
       <p>{revision?.requestSummary || thread.originalRequest}</p>
       <small>
         {resultReady
-          ? `${result.rowCount || 0} result row(s), ${result.traceCount || 0} trace(s)`
+          ? `${result.rowCount || 0} point(s), ${result.traceCount || 0} series`
           : reviewable
           ? `${revision.sourceRectangles?.length || 0} source range(s)`
           : "A reviewable plan could not be drafted yet."}
@@ -60,10 +60,10 @@ export function AnalysisConversationCard({
             onClick={() => onRetry(thread)}
             disabled={!modelAvailable || !acceptedDataAvailable || retrying}
           >
-            {retrying ? "Retrying..." : "Retry with published data"}
+            {retrying ? "Retrying..." : "Retry with confirmed evidence"}
           </button>
           {!modelAvailable && <small>Model planning is unavailable.</small>}
-          {modelAvailable && !acceptedDataAvailable && <small>Publish accepted experiment data before retrying.</small>}
+          {modelAvailable && !acceptedDataAvailable && <small>Confirm a workbook region or publish accepted experiment data before retrying.</small>}
         </div>
       )}
     </article>

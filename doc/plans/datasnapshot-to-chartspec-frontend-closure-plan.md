@@ -132,8 +132,11 @@ Concurrent or replayed retry requests must not create duplicate revisions.
 
 Observed 2026-07-22: publication and reload produced exactly one complete
 analysis-result ChartSpec, but post-reload product consumption is not yet
-acceptable. The Overview management dialog lists zero charts and Manuscript
-preview/Canvas rendering is blank, so the second item remains open.
+acceptable in that recorded run. The resulting defects have since been repaired
+and covered by automated complete-detail/preview/Canvas regressions plus a
+1280px isolated-clone browser check. The second item remains open until a fresh
+real-provider artifact is published, reloaded, and visually rendered after the
+repairs; deterministic regressions alone do not close this gate.
 
 ## Acceptance Gate
 

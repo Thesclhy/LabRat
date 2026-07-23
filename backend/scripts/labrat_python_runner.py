@@ -8,7 +8,7 @@ import sys
 import time
 
 
-RUNTIME_VERSION = "labrat-python-v1"
+RUNTIME_VERSION = "labrat-python-v2"
 ALLOWED_IMPORT_ROOTS = {
     "collections",
     "decimal",
@@ -146,11 +146,11 @@ def validate_tree(tree):
         errors.append("Python source must define exactly one analyze function.")
     elif (
         isinstance(analyze_functions[0], ast.AsyncFunctionDef)
-        or [arg.arg for arg in analyze_functions[0].args.args] != ["tables", "labrat"]
+        or [arg.arg for arg in analyze_functions[0].args.args] != ["inputs", "labrat"]
         or analyze_functions[0].args.vararg
         or analyze_functions[0].args.kwarg
     ):
-        errors.append("Python entrypoint signature must be analyze(tables, labrat).")
+        errors.append("Python entrypoint signature must be analyze(inputs, labrat).")
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -266,7 +266,7 @@ def main():
     apply_resource_limits()
     started = time.time()
     package = json.load(sys.stdin)
-    if package.get("schemaVersion") != "labrat.analysisRunPackage.v1":
+    if package.get("schemaVersion") != "labrat.analysisRunPackage.v2":
         raise ValueError("Unsupported analysis run package.")
     if package.get("runtimeVersion") != RUNTIME_VERSION:
         raise ValueError("Unsupported analysis runtime.")
@@ -291,7 +291,7 @@ def main():
     with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
         exec(compile(tree, "<labrat-analysis>", "exec"), namespace, namespace)
         result = namespace["analyze"](
-            package.get("tables") or {},
+            package.get("inputs") or {},
             LabRatRuntime(),
         )
     emit({

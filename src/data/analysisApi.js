@@ -32,18 +32,6 @@ function requestOptions(options = {}) {
   return rest;
 }
 
-function resultPreviewQuery(options = {}) {
-  const query = new URLSearchParams({
-    offset: String(boundedInteger(options.offset, 0, 0, Number.MAX_SAFE_INTEGER)),
-    limit: String(boundedInteger(options.limit, 50, 1, 200)),
-    traceOffset: String(boundedInteger(options.traceOffset, 0, 0, Number.MAX_SAFE_INTEGER)),
-    traceLimit: String(boundedInteger(options.traceLimit, 50, 1, 500)),
-    sourceOffset: String(boundedInteger(options.sourceOffset, 0, 0, Number.MAX_SAFE_INTEGER)),
-    sourceLimit: String(boundedInteger(options.sourceLimit, 50, 1, 200)),
-  });
-  return `?${query.toString()}`;
-}
-
 export function listAnalysisThreads(projectId, options = {}) {
   const id = requireId(projectId, "Select a project before listing analysis threads.");
   return serverRequest(
@@ -104,11 +92,7 @@ export function acceptAnalysisPlanRevision(planRevisionId, request = {}, options
   if (!idempotencyKey) {
     throw new ServerApiError("Plan acceptance requires an idempotency key.");
   }
-  return serverJson(`/api/analysis-plan-revisions/${id}/accept`, {
-    planHash: request.planHash || "",
-    selectionHash: request.selectionHash || "",
-    dependencyHash: request.dependencyHash || "",
-  }, {
+  return serverJson(`/api/analysis-plan-revisions/${id}/accept`, {}, {
     ...requestOptions(options),
     headers: {
       "idempotency-key": idempotencyKey,
@@ -129,37 +113,30 @@ export function executeAnalysisRun(analysisRunId, options = {}) {
 
 export function getAnalysisResultPreview(analysisRunId, options = {}) {
   const id = requireId(analysisRunId, "Select an analysis run before loading its result.");
-  return serverRequest(
-    `/api/analysis-runs/${id}/result-preview${resultPreviewQuery(options)}`,
-    requestOptions(options),
-  );
+  return serverRequest(`/api/analysis-runs/${id}/result-preview`, requestOptions(options));
 }
 
 export function reviseAnalysisRun(analysisRunId, request = {}, options = {}) {
   const id = requireId(analysisRunId, "Select an analysis run before revising its result.");
-  const resultHash = String(request.resultHash || "").trim();
   const feedback = String(request.feedback || "").trim();
   if (!feedback) {
     throw new ServerApiError("Describe the requested result modification.");
   }
-  return serverJson(`/api/analysis-runs/${id}/revise`, {
-    ...(resultHash ? { resultHash } : {}),
-    feedback,
-  }, requestOptions(options));
+  return serverJson(`/api/analysis-runs/${id}/revise`, { feedback }, requestOptions(options));
 }
 
 export function publishAcceptedAnalysisChart(analysisRunId, request = {}, options = {}) {
   const id = requireId(analysisRunId, "Select an analysis run before publishing its chart.");
-  const resultHash = String(request.resultHash || "").trim();
+  const analysisResultId = String(request.analysisResultId || "").trim();
   const idempotencyKey = String(options.idempotencyKey || "").trim();
-  if (!resultHash) {
-    throw new ServerApiError("Result publication requires the visible result hash.");
+  if (!analysisResultId) {
+    throw new ServerApiError("Result publication requires the visible analysis result.");
   }
   if (!idempotencyKey) {
     throw new ServerApiError("Result publication requires an idempotency key.");
   }
   return serverJson(`/api/analysis-runs/${id}/accept-and-create-chart`, {
-    resultHash,
+    analysisResultId,
     defaultVisibleTraceIds: Array.isArray(request.defaultVisibleTraceIds)
       ? [...new Set(request.defaultVisibleTraceIds.map(String).filter(Boolean))]
       : [],

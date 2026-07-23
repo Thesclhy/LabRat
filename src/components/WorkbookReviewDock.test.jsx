@@ -77,6 +77,47 @@ describe("WorkbookReviewDock", () => {
     expect(onActiveRegionChange).toHaveBeenCalledWith("region_2");
   });
 
+  it("shows an immediate interpreting card with ignore and delete actions", async () => {
+    const interpretingRegion = {
+      id: "region_pending",
+      sourceDocumentId: "source_doc_1",
+      sheetName: "Rates",
+      rangeRef: "E12:K14",
+      disposition: "active",
+      reviewStatus: "interpreting",
+      version: 1,
+      currentRevisionId: null,
+      acceptedRevisionId: null,
+      currentRevision: null,
+      warnings: [],
+    };
+    const onIgnoreRegion = vi.fn(async () => ({}));
+    const onDeleteRegion = vi.fn(async () => ({}));
+    render(
+      <WorkbookReviewDock
+        reviewState={reviewState()}
+        reviewRegions={[interpretingRegion]}
+        activeRegionId="region_pending"
+        onIgnoreRegion={onIgnoreRegion}
+        onDeleteRegion={onDeleteRegion}
+      />,
+    );
+
+    const card = screen.getByRole("article", { name: "Region Rates!E12:K14" });
+    expect(within(card).getByText("E12:K14")).toBeTruthy();
+    expect(within(card).getByText("Rates")).toBeTruthy();
+    expect(within(card).getByRole("status").textContent).toMatch(/AI is interpreting/i);
+    expect(within(card).queryByPlaceholderText("Describe what this region means or what should change...")).toBeNull();
+    expect(within(card).queryByRole("button", { name: "Confirm region Rates!E12:K14" })).toBeNull();
+
+    fireEvent.click(within(card).getByRole("button", { name: "Ignore region Rates!E12:K14" }));
+    await waitFor(() => expect(onIgnoreRegion).toHaveBeenCalledWith("region_pending", {
+      expectedRegionVersion: 1,
+      reason: "Excluded during workbook review.",
+    }));
+    expect(within(card).getByRole("button", { name: "Delete region Rates!E12:K14" })).toBeTruthy();
+  });
+
   it("submits feedback only for the card that owns the input", async () => {
     const onReviseRegion = vi.fn(async () => ({}));
     render(

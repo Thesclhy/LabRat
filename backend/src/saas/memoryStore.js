@@ -34,7 +34,6 @@ export class MemorySaasStore {
     this.sourceDocuments = new Map();
     this.sourceRegions = new Map();
     this.sourceIndexBlobs = new Map();
-    this.sourceExtractProposals = new Map();
     this.workbookReviewSessions = new Map();
     this.workbookReviewRegions = new Map();
     this.regionUnderstandingRevisions = new Map();
@@ -51,7 +50,6 @@ export class MemorySaasStore {
     this.analysisRuns = new Map();
     this.analysisResults = new Map();
     this.analysisPublications = new Map();
-    this.chartProposalSets = new Map();
     this.chartSpecs = new Map();
     this.manuscripts = new Map();
     this.auditEvents = new Map();
@@ -889,54 +887,6 @@ export class MemorySaasStore {
     return this.browserViews.delete(id);
   }
 
-  async createSourceExtractProposal(input) {
-    const createdAt = nowIso();
-    const proposal = {
-      id: input.id || makeId("source_extract_proposal"),
-      labId: input.labId,
-      projectId: input.projectId,
-      sourceDocumentId: input.sourceDocumentId || null,
-      sourceRegionId: input.sourceRegionId || null,
-      schemaVersion: input.schemaVersion || "labrat.sourceExtractProposal.v1",
-      status: input.status || "proposed",
-      purpose: input.purpose || null,
-      extractType: input.extractType || null,
-      intent: copy(input.intent) || {},
-      preview: copy(input.preview) || {},
-      warnings: copy(input.warnings) || [],
-      decisionSummary: copy(input.decisionSummary) || {},
-      createdAt,
-      updatedAt: createdAt,
-      createdBy: input.createdBy,
-      updatedBy: input.createdBy,
-    };
-    this.sourceExtractProposals.set(proposal.id, proposal);
-    return copy(proposal);
-  }
-
-  async findSourceExtractProposalById(id) {
-    return copy(this.sourceExtractProposals.get(id) || null);
-  }
-
-  async listSourceExtractProposals({ projectId }) {
-    return [...this.sourceExtractProposals.values()]
-      .filter((proposal) => proposal.projectId === projectId)
-      .map(copy);
-  }
-
-  async updateSourceExtractProposal(id, changes) {
-    const proposal = this.sourceExtractProposals.get(id);
-    if (!proposal) return null;
-    if (changes.status != null) proposal.status = String(changes.status);
-    if (changes.intent != null) proposal.intent = copy(changes.intent) || {};
-    if (changes.preview != null) proposal.preview = copy(changes.preview) || {};
-    if (changes.warnings != null) proposal.warnings = copy(changes.warnings) || [];
-    if (changes.decisionSummary != null) proposal.decisionSummary = copy(changes.decisionSummary) || {};
-    proposal.updatedAt = nowIso();
-    proposal.updatedBy = changes.updatedBy || proposal.updatedBy;
-    return copy(proposal);
-  }
-
   async createAgentRun(input) {
     const createdAt = nowIso();
     const run = {
@@ -1724,9 +1674,6 @@ export class MemorySaasStore {
       || run.analysisThreadId !== thread.id
       || run.acceptedPlanRevisionId !== revision.id
       || run.status !== "awaiting_result_review"
-      || run.inputHash !== revision.selectionHash
-      || run.programHash !== revision.programHash
-      || run.runtimeVersion !== revision.runtimeVersion
       || run.resultPreviewHash !== storedResult?.resultPreviewHash
       || input.analysisRun.status !== "completed"
       || !result?.id
@@ -1747,13 +1694,12 @@ export class MemorySaasStore {
       || chartSpec.projectId !== input.projectId
       || chartSpec.analysisResultId !== result.id
       || chartSpec.spec?.origin !== "analysis_result"
-      || chartSpec.spec?.schemaVersion !== "labrat.chartSpec.v2"
+      || chartSpec.spec?.schemaVersion !== "labrat.chartSpec.v3"
       || chartSpec.spec?.analysisThreadId !== thread.id
       || chartSpec.spec?.analysisPlanRevisionId !== revision.id
       || chartSpec.spec?.analysisRunId !== run.id
       || chartSpec.spec?.analysisResultId !== storedResult.id
-      || chartSpec.spec?.resultHash !== storedResult.contentHash
-      || !asArray(input.expectedHeadRefs).length
+      || !Array.isArray(input.expectedHeadRefs)
       || this.chartSpecs.has(chartSpec.id)
     ) {
       throw Object.assign(new Error("The analysis result publication package is invalid."), {
@@ -1867,54 +1813,13 @@ export class MemorySaasStore {
     return copy(response);
   }
 
-  async createChartProposalSet(input) {
-    const createdAt = nowIso();
-    const set = {
-      id: input.id || makeId("chart_proposal_set"),
-      labId: input.labId,
-      projectId: input.projectId,
-      schemaVersion: input.schemaVersion || "labrat.chartProposalSet.v1",
-      status: input.status || "proposed",
-      payload: input.payload || {},
-      decisionSummary: input.decisionSummary || {},
-      createdAt,
-      updatedAt: createdAt,
-      createdBy: input.createdBy,
-      updatedBy: input.createdBy,
-    };
-    this.chartProposalSets.set(set.id, set);
-    return copy(set);
-  }
-
-  async findChartProposalSetById(id) {
-    return copy(this.chartProposalSets.get(id) || null);
-  }
-
-  async listChartProposalSets({ projectId }) {
-    return [...this.chartProposalSets.values()]
-      .filter((set) => set.projectId === projectId)
-      .map(copy);
-  }
-
-  async updateChartProposalSet(id, changes) {
-    const set = this.chartProposalSets.get(id);
-    if (!set) return null;
-    if (changes.status != null) set.status = String(changes.status);
-    if (changes.payload != null) set.payload = copy(changes.payload) || {};
-    if (changes.decisionSummary != null) set.decisionSummary = copy(changes.decisionSummary) || {};
-    set.updatedAt = nowIso();
-    set.updatedBy = changes.updatedBy || set.updatedBy;
-    return copy(set);
-  }
-
   async createChartSpec(input) {
     const createdAt = nowIso();
     const spec = {
       id: makeId("chart_spec"),
       labId: input.labId,
       projectId: input.projectId,
-      sourceChartProposalSetId: input.sourceChartProposalSetId || null,
-      sourceProposalId: input.sourceProposalId || null,
+      analysisResultId: input.analysisResultId || null,
       title: input.title || null,
       chartType: input.chartType,
       spec: input.spec || {},

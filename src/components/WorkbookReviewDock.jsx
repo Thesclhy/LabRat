@@ -10,6 +10,7 @@ function regionLabel(region) {
 
 function statusLabel(region) {
   if (region?.disposition === "ignored") return "Ignored";
+  if (region?.reviewStatus === "interpreting") return "Interpreting";
   if (region?.reviewStatus === "interpretation_failed") return "Needs retry";
   if (region?.acceptedRevisionId === region?.currentRevisionId && region?.acceptedRevisionId) return "Confirmed";
   if (region?.acceptedRevisionId) return "New revision";
@@ -35,6 +36,7 @@ function RegionReviewCard({
   const hasAcceptedRevision = Boolean(region.acceptedRevisionId);
   const confirmed = Boolean(hasAcceptedRevision && region.acceptedRevisionId === revision?.id);
   const activeDisposition = region.disposition === "active";
+  const interpreting = region.reviewStatus === "interpreting";
   const busy = Boolean(pendingAction);
 
   useEffect(() => {
@@ -81,8 +83,13 @@ function RegionReviewCard({
         </span>
       </header>
 
-      <div className="workbook-region-summary" aria-label={`AI summary for ${label}`}>
-        {asArray(revision?.summary).length ? asArray(revision.summary).map((sentence, index) => (
+      <div className="workbook-region-summary" aria-label={`AI summary for ${label}`} aria-live="polite">
+        {interpreting ? (
+          <div className="workbook-region-interpreting" role="status">
+            <span className="thinking-spinner" aria-hidden="true" />
+            <span>AI is interpreting this region...</span>
+          </div>
+        ) : asArray(revision?.summary).length ? asArray(revision.summary).map((sentence, index) => (
           <p key={`${revision.id}-summary-${index}`}>{sentence}</p>
         )) : (
           <p>{region.reviewStatus === "interpretation_failed" ? "The backend model could not interpret this region." : "Interpretation is pending."}</p>
@@ -91,7 +98,7 @@ function RegionReviewCard({
 
       <div className="workbook-region-meta">
         {revision?.confidence != null && <span>{Math.round(Number(revision.confidence) * 100)}% structure confidence</span>}
-        <span>{revision ? `Revision ${revision.revisionNumber || 1}` : "No revision"}</span>
+        <span>{interpreting ? "AI interpretation pending" : revision ? `Revision ${revision.revisionNumber || 1}` : "No revision"}</span>
       </div>
 
       {!![...blockers, ...warnings].length && (
@@ -104,40 +111,44 @@ function RegionReviewCard({
 
       {activeDisposition && (
         <>
-          <textarea
-            className="workbook-region-feedback"
-            value={feedback}
-            onChange={(event) => setFeedback(event.target.value)}
-            placeholder="Describe what this region means or what should change..."
-            aria-label={`Feedback for ${label}`}
-            rows={3}
-          />
-          <div className="workbook-region-primary-actions">
-            <button
-              type="button"
-              aria-label={`Submit revision for ${label}`}
-              disabled={busy || !feedback.trim() || !onRevise}
-              onClick={() => run("revise", () => onRevise(region.id, {
-                feedback: feedback.trim(),
-                previousRevisionId: revision?.id || null,
-                expectedRegionVersion: region.version,
-              }))}
-            >
-              {pendingAction === "revise" ? "Submitting..." : "Submit revision"}
-            </button>
-            <button
-              type="button"
-              className="primary"
-              aria-label={confirmed ? `Region ${label} confirmed` : `Confirm region ${label}`}
-              disabled={busy || confirmed || !revision || blockers.length > 0 || !onConfirm}
-              onClick={() => run("confirm", () => onConfirm(region.id, {
-                revisionId: revision.id,
-                expectedRegionVersion: region.version,
-              }))}
-            >
-              {pendingAction === "confirm" ? "Confirming..." : confirmed ? "Confirmed" : "Confirm region"}
-            </button>
-          </div>
+          {!interpreting && (
+            <>
+              <textarea
+                className="workbook-region-feedback"
+                value={feedback}
+                onChange={(event) => setFeedback(event.target.value)}
+                placeholder="Describe what this region means or what should change..."
+                aria-label={`Feedback for ${label}`}
+                rows={3}
+              />
+              <div className="workbook-region-primary-actions">
+                <button
+                  type="button"
+                  aria-label={`Submit revision for ${label}`}
+                  disabled={busy || !feedback.trim() || !onRevise}
+                  onClick={() => run("revise", () => onRevise(region.id, {
+                    feedback: feedback.trim(),
+                    previousRevisionId: revision?.id || null,
+                    expectedRegionVersion: region.version,
+                  }))}
+                >
+                  {pendingAction === "revise" ? "Submitting..." : "Submit revision"}
+                </button>
+                <button
+                  type="button"
+                  className="primary"
+                  aria-label={confirmed ? `Region ${label} confirmed` : `Confirm region ${label}`}
+                  disabled={busy || confirmed || !revision || blockers.length > 0 || !onConfirm}
+                  onClick={() => run("confirm", () => onConfirm(region.id, {
+                    revisionId: revision.id,
+                    expectedRegionVersion: region.version,
+                  }))}
+                >
+                  {pendingAction === "confirm" ? "Confirming..." : confirmed ? "Confirmed" : "Confirm region"}
+                </button>
+              </div>
+            </>
+          )}
           <div className="workbook-region-secondary-actions">
             <button
               type="button"

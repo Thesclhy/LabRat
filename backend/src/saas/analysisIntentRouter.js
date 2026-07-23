@@ -196,7 +196,10 @@ export async function routeAnalysisIntent(input = {}) {
   const deterministic = deterministicAnalysisIntent(input);
   if (deterministic) return deterministic;
 
-  const classified = await input.modelProvider?.classifyIntent?.(boundedIntentInput(input));
+  const classified = await input.modelProvider?.classifyIntent?.(
+    boundedIntentInput(input),
+    { signal: input.signal },
+  );
   if (validProviderRoute(classified)) {
     return result({
       intent: classified.intent,

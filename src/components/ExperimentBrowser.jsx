@@ -10,6 +10,7 @@ import {
 import { ExperimentColumnsDrawer } from "./ExperimentColumnsDrawer.jsx";
 import { ExperimentCompareTray } from "./ExperimentCompareTray.jsx";
 import { ExperimentDetailDrawer } from "./ExperimentDetailDrawer.jsx";
+import { ExperimentGridHeaderCell } from "./ExperimentGridHeaderCell.jsx";
 
 const PAGE_LIMIT = 200;
 const ROW_HEIGHT = 42;
@@ -17,6 +18,8 @@ const VIEWPORT_HEIGHT = 504;
 const OVERSCAN = 5;
 const MAX_COMPARE_SELECTION = 12;
 const EMPTY_SELECTION = [];
+const MIN_COLUMN_WIDTH = 60;
+const MAX_COLUMN_WIDTH = 800;
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -76,6 +79,20 @@ function browserViewFromResponse(response) {
   return response?.browserView || response || null;
 }
 
+function orderedColumnSettings(settings) {
+  return [...asArray(settings)].sort((left, right) => left.order - right.order);
+}
+
+function normalizeColumnOrder(settings) {
+  return settings.map((setting, order) => ({ ...setting, order }));
+}
+
+function autoFitColumnWidth(column, rows) {
+  const values = asArray(rows).slice(0, PAGE_LIMIT).map((row) => displayCell(row, column));
+  const longest = Math.max(column.label?.length || 0, ...values.map((value) => String(value).length));
+  return Math.min(360, Math.max(column.pinned ? 150 : 90, longest * 7 + 34));
+}
+
 export function ExperimentBrowser({
   projectId,
   initialSelectedExperimentIds = EMPTY_SELECTION,
@@ -122,6 +139,8 @@ export function ExperimentBrowser({
   const [viewLoading, setViewLoading] = useState(false);
   const [viewSaving, setViewSaving] = useState(false);
   const [viewError, setViewError] = useState("");
+  const [dragColumnId, setDragColumnId] = useState("");
+  const [dropTarget, setDropTarget] = useState(null);
   const projectRef = useRef(projectId);
   const columnsTriggerRef = useRef(null);
 
@@ -260,13 +279,21 @@ export function ExperimentBrowser({
 
   const visibleColumns = useMemo(() => {
     const columnsById = new Map(columns.map((column) => [column.id, column]));
-    return [...columnSettings]
-      .sort((left, right) => left.order - right.order)
+    return orderedColumnSettings(columnSettings)
       .filter((setting) => !setting.hidden && columnsById.has(setting.columnId))
       .map((setting) => ({ ...columnsById.get(setting.columnId), width: setting.width }));
   }, [columnSettings, columns]);
+  const hiddenColumns = useMemo(() => {
+    const columnsById = new Map(columns.map((column) => [column.id, column]));
+    return orderedColumnSettings(columnSettings)
+      .filter((setting) => setting.hidden && columnsById.has(setting.columnId))
+      .map((setting) => columnsById.get(setting.columnId));
+  }, [columnSettings, columns]);
   const gridTemplateColumns = useMemo(() => (
     `42px ${visibleColumns.map((column) => `${column.width || (column.pinned ? 210 : 160)}px`).join(" ")}`
+  ), [visibleColumns]);
+  const gridWidth = useMemo(() => (
+    42 + visibleColumns.reduce((total, column) => total + (column.width || (column.pinned ? 210 : 160)), 0)
   ), [visibleColumns]);
   const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
   const visibleRowCount = Math.ceil(VIEWPORT_HEIGHT / ROW_HEIGHT) + OVERSCAN * 2;
@@ -354,6 +381,47 @@ export function ExperimentBrowser({
       if (existing.direction === "asc") return [{ columnId, direction: "desc" }];
       return [];
     });
+  };
+
+  const patchColumnSetting = (columnId, patch) => {
+    setColumnSettings((current) => current.map((setting) => (
+      setting.columnId === columnId ? { ...setting, ...patch } : setting
+    )));
+  };
+
+  const moveColumn = (columnId, direction) => {
+    setColumnSettings((current) => {
+      const ordered = orderedColumnSettings(current);
+      const visible = ordered.filter((setting) => !setting.hidden);
+      const index = visible.findIndex((setting) => setting.columnId === columnId);
+      const target = visible[index + direction];
+      if (index < 0 || !target) return current;
+      const sourceIndex = ordered.findIndex((setting) => setting.columnId === columnId);
+      const [source] = ordered.splice(sourceIndex, 1);
+      const targetIndex = ordered.findIndex((setting) => setting.columnId === target.columnId);
+      ordered.splice(targetIndex + (direction > 0 ? 1 : 0), 0, source);
+      return normalizeColumnOrder(ordered);
+    });
+  };
+
+  const reorderColumn = () => {
+    if (!dragColumnId || !dropTarget || dragColumnId === dropTarget.columnId) {
+      setDragColumnId("");
+      setDropTarget(null);
+      return;
+    }
+    setColumnSettings((current) => {
+      const ordered = orderedColumnSettings(current);
+      const sourceIndex = ordered.findIndex((setting) => setting.columnId === dragColumnId);
+      if (sourceIndex < 0) return current;
+      const [source] = ordered.splice(sourceIndex, 1);
+      const targetIndex = ordered.findIndex((setting) => setting.columnId === dropTarget.columnId);
+      if (targetIndex < 0) return current;
+      ordered.splice(targetIndex + (dropTarget.before ? 0 : 1), 0, source);
+      return normalizeColumnOrder(ordered);
+    });
+    setDragColumnId("");
+    setDropTarget(null);
   };
 
   const currentViewPayload = () => ({
@@ -446,8 +514,39 @@ export function ExperimentBrowser({
           <span>Experiment Browser</span>
           <strong>{totalCount}</strong>
         </div>
+
+        <section className="experiment-browser-sidebar-section experiment-browser-view-controls" aria-label="Personal Browser views">
+          <h3>View</h3>
+          <select
+            aria-label="Saved view"
+            value={activeViewId}
+            disabled={viewLoading || viewSaving}
+            onChange={(event) => {
+              const nextId = event.target.value;
+              if (!nextId) {
+                setActiveViewId("");
+                setViewName("");
+                return;
+              }
+              applyView(browserViews.find((view) => view.id === nextId));
+            }}
+          >
+            <option value="">Unsaved view</option>
+            {browserViews.map((view) => <option value={view.id} key={view.id}>{view.name}{view.isDefault ? " (default)" : ""}</option>)}
+          </select>
+          <input aria-label="View name" value={viewName} maxLength={80} placeholder="View name" onChange={(event) => setViewName(event.target.value)} />
+          <div className="experiment-browser-view-actions">
+            <button type="button" className="primary-action" disabled={viewSaving || !viewName.trim()} onClick={saveView}>{activeViewId ? "Update view" : "Save view"}</button>
+            <button type="button" disabled={viewSaving || !activeViewId || !viewName.trim()} onClick={renameView}>Rename view</button>
+            <button type="button" disabled={viewSaving || !activeViewId || activeView?.isDefault} onClick={setDefaultView}>Set default view</button>
+            <button type="button" disabled={viewSaving || !activeViewId} onClick={removeView}>Delete view</button>
+          </div>
+          {viewError ? <div className="experiment-view-error" role="alert">{viewError}</div> : null}
+        </section>
+
         <form role="search" className="experiment-browser-search" onSubmit={(event) => { event.preventDefault(); setSearch(searchInput.trim()); }}>
-          <label htmlFor="experiment-browser-search">Search experiments</label>
+          <h3>Search</h3>
+          <label className="sr-only" htmlFor="experiment-browser-search">Search experiments</label>
           <div className="experiment-browser-search-row">
             <input id="experiment-browser-search" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="Label, value, alias..." />
             <button type="submit">Search</button>
@@ -485,42 +584,38 @@ export function ExperimentBrowser({
             </div>
           ))}
         </section>
+
+        <section className="experiment-browser-sidebar-section">
+          <h3>Hidden columns</h3>
+          {hiddenColumns.length ? (
+            <div className="experiment-browser-hidden-columns">
+              {hiddenColumns.map((column) => (
+                <button
+                  type="button"
+                  className="chip hidden-column-chip"
+                  key={column.id}
+                  title={`Show ${column.label}`}
+                  onClick={() => patchColumnSetting(column.id, { hidden: false })}
+                >
+                  {column.label} <span aria-hidden="true">+</span>
+                </button>
+              ))}
+            </div>
+          ) : <p className="browser-muted">Right-click a table header to hide it.</p>}
+        </section>
       </aside>
 
       <main className="experiment-browser-main">
         <header className="experiment-browser-toolbar">
           <div>
-            <h1>Experiments</h1>
-            <p>{rows.length} loaded of {totalCount} active experiment records</p>
+            <h1>Experiment Browser</h1>
+            <p>{rows.length} loaded of {totalCount} accepted experiment records. Click a row for source-backed detail.</p>
           </div>
-          <button ref={columnsTriggerRef} type="button" aria-expanded={columnsOpen} onClick={() => setColumnsOpen(true)}>Choose columns</button>
+          <div className="experiment-browser-toolbar-actions">
+            {onOpenImportReview ? <button type="button" className="primary-action" onClick={onOpenImportReview}>Import workbook</button> : null}
+            <button ref={columnsTriggerRef} type="button" aria-expanded={columnsOpen} onClick={() => setColumnsOpen(true)}>Choose columns</button>
+          </div>
         </header>
-
-        <section className="experiment-browser-viewbar" aria-label="Personal Browser views">
-          <select
-            aria-label="Saved view"
-            value={activeViewId}
-            disabled={viewLoading || viewSaving}
-            onChange={(event) => {
-              const nextId = event.target.value;
-              if (!nextId) {
-                setActiveViewId("");
-                setViewName("");
-                return;
-              }
-              applyView(browserViews.find((view) => view.id === nextId));
-            }}
-          >
-            <option value="">Unsaved view</option>
-            {browserViews.map((view) => <option value={view.id} key={view.id}>{view.name}{view.isDefault ? " (default)" : ""}</option>)}
-          </select>
-          <input aria-label="View name" value={viewName} maxLength={80} placeholder="View name" onChange={(event) => setViewName(event.target.value)} />
-          <button type="button" disabled={viewSaving || !viewName.trim()} onClick={saveView}>{activeViewId ? "Update view" : "Save view"}</button>
-          <button type="button" disabled={viewSaving || !activeViewId || !viewName.trim()} onClick={renameView}>Rename view</button>
-          <button type="button" disabled={viewSaving || !activeViewId || activeView?.isDefault} onClick={setDefaultView}>Set default view</button>
-          <button type="button" disabled={viewSaving || !activeViewId} onClick={removeView}>Delete view</button>
-        </section>
-        {viewError ? <div className="experiment-view-error" role="alert">{viewError}</div> : null}
 
         {error && <div className="browser-error" role="alert">{error}</div>}
         {loading && <div className="browser-status">Loading experiments...</div>}
@@ -528,31 +623,41 @@ export function ExperimentBrowser({
           <div className="experiment-browser-empty">
             <h2>No published experiments</h2>
             <p>Confirm workbook semantics and publish reviewed experiment records to populate this table.</p>
-            {onOpenImportReview && <button type="button" onClick={onOpenImportReview}>Import workbook</button>}
           </div>
         )}
         {!loading && !error && rows.length > 0 && (
           <div className="experiment-grid-frame" role="table" aria-label="Cross-experiment data table">
             <div className="experiment-grid-header" role="row" style={{ gridTemplateColumns }}>
               <div role="columnheader" aria-label="Select experiments" />
-              {visibleColumns.map((column) => {
+              {visibleColumns.map((column, index) => {
                 const activeSort = sort.find((item) => item.columnId === column.id);
                 return (
-                  <div
-                    role="columnheader"
-                    tabIndex={0}
+                  <ExperimentGridHeaderCell
                     key={column.id}
-                    className={column.pinned ? "pinned" : ""}
-                    onClick={() => toggleSort(column.id)}
-                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") toggleSort(column.id); }}
-                  >
-                    <span>{column.label}</span>
-                    {activeSort && <small>{activeSort.direction}</small>}
-                  </div>
+                    column={column}
+                    width={column.width}
+                    sortDirection={activeSort?.direction || null}
+                    draggable={!column.pinned}
+                    dragging={dragColumnId === column.id}
+                    dropEdge={dropTarget?.columnId === column.id ? (dropTarget.before ? "before" : "after") : null}
+                    canMoveLeft={!column.pinned && index > 0 && !visibleColumns[index - 1]?.pinned}
+                    canMoveRight={!column.pinned && index < visibleColumns.length - 1}
+                    onSort={() => toggleSort(column.id)}
+                    onHide={() => patchColumnSetting(column.id, { hidden: true })}
+                    onResize={(width) => patchColumnSetting(column.id, { width: Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, width)) })}
+                    onAutoFit={() => patchColumnSetting(column.id, { width: autoFitColumnWidth(column, rows) })}
+                    onMove={(direction) => moveColumn(column.id, direction)}
+                    onDragStart={() => setDragColumnId(column.id)}
+                    onDragOver={(before) => {
+                      if (dragColumnId && dragColumnId !== column.id && !column.pinned) setDropTarget({ columnId: column.id, before });
+                    }}
+                    onDrop={reorderColumn}
+                    onDragEnd={() => { setDragColumnId(""); setDropTarget(null); }}
+                  />
                 );
               })}
             </div>
-            <div className="experiment-grid-viewport" style={{ height: VIEWPORT_HEIGHT }} onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}>
+            <div className="experiment-grid-viewport" style={{ height: VIEWPORT_HEIGHT, width: gridWidth }} onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}>
               <div className="experiment-grid-spacer" style={{ height: rows.length * ROW_HEIGHT }}>
                 {virtualRows.map((row, visibleIndex) => {
                   const rowIndex = startIndex + visibleIndex;
@@ -561,15 +666,26 @@ export function ExperimentBrowser({
                       role="row"
                       className={`experiment-grid-row ${selectedIds.has(row.experimentId) ? "selected" : ""}`}
                       key={row.experimentId}
+                      tabIndex={0}
                       style={{ gridTemplateColumns, height: ROW_HEIGHT, transform: `translateY(${rowIndex * ROW_HEIGHT}px)` }}
+                      onClick={() => setDetailId(row.experimentId)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") setDetailId(row.experimentId);
+                      }}
                     >
                       <div role="cell" className="experiment-select-cell">
-                        <input type="checkbox" aria-label={`Select ${row.label}`} checked={selectedIds.has(row.experimentId)} onChange={() => toggleSelection(row)} />
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${row.label}`}
+                          checked={selectedIds.has(row.experimentId)}
+                          onClick={(event) => event.stopPropagation()}
+                          onChange={() => toggleSelection(row)}
+                        />
                       </div>
                       {visibleColumns.map((column) => (
                         <div role="cell" className={column.pinned ? "pinned" : ""} key={column.id} title={displayCell(row, column)}>
                           {column.id === "experiment" ? (
-                            <button type="button" className="experiment-row-link" aria-label={`Open ${row.label}`} onClick={() => setDetailId(row.experimentId)}>{row.label}</button>
+                            <button type="button" className="experiment-row-link" aria-label={`Open ${row.label}`} onClick={(event) => { event.stopPropagation(); setDetailId(row.experimentId); }}>{row.label}</button>
                           ) : displayCell(row, column)}
                         </div>
                       ))}

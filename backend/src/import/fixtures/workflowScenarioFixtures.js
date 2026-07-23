@@ -1,22 +1,15 @@
-export const chartLocalAcceptedSourceExtractScenario = {
-  scenarioId: "scenario_chart_local_source_extract",
-  description: "Accepted source extract feeds a source-backed chart proposal.",
-  sourceExtractProposal: {
-    id: "source_extract_proposal_synthetic_chart_local",
+export const confirmedRegionAnalysisScenario = {
+  scenarioId: "scenario_confirmed_region_analysis",
+  description: "A confirmed region feeds one reviewed analysis plan.",
+  regionUnderstandingRevision: {
+    id: "region_understanding_revision_synthetic_chart",
     status: "accepted",
-    extractType: "component_distribution",
-    purpose: "chart_source",
-    preview: {
-      range: { sheetName: "Carbon Balance", range: "P31:BA32" },
-      rows: [
-        { rowId: "component_1", values: { carbon_number: 1, percentage: 5 }, sourceRefs: [{ sourceType: "excel_cell", sheet: "Carbon Balance", cell: "Q32" }] },
-        { rowId: "component_2", values: { carbon_number: 2, percentage: 12.5 }, sourceRefs: [{ sourceType: "excel_cell", sheet: "Carbon Balance", cell: "R32" }] },
-      ],
-    },
+    semanticType: "component_distribution",
+    range: { sheetName: "Carbon Balance", range: "P31:BA32" },
   },
   expectedNext: {
-    reviewKind: "data_plan_review",
-    dataPlanInputType: "accepted_source_extract",
+    reviewKind: "analysis_plan_review",
+    selectionInputType: "confirmed_region",
   },
 };
 
@@ -27,7 +20,7 @@ export const missingExperimentPromptScenario = {
     kind: "clarification",
     code: "experiment_not_found",
     mustNotUseExperimentAliases: ["Exp33", "Exp34", "Exp35"],
-    mustNotCreate: ["chartProposalSet", "chartSpec", "dataSnapshot"],
+    mustNotCreate: ["chartSpec", "dataSnapshot"],
   },
 };
 
@@ -55,7 +48,7 @@ export const importCorrectionExamples = [
 ];
 
 export const syntheticWorkflowScenarios = [
-  chartLocalAcceptedSourceExtractScenario,
+  confirmedRegionAnalysisScenario,
   missingExperimentPromptScenario,
   ...importCorrectionExamples.map((example, index) => ({
     scenarioId: `scenario_import_correction_${index + 1}`,

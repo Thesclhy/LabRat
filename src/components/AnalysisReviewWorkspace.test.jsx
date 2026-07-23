@@ -2,6 +2,20 @@ import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("../charts/Plot.jsx", () => ({
+  Plot: ({ traces = [], layout = {} }) => (
+    <div
+      aria-label="Analysis chart preview"
+      data-title={layout?.title?.text || ""}
+      data-x-title={layout?.xaxis?.title?.text || ""}
+      data-y-title={layout?.yaxis?.title?.text || ""}
+      data-hover={traces[0]?.hovertemplate || ""}
+    >
+      {traces.map((trace) => trace.name).join(", ")}
+    </div>
+  ),
+}));
+
 import { AnalysisReviewWorkspace } from "./AnalysisReviewWorkspace.jsx";
 
 const thread = {
@@ -21,12 +35,18 @@ const revision1 = {
   revision: 1,
   status: "superseded",
   requestSummary: "Compare selectivity.",
-  processingSummary: ["Read accepted selectivity fields."],
+  displayPlan: ["Read the selected workbook cells."],
+  reviewPlan: {
+    processingSteps: ["Read the selected workbook cells."],
+    chart: {
+      title: "Selectivity",
+      chartType: "bar",
+      xDescription: "Experiment",
+      yDescription: "Selectivity",
+      seriesDescription: "Selectivity components",
+    },
+  },
   sourceRectangles: [],
-  planHash: "sha256_plan_1",
-  selectionHash: "sha256_selection_1",
-  dependencyHash: "sha256_dependency_1",
-  pythonProgram: { source: "def analyze(tables, labrat):\n    return {}", sourceHash: "sha256_python_1" },
   warnings: [],
 };
 
@@ -36,18 +56,27 @@ const revision2 = {
   revision: 2,
   status: "awaiting_review",
   requestSummary: "Normalize Solid, Liquid, and Gas to 100%, then compare experiments.",
-  processingSummary: [
+  displayPlan: [
     "Select Solid, Liquid, and Gas from accepted experiment snapshots.",
     "Scale each experiment proportionally so the three values sum to 100%.",
   ],
+  reviewPlan: {
+    processingSteps: [
+      "Select Solid, Liquid, and Gas from the red workbook ranges.",
+      "Scale each experiment proportionally so the three values sum to 100%.",
+    ],
+    chart: {
+      chartType: "stacked_bar",
+      title: "Normalized selectivity by experiment",
+      xDescription: "Experiment",
+      yDescription: "Normalized selectivity (%)",
+      seriesDescription: "Solid, Liquid, and Gas",
+    },
+  },
   sourceRectangles: [
     { sourceDocumentId: "source_1", sheetName: "Runs", range: "B2:D8", label: "Selectivity inputs" },
     { sourceDocumentId: "source_1", sheetName: "Runs", range: "F2:F8", label: "Experiment labels" },
   ],
-  planHash: "sha256_plan_2",
-  selectionHash: "sha256_selection_2",
-  dependencyHash: "sha256_dependency_2",
-  pythonProgram: { source: "def analyze(tables, labrat):\n    return {'traces': []}", sourceHash: "sha256_python_2" },
 };
 
 const selection = {
@@ -88,12 +117,9 @@ const validatedRun = {
   id: "analysis_run_1",
   acceptedPlanRevisionId: revision2.id,
   status: "awaiting_result_review",
-  inputHash: revision2.selectionHash,
-  programHash: revision2.programHash,
-  runtimeVersion: "labrat-python-v1",
   execution: {
     adapter: "test",
-    runtimeVersion: "labrat-python-v1",
+    phase: "result_ready",
   },
   validation: { ok: true, errors: [] },
 };
@@ -102,21 +128,11 @@ const validatedResult = {
   id: "analysis_result_1",
   analysisRunId: validatedRun.id,
   status: "awaiting_review",
-  contentHash: "sha256_result_1",
-  resultPreviewHash: "sha256_preview_1",
-  rowCount: 4,
   traceCount: 2,
-  sourceRefCount: 2,
   summary: {
-    inputRecordCount: 7,
-    outputRecordCount: 4,
-    excludedRecordCount: 3,
-    excludedRecords: [
-      { sourceRecordId: "snapshot_5:0", reason: "Liquid is missing." },
-      { sourceRecordId: "snapshot_6:0", reason: "Gas is missing." },
-      { sourceRecordId: "snapshot_7:0", reason: "All components are zero." },
-    ],
-    missingValuePolicy: "exclude_record",
+    pointCount: 4,
+    seriesCount: 2,
+    excludedCount: 3,
   },
   validation: {
     ok: true,
@@ -135,59 +151,39 @@ const validatedResult = {
 const resultPreview = {
   analysisRunId: validatedRun.id,
   analysisResultId: validatedResult.id,
-  contentHash: validatedResult.contentHash,
-  resultPreviewHash: validatedResult.resultPreviewHash,
-  rows: [
-    {
-      __result_id: "result_row_1",
-      __experiment_id: "experiment_1",
-      __snapshot_id: "snapshot_1",
-      __record_index: 0,
-      experiment_label: "Exp 1",
-      solid: 60,
-      liquid: 30,
-      gas: 10,
+  plotly: {
+    data: [
+      {
+        traceId: "trace_exp_1",
+        name: "Exp 1",
+        type: "scatter",
+        x: [1, 2],
+        y: [10, 15],
+        hovertemplate: "Experiment %{x}<br>Selectivity %{y}<extra></extra>",
+      },
+      {
+        traceId: "trace_exp_2",
+        name: "Exp 2",
+        type: "scatter",
+        x: [1, 2],
+        y: [8, 12],
+        hovertemplate: "Experiment %{x}<br>Selectivity %{y}<extra></extra>",
+      },
+    ],
+    layout: {
+      title: { text: "Normalized selectivity by experiment" },
+      margin: { l: 60, r: 30, t: 76, b: 60 },
+      legend: { y: 1.02 },
+      xaxis: { title: { text: "Experiment" } },
+      yaxis: { title: { text: "Normalized selectivity (%)" } },
     },
-    {
-      __result_id: "result_row_2",
-      __experiment_id: "experiment_2",
-      __snapshot_id: "snapshot_2",
-      __record_index: 0,
-      experiment_label: "Exp 2",
-      solid: 50,
-      liquid: 35,
-      gas: 15,
-    },
-  ],
-  traces: [
-    {
-      traceId: "trace_exp_1",
-      experimentId: "experiment_1",
-      name: "Exp 1",
-      x: [1, 2],
-      y: [10, 15],
-      xUnit: "min",
-      yUnit: "percent",
-      sourceRecordIds: ["snapshot_1:0"],
-    },
-    {
-      traceId: "trace_exp_2",
-      experimentId: "experiment_2",
-      name: "Exp 2",
-      x: [1, 2],
-      y: [8, 12],
-      xUnit: "min",
-      yUnit: "percent",
-      sourceRecordIds: ["snapshot_2:0"],
-    },
-  ],
-  lineage: {
-    result_row_1: { sourceRecordIds: ["snapshot_1:0"] },
-    result_row_2: { sourceRecordIds: ["snapshot_2:0"] },
-    trace_exp_1: { sourceRecordIds: ["snapshot_1:0"] },
-    trace_exp_2: { sourceRecordIds: ["snapshot_2:0"] },
   },
   summary: validatedResult.summary,
+  exclusions: [
+    { label: "Exp 5", reason: "Liquid is missing." },
+    { label: "Exp 6", reason: "Gas is missing." },
+    { label: "Exp 7", reason: "All components are zero." },
+  ],
   validation: validatedResult.validation,
   warnings: [{ code: "rounded_display", message: "Displayed values are rounded for review." }],
   sourceRefs: [
@@ -204,14 +200,13 @@ const resultPreview = {
       sourceRecordId: "snapshot_2:0",
     },
   ],
-  rowPage: { offset: 0, limit: 50, totalCount: 4 },
   tracePage: { offset: 0, limit: 500, totalCount: 2 },
-  sourcePage: { offset: 0, limit: 200, totalCount: 2 },
 };
 
-function WorkbookWorkspaceStub({ draftRegions, activeDraftRegionId }) {
+function WorkbookWorkspaceStub({ reviewState, draftRegions, activeDraftRegionId }) {
   return (
     <div aria-label="Workbook source stub">
+      <span>Source: {reviewState?.sourceDocument?.id || "none"}</span>
       <span>Active: {activeDraftRegionId}</span>
       {draftRegions.map((region) => (
         <span key={region.draftRegionId}>{`${region.sheetName}!${region.range}`}</span>
@@ -225,7 +220,7 @@ const readyAnalysisCapabilities = {
 };
 
 describe("AnalysisReviewWorkspace", () => {
-  it("accepts only the visible plan revision with its exact hashes", async () => {
+  it("accepts only the visible plan revision by id", async () => {
     const acceptPlan = vi.fn().mockResolvedValue({
       analysisPlanRevision: { ...revision2, status: "accepted" },
       analysisRun: { id: "analysis_run_1", status: "queued" },
@@ -248,11 +243,7 @@ describe("AnalysisReviewWorkspace", () => {
 
     await waitFor(() => expect(acceptPlan).toHaveBeenCalledWith(
       revision2.id,
-      {
-        planHash: revision2.planHash,
-        selectionHash: revision2.selectionHash,
-        dependencyHash: revision2.dependencyHash,
-      },
+      {},
       expect.objectContaining({ idempotencyKey: expect.any(String) }),
     ));
     expect(screen.getByText("Queued for calculation")).toBeTruthy();
@@ -292,7 +283,7 @@ describe("AnalysisReviewWorkspace", () => {
       { feedback: "Treat missing Liquid as zero." },
     ));
     expect(acceptPlan).not.toHaveBeenCalled();
-    expect(screen.getAllByText("Analysis plan revision 3").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Revision 3")).toBeTruthy();
     expect(screen.queryByText("Queued for calculation")).toBeNull();
   });
 
@@ -365,12 +356,46 @@ describe("AnalysisReviewWorkspace", () => {
 
     expect(screen.getAllByText("Runs!B2:D8").length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText("Runs!F2:F8").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("Source: source_1")).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Source" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("tab", { name: "Result" }).hasAttribute("disabled")).toBe(true);
-    expect(screen.getByRole("tab", { name: "Chart" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.queryByRole("tab", { name: "Chart" })).toBeNull();
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
   });
 
-  it("renders structured coverage values as readable field labels", () => {
+  it("switches the workbook source when the active plan rectangle belongs to another document", () => {
+    const multiDocumentRevision = {
+      ...revision2,
+      sourceRectangles: [
+        revision2.sourceRectangles[0],
+        {
+          sourceDocumentId: "source_2",
+          sheetName: "Distribution",
+          range: "Q69:AI69",
+          label: "Exp33 carbon distribution",
+        },
+      ],
+    };
+    render(
+      <AnalysisReviewWorkspace
+        projectId="project_1"
+        thread={thread}
+        revision={multiDocumentRevision}
+        planRevisions={[multiDocumentRevision]}
+        selection={{ ...selection, sourceRectangles: multiDocumentRevision.sourceRectangles }}
+        analysisCapabilities={readyAnalysisCapabilities}
+        WorkbookWorkspaceComponent={WorkbookWorkspaceStub}
+        acceptPlan={vi.fn()}
+        createRevision={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Source: source_1")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Exp33 carbon distribution/i }));
+    expect(screen.getByText("Source: source_2")).toBeTruthy();
+  });
+
+  it("presents only the readable processing plan without source or encoding metadata", () => {
     render(
       <AnalysisReviewWorkspace
         projectId="project_1"
@@ -401,8 +426,17 @@ describe("AnalysisReviewWorkspace", () => {
       />,
     );
 
-    expect(screen.getByText("yield: 7/7 available, temperature: 6/7 available")).toBeTruthy();
-    expect(screen.queryByText("[object Object]")).toBeNull();
+    expect(screen.getByText("Chart plan")).toBeTruthy();
+    expect(screen.getByText("Processing and calculation")).toBeTruthy();
+    expect(screen.getByText("Select Solid, Liquid, and Gas from accepted experiment snapshots.")).toBeTruthy();
+    expect(screen.getByText("Scale each experiment proportionally so the three values sum to 100%.")).toBeTruthy();
+    expect(screen.queryByText("Selected data")).toBeNull();
+    expect(screen.queryByText("Chart setup")).toBeNull();
+    expect(screen.queryByText("X axis")).toBeNull();
+    expect(screen.queryByText("Y axis")).toBeNull();
+    expect(screen.queryByText("Exact Python")).toBeNull();
+    expect(screen.queryByText("scalarCount")).toBeNull();
+    expect(screen.queryByText(/yield: 7\/7 available/)).toBeNull();
   });
 
   it("opens the latest active server revision when a conversation card holds a stale revision", async () => {
@@ -429,7 +463,7 @@ describe("AnalysisReviewWorkspace", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getAllByText("Analysis plan revision 2").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText("Revision 2")).toBeTruthy();
       expect(screen.getAllByText("Accepted").length).toBeGreaterThanOrEqual(1);
     });
     expect(screen.getByRole("button", { name: "Accept plan" }).hasAttribute("disabled")).toBe(true);
@@ -459,16 +493,22 @@ describe("AnalysisReviewWorkspace", () => {
       />,
     );
 
-    await waitFor(() => expect(screen.getByText("Python execution is unavailable. Configure an analysis executor before accepting this plan.")).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText(
+      "Python execution is unavailable. Configure an analysis executor before calculating this chart.",
+    ).length).toBeGreaterThan(0));
     expect(executeRun).not.toHaveBeenCalled();
   });
 
-  it("shows validated results, exclusions, invariants, and complete trace choices before acceptance", () => {
+  it("shows the validated chart, readable exclusions, and complete series choices before acceptance", () => {
     const PlotStub = ({ traces, layout }) => (
       <div
         aria-label="Analysis chart preview"
         data-margin-top={layout?.margin?.t}
         data-legend-y={layout?.legend?.y}
+        data-title={layout?.title?.text}
+        data-x-title={layout?.xaxis?.title?.text}
+        data-y-title={layout?.yaxis?.title?.text}
+        data-hover={traces[0]?.hovertemplate}
       >
         {traces.map((trace) => trace.name).join(", ")}
       </div>
@@ -479,7 +519,20 @@ describe("AnalysisReviewWorkspace", () => {
         thread={thread}
         revision={{ ...revision2, status: "accepted" }}
         planRevisions={[revision1, { ...revision2, status: "accepted" }]}
-        selection={selection}
+        selection={{
+          ...selection,
+          records: [
+            ...selection.records,
+            {
+              experimentId: "experiment_5",
+              experimentLabel: "Exp 5",
+              snapshotId: "snapshot_5",
+              recordIndex: 0,
+              fields: [],
+              series: [],
+            },
+          ],
+        }}
         run={validatedRun}
         result={validatedResult}
         resultPreview={resultPreview}
@@ -490,28 +543,29 @@ describe("AnalysisReviewWorkspace", () => {
     );
 
     fireEvent.click(screen.getByRole("tab", { name: "Result" }));
-    expect(screen.getByText("3 records excluded")).toBeTruthy();
-    expect(screen.getByText("Row sum = 100 +/- 0.000001")).toBeTruthy();
-    expect(screen.getByText("Liquid is missing.")).toBeTruthy();
+    const chart = screen.getByLabelText("Analysis chart preview");
+    expect(chart.textContent).toContain("Exp 1");
+    expect(chart.textContent).toContain("Exp 2");
+    expect(chart.dataset.marginTop).toBe("76");
+    expect(chart.dataset.legendY).toBe("1.02");
+    expect(chart.dataset.title).toBe("Normalized selectivity by experiment");
+    expect(chart.dataset.xTitle).toBe("Experiment");
+    expect(chart.dataset.yTitle).toBe("Normalized selectivity (%)");
+    expect(chart.dataset.hover).toContain("Experiment");
+    expect(screen.getAllByText("Liquid is missing.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Exp 5").length).toBeGreaterThan(0);
     expect(screen.getByText("Displayed values are rounded for review.")).toBeTruthy();
-    expect(screen.getAllByText("exclude_record")).toHaveLength(2);
-    expect(screen.getByText("snapshot_1:0")).toBeTruthy();
-    expect(screen.getByText("Exp 1")).toBeTruthy();
-    expect(screen.getByText("60")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Open source for Exp 1" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Accept result and create chart" })).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("tab", { name: "Chart" }));
-    expect(screen.getByLabelText("Analysis chart preview").textContent).toContain("Exp 1");
-    expect(screen.getByLabelText("Analysis chart preview").textContent).toContain("Exp 2");
-    expect(screen.getByLabelText("Analysis chart preview").dataset.marginTop).toBe("76");
-    expect(screen.getByLabelText("Analysis chart preview").dataset.legendY).toBe("1.02");
+    expect(screen.queryByText("exclude_record")).toBeNull();
+    expect(screen.queryByText("snapshot_1:0")).toBeNull();
+    expect(screen.queryByText("Input records")).toBeNull();
+    expect(screen.queryByText("Run and result hashes")).toBeNull();
+    expect(screen.getByRole("button", { name: "Accept chart" })).toBeTruthy();
     expect(screen.getByRole("checkbox", { name: "Show Exp 1 by default" }).checked).toBe(true);
     fireEvent.click(screen.getByRole("checkbox", { name: "Show Exp 2 by default" }));
     expect(screen.getByRole("checkbox", { name: "Show Exp 2 by default" }).checked).toBe(false);
   });
 
-  it("posts result feedback with the exact result hash and returns to plan review", async () => {
+  it("posts result feedback and returns to plan review", async () => {
     const reviseRun = vi.fn().mockResolvedValue({
       analysisPlanRevision: {
         ...revision2,
@@ -540,20 +594,19 @@ describe("AnalysisReviewWorkspace", () => {
     );
 
     fireEvent.click(screen.getByRole("tab", { name: "Result" }));
-    fireEvent.change(screen.getByPlaceholderText("Describe a result modification"), {
+    fireEvent.change(screen.getByPlaceholderText("Describe a chart modification"), {
       target: { value: "Use reaction time on x and preserve every experiment." },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Send result modification" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send chart modification" }));
 
     await waitFor(() => expect(reviseRun).toHaveBeenCalledWith(
       validatedRun.id,
       {
-        resultHash: validatedResult.contentHash,
         feedback: "Use reaction time on x and preserve every experiment.",
       },
     ));
-    expect(screen.getAllByText("Analysis plan revision 3").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("Prior result sha256_result_1")).toBeTruthy();
+    expect(screen.getByText("Revision 3")).toBeTruthy();
+    expect(screen.queryByText("Prior result sha256_result_1")).toBeNull();
     expect(screen.getByRole("tab", { name: "Source" }).getAttribute("aria-selected")).toBe("true");
   });
 
@@ -586,12 +639,11 @@ describe("AnalysisReviewWorkspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Accept plan" }));
 
     await waitFor(() => expect(executeRun).toHaveBeenCalledWith(validatedRun.id));
-    await waitFor(() => expect(loadResultPreview).toHaveBeenCalledWith(
-      validatedRun.id,
-      expect.objectContaining({ traceLimit: 500, sourceLimit: 200 }),
-    ));
+    await waitFor(() => expect(loadResultPreview).toHaveBeenCalledWith(validatedRun.id));
     expect(screen.getByRole("tab", { name: "Result" }).hasAttribute("disabled")).toBe(false);
-    expect(screen.getByText("Ready for result review")).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Result" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getAllByText("Result ready").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Analysis chart preview")).toBeTruthy();
   });
 
   it("keeps result acceptance disabled when backend validation failed", () => {
@@ -616,8 +668,219 @@ describe("AnalysisReviewWorkspace", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Accept result and create chart" }).hasAttribute("disabled")).toBe(true);
-    expect(screen.getByText("Row sum validation failed.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Accept chart" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getAllByText("Row sum validation failed.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Chart could not be generated").length).toBeGreaterThan(0);
+  });
+
+  it("groups repeated backend validation failures instead of expanding every trace", () => {
+    const repeatedErrors = Array.from({ length: 171 }, (_, index) => ({
+      code: "analysis_trace_unit_mismatch",
+      message: "Trace unit does not match the accepted calculation manifest.",
+      traceId: `trace_${index + 1}`,
+      actualUnit: null,
+      expectedUnits: ["percent"],
+    }));
+    render(
+      <AnalysisReviewWorkspace
+        projectId="project_1"
+        thread={thread}
+        revision={{ ...revision2, status: "accepted" }}
+        planRevisions={[{ ...revision2, status: "accepted" }]}
+        selection={selection}
+        run={{ ...validatedRun, status: "validation_failed", validation: { ok: false } }}
+        result={null}
+        resultPreview={{ ...resultPreview, validation: { ok: false, errors: repeatedErrors } }}
+        WorkbookWorkspaceComponent={WorkbookWorkspaceStub}
+      />,
+    );
+
+    expect(screen.getAllByText("Trace unit does not match the accepted calculation manifest.")).toHaveLength(2);
+    expect(screen.getAllByText(/171 occurrences/).length).toBeGreaterThan(0);
+  });
+
+  it("shows a readable chart error without exposing technical result counts", () => {
+    render(
+      <AnalysisReviewWorkspace
+        projectId="project_1"
+        thread={thread}
+        revision={{ ...revision2, status: "accepted" }}
+        planRevisions={[{ ...revision2, status: "accepted" }]}
+        selection={selection}
+        run={{
+          ...validatedRun,
+          status: "validation_failed",
+          validation: {
+            ok: false,
+            pointCount: 22,
+            traceCount: 1,
+            errors: [{ code: "analysis_test_failure", message: "Blocked test result." }],
+          },
+        }}
+        result={null}
+        resultPreview={null}
+        WorkbookWorkspaceComponent={WorkbookWorkspaceStub}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "Result" }));
+    expect(screen.getAllByText("Chart could not be generated").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Blocked test result.").length).toBeGreaterThan(0);
+    expect(screen.getByText(/22 points/).textContent).toContain("1 series");
+    expect(screen.queryByText("Input records")).toBeNull();
+    expect(screen.queryByText("Output records")).toBeNull();
+    expect(screen.queryByText("Missing policy")).toBeNull();
+    expect(screen.queryByText("exclude_record")).toBeNull();
+  });
+
+  it("shows Python policy code, policy name, module, and line for a rejected revision", async () => {
+    const policyError = Object.assign(new Error("The analysis Python program did not pass the backend runtime policy."), {
+      details: {
+        errors: [{
+          code: "python_import_not_allowed",
+          message: "Python import os is not allowed in labrat-python-v1.",
+          policy: "labrat-python-v1-static-policy",
+          module: "os",
+          line: 2,
+        }],
+      },
+    });
+    render(
+      <AnalysisReviewWorkspace
+        projectId="project_1"
+        thread={thread}
+        revision={revision2}
+        planRevisions={[revision1, revision2]}
+        selection={selection}
+        WorkbookWorkspaceComponent={WorkbookWorkspaceStub}
+        createRevision={vi.fn().mockRejectedValue(policyError)}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("Describe a modification"), {
+      target: { value: "Use the approved runtime only." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send modification" }));
+
+    expect(await screen.findByText("python_import_not_allowed")).toBeTruthy();
+    expect(screen.getByText(/labrat-python-v1-static-policy.*module os.*line 2/)).toBeTruthy();
+  });
+
+  it("renders the Exp33 carbon distribution as one readable 19-point chart", () => {
+    const carbonRevision = {
+      ...revision2,
+      id: "analysis_plan_revision_exp33",
+      status: "accepted",
+      reviewPlan: {
+        ...revision2.reviewPlan,
+        chart: {
+          chartType: "bar",
+          title: "Carbon Number Distribution (Exp33)",
+          xDescription: "Carbon number",
+          yDescription: "Total amount (%)",
+          seriesDescription: "Exp33",
+        },
+      },
+    };
+    const carbonRun = {
+      ...validatedRun,
+      id: "analysis_run_exp33",
+      acceptedPlanRevisionId: carbonRevision.id,
+    };
+    const carbonResult = {
+      ...validatedResult,
+      id: "analysis_result_exp33",
+      analysisRunId: carbonRun.id,
+      traceCount: 1,
+      summary: {
+        pointCount: 19,
+        seriesCount: 1,
+        excludedCount: 0,
+      },
+    };
+    const carbonValues = Array.from({ length: 19 }, (_, index) => index + 0.5);
+    const carbonPreview = {
+      ...resultPreview,
+      analysisRunId: carbonRun.id,
+      analysisResultId: carbonResult.id,
+      plotly: {
+        data: [{
+          traceId: "trace_carbon_distribution",
+          name: "Exp33 carbon distribution",
+          type: "bar",
+          x: Array.from({ length: 19 }, (_, index) => `C${index + 1}`),
+          y: carbonValues,
+          hovertemplate: "Carbon number %{x}<br>Total amount %{y}%<extra></extra>",
+        }],
+        layout: {
+          title: { text: "Carbon Number Distribution (Exp33)" },
+          xaxis: { title: { text: "Carbon number" } },
+          yaxis: { title: { text: "Total amount (%)" } },
+        },
+      },
+      summary: carbonResult.summary,
+      exclusions: [],
+      validation: { ok: true, errors: [] },
+      warnings: [],
+    };
+    const renderedPlots = vi.fn();
+    const PlotStub = (props) => {
+      renderedPlots(props);
+      return <div aria-label="Exp33 chart preview">{props.traces[0]?.name}</div>;
+    };
+
+    render(
+      <AnalysisReviewWorkspace
+        projectId="project_1"
+        thread={thread}
+        revision={carbonRevision}
+        planRevisions={[carbonRevision]}
+        selection={selection}
+        run={carbonRun}
+        result={carbonResult}
+        resultPreview={carbonPreview}
+        WorkbookWorkspaceComponent={WorkbookWorkspaceStub}
+        PlotComponent={PlotStub}
+        onAcceptResult={vi.fn()}
+      />,
+    );
+
+    const plotProps = renderedPlots.mock.calls.at(-1)[0];
+    expect(plotProps.traces[0].x).toHaveLength(19);
+    expect(plotProps.traces[0].y).toEqual(carbonValues);
+    expect(plotProps.layout.title.text).toBe("Carbon Number Distribution (Exp33)");
+    expect(plotProps.layout.xaxis.title.text).toBe("Carbon number");
+    expect(plotProps.layout.yaxis.title.text).toBe("Total amount (%)");
+    expect(plotProps.traces[0].hovertemplate).toContain("Carbon number");
+    expect(screen.getByText("no exclusions", { exact: false }).textContent).toContain("no exclusions");
+    expect(screen.queryByText("Input records")).toBeNull();
+    expect(screen.queryByText("snapshot_exp33:0")).toBeNull();
+  });
+
+  it("requires at least one selected series and supports Clear and Select all", () => {
+    render(
+      <AnalysisReviewWorkspace
+        projectId="project_1"
+        thread={thread}
+        revision={{ ...revision2, status: "accepted" }}
+        planRevisions={[{ ...revision2, status: "accepted" }]}
+        selection={selection}
+        run={validatedRun}
+        result={validatedResult}
+        resultPreview={resultPreview}
+        WorkbookWorkspaceComponent={WorkbookWorkspaceStub}
+        onAcceptResult={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Series", { selector: "summary" }));
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(screen.getByText("No series selected")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Accept chart" }).hasAttribute("disabled")).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Select all" }));
+    expect(screen.queryByText("No series selected")).toBeNull();
+    expect(screen.getByRole("button", { name: "Accept chart" }).hasAttribute("disabled")).toBe(false);
   });
 
   it("publishes the exact result with the reviewed default trace subset", async () => {
@@ -644,13 +907,13 @@ describe("AnalysisReviewWorkspace", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("tab", { name: "Chart" }));
+    fireEvent.click(screen.getByText("Series", { selector: "summary" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Show Exp 2 by default" }));
-    fireEvent.click(screen.getByRole("button", { name: "Accept result and create chart" }));
+    fireEvent.click(screen.getByRole("button", { name: "Accept chart" }));
 
     await waitFor(() => expect(onAcceptResult).toHaveBeenCalledWith({
       runId: validatedRun.id,
-      resultHash: validatedResult.contentHash,
+      analysisResultId: validatedResult.id,
       defaultVisibleTraceIds: ["trace_exp_1"],
     }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Chart created" })).toBeTruthy());
@@ -659,7 +922,7 @@ describe("AnalysisReviewWorkspace", () => {
     }));
   });
 
-  it("loads the complete validated trace domain across backend preview pages", async () => {
+  it("loads the complete validated Plotly trace domain in one result preview", async () => {
     const acceptedRevision = { ...revision2, status: "accepted" };
     const allTraces = Array.from({ length: 1_200 }, (_, index) => ({
       traceId: `trace_${index + 1}`,
@@ -667,9 +930,6 @@ describe("AnalysisReviewWorkspace", () => {
       name: `Exp ${index + 1}`,
       x: [0, 1],
       y: [index, index + 1],
-      xUnit: "min",
-      yUnit: "percent",
-      sourceRecordIds: [`snapshot_${index + 1}:0`],
     }));
     const loadThread = vi.fn().mockResolvedValue({
       analysisThread: thread,
@@ -681,15 +941,23 @@ describe("AnalysisReviewWorkspace", () => {
       analysisPlanRevision: acceptedRevision,
       analysisResult: { ...validatedResult, traceCount: allTraces.length },
     });
-    const loadResultPreview = vi.fn().mockImplementation((runId, options) => Promise.resolve({
+    const loadResultPreview = vi.fn().mockResolvedValue({
       ...resultPreview,
-      traces: allTraces.slice(options.traceOffset, options.traceOffset + options.traceLimit),
+      plotly: {
+        data: allTraces,
+        layout: resultPreview.plotly.layout,
+      },
+      summary: {
+        pointCount: allTraces.length * 2,
+        seriesCount: allTraces.length,
+        excludedCount: 0,
+      },
       tracePage: {
-        offset: options.traceOffset,
-        limit: options.traceLimit,
+        offset: 0,
+        limit: allTraces.length,
         totalCount: allTraces.length,
       },
-    }));
+    });
     const PlotStub = ({ traces }) => <div data-testid="complete-trace-plot">{traces.length}</div>;
 
     render(
@@ -707,13 +975,13 @@ describe("AnalysisReviewWorkspace", () => {
       />,
     );
 
-    await waitFor(() => expect(loadResultPreview).toHaveBeenCalledTimes(3));
-    fireEvent.click(screen.getByRole("tab", { name: "Chart" }));
+    await waitFor(() => expect(loadResultPreview).toHaveBeenCalledTimes(1));
     expect(screen.getByTestId("complete-trace-plot").textContent).toBe("1200");
+    fireEvent.click(screen.getByText("Series", { selector: "summary" }));
     expect(screen.getByRole("checkbox", { name: "Show Exp 1200 by default" }).checked).toBe(true);
   }, 15_000);
 
-  it("rejects a preview that does not match the visible run and result hashes", () => {
+  it("rejects a preview that does not match the visible run and result ids", () => {
     render(
       <AnalysisReviewWorkspace
         projectId="project_1"
@@ -723,27 +991,17 @@ describe("AnalysisReviewWorkspace", () => {
         selection={selection}
         run={validatedRun}
         result={validatedResult}
-        resultPreview={{ ...resultPreview, contentHash: "sha256_other_result" }}
+        resultPreview={{ ...resultPreview, analysisResultId: "analysis_result_other" }}
         WorkbookWorkspaceComponent={WorkbookWorkspaceStub}
         onAcceptResult={vi.fn()}
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Accept result and create chart" }).hasAttribute("disabled")).toBe(true);
-    expect(screen.getByText("The loaded preview does not match the visible analysis result.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Accept chart" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getAllByText("The loaded preview does not match the visible analysis result.").length).toBeGreaterThan(0);
   });
 
-  it("loads later source-evidence pages without changing the reviewed result", async () => {
-    const firstSourcePage = Array.from({ length: 200 }, (_, index) => ({
-      sourceDocumentId: "source_1",
-      sheet: "Runs",
-      cell: `A${index + 1}`,
-    }));
-    const loadResultPreview = vi.fn().mockResolvedValue({
-      ...resultPreview,
-      sourceRefs: [{ sourceDocumentId: "source_1", sheet: "Runs", cell: "A201" }],
-      sourcePage: { offset: 200, limit: 200, totalCount: 201 },
-    });
+  it("does not expose result rows, source-ref pagination, or audit hashes", () => {
     render(
       <AnalysisReviewWorkspace
         projectId="project_1"
@@ -753,26 +1011,16 @@ describe("AnalysisReviewWorkspace", () => {
         selection={selection}
         run={validatedRun}
         result={validatedResult}
-        resultPreview={{
-          ...resultPreview,
-          sourceRefs: firstSourcePage,
-          sourcePage: { offset: 0, limit: 200, totalCount: 201 },
-        }}
+        resultPreview={resultPreview}
         WorkbookWorkspaceComponent={WorkbookWorkspaceStub}
-        loadResultPreview={loadResultPreview}
         onAcceptResult={vi.fn()}
       />,
     );
 
-    fireEvent.click(screen.getByRole("tab", { name: "Result" }));
-    fireEvent.click(screen.getByRole("button", { name: "Next source refs" }));
-
-    await waitFor(() => expect(loadResultPreview).toHaveBeenCalledWith(
-      validatedRun.id,
-      expect.objectContaining({ sourceOffset: 200, sourceLimit: 200 }),
-    ));
-    expect(screen.getByRole("button", { name: "Runs!A201" })).toBeTruthy();
-    expect(screen.getByText(validatedResult.contentHash)).toBeTruthy();
+    expect(screen.queryByText("Validated values")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Next source refs" })).toBeNull();
+    expect(screen.queryByText("Run and result hashes")).toBeNull();
+    expect(screen.queryByText("snapshot_1:0")).toBeNull();
   });
 
   it("rehydrates an earlier run and result when reopening revision history", async () => {
@@ -787,7 +1035,6 @@ describe("AnalysisReviewWorkspace", () => {
       ...validatedResult,
       id: "analysis_result_old",
       analysisRunId: historicalRun.id,
-      contentHash: "sha256_historical_result",
     };
     const loadThread = vi.fn().mockResolvedValue({
       analysisThread: thread,
@@ -803,7 +1050,6 @@ describe("AnalysisReviewWorkspace", () => {
       ...resultPreview,
       analysisRunId: historicalRun.id,
       analysisResultId: historicalResult.id,
-      contentHash: historicalResult.contentHash,
     });
 
     render(
@@ -824,11 +1070,12 @@ describe("AnalysisReviewWorkspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Revision 1Accepted" }));
 
     await waitFor(() => expect(loadRun).toHaveBeenCalledWith(historicalRun.id));
-    await waitFor(() => expect(screen.getByText("Ready for result review")).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText("Result ready").length).toBeGreaterThan(0));
     expect(screen.getByRole("tab", { name: "Result" }).hasAttribute("disabled")).toBe(false);
+    expect(screen.getByRole("tab", { name: "Result" }).getAttribute("aria-selected")).toBe("true");
   });
 
-  it("renders incompatible trace units in separate chart panels", () => {
+  it("renders all selected curves in one authoritative Plotly chart", () => {
     const PlotStub = ({ traces }) => (
       <div data-testid="unit-plot">{traces.map((trace) => trace.name).join(", ")}</div>
     );
@@ -843,10 +1090,17 @@ describe("AnalysisReviewWorkspace", () => {
         result={validatedResult}
         resultPreview={{
           ...resultPreview,
-          traces: [
-            resultPreview.traces[0],
-            { ...resultPreview.traces[1], yUnit: "seconds" },
-          ],
+          plotly: {
+            ...resultPreview.plotly,
+            data: [
+              resultPreview.plotly.data[0],
+              { ...resultPreview.plotly.data[1], yaxis: "y2" },
+            ],
+            layout: {
+              ...resultPreview.plotly.layout,
+              yaxis2: { title: { text: "Seconds" }, overlaying: "y", side: "right" },
+            },
+          },
         }}
         WorkbookWorkspaceComponent={WorkbookWorkspaceStub}
         PlotComponent={PlotStub}
@@ -854,7 +1108,7 @@ describe("AnalysisReviewWorkspace", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("tab", { name: "Chart" }));
-    expect(screen.getAllByTestId("unit-plot")).toHaveLength(2);
+    expect(screen.getAllByTestId("unit-plot")).toHaveLength(1);
+    expect(screen.getByTestId("unit-plot").textContent).toBe("Exp 1, Exp 2");
   });
 });

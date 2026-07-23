@@ -63,7 +63,7 @@ describe("analysisApi", () => {
     expect(JSON.parse(fetchImpl.mock.calls[1][1].body)).toEqual({});
   });
 
-  it("creates feedback revisions without accepting and accepts with exact hashes", async () => {
+  it("creates feedback revisions and accepts a revision by idempotent revision id", async () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ analysisPlanRevision: { id: "revision_2" } }, { status: 201 }))
       .mockResolvedValueOnce(jsonResponse({ analysisRun: { id: "run_1", status: "queued" } }, { status: 201 }));
@@ -71,11 +71,7 @@ describe("analysisApi", () => {
     await createAnalysisPlanRevision("thread_1", {
       feedback: "Treat missing Liquid as zero.",
     }, { fetch: fetchImpl });
-    await acceptAnalysisPlanRevision("revision_2", {
-      planHash: "sha256_plan_2",
-      selectionHash: "sha256_selection_2",
-      dependencyHash: "sha256_dependency_2",
-    }, {
+    await acceptAnalysisPlanRevision("revision_2", {}, {
       fetch: fetchImpl,
       idempotencyKey: "accept_revision_2",
     });
@@ -86,14 +82,10 @@ describe("analysisApi", () => {
     });
     expect(fetchImpl.mock.calls[1][0]).toBe("/api/analysis-plan-revisions/revision_2/accept");
     expect(fetchImpl.mock.calls[1][1].headers["idempotency-key"]).toBe("accept_revision_2");
-    expect(JSON.parse(fetchImpl.mock.calls[1][1].body)).toEqual({
-      planHash: "sha256_plan_2",
-      selectionHash: "sha256_selection_2",
-      dependencyHash: "sha256_dependency_2",
-    });
+    expect(JSON.parse(fetchImpl.mock.calls[1][1].body)).toEqual({});
   });
 
-  it("executes accepted runs and loads independently bounded result pages", async () => {
+  it("executes accepted runs and loads the complete Plotly result", async () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(jsonResponse({
         analysisRun: { id: "analysis_run_1", status: "awaiting_result_review" },
@@ -124,12 +116,11 @@ describe("analysisApi", () => {
     expect(fetchImpl.mock.calls[1][0]).toBe("/api/analysis-runs/analysis%2Frun%201/execute");
     expect(fetchImpl.mock.calls[1][1].method).toBe("POST");
     expect(fetchImpl.mock.calls[2][0]).toBe(
-      "/api/analysis-runs/analysis%2Frun%201/result-preview"
-      + "?offset=25&limit=200&traceOffset=10&traceLimit=500&sourceOffset=50&sourceLimit=200",
+      "/api/analysis-runs/analysis%2Frun%201/result-preview",
     );
   });
 
-  it("revises the exact visible result without mutating it", async () => {
+  it("revises the visible result with natural-language feedback", async () => {
     const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse({
       analysisPlanRevision: { id: "analysis_plan_revision_3", revision: 3 },
       priorAnalysisResult: {
@@ -140,13 +131,11 @@ describe("analysisApi", () => {
     }, { status: 201 }));
 
     await reviseAnalysisRun("analysis_run_1", {
-      resultHash: "sha256_result_1",
       feedback: "Keep all experiments but use reaction time on x.",
     }, { fetch: fetchImpl });
 
     expect(fetchImpl.mock.calls[0][0]).toBe("/api/analysis-runs/analysis_run_1/revise");
     expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
-      resultHash: "sha256_result_1",
       feedback: "Keep all experiments but use reaction time on x.",
     });
   });
@@ -158,7 +147,7 @@ describe("analysisApi", () => {
     }, { status: 201 }));
 
     await publishAcceptedAnalysisChart("analysis/run 1", {
-      resultHash: "sha256_result_1",
+      analysisResultId: "analysis_result_1",
       defaultVisibleTraceIds: ["trace_1", "trace_2"],
     }, {
       fetch: fetchImpl,
@@ -170,7 +159,7 @@ describe("analysisApi", () => {
     );
     expect(fetchImpl.mock.calls[0][1].headers["idempotency-key"]).toBe("publish_result_1");
     expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
-      resultHash: "sha256_result_1",
+      analysisResultId: "analysis_result_1",
       defaultVisibleTraceIds: ["trace_1", "trace_2"],
     });
   });

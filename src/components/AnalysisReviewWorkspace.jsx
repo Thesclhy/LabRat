@@ -65,29 +65,40 @@ function revisionStatus(status) {
   return status || "Draft";
 }
 
-function coverageValueLabel(value) {
-  if (Array.isArray(value)) {
-    return value.map((item) => coverageValueLabel(item)).filter(Boolean).join(", ");
+function planFieldLabel(value, fallback = "Not specified") {
+  const normalized = String(value ?? "")
+    .trim()
+    .replace(/^:+/, "")
+    .replace(/^_+/, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ");
+  if (!normalized) return fallback;
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
+function joinedPlanFieldLabels(values) {
+  const labels = asArray(values).map((value) => planFieldLabel(value, "")).filter(Boolean);
+  if (labels.length <= 1) return labels[0] || "Not specified";
+  return `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`;
+}
+
+function missingValuePlanStep(policy = {}) {
+  const mode = String(policy?.mode || "").trim();
+  if (!mode) return "";
+  if (["exclude_record", "skip_record"].includes(mode)) {
+    return "Exclude a record when a required input is missing.";
   }
-  if (value && typeof value === "object") {
-    const name = value.displayName || value.fieldKey || value.label || value.id;
-    if (name) return value.unit ? `${name} (${value.unit})` : String(name);
-    const entries = Object.entries(value);
-    if (entries.length && entries.every(([, item]) => item && typeof item === "object")) {
-      return entries.map(([key, item]) => {
-        const fieldName = item.displayName
-          || item.fieldKey
-          || (key.startsWith("analysis_field:") ? key.split(":")[1] : key);
-        if (Number.isFinite(item.available)) {
-          const total = Number.isFinite(item.totalExperiments) ? item.totalExperiments : item.available;
-          return `${fieldName}: ${item.available}/${total} available`;
-        }
-        return `${fieldName}: ${coverageValueLabel(item)}`;
-      }).join(", ");
-    }
-    return JSON.stringify(value);
-  }
-  return String(value ?? "");
+  if (mode === "keep_null") return "Keep missing inputs as empty values.";
+  return `Handle missing values using the reviewed ${planFieldLabel(mode).toLowerCase()} rule.`;
+}
+
+function calculationPlanSteps(revision) {
+  const displayPlan = asArray(revision?.displayPlan).map(String).filter(Boolean);
+  if (displayPlan.length) return displayPlan;
+  const reviewPlan = revision?.reviewPlan || {};
+  const steps = asArray(reviewPlan.processingSteps).map(String).filter(Boolean);
+  if (reviewPlan.missingValueHandling) steps.push(String(reviewPlan.missingValueHandling));
+  return [...new Set(steps)];
 }
 
 function acceptanceKey(revision) {
@@ -101,14 +112,98 @@ function resultValidation(run, result, preview) {
 }
 
 function validationErrors(validation) {
-  return asArray(validation?.errors).map((error) => ({
+  return groupDiagnostics(asArray(validation?.errors).map((error) => ({
     code: error?.code || "analysis_validation_failed",
     message: error?.message || error?.code || String(error),
-  }));
+    traceId: error?.traceId || null,
+    traceIndex: Number.isInteger(error?.traceIndex) ? error.traceIndex : null,
+    actualUnit: error?.actualUnit ?? null,
+    expectedUnits: asArray(error?.expectedUnits),
+  })));
 }
 
-function resultSummary(result, preview) {
-  return preview?.summary || result?.summary || {};
+function diagnosticKey(item) {
+  return JSON.stringify([
+    item?.code || "analysis_validation_failed",
+    item?.message || "",
+    item?.actualUnit ?? null,
+    asArray(item?.expectedUnits),
+  ]);
+}
+
+function groupDiagnostics(items) {
+  const grouped = new Map();
+  asArray(items).forEach((item) => {
+    const normalized = typeof item === "string"
+      ? { code: "analysis_validation_failed", message: item }
+      : item || { code: "analysis_validation_failed", message: "Analysis validation failed." };
+    const key = diagnosticKey(normalized);
+    const current = grouped.get(key) || { ...normalized, count: 0, examples: [] };
+    current.count += Number.isInteger(normalized.count) && normalized.count > 0
+      ? normalized.count
+      : 1;
+    asArray(normalized.examples).forEach((example) => {
+      if (current.examples.length < 3 && !current.examples.includes(example)) current.examples.push(example);
+    });
+    const example = normalized.traceId || (Number.isInteger(normalized.traceIndex) ? `trace ${normalized.traceIndex + 1}` : "");
+    if (example && current.examples.length < 3 && !current.examples.includes(example)) current.examples.push(example);
+    grouped.set(key, current);
+  });
+  return [...grouped.values()];
+}
+
+function actionErrorDetails(error) {
+  if (!error) return null;
+  if (typeof error === "string") return { message: error, diagnostics: [] };
+  const diagnostics = asArray(error?.details?.errors || error?.error?.details?.errors).map((item) => ({
+    ...item,
+    code: item?.code || "analysis_action_failed",
+    message: item?.message || item?.code || "Analysis action failed.",
+  }));
+  return {
+    message: error?.message || String(error),
+    diagnostics: groupDiagnostics(diagnostics),
+  };
+}
+
+function diagnosticSuffix(item) {
+  const parts = [];
+  if (item?.policy) parts.push(item.policy);
+  if (item?.module) parts.push(`module ${item.module}`);
+  if (item?.call) parts.push(`call ${item.call}`);
+  if (item?.attribute) parts.push(`attribute ${item.attribute}`);
+  if (Number.isInteger(item?.line)) parts.push(`line ${item.line}`);
+  if (item?.count > 1) parts.push(`${item.count} occurrences`);
+  if (asArray(item?.examples).length) parts.push(`examples: ${item.examples.join(", ")}`);
+  return parts.join(" | ");
+}
+
+function AnalysisActionError({ error }) {
+  const detail = actionErrorDetails(error);
+  if (!detail) return null;
+  return (
+    <div className="analysis-review-error analysis-action-error" role="alert">
+      <p>{detail.message}</p>
+      {detail.diagnostics.map((item, index) => (
+        <div key={`${item.code}-${index}`}>
+          <strong>{item.code}</strong>
+          <span>{item.message}</span>
+          {diagnosticSuffix(item) && <small>{diagnosticSuffix(item)}</small>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function resultSummary(run, result, preview) {
+  const summary = preview?.summary || result?.summary;
+  if (summary) return summary;
+  const validation = resultValidation(run, result, preview);
+  return {
+    pointCount: validation?.pointCount,
+    seriesCount: validation?.traceCount,
+    excludedCount: validation?.excludedCount,
+  };
 }
 
 function resultReady(run, result, preview) {
@@ -125,9 +220,7 @@ function resultReady(run, result, preview) {
 function previewIdentityMatches(run, result, preview) {
   if (!run?.id || !result?.id || !preview) return false;
   return preview.analysisRunId === run.id
-    && preview.analysisResultId === result.id
-    && preview.contentHash === result.contentHash
-    && preview.resultPreviewHash === result.resultPreviewHash;
+    && preview.analysisResultId === result.id;
 }
 
 function previewIdentityError(run, result, preview) {
@@ -138,96 +231,6 @@ function previewIdentityError(run, result, preview) {
   };
 }
 
-function resultTabsAvailable(run, result, preview) {
-  return Boolean(
-    result
-    || preview
-    || ["awaiting_result_review", "validation_failed", "failed"].includes(run?.status)
-  );
-}
-
-function resultColumnLabel(key) {
-  if (String(key).startsWith("input::")) {
-    return `Input ${String(key).slice(7).replaceAll("_", " ")}`;
-  }
-  if (key === "__experiment_id") return "Experiment id";
-  if (key === "__snapshot_id") return "Snapshot id";
-  if (key === "__record_index") return "Record";
-  return String(key || "").replace(/^__/, "").replaceAll("_", " ");
-}
-
-function resultColumns(rows) {
-  const keys = [];
-  const seen = new Set();
-  asArray(rows).forEach((row) => {
-    Object.keys(row || {}).forEach((key) => {
-      if (key === "__result_id" || seen.has(key)) return;
-      seen.add(key);
-      keys.push(key);
-    });
-  });
-  return keys;
-}
-
-function rowsWithInputValues(rows, records) {
-  const byIdentity = new Map(asArray(records).map((record) => [
-    `${record.snapshotId}:${record.recordIndex}:${record.experimentId}`,
-    record,
-  ]));
-  return asArray(rows).map((row) => {
-    const record = byIdentity.get(
-      `${row.__snapshot_id}:${row.__record_index}:${row.__experiment_id}`,
-    );
-    const inputValues = Object.fromEntries(asArray(record?.fields).map((field) => [
-      `input::${field.displayName || field.fieldKey || field.fieldId || "value"}`,
-      field.value,
-    ]));
-    return {
-      ...inputValues,
-      ...row,
-    };
-  });
-}
-
-function displayResultValue(value) {
-  if (value == null || value === "") return "Missing";
-  if (typeof value === "number") return Number.isInteger(value) ? String(value) : String(Number(value.toPrecision(10)));
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
-}
-
-function invariantLabel(invariant) {
-  if (invariant?.type === "row_sum") {
-    return `Row sum = ${invariant.target} +/- ${invariant.absoluteTolerance}`;
-  }
-  return invariant?.message || invariant?.type || "Validation invariant";
-}
-
-function sourceRefLabel(sourceRef, index) {
-  const sheetName = sourceRef?.sheetName || sourceRef?.sheet || "Sheet";
-  const range = sourceRef?.range || sourceRef?.rangeRef || sourceRef?.cell || sourceRef?.cellRef || "";
-  return range ? `${sheetName}!${range}` : sourceRef?.sourceRecordId || `Source ${index + 1}`;
-}
-
-function recordSourceRefs(record) {
-  return [
-    ...asArray(record?.sourceRefs),
-    ...asArray(record?.fields).flatMap((field) => asArray(field?.sourceRefs)),
-    ...asArray(record?.series).flatMap((series) => [
-      ...asArray(series?.sourceRefs),
-      ...asArray(series?.points).flatMap((point) => asArray(point?.sourceRefs)),
-    ]),
-  ];
-}
-
-function inputRecordForResultRow(row, records) {
-  return asArray(records).find((record) => (
-    record.snapshotId === row.__snapshot_id
-    && Number(record.recordIndex) === Number(row.__record_index)
-    && record.experimentId === row.__experiment_id
-  )) || null;
-}
-
 function traceName(trace, index) {
   return trace?.name
     || trace?.experimentLabel
@@ -236,42 +239,33 @@ function traceName(trace, index) {
     || `Trace ${index + 1}`;
 }
 
-function resultPlot(traces, expectedOutput = {}) {
-  const chartType = expectedOutput?.chartType || "scatter";
-  const barChart = ["bar", "grouped_bar", "stacked_bar", "distribution_bar"].includes(chartType);
-  const plotTraces = asArray(traces).map((trace, index) => ({
-    type: barChart || trace?.type === "bar" ? "bar" : "scatter",
-    ...(barChart ? {} : { mode: trace?.mode || "lines+markers" }),
-    name: traceName(trace, index),
-    x: asArray(trace?.x),
-    y: asArray(trace?.y),
-  }));
-  const first = asArray(traces)[0] || {};
+function traceIdentifier(trace, index) {
+  return String(
+    trace?.traceId
+      || trace?.meta?.labrat?.traceId
+      || `trace_${index + 1}`,
+  ).trim();
+}
+
+function previewTraces(preview) {
+  return asArray(preview?.plotly?.data).length
+    ? asArray(preview.plotly.data)
+    : asArray(preview?.traces);
+}
+
+function plotTitle(layout, reviewPlan) {
+  const title = layout?.title;
+  if (typeof title === "string" && title.trim()) return title.trim();
+  if (typeof title?.text === "string" && title.text.trim()) return title.text.trim();
+  return reviewPlan?.chart?.title || "Chart result";
+}
+
+function resultPlot(traces, plotlyLayout = {}) {
   return {
-    traces: plotTraces,
+    traces: asArray(traces).map((trace) => structuredClone(trace)),
     layout: plotLayout({
-      title: { text: "Validated analysis preview", font: { size: 14 } },
+      ...(plotlyLayout && typeof plotlyLayout === "object" ? structuredClone(plotlyLayout) : {}),
       height: 340,
-      margin: { l: 58, r: 20, t: 76, b: 48 },
-      legend: {
-        orientation: "h",
-        y: 1.02,
-        x: 0.5,
-        xanchor: "center",
-        yanchor: "bottom",
-        bgcolor: "rgba(255,255,255,.9)",
-      },
-      xaxis: {
-        ...plotLayout().xaxis,
-        title: first.xUnit ? `X (${first.xUnit})` : "X",
-      },
-      yaxis: {
-        ...plotLayout().yaxis,
-        title: first.yUnit ? `Y (${first.yUnit})` : "Y",
-      },
-      ...(chartType === "stacked_bar" ? { barmode: "stack" } : {}),
-      ...(["grouped_bar", "distribution_bar"].includes(chartType) ? { barmode: "group" } : {}),
-      showlegend: plotTraces.length > 1,
     }),
     config: {
       displayModeBar: false,
@@ -281,349 +275,157 @@ function resultPlot(traces, expectedOutput = {}) {
   };
 }
 
-async function loadCompleteResultPreview(loadResultPreview, runId, options = {}) {
-  const traceLimit = 500;
-  const firstPage = await loadResultPreview(runId, {
-    offset: options.offset ?? 0,
-    limit: options.limit ?? 50,
-    traceOffset: 0,
-    traceLimit,
-    sourceOffset: options.sourceOffset ?? 0,
-    sourceLimit: options.sourceLimit ?? 200,
-  });
-  const traceTotal = Number(firstPage?.tracePage?.totalCount || asArray(firstPage?.traces).length);
-  const offsets = [];
-  for (let offset = traceLimit; offset < traceTotal; offset += traceLimit) offsets.push(offset);
-  if (!offsets.length) return firstPage;
-  const extraPages = await Promise.all(offsets.map((traceOffset) => loadResultPreview(runId, {
-    offset: 0,
-    limit: 1,
-    traceOffset,
-    traceLimit,
-    sourceOffset: 0,
-    sourceLimit: 1,
-  })));
-  return {
-    ...firstPage,
-    traces: [
-      ...asArray(firstPage?.traces),
-      ...extraPages.flatMap((page) => asArray(page?.traces)),
-    ],
-    tracePage: {
-      ...firstPage.tracePage,
-      offset: 0,
-      limit: traceTotal,
-      totalCount: traceTotal,
-    },
-  };
+async function loadCompleteResultPreview(loadResultPreview, runId) {
+  return loadResultPreview(runId);
 }
 
-function ResultStage({
+function ChartResultStage({
   run,
   result,
   preview,
-  inputRecords,
   loading,
   error,
   reviewErrors = [],
-  onPreviousPage,
-  onNextPage,
-  onPreviousSourcePage,
-  onNextSourcePage,
-  onOpenSource,
-}) {
-  const [exclusionOffset, setExclusionOffset] = useState(0);
-  const summary = resultSummary(result, preview);
-  const validation = resultValidation(run, result, preview);
-  const errors = [...validationErrors(validation), ...reviewErrors];
-  const rows = rowsWithInputValues(preview?.rows, inputRecords);
-  const columns = resultColumns(rows);
-  const exclusions = asArray(summary.excludedRecords);
-  const exclusionLimit = 50;
-  const visibleExclusions = exclusions.slice(exclusionOffset, exclusionOffset + exclusionLimit);
-  const invariants = asArray(validation?.invariants);
-  const rowPage = preview?.rowPage || {};
-  const sourcePage = preview?.sourcePage || {};
-  const canPrevious = Number(rowPage.offset) > 0;
-  const canNext = Number(rowPage.offset || 0) + rows.length < Number(rowPage.totalCount || 0);
-  const canPreviousSources = Number(sourcePage.offset) > 0;
-  const canNextSources = Number(sourcePage.offset || 0) + asArray(preview?.sourceRefs).length
-    < Number(sourcePage.totalCount || 0);
-
-  useEffect(() => {
-    setExclusionOffset(0);
-  }, [preview?.contentHash]);
-
-  return (
-    <section className="analysis-result-stage" aria-label="Validated analysis result">
-      {loading && <p className="analysis-review-state">Loading validated result...</p>}
-      {error && <p className="analysis-review-error" role="alert">{error}</p>}
-      <div className="analysis-result-summary">
-        <div><span>Input records</span><strong>{summary.inputRecordCount ?? "Unknown"}</strong></div>
-        <div><span>Output records</span><strong>{summary.outputRecordCount ?? result?.rowCount ?? 0}</strong></div>
-        <div><span>Traces</span><strong>{result?.traceCount ?? preview?.tracePage?.totalCount ?? 0}</strong></div>
-        <div>
-          <span>Excluded</span>
-          <strong>{summary.excludedRecordCount ?? exclusions.length}</strong>
-        </div>
-        <div>
-          <span>Missing policy</span>
-          <strong className="analysis-result-policy">
-            {summary.missingValuePolicy || validation?.missingValuePolicy || "Not declared"}
-          </strong>
-        </div>
-      </div>
-
-      {(Number(summary.excludedRecordCount) > 0 || exclusions.length > 0) && (
-        <section className="analysis-result-section analysis-result-exclusions">
-          <header>
-            <strong>{summary.excludedRecordCount ?? exclusions.length} records excluded</strong>
-            <span>{summary.missingValuePolicy || "Declared missing-value policy"}</span>
-          </header>
-          <ul>
-            {visibleExclusions.map((excluded, index) => (
-              <li key={`${excluded.sourceRecordId || "excluded"}-${exclusionOffset + index}`}>
-                <span>{excluded.sourceRecordId || `Record ${exclusionOffset + index + 1}`}</span>
-                <strong>{excluded.reason || "No reason supplied"}</strong>
-              </li>
-            ))}
-          </ul>
-          {exclusions.length > exclusionLimit && (
-            <div className="analysis-result-pagination">
-              <button
-                type="button"
-                disabled={exclusionOffset === 0}
-                onClick={() => setExclusionOffset(Math.max(exclusionOffset - exclusionLimit, 0))}
-              >
-                Previous exclusions
-              </button>
-              <span>
-                {exclusionOffset + 1}-{Math.min(exclusionOffset + exclusionLimit, exclusions.length)}
-                {" of "}{exclusions.length}
-              </span>
-              <button
-                type="button"
-                disabled={exclusionOffset + exclusionLimit >= exclusions.length}
-                onClick={() => setExclusionOffset(exclusionOffset + exclusionLimit)}
-              >
-                Next exclusions
-              </button>
-            </div>
-          )}
-        </section>
-      )}
-
-      {!!asArray(preview?.warnings).length && (
-        <section className="analysis-result-section analysis-result-warnings">
-          <header>
-            <strong>Execution warnings</strong>
-            <span>{preview.warnings.length}</span>
-          </header>
-          <ul>
-            {preview.warnings.map((warning, index) => (
-              <li key={`${warning.code || "warning"}-${index}`}>
-                {warning.message || warning.code || String(warning)}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <section className="analysis-result-section">
-        <header>
-          <strong>Backend validation</strong>
-          <span>{errors.length ? "Blocked" : "Passed"}</span>
-        </header>
-        {!!invariants.length && (
-          <ul className="analysis-validation-list">
-            {invariants.map((invariant, index) => (
-              <li className={invariant.ok === false ? "failed" : "passed"} key={`${invariant.type || "invariant"}-${index}`}>
-                <span>{invariantLabel(invariant)}</span>
-                <strong>{invariant.ok === false ? "Failed" : "Passed"}</strong>
-              </li>
-            ))}
-          </ul>
-        )}
-        {!!errors.length && (
-          <div className="analysis-validation-errors" role="alert">
-            {errors.map((item, index) => (
-              <p key={`${item.code}-${index}`}>{item.message}</p>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {!!rows.length && (
-        <section className="analysis-result-section analysis-result-table-section">
-          <header>
-            <strong>Validated values</strong>
-            <span>{rowPage.totalCount ?? rows.length} rows</span>
-          </header>
-          <div className="analysis-result-table-wrap">
-            <table className="analysis-result-table">
-              <thead>
-                <tr>
-                  {columns.map((column) => <th key={column}>{resultColumnLabel(column)}</th>)}
-                  <th>Lineage and source</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row, index) => {
-                  const lineageIds = asArray(preview?.lineage?.[row.__result_id]?.sourceRecordIds);
-                  const inputRecord = inputRecordForResultRow(row, inputRecords);
-                  const sourceRef = recordSourceRefs(inputRecord)[0] || null;
-                  const rowLabel = row.experiment_label || inputRecord?.experimentLabel || row.__experiment_id || `row ${index + 1}`;
-                  return (
-                    <tr key={row.__result_id || index}>
-                      {columns.map((column) => (
-                        <td key={column}>{displayResultValue(row[column])}</td>
-                      ))}
-                      <td className="analysis-result-lineage">
-                        {sourceRef && (
-                          <button
-                            type="button"
-                            aria-label={`Open source for ${rowLabel}`}
-                            onClick={() => onOpenSource?.(sourceRef)}
-                          >
-                            Open source
-                          </button>
-                        )}
-                        <small>{lineageIds.join(", ") || "No lineage returned"}</small>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <div className="analysis-result-pagination">
-            <button type="button" disabled={!canPrevious || loading} onClick={onPreviousPage}>Previous rows</button>
-            <span>
-              {rows.length ? Number(rowPage.offset || 0) + 1 : 0}
-              {"-"}
-              {Number(rowPage.offset || 0) + rows.length}
-              {" of "}
-              {rowPage.totalCount ?? rows.length}
-            </span>
-            <button type="button" disabled={!canNext || loading} onClick={onNextPage}>Next rows</button>
-          </div>
-        </section>
-      )}
-
-      {!!asArray(preview?.sourceRefs).length && (
-        <section className="analysis-result-section">
-          <header>
-            <strong>Source evidence</strong>
-            <span>{preview.sourcePage?.totalCount ?? preview.sourceRefs.length} refs</span>
-          </header>
-          <div className="analysis-result-source-links">
-            {preview.sourceRefs.map((sourceRef, index) => (
-              <button
-                type="button"
-                key={`${sourceRef.sourceRecordId || sourceRef.range || "source"}-${index}`}
-                onClick={() => onOpenSource?.(sourceRef)}
-              >
-                {sourceRefLabel(sourceRef, index)}
-              </button>
-            ))}
-          </div>
-          <div className="analysis-result-pagination">
-            <button
-              type="button"
-              disabled={!canPreviousSources || loading}
-              onClick={onPreviousSourcePage}
-            >
-              Previous source refs
-            </button>
-            <span>
-              {asArray(preview?.sourceRefs).length ? Number(sourcePage.offset || 0) + 1 : 0}
-              {"-"}
-              {Number(sourcePage.offset || 0) + asArray(preview?.sourceRefs).length}
-              {" of "}
-              {sourcePage.totalCount ?? asArray(preview?.sourceRefs).length}
-            </span>
-            <button
-              type="button"
-              disabled={!canNextSources || loading}
-              onClick={onNextSourcePage}
-            >
-              Next source refs
-            </button>
-          </div>
-        </section>
-      )}
-
-      <details className="analysis-result-hashes">
-        <summary>Run and result hashes</summary>
-        <dl>
-          <div><dt>Input</dt><dd>{run?.inputHash || "Unavailable"}</dd></div>
-          <div><dt>Program</dt><dd>{run?.programHash || "Unavailable"}</dd></div>
-          <div><dt>Result</dt><dd>{result?.contentHash || preview?.contentHash || "Unavailable"}</dd></div>
-          <div><dt>Preview</dt><dd>{result?.resultPreviewHash || preview?.resultPreviewHash || "Unavailable"}</dd></div>
-          <div><dt>Runtime</dt><dd>{run?.runtimeVersion || "Unavailable"}</dd></div>
-        </dl>
-      </details>
-    </section>
-  );
-}
-
-function ChartStage({
-  preview,
   defaultVisibleTraceIds,
   onDefaultVisibleTraceIdsChange,
   PlotComponent,
-  expectedOutput,
+  reviewPlan,
 }) {
-  const traces = asArray(preview?.traces);
+  const [seriesSearch, setSeriesSearch] = useState("");
+  const traces = previewTraces(preview);
   const selected = new Set(defaultVisibleTraceIds);
-  const visibleTraces = traces.filter((trace) => selected.has(trace.traceId));
-  const traceGroups = [...visibleTraces.reduce((groups, trace) => {
-    const key = `${trace.xUnit || ""}::${trace.yUnit || ""}`;
-    const current = groups.get(key) || [];
-    current.push(trace);
-    groups.set(key, current);
-    return groups;
-  }, new Map()).values()];
+  const visibleTraces = traces.filter((trace, index) => (
+    selected.has(traceIdentifier(trace, index))
+  ));
+  const summary = resultSummary(run, result, preview);
+  const validation = resultValidation(run, result, preview);
+  const errors = groupDiagnostics([...validationErrors(validation), ...reviewErrors]);
+  const exclusions = asArray(preview?.exclusions);
+  const normalizedSearch = seriesSearch.trim().toLowerCase();
+  const filteredTraces = traces.filter((trace, index) => (
+    !normalizedSearch || traceName(trace, index).toLowerCase().includes(normalizedSearch)
+  ));
+  const calculating = !error && (loading || ["queued", "running"].includes(run?.status));
+  const failed = Boolean(error) || errors.length > 0 || ["failed", "validation_failed"].includes(run?.status);
+  const ready = Boolean(result?.id && preview && !calculating && !failed);
+
+  useEffect(() => {
+    setSeriesSearch("");
+  }, [preview?.analysisResultId]);
+
   return (
-    <section className="analysis-chart-stage" aria-label="Analysis chart review">
-      <div className="analysis-chart-preview">
-        {traceGroups.map((group, index) => {
-          const plot = resultPlot(group, expectedOutput);
-          return (
-            <div className="analysis-chart-unit-panel" key={`${group[0]?.xUnit || "x"}:${group[0]?.yUnit || "y"}:${index}`}>
-              <PlotComponent traces={plot.traces} layout={plot.layout} config={plot.config} />
-            </div>
-          );
-        })}
-      </div>
-      <aside className="analysis-trace-selector" aria-label="Default chart traces">
-        <header>
-          <strong>Default visible experiments</strong>
-          <span>{selected.size}/{traces.length} shown</span>
-        </header>
+    <section className="analysis-chart-stage" aria-label="Analysis result">
+      <header className="analysis-result-toolbar">
         <div>
-          {traces.map((trace, index) => {
-            const name = traceName(trace, index);
-            return (
-              <label key={trace.traceId || index}>
-                <input
-                  type="checkbox"
-                  checked={selected.has(trace.traceId)}
-                  aria-label={`Show ${name} by default`}
-                  onChange={() => {
-                    const next = new Set(selected);
-                    if (next.has(trace.traceId)) next.delete(trace.traceId);
-                    else next.add(trace.traceId);
-                    onDefaultVisibleTraceIdsChange([...next]);
-                  }}
-                />
-                <span>{name}</span>
-                <small>{trace.yUnit || "No unit"}</small>
-              </label>
-            );
-          })}
+          <strong>{plotTitle(preview?.plotly?.layout, reviewPlan)}</strong>
+          <span>
+            {ready
+              ? `${summary.pointCount ?? 0} points · ${summary.seriesCount ?? traces.length} series`
+              : calculating ? "Calculating accepted plan" : failed ? "Chart could not be generated" : "Waiting for result"}
+          </span>
         </div>
-      </aside>
+        {traces.length > 1 && (
+          <details className="analysis-series-menu">
+            <summary>
+              Series
+              <span>{selected.size}/{traces.length}</span>
+            </summary>
+            <div className="analysis-series-popover">
+              <input
+                type="search"
+                value={seriesSearch}
+                placeholder="Search series"
+                aria-label="Search chart series"
+                onChange={(event) => setSeriesSearch(event.target.value)}
+              />
+              <div className="analysis-series-actions">
+                <button
+                  type="button"
+                  onClick={() => onDefaultVisibleTraceIdsChange(
+                    traces.map((trace, index) => traceIdentifier(trace, index)),
+                  )}
+                >
+                  Select all
+                </button>
+                <button type="button" onClick={() => onDefaultVisibleTraceIdsChange([])}>Clear</button>
+              </div>
+              <div className="analysis-series-options">
+                {filteredTraces.map((trace, index) => {
+                  const name = traceName(trace, index);
+                  const id = traceIdentifier(trace, index);
+                  return (
+                    <label key={id}>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(id)}
+                        aria-label={`Show ${name} by default`}
+                        onChange={() => {
+                          const next = new Set(selected);
+                          if (next.has(id)) next.delete(id);
+                          else next.add(id);
+                          onDefaultVisibleTraceIdsChange([...next]);
+                        }}
+                      />
+                      <span>{name}</span>
+                      <small>{trace.type || "scatter"}</small>
+                    </label>
+                  );
+                })}
+                {!filteredTraces.length && <p>No series match this search.</p>}
+              </div>
+            </div>
+          </details>
+        )}
+      </header>
+      <div className="analysis-chart-preview">
+        {calculating && (
+          <div className="analysis-result-empty" role="status">
+            <strong>Calculating chart</strong>
+            <span>LabRat is running the accepted Python plan and validating its output.</span>
+          </div>
+        )}
+        {!calculating && (error || failed) && (
+          <div className="analysis-result-empty failed" role="alert">
+            <strong>Chart could not be generated</strong>
+            <span>{error || errors[0]?.message || "The accepted calculation did not produce a valid chart result."}</span>
+            {errors.slice(1, 4).map((item, index) => (
+              <small key={`${item.code || "error"}-${index}`}>{item.message}</small>
+            ))}
+          </div>
+        )}
+        {ready && !traces.length && (
+          <div className="analysis-result-empty failed" role="alert">
+            <strong>No chart series were returned</strong>
+            <span>Submit a modification so LabRat can revise the calculation plan.</span>
+          </div>
+        )}
+        {ready && traces.length > 0 && !visibleTraces.length && (
+          <div className="analysis-result-empty">
+            <strong>No series selected</strong>
+            <span>Select at least one series before accepting this chart.</span>
+          </div>
+        )}
+        {ready && visibleTraces.length > 0 && (() => {
+          const plot = resultPlot(visibleTraces, preview?.plotly?.layout);
+          return <PlotComponent traces={plot.traces} layout={plot.layout} config={plot.config} />;
+        })()}
+      </div>
+      {ready && (exclusions.length > 0 || asArray(preview?.warnings).length > 0) && (
+        <div className="analysis-result-notices">
+          {exclusions.map((excluded, index) => (
+            <p key={`${excluded.label || "excluded"}-${index}`}>
+              <strong>{excluded.label || `Excluded item ${index + 1}`}</strong>
+              <span>{excluded.reason || "This item was excluded by the reviewed plan."}</span>
+            </p>
+          ))}
+          {asArray(preview?.warnings).map((warning, index) => (
+            <p key={`${warning.code || "warning"}-${index}`}>
+              <strong>Warning</strong>
+              <span>{warning.message || warning.code || String(warning)}</span>
+            </p>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -666,8 +468,10 @@ export function AnalysisReviewWorkspace({
   const [activeRectangleId, setActiveRectangleId] = useState("");
   const [feedback, setFeedback] = useState("");
   const [pendingAction, setPendingAction] = useState("");
-  const [actionError, setActionError] = useState("");
-  const [activeTab, setActiveTab] = useState("source");
+  const [actionError, setActionError] = useState(null);
+  const [activeTab, setActiveTab] = useState(
+    initialRun || initialResult || initialResultPreview ? "result" : "source",
+  );
   const [run, setRun] = useState(initialRun);
   const [result, setResult] = useState(initialResult);
   const [resultState, setResultState] = useState({
@@ -676,12 +480,11 @@ export function AnalysisReviewWorkspace({
     value: initialResultPreview,
   });
   const [defaultVisibleTraceIds, setDefaultVisibleTraceIds] = useState(
-    () => asArray(initialResultPreview?.traces).map((trace) => trace.traceId).filter(Boolean),
+    () => previewTraces(initialResultPreview).map(traceIdentifier),
   );
   const [runHistory, setRunHistory] = useState(() => (
     initialRun ? [{ run: initialRun, result: initialResult }] : []
   ));
-  const [resultSourceFocus, setResultSourceFocus] = useState(null);
   const [capabilityState, setCapabilityState] = useState({
     loading: !analysisCapabilities,
     value: analysisCapabilities,
@@ -699,16 +502,15 @@ export function AnalysisReviewWorkspace({
     setResult(initialResult);
     setResultState({ loading: false, error: "", value: initialResultPreview });
     setDefaultVisibleTraceIds(
-      asArray(initialResultPreview?.traces).map((trace) => trace.traceId).filter(Boolean),
+      previewTraces(initialResultPreview).map(traceIdentifier),
     );
     setRunHistory(initialRun ? [{ run: initialRun, result: initialResult }] : []);
-    setResultSourceFocus(null);
-    setActiveTab("source");
+    setActiveTab(initialRun || initialResult || initialResultPreview ? "result" : "source");
     setActionError("");
     setCapabilityState({ loading: !analysisCapabilities, value: analysisCapabilities });
   }, [
     initialResult?.id,
-    initialResultPreview?.resultPreviewHash,
+    initialResultPreview?.analysisResultId,
     initialRevision?.id,
     initialRun?.id,
     initialThread?.id,
@@ -754,6 +556,7 @@ export function AnalysisReviewWorkspace({
         setRunHistory(loadedRuns.map((item) => ({ run: item, result: null })));
         if (!latestRun?.id) return;
         setRun(latestRun);
+        setActiveTab("result");
         if (latestRun.status === "queued" && !executorCapabilityReady) return;
         const runResponse = latestRun.status === "queued"
           ? await executeRun(latestRun.id)
@@ -771,19 +574,19 @@ export function AnalysisReviewWorkspace({
         if (hydratedResult?.id) {
           const loadedPreview = await loadCompleteResultPreview(loadResultPreview, hydratedRun.id, {
             offset: 0,
-            limit: 50,
+            limit: 1,
             sourceOffset: 0,
-            sourceLimit: 200,
+            sourceLimit: 1,
           });
           if (cancelled || requestToken !== previewRequestRef.current) return;
           setResultState({ loading: false, error: "", value: loadedPreview });
           setDefaultVisibleTraceIds(
-            asArray(loadedPreview?.traces).map((trace) => trace.traceId).filter(Boolean),
+            previewTraces(loadedPreview).map(traceIdentifier),
           );
         }
       })
       .catch((error) => {
-        if (!cancelled) setActionError(error?.message || String(error));
+        if (!cancelled) setActionError(error);
       });
     return () => {
       cancelled = true;
@@ -828,6 +631,10 @@ export function AnalysisReviewWorkspace({
     () => sourceReviewRegions(selectionState.value?.sourceRectangles || revision?.sourceRectangles),
     [revision?.id, revision?.sourceRectangles, selectionState.value?.sourceRectangles],
   );
+  const visibleCalculationSteps = useMemo(
+    () => calculationPlanSteps(revision),
+    [revision],
+  );
   const activeRectangle = rectangles.find((rectangle) => rectangle.draftRegionId === activeRectangleId)
     || rectangles[0]
     || null;
@@ -839,16 +646,7 @@ export function AnalysisReviewWorkspace({
     range: activeRectangle.range,
     focusOnly: true,
   } : null;
-  const focusSelection = resultSourceFocus ? {
-    requestId: `${run?.id || "run"}:${resultSourceFocus.sourceRecordId || resultSourceFocus.range || "source"}`,
-    sourceDocumentId: resultSourceFocus.sourceDocumentId,
-    sheetName: resultSourceFocus.sheetName || resultSourceFocus.sheet,
-    range: resultSourceFocus.range
-      || resultSourceFocus.rangeRef
-      || resultSourceFocus.cell
-      || resultSourceFocus.cellRef,
-    focusOnly: true,
-  } : rectangleFocusSelection;
+  const focusSelection = rectangleFocusSelection;
   const busy = Boolean(pendingAction);
   const awaitingReview = revision?.status === "awaiting_review" && !run;
   const executorReady = executorCapabilityReady;
@@ -861,10 +659,16 @@ export function AnalysisReviewWorkspace({
     ...validationErrors(validation),
     ...(identityError ? [identityError] : []),
   ];
-  const hasResultStage = resultTabsAvailable(run, result, preview);
-  const hasChartStage = asArray(preview?.traces).length > 0;
-  const canAcceptResult = resultReady(run, result, preview)
+  const hasResultStage = Boolean(run || result || preview);
+  const hasChartStage = previewTraces(preview).length > 0;
+  const chartReady = resultReady(run, result, preview);
+  const chartCalculating = ["queued", "running"].includes(run?.status) || pendingAction === "execute";
+  const chartFinalized = result?.status === "accepted";
+  const visibleResultSummary = resultSummary(run, result, preview);
+  const resultExclusions = asArray(preview?.exclusions);
+  const canAcceptResult = chartReady
     && hasChartStage
+    && defaultVisibleTraceIds.length > 0
     && Boolean(onAcceptResult);
   const resultReviewMode = hasResultStage && revision?.status === "accepted";
 
@@ -890,7 +694,7 @@ export function AnalysisReviewWorkspace({
       setActiveRectangleId("");
       setActiveTab("source");
     } catch (error) {
-      setActionError(error?.message || String(error));
+      setActionError(error);
     } finally {
       setPendingAction("");
     }
@@ -901,11 +705,7 @@ export function AnalysisReviewWorkspace({
     setPendingAction("accept");
     setActionError("");
     try {
-      const response = await acceptPlan(revision.id, {
-        planHash: revision.planHash,
-        selectionHash: revision.selectionHash,
-        dependencyHash: revision.dependencyHash,
-      }, {
+      const response = await acceptPlan(revision.id, {}, {
         idempotencyKey: acceptanceKey(revision),
       });
       const acceptedRevision = response?.analysisPlanRevision || { ...revision, status: "accepted" };
@@ -917,6 +717,7 @@ export function AnalysisReviewWorkspace({
       const requestToken = ++previewRequestRef.current;
       setRun(queuedRun);
       setRunHistory((current) => [...current, { run: queuedRun, result: null }]);
+      setActiveTab("result");
       onAccepted?.(response);
       if (!queuedRun.id) return;
       setPendingAction("execute");
@@ -935,91 +736,31 @@ export function AnalysisReviewWorkspace({
         setResultState((current) => ({ ...current, loading: true, error: "" }));
         const loadedPreview = await loadCompleteResultPreview(loadResultPreview, executedRun.id, {
           offset: 0,
-          limit: 50,
+          limit: 1,
           sourceOffset: 0,
-          sourceLimit: 200,
+          sourceLimit: 1,
         });
         if (requestToken !== previewRequestRef.current) return;
         setResultState({ loading: false, error: "", value: loadedPreview });
         setDefaultVisibleTraceIds(
-          asArray(loadedPreview?.traces).map((trace) => trace.traceId).filter(Boolean),
+          previewTraces(loadedPreview).map(traceIdentifier),
         );
-        setActiveTab("result");
       }
       onAccepted?.(executionResponse);
     } catch (error) {
-      setActionError(error?.message || String(error));
+      setActionError(error);
     } finally {
       setPendingAction("");
     }
   };
 
-  const loadResultRows = async (offset) => {
-    if (!run?.id || resultState.loading) return;
-    const runId = run.id;
-    const requestToken = ++previewRequestRef.current;
-    setResultState((current) => ({ ...current, loading: true, error: "" }));
-    try {
-      const loadedPreview = await loadCompleteResultPreview(loadResultPreview, runId, {
-        offset,
-        limit: preview?.rowPage?.limit || 50,
-        sourceOffset: preview?.sourcePage?.offset || 0,
-        sourceLimit: preview?.sourcePage?.limit || 200,
-      });
-      if (requestToken !== previewRequestRef.current) return;
-      setResultState({ loading: false, error: "", value: loadedPreview });
-    } catch (error) {
-      if (requestToken !== previewRequestRef.current) return;
-      setResultState((current) => ({
-        ...current,
-        loading: false,
-        error: error?.message || String(error),
-      }));
-    }
-  };
-
-  const loadSourceRefs = async (sourceOffset) => {
-    if (!run?.id || resultState.loading) return;
-    const runId = run.id;
-    const requestToken = ++previewRequestRef.current;
-    setResultState((current) => ({ ...current, loading: true, error: "" }));
-    try {
-      const sourcePreview = await loadResultPreview(runId, {
-        offset: preview?.rowPage?.offset || 0,
-        limit: preview?.rowPage?.limit || 50,
-        traceOffset: 0,
-        traceLimit: 1,
-        sourceOffset,
-        sourceLimit: preview?.sourcePage?.limit || 200,
-      });
-      if (requestToken !== previewRequestRef.current) return;
-      setResultState({
-        loading: false,
-        error: "",
-        value: {
-          ...preview,
-          sourceRefs: sourcePreview.sourceRefs,
-          sourcePage: sourcePreview.sourcePage,
-        },
-      });
-    } catch (error) {
-      if (requestToken !== previewRequestRef.current) return;
-      setResultState((current) => ({
-        ...current,
-        loading: false,
-        error: error?.message || String(error),
-      }));
-    }
-  };
-
   const submitResultFeedback = async () => {
     const nextFeedback = feedback.trim();
-    if (!nextFeedback || busy || !run?.id || !resultReviewMode) return;
+    if (!nextFeedback || busy || !run?.id || !resultReviewMode || chartFinalized) return;
     setPendingAction("result_revision");
     setActionError("");
     try {
       const response = await reviseRun(run.id, {
-        resultHash: result?.contentHash || preview?.contentHash || "",
         feedback: nextFeedback,
       });
       const nextRevision = response?.analysisPlanRevision;
@@ -1039,10 +780,9 @@ export function AnalysisReviewWorkspace({
       setDefaultVisibleTraceIds([]);
       setFeedback("");
       setActiveRectangleId("");
-      setResultSourceFocus(null);
       setActiveTab("source");
     } catch (error) {
-      setActionError(error?.message || String(error));
+      setActionError(error);
     } finally {
       setPendingAction("");
     }
@@ -1055,23 +795,17 @@ export function AnalysisReviewWorkspace({
     try {
       const response = await onAcceptResult({
         runId: run.id,
-        resultHash: result.contentHash,
+        analysisResultId: result.id,
         defaultVisibleTraceIds,
       });
       if (response?.analysisRun) setRun(response.analysisRun);
       if (response?.analysisResult) setResult(response.analysisResult);
       onAccepted?.(response);
     } catch (error) {
-      setActionError(error?.message || String(error));
+      setActionError(error);
     } finally {
       setPendingAction("");
     }
-  };
-
-  const openResultSource = (sourceRef) => {
-    if (!sourceRef?.sourceDocumentId) return;
-    setResultSourceFocus(sourceRef);
-    setActiveTab("source");
   };
 
   const openRevision = async (item) => {
@@ -1084,8 +818,7 @@ export function AnalysisReviewWorkspace({
     setResult(historyItem?.result || null);
     setResultState({ loading: false, error: "", value: null });
     setActiveRectangleId("");
-    setResultSourceFocus(null);
-    setActiveTab("source");
+    setActiveTab(historyItem?.run ? "result" : "source");
     if (!historyItem?.run?.id) return;
     const requestToken = previewRequestRef.current;
     setPendingAction("load_history");
@@ -1108,19 +841,19 @@ export function AnalysisReviewWorkspace({
         historicalRun.id,
         {
           offset: 0,
-          limit: 50,
+          limit: 1,
           sourceOffset: 0,
-          sourceLimit: 200,
+          sourceLimit: 1,
         },
       );
       if (requestToken !== previewRequestRef.current) return;
       setResultState({ loading: false, error: "", value: historicalPreview });
       setDefaultVisibleTraceIds(
-        asArray(historicalPreview?.traces).map((trace) => trace.traceId).filter(Boolean),
+        previewTraces(historicalPreview).map(traceIdentifier),
       );
     } catch (error) {
       if (requestToken === previewRequestRef.current) {
-        setActionError(error?.message || String(error));
+        setActionError(error);
       }
     } finally {
       if (requestToken === previewRequestRef.current) setPendingAction("");
@@ -1159,17 +892,6 @@ export function AnalysisReviewWorkspace({
         >
           Result
         </button>
-        <button
-          id="analysis-tab-chart"
-          type="button"
-          role="tab"
-          aria-controls="analysis-panel-chart"
-          aria-selected={activeTab === "chart"}
-          disabled={!hasChartStage}
-          onClick={() => setActiveTab("chart")}
-        >
-          Chart
-        </button>
       </div>
 
       <div className="analysis-review-split">
@@ -1187,10 +909,7 @@ export function AnalysisReviewWorkspace({
                     type="button"
                     className={rectangle.draftRegionId === currentActiveId ? "active" : ""}
                     key={rectangle.draftRegionId}
-                    onClick={() => {
-                      setResultSourceFocus(null);
-                      setActiveRectangleId(rectangle.draftRegionId);
-                    }}
+                    onClick={() => setActiveRectangleId(rectangle.draftRegionId)}
                   >
                     <span>{rectangle.label || `Input ${index + 1}`}</span>
                     <small>{rectangle.sheetName}!{rectangle.range}</small>
@@ -1202,7 +921,12 @@ export function AnalysisReviewWorkspace({
               {WorkbookWorkspaceComponent && (
                 <WorkbookWorkspaceComponent
                   projectId={projectId || thread?.projectId}
-                  reviewState={{ regions: [] }}
+                  reviewState={{
+                    regions: [],
+                    sourceDocument: activeRectangle?.sourceDocumentId
+                      ? { id: activeRectangle.sourceDocumentId }
+                      : null,
+                  }}
                   draftRegions={rectangles}
                   activeDraftRegionId={currentActiveId}
                   onDraftRegionsChange={() => {}}
@@ -1213,38 +937,21 @@ export function AnalysisReviewWorkspace({
             </section>
           )}
           {activeTab === "result" && (
-            <ResultStage
+            <ChartResultStage
               run={run}
               result={result}
               preview={preview}
-              inputRecords={selectionState.value?.records}
               loading={resultState.loading}
-              error={resultState.error}
+              error={resultState.error || (
+                run?.status === "queued" && executorUnavailable
+                  ? "Python execution is unavailable. Configure an analysis executor before calculating this chart."
+                  : ""
+              )}
               reviewErrors={identityError ? [identityError] : []}
-              onPreviousPage={() => loadResultRows(Math.max(
-                Number(preview?.rowPage?.offset || 0) - Number(preview?.rowPage?.limit || 50),
-                0,
-              ))}
-              onNextPage={() => loadResultRows(
-                Number(preview?.rowPage?.offset || 0) + Number(preview?.rowPage?.limit || 50),
-              )}
-              onPreviousSourcePage={() => loadSourceRefs(Math.max(
-                Number(preview?.sourcePage?.offset || 0) - Number(preview?.sourcePage?.limit || 200),
-                0,
-              ))}
-              onNextSourcePage={() => loadSourceRefs(
-                Number(preview?.sourcePage?.offset || 0) + Number(preview?.sourcePage?.limit || 200),
-              )}
-              onOpenSource={openResultSource}
-            />
-          )}
-          {activeTab === "chart" && (
-            <ChartStage
-              preview={preview}
               defaultVisibleTraceIds={defaultVisibleTraceIds}
               onDefaultVisibleTraceIdsChange={setDefaultVisibleTraceIds}
               PlotComponent={PlotComponent}
-              expectedOutput={revision?.expectedOutput}
+              reviewPlan={revision?.reviewPlan}
             />
           )}
         </div>
@@ -1253,9 +960,19 @@ export function AnalysisReviewWorkspace({
           <header className="analysis-review-conversation-head">
             <div>
               <strong>the lab rat</strong>
-              <span>{revision ? `Analysis plan revision ${revision.revision}` : "Planning"}</span>
+              <span>{resultReviewMode ? "Result review" : revision ? "Plan review" : "Planning"}</span>
             </div>
-            <span>{resultReady(run, result, preview) ? "Result ready" : revisionStatus(revision?.status)}</span>
+            <span>
+              {chartFinalized
+                ? "Chart created"
+                : chartReady
+                  ? "Result ready"
+                  : chartCalculating
+                    ? "Calculating"
+                    : errors.length || ["failed", "validation_failed"].includes(run?.status)
+                      ? "Needs changes"
+                      : revisionStatus(revision?.status)}
+            </span>
           </header>
 
           <div className="analysis-review-messages">
@@ -1269,22 +986,16 @@ export function AnalysisReviewWorkspace({
             {revision && (
               <article className="analysis-plan-card">
                 <header>
-                  <strong>Analysis plan revision {revision.revision}</strong>
-                  <span>{revisionStatus(revision.status)}</span>
+                  <strong>Chart plan</strong>
                 </header>
-                <p>{revision.requestSummary}</p>
-                <ol>
-                  {asArray(revision.processingSummary).map((step, index) => (
-                    <li key={`${step}-${index}`}>{step}</li>
-                  ))}
-                </ol>
-                {selectionState.value?.coverage && (
-                  <dl className="analysis-plan-coverage">
-                    {Object.entries(selectionState.value.coverage).map(([key, value]) => (
-                      <div key={key}><dt>{key}</dt><dd>{coverageValueLabel(value)}</dd></div>
+                <section className="analysis-plan-section">
+                  <strong>Processing and calculation</strong>
+                  <ol>
+                    {visibleCalculationSteps.map((step, index) => (
+                      <li key={`${step}-${index}`}>{step}</li>
                     ))}
-                  </dl>
-                )}
+                  </ol>
+                </section>
                 {!!asArray(revision.warnings).length && (
                   <div className="analysis-plan-warnings">
                     {asArray(revision.warnings).map((warning, index) => (
@@ -1292,27 +1003,24 @@ export function AnalysisReviewWorkspace({
                     ))}
                   </div>
                 )}
-                <details>
-                  <summary>Exact Python</summary>
-                  <pre>{revision.pythonProgram?.source || "No Python source was provided."}</pre>
-                  {revision.pythonProgram?.sourceHash && <small>{revision.pythonProgram.sourceHash}</small>}
-                </details>
               </article>
             )}
 
-            <section className="analysis-revision-history" aria-label="Analysis revision history">
-              {revisions.map((item) => (
-                <button
-                  type="button"
-                  className={item.id === revision?.id ? "active" : ""}
-                  key={item.id}
-                  onClick={() => openRevision(item)}
-                >
-                  <span>Revision {item.revision}</span>
-                  <small>{revisionStatus(item.status)}</small>
-                </button>
-              ))}
-            </section>
+            {revisions.length > 1 && (
+              <section className="analysis-revision-history" aria-label="Analysis revision history">
+                {revisions.map((item) => (
+                  <button
+                    type="button"
+                    className={item.id === revision?.id ? "active" : ""}
+                    key={item.id}
+                    onClick={() => openRevision(item)}
+                  >
+                    <span>Revision {item.revision}</span>
+                    <small>{revisionStatus(item.status)}</small>
+                  </button>
+                ))}
+              </section>
+            )}
 
             {!!runHistory.length && (
               <section className="analysis-run-history" aria-label="Analysis run history">
@@ -1320,7 +1028,6 @@ export function AnalysisReviewWorkspace({
                   <div key={item.run.id || index}>
                     <span>Run {index + 1}</span>
                     <small>{item.run.status || "queued"}</small>
-                    {item.result?.contentHash && <strong>Prior result {item.result.contentHash}</strong>}
                   </div>
                 ))}
               </section>
@@ -1329,35 +1036,46 @@ export function AnalysisReviewWorkspace({
             {run && !result && ["queued", "running"].includes(run.status) && (
               <div className="analysis-review-queued" role="status">
                 <strong>{run.status === "running" ? "Calculating accepted plan" : "Queued for calculation"}</strong>
-                <span>The exact accepted source, hashes, and Python are frozen.</span>
-              </div>
-            )}
-            {resultReady(run, result, preview) && (
-              <div className="analysis-review-queued analysis-result-ready" role="status">
-                <strong>Ready for result review</strong>
-                <span>
-                  {result?.rowCount ?? preview?.rowPage?.totalCount ?? 0} rows and{" "}
-                  {result?.traceCount ?? preview?.tracePage?.totalCount ?? 0} traces passed backend validation.
-                </span>
+                <span>The chart will appear in Result after backend validation passes.</span>
               </div>
             )}
             {hasResultStage && (
               <article className="analysis-result-conversation-card">
                 <header>
-                  <strong>Execution validation</strong>
-                  <span>{errors.length ? "Blocked" : result ? "Passed" : run?.status || "Pending"}</span>
+                  <strong>{chartFinalized ? "Chart created" : chartReady ? "Chart ready" : "Chart result"}</strong>
+                  <span>
+                    {chartFinalized
+                      ? "Created"
+                      : errors.length || ["failed", "validation_failed"].includes(run?.status)
+                        ? "Blocked"
+                        : chartReady ? "Ready" : run?.status || "Pending"}
+                  </span>
                 </header>
                 <p>
-                  {resultSummary(result, preview).inputRecordCount ?? "Unknown"} inputs,{" "}
-                  {resultSummary(result, preview).outputRecordCount ?? result?.rowCount ?? 0} outputs,{" "}
-                  {resultSummary(result, preview).excludedRecordCount ?? 0} exclusions.
+                  {visibleResultSummary.pointCount ?? 0} points ·{" "}
+                  {visibleResultSummary.seriesCount ?? previewTraces(preview).length} series ·{" "}
+                  {(visibleResultSummary.excludedCount ?? resultExclusions.length) > 0
+                    ? `${visibleResultSummary.excludedCount ?? resultExclusions.length} excluded`
+                    : "no exclusions"}
                 </p>
+                {resultExclusions.map((excluded, index) => (
+                  <p className="analysis-result-exclusion-message" key={`${excluded.label || "excluded"}-${index}`}>
+                    <strong>{excluded.label || `Excluded item ${index + 1}`}</strong>
+                    <span>{excluded.reason || "Excluded by the reviewed plan."}</span>
+                  </p>
+                ))}
+                {chartReady && !defaultVisibleTraceIds.length && (
+                  <p className="analysis-review-error">Select at least one series before accepting this chart.</p>
+                )}
                 {errors.map((item, index) => (
-                  <p className="analysis-review-error" key={`${item.code}-${index}`}>{item.message}</p>
+                  <p className="analysis-review-error" key={`${item.code}-${index}`}>
+                    {item.message}
+                    {diagnosticSuffix(item) && <small>{diagnosticSuffix(item)}</small>}
+                  </p>
                 ))}
               </article>
             )}
-            {actionError && <p className="analysis-review-error" role="alert">{actionError}</p>}
+            <AnalysisActionError error={actionError} />
           </div>
 
           <div className="analysis-review-composer">
@@ -1368,9 +1086,11 @@ export function AnalysisReviewWorkspace({
               disabled={resultReviewMode ? (!canAcceptResult || busy) : planAcceptanceDisabled}
             >
               {resultReviewMode
-                ? result?.status === "accepted"
+                ? chartFinalized
                   ? "Chart created"
-                  : pendingAction === "accept_result" ? "Creating..." : "Accept result and create chart"
+                  : chartCalculating
+                    ? "Calculating..."
+                    : pendingAction === "accept_result" ? "Creating..." : "Accept chart"
                 : pendingAction === "accept" || pendingAction === "execute" ? "Working..." : "Accept plan"}
             </button>
             {!resultReviewMode && executorUnavailable && (
@@ -1378,6 +1098,11 @@ export function AnalysisReviewWorkspace({
                 {capabilityState.loading
                   ? "Checking Python execution availability before this plan can be accepted."
                   : "Python execution is unavailable. Configure an analysis executor before accepting this plan."}
+              </p>
+            )}
+            {resultReviewMode && run?.status === "queued" && executorUnavailable && (
+              <p className="analysis-review-blocker" role="status">
+                Python execution is unavailable. Configure an analysis executor before calculating this chart.
               </p>
             )}
             <div className="analysis-review-modification">
@@ -1391,14 +1116,16 @@ export function AnalysisReviewWorkspace({
                     else submitFeedback();
                   }
                 }}
-                placeholder={resultReviewMode ? "Describe a result modification" : "Describe a modification"}
-                disabled={resultReviewMode ? (!run?.id || busy) : (!awaitingReview || busy)}
+                placeholder={resultReviewMode ? "Describe a chart modification" : "Describe a modification"}
+                disabled={resultReviewMode ? (!run?.id || busy || chartFinalized) : (!awaitingReview || busy)}
               />
               <button
                 type="button"
-                aria-label={resultReviewMode ? "Send result modification" : "Send modification"}
+                aria-label={resultReviewMode ? "Send chart modification" : "Send modification"}
                 onClick={resultReviewMode ? submitResultFeedback : submitFeedback}
-                disabled={!feedback.trim() || (resultReviewMode ? !run?.id : !awaitingReview) || busy}
+                disabled={!feedback.trim()
+                  || (resultReviewMode ? (!run?.id || chartFinalized) : !awaitingReview)
+                  || busy}
               >
                 {["revision", "result_revision"].includes(pendingAction) ? "Sending..." : "Send"}
               </button>

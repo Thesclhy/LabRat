@@ -2,7 +2,7 @@ import PptxGenJS from "pptxgenjs";
 import JSZip from "jszip";
 import { applyChartLayout, resolveChartLayout, defaultFontFamily } from "../charts/chartLayout.js";
 import { normalizeChartView } from "../charts/chartView.js";
-import { chartSpecToProposal, makeSourceChartPreview } from "../charts/sourceChartPreview.js";
+import { chartSpecModel, makeChartSpecPreview } from "../charts/chartSpecPreview.js";
 import { defineLabRatDefaultSlideMasters, LABRAT_FIGURE_MASTER } from "./pptxTemplate.js";
 
 const SLIDE_WIDTH_IN = 13.333333;
@@ -263,7 +263,7 @@ export function chartPlotForExport(block, chartSpecs, resolvedLayout = null) {
   if (!chartSpec) return { traces: [], layout: {}, config: {} };
   const chartLayout = resolvedLayout || resolveExportChartLayout(block, chartSpec);
   const plotArea = chartLayout.plotArea || {};
-  const plot = makeSourceChartPreview(chartSpec, {
+  const plot = makeChartSpecPreview(chartSpec, {
     width: Math.max(1, Math.round(Number(plotArea.width) || Number(block.w) || 580)),
     height: Math.max(1, Math.round(Number(plotArea.height) || Number(block.h) || 380)),
     chartView: normalizeChartView(chartSpec, block.chartView),
@@ -285,20 +285,20 @@ function chartSpecAxisTitle(axis, fallback) {
 }
 
 function chartSpecLayoutOpts(chartSpec) {
-  const proposal = chartSpecToProposal(chartSpec);
-  const yFields = Array.isArray(proposal.yFields) && proposal.yFields.length ? proposal.yFields : [proposal.y].filter(Boolean);
+  const model = chartSpecModel(chartSpec);
+  const yFields = Array.isArray(model.yFields) && model.yFields.length ? model.yFields : [model.y].filter(Boolean);
   return {
-    title: proposal.title || chartSpec?.title || "Chart",
-    xLabel: chartSpecAxisTitle(proposal.x, "Experiment"),
+    title: model.title || chartSpec?.title || "Chart",
+    xLabel: chartSpecAxisTitle(model.x, "Experiment"),
     yLabel: yFields.length > 1 ? "Value" : chartSpecAxisTitle(yFields[0], "Value"),
   };
 }
 
 function resolveExportChartLayout(block, chartSpec) {
-  const proposal = chartSpecToProposal(chartSpec);
+  const model = chartSpecModel(chartSpec);
   const layout = resolveChartLayout({
     ...block,
-    chartKind: proposal.chartType || chartSpec?.chartType || "scatter",
+    chartKind: model.chartType || chartSpec?.chartType || "scatter",
     opts: chartSpecLayoutOpts(chartSpec),
   });
   if (!block?.chartLayout?.xAxisTitle) {

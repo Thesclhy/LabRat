@@ -93,26 +93,10 @@ create table if not exists import_runs (
   updated_by text references users(id)
 );
 
-create table if not exists chart_proposal_sets (
-  id text primary key,
-  lab_id text not null references labs(id),
-  project_id text not null references projects(id),
-  schema_version text not null,
-  status text not null default 'proposed',
-  payload jsonb not null,
-  decision_summary jsonb not null default '{}',
-  created_at timestamptz not null,
-  updated_at timestamptz not null,
-  created_by text not null references users(id),
-  updated_by text references users(id)
-);
-
 create table if not exists chart_specs (
   id text primary key,
   lab_id text not null references labs(id),
   project_id text not null references projects(id),
-  source_chart_proposal_set_id text references chart_proposal_sets(id),
-  source_proposal_id text,
   title text,
   chart_type text not null,
   spec jsonb not null,
@@ -166,7 +150,6 @@ create index if not exists idx_projects_lab_id on projects(lab_id);
 create index if not exists idx_file_objects_project on file_objects(lab_id, project_id);
 create index if not exists idx_file_objects_checksum on file_objects(checksum_sha256);
 create index if not exists idx_import_runs_project on import_runs(lab_id, project_id);
-create index if not exists idx_chart_proposal_sets_project on chart_proposal_sets(lab_id, project_id);
 create index if not exists idx_chart_specs_project on chart_specs(lab_id, project_id);
 create index if not exists idx_manuscripts_project on manuscripts(lab_id, project_id);
 create index if not exists idx_audit_events_scope on audit_events(lab_id, project_id, created_at);

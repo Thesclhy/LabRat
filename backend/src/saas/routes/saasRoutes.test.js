@@ -9,8 +9,6 @@ import {
   groupedMasterTableFixture,
 } from "../../import/fixtures/workbookFixtures.js";
 import { createServer } from "../../server.js";
-import { analysisFieldId, resolveAnalysisSelection } from "../analysisSelection.js";
-import { ANALYSIS_PLAN_REVISION_VERSION, pythonSourceHash } from "../analysisSchemas.js";
 import { loadSaasConfig } from "../config.js";
 import { MemorySaasStore } from "../memoryStore.js";
 
@@ -89,6 +87,20 @@ function makeComponentDistributionWorkbookBlob({ headerRowNumber = 1 } = {}) {
     ["Light fraction", 1, 2, 3, 4],
   );
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), "Sheet1");
+  return new Blob([XLSX.write(workbook, { type: "buffer", bookType: "xlsx" })], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+}
+
+function makeOversizedCalculationWorkbookBlob() {
+  const workbook = XLSX.utils.book_new();
+  const rows = Array.from({ length: 107 }, () => Array(83).fill(null));
+  rows[0][0] = "Label";
+  rows[0][1] = "C1";
+  rows[1][0] = "Overall tots";
+  rows[1][1] = 12.5;
+  rows[106][82] = "Used range boundary";
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), "LDPE TEMPLATE");
   return new Blob([XLSX.write(workbook, { type: "buffer", bookType: "xlsx" })], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
@@ -241,111 +253,6 @@ async function publishGroupedSelectivityDataForAnalysis(project, suffix) {
   return published.json();
 }
 
-function seedRouteAnalysisData(project, suffix = "route") {
-  const experimentId = `experiment_analysis_${suffix}`;
-  const snapshotId = `data_snapshot_analysis_${suffix}`;
-  const headId = `head_analysis_${suffix}`;
-  const fieldId = analysisFieldId({
-    fieldKey: "yield",
-    unit: "percent",
-    valueType: "number",
-  });
-  store.experimentIdentities.set(experimentId, {
-    id: experimentId,
-    labId: project.labId,
-    projectId: project.id,
-    canonicalLabel: `Exp ${suffix}`,
-    aliases: [`Exp${suffix}`],
-  });
-  store.dataSnapshots.set(snapshotId, {
-    id: snapshotId,
-    labId: project.labId,
-    projectId: project.id,
-    status: "accepted",
-    contentHash: `sha256_snapshot_${suffix}`,
-    dependencyHash: `sha256_dependency_${suffix}`,
-    experimentRecords: [{
-      experimentId,
-      label: `Exp ${suffix}`,
-      fields: [{
-        fieldKey: "yield",
-        displayName: "Yield",
-        unit: "percent",
-        valueType: "number",
-        role: "outcome",
-        value: 37.5,
-        sourceRefs: [{
-          sourceType: "excel_cell",
-          sourceDocumentId: `source_document_${suffix}`,
-          sheet: "Runs",
-          cell: "B2",
-        }],
-        warnings: [],
-      }],
-      series: [],
-      sourceRefs: [],
-      warnings: [],
-    }],
-  });
-  store.experimentSnapshotHeads.set(headId, {
-    id: headId,
-    labId: project.labId,
-    projectId: project.id,
-    experimentId,
-    dataSnapshotId: snapshotId,
-    recordIndex: 0,
-  });
-  const selectionRequest = {
-    experimentIds: [experimentId],
-    fieldIds: [fieldId],
-    includeSeries: false,
-  };
-  const selection = resolveAnalysisSelection({
-    projectId: project.id,
-    dataSnapshots: [...store.dataSnapshots.values()],
-    experimentIdentities: [...store.experimentIdentities.values()],
-    experimentSnapshotHeads: [...store.experimentSnapshotHeads.values()],
-    selectionRequest,
-  });
-  const source = [
-    "def analyze(tables, labrat):",
-    "    return {'result_table': [], 'traces': [], 'lineage': {}, 'summary': {}}",
-  ].join("\n");
-  const plan = {
-    schemaVersion: ANALYSIS_PLAN_REVISION_VERSION,
-    status: "awaiting_review",
-    requestSummary: "Compare accepted yield values.",
-    selection: {
-      selectionId: selection.selectionId,
-      experimentIds: selection.experimentIds,
-      fieldIds: selection.fieldIds,
-      dependencyHash: selection.dependencyHash,
-      selectionHash: selection.selectionHash,
-    },
-    processingSummary: ["Use each accepted yield value once."],
-    calculationManifest: {
-      inputs: [{ fieldId, fieldKey: "yield", unit: "percent" }],
-      missingValuePolicy: { mode: "exclude_record", requiredFieldIds: [fieldId] },
-      derivedFields: [],
-      invariants: [],
-    },
-    pythonProgram: {
-      runtime: "labrat-python-v1",
-      entrypoint: "analyze",
-      source,
-      sourceHash: pythonSourceHash(source),
-    },
-    expectedOutput: {
-      shape: "experiment_traces",
-      chartType: "bar",
-      xField: "experiment_label",
-      yFields: ["yield"],
-    },
-    warnings: [],
-  };
-  return { plan, selection, selectionRequest };
-}
-
 const testModelProvider = {
   publicConfig() {
     return {
@@ -357,52 +264,65 @@ const testModelProvider = {
   async classifyIntent() {
     return { ok: false };
   },
-  async answerReadOnly() {
-    return { ok: false };
-  },
-  async draftAnalysisPlan(input) {
-    const field = input.fields?.find((candidate) => candidate.valueType === "number")
-      || input.fields?.[0];
-    if (!field) return { ok: false, warning: { code: "analysis_fields_required" } };
-    const source = [
-      "def analyze(tables, labrat):",
-      "    return {'result_table': [], 'traces': [], 'lineage': {}, 'summary': {}}",
-    ].join("\n");
+  async answerReadOnly(input) {
+    const goal = input.project?.profile?.researchGoal || "";
     return {
       ok: true,
-      selectionRequest: {
-        experimentIds: [],
-        fieldIds: [field.fieldId],
-        includeSeries: false,
+      answer: [`Project ${input.project?.name || "Untitled project"}.`, goal].filter(Boolean).join(" "),
+      evidenceIds: [],
+      metadata: {
+        provider: "anthropic",
+        model: "test-analysis-model",
+        usage: { inputTokens: 10, outputTokens: 5 },
       },
-      plan: {
-        requestSummary: "Compare the accepted numeric field across experiments.",
-        processingSummary: ["Use each accepted value once."],
-        calculationManifest: {
-          inputs: [{
-            fieldId: field.fieldId,
-            fieldKey: field.fieldKey,
-            unit: field.unit,
-          }],
-          missingValuePolicy: {
-            mode: "exclude_record",
-            requiredFieldIds: [field.fieldId],
-          },
-          derivedFields: [],
-          invariants: [],
-        },
-        pythonProgram: {
-          runtime: "labrat-python-v1",
-          entrypoint: "analyze",
-          source,
-        },
-        expectedOutput: {
-          shape: "experiment_traces",
+    };
+  },
+  async draftAnalysisPlan(input) {
+    const region = input.confirmedRegions?.[0];
+    if (!region) return { ok: false, warning: { code: "analysis_evidence_required" } };
+    return {
+      ok: true,
+      requestSummary: "Create a chart from the confirmed workbook cells.",
+      sourceSelections: [{
+        regionUnderstandingRevisionId: region.regionUnderstandingRevisionId,
+        sourceDocumentId: region.sourceDocumentId,
+        sheetName: region.sheetName,
+        range: region.range === "A1:CE107" ? "A1:B2" : region.range,
+        label: region.experimentLabel || region.workbookName || "Selected workbook data",
+        purpose: "Use the selected labels and numeric values in the chart",
+      }],
+      reviewPlan: {
+        processingSteps: [
+          "Read labels and numeric values from the selected red range.",
+          "Create one chart curve for the selected table.",
+        ],
+        missingValueHandling: "Skip empty plotted values.",
+        chart: {
+          title: "Confirmed workbook data",
           chartType: "bar",
-          xField: "experiment_label",
-          yFields: [field.fieldKey],
+          xDescription: "Workbook labels",
+          yDescription: "Selected values",
+          seriesDescription: "One curve per selected table",
         },
-        warnings: [],
+        invariants: [],
+      },
+      displayPlan: [
+        "Use the selected red workbook range.",
+        "Plot the first readable labels on X and the corresponding numeric values on Y.",
+      ],
+      warnings: [],
+    };
+  },
+  async draftAnalysisProgram() {
+    return {
+      ok: true,
+      pythonProgram: {
+        runtime: "labrat-python-v2",
+        entrypoint: "analyze",
+        source: [
+          "def analyze(inputs, labrat):",
+          "    return {'plotly': {'data': [], 'layout': {}}, 'exclusions': [], 'checks': []}",
+        ].join("\n"),
       },
     };
   },
@@ -444,14 +364,22 @@ const testAnalysisExecutor = {
     };
   },
   async executeAcceptedRun(runPackage) {
-    const resultTable = runPackage.tables.records.map((record, index) => ({
-      __result_id: `result_row_${index + 1}`,
-      __experiment_id: record.__experiment_id,
-      __snapshot_id: record.__snapshot_id,
-      __record_index: record.__record_index,
-      yield: record.yield,
-    }));
-    const sourceRecordIds = runPackage.tables.records.map((record) => record.__source_record_id);
+    const traces = runPackage.inputs.tables.map((table, index) => {
+      const rows = table.values || [];
+      const displayRows = table.displayValues || [];
+      const numericRowIndex = rows.findIndex((row) => row.some((value) => Number.isFinite(value)));
+      const numericRow = numericRowIndex >= 0 ? rows[numericRowIndex] : [];
+      const labelRow = numericRowIndex > 0 ? displayRows[numericRowIndex - 1] : [];
+      const y = numericRow.flatMap((value) => Number.isFinite(value) ? [value] : []);
+      const x = y.map((_, pointIndex) => String(labelRow[pointIndex] || `Value ${pointIndex + 1}`));
+      return {
+        traceId: `table_${index + 1}`,
+        name: table.source?.workbookName || `Table ${index + 1}`,
+        type: "bar",
+        x,
+        y,
+      };
+    }).filter((trace) => trace.y.length);
     return {
       ok: true,
       adapter: "test_executor",
@@ -460,29 +388,16 @@ const testAnalysisExecutor = {
         exitCode: 0,
       },
       result: {
-        result_table: resultTable,
-        traces: [{
-          traceId: "trace_yield",
-          x: runPackage.tables.records.map((record) => record.__experiment_label),
-          y: runPackage.tables.records.map((record) => record.yield),
-          xUnit: null,
-          yUnit: "percent",
-          sourceRecordIds,
-        }],
-        lineage: {
-          ...Object.fromEntries(resultTable.map((row, index) => [
-            row.__result_id,
-            { sourceRecordIds: [sourceRecordIds[index]] },
-          ])),
-          trace_yield: { sourceRecordIds },
+        plotly: {
+          data: traces,
+          layout: {
+            title: { text: "Confirmed workbook data" },
+            xaxis: { title: { text: "Workbook labels" } },
+            yaxis: { title: { text: "Selected values" } },
+          },
         },
-        summary: {
-          inputRecordCount: runPackage.tables.records.length,
-          outputRecordCount: resultTable.length,
-          excludedRecordCount: 0,
-          excludedRecords: [],
-          missingValuePolicy: runPackage.calculationManifest.missingValuePolicy.mode,
-        },
+        exclusions: [],
+        checks: [],
       },
     };
   },
@@ -615,6 +530,39 @@ test("workbook review region APIs independently revise confirm ignore and delete
   assert.equal(created.region.rangeRef, "A1:D3");
   assert.equal(created.region.reviewStatus, "awaiting_review");
   assert.ok(created.currentRevision.summary.length >= 2 && created.currentRevision.summary.length <= 4);
+
+  const deferredResponse = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/regions`, {
+    method: "POST",
+    body: {
+      sourceDocumentId: sessionBody.sourceDocument.id,
+      sheetName: "Runs",
+      range: "A2:D3",
+      selectionMethod: "drag_select",
+      deferInterpretation: true,
+      idempotencyKey: `create_deferred_region_${Date.now()}`,
+    },
+  });
+  assert.equal(deferredResponse.status, 201);
+  const deferred = await deferredResponse.json();
+  assert.equal(deferred.interpretationDeferred, true);
+  assert.equal(deferred.region.reviewStatus, "interpreting");
+  assert.equal(deferred.currentRevision, null);
+
+  const interpretResponse = await jsonFetch(
+    `/api/workbook-review-sessions/${sessionId}/regions/${deferred.region.id}/interpret`,
+    {
+      method: "POST",
+      body: {
+        expectedRegionVersion: deferred.region.version,
+        semanticType: "experiment_table",
+        idempotencyKey: `interpret_region_${Date.now()}`,
+      },
+    },
+  );
+  assert.equal(interpretResponse.status, 201);
+  const interpreted = await interpretResponse.json();
+  assert.equal(interpreted.region.reviewStatus, "awaiting_review");
+  assert.ok(interpreted.currentRevision.summary.length >= 2);
 
   const revisionResponse = await jsonFetch(
     `/api/workbook-review-sessions/${sessionId}/regions/${created.region.id}/revisions`,
@@ -1377,166 +1325,7 @@ test("source documents expose bounded ranges, cell search, and extract previews"
   assert.equal((await oversized.json()).error.code, "source_range_too_large");
 });
 
-test("source extract proposals preserve original cell refs and create source-backed chart specs", async () => {
-  const project = await createProject("Source Extract Project");
-  await uploadAndCreateImportRun(project.id, makeComponentDistributionWorkbookBlob(), "Calculation_Exp30.xlsx");
-  const documents = await (await jsonFetch(`/api/projects/${project.id}/source-documents`)).json();
-  const sourceDocument = documents.sourceDocuments[0];
-
-  const previewResponse = await jsonFetch(`/api/source-documents/${sourceDocument.id}/extract-preview`, {
-    method: "POST",
-    body: {
-      sheetName: "Sheet1",
-      range: "A1:E3",
-      extractType: "component_distribution",
-      intent: { title: "Exp30 Overall tots", chartTitle: "Exp30 carbon number distribution" },
-    },
-  });
-  assert.equal(previewResponse.status, 200);
-  const previewBody = await previewResponse.json();
-  assert.deepEqual(previewBody.preview.rows.map((row) => row.values.carbon_number), [1, 2, 3, 4]);
-  assert.equal(previewBody.preview.rows[0].sourceRefs.some((ref) => ref.cell === "B2" && ref.fieldId === "percentage"), true);
-
-  const proposalResponse = await jsonFetch(`/api/projects/${project.id}/source-extract-proposals`, {
-    method: "POST",
-    body: {
-      sourceDocumentId: sourceDocument.id,
-      sheetName: "Sheet1",
-      range: "A1:E3",
-      extractType: "component_distribution",
-      purpose: "chart_source",
-      intent: { chartTitle: "Exp30 carbon number distribution" },
-    },
-  });
-  assert.equal(proposalResponse.status, 201);
-  const proposal = (await proposalResponse.json()).sourceExtractProposal;
-  assert.equal(proposal.status, "proposed");
-  assert.equal(proposal.datasetCommitId, undefined);
-  assert.equal(proposal.preview.rows[2].sourceRefs.some((ref) => ref.cell === "D2"), true);
-
-  const prematureChart = await jsonFetch(`/api/source-extract-proposals/${proposal.id}/chart-proposal`, {
-    method: "POST",
-    body: {},
-  });
-  assert.equal(prematureChart.status, 409);
-
-  const accepted = await jsonFetch(`/api/source-extract-proposals/${proposal.id}`, {
-    method: "PATCH",
-    body: { status: "accepted", decisionSummary: { acceptedByUser: true } },
-  });
-  assert.equal(accepted.status, 200);
-
-  const chartProposalResponse = await jsonFetch(`/api/source-extract-proposals/${proposal.id}/chart-proposal`, {
-    method: "POST",
-    body: {},
-  });
-  assert.equal(chartProposalResponse.status, 201);
-  const chartProposalSet = (await chartProposalResponse.json()).chartProposalSet;
-  const chartProposal = chartProposalSet.payload.proposals[0];
-  assert.equal(chartProposal.origin, "source_extract");
-  assert.equal(chartProposal.chartSpecDraft.datasetCommitId, undefined);
-  assert.equal(chartProposal.sourceSnapshot.rows.length, 4);
-
-  const chartSpecResponse = await jsonFetch(`/api/projects/${project.id}/chart-specs/from-proposal`, {
-    method: "POST",
-    body: {
-      chartProposalSetId: chartProposalSet.id,
-      proposalId: chartProposal.proposalId,
-    },
-  });
-  assert.equal(chartSpecResponse.status, 201);
-  const chartSpec = (await chartSpecResponse.json()).chartSpec;
-  assert.equal(chartSpec.datasetCommitId, undefined);
-  assert.equal(chartSpec.spec.origin, "source_extract");
-  assert.equal(chartSpec.spec.sourceSnapshot.rows.length, 4);
-});
-
-test("chart interpret creates source extract proposals for explicit original-index Excel ranges", async () => {
-  const project = await createProject("Evidence Interpret Project");
-  await uploadAndCreateImportRun(
-    project.id,
-    makeCalculationRangeWorkbookBlob({ invalidSheets: ["Notes"], validSheets: ["Carbon Balance"] }),
-    "Calculation_Exp33.xlsx",
-  );
-
-  const response = await jsonFetch(`/api/projects/${project.id}/charts/interpret`, {
-    method: "POST",
-    body: {
-      prompt: "draw carbon balance distribution of experiment 33, bar chart, using c-number distribution data from P31 to BA32 in calculation33",
-      persistAsProposal: true,
-    },
-  });
-  assert.equal(response.status, 200);
-  const body = await response.json();
-  assert.equal(body.chartProposalSet, null);
-  assert.equal(body.chartSpecDraft, null);
-  assert.equal(body.clarification, null);
-  assert.equal(body.evidenceIntent.range, "P31:BA32");
-  assert.equal(body.evidenceResolution.sheetName, "Carbon Balance");
-  assert.equal(body.sourceExtractProposal.preview.rows[0].cells.carbon_number, "Q31");
-  assert.equal(body.sourceExtractProposal.preview.rows[0].cells.percentage, "Q32");
-  assert.equal(JSON.stringify(body).includes("Which C-number distribution fields should be used?"), false);
-});
-
-test("source evidence cross-compare creates series-backed source extract chart specs", async () => {
-  const project = await createProject("Source Evidence Cross Compare Project");
-  for (const fixture of [
-    { exp: 33, values: [5, 12.5, 21, 9.5] },
-    { exp: 34, values: [6, 13, 22, 10] },
-    { exp: 35, values: [7, 14, 23, 11] },
-  ]) {
-    await uploadAndCreateImportRun(
-      project.id,
-      makeCalculationRangeWorkbookBlob({ values: fixture.values }),
-      `Calculation_Exp${fixture.exp}.xlsx`,
-    );
-  }
-
-  const response = await jsonFetch(`/api/projects/${project.id}/charts/interpret`, {
-    method: "POST",
-    body: {
-      prompt: "draw a cross-compare carbon balance distribution chart for experiments 33, 34, and 35 using c-number distribution data from P31 to BA32 in calculation files",
-      persistAsProposal: true,
-    },
-  });
-  assert.equal(response.status, 200);
-  const body = await response.json();
-  assert.equal(body.clarification, null);
-  assert.equal(body.evidenceResolution.mode, "multi_source_series");
-  assert.deepEqual(body.evidenceResolution.series.map((series) => series.experimentAlias), ["Exp33", "Exp34", "Exp35"]);
-  assert.deepEqual(body.sourceExtractProposal.preview.series.map((series) => series.rows[0].values.percentage), [5, 6, 7]);
-
-  const accept = await jsonFetch(`/api/source-extract-proposals/${body.sourceExtractProposal.id}`, {
-    method: "PATCH",
-    body: { status: "accepted", decisionSummary: { acceptedByUser: true } },
-  });
-  assert.equal(accept.status, 200);
-  const chartProposalResponse = await jsonFetch(`/api/source-extract-proposals/${body.sourceExtractProposal.id}/chart-proposal`, {
-    method: "POST",
-    body: {},
-  });
-  assert.equal(chartProposalResponse.status, 201);
-  const chartProposalSet = (await chartProposalResponse.json()).chartProposalSet;
-  const proposal = chartProposalSet.payload.proposals[0];
-  assert.equal(proposal.seriesScope.groupBy, "experiment");
-  assert.equal(proposal.series.length, 3);
-  assert.equal(proposal.sourceSnapshot.series.length, 3);
-
-  const specResponse = await jsonFetch(`/api/projects/${project.id}/chart-specs/from-proposal`, {
-    method: "POST",
-    body: {
-      chartProposalSetId: chartProposalSet.id,
-      proposalId: proposal.proposalId,
-    },
-  });
-  assert.equal(specResponse.status, 201);
-  const spec = (await specResponse.json()).chartSpec.spec;
-  assert.equal(spec.schemaVersion, "labrat.chartSpec.v1.4");
-  assert.equal(spec.seriesScope.seriesKind, "component_distribution");
-  assert.equal(spec.sourceSnapshot.series.length, 3);
-});
-
-test("legacy dataset, mapping, analysis, and dataset-chart routes are retired", async () => {
+test("legacy dataset, source-extract, chart-proposal, and planner routes are retired", async () => {
   const project = await createProject("Snapshot Browser Project");
   for (const request of [
     { path: `/api/projects/${project.id}/dataset-commits`, method: "GET" },
@@ -1544,55 +1333,21 @@ test("legacy dataset, mapping, analysis, and dataset-chart routes are retired", 
     { path: `/api/projects/${project.id}/mapping-sets`, method: "POST", body: {} },
     { path: `/api/projects/${project.id}/analysis-views`, method: "GET" },
     { path: `/api/projects/${project.id}/analysis-views`, method: "POST", body: {} },
+    { path: `/api/projects/${project.id}/charts/interpret`, method: "POST", body: { prompt: "plot gas selectivity" } },
+    { path: `/api/projects/${project.id}/source-extract-proposals`, method: "POST", body: {} },
+    { path: `/api/projects/${project.id}/chart-proposal-sets`, method: "GET" },
+    { path: `/api/projects/${project.id}/chart-specs/from-proposal`, method: "POST", body: {} },
+    { path: `/api/projects/${project.id}/agent/plan`, method: "POST", body: { message: "plot gas selectivity" } },
   ]) {
     const response = await jsonFetch(request.path, { method: request.method, body: request.body });
     assert.equal(response.status, 404, `${request.method} ${request.path}`);
   }
-
-  const interpret = await jsonFetch(`/api/projects/${project.id}/charts/interpret`, {
-    method: "POST",
-    body: { prompt: "plot gas selectivity vs temperature" },
-  });
-  assert.equal(interpret.status, 409);
-  assert.equal((await interpret.json()).error.code, "data_snapshot_chart_not_implemented");
 
   const propose = await jsonFetch(`/api/projects/${project.id}/charts/propose`, {
     method: "POST",
     body: { userGoal: "Find charts" },
   });
   assert.equal(propose.status, 404);
-});
-
-test("agent planner uses one workbook upload action and no legacy upload/supplement actions", async () => {
-  const project = await createProject("Agent Plan Project");
-  const upload = await jsonFetch(`/api/projects/${project.id}/agent/plan`, {
-    method: "POST",
-    body: { message: "upload supplement reaction rate for Exp30" },
-  });
-  assert.equal(upload.status, 200);
-  const uploadBody = await upload.json();
-  assert.equal(uploadBody.actions[0].type, "upload_workbook_for_review");
-  assert.equal(uploadBody.actions[0].requiresFile, true);
-  assert.equal(JSON.stringify(uploadBody).includes("upload_supplement"), false);
-
-  const chart = await jsonFetch(`/api/projects/${project.id}/agent/plan`, {
-    method: "POST",
-    body: { message: "plot gas selectivity vs temperature" },
-  });
-  assert.equal(chart.status, 200);
-  const chartBody = await chart.json();
-  assert.equal(chartBody.intent, "analysis_thread");
-  assert.deepEqual(chartBody.actions, []);
-
-  const compare = await jsonFetch(`/api/projects/${project.id}/agent/plan`, {
-    method: "POST",
-    body: { message: "compare Exp30 and Exp31 in a table" },
-  });
-  assert.equal(compare.status, 200);
-  const compareBody = await compare.json();
-  assert.equal(compareBody.intent, "analysis_thread");
-  assert.deepEqual(compareBody.actions, []);
-  assert.equal(compareBody.contextSummary.currentDatasetCommitId, undefined);
 });
 
 test("project-content AgentRun returns a direct read-only answer without confirmation actions", async () => {
@@ -1603,7 +1358,7 @@ test("project-content AgentRun returns a direct read-only answer without confirm
   });
   assert.equal(run.status, 201);
   const body = await run.json();
-  assert.equal(body.agentRun.mode, "project_summary");
+  assert.equal(body.agentRun.mode, "project_question");
   assert.equal(body.agentRun.status, "completed");
   assert.deepEqual(body.agentRun.actions, []);
   assert.match(body.reply, /Agent Project Summary/);
@@ -1630,1091 +1385,216 @@ test("experiment trend AgentRun enters reviewed analysis instead of opening Brow
   assert.equal(body.currentPlanRevision, null);
 });
 
-test("golden conversational analysis normalizes accepted selectivity and publishes a trace-complete chart", async () => {
-  const project = await createProject("Golden Conversational Analysis");
-  const suffix = `golden_${Date.now()}`;
-  const publication = await publishGroupedSelectivityDataForAnalysis(project, suffix);
-  assert.equal(publication.dataSnapshot.status, "accepted");
-  assert.equal(publication.experimentSnapshotHeads.length, 2);
-
-  const originalDraftAnalysisPlan = testModelProvider.draftAnalysisPlan;
-  const originalExecuteAcceptedRun = testAnalysisExecutor.executeAcceptedRun;
-  const selectedFieldKeys = [
-    "selectivity_solid",
-    "selectivity_liquid",
-    "selectivity_gas",
-  ];
-  const outputFieldKeys = selectedFieldKeys.map((fieldKey) => `${fieldKey}_normalized`);
-  const pythonSource = [
-    "def analyze(tables, labrat):",
-    "    result_table = []",
-    "    for row in tables.get('records', []):",
-    "        total = row.get('selectivity_solid') + row.get('selectivity_liquid') + row.get('selectivity_gas')",
-    "        result_table.append({",
-    "            '__result_id': row.get('__source_record_id'),",
-    "            '__experiment_id': row.get('__experiment_id'),",
-    "            '__snapshot_id': row.get('__snapshot_id'),",
-    "            '__record_index': row.get('__record_index'),",
-    "            'selectivity_solid_normalized': row.get('selectivity_solid') / total * 100,",
-    "            'selectivity_liquid_normalized': row.get('selectivity_liquid') / total * 100,",
-    "            'selectivity_gas_normalized': row.get('selectivity_gas') / total * 100,",
-    "        })",
-    "    return {'result_table': result_table, 'traces': [], 'lineage': {}, 'summary': {}}",
-  ].join("\n");
-
-  testModelProvider.draftAnalysisPlan = async (input) => {
-    const selectedFields = selectedFieldKeys.map((fieldKey) => (
-      input.fields.find((field) => field.fieldKey === fieldKey)
-    ));
-    assert.equal(selectedFields.every(Boolean), true);
-    const fieldIds = selectedFields.map((field) => field.fieldId);
-    return {
-      ok: true,
-      selectionRequest: {
-        experimentIds: [],
-        fieldIds,
-        includeSeries: false,
-      },
-      plan: {
-        requestSummary: "Normalize Solid, Liquid, and Gas selectivity to 100 percent for every accepted experiment.",
-        processingSummary: [
-          "Use the accepted Solid, Liquid, and Gas selectivity cells for every published experiment.",
-          "Divide each component by its row total and multiply by 100.",
-          ...(input.feedback ? [`Apply the review feedback: ${input.feedback}`] : []),
-        ],
-        calculationManifest: {
-          inputs: selectedFields.map((field) => ({
-            fieldId: field.fieldId,
-            fieldKey: field.fieldKey,
-            unit: field.unit,
-          })),
-          missingValuePolicy: {
-            mode: "exclude_record",
-            requiredFieldIds: fieldIds,
-          },
-          derivedFields: outputFieldKeys.map((fieldKey) => ({
-            fieldKey,
-            inputFieldIds: fieldIds,
-            expression: `${fieldKey.replace("_normalized", "")} / row_total * 100`,
-            outputUnit: "percent",
-          })),
-          invariants: [{
-            type: "row_sum",
-            fieldKeys: outputFieldKeys,
-            target: 100,
-            absoluteTolerance: 0.000001,
-          }],
-        },
-        pythonProgram: {
-          runtime: "labrat-python-v1",
-          entrypoint: "analyze",
-          source: pythonSource,
-        },
-        expectedOutput: {
-          shape: "experiment_traces",
-          chartType: "stacked_bar",
-          xField: "experiment_label",
-          yFields: outputFieldKeys,
-        },
-        warnings: [],
-      },
-    };
+async function uploadAndConfirmAnalysisWorkbook(project, blob, filename) {
+  const upload = await uploadProjectFile(project.id, blob, filename);
+  assert.equal(upload.response.status, 201);
+  const sessionResponse = await jsonFetch(`/api/projects/${project.id}/workbook-review-sessions`, {
+    method: "POST",
+    body: { fileObjectId: upload.body.fileObject.id },
+  });
+  assert.equal(sessionResponse.status, 201);
+  const session = await sessionResponse.json();
+  const reviewRegion = session.reviewRegions[0];
+  assert.ok(reviewRegion?.currentRevision?.id);
+  const confirmed = await confirmReviewRegion(session.workbookReviewSession.id, reviewRegion);
+  return {
+    sourceDocument: session.sourceDocument,
+    reviewRegion: confirmed.region,
+    regionRevision: reviewRegion.currentRevision,
   };
+}
 
-  testAnalysisExecutor.executeAcceptedRun = async (runPackage) => {
-    const resultTable = runPackage.tables.records.map((record, index) => {
-      const total = selectedFieldKeys.reduce(
-        (sum, fieldKey) => sum + Number(record[fieldKey]),
-        0,
-      );
-      const solid = Number(record.selectivity_solid) / total * 100;
-      const liquid = Number(record.selectivity_liquid) / total * 100;
-      return {
-        __result_id: `normalized_result_${index + 1}`,
-        __experiment_id: record.__experiment_id,
-        __snapshot_id: record.__snapshot_id,
-        __record_index: record.__record_index,
-        selectivity_solid_normalized: solid,
-        selectivity_liquid_normalized: liquid,
-        selectivity_gas_normalized: 100 - solid - liquid,
-      };
-    });
-    const sourceRecordIds = runPackage.tables.records.map(
-      (record) => record.__source_record_id,
-    );
-    const traces = [
-      ["trace_solid", "Solid", "selectivity_solid_normalized"],
-      ["trace_liquid", "Liquid", "selectivity_liquid_normalized"],
-      ["trace_gas", "Gas", "selectivity_gas_normalized"],
-    ].map(([traceId, name, fieldKey]) => ({
-      traceId,
-      name,
-      yField: fieldKey,
-      x: runPackage.tables.records.map((record) => record.__experiment_label),
-      y: resultTable.map((row) => row[fieldKey]),
-      xUnit: null,
-      yUnit: "percent",
-      sourceRecordIds,
-    }));
-    return {
-      ok: true,
-      adapter: "golden_test_executor",
-      runtime: {
-        version: runPackage.runtimeVersion,
-        exitCode: 0,
-      },
-      result: {
-        result_table: resultTable,
-        traces,
-        lineage: {
-          ...Object.fromEntries(resultTable.map((row, index) => [
-            row.__result_id,
-            { sourceRecordIds: [sourceRecordIds[index]] },
-          ])),
-          ...Object.fromEntries(traces.map((trace) => [
-            trace.traceId,
-            { sourceRecordIds },
-          ])),
-        },
-        summary: {
-          inputRecordCount: runPackage.tables.records.length,
-          outputRecordCount: resultTable.length,
-          excludedRecordCount: 0,
-          excludedRecords: [],
-          missingValuePolicy: runPackage.calculationManifest.missingValuePolicy.mode,
-        },
-      },
-    };
-  };
+test("confirmed workbook chart request completes Source to Plotly to ChartSpec without hashes", async () => {
+  const project = await createProject("Analysis V2 Route Project");
+  await uploadAndConfirmAnalysisWorkbook(
+    project,
+    makeComponentDistributionWorkbookBlob(),
+    "Calculation Exp33.xlsx",
+  );
 
-  try {
-    const requested = await jsonFetch(`/api/projects/${project.id}/agent/runs`, {
-      method: "POST",
-      body: {
-        message: "Normalize Solid, Liquid, and Gas selectivity for every experiment so each row sums to 100%, then create a stacked chart.",
-      },
-    });
-    assert.equal(requested.status, 201);
-    const requestedBody = await requested.json();
-    assert.equal(requestedBody.agentRun.mode, "analysis_planning");
-    assert.deepEqual(requestedBody.agentRun.actions, []);
-    assert.equal(requestedBody.reply.includes("Open Experiment Browser"), false);
-    assert.equal(requestedBody.currentPlanRevision.revision, 1);
-    assert.equal(requestedBody.currentPlanRevision.sourceRectangles.length, 1);
-    assert.equal(requestedBody.currentPlanRevision.sourceRectangles[0].range, "L3:N4");
-
-    const feedback = "Keep all accepted experiments and use concise Solid, Liquid, and Gas trace labels.";
-    const modified = await jsonFetch(
-      `/api/analysis-threads/${requestedBody.analysisThread.id}/plan-revisions`,
-      {
-        method: "POST",
-        body: { feedback },
-      },
-    );
-    assert.equal(modified.status, 201);
-    const modifiedBody = await modified.json();
-    const revision = modifiedBody.analysisPlanRevision;
-    assert.equal(revision.revision, 2);
-    assert.equal(revision.feedback, feedback);
-    assert.equal(revision.status, "awaiting_review");
-
-    const threadAfterRevision = await jsonFetch(
-      `/api/analysis-threads/${requestedBody.analysisThread.id}`,
-    );
-    const threadAfterRevisionBody = await threadAfterRevision.json();
-    assert.equal(threadAfterRevisionBody.planRevisions[0].status, "superseded");
-    assert.equal(threadAfterRevisionBody.planRevisions[1].id, revision.id);
-
-    const accepted = await jsonFetch(
-      `/api/analysis-plan-revisions/${revision.id}/accept`,
-      {
-        method: "POST",
-        headers: { "idempotency-key": `golden_plan_accept_${suffix}` },
-        body: {
-          planHash: revision.planHash,
-          selectionHash: revision.selectionHash,
-          dependencyHash: revision.dependencyHash,
-        },
-      },
-    );
-    assert.equal(accepted.status, 201);
-    const acceptedBody = await accepted.json();
-    assert.equal(acceptedBody.analysisRun.status, "queued");
-
-    const executed = await jsonFetch(
-      `/api/analysis-runs/${acceptedBody.analysisRun.id}/execute`,
-      { method: "POST", body: {} },
-    );
-    assert.equal(executed.status, 201);
-    const executedBody = await executed.json();
-    assert.equal(executedBody.analysisRun.status, "awaiting_result_review");
-    assert.equal(executedBody.analysisRun.execution.adapter, "golden_test_executor");
-    assert.equal(executedBody.analysisResult.status, "awaiting_review");
-    assert.equal(executedBody.analysisResult.validation.ok, true);
-    assert.equal(executedBody.analysisResult.validation.invariants[0].ok, true);
-
-    const preview = await jsonFetch(
-      `/api/analysis-runs/${acceptedBody.analysisRun.id}/result-preview?offset=0&limit=10&traceOffset=0&traceLimit=10`,
-    );
-    assert.equal(preview.status, 200);
-    const previewBody = await preview.json();
-    assert.equal(previewBody.rows.length, 2);
-    assert.equal(previewBody.traces.length, 3);
-    previewBody.rows.forEach((row) => {
-      const normalizedTotal = outputFieldKeys.reduce(
-        (sum, fieldKey) => sum + row[fieldKey],
-        0,
-      );
-      assert.equal(Math.abs(normalizedTotal - 100) < 0.000001, true);
-    });
-
-    const published = await jsonFetch(
-      `/api/analysis-runs/${acceptedBody.analysisRun.id}/accept-and-create-chart`,
-      {
-        method: "POST",
-        headers: { "idempotency-key": `golden_result_accept_${suffix}` },
-        body: {
-          resultHash: executedBody.analysisResult.contentHash,
-          defaultVisibleTraceIds: ["trace_solid", "trace_liquid", "trace_gas"],
-        },
-      },
-    );
-    assert.equal(published.status, 201);
-    const publishedBody = await published.json();
-    assert.equal(publishedBody.analysisThread.status, "completed");
-    assert.equal(publishedBody.analysisRun.status, "completed");
-    assert.equal(publishedBody.analysisResult.status, "accepted");
-
-    const reloadedState = await jsonFetch(`/api/projects/${project.id}/state`);
-    assert.equal(reloadedState.status, 200);
-    const reloadedStateBody = await reloadedState.json();
-    const chartSummary = reloadedStateBody.chartSpecs.find(
-      (chartSpec) => chartSpec.id === publishedBody.chartSpec.id,
-    );
-    assert.equal(chartSummary.spec.origin, "analysis_result");
-    assert.equal(chartSummary.spec.detailRequired, true);
-    assert.equal(Object.hasOwn(chartSummary.spec.traceCatalog[0], "x"), false);
-    assert.equal(reloadedStateBody.analysisThreads[0].status, "completed");
-
-    const reloadedThread = await jsonFetch(
-      `/api/analysis-threads/${requestedBody.analysisThread.id}`,
-    );
-    assert.equal(reloadedThread.status, 200);
-    const reloadedThreadBody = await reloadedThread.json();
-    assert.equal(reloadedThreadBody.analysisRuns[0].status, "completed");
-    assert.deepEqual(
-      reloadedThreadBody.analysisThread.chartSpecIds,
-      [publishedBody.chartSpec.id],
-    );
-    const reloadedRun = await jsonFetch(
-      `/api/analysis-runs/${acceptedBody.analysisRun.id}`,
-    );
-    assert.equal(reloadedRun.status, 200);
-    const reloadedRunBody = await reloadedRun.json();
-    assert.equal(reloadedRunBody.analysisResult.status, "accepted");
-
-    const detail = await jsonFetch(`/api/chart-specs/${publishedBody.chartSpec.id}`);
-    assert.equal(detail.status, 200);
-    const chartSpec = (await detail.json()).chartSpec.spec;
-    assert.equal(chartSpec.traceCatalog.length, 3);
-    assert.equal(chartSpec.inputSnapshotRefs.length, 2);
-    assert.deepEqual(
-      chartSpec.defaultChartView.visibleTraceIds,
-      ["trace_solid", "trace_liquid", "trace_gas"],
-    );
-    chartSpec.inputSnapshotRefs.forEach((ref) => {
-      assert.match(ref.sourceRecordId, new RegExp(`^${ref.snapshotId}:\\d+$`));
-      assert.match(ref.contentHash, /^sha256_/);
-      assert.match(ref.dependencyHash, /^sha256_/);
-      assert.match(ref.headId, /^experiment_snapshot_head_/);
-    });
-    chartSpec.traceCatalog.forEach((trace) => {
-      assert.equal(trace.x.length, 2);
-      assert.equal(trace.y.length, 2);
-      assert.deepEqual(trace.sourceRecordIds, chartSpec.inputSnapshotRefs.map(
-        (ref) => ref.sourceRecordId,
-      ));
-    });
-    assert.equal(Object.hasOwn(reloadedStateBody, "datasetCommits"), false);
-    assert.equal(Object.hasOwn(reloadedStateBody, "mappingSets"), false);
-    assert.equal(Object.hasOwn(reloadedStateBody, "analysisViews"), false);
-  } finally {
-    testModelProvider.draftAnalysisPlan = originalDraftAnalysisPlan;
-    testAnalysisExecutor.executeAcceptedRun = originalExecuteAcceptedRun;
-  }
-});
-
-test("analysis thread routes preserve immutable reviewed plans and queue accepted work idempotently", async () => {
-  const project = await createProject("Analysis Thread Route Project");
-  const ownerCookie = cookie;
-  const { plan, selection, selectionRequest } = seedRouteAnalysisData(project, `route_${Date.now()}`);
-
-  const agentAnalysis = await jsonFetch(`/api/projects/${project.id}/agent/runs`, {
+  const plannedResponse = await jsonFetch(`/api/projects/${project.id}/agent/runs`, {
     method: "POST",
-    body: { message: "Compare yield across all experiments and plot it." },
+    body: { message: "Draw the carbon number distribution for Exp33." },
   });
-  assert.equal(agentAnalysis.status, 201);
-  const agentAnalysisBody = await agentAnalysis.json();
-  assert.match(agentAnalysisBody.analysisThread.id, /^analysis_thread_/);
-  assert.equal(agentAnalysisBody.currentPlanRevision.status, "awaiting_review");
-  assert.equal(agentAnalysisBody.currentPlanRevision.selectionHash, selection.selectionHash);
-  const modifiedAgentPlan = await jsonFetch(
-    `/api/analysis-threads/${agentAnalysisBody.analysisThread.id}/plan-revisions`,
-    {
-      method: "POST",
-      body: { feedback: "Keep the same data but use a bar chart." },
-    },
-  );
-  assert.equal(modifiedAgentPlan.status, 201);
-  const modifiedAgentRevision = (await modifiedAgentPlan.json()).analysisPlanRevision;
-  assert.equal(modifiedAgentRevision.revision, 2);
-  const modifiedAgentDetail = await jsonFetch(
-    `/api/analysis-threads/${agentAnalysisBody.analysisThread.id}`,
-  );
-  const modifiedAgentDetailBody = await modifiedAgentDetail.json();
-  assert.equal(modifiedAgentDetailBody.planRevisions[0].status, "superseded");
-  assert.equal(modifiedAgentDetailBody.planRevisions[1].status, "awaiting_review");
-
-  const configuredDraftAnalysisPlan = testModelProvider.draftAnalysisPlan;
-  testModelProvider.draftAnalysisPlan = async () => ({
-    ok: false,
-    warning: {
-      code: "ai_unavailable",
-      message: "Backend model provider is unavailable.",
-    },
-  });
-  try {
-    const providerFailureProject = await createProject("Analysis Provider Failure");
-    seedRouteAnalysisData(providerFailureProject, `provider_failure_${Date.now()}`);
-    const providerFailure = await jsonFetch(
-      `/api/projects/${providerFailureProject.id}/agent/runs`,
-      {
-        method: "POST",
-        body: { message: "Compare yield across all experiments." },
-      },
-    );
-    assert.equal(providerFailure.status, 201);
-    const providerFailureBody = await providerFailure.json();
-    assert.match(providerFailureBody.analysisThread.id, /^analysis_thread_/);
-    assert.equal(providerFailureBody.currentPlanRevision, null);
-    assert.match(providerFailureBody.reply, /could not draft/i);
-    assert.equal(
-      providerFailureBody.agentRun.warnings.some((warning) => warning.code === "analysis_plan_draft_unavailable"),
-      true,
-    );
-  } finally {
-    testModelProvider.draftAnalysisPlan = configuredDraftAnalysisPlan;
-  }
-
-  const createThread = await jsonFetch(`/api/projects/${project.id}/analysis-threads`, {
-    method: "POST",
-    body: {
-      originalRequest: "Compare accepted yield values.",
-      messages: [{
-        role: "assistant",
-        content: "Client-supplied hidden reasoning must not be persisted.",
-      }],
-    },
-  });
-  assert.equal(createThread.status, 201);
-  const thread = (await createThread.json()).analysisThread;
-  assert.match(thread.id, /^analysis_thread_/);
-  assert.equal(thread.status, "planning");
-  const initialThreadDetail = await jsonFetch(`/api/analysis-threads/${thread.id}`);
-  const initialThreadDetailBody = await initialThreadDetail.json();
-  assert.deepEqual(
-    initialThreadDetailBody.analysisThread.messages.map((message) => message.role),
-    ["user"],
-  );
-  const stateWithAnalysis = await jsonFetch(`/api/projects/${project.id}/state`);
-  const stateWithAnalysisBody = await stateWithAnalysis.json();
-  assert.equal(
-    stateWithAnalysisBody.analysisThreads.some((item) => item.id === thread.id),
-    true,
-  );
-
-  const createRevision = await jsonFetch(`/api/analysis-threads/${thread.id}/plan-revisions`, {
-    method: "POST",
-    body: { plan, selectionRequest },
-  });
-  assert.equal(createRevision.status, 201);
-  const revision = (await createRevision.json()).analysisPlanRevision;
-  assert.equal(revision.revision, 1);
-  assert.equal(revision.status, "awaiting_review");
-  assert.equal(revision.selectionHash, selection.selectionHash);
-
-  const list = await jsonFetch(`/api/projects/${project.id}/analysis-threads?limit=500`);
-  assert.equal(list.status, 200);
-  const listBody = await list.json();
-  assert.equal(listBody.analysisThreads.some((item) => item.id === thread.id), true);
-  assert.equal(listBody.page.limit, 100);
-
-  const detail = await jsonFetch(`/api/analysis-threads/${thread.id}`);
-  assert.equal(detail.status, 200);
-  const detailBody = await detail.json();
-  assert.equal(detailBody.planRevisions[0].id, revision.id);
-  assert.deepEqual(detailBody.analysisRuns, []);
+  assert.equal(plannedResponse.status, 201);
+  const planned = await plannedResponse.json();
+  const revision = planned.currentPlanRevision;
+  assert.equal(revision.schemaVersion, "labrat.analysisPlanRevision.v2");
+  assert.equal(revision.sourceSelections.length, 1);
+  assert.equal(Object.hasOwn(revision, "pythonProgram"), false);
 
   const selectionResponse = await jsonFetch(
-    `/api/analysis-plan-revisions/${revision.id}/selection?offset=0&limit=500`,
+    `/api/analysis-plan-revisions/${revision.id}/selection`,
   );
   assert.equal(selectionResponse.status, 200);
-  const selectionBody = await selectionResponse.json();
-  assert.equal(selectionBody.records[0].fields[0].value, 37.5);
-  assert.deepEqual(selectionBody.sourceRectangles.map((item) => item.range), ["B2"]);
-  assert.equal(selectionBody.page.limit, 200);
+  const selection = await selectionResponse.json();
+  assert.deepEqual(selection.records, []);
+  assert.equal(selection.sourceRectangles.length, 1);
 
-  const otherProject = await createProject("Analysis Cross Project");
-  const other = seedRouteAnalysisData(otherProject, `other_${Date.now()}`);
-  const crossProjectRevision = await jsonFetch(`/api/analysis-threads/${thread.id}/plan-revisions`, {
+  const acceptResponse = await jsonFetch(`/api/analysis-plan-revisions/${revision.id}/accept`, {
     method: "POST",
-    body: {
-      feedback: "Use another project's experiment.",
-      plan: other.plan,
-      selectionRequest: other.selectionRequest,
-    },
+    headers: { "idempotency-key": `accept_analysis_v2_${Date.now()}` },
+    body: {},
   });
-  assert.equal(crossProjectRevision.status, 422);
-  assert.equal((await crossProjectRevision.json()).error.code, "analysis_selection_invalid");
+  assert.equal(acceptResponse.status, 201);
+  const accepted = await acceptResponse.json();
+  assert.equal(accepted.analysisRun.status, "queued");
+  assert.equal(Object.hasOwn(accepted.analysisRun.execution, "pythonProgram"), false);
 
-  const missingIdempotency = await jsonFetch(`/api/analysis-plan-revisions/${revision.id}/accept`, {
-    method: "POST",
-    body: {
-      planHash: revision.planHash,
-      selectionHash: revision.selectionHash,
-      dependencyHash: revision.dependencyHash,
-    },
-  });
-  assert.equal(missingIdempotency.status, 400);
-  assert.equal((await missingIdempotency.json()).error.code, "idempotency_key_required");
-
-  const acceptBody = {
-    planHash: revision.planHash,
-    selectionHash: revision.selectionHash,
-    dependencyHash: revision.dependencyHash,
-  };
-  const accepted = await jsonFetch(`/api/analysis-plan-revisions/${revision.id}/accept`, {
-    method: "POST",
-    headers: { "Idempotency-Key": "analysis_route_accept_1" },
-    body: acceptBody,
-  });
-  assert.equal(accepted.status, 201);
-  const acceptedBody = await accepted.json();
-  assert.equal(acceptedBody.analysisPlanRevision.status, "accepted");
-  assert.equal(acceptedBody.analysisRun.status, "queued");
-
-  const replay = await jsonFetch(`/api/analysis-plan-revisions/${revision.id}/accept`, {
-    method: "POST",
-    headers: { "Idempotency-Key": "analysis_route_accept_1" },
-    body: acceptBody,
-  });
-  assert.equal(replay.status, 200);
-  assert.equal((await replay.json()).analysisRun.id, acceptedBody.analysisRun.id);
-  assert.equal((await store.listAnalysisRuns({ projectId: project.id })).length, 1);
-  assert.equal((await store.listChartSpecs({ projectId: project.id })).length, 0);
-
-  const adminLogin = await jsonFetch("/api/auth/login", {
-    method: "POST",
-    body: { username: "admin", password: "LabRatAdmin123!" },
-  });
-  assert.equal(adminLogin.status, 200);
-  cookie = cookieFrom(adminLogin);
-  const viewerUsername = `analysis_viewer_${Date.now()}`;
-  const viewerPassword = "AnalysisViewer123!";
-  const createViewer = await jsonFetch("/api/admin/users", {
-    method: "POST",
-    body: {
-      username: viewerUsername,
-      displayName: "Analysis Viewer",
-      temporaryPassword: viewerPassword,
-      labId: project.labId,
-      role: "viewer",
-    },
-  });
-  assert.equal(createViewer.status, 201);
-  const viewerLogin = await jsonFetch("/api/auth/login", {
-    method: "POST",
-    body: { username: viewerUsername, password: viewerPassword },
-  });
-  assert.equal(viewerLogin.status, 200);
-  cookie = cookieFrom(viewerLogin);
-  const viewerCreate = await jsonFetch(`/api/projects/${project.id}/analysis-threads`, {
-    method: "POST",
-    body: { originalRequest: "Viewer must not create analysis." },
-  });
-  assert.equal(viewerCreate.status, 403);
-  assert.equal((await viewerCreate.json()).error.code, "forbidden");
-  cookie = ownerCookie;
-});
-
-test("accepted analysis runs execute once, expose a bounded result preview, and revise immutably", async () => {
-  const project = await createProject("Analysis Execution Route Project");
-  seedRouteAnalysisData(project, `execute_${Date.now()}`);
-  const drafted = await jsonFetch(`/api/projects/${project.id}/agent/runs`, {
-    method: "POST",
-    body: { message: "Compare yield across all experiments and plot it." },
-  });
-  assert.equal(drafted.status, 201);
-  const draftedBody = await drafted.json();
-  const revision = draftedBody.currentPlanRevision;
-  const accepted = await jsonFetch(`/api/analysis-plan-revisions/${revision.id}/accept`, {
-    method: "POST",
-    headers: { "idempotency-key": `execute_accept_${Date.now()}` },
-    body: {
-      planHash: revision.planHash,
-      selectionHash: revision.selectionHash,
-      dependencyHash: revision.dependencyHash,
-    },
-  });
-  assert.equal(accepted.status, 201);
-  const queuedRun = (await accepted.json()).analysisRun;
-
-  const executed = await jsonFetch(`/api/analysis-runs/${queuedRun.id}/execute`, {
+  const executeResponse = await jsonFetch(`/api/analysis-runs/${accepted.analysisRun.id}/execute`, {
     method: "POST",
     body: {},
   });
-  assert.equal(executed.status, 201);
-  const executedBody = await executed.json();
-  assert.equal(executedBody.analysisRun.status, "awaiting_result_review");
-  assert.equal(Object.hasOwn(executedBody.analysisRun.execution, "claimToken"), false);
-  assert.equal(executedBody.analysisResult.status, "awaiting_review");
-  assert.match(executedBody.analysisResult.contentHash, /^sha256_/);
+  assert.equal(executeResponse.status, 201);
+  const executed = await executeResponse.json();
+  assert.equal(executed.analysisRun.status, "awaiting_result_review");
+  assert.equal(executed.analysisResult.status, "awaiting_review");
 
-  const replay = await jsonFetch(`/api/analysis-runs/${queuedRun.id}/execute`, {
-    method: "POST",
-    body: {},
-  });
-  assert.equal(replay.status, 200);
-  const replayBody = await replay.json();
-  assert.equal(replayBody.idempotentReplay, true);
-  assert.equal(replayBody.analysisResult.id, executedBody.analysisResult.id);
-
-  const detail = await jsonFetch(`/api/analysis-runs/${queuedRun.id}`);
-  assert.equal(detail.status, 200);
-  const detailBody = await detail.json();
-  assert.equal(detailBody.analysisResult.id, executedBody.analysisResult.id);
-  assert.equal(detailBody.analysisPlanRevision.id, revision.id);
-
-  const preview = await jsonFetch(
-    `/api/analysis-runs/${queuedRun.id}/result-preview?offset=0&limit=1&traceOffset=0&traceLimit=1`,
+  const previewResponse = await jsonFetch(
+    `/api/analysis-runs/${accepted.analysisRun.id}/result-preview`,
   );
-  assert.equal(preview.status, 200);
-  const previewBody = await preview.json();
-  assert.equal(previewBody.rows.length, 1);
-  assert.equal(previewBody.traces.length, 1);
-  assert.equal(previewBody.rowPage.limit, 1);
-  assert.equal(previewBody.resultPreviewHash, executedBody.analysisResult.resultPreviewHash);
+  assert.equal(previewResponse.status, 200);
+  const preview = await previewResponse.json();
+  assert.ok(preview.plotly.data.length >= 1);
+  assert.equal(preview.summary.seriesCount, preview.plotly.data.length);
+  assert.equal(Object.hasOwn(preview, "rows"), false);
+  assert.equal(Object.hasOwn(preview, "lineage"), false);
 
-  const revised = await jsonFetch(`/api/analysis-runs/${queuedRun.id}/revise`, {
-    method: "POST",
-    body: {
-      resultHash: executedBody.analysisResult.contentHash,
-      feedback: "Keep the same accepted data but label the yield trace more clearly.",
-    },
-  });
-  assert.equal(revised.status, 201);
-  const revisedBody = await revised.json();
-  assert.equal(revisedBody.analysisPlanRevision.revision, 2);
-  assert.equal((await store.findAnalysisResultById(executedBody.analysisResult.id)).status, "awaiting_review");
-});
-
-test("accepted analysis results publish one bounded-list ChartSpec atomically", async () => {
-  const project = await createProject("Analysis Publication Route Project");
-  seedRouteAnalysisData(project, `publish_${Date.now()}`);
-  const drafted = await jsonFetch(`/api/projects/${project.id}/agent/runs`, {
-    method: "POST",
-    body: { message: "Compare yield across all experiments and plot it." },
-  });
-  const revision = (await drafted.json()).currentPlanRevision;
-  const accepted = await jsonFetch(`/api/analysis-plan-revisions/${revision.id}/accept`, {
-    method: "POST",
-    headers: { "idempotency-key": `publish_accept_${Date.now()}` },
-    body: {
-      planHash: revision.planHash,
-      selectionHash: revision.selectionHash,
-      dependencyHash: revision.dependencyHash,
-    },
-  });
-  const run = (await accepted.json()).analysisRun;
-  const executed = await jsonFetch(`/api/analysis-runs/${run.id}/execute`, {
-    method: "POST",
-    body: {},
-  });
-  const executedBody = await executed.json();
-  const publicationBody = {
-    resultHash: executedBody.analysisResult.contentHash,
-    defaultVisibleTraceIds: ["trace_yield"],
-  };
-
-  const missingKey = await jsonFetch(
-    `/api/analysis-runs/${run.id}/accept-and-create-chart`,
-    { method: "POST", body: publicationBody },
-  );
-  assert.equal(missingKey.status, 400);
-  assert.equal((await missingKey.json()).error.code, "idempotency_key_required");
-
-  const publicationKey = `publish_result_${Date.now()}`;
-  const published = await jsonFetch(
-    `/api/analysis-runs/${run.id}/accept-and-create-chart`,
+  const publishResponse = await jsonFetch(
+    `/api/analysis-runs/${accepted.analysisRun.id}/accept-and-create-chart`,
     {
       method: "POST",
-      headers: { "idempotency-key": publicationKey },
-      body: publicationBody,
+      headers: { "idempotency-key": `publish_analysis_v2_${Date.now()}` },
+      body: {
+        analysisResultId: executed.analysisResult.id,
+        defaultVisibleTraceIds: preview.plotly.data.map((trace) => trace.traceId),
+      },
     },
   );
-  assert.equal(published.status, 201);
-  const publishedBody = await published.json();
-  assert.equal(publishedBody.analysisResult.status, "accepted");
-  assert.equal(publishedBody.analysisRun.status, "completed");
-  assert.equal(publishedBody.analysisThread.status, "completed");
-  assert.equal(publishedBody.chartSpec.spec.origin, "analysis_result");
+  assert.equal(publishResponse.status, 201);
+  const published = await publishResponse.json();
+  assert.equal(published.chartSpec.spec.schemaVersion, "labrat.chartSpec.v3");
+  assert.deepEqual(published.chartSpec.spec.plotly, preview.plotly);
   assert.deepEqual(
-    publishedBody.chartSpec.spec.defaultChartView.visibleTraceIds,
-    ["trace_yield"],
+    published.chartSpec.spec.defaultChartView.visibleTraceIds,
+    preview.plotly.data.map((trace) => trace.traceId),
+  );
+});
+
+test("two confirmed workbook selections materialize as two Python input tables and curves", async () => {
+  const project = await createProject("Analysis V2 Multi Table Project");
+  const first = await uploadAndConfirmAnalysisWorkbook(
+    project,
+    makeComponentDistributionWorkbookBlob(),
+    "Calculation Exp32.xlsx",
+  );
+  const second = await uploadAndConfirmAnalysisWorkbook(
+    project,
+    makeComponentDistributionWorkbookBlob(),
+    "Calculation Exp33.xlsx",
+  );
+  const threadResponse = await jsonFetch(`/api/projects/${project.id}/analysis-threads`, {
+    method: "POST",
+    body: { originalRequest: "Compare Exp32 and Exp33 carbon distributions." },
+  });
+  assert.equal(threadResponse.status, 201);
+  const thread = (await threadResponse.json()).analysisThread;
+  const sourceSelections = [first, second].map((item, index) => ({
+    sourceSelectionId: `requested_${index + 1}`,
+    regionUnderstandingRevisionId: item.regionRevision.id,
+    sourceDocumentId: item.sourceDocument.id,
+    sheetName: item.reviewRegion.sheetName,
+    range: item.reviewRegion.rangeRef,
+    label: `Exp${index + 32}`,
+    purpose: "Compare carbon distribution",
+  }));
+  const revisionResponse = await jsonFetch(`/api/analysis-threads/${thread.id}/plan-revisions`, {
+    method: "POST",
+    body: {
+      plan: {
+        schemaVersion: "labrat.analysisPlanRevision.v2",
+        status: "awaiting_review",
+        requestSummary: "Compare two carbon distributions.",
+        sourceSelections,
+        reviewPlan: {
+          processingSteps: ["Read both selected workbook tables.", "Create one curve per table."],
+          missingValueHandling: "Skip empty plotted values.",
+          chart: {
+            title: "Exp32 and Exp33 carbon distributions",
+            chartType: "bar",
+            xDescription: "Carbon number",
+            yDescription: "Distribution",
+            seriesDescription: "One curve per experiment",
+          },
+          invariants: [],
+        },
+        displayPlan: [
+          "Use the two red workbook ranges.",
+          "Plot one curve for each experiment.",
+        ],
+        warnings: [],
+      },
+    },
+  });
+  assert.equal(revisionResponse.status, 201);
+  const revision = (await revisionResponse.json()).analysisPlanRevision;
+  assert.equal(revision.sourceSelections.length, 2);
+
+  const acceptResponse = await jsonFetch(`/api/analysis-plan-revisions/${revision.id}/accept`, {
+    method: "POST",
+    headers: { "idempotency-key": `accept_multi_table_${Date.now()}` },
+    body: {},
+  });
+  const accepted = await acceptResponse.json();
+  const executeResponse = await jsonFetch(`/api/analysis-runs/${accepted.analysisRun.id}/execute`, {
+    method: "POST",
+    body: {},
+  });
+  assert.equal(executeResponse.status, 201);
+  const executed = await executeResponse.json();
+  assert.equal(executed.analysisRun.status, "awaiting_result_review");
+  const preview = await (
+    await jsonFetch(`/api/analysis-runs/${accepted.analysisRun.id}/result-preview`)
+  ).json();
+  assert.equal(preview.plotly.data.length, 2);
+  assert.deepEqual(
+    preview.plotly.data.map((trace) => trace.name),
+    ["Calculation Exp32.xlsx", "Calculation Exp33.xlsx"],
+  );
+});
+
+test("an 8,881-cell confirmed region is planned through an exact subrange without a 500-cell error", async () => {
+  const project = await createProject("Analysis V2 Oversized Region Project");
+  await uploadAndConfirmAnalysisWorkbook(
+    project,
+    makeOversizedCalculationWorkbookBlob(),
+    "Calculation Exp33.xlsx",
   );
 
-  const replay = await jsonFetch(
-    `/api/analysis-runs/${run.id}/accept-and-create-chart`,
+  const plannedResponse = await jsonFetch(`/api/projects/${project.id}/agent/runs`, {
+    method: "POST",
+    body: { message: "Draw the carbon number distribution in Exp33." },
+  });
+  assert.equal(plannedResponse.status, 201);
+  const planned = await plannedResponse.json();
+  assert.equal(planned.currentPlanRevision.sourceSelections[0].range, "A1:B2");
+
+  const acceptResponse = await jsonFetch(
+    `/api/analysis-plan-revisions/${planned.currentPlanRevision.id}/accept`,
     {
       method: "POST",
-      headers: { "idempotency-key": publicationKey },
-      body: publicationBody,
-    },
-  );
-  assert.equal(replay.status, 200);
-  const replayBody = await replay.json();
-  assert.equal(replayBody.idempotentReplay, true);
-  assert.equal(replayBody.chartSpec.id, publishedBody.chartSpec.id);
-
-  const list = await jsonFetch(`/api/projects/${project.id}/chart-specs`);
-  const listedChart = (await list.json()).chartSpecs.find(
-    (chartSpec) => chartSpec.id === publishedBody.chartSpec.id,
-  );
-  assert.equal(listedChart.spec.detailRequired, true);
-  assert.equal(listedChart.spec.traceCatalog[0].pointCount, 1);
-  assert.equal(Object.hasOwn(listedChart.spec.traceCatalog[0], "x"), false);
-  assert.equal(Object.hasOwn(listedChart.spec.traceCatalog[0], "y"), false);
-  assert.equal(Object.hasOwn(listedChart.spec.traceCatalog[0], "sourceRecordIds"), false);
-  assert.equal(Object.hasOwn(listedChart.spec, "inputSnapshotRefs"), false);
-  assert.equal(Object.hasOwn(listedChart.spec, "sourceRefs"), false);
-  assert.equal(listedChart.spec.inputSnapshotRefCount, 1);
-
-  const detail = await jsonFetch(`/api/chart-specs/${publishedBody.chartSpec.id}`);
-  assert.equal(detail.status, 200);
-  const detailedChart = (await detail.json()).chartSpec;
-  assert.equal(detailedChart.spec.traceCatalog[0].x.length, 1);
-  assert.equal(typeof detailedChart.spec.traceCatalog[0].x[0], "string");
-  assert.equal(detailedChart.spec.traceCatalog[0].y[0], 37.5);
-
-  const conflict = await jsonFetch(
-    `/api/analysis-runs/${run.id}/accept-and-create-chart`,
-    {
-      method: "POST",
-      headers: { "idempotency-key": publicationKey },
-      body: { ...publicationBody, defaultVisibleTraceIds: [] },
-    },
-  );
-  assert.equal(conflict.status, 409);
-  assert.equal((await conflict.json()).error.code, "idempotency_key_conflict");
-  assert.equal((await store.listChartSpecs({ projectId: project.id })).length, 1);
-});
-
-test("analysis execution terminally rejects stale active heads and remains revisable", async () => {
-  const project = await createProject("Stale Analysis Execution Project");
-  const seeded = seedRouteAnalysisData(project, `stale_execute_${Date.now()}`);
-  const drafted = await jsonFetch(`/api/projects/${project.id}/agent/runs`, {
-    method: "POST",
-    body: { message: "Compare yield across all experiments and plot it." },
-  });
-  assert.equal(drafted.status, 201);
-  const revision = (await drafted.json()).currentPlanRevision;
-  const accepted = await jsonFetch(`/api/analysis-plan-revisions/${revision.id}/accept`, {
-    method: "POST",
-    headers: { "idempotency-key": `stale_execute_accept_${Date.now()}` },
-    body: {
-      planHash: revision.planHash,
-      selectionHash: revision.selectionHash,
-      dependencyHash: revision.dependencyHash,
-    },
-  });
-  assert.equal(accepted.status, 201);
-  const queuedRun = (await accepted.json()).analysisRun;
-  const headId = seeded.selection.records[0].headId;
-  const priorHead = store.experimentSnapshotHeads.get(headId);
-  const priorSnapshot = store.dataSnapshots.get(priorHead.dataSnapshotId);
-  const replacementSnapshotId = `${priorSnapshot.id}_replacement`;
-  store.dataSnapshots.set(replacementSnapshotId, {
-    ...priorSnapshot,
-    id: replacementSnapshotId,
-    contentHash: `${priorSnapshot.contentHash}_replacement`,
-  });
-  store.experimentSnapshotHeads.set(headId, {
-    ...priorHead,
-    dataSnapshotId: replacementSnapshotId,
-  });
-
-  const executed = await jsonFetch(`/api/analysis-runs/${queuedRun.id}/execute`, {
-    method: "POST",
-    body: {},
-  });
-  assert.equal(executed.status, 201);
-  const executedBody = await executed.json();
-  assert.equal(executedBody.analysisRun.status, "validation_failed");
-  assert.equal(executedBody.analysisResult, null);
-
-  const revised = await jsonFetch(`/api/analysis-runs/${queuedRun.id}/revise`, {
-    method: "POST",
-    body: { feedback: "Use the newly accepted experiment snapshot instead." },
-  });
-  assert.equal(revised.status, 201);
-  assert.equal((await revised.json()).analysisPlanRevision.revision, 2);
-});
-
-test("analysis run reads allow viewers while execution and revision require editors", async () => {
-  const ownerCookie = cookie;
-  const project = await createProject("Analysis Run Authorization Project");
-  seedRouteAnalysisData(project, `execute_auth_${Date.now()}`);
-  const drafted = await jsonFetch(`/api/projects/${project.id}/agent/runs`, {
-    method: "POST",
-    body: { message: "Compare yield across experiments." },
-  });
-  const revision = (await drafted.json()).currentPlanRevision;
-  const accepted = await jsonFetch(`/api/analysis-plan-revisions/${revision.id}/accept`, {
-    method: "POST",
-    headers: { "idempotency-key": `execute_auth_accept_${Date.now()}` },
-    body: {
-      planHash: revision.planHash,
-      selectionHash: revision.selectionHash,
-      dependencyHash: revision.dependencyHash,
-    },
-  });
-  const queuedRun = (await accepted.json()).analysisRun;
-  const viewerUsername = `analysis_run_viewer_${Date.now()}`;
-  const viewerPassword = "AnalysisRunViewer123!";
-  const createViewer = await jsonFetch("/api/admin/users", {
-    method: "POST",
-    body: {
-      username: viewerUsername,
-      displayName: "Analysis Run Viewer",
-      temporaryPassword: viewerPassword,
-      labId: project.labId,
-      role: "viewer",
-    },
-  });
-  assert.equal(createViewer.status, 201);
-  const viewerLogin = await jsonFetch("/api/auth/login", {
-    method: "POST",
-    body: { username: viewerUsername, password: viewerPassword },
-  });
-  cookie = cookieFrom(viewerLogin);
-
-  assert.equal((await jsonFetch(`/api/analysis-runs/${queuedRun.id}`)).status, 200);
-  assert.equal((await jsonFetch(`/api/analysis-runs/${queuedRun.id}/execute`, {
-    method: "POST",
-    body: {},
-  })).status, 403);
-  assert.equal((await jsonFetch(`/api/analysis-runs/${queuedRun.id}/revise`, {
-    method: "POST",
-    body: { feedback: "Change it." },
-  })).status, 403);
-  assert.equal((await jsonFetch(
-    `/api/analysis-runs/${queuedRun.id}/accept-and-create-chart`,
-    {
-      method: "POST",
-      headers: { "idempotency-key": "viewer_cannot_publish_analysis" },
-      body: { resultHash: "sha256_not_visible", defaultVisibleTraceIds: [] },
-    },
-  )).status, 403);
-
-  cookie = ownerCookie;
-});
-
-test("analysis capabilities and missing-evidence retry stay bounded, authorized, and replay-safe", async () => {
-  const project = await createProject("Analysis Retry Route Project");
-  const ownerCookie = cookie;
-
-  const initialCapabilities = await jsonFetch(`/api/projects/${project.id}/analysis-capabilities`);
-  assert.equal(initialCapabilities.status, 200);
-  assert.deepEqual(await initialCapabilities.json(), {
-    schemaVersion: "labrat.analysisCapabilities.v1",
-    projectId: project.id,
-    model: {
-      provider: "anthropic",
-      model: "test-analysis-model",
-      configured: true,
-    },
-    executor: {
-      mode: "test",
-      adapter: "test_executor",
-      configured: true,
-      productionSafe: false,
-    },
-    acceptedData: {
-      acceptedSnapshotCount: 0,
-      activeExperimentHeadCount: 0,
-    },
-  });
-
-  const blocked = await jsonFetch(`/api/projects/${project.id}/agent/runs`, {
-    method: "POST",
-    body: { message: "Compare accepted yield across the experiments." },
-  });
-  assert.equal(blocked.status, 201);
-  const blockedBody = await blocked.json();
-  assert.equal(blockedBody.currentPlanRevision, null);
-  assert.equal(
-    blockedBody.agentRun.warnings.some((warning) => warning.code === "analysis_evidence_required"),
-    true,
-  );
-
-  const unavailable = await jsonFetch(`/api/analysis-threads/${blockedBody.analysisThread.id}/retry`, {
-    method: "POST",
-    headers: { "idempotency-key": "analysis_retry_no_evidence_1" },
-    body: {},
-  });
-  assert.equal(unavailable.status, 409);
-  assert.equal((await unavailable.json()).error.code, "analysis_evidence_required");
-
-  seedRouteAnalysisData(project, `retry_${Date.now()}`);
-  const adminLogin = await jsonFetch("/api/auth/login", {
-    method: "POST",
-    body: { username: "admin", password: "LabRatAdmin123!" },
-  });
-  assert.equal(adminLogin.status, 200);
-  cookie = cookieFrom(adminLogin);
-  const viewerUsername = `analysis_retry_viewer_${Date.now()}`;
-  const viewerPassword = "AnalysisRetryViewer123!";
-  const createViewer = await jsonFetch("/api/admin/users", {
-    method: "POST",
-    body: {
-      username: viewerUsername,
-      displayName: "Analysis Retry Viewer",
-      temporaryPassword: viewerPassword,
-      labId: project.labId,
-      role: "viewer",
-    },
-  });
-  assert.equal(createViewer.status, 201);
-  const viewerLogin = await jsonFetch("/api/auth/login", {
-    method: "POST",
-    body: { username: viewerUsername, password: viewerPassword },
-  });
-  assert.equal(viewerLogin.status, 200);
-  cookie = cookieFrom(viewerLogin);
-  const viewerRetry = await jsonFetch(`/api/analysis-threads/${blockedBody.analysisThread.id}/retry`, {
-    method: "POST",
-    headers: { "idempotency-key": "analysis_retry_viewer_forbidden_1" },
-    body: {},
-  });
-  assert.equal(viewerRetry.status, 403);
-  assert.equal((await viewerRetry.json()).error.code, "forbidden");
-
-  cookie = ownerCookie;
-  const retryKey = `analysis_retry_success_${Date.now()}`;
-  const retries = await Promise.all([
-    jsonFetch(`/api/analysis-threads/${blockedBody.analysisThread.id}/retry`, {
-      method: "POST",
-      headers: { "idempotency-key": retryKey },
+      headers: { "idempotency-key": `accept_oversized_region_${Date.now()}` },
       body: {},
-    }),
-    jsonFetch(`/api/analysis-threads/${blockedBody.analysisThread.id}/retry`, {
-      method: "POST",
-      headers: { "idempotency-key": retryKey },
-      body: {},
-    }),
-  ]);
-  const retryBodies = await Promise.all(retries.map((response) => response.json()));
-  assert.deepEqual(retries.map((response) => response.status).sort(), [200, 201]);
-  assert.equal(retryBodies[0].analysisPlanRevision.id, retryBodies[1].analysisPlanRevision.id);
-  assert.equal(retryBodies.some((body) => body.idempotentReplay), true);
-  assert.equal(
-    (await store.listAnalysisPlanRevisions({ analysisThreadId: blockedBody.analysisThread.id })).length,
-    1,
+    },
   );
-  assert.equal((await store.listAnalysisRuns({ projectId: project.id })).length, 0);
-  assert.equal((await store.listChartSpecs({ projectId: project.id })).length, 0);
-
-  const refreshedCapabilities = await jsonFetch(`/api/projects/${project.id}/analysis-capabilities`);
-  assert.equal(refreshedCapabilities.status, 200);
-  assert.deepEqual((await refreshedCapabilities.json()).acceptedData, {
-    acceptedSnapshotCount: 1,
-    activeExperimentHeadCount: 1,
-  });
-});
-
-test("analysis retry requires durable missing-evidence proof and releases a failed claim", async () => {
-  const originalDraftAnalysisPlan = testModelProvider.draftAnalysisPlan;
-  try {
-    const providerFailureProject = await createProject("Retry Provider Failure Project");
-    seedRouteAnalysisData(providerFailureProject, `retry_provider_failure_${Date.now()}`);
-    let providerCalls = 0;
-    testModelProvider.draftAnalysisPlan = async () => {
-      providerCalls += 1;
-      return { ok: false, warning: { code: "provider_unavailable" } };
-    };
-    const providerFailure = await jsonFetch(`/api/projects/${providerFailureProject.id}/agent/runs`, {
-      method: "POST",
-      body: { message: "Compare accepted yield across experiments." },
-    });
-    assert.equal(providerFailure.status, 201);
-    const providerFailureBody = await providerFailure.json();
-    assert.equal(providerCalls, 1);
-
-    testModelProvider.draftAnalysisPlan = async () => {
-      providerCalls += 1;
-      return originalDraftAnalysisPlan({
-        fields: [{ fieldId: "unused" }],
-      });
-    };
-    const rejected = await jsonFetch(
-      `/api/analysis-threads/${providerFailureBody.analysisThread.id}/retry`,
-      {
-        method: "POST",
-        headers: { "idempotency-key": "analysis_retry_without_evidence_proof_1" },
-        body: {},
-      },
-    );
-    assert.equal(rejected.status, 409);
-    assert.equal((await rejected.json()).error.code, "analysis_retry_not_available");
-    assert.equal(providerCalls, 1);
-
-    const retryProject = await createProject("Retry Claim Release Project");
-    const blocked = await jsonFetch(`/api/projects/${retryProject.id}/agent/runs`, {
-      method: "POST",
-      body: { message: "Compare accepted yield across experiments." },
-    });
-    assert.equal(blocked.status, 201);
-    const blockedBody = await blocked.json();
-    seedRouteAnalysisData(retryProject, `retry_claim_${Date.now()}`);
-
-    let retryCalls = 0;
-    testModelProvider.draftAnalysisPlan = async () => {
-      retryCalls += 1;
-      return { ok: false, warning: { code: "provider_unavailable" } };
-    };
-    const failedRetry = await jsonFetch(
-      `/api/analysis-threads/${blockedBody.analysisThread.id}/retry`,
-      {
-        method: "POST",
-        headers: { "idempotency-key": "analysis_retry_provider_failure_1" },
-        body: {},
-      },
-    );
-    assert.equal(failedRetry.status, 503);
-    assert.equal(retryCalls, 1);
-    assert.equal(
-      (await store.findAnalysisThreadById(blockedBody.analysisThread.id)).status,
-      "planning",
-    );
-
-    let releaseFirstDraft;
-    const firstDraftStarted = new Promise((resolve) => { releaseFirstDraft = resolve; });
-    let enteredFirstDraft;
-    const entered = new Promise((resolve) => { enteredFirstDraft = resolve; });
-    testModelProvider.draftAnalysisPlan = async (input) => {
-      retryCalls += 1;
-      if (retryCalls === 2) {
-        enteredFirstDraft();
-        await firstDraftStarted;
-      }
-      return originalDraftAnalysisPlan(input);
-    };
-    const firstRetry = jsonFetch(`/api/analysis-threads/${blockedBody.analysisThread.id}/retry`, {
-      method: "POST",
-      headers: { "idempotency-key": "analysis_retry_provider_failure_1" },
-      body: {},
-    });
-    await entered;
-    const concurrentRetry = await jsonFetch(
-      `/api/analysis-threads/${blockedBody.analysisThread.id}/retry`,
-      {
-        method: "POST",
-        headers: { "idempotency-key": "analysis_retry_provider_failure_1" },
-        body: {},
-      },
-    );
-    assert.equal(concurrentRetry.status, 409);
-    assert.equal((await concurrentRetry.json()).error.code, "analysis_retry_in_progress");
-    assert.equal(retryCalls, 2);
-
-    releaseFirstDraft();
-    const firstRetryResponse = await firstRetry;
-    assert.equal(firstRetryResponse.status, 201);
-    assert.equal(retryCalls, 2);
-    const replay = await jsonFetch(`/api/analysis-threads/${blockedBody.analysisThread.id}/retry`, {
-      method: "POST",
-      headers: { "idempotency-key": "analysis_retry_provider_failure_1" },
-      body: {},
-    });
-    assert.equal(replay.status, 200);
-    assert.equal((await replay.json()).idempotentReplay, true);
-    assert.equal(retryCalls, 2);
-    assert.equal(
-      (await store.listAnalysisPlanRevisions({ analysisThreadId: blockedBody.analysisThread.id })).length,
-      1,
-    );
-  } finally {
-    testModelProvider.draftAnalysisPlan = originalDraftAnalysisPlan;
-  }
-});
-
-test("analysis retry validates idempotency keys and rejects conflicting reuse", async () => {
-  const firstProject = await createProject("Retry Idempotency First Project");
-  const firstBlocked = await jsonFetch(`/api/projects/${firstProject.id}/agent/runs`, {
-    method: "POST",
-    body: { message: "Compare accepted yield across experiments." },
-  });
-  assert.equal(firstBlocked.status, 201);
-  const firstBlockedBody = await firstBlocked.json();
-  const secondBlocked = await jsonFetch(`/api/projects/${firstProject.id}/agent/runs`, {
-    method: "POST",
-    body: { message: "Compare accepted yield across experiments." },
-  });
-  assert.equal(secondBlocked.status, 201);
-  const secondBlockedBody = await secondBlocked.json();
-  seedRouteAnalysisData(firstProject, `retry_idempotency_first_${Date.now()}`);
-
-  const missing = await jsonFetch(`/api/analysis-threads/${firstBlockedBody.analysisThread.id}/retry`, {
+  assert.equal(acceptResponse.status, 201);
+  const accepted = await acceptResponse.json();
+  const executeResponse = await jsonFetch(`/api/analysis-runs/${accepted.analysisRun.id}/execute`, {
     method: "POST",
     body: {},
   });
-  assert.equal(missing.status, 400);
-  assert.equal((await missing.json()).error.code, "idempotency_key_required");
-
-  const invalid = await jsonFetch(`/api/analysis-threads/${firstBlockedBody.analysisThread.id}/retry`, {
-    method: "POST",
-    headers: { "idempotency-key": "bad key" },
-    body: {},
-  });
-  assert.equal(invalid.status, 400);
-  assert.equal((await invalid.json()).error.code, "invalid_idempotency_key");
-
-  const key = `analysis_retry_conflict_${Date.now()}`;
-  const firstRetry = await jsonFetch(`/api/analysis-threads/${firstBlockedBody.analysisThread.id}/retry`, {
-    method: "POST",
-    headers: { "idempotency-key": key },
-    body: {},
-  });
-  assert.equal(firstRetry.status, 201);
-  const firstRevision = (await firstRetry.json()).analysisPlanRevision;
-
-  const replay = await jsonFetch(`/api/analysis-threads/${firstBlockedBody.analysisThread.id}/retry`, {
-    method: "POST",
-    headers: { "idempotency-key": key },
-    body: {},
-  });
-  assert.equal(replay.status, 200);
-  const replayBody = await replay.json();
-  assert.equal(replayBody.idempotentReplay, true);
-  assert.equal(replayBody.analysisPlanRevision.id, firstRevision.id);
-
-  const conflict = await jsonFetch(`/api/analysis-threads/${secondBlockedBody.analysisThread.id}/retry`, {
-    method: "POST",
-    headers: { "idempotency-key": key },
-    body: {},
-  });
-  assert.equal(conflict.status, 409);
-  assert.equal((await conflict.json()).error.code, "idempotency_key_conflict");
+  assert.equal(executeResponse.status, 201);
+  assert.equal((await executeResponse.json()).analysisRun.status, "awaiting_result_review");
 });
 
 test("experiment-purpose AgentRun answers directly without a confirmation card", async () => {
@@ -2735,13 +1615,13 @@ test("experiment-purpose AgentRun answers directly without a confirmation card",
   });
   assert.equal(response.status, 201);
   const body = await response.json();
-  assert.equal(body.agentRun.mode, "project_summary");
+  assert.equal(body.agentRun.mode, "project_question");
   assert.equal(body.agentRun.status, "completed");
   assert.deepEqual(body.agentRun.actions, []);
   assert.match(body.reply, /Determine how reaction conditions affect selectivity/);
 });
 
-test("source extract AgentRun remains review-gated and confirmable", async () => {
+test("explicit source wording uses the unified analysis flow and requires confirmed evidence", async () => {
   const project = await createProject("AgentRun Source Project");
   await uploadAndCreateImportRun(
     project.id,
@@ -2755,26 +1635,15 @@ test("source extract AgentRun remains review-gated and confirmable", async () =>
   });
   assert.equal(runResponse.status, 201);
   const runBody = await runResponse.json();
-  assert.equal(runBody.agentRun.mode, "source_extract");
+  assert.equal(runBody.agentRun.mode, "analysis_planning");
   assert.equal(runBody.agentRun.status, "waiting_for_user");
-  const action = runBody.agentRun.actions[0];
-  assert.equal(action.type, "create_source_extract_proposal");
-
-  const confirm = await jsonFetch(`/api/agent-runs/${runBody.agentRun.id}/confirm`, {
-    method: "POST",
-    body: { actionId: action.actionId },
-  });
-  assert.equal(confirm.status, 200);
-  const confirmBody = await confirm.json();
-  assert.equal(confirmBody.agentRun.status, "completed");
-  assert.equal(confirmBody.sourceExtractProposal.status, "proposed");
-  assert.equal(confirmBody.chartProposalSet, null);
-
-  const secondConfirm = await jsonFetch(`/api/agent-runs/${runBody.agentRun.id}/confirm`, {
-    method: "POST",
-    body: { actionId: action.actionId },
-  });
-  assert.equal(secondConfirm.status, 409);
+  assert.deepEqual(runBody.agentRun.actions, []);
+  assert.match(runBody.analysisThread.id, /^analysis_thread_/);
+  assert.equal(runBody.currentPlanRevision, null);
+  assert.equal(
+    runBody.agentRun.warnings.some((warning) => warning.code === "analysis_evidence_required"),
+    true,
+  );
 });
 
 test("manuscripts round trip blocks and pages", async () => {

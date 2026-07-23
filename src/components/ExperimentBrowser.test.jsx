@@ -106,6 +106,67 @@ describe("ExperimentBrowser", () => {
     expect(await screen.findByRole("complementary", { name: "Experiment detail" })).toBeTruthy();
   });
 
+  it("uses main-style direct column controls and opens detail from the full row", async () => {
+    const loadDetail = vi.fn(async () => ({
+      experiment: { id: "exp_1", canonicalLabel: "Exp 1", aliases: [] },
+      dataSnapshot: { id: "snapshot_1" },
+      record: { fields: [], series: [], warnings: [], sourceRefs: [] },
+    }));
+    render(
+      <ExperimentBrowser
+        projectId="project_1"
+        loadProjection={vi.fn(async () => projection())}
+        loadDetail={loadDetail}
+        {...viewApi()}
+      />,
+    );
+
+    const temperatureHeader = await screen.findByRole("columnheader", { name: /Temperature/ });
+    expect(document.querySelector(".experiment-grid-viewport")?.style.width).toBe("412px");
+    fireEvent.contextMenu(temperatureHeader, { clientX: 180, clientY: 90 });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Hide column" }));
+    expect(screen.queryByRole("columnheader", { name: /Temperature/ })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Temperature (degC)" }));
+    const restoredHeader = screen.getByRole("columnheader", { name: /Temperature/ });
+    const resizeHandle = within(restoredHeader).getByRole("separator", { name: "Resize Temperature (degC)" });
+    fireEvent.mouseDown(resizeHandle, { clientX: 160 });
+    fireEvent.mouseMove(window, { clientX: 220 });
+    fireEvent.mouseUp(window);
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose columns" }));
+    expect(screen.getByRole("spinbutton", { name: "Width for Temperature (degC)" }).value).toBe("220");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Show Yield (percent)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+
+    const yieldHeader = screen.getByRole("columnheader", { name: /Yield/ });
+    fireEvent.contextMenu(yieldHeader, { clientX: 320, clientY: 90 });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Move left" }));
+    expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
+      "",
+      expect.stringContaining("Experiment"),
+      expect.stringContaining("Yield"),
+      expect.stringContaining("Temperature"),
+    ]);
+
+    const dataTransfer = { effectAllowed: "", setData: vi.fn() };
+    fireEvent.dragStart(within(yieldHeader).getByText("Yield (percent)"), { dataTransfer });
+    await waitFor(() => expect(yieldHeader.className).toContain("is-dragging"));
+    fireEvent.dragOver(restoredHeader, { clientX: 1, dataTransfer });
+    await waitFor(() => expect(restoredHeader.className).toContain("drop-after"));
+    fireEvent.drop(restoredHeader, { dataTransfer });
+    fireEvent.dragEnd(within(yieldHeader).getByText("Yield (percent)"), { dataTransfer });
+    expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
+      "",
+      expect.stringContaining("Experiment"),
+      expect.stringContaining("Temperature"),
+      expect.stringContaining("Yield"),
+    ]);
+
+    fireEvent.click(screen.getByRole("row", { name: /Exp 1/ }));
+    await waitFor(() => expect(loadDetail).toHaveBeenCalledWith("project_1", "exp_1", expect.anything()));
+  });
+
   it("shows an actionable empty state and loads additional cursor pages", async () => {
     const onOpenImportReview = vi.fn();
     const loadProjection = vi.fn()

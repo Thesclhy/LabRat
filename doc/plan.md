@@ -2,7 +2,7 @@
 
 Status: active
 Read when: deciding what LabRat should build next.
-Last reviewed: 2026-07-22
+Last reviewed: 2026-07-23
 
 This is the short active plan. Current execution status lives in `doc/current-milestone.md`; detailed implementation plans live under `doc/plans/`.
 
@@ -23,7 +23,7 @@ Upload workbook
   -> Experiment Browser
 ```
 
-Uploading Excel defaults to evidence indexing and workbook understanding only. It does not normalize data, choose master/supplement roles, create a DatasetCommit, create a SourceExtractProposal, create a ChartSpec, or insert manuscript content. Those are later reviewed actions.
+Uploading Excel defaults to evidence indexing and region understanding only. It does not publish accepted records, create a ChartSpec, or insert manuscript content. SourceExtractProposal and ChartProposalSet are retired and must not be recreated.
 
 The first complete product target is now reviewed workbook data in Experiment Browser. Exact active accepted RegionUnderstandingRevision evidence is compiled into reviewable experiment-record DataPlans and deterministic DataSnapshot previews. Explicit publish persists an immutable accepted DataSnapshot and advances the affected experiment identities. Experiment Browser derives its rows from those accepted snapshots.
 
@@ -37,6 +37,16 @@ Use this split when deciding what to build:
 
 ## Recently Completed
 
+- Two-page analysis review: `Source` keeps exact workbook red boxes and the
+  natural-language plan; after acceptance, `Result` materializes the reviewed
+  workbook selections, generates Python from the real multi-table input, and
+  directly shows backend-validated authoritative Plotly. Plan revisions contain
+  no Python, field mapping, scientific values, or review hashes. The former
+  technical result table, row lineage UI, 500-cell aggregate analysis limit,
+  and field-selection registry are removed. Result supports searchable
+  curve-only visibility, readable exclusions, and zero-series acceptance
+  blocking; ChartSpec v3 and each Canvas block retain independent visible
+  curves.
 - Progressive full-sheet Workbook Review loading: the active sheet's complete
   `usedRange` hydrates through visible-first bounded tiles with three background
   workers, persistent per-sheet cell/completion caches, late-response
@@ -60,34 +70,33 @@ Use this split when deciding what to build:
 - Project Evidence Retrieval API v0: read-only `POST /api/projects/:projectId/search`.
 - Phase 1.1 minimal Excel-like Source Workbook viewer: large ranges are browsed through bounded sheet windows with region/draft overlays.
 - Phase 1 read-only Workbook Source Review UI in import/scan review.
-- SourceDocument, SourceRegion, SourceExtractProposal, AgentRun, and source-backed ChartSpec foundations.
+- SourceDocument, SourceRegion, AgentRun, and reviewed analysis-result ChartSpec foundations.
 - Server project state with auth, labs, projects, files, source review, accepted snapshots/heads, BrowserViews, source-backed charts, manuscripts, and audit events.
-- Approved the backend conversational-analysis design: backend-only model access, intent routing, Excel red-box plan review, immutable plan revisions with exact Python, LabRat-managed sandbox execution, result review, atomic AnalysisResult/ChartSpec creation, and placement-local Canvas trace visibility.
+- Approved and completed the backend conversational-analysis design:
+  backend-only model access, intent routing, exact Excel red-box plan review,
+  post-acceptance Python from real multi-table input, validated Plotly result
+  review, atomic AnalysisResult/ChartSpec v3 creation, and placement-local
+  Canvas curve visibility.
 - Implemented conversational-analysis Task 1: provider secrets/model calls now stay on the backend, bounded intent routing replaces unknown-message Browser fallback, project purpose/overview can answer directly, derived analysis/chart requests enter analysis planning, and frontend provider credential/direct-call UI is removed.
-- Implemented conversational-analysis Task 2: accepted-head-only unit-aware selections, source review rectangles and limits, frozen plan/program schema validation, and a project-scoped six-tool planning registry without execution.
-- Implemented conversational-analysis Task 3: durable threads and immutable plan revisions, backend-only initial/feedback plan drafting, exact accepted-selection/source/Python hashes, migration/store parity, bounded review routes, AgentRun artifact links, stale-plan checks, and idempotent acceptance that creates a queued run without executing or creating a chart.
-- Implemented conversational-analysis Task 4: normal LabRat analysis cards open a persistent Excel-plus-conversation review workspace; accepted source cells are highlighted as non-contiguous red rectangles; users can iterate immutable plan revisions through the split modify composer; exact visible hashes gate acceptance; stale cards reopen the latest active revision; and responsive layouts keep Result/Chart unavailable before execution.
-- Implemented conversational-analysis Task 5: accepted queued runs are revalidated and executed through a versioned backend adapter; static/runner Python policy and production-disabled defaults bound code execution; valid output is hash/shape/lineage/count/invariant checked before one immutable awaiting-review AnalysisResult is persisted; result previews and hash-bound replanning are available without creating a ChartSpec.
-- Implemented conversational-analysis Task 6: the existing LabRat review workspace now binds exact run/result hashes, reviews validated rows, exclusions, missing policy, warnings, invariants, lineage and source evidence, loads the complete trace domain, separates incompatible units, preserves historical runs, and supports immutable result-feedback revisions plus reviewed default trace visibility.
-- Implemented conversational-analysis Task 7: exact result/default-trace acceptance now atomically rechecks accepted heads, accepts the existing result, completes its run/thread, creates one provenance-complete analysis-result ChartSpec v2, records an idempotent receipt/audit event, exposes bounded list metadata plus full detail, and renders validated traces without a sourceSnapshot.
-- Implemented conversational-analysis Task 8: a shared trace-aware chart-view model migrates legacy source experiment selections, inherits reviewed analysis defaults, lazy-loads complete ChartSpecs before Manuscript insertion, keeps each placement's visible traces independent, exposes searchable Canvas trace controls, bounds LabRat chart context, and filters PPTX output by the placement-local view.
-- Completed conversational-analysis Task 9: backend and stateful frontend golden workflows now cover natural-language request through revision, exact-plan execution, validated result review, atomic trace-complete ChartSpec publication, Manuscript insertion, independent placement views, reload, and source lineage. Final contracts cover both ChartSpec origins and backend-only model/executor boundaries. Desktop/mobile browser QA also fixed immutable-snapshot reload rendering, a selected-chart context update loop, and chart-preview title/legend overlap.
+- Implemented conversational-analysis Tasks 2-7, then replaced their
+  development-only field/hash/result-table contracts with the exact confirmed
+  range -> review-only PlanRevision -> materialized input -> generated Python
+  -> validated Plotly -> ChartSpec v3 chain described above.
+- Implemented conversational-analysis Task 8: a shared trace-aware chart-view model inherits reviewed analysis defaults, lazy-loads complete ChartSpecs before Manuscript insertion, keeps each placement's visible traces independent, exposes searchable Canvas trace controls, bounds LabRat chart context, and filters PPTX output by the placement-local view.
+- Completed conversational-analysis Task 9: backend and stateful frontend golden workflows cover natural-language request through revision, exact-plan execution, validated result review, atomic trace-complete ChartSpec publication, Manuscript insertion, independent placement views, reload, and source lineage.
+- Unified LabRat chart cutover: removed SourceExtractProposal/ChartProposalSet routes, stores, migrations, frontend cards, proposal review, and sourceSnapshot rendering. Explicit Excel ranges and ordinary chart requests now use the same confirmed-evidence analysis plan.
+- Simplified chat workbook entry: each upload now produces one persisted
+  filename link to its exact WorkbookReviewSession; Workbook Review remains the
+  sole region list and review surface.
+- Unified reviewed record ordering across validation and ChartSpec publication
+  so result rows, trace lineage, and `inputSnapshotRefs` follow the accepted
+  natural-label or workbook-index order.
 
 ## Next Recommended Slices
 
-1. Complete the real DataSnapshot-to-ChartSpec frontend workflow in
-   `doc/plans/datasnapshot-to-chartspec-frontend-closure-plan.md`: enable the
-   local executor for development only, expose model/executor readiness, retry
-   evidence-blocked conversations after DataSnapshot publication, and pass a
-   real Anthropic plus local-Python E2E against all 63 active `test1` experiment
-   heads before calling the frontend path complete.
-2. Replace chat's per-region workbook upload buttons with one filename button
-   per WorkbookReviewSession. Clicking it must reload the exact session and use
-   the existing Workbook Review region list as the sole selection/review
-   surface. Follow
-   `doc/plans/chat-workbook-file-entry-design.md`.
-3. Run migrations 013/014 and the region-to-DataPlan path against configured Postgres in CI or staging.
-4. Deploy and exercise the hardened no-network analysis worker with production secret management, audit telemetry, timeout controls, and provider cost/latency monitoring.
+1. Run a fresh real Anthropic plus local-Python E2E for all three LabRat dispositions, including one multi-workbook chart selected only from confirmed regions.
+2. Run migrations 013/014/016/017 and the region-to-DataPlan plus reviewed-analysis paths against configured Postgres in CI or staging.
+3. Deploy and exercise the hardened no-network analysis worker with production secret management, audit telemetry, timeout controls, and provider cost/latency monitoring.
 
 ## Operating Loop
 
@@ -111,7 +120,7 @@ npm run codex:preflight
 - Mutating actions require explicit user confirmation.
 - RegionUnderstandingRevisions, DataPlans, DataSnapshots, and later chart/manuscript artifacts must remain traceable to source refs.
 - SourceDocument is the evidence layer; accepted RegionUnderstandingRevision is the interpretation layer; DataPlan is the reviewed extraction recipe; DataSnapshot is immutable accepted structured data; Experiment Browser is a read model.
-- Browser publish must not create chart proposals, ChartSpecs, FigurePackages, or manuscript placements.
+- Browser publish must not create ChartSpecs, FigurePackages, or manuscript placements.
 - MCP and embedding/RAG adapters are future access layers, not the source of truth.
 
 ## Details

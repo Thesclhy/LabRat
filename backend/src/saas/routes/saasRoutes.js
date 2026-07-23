@@ -1,8 +1,6 @@
 import path from "node:path";
 import { sendJson } from "../../http/json.js";
 import { readRequestBody } from "../../http/body.js";
-import { shapeChartInterpretResponse } from "../../charts/schemas/chartInterpretSchemas.js";
-import { parseChartEvidenceIntent } from "../../charts/services/chartEvidenceIntent.js";
 import { parseMultipartFormData } from "../../http/multipart.js";
 import { runImportScan } from "../../import/services/importPipeline.js";
 import { getAuthContext, publicUser, requireAuth, requireLabRole, requireSuperAdmin } from "../authz.js";
@@ -11,7 +9,6 @@ import { deleteUploadedFile, persistUploadedFile, readFileObjectBuffer } from ".
 import { makeId, makeSessionToken, sha256Hex } from "../ids.js";
 import { isJsonContentType, readJsonBody, routeUrl, sendError } from "../http.js";
 import { verifyPassword } from "../passwords.js";
-import { createProjectAgentPlan } from "../projectAgentPlanner.js";
 import { runEvidenceRetrievalAgent } from "../evidenceAgentRetrieval.js";
 import {
   loadExperimentDataPlanReview,
@@ -32,26 +29,21 @@ import {
   sourceRegionSummary,
 } from "../sourceDocuments.js";
 import {
-  buildSourceExtractPreview,
-  chartProposalFromSourceExtract,
-  sourceExtractProposalSummary,
-} from "../sourceExtracts.js";
-import {
   buildWorkbookReviewSessionDraft,
   workbookReviewSessionSummary,
 } from "../workbookReviewSessions.js";
 import {
   confirmWorkbookReviewRegion,
   createWorkbookReviewRegionDraft,
+  createWorkbookReviewRegionRecord,
   deleteWorkbookReviewRegion,
   ignoreWorkbookReviewRegion,
+  interpretWorkbookReviewRegion,
   reviseWorkbookReviewRegion,
 } from "../workbookReviewRegions.js";
 import {
   agentRunSummary,
   buildAgentRunDraft,
-  executeAgentRunAction,
-  markActionCompleted,
 } from "../agentRuns.js";
 import {
   acceptAnalysisPlanRevision,
@@ -69,12 +61,7 @@ import {
   executeAnalysisRun,
   reviseAnalysisRun,
 } from "../analysisThreads.js";
-import { validateChartSpecProposal } from "../chartSpecValidation.js";
 import { publishAcceptedAnalysisChart } from "../analysisChartPublisher.js";
-import {
-  createSourceExtractProposalFromEvidence,
-  resolveChartEvidenceIntent,
-} from "../chartEvidenceResolver.js";
 
 const PROJECT_PROFILE_SCHEMA_VERSION = "labrat.projectProfile.v1";
 const ANALYSIS_RETRY_LEASE_MS = 6 * 60 * 1000;
@@ -90,6 +77,24 @@ const FILE_OBJECT_DUPLICATE_CONSTRAINT = "file_objects_project_id_checksum_sha25
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
+}
+
+function planningWarningFromError(error) {
+  const errors = asArray(error?.details?.errors).slice(0, 8);
+  const first = errors[0] || null;
+  const location = Number.isInteger(Number(first?.line)) ? ` at line ${Number(first.line)}` : "";
+  const detailMessage = first?.message
+    ? `${first.message}${location}.`
+    : "";
+  return {
+    code: error?.code || "analysis_plan_draft_failed",
+    message: [
+      error?.message || "The reviewed analysis plan could not be drafted.",
+      detailMessage,
+    ].filter(Boolean).join(" "),
+    severity: "warning",
+    ...(errors.length ? { details: { errors } } : {}),
+  };
 }
 
 function isObject(value) {
@@ -178,7 +183,7 @@ function mergeProjectProfile(metadata, projectProfile, updatedBy) {
   return next;
 }
 
-function projectSummary(project) {
+function projectSummary(project, workflowSummary = null) {
   return {
     id: project.id,
     labId: project.labId,
@@ -189,6 +194,18 @@ function projectSummary(project) {
     projectProfile: projectProfileFor(project),
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,
+    ...(workflowSummary ? { workflowSummary } : {}),
+  };
+}
+
+async function projectWorkflowSummaryForStore(store, projectId) {
+  const [experimentSnapshotHeads, chartSpecs] = await Promise.all([
+    store.listExperimentSnapshotHeads({ projectId }),
+    store.listChartSpecs({ projectId }),
+  ]);
+  return {
+    publishedExperimentCount: asArray(experimentSnapshotHeads).length,
+    chartSpecCount: asArray(chartSpecs).filter(isSupportedChartSpec).length,
   };
 }
 
@@ -265,22 +282,6 @@ function dataSnapshotSummary(snapshot) {
   };
 }
 
-function chartProposalSetSummary(set) {
-  return {
-    id: set.id,
-    labId: set.labId,
-    projectId: set.projectId,
-    schemaVersion: set.schemaVersion,
-    status: set.status,
-    payload: set.payload || {},
-    decisionSummary: set.decisionSummary || {},
-    createdAt: set.createdAt,
-    updatedAt: set.updatedAt,
-    createdBy: set.createdBy,
-    updatedBy: set.updatedBy,
-  };
-}
-
 async function readOptionalJsonBody(req) {
   const contentType = req.headers["content-type"] || "";
   const contentLength = Number(req.headers["content-length"] || 0);
@@ -305,62 +306,22 @@ async function readOptionalJsonBody(req) {
   }
 }
 
-function chartSpecProposalPayload(proposal = {}) {
-  const draft = isObject(proposal.chartSpecDraft) ? proposal.chartSpecDraft : {};
-  return {
-    ...draft,
-    ...proposal,
-    chartType: proposal.chartType || draft.chartType || "scatter",
-    title: proposal.title || draft.title || "Interpreted chart",
-    x: proposal.x || draft.x || null,
-    y: proposal.y || draft.y || null,
-    yFields: asArray(proposal.yFields).length ? proposal.yFields : asArray(draft.yFields),
-    groupBy: proposal.groupBy || draft.groupBy || null,
-    filters: asArray(proposal.filters).length ? proposal.filters : asArray(draft.filters),
-    transforms: asArray(proposal.transforms).length ? proposal.transforms : asArray(draft.transforms),
-    series: asArray(proposal.series).length ? proposal.series : asArray(draft.series),
-    seriesScope: proposal.seriesScope || draft.seriesScope || null,
-    compatibleExperimentIds: asArray(proposal.compatibleExperimentIds).length ? proposal.compatibleExperimentIds : asArray(draft.compatibleExperimentIds),
-    selectedExperimentIds: asArray(proposal.selectedExperimentIds).length ? proposal.selectedExperimentIds : asArray(draft.selectedExperimentIds),
-    seriesKind: proposal.seriesKind || draft.seriesKind || proposal.seriesScope?.seriesKind || draft.seriesScope?.seriesKind || null,
-    axisOptions: isObject(proposal.axisOptions) && Object.keys(proposal.axisOptions).length ? proposal.axisOptions : draft.axisOptions || {},
-    renderStyle: isObject(proposal.renderStyle) && Object.keys(proposal.renderStyle).length ? proposal.renderStyle : draft.renderStyle || {},
-    calculationWarnings: asArray(proposal.calculationWarnings).length ? proposal.calculationWarnings : asArray(draft.calculationWarnings),
-    sourceRefs: asArray(proposal.sourceRefs).length ? proposal.sourceRefs : asArray(draft.sourceRefs),
-    warnings: asArray(proposal.warnings).length ? proposal.warnings : asArray(draft.warnings),
-    confidence: proposal.confidence ?? draft.confidence ?? null,
-    rationale: proposal.rationale || draft.rationale || "Interpreted from user prompt.",
-  };
-}
-
-function isSourceBackedChartProposal(proposal = {}) {
-  const draft = isObject(proposal.chartSpecDraft) ? proposal.chartSpecDraft : {};
-  return proposal.origin === "source_extract"
-    || draft.origin === "source_extract"
-    || isObject(proposal.sourceSnapshot)
-    || isObject(draft.sourceSnapshot);
-}
-
-function isSourceBackedChartSpec(chartSpec = {}) {
-  const spec = isObject(chartSpec.spec) ? chartSpec.spec : chartSpec;
-  return spec.origin === "source_extract" || isObject(spec.sourceSnapshot);
-}
-
 function isAnalysisResultChartSpec(chartSpec = {}) {
   const spec = isObject(chartSpec.spec) ? chartSpec.spec : chartSpec;
-  return spec.origin === "analysis_result" && spec.schemaVersion === "labrat.chartSpec.v2";
+  return spec.origin === "analysis_result" && spec.schemaVersion === "labrat.chartSpec.v3";
 }
 
 function isSupportedChartSpec(chartSpec = {}) {
-  return isSourceBackedChartSpec(chartSpec) || isAnalysisResultChartSpec(chartSpec);
+  return isAnalysisResultChartSpec(chartSpec);
 }
 
 function chartSpecListItem(chartSpec = {}) {
   if (!isAnalysisResultChartSpec(chartSpec)) return chartSpec;
   const spec = chartSpec.spec || {};
   const {
+    plotly,
     traceCatalog,
-    inputSnapshotRefs,
+    sourceSelections,
     sourceRefs,
     ...metadata
   } = spec;
@@ -370,19 +331,13 @@ function chartSpecListItem(chartSpec = {}) {
       ...metadata,
       traceCatalog: asArray(traceCatalog).map((trace) => ({
         traceId: trace?.traceId || null,
-        experimentId: trace?.experimentId || null,
-        experimentLabel: trace?.experimentLabel || trace?.name || null,
-        xField: trace?.xField || null,
-        yField: trace?.yField || null,
-        xUnit: trace?.xUnit ?? null,
-        yUnit: trace?.yUnit ?? null,
+        name: trace?.name || null,
         type: trace?.type || null,
-        mode: trace?.mode || null,
-        pointCount: Math.max(asArray(trace?.x).length, asArray(trace?.y).length),
-        sourceRecordCount: asArray(trace?.sourceRecordIds).length,
+        pointCount: Number(trace?.pointCount) || 0,
       })),
-      inputSnapshotRefCount: asArray(inputSnapshotRefs).length,
+      sourceSelectionCount: asArray(sourceSelections).length,
       sourceRefCount: asArray(sourceRefs).length,
+      plotlyTraceCount: asArray(plotly?.data).length,
       detailRequired: true,
     },
   };
@@ -439,19 +394,6 @@ async function sourceRegionAuth(req, context, sourceRegionId, role = "viewer") {
   }
   requireLabRole(auth, sourceRegion.labId, role);
   return { auth, sourceRegion };
-}
-
-async function sourceExtractProposalAuth(req, context, proposalId, role = "viewer") {
-  const auth = requireAuth(await authFor(req, context));
-  const sourceExtractProposal = await context.store.findSourceExtractProposalById?.(proposalId);
-  if (!sourceExtractProposal) {
-    throw Object.assign(new Error("Source extract proposal not found."), {
-      statusCode: 404,
-      code: "source_extract_proposal_not_found",
-    });
-  }
-  requireLabRole(auth, sourceExtractProposal.labId, role);
-  return { auth, sourceExtractProposal };
 }
 
 async function workbookReviewSessionAuth(req, context, sessionId, role = "viewer") {
@@ -761,8 +703,13 @@ async function handleProjects(req, res, context) {
       return;
     }
     requireLabRole(auth, labId, "viewer");
-    const projects = await context.store.listProjects({ labId });
-    sendJson(res, 200, { projects: projects.filter((project) => project.status !== "deleted").map(projectSummary) });
+    const projects = (await context.store.listProjects({ labId }))
+      .filter((project) => project.status !== "deleted");
+    const summaries = await Promise.all(projects.map(async (project) => projectSummary(
+      project,
+      await projectWorkflowSummaryForStore(context.store, project.id),
+    )));
+    sendJson(res, 200, { projects: summaries });
     return;
   }
   const body = await readJsonBody(req);
@@ -859,7 +806,6 @@ async function handleProjectState(req, res, context, projectId) {
   const [
     fileObjects,
     importRuns,
-    chartProposalSets,
     chartSpecs,
     manuscripts,
     workbookReviewSessions,
@@ -875,7 +821,6 @@ async function handleProjectState(req, res, context, projectId) {
   ] = await Promise.all([
     context.store.listFileObjects({ projectId }),
     context.store.listImportRuns({ projectId }),
-    context.store.listChartProposalSets({ projectId }),
     context.store.listChartSpecs({ projectId }),
     context.store.listManuscripts({ projectId }),
     context.store.listWorkbookReviewSessions ? context.store.listWorkbookReviewSessions({ projectId }) : [],
@@ -895,7 +840,6 @@ async function handleProjectState(req, res, context, projectId) {
     projectProfile: projectProfileFor(project),
     fileObjects: fileObjects.map(fileObjectSummary),
     importRuns: importRuns.map(importRunSummary),
-    chartProposalSets: chartProposalSets.map(chartProposalSetSummary),
     chartSpecs: supportedChartSpecs.map(chartSpecListItem),
     manuscripts,
     workbookReviewSessions: workbookReviewSessions.map(workbookReviewSessionSummary),
@@ -1205,40 +1149,6 @@ async function handleProjectBrowserViewById(req, res, context, projectId, browse
   sendJson(res, 200, { browserView: updated });
 }
 
-async function handleProjectAgentPlan(req, res, context, projectId) {
-  const { project } = await projectAuth(req, context, projectId, "viewer");
-  const body = await readJsonBody(req);
-  const [
-    fileObjects,
-    chartProposalSets,
-    chartSpecs,
-    manuscripts,
-    experimentSnapshotHeads,
-    sourceDocuments,
-  ] = await Promise.all([
-    context.store.listFileObjects({ projectId: project.id }),
-    context.store.listChartProposalSets({ projectId: project.id }),
-    context.store.listChartSpecs({ projectId: project.id }),
-    context.store.listManuscripts({ projectId: project.id }),
-    context.store.listExperimentSnapshotHeads({ projectId: project.id }),
-    context.store.listSourceDocuments({ projectId: project.id }),
-  ]);
-  const plan = createProjectAgentPlan({
-    project,
-    projectProfile: projectProfileFor(project),
-    fileObjects: fileObjects.map(fileObjectSummary),
-    chartProposalSets: chartProposalSets.map(chartProposalSetSummary),
-    chartSpecs: chartSpecs.filter(isSupportedChartSpec).map(chartSpecListItem),
-    manuscripts,
-    experimentSnapshotHeads,
-    sourceDocuments: sourceDocuments.map(sourceDocumentSummary),
-    message: body.message || "",
-    conversation: Array.isArray(body.conversation) ? body.conversation : [],
-    selectedContext: isObject(body.selectedContext) ? body.selectedContext : {},
-  });
-  sendJson(res, 200, plan);
-}
-
 async function handleProjectAgentRuns(req, res, context, projectId) {
   const { auth, project } = await projectAuth(req, context, projectId, "viewer");
   if (req.method === "GET") {
@@ -1254,27 +1164,28 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
   }
 
   const body = await readJsonBody(req);
+  const requestAbortController = new AbortController();
+  const abortOnDisconnect = () => {
+    if (!res.writableEnded) requestAbortController.abort();
+  };
+  res.once("close", abortOnDisconnect);
   const [
-    fileObjects,
-    chartProposalSets,
     chartSpecs,
     manuscripts,
     experimentSnapshotHeads,
     sourceDocuments,
+    acceptedRegionUnderstandings,
   ] = await Promise.all([
-    context.store.listFileObjects({ projectId: project.id }),
-    context.store.listChartProposalSets({ projectId: project.id }),
     context.store.listChartSpecs({ projectId: project.id }),
     context.store.listManuscripts({ projectId: project.id }),
     context.store.listExperimentSnapshotHeads({ projectId: project.id }),
     context.store.listSourceDocuments({ projectId: project.id }),
+    context.store.listAcceptedRegionUnderstandings({ projectId: project.id }),
   ]);
   const draft = await buildAgentRunDraft({
     context,
     project,
     projectProfile: projectProfileFor(project),
-    fileObjects: fileObjects.map(fileObjectSummary),
-    chartProposalSets: chartProposalSets.map(chartProposalSetSummary),
     chartSpecs: chartSpecs.filter(isSupportedChartSpec).map(chartSpecListItem),
     manuscripts,
     experimentSnapshotHeads,
@@ -1282,6 +1193,7 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
     message: body.message || "",
     conversation: Array.isArray(body.conversation) ? body.conversation : [],
     selectedContext: isObject(body.selectedContext) ? body.selectedContext : {},
+    signal: requestAbortController.signal,
   });
   let agentRun = await context.store.createAgentRun({
     labId: project.labId,
@@ -1316,7 +1228,7 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
       }],
     });
     const planningWarnings = [...asArray(agentRun.warnings)];
-    if (experimentSnapshotHeads.length) {
+    if (acceptedRegionUnderstandings.length) {
       try {
         currentPlanRevision = await draftAnalysisPlanRevision({
           store: context.store,
@@ -1324,23 +1236,20 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
           analysisThreadId: analysisThread.id,
           actorUserId: auth.user.id,
           modelProvider: context.modelProvider,
-          analysisToolRegistry: context.analysisToolRegistry,
+          signal: requestAbortController.signal,
         });
       } catch (error) {
-        planningWarnings.push({
-          code: error.code || "analysis_plan_draft_failed",
-          message: error.message || "The reviewed analysis plan could not be drafted.",
-          severity: "warning",
-        });
+        if (error?.name === "AbortError") throw error;
+        planningWarnings.push(planningWarningFromError(error));
         reply = "I created an analysis thread, but the backend could not draft a reviewable plan. The request is preserved and can be retried after the provider or accepted data is corrected.";
       }
     } else {
       planningWarnings.push({
         code: "analysis_evidence_required",
-        message: "Publish accepted experiment data before drafting an analysis plan.",
+        message: "Confirm workbook regions before drafting an analysis plan.",
         severity: "info",
       });
-      reply = "I created an analysis thread, but accepted published experiment data is required before I can draft the reviewed analysis plan.";
+      reply = "I created an analysis thread, but user-confirmed workbook regions are required before I can draft the reviewed analysis plan.";
     }
     const draftMetadata = currentPlanRevision?.draftMetadata || {};
     const existingUsage = agentRun.usage || {};
@@ -1355,8 +1264,6 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
           details: {
             analysisThreadId: analysisThread.id,
             planRevisionId: currentPlanRevision?.id || null,
-            planHash: currentPlanRevision?.planHash || null,
-            selectionHash: currentPlanRevision?.selectionHash || null,
           },
           createdAt: new Date().toISOString(),
         },
@@ -1364,16 +1271,22 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
       toolTrace: currentPlanRevision ? [
         ...asArray(agentRun.toolTrace),
         {
-          tool: "list_analysis_fields",
-          observation: { projectId: project.id },
-        },
-        {
-          tool: "preview_analysis_selection",
+          tool: "list_confirmed_analysis_regions",
           observation: {
             projectId: project.id,
-            selectionId: currentPlanRevision.selection?.selectionId || null,
-            experimentCount: asArray(currentPlanRevision.selection?.experimentIds).length,
-            fieldCount: asArray(currentPlanRevision.selection?.fieldIds).length,
+            confirmedRegionCount: acceptedRegionUnderstandings.length,
+          },
+        },
+        {
+          tool: "select_confirmed_source_ranges",
+          observation: {
+            projectId: project.id,
+            selectionCount: asArray(currentPlanRevision.sourceSelections).length,
+            sourceSelections: asArray(currentPlanRevision.sourceSelections).map((selection) => ({
+              sourceDocumentId: selection.sourceDocumentId,
+              sheetName: selection.sheetName,
+              range: selection.range,
+            })),
           },
         },
         {
@@ -1433,9 +1346,6 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
         metadata: {
           agentRunId: agentRun.id,
           analysisThreadId: analysisThread.id,
-          planHash: currentPlanRevision.planHash,
-          selectionHash: currentPlanRevision.selectionHash,
-          dependencyHash: currentPlanRevision.dependencyHash,
         },
       });
     }
@@ -1450,6 +1360,7 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
     summary: `Created AgentRun ${agentRun.id}.`,
     metadata: { mode: agentRun.mode, actionCount: asArray(agentRun.actions).length },
   });
+  res.off("close", abortOnDisconnect);
   sendJson(res, 201, {
     agentRun: agentRunSummary(agentRun),
     reply,
@@ -1463,94 +1374,6 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
 async function handleAgentRunById(req, res, context, agentRunId) {
   const { agentRun } = await agentRunAuth(req, context, agentRunId, "viewer");
   sendJson(res, 200, { agentRun: agentRunSummary(agentRun) });
-}
-
-async function handleAgentRunConfirm(req, res, context, agentRunId) {
-  const { auth, agentRun } = await agentRunAuth(req, context, agentRunId, "editor");
-  if (agentRun.status === "completed" || agentRun.status === "cancelled") {
-    throw Object.assign(new Error(`AgentRun is already ${agentRun.status}.`), {
-      statusCode: 409,
-      code: "agent_run_closed",
-    });
-  }
-  const body = await readJsonBody(req);
-  const actionId = String(body.actionId || "");
-  const requestedAction = asArray(agentRun.actions).find((candidate) => candidate.actionId === actionId);
-  if (!requestedAction) {
-    throw Object.assign(new Error("AgentRun action not found."), {
-      statusCode: 404,
-      code: "agent_run_action_not_found",
-    });
-  }
-  if (requestedAction.status !== "requires_confirmation") {
-    throw Object.assign(new Error("AgentRun action is not waiting for confirmation."), {
-      statusCode: 409,
-      code: "agent_run_action_not_confirmable",
-    });
-  }
-  const result = await executeAgentRunAction({
-    context,
-    run: agentRun,
-    action: requestedAction,
-    actorUserId: auth.user.id,
-  });
-  const proposalRefs = [
-    ...asArray(agentRun.proposalRefs),
-    ...asArray(result.proposalRefs),
-  ];
-  const visibleSteps = [
-    ...asArray(agentRun.visibleSteps),
-    ...asArray(result.visibleSteps),
-  ];
-  const updated = await context.store.updateAgentRun(agentRun.id, {
-    status: "completed",
-    visibleSteps,
-    actions: markActionCompleted(agentRun.actions, actionId, {
-      chartProposalSetId: result.chartProposalSet?.id || null,
-      sourceExtractProposalId: result.sourceExtractProposal?.id || null,
-    }),
-    proposalRefs,
-    updatedBy: auth.user.id,
-  });
-  if (result.chartProposalSet) {
-    await context.store.recordAuditEvent({
-      labId: agentRun.labId,
-      projectId: agentRun.projectId,
-      actorUserId: auth.user.id,
-      action: "chart_proposal_set.create",
-      targetType: "chart_proposal_set",
-      targetId: result.chartProposalSet.id,
-      summary: "Created chart proposal set from AgentRun.",
-      metadata: { agentRunId: agentRun.id },
-    });
-  }
-  if (result.sourceExtractProposal) {
-    await context.store.recordAuditEvent({
-      labId: agentRun.labId,
-      projectId: agentRun.projectId,
-      actorUserId: auth.user.id,
-      action: "source.extract.propose",
-      targetType: "source_extract_proposal",
-      targetId: result.sourceExtractProposal.id,
-      summary: "Created source extract proposal from AgentRun.",
-      metadata: { agentRunId: agentRun.id },
-    });
-  }
-  await context.store.recordAuditEvent({
-    labId: agentRun.labId,
-    projectId: agentRun.projectId,
-    actorUserId: auth.user.id,
-    action: "agent_run.confirm",
-    targetType: "agent_run",
-    targetId: agentRun.id,
-    summary: `Confirmed AgentRun action ${requestedAction.type}.`,
-    metadata: { actionId, actionType: requestedAction.type },
-  });
-  sendJson(res, 200, {
-    agentRun: agentRunSummary(updated),
-    chartProposalSet: result.chartProposalSet ? chartProposalSetSummary(result.chartProposalSet) : null,
-    sourceExtractProposal: result.sourceExtractProposal ? sourceExtractProposalSummary(result.sourceExtractProposal) : null,
-  });
 }
 
 async function handleAgentRunCancel(req, res, context, agentRunId) {
@@ -1619,9 +1442,10 @@ async function handleProjectAnalysisThreads(req, res, context, projectId, url) {
 
 async function handleProjectAnalysisCapabilities(req, res, context, projectId) {
   const { project } = await projectAuth(req, context, projectId, "viewer");
-  const [dataSnapshots, experimentSnapshotHeads] = await Promise.all([
+  const [dataSnapshots, experimentSnapshotHeads, acceptedRegionUnderstandings] = await Promise.all([
     context.store.listDataSnapshots({ projectId: project.id }),
     context.store.listExperimentSnapshotHeads({ projectId: project.id }),
+    context.store.listAcceptedRegionUnderstandings({ projectId: project.id }),
   ]);
   const model = publicAnalysisCapabilityConfig(context.modelProvider, {
     provider: null,
@@ -1651,6 +1475,7 @@ async function handleProjectAnalysisCapabilities(req, res, context, projectId) {
     acceptedData: {
       acceptedSnapshotCount: dataSnapshots.filter((snapshot) => snapshot.status === "accepted").length,
       activeExperimentHeadCount: experimentSnapshotHeads.length,
+      confirmedRegionCount: acceptedRegionUnderstandings.length,
     },
   });
 }
@@ -1704,9 +1529,9 @@ async function handleAnalysisThreadRetry(req, res, context, analysisThreadId) {
       code: "project_not_found",
     });
   }
-  const [analysisRuns, experimentSnapshotHeads, agentRuns] = await Promise.all([
+  const [analysisRuns, acceptedRegionUnderstandings, agentRuns] = await Promise.all([
     context.store.listAnalysisRuns({ projectId: project.id, analysisThreadId: analysisThread.id }),
-    context.store.listExperimentSnapshotHeads({ projectId: project.id }),
+    context.store.listAcceptedRegionUnderstandings({ projectId: project.id }),
     context.store.listAgentRuns({ projectId: project.id }),
   ]);
   if (!isEvidenceBlockedAnalysisThread(agentRuns, analysisThread.id)) {
@@ -1721,8 +1546,8 @@ async function handleAnalysisThreadRetry(req, res, context, analysisThreadId) {
       code: "analysis_retry_not_available",
     });
   }
-  if (!experimentSnapshotHeads.length) {
-    throw Object.assign(new Error("Publish accepted experiment data before retrying this analysis plan."), {
+  if (!acceptedRegionUnderstandings.length) {
+    throw Object.assign(new Error("Confirm workbook regions before retrying this analysis plan."), {
       statusCode: 409,
       code: "analysis_evidence_required",
     });
@@ -1778,7 +1603,6 @@ async function handleAnalysisThreadRetry(req, res, context, analysisThreadId) {
       analysisThreadId: analysisThread.id,
       actorUserId: auth.user.id,
       modelProvider: context.modelProvider,
-      analysisToolRegistry: context.analysisToolRegistry,
       allowRetryClaim: true,
     });
   } catch (error) {
@@ -1820,12 +1644,7 @@ async function handleAnalysisThreadRetry(req, res, context, analysisThreadId) {
       targetType: "analysis_plan_revision",
       targetId: revision.id,
       summary: `Retried analysis thread ${analysisThread.id} with published data.`,
-      metadata: {
-        analysisThreadId: analysisThread.id,
-        planHash: revision.planHash,
-        selectionHash: revision.selectionHash,
-        dependencyHash: revision.dependencyHash,
-      },
+      metadata: { analysisThreadId: analysisThread.id },
     });
   }
   sendJson(res, idempotentReplay ? 200 : 201, {
@@ -1857,7 +1676,6 @@ async function handleAnalysisPlanRevisions(req, res, context, analysisThreadId) 
       analysisThreadId: analysisThread.id,
       actorUserId: auth.user.id,
       plan: body.plan,
-      selectionRequest: body.selectionRequest,
       feedback: body.feedback,
     })
     : await draftAnalysisPlanRevision({
@@ -1866,7 +1684,6 @@ async function handleAnalysisPlanRevisions(req, res, context, analysisThreadId) 
       analysisThreadId: analysisThread.id,
       actorUserId: auth.user.id,
       modelProvider: context.modelProvider,
-      analysisToolRegistry: context.analysisToolRegistry,
       feedback: body.feedback,
     });
   await context.store.recordAuditEvent({
@@ -1877,12 +1694,7 @@ async function handleAnalysisPlanRevisions(req, res, context, analysisThreadId) 
     targetType: "analysis_plan_revision",
     targetId: revision.id,
     summary: `Created analysis plan revision ${revision.revision}.`,
-    metadata: {
-      analysisThreadId: analysisThread.id,
-      planHash: revision.planHash,
-      selectionHash: revision.selectionHash,
-      dependencyHash: revision.dependencyHash,
-    },
+    metadata: { analysisThreadId: analysisThread.id },
   });
   sendJson(res, 201, { analysisPlanRevision: analysisPlanRevisionSummary(revision) });
 }
@@ -1912,16 +1724,13 @@ async function handleAnalysisPlanAccept(req, res, context, planRevisionId) {
       code: "project_not_found",
     });
   }
-  const body = await readJsonBody(req);
+  await readOptionalJsonBody(req);
   const result = await acceptAnalysisPlanRevision({
     store: context.store,
     project,
     actorUserId: auth.user.id,
     planRevisionId: analysisPlanRevision.id,
     idempotencyKey: req.headers["idempotency-key"],
-    planHash: body.planHash,
-    selectionHash: body.selectionHash,
-    dependencyHash: body.dependencyHash,
     ipAddress: clientIp(req),
     userAgent: userAgent(req),
   });
@@ -1968,6 +1777,7 @@ async function handleAnalysisRunExecute(req, res, context, analysisRunId) {
     actorUserId: auth.user.id,
     analysisRunId,
     executor: context.analysisExecutor,
+    modelProvider: context.modelProvider,
     ipAddress: clientIp(req),
     userAgent: userAgent(req),
   });
@@ -2015,10 +1825,8 @@ async function handleAnalysisRunRevise(req, res, context, analysisRunId) {
     project,
     actorUserId: auth.user.id,
     analysisRunId,
-    resultHash: body.resultHash,
     feedback: body.feedback,
     modelProvider: context.modelProvider,
-    analysisToolRegistry: context.analysisToolRegistry,
   });
   await context.store.recordAuditEvent({
     labId: project.labId,
@@ -2032,7 +1840,6 @@ async function handleAnalysisRunRevise(req, res, context, analysisRunId) {
       analysisThreadId: analysisRun.analysisThreadId,
       priorAnalysisRunId: analysisRun.id,
       priorAnalysisResultId: result.priorAnalysisResult?.id || null,
-      priorResultHash: result.priorAnalysisResult?.contentHash || null,
     },
     ipAddress: clientIp(req),
     userAgent: userAgent(req),
@@ -2064,7 +1871,7 @@ async function handleAnalysisResultChartPublication(req, res, context, analysisR
     project,
     actorUserId: auth.user.id,
     runId: analysisRun.id,
-    resultHash: body.resultHash,
+    analysisResultId: body.analysisResultId,
     defaultVisibleTraceIds: body.defaultVisibleTraceIds,
     idempotencyKey: req.headers["idempotency-key"],
     ipAddress: clientIp(req),
@@ -2078,61 +1885,6 @@ async function handleAnalysisResultChartPublication(req, res, context, analysisR
     chartSpec: result.chartSpec,
     idempotentReplay: result.idempotentReplay,
   });
-}
-
-async function handleProjectChartInterpret(req, res, context, projectId) {
-  const { auth, project } = await projectAuth(req, context, projectId, "viewer");
-  const body = await readJsonBody(req);
-  if (body.persistAsProposal) requireLabRole(auth, project.labId, "editor");
-  const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
-  if (!prompt) {
-    sendError(res, 400, "invalid_chart_interpret_request", "A chart prompt is required.", ["A chart prompt is required."]);
-    return;
-  }
-  const evidenceIntent = parseChartEvidenceIntent(prompt);
-  if (evidenceIntent) {
-    const resolvedEvidence = await resolveChartEvidenceIntent({
-      context,
-      project,
-      evidenceIntent,
-    });
-    const baseResponse = shapeChartInterpretResponse({
-      chartSpecDraft: null,
-      clarification: resolvedEvidence.clarification,
-      warnings: resolvedEvidence.sourceExtractPreview?.warnings || [],
-      evidenceIntent,
-      evidenceResolution: resolvedEvidence.evidenceResolution,
-      sourceExtractPreview: resolvedEvidence.sourceExtractPreview,
-    });
-    if (resolvedEvidence.clarification || !resolvedEvidence.sourceExtractPreview || !body.persistAsProposal) {
-      sendJson(res, 200, {
-        ...baseResponse,
-        chartProposalSet: null,
-      });
-      return;
-    }
-    const sourceExtractProposal = await createSourceExtractProposalFromEvidence({
-      context,
-      project,
-      sourceDocument: resolvedEvidence.sourceDocument,
-      sourceRegion: resolvedEvidence.sourceRegion,
-      sourceExtractPreview: resolvedEvidence.sourceExtractPreview,
-      evidenceIntent,
-      createdBy: auth.user.id,
-    });
-    sendJson(res, 200, {
-      ...baseResponse,
-      sourceExtractProposal,
-      chartProposalSet: null,
-    });
-    return;
-  }
-  sendError(
-    res,
-    409,
-    "data_snapshot_chart_not_implemented",
-    "Charting accepted experiment snapshots is not implemented yet. Select explicit workbook source evidence for source-backed charting.",
-  );
 }
 
 async function handleProjectImportRunsList(req, res, context, projectId) {
@@ -2200,221 +1952,6 @@ async function handleSourceDocumentRange(req, res, context, sourceDocumentId) {
     maxCells: body.maxCells,
   });
   sendJson(res, 200, result);
-}
-
-async function sourceDocumentForRegion(context, sourceRegion) {
-  const sourceDocument = await context.store.findSourceDocumentById?.(sourceRegion.sourceDocumentId);
-  if (!sourceDocument) {
-    throw Object.assign(new Error("Source document not found for source region."), {
-      statusCode: 404,
-      code: "source_document_not_found",
-    });
-  }
-  return sourceDocument;
-}
-
-async function buildExtractPreviewForRoute(context, { sourceDocument, sourceRegion = null, body = {} }) {
-  const indexBlobs = context.store.listSourceIndexBlobs
-    ? await context.store.listSourceIndexBlobs({ sourceDocumentId: sourceDocument.id })
-    : [];
-  return buildSourceExtractPreview({
-    sourceDocument,
-    sourceRegion,
-    indexBlobs,
-    body,
-  });
-}
-
-async function handleSourceDocumentExtractPreview(req, res, context, sourceDocumentId) {
-  const { sourceDocument } = await sourceDocumentAuth(req, context, sourceDocumentId, "viewer");
-  const body = await readJsonBody(req);
-  const preview = await buildExtractPreviewForRoute(context, { sourceDocument, body });
-  sendJson(res, 200, { preview });
-}
-
-async function handleSourceRegionExtractPreview(req, res, context, sourceRegionId) {
-  const { sourceRegion } = await sourceRegionAuth(req, context, sourceRegionId, "viewer");
-  const sourceDocument = await sourceDocumentForRegion(context, sourceRegion);
-  const body = await readJsonBody(req);
-  const preview = await buildExtractPreviewForRoute(context, { sourceDocument, sourceRegion, body });
-  sendJson(res, 200, { preview });
-}
-
-async function resolveSourceExtractTarget(context, project, body) {
-  let sourceRegion = null;
-  let sourceDocument = null;
-  if (body.sourceRegionId) {
-    sourceRegion = await context.store.findSourceRegionById?.(body.sourceRegionId);
-    if (!sourceRegion || sourceRegion.projectId !== project.id) {
-      throw Object.assign(new Error("Source region not found for this project."), {
-        statusCode: 404,
-        code: "source_region_not_found",
-      });
-    }
-    sourceDocument = await sourceDocumentForRegion(context, sourceRegion);
-  } else if (body.sourceDocumentId) {
-    sourceDocument = await context.store.findSourceDocumentById?.(body.sourceDocumentId);
-    if (!sourceDocument || sourceDocument.projectId !== project.id) {
-      throw Object.assign(new Error("Source document not found for this project."), {
-        statusCode: 404,
-        code: "source_document_not_found",
-      });
-    }
-  } else {
-    throw Object.assign(new Error("sourceRegionId or sourceDocumentId is required."), {
-      statusCode: 400,
-      code: "invalid_source_extract_request",
-    });
-  }
-  return { sourceDocument, sourceRegion };
-}
-
-async function handleProjectSourceExtractProposals(req, res, context, projectId) {
-  const { auth, project } = await projectAuth(req, context, projectId, req.method === "POST" ? "editor" : "viewer");
-  if (req.method === "GET") {
-    const proposals = context.store.listSourceExtractProposals
-      ? await context.store.listSourceExtractProposals({ projectId: project.id })
-      : [];
-    sendJson(res, 200, {
-      sourceExtractProposals: proposals.map(sourceExtractProposalSummary),
-    });
-    return;
-  }
-  const body = await readJsonBody(req);
-  const { sourceDocument, sourceRegion } = await resolveSourceExtractTarget(context, project, body);
-  const preview = await buildExtractPreviewForRoute(context, { sourceDocument, sourceRegion, body });
-  const proposal = await context.store.createSourceExtractProposal({
-    labId: project.labId,
-    projectId: project.id,
-    sourceDocumentId: sourceDocument.id,
-    sourceRegionId: sourceRegion?.id || null,
-    status: body.status || "proposed",
-    purpose: body.purpose || preview.purpose || "chart_source",
-    extractType: body.extractType || preview.extractType || "table_range",
-    intent: body.intent || {},
-    preview,
-    warnings: preview.warnings || [],
-    decisionSummary: body.decisionSummary || {},
-    createdBy: auth.user.id,
-  });
-  await context.store.recordAuditEvent({
-    labId: project.labId,
-    projectId: project.id,
-    actorUserId: auth.user.id,
-    action: "source.extract.propose",
-    targetType: "source_extract_proposal",
-    targetId: proposal.id,
-    summary: `Created source extract proposal ${proposal.extractType || proposal.id}.`,
-    metadata: {
-      sourceDocumentId: sourceDocument.id,
-      sourceRegionId: sourceRegion?.id || null,
-      extractType: proposal.extractType || null,
-    },
-  });
-  sendJson(res, 201, { sourceExtractProposal: sourceExtractProposalSummary(proposal) });
-}
-
-async function handleSourceExtractProposalPatch(req, res, context, proposalId) {
-  const { auth, sourceExtractProposal } = await sourceExtractProposalAuth(req, context, proposalId, "editor");
-  const body = await readJsonBody(req);
-  const allowedStatuses = new Set(["proposed", "accepted", "rejected"]);
-  const nextStatus = body.status == null ? sourceExtractProposal.status : String(body.status);
-  if (!allowedStatuses.has(nextStatus)) {
-    sendError(res, 400, "invalid_source_extract_status", "Source extract status must be proposed, accepted, or rejected.");
-    return;
-  }
-  const updated = await context.store.updateSourceExtractProposal(sourceExtractProposal.id, {
-    status: nextStatus,
-    decisionSummary: body.decisionSummary || sourceExtractProposal.decisionSummary || {},
-    warnings: body.warnings || sourceExtractProposal.warnings || [],
-    updatedBy: auth.user.id,
-  });
-  await context.store.recordAuditEvent({
-    labId: sourceExtractProposal.labId,
-    projectId: sourceExtractProposal.projectId,
-    actorUserId: auth.user.id,
-    action: nextStatus === "accepted"
-      ? "source.extract.accept"
-      : nextStatus === "rejected"
-        ? "source.extract.reject"
-        : "source.extract.update_decision",
-    targetType: "source_extract_proposal",
-    targetId: sourceExtractProposal.id,
-    summary: `Updated source extract proposal to ${nextStatus}.`,
-  });
-  sendJson(res, 200, { sourceExtractProposal: sourceExtractProposalSummary(updated) });
-}
-
-async function handleSourceExtractChartProposal(req, res, context, proposalId) {
-  const { auth, sourceExtractProposal } = await sourceExtractProposalAuth(req, context, proposalId, "editor");
-  if (sourceExtractProposal.status !== "accepted") {
-    sendError(res, 409, "source_extract_not_accepted", "Accept the source extract proposal before drafting a chart proposal.");
-    return;
-  }
-  const proposal = chartProposalFromSourceExtract(sourceExtractProposal);
-  const chartProposalSet = await context.store.createChartProposalSet({
-    labId: sourceExtractProposal.labId,
-    projectId: sourceExtractProposal.projectId,
-    schemaVersion: "labrat.chartProposalSet.v1",
-    status: "proposed",
-    payload: {
-      proposalSetId: `chart_proposal_set_source_extract_${sha256Hex(sourceExtractProposal.id).slice(0, 16)}`,
-      schemaVersion: "labrat.chartProposalSet.v1",
-      proposals: [proposal],
-      warnings: proposal.warnings || [],
-      origin: "source_extract",
-      sourceExtractProposalId: sourceExtractProposal.id,
-    },
-    decisionSummary: { accepted: 0, rejected: 0, proposalCount: 1 },
-    createdBy: auth.user.id,
-  });
-  await context.store.recordAuditEvent({
-    labId: sourceExtractProposal.labId,
-    projectId: sourceExtractProposal.projectId,
-    actorUserId: auth.user.id,
-    action: "chart_proposal_set.create",
-    targetType: "chart_proposal_set",
-    targetId: chartProposalSet.id,
-    summary: "Created chart proposal set from source extract proposal.",
-    metadata: { sourceExtractProposalId: sourceExtractProposal.id },
-  });
-  sendJson(res, 201, {
-    sourceExtractProposal: sourceExtractProposalSummary(sourceExtractProposal),
-    chartProposalSet: chartProposalSetSummary(chartProposalSet),
-  });
-}
-
-async function handleProjectChartProposalSets(req, res, context, projectId) {
-  await projectAuth(req, context, projectId, "viewer");
-  const chartProposalSets = await context.store.listChartProposalSets({ projectId });
-  sendJson(res, 200, { chartProposalSets: chartProposalSets.map(chartProposalSetSummary) });
-}
-
-async function handleChartProposalSetPatch(req, res, context, chartProposalSetId) {
-  const auth = requireAuth(await authFor(req, context));
-  const chartProposalSet = await context.store.findChartProposalSetById(chartProposalSetId);
-  if (!chartProposalSet) {
-    sendError(res, 404, "chart_proposal_set_not_found", "Chart proposal set not found.");
-    return;
-  }
-  requireLabRole(auth, chartProposalSet.labId, "editor");
-  const body = await readJsonBody(req);
-  const updated = await context.store.updateChartProposalSet(chartProposalSet.id, {
-    status: body.status,
-    payload: body.payload,
-    decisionSummary: body.decisionSummary,
-    updatedBy: auth.user.id,
-  });
-  await context.store.recordAuditEvent({
-    labId: chartProposalSet.labId,
-    projectId: chartProposalSet.projectId,
-    actorUserId: auth.user.id,
-    action: "chart_proposal_set.update_decision",
-    targetType: "chart_proposal_set",
-    targetId: chartProposalSet.id,
-    summary: "Updated chart proposal set.",
-  });
-  sendJson(res, 200, { chartProposalSet: chartProposalSetSummary(updated) });
 }
 
 async function handleProjectFileUpload(req, res, context, projectId) {
@@ -2838,15 +2375,28 @@ async function handleWorkbookReviewSessionRegions(req, res, context, sessionId) 
     return;
   }
   const { sourceDocument, indexBlobs } = await sourceContextForWorkbookReviewRegion(context, workbookReviewSession);
-  const created = await createWorkbookReviewRegionDraft({
-    store: context.store,
-    session: workbookReviewSession,
-    sourceDocument,
-    indexBlobs,
-    modelProvider: context.modelProvider,
-    actorUserId: auth.user.id,
-    input: body,
-  });
+  const deferInterpretation = body.deferInterpretation === true;
+  const created = deferInterpretation
+    ? {
+      region: await createWorkbookReviewRegionRecord({
+        store: context.store,
+        session: workbookReviewSession,
+        sourceDocument,
+        actorUserId: auth.user.id,
+        input: body,
+      }),
+      revision: null,
+      warning: null,
+    }
+    : await createWorkbookReviewRegionDraft({
+      store: context.store,
+      session: workbookReviewSession,
+      sourceDocument,
+      indexBlobs,
+      modelProvider: context.modelProvider,
+      actorUserId: auth.user.id,
+      input: body,
+    });
   await context.store.recordAuditEvent({
     labId: workbookReviewSession.labId,
     projectId: workbookReviewSession.projectId,
@@ -2861,6 +2411,46 @@ async function handleWorkbookReviewSessionRegions(req, res, context, sessionId) 
     region: await workbookReviewRegionSummary(context, created.region),
     currentRevision: regionUnderstandingRevisionSummary(created.revision),
     warning: created.warning || null,
+    interpretationDeferred: deferInterpretation,
+  });
+}
+
+async function handleWorkbookReviewRegionInterpret(req, res, context, sessionId, regionId) {
+  const { auth, workbookReviewSession, region } = await workbookReviewRegionAuth(
+    req,
+    context,
+    sessionId,
+    regionId,
+    "editor",
+  );
+  const body = await readJsonBody(req);
+  const { sourceDocument, indexBlobs } = await sourceContextForWorkbookReviewRegion(context, workbookReviewSession);
+  const interpreted = await interpretWorkbookReviewRegion({
+    store: context.store,
+    region,
+    sourceDocument,
+    indexBlobs,
+    modelProvider: context.modelProvider,
+    actorUserId: auth.user.id,
+    input: body,
+  });
+  await context.store.recordAuditEvent({
+    labId: region.labId,
+    projectId: region.projectId,
+    actorUserId: auth.user.id,
+    action: interpreted.cancelled ? "workbook_review_region.interpret_cancelled" : "workbook_review_region.interpret",
+    targetType: interpreted.revision ? "region_understanding_revision" : "workbook_review_region",
+    targetId: interpreted.revision?.id || region.id,
+    summary: interpreted.cancelled
+      ? `Skipped a stale interpretation for ${region.sheetName}!${region.rangeRef}.`
+      : `Interpreted workbook review region ${region.sheetName}!${region.rangeRef}.`,
+    metadata: { regionId: region.id, modelWarning: interpreted.warning?.code || null },
+  });
+  sendJson(res, interpreted.revision ? 201 : 200, {
+    region: await workbookReviewRegionSummary(context, interpreted.region),
+    currentRevision: regionUnderstandingRevisionSummary(interpreted.revision),
+    warning: interpreted.warning || null,
+    cancelled: interpreted.cancelled === true,
   });
 }
 
@@ -2989,58 +2579,6 @@ async function handleWorkbookReviewRegionIgnore(req, res, context, sessionId, re
   sendJson(res, 200, { region: await workbookReviewRegionSummary(context, ignored.region) });
 }
 
-async function handleChartSpecFromProposal(req, res, context, projectId) {
-  const { auth, project } = await projectAuth(req, context, projectId, "editor");
-  const body = await readJsonBody(req);
-  const proposalSet = body.chartProposalSetId
-    ? await context.store.findChartProposalSetById(body.chartProposalSetId)
-    : null;
-  if (body.chartProposalSetId && (!proposalSet || proposalSet.projectId !== project.id)) {
-    sendError(res, 404, "chart_proposal_set_not_found", "Chart proposal set was not found for this project.");
-    return;
-  }
-  const proposal = proposalSet?.payload?.proposals?.find((candidate) => candidate.proposalId === body.proposalId)
-    || body.proposal;
-  if (!proposal) {
-    sendError(res, 404, "chart_proposal_not_found", "Chart proposal was not found.");
-    return;
-  }
-  const sourceBacked = isSourceBackedChartProposal(proposal);
-  if (!sourceBacked) {
-    sendError(
-      res,
-      409,
-      "data_snapshot_chart_not_implemented",
-      "This proposal endpoint accepts source-extract evidence only; analysis-result charts must use accepted result publication.",
-    );
-    return;
-  }
-  const chartValidation = validateChartSpecProposal({ proposal: chartSpecProposalPayload(proposal) });
-  const chartSpecPayload = chartValidation.chartSpec;
-  const chartSpec = await context.store.createChartSpec({
-    labId: project.labId,
-    projectId: project.id,
-    sourceChartProposalSetId: body.chartProposalSetId || null,
-    sourceProposalId: body.proposalId || proposal.proposalId || null,
-    title: chartSpecPayload.title || "Untitled chart",
-    chartType: chartSpecPayload.chartType || "scatter",
-    spec: chartSpecPayload,
-    layout: body.layout || {},
-    warnings: chartSpecPayload.warnings || [],
-    createdBy: auth.user.id,
-  });
-  await context.store.recordAuditEvent({
-    labId: project.labId,
-    projectId: project.id,
-    actorUserId: auth.user.id,
-    action: "chart_spec.create",
-    targetType: "chart_spec",
-    targetId: chartSpec.id,
-    summary: `Created chart spec ${chartSpec.title || chartSpec.id}.`,
-  });
-  sendJson(res, 201, { chartSpec });
-}
-
 async function handleChartSpecs(req, res, context, projectId) {
   await projectAuth(req, context, projectId, "viewer");
   const chartSpecs = await context.store.listChartSpecs({ projectId });
@@ -3159,16 +2697,12 @@ async function dispatch(req, res, context) {
   if (projectBrowserViewMatch && (req.method === "PATCH" || req.method === "DELETE")) {
     return handleProjectBrowserViewById(req, res, context, projectBrowserViewMatch[1], projectBrowserViewMatch[2]);
   }
-  const projectAgentPlanMatch = pathName.match(/^\/api\/projects\/([^/]+)\/agent\/plan$/);
-  if (projectAgentPlanMatch && req.method === "POST") return handleProjectAgentPlan(req, res, context, projectAgentPlanMatch[1]);
   const projectAgentRunsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/agent\/runs$/);
   if (projectAgentRunsMatch && (req.method === "GET" || req.method === "POST")) return handleProjectAgentRuns(req, res, context, projectAgentRunsMatch[1]);
   const projectAnalysisThreadsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/analysis-threads$/);
   if (projectAnalysisThreadsMatch && (req.method === "GET" || req.method === "POST")) {
     return handleProjectAnalysisThreads(req, res, context, projectAnalysisThreadsMatch[1], url);
   }
-  const projectChartInterpretMatch = pathName.match(/^\/api\/projects\/([^/]+)\/charts\/interpret$/);
-  if (projectChartInterpretMatch && req.method === "POST") return handleProjectChartInterpret(req, res, context, projectChartInterpretMatch[1]);
   const projectMatch = pathName.match(/^\/api\/projects\/([^/]+)$/);
   if (projectMatch && (req.method === "GET" || req.method === "PATCH")) return handleProjectById(req, res, context, projectMatch[1]);
   const fileMatch = pathName.match(/^\/api\/projects\/([^/]+)\/files$/);
@@ -3185,20 +2719,16 @@ async function dispatch(req, res, context) {
   }
   const regionUnderstandingsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/region-understandings$/);
   if (regionUnderstandingsMatch && req.method === "GET") return handleProjectRegionUnderstandings(req, res, context, regionUnderstandingsMatch[1]);
-  const sourceExtractProposalsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/source-extract-proposals$/);
-  if (sourceExtractProposalsMatch && (req.method === "GET" || req.method === "POST")) {
-    return handleProjectSourceExtractProposals(req, res, context, sourceExtractProposalsMatch[1]);
-  }
   const sourceDocumentRegionsMatch = pathName.match(/^\/api\/source-documents\/([^/]+)\/regions$/);
   if (sourceDocumentRegionsMatch && req.method === "GET") return handleSourceDocumentRegions(req, res, context, sourceDocumentRegionsMatch[1]);
   const sourceDocumentQueryMatch = pathName.match(/^\/api\/source-documents\/([^/]+)\/query$/);
   if (sourceDocumentQueryMatch && req.method === "POST") return handleSourceDocumentQuery(req, res, context, sourceDocumentQueryMatch[1]);
   const sourceDocumentRangeMatch = pathName.match(/^\/api\/source-documents\/([^/]+)\/range$/);
   if (sourceDocumentRangeMatch && req.method === "POST") return handleSourceDocumentRange(req, res, context, sourceDocumentRangeMatch[1]);
-  const sourceDocumentExtractPreviewMatch = pathName.match(/^\/api\/source-documents\/([^/]+)\/extract-preview$/);
-  if (sourceDocumentExtractPreviewMatch && req.method === "POST") return handleSourceDocumentExtractPreview(req, res, context, sourceDocumentExtractPreviewMatch[1]);
-  const sourceRegionExtractPreviewMatch = pathName.match(/^\/api\/source-regions\/([^/]+)\/extract-preview$/);
-  if (sourceRegionExtractPreviewMatch && req.method === "POST") return handleSourceRegionExtractPreview(req, res, context, sourceRegionExtractPreviewMatch[1]);
+  const workbookReviewRegionInterpretMatch = pathName.match(/^\/api\/workbook-review-sessions\/([^/]+)\/regions\/([^/]+)\/interpret$/);
+  if (workbookReviewRegionInterpretMatch && req.method === "POST") {
+    return handleWorkbookReviewRegionInterpret(req, res, context, workbookReviewRegionInterpretMatch[1], workbookReviewRegionInterpretMatch[2]);
+  }
   const workbookReviewRegionRevisionsMatch = pathName.match(/^\/api\/workbook-review-sessions\/([^/]+)\/regions\/([^/]+)\/revisions$/);
   if (workbookReviewRegionRevisionsMatch && (req.method === "GET" || req.method === "POST")) {
     return handleWorkbookReviewRegionRevisions(req, res, context, workbookReviewRegionRevisionsMatch[1], workbookReviewRegionRevisionsMatch[2]);
@@ -3221,12 +2751,6 @@ async function dispatch(req, res, context) {
   }
   const workbookReviewSessionMatch = pathName.match(/^\/api\/workbook-review-sessions\/([^/]+)$/);
   if (workbookReviewSessionMatch && req.method === "GET") return handleWorkbookReviewSessionById(req, res, context, workbookReviewSessionMatch[1]);
-  const sourceExtractProposalChartMatch = pathName.match(/^\/api\/source-extract-proposals\/([^/]+)\/chart-proposal$/);
-  if (sourceExtractProposalChartMatch && req.method === "POST") return handleSourceExtractChartProposal(req, res, context, sourceExtractProposalChartMatch[1]);
-  const sourceExtractProposalMatch = pathName.match(/^\/api\/source-extract-proposals\/([^/]+)$/);
-  if (sourceExtractProposalMatch && req.method === "PATCH") return handleSourceExtractProposalPatch(req, res, context, sourceExtractProposalMatch[1]);
-  const agentRunConfirmMatch = pathName.match(/^\/api\/agent-runs\/([^/]+)\/confirm$/);
-  if (agentRunConfirmMatch && req.method === "POST") return handleAgentRunConfirm(req, res, context, agentRunConfirmMatch[1]);
   const agentRunCancelMatch = pathName.match(/^\/api\/agent-runs\/([^/]+)\/cancel$/);
   if (agentRunCancelMatch && req.method === "POST") return handleAgentRunCancel(req, res, context, agentRunCancelMatch[1]);
   const agentRunMatch = pathName.match(/^\/api\/agent-runs\/([^/]+)$/);
@@ -3278,12 +2802,6 @@ async function dispatch(req, res, context) {
   if (analysisThreadMatch && req.method === "GET") {
     return handleAnalysisThreadById(req, res, context, analysisThreadMatch[1]);
   }
-  const chartProposalSetsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/chart-proposal-sets$/);
-  if (chartProposalSetsMatch && req.method === "GET") return handleProjectChartProposalSets(req, res, context, chartProposalSetsMatch[1]);
-  const chartProposalSetMatch = pathName.match(/^\/api\/chart-proposal-sets\/([^/]+)$/);
-  if (chartProposalSetMatch && req.method === "PATCH") return handleChartProposalSetPatch(req, res, context, chartProposalSetMatch[1]);
-  const chartFromProposalMatch = pathName.match(/^\/api\/projects\/([^/]+)\/chart-specs\/from-proposal$/);
-  if (chartFromProposalMatch && req.method === "POST") return handleChartSpecFromProposal(req, res, context, chartFromProposalMatch[1]);
   const chartSpecsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/chart-specs$/);
   if (chartSpecsMatch && req.method === "GET") return handleChartSpecs(req, res, context, chartSpecsMatch[1]);
   const chartSpecMatch = pathName.match(/^\/api\/chart-specs\/([^/]+)$/);
@@ -3303,13 +2821,11 @@ export async function handleSaasRoutes(req, res, context) {
     && !req.url?.startsWith("/api/source-documents")
     && !req.url?.startsWith("/api/source-regions")
     && !req.url?.startsWith("/api/workbook-review-sessions")
-    && !req.url?.startsWith("/api/source-extract-proposals")
     && !req.url?.startsWith("/api/agent-runs")
     && !req.url?.startsWith("/api/analysis-threads")
     && !req.url?.startsWith("/api/analysis-plan-revisions")
     && !req.url?.startsWith("/api/analysis-runs")
     && !req.url?.startsWith("/api/import-runs")
-    && !req.url?.startsWith("/api/chart-proposal-sets")
     && !req.url?.startsWith("/api/chart-specs")
     && !req.url?.startsWith("/api/manuscripts")) {
     return false;
