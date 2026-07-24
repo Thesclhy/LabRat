@@ -15,6 +15,24 @@ Keep entries concise, newest first, and include:
 
 ## 2026-07-24
 
+- Fixed the Ubuntu GitHub Actions backend-test failure caused by a
+  Windows-only temporary upload path in `saasRoutes.test.js`. The route suite
+  now builds its isolated storage root with `path.join(os.tmpdir(), ...)`, so
+  workbook upload tests use a writable system temporary directory on Windows
+  and Linux instead of cascading from HTTP 500 upload failures. Verification:
+  frontend 257/257, backend 202 passed with four retired-flow skips, and the
+  production build passed with only the existing Plotly chunk-size warning.
+- Fixed the temporary production deployment's first-project blocker. The
+  bootstrap admin had no labs, so `/api/auth/me` returned `labs: []` and
+  project creation reached Postgres with a null `lab_id`. Created the initial
+  `LabRat Production` lab on the server, verified the admin session now sees
+  one lab, and smoke-tested project create/delete. Updated the project-create
+  route to fall back to the session's first lab and return a clear 400 when no
+  lab exists instead of surfacing a database 500, then redeployed release
+  `dbc8285bd26e-local-20260724020309`. Verification: production `/health` 200,
+  production login with one lab, production project creation without explicit
+  `labId` 201 followed by cleanup delete 200, `npm --prefix backend test`, and
+  `npm run build` with the existing Plotly chunk-size warning.
 - Added source-backed nullable scalar values to the Experiment Browser analysis
   and DataSnapshot v3 path. New nulls require a reviewed missing reason and
   exact source evidence, retain source raw/formatted placeholders, never

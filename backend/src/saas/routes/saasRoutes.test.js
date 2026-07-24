@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import os from "node:os";
+import path from "node:path";
 import { after, before, test } from "node:test";
 import * as XLSX from "xlsx";
 import {
@@ -538,7 +539,7 @@ before(async () => {
       SESSION_SECRET: "test-secret",
       LABRAT_SEED_DEV_ACCOUNTS: "true",
     }),
-    fileStorageRoot: `${os.tmpdir()}\\labrat-saas-test-${Date.now()}`,
+    fileStorageRoot: path.join(os.tmpdir(), `labrat-saas-test-${Date.now()}`),
   };
   store = new MemorySaasStore({ seedDevAccounts: true });
   server = createServer({
