@@ -716,7 +716,11 @@ async function handleProjects(req, res, context) {
     return;
   }
   const body = await readJsonBody(req);
-  const labId = body.labId;
+  const labId = body.labId || auth.labs[0]?.labId || auth.labs[0]?.id || "";
+  if (!labId) {
+    sendError(res, 400, "invalid_project_request", "Create or select a lab before creating a project.");
+    return;
+  }
   requireLabRole(auth, labId, "editor");
   const name = String(body.name || "").trim();
   if (!name) {

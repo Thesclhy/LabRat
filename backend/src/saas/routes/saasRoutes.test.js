@@ -577,6 +577,14 @@ test("seeded lab owner can create projects and cross-lab access is rejected", as
   const state = await jsonFetch(`/api/projects/${project.id}/state`);
   assert.equal(state.status, 200);
 
+  const fallbackProjectResponse = await jsonFetch("/api/projects", {
+    method: "POST",
+    body: { name: "Default Lab Project" },
+  });
+  assert.equal(fallbackProjectResponse.status, 201);
+  const fallbackProject = (await fallbackProjectResponse.json()).project;
+  assert.equal(fallbackProject.labId, meBody.labs[0].labId);
+
   const ownerCookie = cookie;
   const adminLogin = await jsonFetch("/api/auth/login", {
     method: "POST",
