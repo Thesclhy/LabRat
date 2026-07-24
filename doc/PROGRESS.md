@@ -15,6 +15,19 @@ Keep entries concise, newest first, and include:
 
 ## 2026-07-24
 
+- Raised only the reviewed Analysis `inspect_source_range` and materialization
+  page limit from 500 to 2,500 cells so common master tables such as
+  `A1:Y63` can be inspected in one model tool call. The ordinary
+  SourceDocument range API, Workbook Review, and source preview retain their
+  500-cell ceiling, including when a client requests a larger `maxCells`.
+  Updated both chart and Experiment Browser planning tool descriptions and the
+  AI boundary contract. Regression coverage verifies the 2,500-cell boundary,
+  confirmed-region containment, public-API isolation, and transparent
+  materialization of a 3,000-cell selection. Verification passed: backend 203
+  tests with four existing skips, frontend 257/257, and the production build
+  with only the existing Plotly chunk-size warning. Follow-up: record a
+  real-provider master-table latency/token baseline, then replace broad range
+  scans with source-field search and profiling.
 - Fixed the Ubuntu GitHub Actions backend-test failure caused by a
   Windows-only temporary upload path in `saasRoutes.test.js`. The route suite
   now builds its isolated storage root with `path.join(os.tmpdir(), ...)`, so

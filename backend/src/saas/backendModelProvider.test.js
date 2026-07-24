@@ -170,6 +170,7 @@ test("draftAnalysisPlan selects exact confirmed ranges without generating Python
       assert.match(body.system, /Do not write Python/i);
       assert.match(body.system, /repairContext/);
       assert.equal(body.tools[0].name, "inspect_source_range");
+      assert.match(body.tools[0].description, /2500 cells/);
       assert.equal(body.output_config.format.type, "json_schema");
       assert.deepEqual(body.output_config.format.schema.required, [
         "requestSummary",
@@ -248,6 +249,8 @@ test("draftExperimentBrowserPlan uses an Anthropic-compatible empty invariants s
       assert.match(body.system, /count actual non-header data rows/i);
       assert.match(body.system, /distinguish creating new experiment records from appending/i);
       assert.match(body.system, /remain selected source-backed null fields/i);
+      assert.equal(body.tools[0].name, "inspect_source_range");
+      assert.match(body.tools[0].description, /2500 cells/);
       return {
         ok: true,
         async json() {

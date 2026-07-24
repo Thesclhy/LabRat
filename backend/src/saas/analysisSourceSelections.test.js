@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import { encodeCell } from "../import/utils/excelAddress.js";
 import {
+  analysisSourceSelectionLimits,
   confirmedSourceRegionCatalog,
   inspectConfirmedSourceRange,
   inspectRunInput,
@@ -101,17 +102,50 @@ test("model inspection stays paged while an exact subrange resolves inside the c
   assert.equal(selections[0].sourceSelectionId, "source_selection_1");
 });
 
-test("materializes selections larger than 500 cells by bounded source reads", async () => {
-  const inputs = await materializeAnalysisInputs({
-    store: seededWorkbook({ rows: 20, columns: 30 }),
+test("analysis inspection allows 2,500 cells but rejects larger or unconfirmed ranges", async () => {
+  const store = seededWorkbook();
+  const page = await inspectConfirmedSourceRange({
+    store,
     projectId: "project_1",
-    sourceSelections: requested("A1:AD20"),
+    regionUnderstandingRevisionId: "region_revision_1",
+    range: "A1:AX50",
+  });
+
+  assert.equal(page.cellCount, 2500);
+  assert.equal(analysisSourceSelectionLimits.maxInspectionCells, 2500);
+  await assert.rejects(
+    inspectConfirmedSourceRange({
+      store,
+      projectId: "project_1",
+      regionUnderstandingRevisionId: "region_revision_1",
+      range: "A1:AY50",
+    }),
+    (error) => error.code === "source_range_too_large"
+      && error.details?.cellCount === 2550
+      && error.details?.maxCells === 2500,
+  );
+  await assert.rejects(
+    inspectConfirmedSourceRange({
+      store,
+      projectId: "project_1",
+      regionUnderstandingRevisionId: "region_revision_1",
+      range: "A1:CF1",
+    }),
+    (error) => error.code === "analysis_source_range_outside_confirmed_region",
+  );
+});
+
+test("materializes selections larger than 2,500 cells by bounded source reads", async () => {
+  const inputs = await materializeAnalysisInputs({
+    store: seededWorkbook({ rows: 60, columns: 50 }),
+    projectId: "project_1",
+    sourceSelections: requested("A1:AX60"),
   });
 
   assert.equal(inputs.tables.length, 1);
-  assert.equal(inputs.tables[0].rowCount, 20);
-  assert.equal(inputs.tables[0].columnCount, 30);
-  assert.equal(inputs.tables[0].values.length * inputs.tables[0].values[0].length, 600);
+  assert.equal(inputs.tables[0].rowCount, 60);
+  assert.equal(inputs.tables[0].columnCount, 50);
+  assert.equal(inputs.tables[0].values.length * inputs.tables[0].values[0].length, 3000);
   const page = inspectRunInput(inputs, {
     tableId: inputs.tables[0].tableId,
     rowOffset: 5,
@@ -121,8 +155,8 @@ test("materializes selections larger than 500 cells by bounded source reads", as
   });
   assert.equal(page.values.length, 3);
   assert.equal(page.values[0].length, 2);
-  assert.equal(page.page.rowCount, 20);
-  assert.equal(page.page.columnCount, 30);
+  assert.equal(page.page.rowCount, 60);
+  assert.equal(page.page.columnCount, 50);
 });
 
 test("one source selection becomes one Python input table across multiple workbooks", async () => {

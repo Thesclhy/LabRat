@@ -3,6 +3,12 @@ import {
   requestAnthropicJsonWithTools,
 } from "../ai/anthropic.js";
 import { SUPPORTED_CHART_TYPES } from "../charts/services/chartSpec.js";
+import { ANALYSIS_SOURCE_RANGE_MAX_CELLS } from "./sourceDocuments.js";
+
+const INSPECT_SOURCE_RANGE_DESCRIPTION = [
+  `Read at most ${ANALYSIS_SOURCE_RANGE_MAX_CELLS} cells from one user-confirmed workbook region.`,
+  "Call repeatedly with smaller ranges when needed.",
+].join(" ");
 
 const INTENT_SYSTEM = [
   "Classify one LabRat research-workflow message.",
@@ -542,7 +548,7 @@ export function createBackendModelProvider({
         outputSchema: ANALYSIS_PLAN_OUTPUT_SCHEMA,
         tools: [{
           name: "inspect_source_range",
-          description: "Read at most 500 cells from one user-confirmed workbook region. Call repeatedly with smaller ranges when needed.",
+          description: INSPECT_SOURCE_RANGE_DESCRIPTION,
           input_schema: {
             type: "object",
             properties: {
@@ -595,7 +601,7 @@ export function createBackendModelProvider({
         outputSchema: EXPERIMENT_BROWSER_PLAN_OUTPUT_SCHEMA,
         tools: [{
           name: "inspect_source_range",
-          description: "Read at most 500 cells from one user-confirmed workbook region. Call repeatedly with smaller ranges when needed.",
+          description: INSPECT_SOURCE_RANGE_DESCRIPTION,
           input_schema: {
             type: "object",
             properties: {

@@ -93,9 +93,11 @@ stages.
   `inspect_source_range` to page through exact cells. It selects one or more
   rectangular `sourceSelections`; each must stay inside its accepted region.
 - Multiple files, worksheets, and non-contiguous ranges remain separate
-  selections and separate red review rectangles. SourceDocument reads are
-  individually bounded to 500 cells, but there is no 500-cell aggregate
-  analysis-selection limit.
+  selections and separate red review rectangles. Analysis planning and
+  materialization reads are individually bounded to 2,500 cells, but there is
+  no aggregate analysis-selection limit. Workbook Review, ordinary source
+  preview, and the public SourceDocument range API retain their 500-cell
+  request limit.
 - A PlanRevision stores only output target, source/snapshot selections, structured review meaning,
   readable display steps, warnings, and derived rectangles. Python, input
   values, field ids, expected result rows, traces, and Plotly are forbidden.

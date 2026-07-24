@@ -1557,10 +1557,12 @@ test("source documents expose bounded ranges, cell search, and extract previews"
 
   const oversized = await jsonFetch(`/api/source-documents/${sourceDocument.id}/range`, {
     method: "POST",
-    body: { sheetName: "Runs", range: "A1:ZZ100" },
+    body: { sheetName: "Runs", range: "A1:ZZ100", maxCells: 2500 },
   });
   assert.equal(oversized.status, 400);
-  assert.equal((await oversized.json()).error.code, "source_range_too_large");
+  const oversizedBody = await oversized.json();
+  assert.equal(oversizedBody.error.code, "source_range_too_large");
+  assert.equal(oversizedBody.error.details.maxCells, 500);
 });
 
 test("legacy dataset, source-extract, chart-proposal, and planner routes are retired", async () => {

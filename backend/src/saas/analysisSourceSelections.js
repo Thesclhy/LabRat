@@ -1,5 +1,8 @@
 import { decodeRange, encodeRange } from "../import/utils/excelAddress.js";
-import { readSourceDocumentRange, SOURCE_RANGE_MAX_CELLS } from "./sourceDocuments.js";
+import {
+  ANALYSIS_SOURCE_RANGE_MAX_CELLS,
+  readSourceDocumentRange,
+} from "./sourceDocuments.js";
 
 const MAX_SOURCE_SELECTIONS = 64;
 
@@ -127,7 +130,8 @@ async function rangeCells({ store, projectId, sourceDocumentId, sheetName, range
     indexBlobs,
     sheetName,
     range,
-    maxCells: SOURCE_RANGE_MAX_CELLS,
+    maxCells: ANALYSIS_SOURCE_RANGE_MAX_CELLS,
+    maxAllowedCells: ANALYSIS_SOURCE_RANGE_MAX_CELLS,
   });
 }
 
@@ -250,8 +254,8 @@ function tileRanges(range) {
   const decoded = decodeRange(range);
   const ranges = [];
   for (let col = decoded.s.c; col <= decoded.e.c;) {
-    const columnCount = Math.min(decoded.e.c - col + 1, SOURCE_RANGE_MAX_CELLS);
-    const rowCount = Math.max(1, Math.floor(SOURCE_RANGE_MAX_CELLS / columnCount));
+    const columnCount = Math.min(decoded.e.c - col + 1, ANALYSIS_SOURCE_RANGE_MAX_CELLS);
+    const rowCount = Math.max(1, Math.floor(ANALYSIS_SOURCE_RANGE_MAX_CELLS / columnCount));
     const endCol = col + columnCount - 1;
     for (let row = decoded.s.r; row <= decoded.e.r; row += rowCount) {
       ranges.push(encodeRange({
@@ -377,5 +381,5 @@ export function inspectRunInput(inputs, {
 
 export const analysisSourceSelectionLimits = Object.freeze({
   maxSelections: MAX_SOURCE_SELECTIONS,
-  maxInspectionCells: SOURCE_RANGE_MAX_CELLS,
+  maxInspectionCells: ANALYSIS_SOURCE_RANGE_MAX_CELLS,
 });
