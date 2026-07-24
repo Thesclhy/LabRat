@@ -5,7 +5,10 @@ import {
   buildAnalysisRunPackage,
   createAnalysisExecutor,
 } from "./analysisExecutor.js";
-import { ANALYSIS_RUNTIME_VERSION } from "./analysisSchemas.js";
+import {
+  ANALYSIS_PLAN_REVISION_VERSION,
+  ANALYSIS_RUNTIME_VERSION,
+} from "./analysisSchemas.js";
 
 const source = [
   "def analyze(inputs, labrat):",
@@ -24,7 +27,7 @@ function runPackage() {
     },
     planRevision: {
       id: "revision_1",
-      schemaVersion: "labrat.analysisPlanRevision.v2",
+      schemaVersion: ANALYSIS_PLAN_REVISION_VERSION,
       status: "accepted",
       plan: {
         reviewPlan: {

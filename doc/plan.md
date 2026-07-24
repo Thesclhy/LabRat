@@ -18,7 +18,7 @@ Upload workbook
   -> user independently confirms/corrects/ignores/deletes each region
   -> accepted RegionUnderstandingRevisions
   -> natural-language Experiment Browser AnalysisThread
-  -> reviewed source selections and readable data-change plan
+  -> reviewed source selections, scalar field targets, and readable data-change plan
   -> post-acceptance Python against real workbook/snapshot inputs
   -> reviewed record-patch Browser preview
   -> explicit Publish to Browser as DataSnapshot v3
@@ -30,9 +30,11 @@ Uploading Excel defaults to evidence indexing and region understanding only. It 
 The first complete product target is reviewed and sustainably editable data in
 Experiment Browser. LabRat may select exact accepted workbook ranges, active
 experiment fields, or both. The user reviews only sources and a natural-language
-plan. After acceptance, Python returns source-backed `recordPatches`; the backend
-merges them with frozen active records, previews the resulting Browser table,
-and atomically publishes an immutable DataSnapshot v3 plus a new BrowserView.
+plan. Direct workbook fields inherit their stable metadata from accepted region
+understanding; derived fields fix metadata in the plan. After acceptance,
+Python returns source-backed values keyed by `targetFieldId`; the backend merges
+them with frozen active records, previews the resulting Browser table, and
+atomically publishes an immutable DataSnapshot v3 plus a new BrowserView.
 Unmentioned fields and series are preserved.
 
 The obsolete aggregate dataset/generic import implementation has been removed. No legacy local-data migration or dual-write path is required.
@@ -49,7 +51,8 @@ Use this split when deciding what to build:
 
 - Sustainable natural-language Experiment Browser publication: AnalysisThread
   now supports `outputTarget: experiment_browser`, mixed workbook and active
-  snapshot selections, post-acceptance Python, source-validated field/series
+  snapshot selections, reviewed scalar field targets, post-acceptance Python,
+  source-validated field/series
   patches, complete-record merge previews, automated identity suggestions,
   stale-head and idempotency protection, atomic DataSnapshot v3/BrowserView
   publication, and automatic opening of the published view. Pure column

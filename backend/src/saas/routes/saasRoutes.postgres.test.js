@@ -214,11 +214,7 @@ test("Postgres SaaS routes preserve workbook review, source documents, and suppo
               recordPatches: [{
                 label: "Exp30",
                 upsertFields: [{
-                  fieldKey: "carbon_c1",
-                  displayName: "C1",
-                  role: "outcome",
-                  valueType: "number",
-                  unit: "unitless",
+                  targetFieldId: runPackage.inputs.targetFields[0].targetFieldId,
                   value: table.values[1][1],
                   formattedValue: table.displayValues[1][1],
                   confidence: 1,
@@ -453,6 +449,17 @@ test("Postgres SaaS routes preserve workbook review, source documents, and suppo
         purpose: "Read the accepted Exp30 carbon data.",
       }],
       experimentSelections: [],
+      fieldTargets: [{
+        kind: "source_field",
+        regionUnderstandingRevisionId: confirmedUnderstandingBody.acceptedRevision.id,
+        column: "B",
+        fieldKey: "",
+        displayName: "",
+        role: "",
+        valueType: "",
+        unit: "",
+        description: "Add the accepted C1 value.",
+      }],
       reviewPlan: {
         processingSteps: [
           "Read Exp30 C1 from the accepted workbook range.",

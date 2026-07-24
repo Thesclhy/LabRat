@@ -1,14 +1,29 @@
 import { stableDataHash } from "./dataPlanSchemas.js";
 import { SUPPORTED_CHART_TYPES } from "../charts/services/chartSpec.js";
 
-export const ANALYSIS_PLAN_REVISION_VERSION = "labrat.analysisPlanRevision.v2";
+export const ANALYSIS_PLAN_REVISION_VERSION = "labrat.analysisPlanRevision.v3";
 export const ANALYSIS_RUNTIME_VERSION = "labrat-python-v2";
 export const ANALYSIS_OUTPUT_TARGETS = Object.freeze({
   CHART: "chart",
   EXPERIMENT_BROWSER: "experiment_browser",
 });
+export const ANALYSIS_FIELD_ROLES = Object.freeze([
+  "identifier",
+  "condition",
+  "outcome",
+  "series_summary",
+  "other",
+]);
+export const ANALYSIS_VALUE_TYPES = Object.freeze([
+  "number",
+  "string",
+  "date",
+  "boolean",
+]);
 
 const SUPPORTED_ANALYSIS_CHART_TYPES = new Set(SUPPORTED_CHART_TYPES);
+const SUPPORTED_ANALYSIS_FIELD_ROLES = new Set(ANALYSIS_FIELD_ROLES);
+const SUPPORTED_ANALYSIS_VALUE_TYPES = new Set(ANALYSIS_VALUE_TYPES);
 const FORBIDDEN_PLAN_KEYS = new Set([
   "pythonProgram",
   "program",
@@ -50,6 +65,7 @@ export function frozenPlanHash(plan = {}) {
     outputTarget: plan.outputTarget || ANALYSIS_OUTPUT_TARGETS.CHART,
     sourceSelections: asArray(plan.sourceSelections),
     experimentSelections: asArray(plan.experimentSelections),
+    fieldTargets: asArray(plan.fieldTargets),
     reviewPlan: plan.reviewPlan || {},
     displayPlan: asArray(plan.displayPlan),
   });
@@ -132,6 +148,67 @@ export function validateAnalysisPlanRevision(plan = {}) {
       ));
     }
   });
+  const targetIds = new Set();
+  const targetSelectors = new Set();
+  asArray(plan.fieldTargets).forEach((target, index) => {
+    const targetFieldId = text(target?.targetFieldId);
+    const kind = text(target?.kind);
+    const fieldKey = text(target?.fieldKey);
+    const displayName = text(target?.displayName);
+    const role = text(target?.role);
+    const valueType = text(target?.valueType);
+    const selector = `${fieldKey}|${text(target?.unit) || "unitless"}|${valueType}`;
+    if (
+      !targetFieldId
+      || !["source_field", "derived_field"].includes(kind)
+      || !fieldKey
+      || !displayName
+      || !SUPPORTED_ANALYSIS_FIELD_ROLES.has(role)
+      || !SUPPORTED_ANALYSIS_VALUE_TYPES.has(valueType)
+    ) {
+      errors.push(error(
+        "analysis_field_target_invalid",
+        "Every field target requires a stable id, kind, key, readable name, supported role, and supported value type.",
+        { targetIndex: index },
+      ));
+    }
+    if (targetIds.has(targetFieldId)) {
+      errors.push(error(
+        "analysis_field_target_duplicate",
+        "Every field target id must be unique within one plan revision.",
+        { targetIndex: index, targetFieldId },
+      ));
+    }
+    if (targetSelectors.has(selector)) {
+      errors.push(error(
+        "analysis_field_target_duplicate",
+        "The same field key, unit, and value type may appear only once in one plan revision.",
+        { targetIndex: index, fieldKey },
+      ));
+    }
+    targetIds.add(targetFieldId);
+    targetSelectors.add(selector);
+    if (kind === "source_field" && (
+      !text(target?.sourceField?.regionUnderstandingRevisionId)
+      || !text(target?.sourceField?.sourceSelectionId)
+      || !text(target?.sourceField?.column)
+    )) {
+      errors.push(error(
+        "analysis_source_field_target_invalid",
+        "A source field target must reference one accepted region field inside one source selection.",
+        { targetIndex: index, targetFieldId },
+      ));
+    }
+  });
+  if (
+    outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
+    && !asArray(plan.fieldTargets).length
+  ) {
+    errors.push(error(
+      "analysis_field_target_required",
+      "An Experiment Browser plan must declare at least one reviewed scalar field target.",
+    ));
+  }
   if (!plan.reviewPlan || typeof plan.reviewPlan !== "object" || Array.isArray(plan.reviewPlan)) {
     errors.push(error(
       "analysis_review_plan_required",

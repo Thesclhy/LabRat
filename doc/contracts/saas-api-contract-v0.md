@@ -325,9 +325,10 @@ Rules:
   or publishes an artifact. A second failure returns a durable planning warning
   with bounded error details so the frontend can name the policy and offending
   line instead of showing only a generic provider/runtime error.
-- Each revision declares `outputTarget: chart | experiment_browser` and stores exact `sourceSelections`, optional active `experimentSelections`, structured `reviewPlan`, readable
-  `displayPlan`, derived non-contiguous source rectangles, validation, and
-  visible feedback. It stores no Python, input values, field mapping, expected
+- Each revision declares `outputTarget: chart | experiment_browser` and stores exact `sourceSelections`, optional active `experimentSelections`, reviewed
+  `fieldTargets` for Experiment Browser scalar output, structured `reviewPlan`,
+  readable `displayPlan`, derived non-contiguous source rectangles, validation,
+  and visible feedback. It stores no Python, input values, expected
   result table, or user-review hash. Creating revision N marks the prior
   awaiting-review revision `superseded` without changing its payload.
 - Each source selection names one accepted RegionUnderstandingRevision,
@@ -336,7 +337,16 @@ Rules:
   files, sheets, and non-contiguous ranges.
 - Each experiment selection names one active experiment, its frozen snapshot
   head, exact unit-aware field column ids, and whether series are included.
-  Experiment Browser plans may combine workbook and snapshot inputs.
+  These selections are existing calculation inputs only; a desired new
+  workbook field cannot be represented as an experiment selection. Experiment
+  Browser plans may combine workbook and snapshot inputs.
+- Each Experiment Browser scalar output has one stable `targetFieldId`.
+  A direct `source_field` target references an accepted region revision and
+  Excel column; the backend derives its key, readable name, role, value type,
+  unit, header evidence, and stable Browser column id from the accepted region
+  understanding. A `derived_field` target declares those semantics in the
+  reviewed plan and is validated before acceptance. Python never defines or
+  changes field metadata.
 - `GET .../selection` returns the exact source selections and derived source
   rectangles for the Source review page; it returns no result records.
 - Plan acceptance requires only an `Idempotency-Key` header. The request body
@@ -351,12 +361,13 @@ Rules:
   individually bounded, but the analysis selection has no 500-cell aggregate
   limit; configurable executor input/output limits remain.
 - For `experiment_browser`, execution also verifies frozen active heads and
-  materializes `inputs["experiments"]` plus the current project field catalog.
-  Code generation may page these values with `inspect_experiment_input`.
+  materializes `inputs["experiments"]`, the current project field catalog, and
+  the accepted `inputs["targetFields"]`. Code generation may page selected
+  experiment values with `inspect_experiment_input`.
 - Only after materialization does the model generate `labrat-python-v2` with
   entrypoint `analyze(inputs, labrat)`. Programs read the dictionary
-  whose `tables`, `experiments`, and `fieldCatalog` members are arrays; large
-  inputs can be inspected with `inspect_run_input`.
+  whose `tables`, `experiments`, `fieldCatalog`, and `targetFields` members are
+  arrays; large inputs can be inspected with `inspect_run_input`.
   Python policy errors include the policy name, offending line, and reason.
 - A Python execution error or backend output-contract failure may trigger one
   bounded automatic code-repair attempt inside the same immutable AnalysisRun.
@@ -375,7 +386,10 @@ Rules:
 - For `experiment_browser`, Python instead returns `recordPatches`,
   `browserView`, and readable `exclusions`. Each patch can upsert scalar fields
   or series but cannot remove scientific data. Every generated value references
-  accepted workbook cell coordinates or selected snapshot fields. The backend
+  accepted workbook cell coordinates or selected snapshot fields. Every scalar
+  upsert contains an accepted `targetFieldId`, value payload, and sources; it
+  cannot repeat or override `fieldKey`, `displayName`, `role`, `valueType`,
+  `unit`, or `columnId`. The backend applies the frozen target definition,
   reuses stable field selectors, blocks same-key/same-unit type conflicts,
   validates finite values and payload limits, and merges patches with complete
   frozen active records so unmentioned fields and series are preserved.

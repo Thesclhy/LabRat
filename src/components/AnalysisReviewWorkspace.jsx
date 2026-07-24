@@ -122,6 +122,8 @@ function validationErrors(validation) {
     traceIndex: Number.isInteger(error?.traceIndex) ? error.traceIndex : null,
     actualUnit: error?.actualUnit ?? null,
     expectedUnits: asArray(error?.expectedUnits),
+    count: Number.isInteger(error?.count) && error.count > 0 ? error.count : undefined,
+    examples: asArray(error?.examples),
   })));
 }
 

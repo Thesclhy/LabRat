@@ -8,7 +8,9 @@ import {
   inspectConfirmedSourceRange,
   inspectRunInput,
   materializeAnalysisInputs,
+  resolveAnalysisFieldTargets,
   resolveAnalysisSourceSelections,
+  sourceFieldCandidatesForRequest,
 } from "./analysisSourceSelections.js";
 import { MemorySaasStore } from "./memoryStore.js";
 
@@ -214,4 +216,254 @@ test("one source selection becomes one Python input table across multiple workbo
     "Calculation Exp33.xlsx",
     "Calculation Exp32.xlsx",
   ]);
+});
+
+test("resolves Impeller and explicit column K from accepted region semantics", async () => {
+  const store = seededWorkbook({ rows: 63, columns: 25 });
+  const revision = store.regionUnderstandingRevisions.get("region_revision_1");
+  revision.interpretation = {
+    semanticType: "experiment_table",
+    fields: [{
+      column: "A",
+      semanticKey: "experiment_id",
+      displayName: "Experiment",
+      role: "identifier",
+      valueType: "string",
+      unit: null,
+      sourceRefs: [{ sourceType: "excel_cell", sourceDocumentId: "source_1", sheet: "LDPE TEMPLATE", cell: "A1" }],
+    }, {
+      column: "K",
+      semanticKey: "impeller",
+      displayName: "Impeller",
+      role: "condition",
+      valueType: "string",
+      unit: null,
+      sourceRefs: [{ sourceType: "excel_cell", sourceDocumentId: "source_1", sheet: "LDPE TEMPLATE", cell: "K1" }],
+    }],
+  };
+  const confirmedRegions = await confirmedSourceRegionCatalog({
+    store,
+    projectId: "project_1",
+  });
+  assert.deepEqual(
+    sourceFieldCandidatesForRequest({
+      originalRequest: "Add column K, Impeller, to Experiment Browser.",
+      confirmedRegions,
+    }).map((item) => [item.column, item.semanticKey, item.matchReason]),
+    [["K", "impeller", "explicit_column"]],
+  );
+  const sourceSelections = await resolveAnalysisSourceSelections({
+    store,
+    projectId: "project_1",
+    sourceSelections: requested("A1:K63"),
+  });
+  const targets = await resolveAnalysisFieldTargets({
+    store,
+    projectId: "project_1",
+    sourceSelections,
+    fieldTargets: [{
+      kind: "source_field",
+      regionUnderstandingRevisionId: "region_revision_1",
+      column: "K",
+      fieldKey: "",
+      displayName: "",
+      role: "",
+      valueType: "",
+      unit: "",
+      description: "Add Impeller to Experiment Browser.",
+    }],
+  });
+
+  assert.equal(targets[0].targetFieldId, "target_field_1");
+  assert.equal(targets[0].fieldKey, "impeller");
+  assert.equal(targets[0].displayName, "Impeller");
+  assert.equal(targets[0].role, "condition");
+  assert.equal(targets[0].valueType, "string");
+  assert.equal(targets[0].sourceField.columnOffset, 10);
+  assert.equal(targets[0].sourceField.headerSourceRefs[0].cell, "K1");
+  assert.equal(targets[0].columnId, "field:impeller:unitless:string");
+});
+
+test("deterministically binds a source field target to the unique selected column", async () => {
+  const store = seededWorkbook({ rows: 63, columns: 25 });
+  store.regionUnderstandingRevisions.get("region_revision_1").interpretation = {
+    semanticType: "experiment_table",
+    fields: [{
+      column: "K",
+      semanticKey: "impeller_type",
+      displayName: "Impeller",
+      role: "condition",
+      valueType: "string",
+      unit: null,
+    }],
+  };
+  const sourceSelections = await resolveAnalysisSourceSelections({
+    store,
+    projectId: "project_1",
+    sourceSelections: requested("A1:K63"),
+  });
+  const targets = await resolveAnalysisFieldTargets({
+    store,
+    projectId: "project_1",
+    sourceSelections,
+    fieldTargets: [{
+      kind: "source_field",
+      regionUnderstandingRevisionId: "model_revision_alias",
+      column: "Column K",
+      fieldKey: "impeller",
+      displayName: "Impeller type",
+    }],
+  });
+
+  assert.equal(targets[0].fieldKey, "impeller_type");
+  assert.equal(
+    targets[0].sourceField.regionUnderstandingRevisionId,
+    "region_revision_1",
+  );
+  assert.equal(targets[0].sourceField.column, "K");
+});
+
+test("does not bind a source field outside the accepted selection", async () => {
+  const store = seededWorkbook({ rows: 63, columns: 25 });
+  store.regionUnderstandingRevisions.get("region_revision_1").interpretation = {
+    semanticType: "experiment_table",
+    fields: [{
+      column: "K",
+      semanticKey: "impeller_type",
+      displayName: "Impeller",
+      role: "condition",
+      valueType: "string",
+      unit: null,
+    }],
+  };
+  const sourceSelections = await resolveAnalysisSourceSelections({
+    store,
+    projectId: "project_1",
+    sourceSelections: requested("A1:J63"),
+  });
+
+  await assert.rejects(
+    resolveAnalysisFieldTargets({
+      store,
+      projectId: "project_1",
+      sourceSelections,
+      fieldTargets: [{
+        kind: "source_field",
+        regionUnderstandingRevisionId: "region_revision_1",
+        column: "K",
+        fieldKey: "impeller_type",
+      }],
+    }),
+    (error) => error.code === "analysis_source_field_target_invalid"
+      && error.details?.matchCount === 0,
+  );
+});
+
+test("rejects ambiguous source field targets across selected regions", async () => {
+  const store = seededWorkbook({ rows: 63, columns: 25 });
+  store.regionUnderstandingRevisions.get("region_revision_1").interpretation = {
+    semanticType: "experiment_table",
+    fields: [{
+      column: "K",
+      semanticKey: "impeller_type",
+      displayName: "Impeller",
+      role: "condition",
+      valueType: "string",
+      unit: null,
+    }],
+  };
+  store.sourceDocuments.set("source_2", {
+    id: "source_2",
+    projectId: "project_1",
+    originalFilename: "Second master.xlsx",
+  });
+  store.workbookReviewRegions.set("region_2", {
+    id: "region_2",
+    projectId: "project_1",
+    sourceDocumentId: "source_2",
+    sheetName: "Sheet1",
+    rangeRef: "A1:K63",
+    disposition: "active",
+    acceptedRevisionId: "region_revision_2",
+  });
+  store.regionUnderstandingRevisions.set("region_revision_2", {
+    id: "region_revision_2",
+    projectId: "project_1",
+    regionId: "region_2",
+    interpretation: {
+      semanticType: "experiment_table",
+      fields: [{
+        column: "K",
+        semanticKey: "impeller_type",
+        displayName: "Impeller",
+        role: "condition",
+        valueType: "string",
+        unit: null,
+      }],
+    },
+  });
+  const sourceSelections = await resolveAnalysisSourceSelections({
+    store,
+    projectId: "project_1",
+    sourceSelections: [
+      ...requested("A1:K63"),
+      {
+        regionUnderstandingRevisionId: "region_revision_2",
+        sourceDocumentId: "source_2",
+        sheetName: "Sheet1",
+        range: "A1:K63",
+        label: "Second master",
+      },
+    ],
+  });
+
+  await assert.rejects(
+    resolveAnalysisFieldTargets({
+      store,
+      projectId: "project_1",
+      sourceSelections,
+      fieldTargets: [{
+        kind: "source_field",
+        regionUnderstandingRevisionId: "model_revision_alias",
+        column: "K",
+        fieldKey: "impeller_type",
+      }],
+    }),
+    (error) => error.code === "analysis_source_field_target_invalid"
+      && error.details?.matchCount === 2,
+  );
+});
+
+test("rejects identity columns as Experiment Browser scientific field targets", async () => {
+  const store = seededWorkbook({ rows: 10, columns: 3 });
+  store.regionUnderstandingRevisions.get("region_revision_1").interpretation = {
+    semanticType: "experiment_table",
+    fields: [{
+      column: "A",
+      semanticKey: "experiment_id",
+      displayName: "Experiment",
+      role: "identifier",
+      valueType: "string",
+      unit: null,
+    }],
+  };
+  const sourceSelections = await resolveAnalysisSourceSelections({
+    store,
+    projectId: "project_1",
+    sourceSelections: requested("A1:C10"),
+  });
+
+  await assert.rejects(
+    resolveAnalysisFieldTargets({
+      store,
+      projectId: "project_1",
+      sourceSelections,
+      fieldTargets: [{
+        kind: "source_field",
+        regionUnderstandingRevisionId: "region_revision_1",
+        column: "A",
+      }],
+    }),
+    (error) => error.code === "analysis_identity_field_target_invalid",
+  );
 });

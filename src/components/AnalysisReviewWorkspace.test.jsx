@@ -1271,15 +1271,12 @@ describe("AnalysisReviewWorkspace", () => {
         browserView: { summary: "Show selectivity fields." },
       },
     };
-    const errors = ["Exp5", "Exp12", "Exp36", "Exp59"].flatMap((experimentLabel) => (
-      ["Solid", "Liquid", "Gas"].map((fieldName, index) => ({
-        code: "experiment_patch_numeric_value_invalid",
-        message: "A numeric Experiment Browser field requires one finite number.",
-        experimentLabel,
-        fieldName,
-        path: `recordPatches[${index}].upsertFields[0]`,
-      }))
-    ));
+    const errors = [{
+      code: "experiment_patch_numeric_value_invalid",
+      message: "A numeric Experiment Browser field requires one finite number.",
+      count: 12,
+      examples: ["Exp5 / Solid", "Exp5 / Liquid", "Exp5 / Gas"],
+    }];
 
     render(
       <AnalysisReviewWorkspace

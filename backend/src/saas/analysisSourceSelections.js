@@ -3,6 +3,11 @@ import {
   ANALYSIS_SOURCE_RANGE_MAX_CELLS,
   readSourceDocumentRange,
 } from "./sourceDocuments.js";
+import {
+  ANALYSIS_FIELD_ROLES,
+  ANALYSIS_VALUE_TYPES,
+} from "./analysisSchemas.js";
+import { experimentFieldColumnId } from "./experimentProjection.js";
 
 const MAX_SOURCE_SELECTIONS = 64;
 
@@ -38,6 +43,35 @@ function containsRange(outer, inner) {
     && inner.s.c >= outer.s.c
     && inner.e.r <= outer.e.r
     && inner.e.c <= outer.e.c;
+}
+
+function normalizedUnit(value) {
+  return text(value) || "unitless";
+}
+
+function normalizedType(value) {
+  return text(value).toLowerCase() || "string";
+}
+
+function normalizedAlias(value) {
+  return text(value).toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function columnIndex(column) {
+  const token = text(column).toUpperCase();
+  if (!/^[A-Z]{1,3}$/.test(token)) {
+    throw selectionError(
+      "analysis_field_target_column_invalid",
+      "A source field target requires a valid Excel column.",
+    );
+  }
+  return decodeRange(`${token}1`).s.c;
+}
+
+function rangeContainsColumn(range, column) {
+  const decoded = decodeRange(range);
+  const index = columnIndex(column);
+  return index >= decoded.s.c && index <= decoded.e.c;
 }
 
 function canonicalRange(value) {
@@ -87,6 +121,7 @@ export async function confirmedSourceRegionCatalog({ store, projectId } = {}) {
         role: text(field?.role) || "other",
         valueType: text(field?.valueType) || "string",
         unit: field?.unit || null,
+        sourceRefs: asArray(field?.sourceRefs),
       })).filter((field) => field.column),
       series: asArray(interpretation.series).map((series) => ({
         seriesKey: text(series?.seriesKey),
@@ -96,6 +131,228 @@ export async function confirmedSourceRegionCatalog({ store, projectId } = {}) {
         xUnit: series?.xUnit || null,
         yUnit: series?.yUnit || null,
       })).filter((series) => series.xColumn || series.yColumn),
+    };
+  });
+}
+
+export function sourceFieldCandidatesForRequest({
+  originalRequest,
+  confirmedRegions = [],
+} = {}) {
+  const request = text(originalRequest);
+  const normalizedRequest = normalizedAlias(request);
+  const explicitColumns = [...request.matchAll(/\bcolumn\s+([a-z]{1,3})\b/gi)]
+    .map((match) => match[1].toUpperCase());
+  const ignoredAliases = new Set(["experiment", "experimentid", "id", "label"]);
+  const candidates = [];
+  asArray(confirmedRegions).forEach((region) => {
+    asArray(region?.fields).forEach((field) => {
+      const aliases = [
+        normalizedAlias(field.semanticKey),
+        normalizedAlias(field.displayName),
+      ].filter((alias) => alias.length >= 3 && !ignoredAliases.has(alias));
+      let matchReason = null;
+      if (explicitColumns.includes(text(field.column).toUpperCase())) {
+        matchReason = "explicit_column";
+      } else if (aliases.some((alias) => normalizedRequest.includes(alias))) {
+        matchReason = "field_name";
+      }
+      if (!matchReason) return;
+      candidates.push({
+        regionUnderstandingRevisionId: region.regionUnderstandingRevisionId,
+        sourceDocumentId: region.sourceDocumentId,
+        workbookName: region.workbookName,
+        sheetName: region.sheetName,
+        confirmedRange: region.range,
+        column: field.column,
+        semanticKey: field.semanticKey,
+        displayName: field.displayName,
+        role: field.role,
+        valueType: field.valueType,
+        unit: field.unit,
+        matchReason,
+      });
+    });
+  });
+  return candidates;
+}
+
+export async function resolveAnalysisFieldTargets({
+  store,
+  projectId,
+  fieldTargets = [],
+  sourceSelections = [],
+  existingFieldCatalog = [],
+} = {}) {
+  const requested = asArray(fieldTargets);
+  if (!requested.length) return [];
+  const context = await acceptedSourceContext({ store, projectId });
+  const roleSet = new Set(ANALYSIS_FIELD_ROLES);
+  const valueTypeSet = new Set(ANALYSIS_VALUE_TYPES);
+  const existingFields = asArray(existingFieldCatalog);
+  const selectedSourceFields = asArray(sourceSelections).flatMap((selection) => {
+    const region = context.catalogByRevisionId.get(selection.regionUnderstandingRevisionId);
+    if (!region) return [];
+    return asArray(region.fields)
+      .filter((field) => rangeContainsColumn(selection.range, field.column))
+      .map((field) => ({ region, field, selection }));
+  });
+  const seen = new Set();
+  return requested.map((target, index) => {
+    const kind = text(target?.kind);
+    let definition;
+    let sourceField = null;
+    if (kind === "source_field") {
+      const requestedRevisionId = text(target?.regionUnderstandingRevisionId);
+      const column = text(target?.column).toUpperCase();
+      const fieldAlias = normalizedAlias(target?.fieldKey);
+      const displayAlias = normalizedAlias(target?.displayName);
+      let matches = selectedSourceFields.filter(({ region, field }) => (
+        region.regionUnderstandingRevisionId === requestedRevisionId
+        && field.column === column
+      ));
+      if (matches.length !== 1 && column) {
+        matches = selectedSourceFields.filter(({ field }) => field.column === column);
+      }
+      if (matches.length !== 1 && (fieldAlias || displayAlias)) {
+        matches = selectedSourceFields.filter(({ field }) => {
+          const aliases = new Set([
+            normalizedAlias(field.semanticKey),
+            normalizedAlias(field.displayName),
+          ]);
+          return (fieldAlias && aliases.has(fieldAlias))
+            || (displayAlias && aliases.has(displayAlias));
+        });
+      }
+      if (matches.length !== 1) {
+        throw selectionError(
+          "analysis_source_field_target_invalid",
+          matches.length > 1
+            ? "A source field target matched multiple confirmed fields inside the accepted source selections."
+            : "A source field target must reference one confirmed field inside an accepted source selection.",
+          422,
+          {
+            targetIndex: index,
+            regionUnderstandingRevisionId: requestedRevisionId || null,
+            column: column || null,
+            fieldKey: text(target?.fieldKey) || null,
+            displayName: text(target?.displayName) || null,
+            matchCount: matches.length,
+            selectedFields: selectedSourceFields.slice(0, 20).map(({ region, field }) => ({
+              regionUnderstandingRevisionId: region.regionUnderstandingRevisionId,
+              column: field.column,
+              fieldKey: field.semanticKey,
+              displayName: field.displayName,
+            })),
+          },
+        );
+      }
+      const [{ region, field, selection }] = matches;
+      const revisionId = region.regionUnderstandingRevisionId;
+      const resolvedColumn = field.column;
+      if (
+        field.role === "identifier"
+        || ["label", "experiment", "experimentid", "experimentlabel"]
+          .includes(normalizedAlias(field.semanticKey))
+      ) {
+        throw selectionError(
+          "analysis_identity_field_target_invalid",
+          "Experiment identity is used to match records and cannot be published as a duplicate scientific field.",
+          422,
+          { targetIndex: index, column: resolvedColumn, fieldKey: field.semanticKey },
+        );
+      }
+      definition = {
+        fieldKey: field.semanticKey,
+        displayName: field.displayName,
+        role: field.role,
+        valueType: normalizedType(field.valueType),
+        unit: field.unit || null,
+      };
+      sourceField = {
+        regionUnderstandingRevisionId: revisionId,
+        sourceSelectionId: selection.sourceSelectionId,
+        sourceDocumentId: region.sourceDocumentId,
+        workbookName: region.workbookName,
+        sheetName: region.sheetName,
+        column: resolvedColumn,
+        columnOffset: columnIndex(resolvedColumn) - decodeRange(selection.range).s.c,
+        headerSourceRefs: asArray(field.sourceRefs),
+      };
+    } else if (kind === "derived_field") {
+      definition = {
+        fieldKey: text(target?.fieldKey),
+        displayName: text(target?.displayName || target?.fieldKey),
+        role: text(target?.role),
+        valueType: normalizedType(target?.valueType),
+        unit: text(target?.unit) || null,
+      };
+    } else {
+      throw selectionError(
+        "analysis_field_target_kind_invalid",
+        "A field target kind must be source_field or derived_field.",
+        422,
+        { targetIndex: index, kind: kind || null },
+      );
+    }
+    if (
+      !definition.fieldKey
+      || !definition.displayName
+      || !roleSet.has(definition.role)
+      || !valueTypeSet.has(definition.valueType)
+    ) {
+      throw selectionError(
+        "analysis_field_target_definition_invalid",
+        "A derived field target requires a stable key, readable name, supported role, and supported value type.",
+        422,
+        {
+          targetIndex: index,
+          role: definition.role || null,
+          valueType: definition.valueType || null,
+          allowedRoles: ANALYSIS_FIELD_ROLES,
+          allowedValueTypes: ANALYSIS_VALUE_TYPES,
+        },
+      );
+    }
+    const selector = `${definition.fieldKey}|${normalizedUnit(definition.unit)}|${definition.valueType}`;
+    if (seen.has(selector)) {
+      throw selectionError(
+        "analysis_field_target_duplicate",
+        "The same field key, unit, and value type may appear only once in one plan revision.",
+        422,
+        { targetIndex: index, fieldKey: definition.fieldKey },
+      );
+    }
+    seen.add(selector);
+    const semanticMatches = existingFields.filter((field) => (
+      text(field?.fieldKey) === definition.fieldKey
+      && normalizedUnit(field?.unit) === normalizedUnit(definition.unit)
+    ));
+    const existing = semanticMatches.find((field) => (
+      normalizedType(field?.valueType) === definition.valueType
+    ));
+    if (!existing && semanticMatches.length) {
+      throw selectionError(
+        "analysis_field_target_type_conflict",
+        "A field with the same stable key and unit already exists with another value type.",
+        422,
+        {
+          targetIndex: index,
+          fieldKey: definition.fieldKey,
+          unit: definition.unit,
+          existingTypes: [...new Set(semanticMatches.map((field) => normalizedType(field.valueType)))],
+          requestedType: definition.valueType,
+        },
+      );
+    }
+    return {
+      targetFieldId: `target_field_${index + 1}`,
+      kind,
+      ...definition,
+      description: text(target?.description) || definition.displayName,
+      existingColumnId: existing?.columnId || null,
+      columnId: existing?.columnId || experimentFieldColumnId(definition),
+      sourceField,
     };
   });
 }

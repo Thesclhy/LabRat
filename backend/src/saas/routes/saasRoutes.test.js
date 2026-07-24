@@ -372,9 +372,10 @@ const testModelProvider = {
     };
   },
   async draftExperimentBrowserPlan(input) {
-    const experiment = input.activeExperiments?.[0];
-    const sourceField = experiment?.fields?.find((field) => field.fieldKey === "solid")
-      || experiment?.fields?.[0];
+    const experiment = input.activeExperimentCatalog?.experiments?.[0];
+    const sourceField = input.activeExperimentCatalog?.fields
+      ?.find((field) => field.fieldKey === "solid")
+      || input.activeExperimentCatalog?.fields?.[0];
     if (!experiment || !sourceField) {
       return { ok: false, warning: { code: "analysis_evidence_required" } };
     }
@@ -387,6 +388,17 @@ const testModelProvider = {
         columnIds: [sourceField.columnId],
         includeSeries: false,
         purpose: "Use the accepted Solid value.",
+      }],
+      fieldTargets: [{
+        kind: "derived_field",
+        regionUnderstandingRevisionId: "",
+        column: "",
+        fieldKey: "normalized_solid",
+        displayName: "Normalized Solid",
+        role: "outcome",
+        valueType: "number",
+        unit: "percent",
+        description: "Normalized Solid derived from the accepted value.",
       }],
       reviewPlan: {
         processingSteps: [
@@ -469,11 +481,7 @@ const testAnalysisExecutor = {
           recordPatches: [{
             label: experiment.label,
             upsertFields: [{
-              fieldKey: "normalized_solid",
-              displayName: "Normalized Solid",
-              role: "outcome",
-              valueType: "number",
-              unit: "percent",
+              targetFieldId: runPackage.inputs.targetFields[0].targetFieldId,
               value: sourceField.value,
               formattedValue: String(sourceField.value),
               confidence: 1,
@@ -1660,7 +1668,7 @@ test("confirmed workbook chart request completes Source to Plotly to ChartSpec w
   assert.equal(plannedResponse.status, 201);
   const planned = await plannedResponse.json();
   const revision = planned.currentPlanRevision;
-  assert.equal(revision.schemaVersion, "labrat.analysisPlanRevision.v2");
+  assert.equal(revision.schemaVersion, "labrat.analysisPlanRevision.v3");
   assert.equal(revision.sourceSelections.length, 1);
   assert.equal(Object.hasOwn(revision, "pythonProgram"), false);
 
@@ -1836,7 +1844,7 @@ test("two confirmed workbook selections materialize as two Python input tables a
     method: "POST",
     body: {
       plan: {
-        schemaVersion: "labrat.analysisPlanRevision.v2",
+        schemaVersion: "labrat.analysisPlanRevision.v3",
         status: "awaiting_review",
         requestSummary: "Compare two carbon distributions.",
         sourceSelections,

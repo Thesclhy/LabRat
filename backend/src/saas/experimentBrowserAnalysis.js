@@ -19,13 +19,6 @@ const MISSING_REASONS = new Set([
   "calculation_unavailable",
 ]);
 const SOURCE_PLACEHOLDERS = new Set(["-", "--", "—", "n/a", "na"]);
-const RESERVED_IDENTITY_FIELD_KEYS = new Set([
-  "label",
-  "experiment",
-  "experimentid",
-  "experimentlabel",
-]);
-
 function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -462,57 +455,48 @@ function sourceRefsForValue(value, inputs, errors, path) {
   });
 }
 
-function normalizeField(field, inputs, fieldCatalog, errors, path, diagnostic = {}) {
-  const existingColumnId = text(field?.columnId);
-  let existing = existingColumnId
-    ? fieldCatalog.get(existingColumnId)
+function normalizeField(field, inputs, fieldTargets, fieldCatalog, errors, path, diagnostic = {}) {
+  const targetFieldId = text(field?.targetFieldId);
+  const target = fieldTargets.get(targetFieldId);
+  if (!target) {
+    errors.push(error(
+      "experiment_patch_field_target_invalid",
+      "Every scalar output must reference a targetFieldId from the accepted plan.",
+      { path, targetFieldId: targetFieldId || null, ...diagnostic },
+    ));
+  }
+  const forbiddenMetadata = [
+    "fieldKey",
+    "displayName",
+    "role",
+    "valueType",
+    "unit",
+    "columnId",
+  ].filter((key) => Object.prototype.hasOwnProperty.call(field || {}, key));
+  if (forbiddenMetadata.length) {
+    errors.push(error(
+      "experiment_patch_field_metadata_forbidden",
+      "Python must not redefine accepted scalar field metadata.",
+      { path, targetFieldId: targetFieldId || null, properties: forbiddenMetadata, ...diagnostic },
+    ));
+  }
+  const existing = target?.existingColumnId
+    ? fieldCatalog.get(target.existingColumnId)
     : null;
-  if (existingColumnId && !existing) {
+  if (target?.existingColumnId && !existing) {
     errors.push(error(
       "experiment_patch_field_selector_invalid",
-      "A replacement field must use a columnId from the accepted project field catalog.",
-      { path, columnId: existingColumnId, ...diagnostic },
+      "The accepted target field no longer exists in the active project field catalog.",
+      { path, targetFieldId, columnId: target.existingColumnId, ...diagnostic },
     ));
   }
-  if (!existingColumnId) {
-    const requestedKey = text(field?.fieldKey);
-    if (RESERVED_IDENTITY_FIELD_KEYS.has(normalizeAlias(requestedKey))) {
-      errors.push(error(
-        "experiment_patch_identity_field_duplicate",
-        "Experiment identity belongs in the record patch label and cannot be added as a scientific field.",
-        { path, fieldKey: requestedKey, ...diagnostic },
-      ));
-    }
-    const requestedUnit = normalizedUnit(field?.unit);
-    const requestedType = normalizedType(field?.valueType);
-    const semanticMatches = [...fieldCatalog.values()].filter((candidate) => (
-      text(candidate.fieldKey) === requestedKey
-      && normalizedUnit(candidate.unit) === requestedUnit
-    ));
-    const compatible = semanticMatches.find((candidate) => candidate.valueType === requestedType);
-    if (compatible) {
-      existing = compatible;
-    } else if (semanticMatches.length) {
-      errors.push(error(
-        "experiment_patch_field_type_conflict",
-        "A field with the same stable key and unit already exists with another value type.",
-        {
-          path,
-          fieldKey: requestedKey,
-          unit: requestedUnit,
-          existingTypes: [...new Set(semanticMatches.map((candidate) => candidate.valueType))],
-          requestedType,
-          ...diagnostic,
-        },
-      ));
-    }
-  }
-  const definition = existing || {
-    fieldKey: text(field?.fieldKey),
-    displayName: text(field?.displayName || field?.fieldKey),
-    role: text(field?.role) || "other",
-    valueType: normalizedType(field?.valueType),
-    unit: field?.unit || null,
+  const definition = target || {
+    fieldKey: "",
+    displayName: "",
+    role: "",
+    valueType: "",
+    unit: null,
+    columnId: "",
   };
   if (
     !definition.fieldKey
@@ -522,8 +506,16 @@ function normalizeField(field, inputs, fieldCatalog, errors, path, diagnostic = 
   ) {
     errors.push(error(
       "experiment_patch_field_definition_invalid",
-      "A new field requires a stable key, readable name, supported role, and supported value type.",
-      { path, ...diagnostic },
+      "The accepted target field definition is incomplete or unsupported.",
+      {
+        path,
+        targetFieldId: targetFieldId || null,
+        role: definition.role || null,
+        valueType: definition.valueType || null,
+        allowedRoles: [...FIELD_ROLES],
+        allowedValueTypes: [...VALUE_TYPES],
+        ...diagnostic,
+      },
     ));
   }
   const hasValue = Object.prototype.hasOwnProperty.call(field || {}, "value");
@@ -535,6 +527,7 @@ function normalizeField(field, inputs, fieldCatalog, errors, path, diagnostic = 
     role: definition.role,
     valueType: definition.valueType,
     unit: definition.unit || null,
+    headerSourceRefs: clone(definition.sourceField?.headerSourceRefs) || [],
     value,
     formattedValue: value === null ? null : field?.formattedValue ?? null,
     ...(missingReason ? { missingReason } : {}),
@@ -616,12 +609,12 @@ function normalizeField(field, inputs, fieldCatalog, errors, path, diagnostic = 
       fieldDiagnostic,
     ));
   }
-  normalized.columnId = experimentFieldColumnId(normalized);
-  if (existingColumnId && normalized.columnId !== existingColumnId) {
+  normalized.columnId = text(definition.columnId) || experimentFieldColumnId(normalized);
+  if (existing && normalized.columnId !== existing.columnId) {
     errors.push(error(
       "experiment_patch_field_selector_mismatch",
-      "A replacement field may not change the selected field key, unit, or value type.",
-      { ...fieldDiagnostic, columnId: existingColumnId },
+      "An accepted replacement target may not change its field key, unit, or value type.",
+      { ...fieldDiagnostic, columnId: definition.existingColumnId },
     ));
   }
   return normalized;
@@ -790,7 +783,8 @@ function proposedBrowserView(rawView, projection, changedColumnIds) {
   const requested = asArray(rawView?.visibleColumnIds).map(text).filter((id) => available.has(id));
   const visibleColumnIds = [
     "experiment",
-    ...(requested.length ? requested : changedColumnIds),
+    ...changedColumnIds,
+    ...requested,
   ].filter((id, index, all) => available.has(id) && all.indexOf(id) === index);
   return {
     schemaVersion: "labrat.browserView.v1",
@@ -807,6 +801,7 @@ function proposedBrowserView(rawView, projection, changedColumnIds) {
 
 export function validateExperimentBrowserResult({
   projectId,
+  plan,
   executorResult,
   inputs,
   activeContext,
@@ -837,6 +832,17 @@ export function validateExperimentBrowserResult({
   }
   const fieldCatalog = new Map(buildProjectFieldCatalog(activeContext.entries)
     .map((field) => [field.columnId, field]));
+  const fieldTargets = new Map(asArray(
+    plan?.plan?.fieldTargets
+      || plan?.fieldTargets
+      || inputs?.targetFields,
+  ).map((target) => [text(target?.targetFieldId), target]));
+  if (!fieldTargets.size) {
+    errors.push(error(
+      "experiment_patch_field_targets_required",
+      "The accepted Experiment Browser plan contains no scalar field targets.",
+    ));
+  }
   const seenAliases = new Set();
   let totalSeriesPoints = 0;
   const patches = rawPatches.map((patch, patchIndex) => {
@@ -881,13 +887,14 @@ export function validateExperimentBrowserResult({
       normalizeField(
         field,
         inputs,
+        fieldTargets,
         fieldCatalog,
         errors,
         `recordPatches[${patchIndex}].upsertFields[${fieldIndex}]`,
         {
           patchIndex,
           experimentLabel: label,
-          fieldName: text(field?.displayName || field?.fieldKey) || null,
+          fieldName: fieldTargets.get(text(field?.targetFieldId))?.displayName || null,
         },
       )
     ));

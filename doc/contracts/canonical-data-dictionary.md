@@ -280,15 +280,19 @@ One selection becomes one materialized Python input table. Multiple files,
 worksheets, and non-contiguous ranges remain separate selections. Red Source
 rectangles are derived UI data rather than separately reviewed evidence.
 
-## AnalysisPlanRevision v2
+## AnalysisPlanRevision v3
 
 A durable immutable review proposal declaring `outputTarget: chart |
 experiment_browser` and containing `sourceSelections`, optional frozen active
-`experimentSelections`, structured
+`experimentSelections`, reviewed scalar `fieldTargets`, structured
 `reviewPlan`, user-readable `displayPlan`, warnings, validation, and feedback.
-It contains no Python, field mapping, materialized values, result rows, traces,
-Plotly, or user-review hashes. Feedback creates a later numbered revision and
-marks the prior awaiting-review revision superseded without modifying it.
+Direct source targets bind an accepted RegionUnderstandingRevision and Excel
+column to the accepted field key, display name, role, value type, unit, header
+evidence, and stable Browser column id. Derived targets declare the same
+metadata before review. It contains no Python, materialized values, result
+rows, traces, Plotly, or user-review hashes. Feedback creates a later numbered
+revision and marks the prior awaiting-review revision superseded without
+modifying it.
 
 ## AnalysisThread v1
 
@@ -299,7 +303,7 @@ A project-scoped conversational workflow container for one analysis goal. It sto
 An immutable execution-attempt record linked to one accepted PlanRevision.
 Idempotent plan acceptance creates a `queued` run with no Python. Execution
 re-resolves source selections and frozen snapshot heads, materializes complete
-`inputs.tables` and/or `inputs.experiments`,
+`inputs.tables` and/or `inputs.experiments` plus accepted `inputs.targetFields`,
 generates Python against that real input, applies policy checks, and then runs
 it through the configured executor. The run records input/program/runtime
 hashes, generated Python, execution phases, bounded diagnostics, warnings, and
@@ -313,6 +317,8 @@ An append-only backend-validated output linked to one AnalysisRun. Chart output
 contains authoritative Plotly `data/layout`. Experiment Browser output contains
 validated source-backed `recordPatches`, merged preview records, change
 summaries, identity candidates, exclusions, and a proposed BrowserView.
+Scalar patch values reference accepted `targetFieldId` values; field metadata
+comes from the immutable plan rather than generated Python.
 Experiment Browser summaries include `missingValueCount` and
 `missingExperimentCount`; scalar coverage counts only non-null values.
 It begins as `awaiting_review`; executor or validation failures create no

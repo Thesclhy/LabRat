@@ -490,6 +490,17 @@ test("Experiment Browser analysis materializes active fields and returns a patch
         includeSeries: false,
         purpose: "Use the accepted temperature value.",
       }],
+      fieldTargets: [{
+        kind: "derived_field",
+        regionUnderstandingRevisionId: "",
+        column: "",
+        fieldKey: "normalized_temperature",
+        displayName: "Normalized temperature",
+        role: "condition",
+        valueType: "number",
+        unit: "degC",
+        description: "A normalized copy of the accepted temperature.",
+      }],
       reviewPlan: {
         processingSteps: ["Copy the accepted temperature into a new normalized field."],
         missingValueHandling: "Exclude Exp31 if temperature is missing.",
@@ -516,6 +527,7 @@ test("Experiment Browser analysis materializes active fields and returns a patch
     async draftExperimentBrowserProgram(request, options) {
       browserProgramDraftCount += 1;
       assert.equal(request.inputManifest.experiments[0].experimentId, "experiment_31");
+      assert.equal(request.inputManifest.targetFields[0].targetFieldId, "target_field_1");
       const input = options.inspectExperimentInput({
         experimentId: "experiment_31",
         fieldOffset: 0,
@@ -531,9 +543,7 @@ test("Experiment Browser analysis materializes active fields and returns a patch
         assert.equal(request.repairContext.errors[0].count, 3);
         assert.match(request.repairContext.errors[0].repairGuidance, /value None/i);
         assert.deepEqual(request.repairContext.errors[0].examples, [
-          "Exp31 / Invalid 1",
-          "Exp31 / Invalid 2",
-          "Exp31 / Invalid 3",
+          "Exp31 / Normalized temperature",
         ]);
       }
       return {
@@ -561,12 +571,8 @@ test("Experiment Browser analysis materializes active fields and returns a patch
           result: {
             recordPatches: [{
               label: "Exp31",
-              upsertFields: [1, 2, 3].map((index) => ({
-                fieldKey: `invalid_${index}`,
-                displayName: `Invalid ${index}`,
-                role: "outcome",
-                valueType: "number",
-                unit: null,
+              upsertFields: [1, 2, 3].map(() => ({
+                targetFieldId: "target_field_1",
                 value: "-",
                 formattedValue: "-",
                 confidence: 1,
@@ -591,11 +597,7 @@ test("Experiment Browser analysis materializes active fields and returns a patch
           recordPatches: [{
             label: "Exp31",
             upsertFields: [{
-              fieldKey: "normalized_temperature",
-              displayName: "Normalized temperature",
-              role: "condition",
-              valueType: "number",
-              unit: "degC",
+              targetFieldId: "target_field_1",
               value: 250,
               formattedValue: "250",
               confidence: 1,

@@ -15,6 +15,28 @@ Keep entries concise, newest first, and include:
 
 ## 2026-07-24
 
+- Replaced model-authored Experiment Browser field metadata with reviewed
+  `fieldTargets`. Source fields now inherit their stable key, display name,
+  role, value type, unit, and header evidence from the accepted
+  RegionUnderstandingRevision; derived fields declare the same metadata in
+  the reviewed plan. Accepted Python receives frozen `targetFields` and emits
+  only `targetFieldId`, value, display value, missing state, confidence,
+  warnings, and exact input pointers. The backend rejects undeclared targets,
+  model-authored field definitions, identity duplication, type conflicts,
+  fields outside the selected range, and ambiguous matches. Existing Browser
+  planning now receives a compact field catalog so requests for new workbook
+  columns are not confused with already-published fields. Source binding also
+  canonicalizes provider variants such as `Column K` to the uniquely reviewed
+  Excel column, while diagnostics preserve full grouped counts and examples.
+  New or changed fields are always visible in the proposed BrowserView.
+  Real Anthropic plus local-Python Docker E2E selected
+  `MasterTable_updated.xlsx / Sheet1!K1:K63`, froze
+  `impeller_type / Impeller / condition / string`, and produced a valid
+  61-experiment preview with 61 new Impeller values and 183 preserved fields;
+  the test stopped before publication. Verification passed:
+  `npm run codex:verify` (frontend 257/257, backend 209 passed with four
+  existing skips, production build with the existing Plotly chunk warning)
+  and configured PostgreSQL integration 2/2.
 - Raised only the reviewed Analysis `inspect_source_range` and materialization
   page limit from 500 to 2,500 cells so common master tables such as
   `A1:Y63` can be inspected in one model tool call. The ordinary

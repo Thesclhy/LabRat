@@ -363,8 +363,9 @@ test("draftExperimentBrowserProgram describes list-shaped multi-table inputs and
       assert.match(body.system, /never add series IDs/i);
       assert.match(body.system, /Generated Python cannot call either inspection tool/i);
       assert.match(body.system, /value None.*formattedValue None.*missingReason/i);
-      assert.match(body.system, /valueType must be exactly one of number, string, date, or boolean/i);
-      assert.match(body.system, /never use numeric, float, integer/i);
+      assert.match(body.system, /targetFields list is authoritative/i);
+      assert.match(body.system, /targetFieldId.*value.*formattedValue.*confidence.*warnings.*sources/i);
+      assert.match(body.system, /never output fieldKey, displayName, role, valueType, unit, or columnId/i);
       assert.match(body.system, /Do not output zero, a placeholder string, NaN, or Infinity/i);
       assert.match(body.system, /must cite the exact missing workbook cell/i);
       assert.deepEqual(body.tools.map((tool) => tool.name), [

@@ -55,12 +55,15 @@ workflow used for charts now supports `outputTarget: experiment_browser`.
 Planning can select exact ranges from accepted RegionUnderstandingRevisions,
 active experiment fields, or both. Plan revisions contain only sources and a
 readable description of identification, calculations, field changes, missing
-data, and the proposed Browser view. Python is generated only after acceptance
-against materialized `inputs.tables`, `inputs.experiments`, and the project
-field catalog.
+data, the proposed Browser view, and reviewed scalar field targets. Direct
+workbook targets inherit key/name/role/type/unit from the accepted region;
+derived targets define those semantics before acceptance. Python is generated
+only after acceptance against materialized `inputs.tables`,
+`inputs.experiments`, the project field catalog, and `inputs.targetFields`.
 
 Validated Python output contains source-backed `recordPatches`, not replacement
-records. The backend reuses stable field selectors, blocks same-key/same-unit
+records. Scalar values reference accepted `targetFieldId` values and cannot
+redefine field metadata. The backend reuses stable field selectors, blocks same-key/same-unit
 type conflicts and forged sources, preserves untouched fields/series, and
 previews new/changed/preserved/excluded data through the Browser table. Publish
 atomically accepts the result, creates DataSnapshot v3, updates only affected

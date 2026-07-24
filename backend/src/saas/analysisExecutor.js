@@ -4,7 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { ANALYSIS_RUNTIME_VERSION, pythonSourceHash } from "./analysisSchemas.js";
+import {
+  ANALYSIS_PLAN_REVISION_VERSION,
+  ANALYSIS_RUNTIME_VERSION,
+  pythonSourceHash,
+} from "./analysisSchemas.js";
 import { stableDataHash } from "./dataPlanSchemas.js";
 import { validatePythonPolicy } from "./pythonPolicy.js";
 
@@ -56,7 +60,7 @@ export function buildAnalysisRunPackage({
   const sourceHash = pythonSourceHash(source);
   if (
     run.acceptedPlanRevisionId !== planRevision.id
-    || planRevision.schemaVersion !== "labrat.analysisPlanRevision.v2"
+    || planRevision.schemaVersion !== ANALYSIS_PLAN_REVISION_VERSION
     || !Array.isArray(inputs?.tables)
     || (
       !inputs.tables.length

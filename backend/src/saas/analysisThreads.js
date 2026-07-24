@@ -10,7 +10,9 @@ import {
   inspectConfirmedSourceRange,
   inspectRunInput,
   materializeAnalysisInputs,
+  resolveAnalysisFieldTargets,
   resolveAnalysisSourceSelections,
+  sourceFieldCandidatesForRequest,
   sourceRectanglesForSelections,
 } from "./analysisSourceSelections.js";
 import {
@@ -62,6 +64,9 @@ function diagnostics(error) {
   return [{
     code: error?.code || "analysis_failed",
     message: error?.message || "Analysis failed.",
+    ...(error?.details && typeof error.details === "object"
+      ? Object.fromEntries(Object.entries(error.details).filter(([key]) => key !== "errors"))
+      : {}),
   }];
 }
 
@@ -97,8 +102,14 @@ function groupedProgramRepairDiagnostics(values) {
     ].includes(normalized.code)) {
       current.repairGuidance = "For missing scalar data, emit value None, formattedValue None, a source-backed missingReason, and the exact accepted source pointer.";
     }
+    if ([
+      "experiment_patch_field_target_invalid",
+      "experiment_patch_field_metadata_forbidden",
+    ].includes(normalized.code)) {
+      current.repairGuidance = "Copy targetFieldId exactly from inputs['targetFields'] and output only the value payload and source pointers. Do not emit fieldKey, displayName, role, valueType, unit, or columnId.";
+    }
     if (normalized.code === "experiment_patch_field_definition_invalid") {
-      current.repairGuidance = "Every new scalar requires fieldKey, displayName, role, valueType, and unit. valueType must be exactly number, string, date, or boolean; use number, never numeric, for numeric data.";
+      current.repairGuidance = "The accepted target field definition is invalid. Do not invent replacement metadata in Python; return values only for valid inputs['targetFields'] entries.";
     }
     grouped.set(key, current);
   });
@@ -152,6 +163,7 @@ export function analysisPlanRevisionSummary(revision) {
     requestSummary: revision.requestSummary,
     sourceSelections: revision.sourceSelections || plan.sourceSelections || [],
     experimentSelections: revision.experimentSelections || plan.experimentSelections || [],
+    fieldTargets: revision.fieldTargets || plan.fieldTargets || [],
     reviewPlan: revision.reviewPlan || plan.reviewPlan || {},
     displayPlan: revision.displayPlan || plan.displayPlan || [],
     sourceRectangles: revision.sourceRectangles || [],
@@ -279,9 +291,31 @@ function modelPlanCandidate(rawDraft, originalRequest, outputTarget = ANALYSIS_O
     requestSummary: text(rawDraft?.requestSummary) || originalRequest,
     sourceSelections: asArray(rawDraft?.sourceSelections),
     experimentSelections: asArray(rawDraft?.experimentSelections),
+    fieldTargets: asArray(rawDraft?.fieldTargets),
     reviewPlan: rawDraft?.reviewPlan || {},
     displayPlan: asArray(rawDraft?.displayPlan).map(text).filter(Boolean),
     warnings: asArray(rawDraft?.warnings),
+  };
+}
+
+function compactExperimentPlanningCatalog(activeExperiments = []) {
+  const fields = new Map();
+  asArray(activeExperiments).forEach((experiment) => {
+    asArray(experiment?.fields).forEach((field) => {
+      if (field?.columnId && !fields.has(field.columnId)) fields.set(field.columnId, field);
+    });
+  });
+  return {
+    experimentCount: asArray(activeExperiments).length,
+    experiments: asArray(activeExperiments).map((experiment) => ({
+      experimentId: experiment.experimentId,
+      label: experiment.label,
+      aliases: experiment.aliases,
+      activeHead: experiment.activeHead,
+      availableColumnIds: asArray(experiment.fields).map((field) => field.columnId),
+      availableSeriesKeys: asArray(experiment.series).map((series) => series.seriesKey),
+    })),
+    fields: [...fields.values()],
   };
 }
 
@@ -338,8 +372,9 @@ export async function draftAnalysisPlanRevision({
   const priorRevisions = await store.listAnalysisPlanRevisions({
     analysisThreadId: thread.id,
   });
+  const activeExperimentCatalog = compactExperimentPlanningCatalog(activeExperiments);
   const request = {
-    schemaVersion: "labrat.analysisPlanDraftRequest.v2",
+    schemaVersion: "labrat.analysisPlanDraftRequest.v3",
     project: {
       id: project.id,
       name: project.name,
@@ -356,10 +391,16 @@ export async function draftAnalysisPlanRevision({
       status: revision.status,
       requestSummary: revision.requestSummary,
       sourceSelections: revision.plan?.sourceSelections || [],
+      experimentSelections: revision.plan?.experimentSelections || [],
+      fieldTargets: revision.plan?.fieldTargets || [],
       displayPlan: revision.plan?.displayPlan || [],
     })),
     confirmedRegions,
-    activeExperiments,
+    sourceFieldCandidates: sourceFieldCandidatesForRequest({
+      originalRequest: thread.originalRequest,
+      confirmedRegions,
+    }),
+    activeExperimentCatalog,
   };
   let draft = null;
   let plan = null;
@@ -401,7 +442,21 @@ export async function draftAnalysisPlanRevision({
           experimentSelections: candidate.experimentSelections,
         })
         : [];
-      plan = { ...candidate, sourceSelections, experimentSelections };
+      const fieldTargets = outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
+        ? await resolveAnalysisFieldTargets({
+          store,
+          projectId: project.id,
+          fieldTargets: candidate.fieldTargets,
+          sourceSelections,
+          existingFieldCatalog: activeExperimentCatalog.fields,
+        })
+        : [];
+      plan = {
+        ...candidate,
+        sourceSelections,
+        experimentSelections,
+        fieldTargets,
+      };
       const validation = validateAnalysisPlanRevision(plan);
       if (!validation.ok) {
         throw analysisError(
@@ -509,6 +564,18 @@ export async function createAnalysisPlanRevision({
       experimentSelections: plan?.experimentSelections,
     })
     : [];
+  const activeExperiments = outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
+    ? await experimentInputCatalog({ store, projectId: project.id })
+    : [];
+  const fieldTargets = outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
+    ? await resolveAnalysisFieldTargets({
+      store,
+      projectId: project.id,
+      fieldTargets: plan?.fieldTargets,
+      sourceSelections,
+      existingFieldCatalog: compactExperimentPlanningCatalog(activeExperiments).fields,
+    })
+    : [];
   const normalizedPlan = {
     ...plan,
     schemaVersion: ANALYSIS_PLAN_REVISION_VERSION,
@@ -516,6 +583,7 @@ export async function createAnalysisPlanRevision({
     outputTarget,
     sourceSelections,
     experimentSelections,
+    fieldTargets,
   };
   const validation = validateAnalysisPlanRevision(normalizedPlan);
   if (!validation.ok) {
@@ -543,6 +611,7 @@ export async function createAnalysisPlanRevision({
     plan: normalizedPlan,
     sourceSelections,
     experimentSelections,
+    fieldTargets,
     reviewPlan: normalizedPlan.reviewPlan,
     displayPlan: normalizedPlan.displayPlan,
     sourceRectangles,
@@ -602,6 +671,7 @@ export async function getAnalysisPlanSelectionPage({
     planRevisionId: revision.id,
     sourceSelections,
     experimentSelections,
+    fieldTargets: revision.plan?.fieldTargets || [],
     sourceRectangles: revision.sourceRectangles || [],
     records: [],
     warnings: revision.warnings || [],
@@ -787,6 +857,7 @@ function inputManifest(inputs) {
       activeHead: experiment.activeHead,
     })),
     fieldCatalog: asArray(inputs.fieldCatalog),
+    targetFields: asArray(inputs.targetFields),
   };
 }
 
@@ -822,12 +893,13 @@ async function draftPythonProgram({
   let response = null;
   for (let attempt = 1; attempt <= MODEL_DRAFT_ATTEMPT_LIMIT; attempt += 1) {
     response = await programProvider.call(modelProvider, {
-      schemaVersion: "labrat.analysisProgramDraftRequest.v2",
+      schemaVersion: "labrat.analysisProgramDraftRequest.v3",
       originalRequest: thread.originalRequest,
       acceptedPlan: {
         requestSummary: revision.requestSummary,
         sourceSelections: revision.plan?.sourceSelections || [],
         experimentSelections: revision.plan?.experimentSelections || [],
+        fieldTargets: revision.plan?.fieldTargets || [],
         reviewPlan: revision.plan?.reviewPlan || {},
         displayPlan: revision.plan?.displayPlan || [],
       },
@@ -894,7 +966,12 @@ async function finalizeFailedRun({
 } = {}) {
   const completedAt = new Date().toISOString();
   const errors = diagnostics(error);
-  const validation = { ok: false, errors, warnings: [] };
+  const validation = {
+    ok: false,
+    errors,
+    warnings: [],
+    totalErrorCount: Number(error?.details?.totalErrorCount) || errors.length,
+  };
   const finalized = await store.finalizeAnalysisRun({
     projectId: project.id,
     analysisRunId: run.id,
@@ -1022,11 +1099,14 @@ export async function executeAnalysisRun({
     inputs = {
       ...workbookInputs,
       schemaVersion: outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
-        ? "labrat.analysisInputs.v3"
+        ? "labrat.analysisInputs.v4"
         : workbookInputs.schemaVersion,
       experiments: experimentInputs.experiments,
       fieldCatalog: outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
         ? buildProjectFieldCatalog(activeContext.entries)
+        : [],
+      targetFields: outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
+        ? asArray(revision.plan?.fieldTargets)
         : [],
     };
   } catch (error) {
@@ -1219,7 +1299,12 @@ export async function executeAnalysisRun({
         message: outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
           ? "Python returned Experiment Browser patches that did not pass backend validation."
           : "Python returned a chart that did not pass backend Plotly validation.",
-        details: { errors: checked.errors },
+        details: {
+          errors: outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
+            ? groupedProgramRepairDiagnostics(checked.errors)
+            : checked.errors,
+          totalErrorCount: checked.errors.length,
+        },
       },
       payload: {
         phase: outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER

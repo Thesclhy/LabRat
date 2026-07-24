@@ -70,9 +70,19 @@ stages.
 
 - Planning may select exact accepted workbook ranges, active snapshot fields,
   or both; it never embeds final values or Python.
+- Existing `experimentSelections` are calculation inputs only. Requests for a
+  new workbook column use `sourceSelections` and a `source_field` target;
+  explicit column letters and accepted semantic names are supplied as
+  deterministic planning candidates.
+- Direct source-field metadata is derived from the accepted
+  RegionUnderstandingRevision. Derived field metadata is fixed in the reviewed
+  plan. Both receive stable `targetFieldId` values before acceptance.
 - After plan acceptance, code generation sees only materialized reviewed input
-  and the project field catalog.
+  plus the project field catalog and accepted target fields.
 - Python returns field/series patches rather than complete replacement records.
+- Python scalar patches return only `targetFieldId`, value/format/missing data,
+  warnings, confidence, and source pointers. Generated code cannot define or
+  replace field keys, names, roles, value types, units, or column ids.
 - Every output value must cite selected workbook cells or snapshot fields.
 - Missing scalar output must remain `null` with an allowed `missingReason` and
   the exact missing source pointer. Models must not convert missing values to
@@ -98,9 +108,10 @@ stages.
   no aggregate analysis-selection limit. Workbook Review, ordinary source
   preview, and the public SourceDocument range API retain their 500-cell
   request limit.
-- A PlanRevision stores only output target, source/snapshot selections, structured review meaning,
-  readable display steps, warnings, and derived rectangles. Python, input
-  values, field ids, expected result rows, traces, and Plotly are forbidden.
+- A PlanRevision stores only output target, source/snapshot selections, reviewed
+  scalar field targets, structured review meaning, readable display steps,
+  warnings, and derived rectangles. Python, input values, expected result rows,
+  traces, and Plotly are forbidden.
 - Feedback creates a later immutable numbered PlanRevision instead of patching
   prior plans. Draft validation happens before review persistence; one
   repairable range/plan failure may be returned to the provider for a bounded
@@ -110,8 +121,9 @@ stages.
   and does not create an AnalysisResult/ChartSpec.
 - Execution materializes one `inputs.tables` item per workbook selection with source
   metadata, starting row/column, typed values, display values, and optional
-  formulas. Snapshot selections become `inputs.experiments`. Large inputs may
-  be paged read-only with `inspect_run_input` and `inspect_experiment_input`.
+  formulas. Snapshot selections become `inputs.experiments`; reviewed scalar
+  definitions become `inputs.targetFields`. Large inputs may be paged read-only
+  with `inspect_run_input` and `inspect_experiment_input`.
 - Only after materialization may the code-generation model produce
   `labrat-python-v2` implementing `analyze(inputs, labrat)`. The model sees the
   real dictionary input contract; users do not review Python.
