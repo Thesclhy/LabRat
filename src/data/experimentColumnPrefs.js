@@ -1,6 +1,7 @@
 import { ls } from "../storage/localStorage.js";
 
 const COLUMN_PREFS_STORAGE_KEY = "labrat_blank_experiment_column_prefs_v1";
+const COLUMN_ORDER_STORAGE_KEY = "labrat_blank_experiment_column_order_v1";
 const DEFAULT_SCOPE = "local";
 
 function readStore() {
@@ -76,4 +77,55 @@ export function renameColumn(projectId, columnKey, label) {
 // Set an explicit pixel width; passing a non-positive value clears it (auto-fit).
 export function setColumnWidth(projectId, columnKey, width) {
   return updateEntry(projectId, columnKey, { width: typeof width === "number" && width > 0 ? width : undefined });
+}
+
+// --- Column order (a per-project array of column keys) ---
+
+function readOrderStore() {
+  const value = ls.get(COLUMN_ORDER_STORAGE_KEY, {});
+  return value && typeof value === "object" ? value : {};
+}
+
+export function getColumnOrder(projectId) {
+  const value = readOrderStore()[scopeKey(projectId)];
+  return Array.isArray(value) ? value.filter((key) => typeof key === "string") : [];
+}
+
+export function setColumnOrder(projectId, keys) {
+  const store = readOrderStore();
+  const scope = scopeKey(projectId);
+  const clean = Array.isArray(keys) ? [...new Set(keys.filter((key) => typeof key === "string"))] : [];
+  if (clean.length) {
+    store[scope] = clean;
+  } else {
+    delete store[scope];
+  }
+  ls.set(COLUMN_ORDER_STORAGE_KEY, store);
+  return clean;
+}
+
+// Pure helper: move `fromKey` so it sits immediately before/after `toKey`.
+export function moveKeyRelative(keys, fromKey, toKey, placeBefore) {
+  const list = Array.isArray(keys) ? keys.slice() : [];
+  if (fromKey === toKey || !list.includes(fromKey) || !list.includes(toKey)) return list;
+  const without = list.filter((key) => key !== fromKey);
+  const targetIndex = without.indexOf(toKey);
+  const insertAt = placeBefore ? targetIndex : targetIndex + 1;
+  return [...without.slice(0, insertAt), fromKey, ...without.slice(insertAt)];
+}
+
+// Order a list of { key } columns by a saved key order; unknown keys keep base order.
+export function applyColumnOrder(columns, savedOrder) {
+  const base = Array.isArray(columns) ? columns : [];
+  if (!Array.isArray(savedOrder) || !savedOrder.length) return base;
+  const byKey = new Map(base.map((column) => [column.key, column]));
+  const ordered = [];
+  savedOrder.forEach((key) => {
+    if (byKey.has(key)) {
+      ordered.push(byKey.get(key));
+      byKey.delete(key);
+    }
+  });
+  byKey.forEach((column) => ordered.push(column));
+  return ordered;
 }

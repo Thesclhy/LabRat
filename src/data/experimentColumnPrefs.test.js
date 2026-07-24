@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { getColumnPrefs, hideColumn, renameColumn, setColumnWidth, showColumn } from "./experimentColumnPrefs.js";
+import { applyColumnOrder, getColumnOrder, getColumnPrefs, hideColumn, moveKeyRelative, renameColumn, setColumnOrder, setColumnWidth, showColumn } from "./experimentColumnPrefs.js";
 
 const PROJECT = "proj-1";
 const COL = "selectivity_solid_pct";
@@ -50,5 +50,24 @@ describe("experimentColumnPrefs", () => {
   it("falls back to a local scope when no projectId is given", () => {
     renameColumn(null, COL, "Short");
     expect(getColumnPrefs(null)[COL]).toEqual({ label: "Short" });
+  });
+
+  it("persists and scopes column order", () => {
+    setColumnOrder(PROJECT, ["b", "a", "c"]);
+    expect(getColumnOrder(PROJECT)).toEqual(["b", "a", "c"]);
+    expect(getColumnOrder("proj-2")).toEqual([]);
+  });
+
+  it("moveKeyRelative places a key before/after a target", () => {
+    expect(moveKeyRelative(["a", "b", "c", "d"], "d", "b", true)).toEqual(["a", "d", "b", "c"]);
+    expect(moveKeyRelative(["a", "b", "c", "d"], "a", "c", false)).toEqual(["b", "c", "a", "d"]);
+    expect(moveKeyRelative(["a", "b"], "a", "a", true)).toEqual(["a", "b"]);
+    expect(moveKeyRelative(["a", "b"], "x", "a", true)).toEqual(["a", "b"]);
+  });
+
+  it("applyColumnOrder reorders known keys and appends unknown ones in base order", () => {
+    const cols = [{ key: "a" }, { key: "b" }, { key: "c" }];
+    expect(applyColumnOrder(cols, ["c", "a"]).map((c) => c.key)).toEqual(["c", "a", "b"]);
+    expect(applyColumnOrder(cols, []).map((c) => c.key)).toEqual(["a", "b", "c"]);
   });
 });

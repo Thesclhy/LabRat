@@ -8310,14 +8310,48 @@ tbody tr:hover {
   font-size: 12px;
   cursor: pointer;
 }
+.star-color-row {
+  display: flex;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+.star-color-swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+.star-color-swatch:hover {
+  transform: scale(1.12);
+}
+.star-color-swatch.active {
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--text);
+}
 
 /* Column header right-click menu, inline rename, hidden-column chips */
 .generic-browser-table th.column-header {
-  cursor: context-menu;
+  cursor: pointer;
   white-space: normal;
   overflow-wrap: anywhere;
   word-break: break-word;
   vertical-align: middle;
+}
+.column-sort-arrow {
+  margin-left: 4px;
+  font-size: 9px;
+  color: var(--muted);
+  opacity: 0;
+}
+.generic-browser-table th.column-header:hover .column-sort-arrow {
+  opacity: 0.4;
+}
+.generic-browser-table th.column-header .column-sort-arrow.asc,
+.generic-browser-table th.column-header .column-sort-arrow.desc {
+  opacity: 1;
+  color: var(--accent);
 }
 .column-header-label {
   border-bottom: 1px dotted transparent;
@@ -9455,4 +9489,38 @@ tbody tr:hover {
   border: 1px solid #cbd5e1;
   border-radius: 4px;
   background: #fff;
+}
+/* Drag-to-reorder columns */
+.column-header-label {
+  cursor: pointer;
+}
+.column-header-label:active {
+  cursor: grabbing;
+}
+.column-drag-grip {
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-size: 11px;
+  opacity: 0;
+  letter-spacing: -1px;
+  pointer-events: none;
+}
+.generic-browser-table th.column-header:hover .column-drag-grip {
+  opacity: 0.5;
+}
+.generic-browser-table th.column-header.is-dragging {
+  opacity: 0.4;
+}
+.generic-browser-table th.column-header.drop-before {
+  box-shadow: inset 2px 0 0 0 var(--accent);
+}
+.generic-browser-table th.column-header.drop-after {
+  box-shadow: inset -2px 0 0 0 var(--accent);
+}
+.column-header-menu button:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
