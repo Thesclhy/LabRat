@@ -10,7 +10,7 @@ This file tracks the active execution state. Keep `doc/plan.md` as the short roa
 
 - Product mainline: Workbook Understanding First, ending in Experiment Browser.
 - Engineering mainline: accepted regions and active snapshots -> reviewed
-  Experiment Browser analysis -> record patches -> DataSnapshot v3 -> Browser
+  Experiment Browser analysis -> list-column patches -> DataSnapshot v4 -> Browser
   projection.
 - Completed milestone: Backend conversational analysis and chart workflow implementation.
 - Completed milestone: progressive full-sheet workbook loading and
@@ -54,24 +54,40 @@ publication. The same durable AnalysisThread revision/accept/run/revise
 workflow used for charts now supports `outputTarget: experiment_browser`.
 Planning can select exact ranges from accepted RegionUnderstandingRevisions,
 active experiment fields, or both. Plan revisions contain only sources and a
-readable description of identification, calculations, field changes, missing
-data, the proposed Browser view, and reviewed scalar field targets. Direct
-workbook targets inherit key/name/role/type/unit from the accepted region;
-derived targets define those semantics before acceptance. Python is generated
-only after acceptance against materialized `inputs.tables`,
-`inputs.experiments`, the project field catalog, and `inputs.targetFields`.
+readable description of identification, calculations, missing data, and the
+proposed Browser result. They do not contain scalar field definitions,
+semantic keys, roles, target ids, or Python. Python is generated only after
+acceptance against ordered materialized `inputs.tables` and
+`inputs.experiments`.
 
-Validated Python output contains source-backed `recordPatches`, not replacement
-records. Scalar values reference accepted `targetFieldId` values and cannot
-redefine field metadata. The backend reuses stable field selectors, blocks same-key/same-unit
-type conflicts and forged sources, preserves untouched fields/series, and
-previews new/changed/preserved/excluded data through the Browser table. Publish
-atomically accepts the result, creates DataSnapshot v3, updates only affected
-snapshot heads, creates a non-default BrowserView, completes the thread, and
-records an idempotency receipt/audit event. Stale active heads block
-publication. The frontend now opens this flow from Experiment Browser or
-Workbook Review, uses Source/Result review, resolves only ambiguous identities,
-and opens the new view after publication.
+Validated Python output contains top-level `columns[]`, per-record `values[]`
+addressed by output `columnIndex`, optional series patches, and readable
+exclusions. The backend validates types, finite values, null reasons, identities,
+and exact input pointers, then assigns each output column one opaque random
+`columnId` when the AnalysisResult is created. That id is shared across all
+experiments in the result and remains stable through preview, retry, publish,
+Browser filters/sorts, and later chart selection. Duplicate readable names are
+allowed and source-disambiguated; no automatic merge or replacement occurs.
+Untouched fields and series remain preserved.
+
+Publish atomically accepts the result, creates DataSnapshot v4, updates only
+affected snapshot heads, creates a non-default BrowserView, completes the
+thread, and records an idempotency receipt/audit event. Stale active heads block
+publication. Chart planning and Python can also consume published fields as
+ordered `columnIndex` selections without exposing internal Browser ids. The
+frontend continues to show the same Source/Result review and Browser table,
+with no technical ids or field JSON.
+
+Real Anthropic plus local-Python Docker E2E selected
+`MasterTable_updated.xlsx` labels and column K as two exact workbook ranges,
+generated a 61-record Impeller preview, and published one DataSnapshot v4.
+All 61 records share one backend-assigned random `columnId`, while Browser
+shows only the readable Impeller name and values. A subsequent chart request
+selected the new Impeller field from all 61 active experiments by ordered
+column index, produced a four-point category-count bar chart, and published a
+ChartSpec v3 backed by 61 reviewed experiment selections and no workbook
+selection. Chart publication now accepts workbook evidence, frozen experiment
+evidence, or both, and transactionally rejects changed experiment heads.
 
 One bounded automatic replacement-program attempt now handles Python
 execution or output-contract failures inside the same AnalysisRun. The repair

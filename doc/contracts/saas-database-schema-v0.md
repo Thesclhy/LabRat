@@ -119,9 +119,11 @@ agent_runs
 
 `chart_specs` stores durable `origin: analysis_result` chart definitions. Each
 spec uses `labrat.chartSpec.v3`, sets `analysis_result_id`, and contains exact
-analysis artifact ids, reviewed source selections, complete validated Plotly
-`data/layout`, a matching flat trace catalog, and reviewed default trace
-visibility. There is no proposal or aggregate dataset foreign key.
+analysis artifact ids, reviewed workbook and/or active-experiment selections,
+complete validated Plotly `data/layout`, a matching flat trace catalog, and
+reviewed default trace visibility. Frozen experiment selections carry their
+base snapshot-head refs so publication can reject concurrent head changes.
+There is no proposal or aggregate dataset foreign key.
 
 `manuscripts` stores blocks, pages, canvas state, and references. Chart blocks carry their own complete ChartSpec snapshot plus placement-local `chartView.visibleTraceIds` for stable independent rendering and export.
 

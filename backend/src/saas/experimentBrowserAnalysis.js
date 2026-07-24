@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { encodeCell } from "../import/utils/excelAddress.js";
 import {
   buildExperimentProjection,
@@ -11,7 +13,6 @@ const MAX_RECORD_PATCHES = 10_000;
 const MAX_FIELDS_PER_PATCH = 2_000;
 const MAX_SERIES_PER_PATCH = 500;
 const MAX_SERIES_POINTS = 1_000_000;
-const FIELD_ROLES = new Set(["identifier", "condition", "outcome", "series_summary", "other"]);
 const VALUE_TYPES = new Set(["number", "string", "date", "boolean"]);
 const MISSING_REASONS = new Set([
   "source_blank",
@@ -55,6 +56,18 @@ function normalizedType(value) {
   return text(value).toLowerCase() || "string";
 }
 
+function fieldSourceSummary(sourceRefs) {
+  const source = asArray(sourceRefs)[0];
+  if (!source) return null;
+  if (source.sourceType === "excel_cell") {
+    const workbook = text(source.fileName || source.sourceDocumentId) || "Workbook";
+    const sheet = text(source.sheet) || "Sheet";
+    const range = text(source.cell || source.range);
+    return range ? `${workbook} · ${sheet}!${range}` : `${workbook} · ${sheet}`;
+  }
+  return text(source.label || source.sourceType) || null;
+}
+
 function sourceGridValue(grid, rowOffset, columnOffset) {
   const row = asArray(grid)[rowOffset];
   if (!Array.isArray(row) || columnOffset >= row.length) return null;
@@ -67,7 +80,7 @@ function isBlankSourceValue(value) {
 }
 
 function isPlaceholderSourceValue(value) {
-  return SOURCE_PLACEHOLDERS.has(text(value).toLowerCase());
+  return SOURCE_PLACEHOLDERS.has(text(value).toLowerCase()) || text(value) === "\u2014";
 }
 
 function sourceEvidenceForPointers(value, inputs) {
@@ -91,11 +104,11 @@ function sourceEvidenceForPointers(value, inputs) {
         formattedValue: sourceGridValue(table.displayValues, rowOffset, columnOffset),
       }];
     }
-    if (text(pointer?.experimentId) && text(pointer?.columnId)) {
+    if (text(pointer?.experimentId) && Number.isInteger(Number(pointer?.columnIndex))) {
       const experiment = asArray(inputs?.experiments)
         .find((item) => item.experimentId === text(pointer.experimentId));
       const field = asArray(experiment?.fields)
-        .find((item) => item.columnId === text(pointer.columnId));
+        .find((item) => Number(item.columnIndex) === Number(pointer.columnIndex));
       if (!field) return [];
       return [{
         sourceType: "experiment_field",
@@ -182,13 +195,12 @@ export async function experimentInputCatalog({ store, projectId } = {}) {
       dataSnapshotId: head.dataSnapshotId,
       recordIndex: Number(head.recordIndex),
     },
-    fields: asArray(record.fields).map((field) => ({
-      columnId: experimentFieldColumnId(field),
-      fieldKey: text(field.fieldKey),
-      displayName: text(field.displayName || field.fieldKey),
-      role: text(field.role) || "other",
+    fields: asArray(record.fields).map((field, columnIndex) => ({
+      columnIndex,
+      displayName: text(field.displayName || field.fieldKey) || `Column ${columnIndex + 1}`,
       valueType: normalizedType(field.valueType),
       unit: field.unit || null,
+      sourceSummary: fieldSourceSummary(field.sourceRefs),
     })),
     series: asArray(record.series).map((series) => ({
       seriesKey: text(series.seriesKey),
@@ -218,6 +230,15 @@ export async function resolveExperimentSelections({
   const context = await loadActiveExperimentContext({ store, projectId });
   const seen = new Set();
   return requested.map((selection, index) => {
+    if (
+      Object.prototype.hasOwnProperty.call(selection || {}, "columnIds")
+      || Object.prototype.hasOwnProperty.call(selection || {}, "targetFieldIds")
+    ) {
+      throw analysisError(
+        "analysis_experiment_column_ids_forbidden",
+        "Experiment selections must use ordered columnIndexes; model-facing inputs never expose internal Browser column ids.",
+      );
+    }
     const experimentId = text(selection?.experimentId);
     const entry = context.entryByExperimentId.get(experimentId);
     if (!entry) {
@@ -235,29 +256,41 @@ export async function resolveExperimentSelections({
       );
     }
     seen.add(experimentId);
-    const availableFields = new Map(asArray(entry.record.fields).map((field) => [
-      experimentFieldColumnId(field),
-      field,
-    ]));
-    const requestedColumnIds = asArray(selection?.columnIds).map(text).filter(Boolean);
-    const columnIds = requestedColumnIds.length ? requestedColumnIds : [...availableFields.keys()];
-    const unknown = columnIds.filter((columnId) => !availableFields.has(columnId));
+    const availableFields = asArray(entry.record.fields);
+    if (!Array.isArray(selection?.columnIndexes)) {
+      throw analysisError(
+        "analysis_experiment_column_indexes_required",
+        "Experiment selections must provide an exact columnIndexes list.",
+      );
+    }
+    const columnIndexes = selection.columnIndexes.map(Number);
+    if (!columnIndexes.length && selection?.includeSeries !== true) {
+      throw analysisError(
+        "analysis_experiment_selection_empty",
+        "An experiment selection must choose at least one column index or include series.",
+      );
+    }
+    const unknown = columnIndexes.filter((columnIndex) => (
+      !Number.isInteger(columnIndex)
+      || columnIndex < 0
+      || columnIndex >= availableFields.length
+    ));
     if (unknown.length) {
       throw analysisError(
         "analysis_experiment_field_not_found",
         "An active experiment selection references unavailable fields.",
         422,
-        { experimentId, columnIds: unknown },
+        { experimentId, columnIndexes: unknown },
       );
     }
     return {
       experimentSelectionId: `experiment_selection_${index + 1}`,
       experimentId,
       label: entry.identity.canonicalLabel || entry.record.label || experimentId,
-      columnIds: [...new Set(columnIds)],
-      fieldLabels: [...new Set(columnIds.map((columnId) => {
-        const field = availableFields.get(columnId);
-        const label = text(field?.displayName || field?.fieldKey) || columnId;
+      columnIndexes: [...new Set(columnIndexes)],
+      fieldLabels: [...new Set(columnIndexes.map((columnIndex) => {
+        const field = availableFields[columnIndex];
+        const label = text(field?.displayName || field?.fieldKey) || `Column ${columnIndex + 1}`;
         const unit = text(field?.unit);
         if (!unit || normalizeAlias(label) === normalizeAlias(unit)) return label;
         return label.toLowerCase().includes(`(${unit.toLowerCase()})`)
@@ -286,26 +319,27 @@ export async function materializeExperimentInputs({
     projectId,
     experimentSelections,
   });
-  if (!selections.length) return { selections: [], experiments: [], fieldCatalog: [], expectedHeadRefs: [] };
+  if (!selections.length) return { selections: [], experiments: [], expectedHeadRefs: [] };
   const context = await loadActiveExperimentContext({ store, projectId });
-  const fieldCatalog = new Map();
   const experiments = selections.map((selection) => {
     const entry = context.entryByExperimentId.get(selection.experimentId);
-    const selected = new Set(selection.columnIds);
+    const selected = new Set(selection.columnIndexes);
     const fields = asArray(entry.record.fields)
-      .filter((field) => selected.has(experimentFieldColumnId(field)))
-      .map((field) => {
-        const columnId = experimentFieldColumnId(field);
-        fieldCatalog.set(columnId, {
-          columnId,
-          fieldKey: text(field.fieldKey),
-          displayName: text(field.displayName || field.fieldKey),
-          role: text(field.role) || "other",
-          valueType: normalizedType(field.valueType),
-          unit: field.unit || null,
-        });
-        return { ...clone(field), columnId };
-      });
+      .map((field, columnIndex) => ({ field, columnIndex }))
+      .filter(({ columnIndex }) => selected.has(columnIndex))
+      .map(({ field, columnIndex }) => ({
+        columnIndex,
+        displayName: text(field.displayName || field.fieldKey) || `Column ${columnIndex + 1}`,
+        valueType: normalizedType(field.valueType),
+        unit: field.unit || null,
+        sourceSummary: fieldSourceSummary(field.sourceRefs),
+        value: field.value ?? null,
+        formattedValue: field.formattedValue ?? null,
+        missingReason: field.missingReason || null,
+        confidence: field.confidence ?? null,
+        warnings: clone(field.warnings) || [],
+        sourceRefs: clone(field.sourceRefs) || [],
+      }));
     return {
       experimentSelectionId: selection.experimentSelectionId,
       experimentId: entry.identity.id,
@@ -319,7 +353,6 @@ export async function materializeExperimentInputs({
   return {
     selections,
     experiments,
-    fieldCatalog: [...fieldCatalog.values()],
     expectedHeadRefs: selections.map((selection) => clone(selection.baseHeadRef)),
   };
 }
@@ -350,26 +383,6 @@ export function inspectExperimentInput(inputs, {
       fieldCount: asArray(experiment.fields).length,
     },
   };
-}
-
-export function buildProjectFieldCatalog(entries = []) {
-  const catalog = new Map();
-  asArray(entries).forEach(({ record }) => {
-    asArray(record?.fields).forEach((field) => {
-      const columnId = experimentFieldColumnId(field);
-      if (!catalog.has(columnId)) {
-        catalog.set(columnId, {
-          columnId,
-          fieldKey: text(field.fieldKey),
-          displayName: text(field.displayName || field.fieldKey),
-          role: text(field.role) || "other",
-          valueType: normalizedType(field.valueType),
-          unit: field.unit || null,
-        });
-      }
-    });
-  });
-  return [...catalog.values()];
 }
 
 function sourceRefsForPointer(pointer, inputs, errors, path) {
@@ -410,11 +423,11 @@ function sourceRefsForPointer(pointer, inputs, errors, path) {
       formattedValue: sourceGridValue(table.displayValues, rowOffset, columnOffset),
     }];
   }
-  if (text(pointer?.experimentId) && text(pointer?.columnId)) {
+  if (text(pointer?.experimentId) && Number.isInteger(Number(pointer?.columnIndex))) {
     const experiment = asArray(inputs?.experiments)
       .find((item) => item.experimentId === text(pointer.experimentId));
     const field = asArray(experiment?.fields)
-      .find((item) => item.columnId === text(pointer.columnId));
+      .find((item) => Number(item.columnIndex) === Number(pointer.columnIndex));
     if (!experiment || !field) {
       errors.push(error(
         "experiment_patch_source_field_invalid",
@@ -455,79 +468,112 @@ function sourceRefsForValue(value, inputs, errors, path) {
   });
 }
 
-function normalizeField(field, inputs, fieldTargets, fieldCatalog, errors, path, diagnostic = {}) {
-  const targetFieldId = text(field?.targetFieldId);
-  const target = fieldTargets.get(targetFieldId);
-  if (!target) {
+function sourceColumnMetadata(value, inputs) {
+  for (const pointer of asArray(value?.sources)) {
+    if (text(pointer?.tableId) && Number.isInteger(Number(pointer?.columnOffset))) {
+      const table = asArray(inputs?.tables).find((item) => item.tableId === text(pointer.tableId));
+      const column = asArray(table?.columns)[Number(pointer.columnOffset)];
+      if (column) return column;
+    }
+    if (text(pointer?.experimentId) && Number.isInteger(Number(pointer?.columnIndex))) {
+      const experiment = asArray(inputs?.experiments)
+        .find((item) => item.experimentId === text(pointer.experimentId));
+      const field = asArray(experiment?.fields)
+        .find((item) => Number(item.columnIndex) === Number(pointer.columnIndex));
+      if (field) return field;
+    }
+  }
+  return null;
+}
+
+function normalizeOutputColumns(raw, inputs, errors, columnIdFactory) {
+  if (!Array.isArray(raw?.columns)) {
     errors.push(error(
-      "experiment_patch_field_target_invalid",
-      "Every scalar output must reference a targetFieldId from the accepted plan.",
-      { path, targetFieldId: targetFieldId || null, ...diagnostic },
+      "experiment_output_columns_required",
+      "Python must return a top-level columns list for scalar output.",
     ));
   }
-  const forbiddenMetadata = [
-    "fieldKey",
-    "displayName",
-    "role",
-    "valueType",
-    "unit",
-    "columnId",
-  ].filter((key) => Object.prototype.hasOwnProperty.call(field || {}, key));
-  if (forbiddenMetadata.length) {
+  const rawColumns = asArray(raw?.columns);
+  if (rawColumns.length > MAX_FIELDS_PER_PATCH) {
+    errors.push(error(
+      "experiment_output_column_limit_exceeded",
+      `Python may return at most ${MAX_FIELDS_PER_PATCH} scalar output columns.`,
+    ));
+  }
+  const patches = asArray(raw?.recordPatches);
+  return rawColumns.map((column, columnIndex) => {
+    const sampleValue = patches
+      .flatMap((patch) => asArray(patch?.values))
+      .find((value) => Number(value?.columnIndex) === columnIndex);
+    const sourceMetadata = sourceColumnMetadata(sampleValue, inputs);
+    const unknownProperties = Object.keys(column || {}).filter(
+      (key) => !["displayName", "valueType", "unit"].includes(key),
+    );
+    if (unknownProperties.length) {
+      errors.push(error(
+        "experiment_output_column_metadata_forbidden",
+        "Output columns may define only displayName, valueType, and unit.",
+        { columnIndex, properties: unknownProperties },
+      ));
+    }
+    const valueType = text(column?.valueType).toLowerCase();
+    if (!VALUE_TYPES.has(valueType)) {
+      errors.push(error(
+        "experiment_output_column_type_invalid",
+        "Every output column requires number, string, date, or boolean valueType.",
+        { columnIndex, valueType: valueType || null },
+      ));
+    }
+    return {
+      columnId: columnIdFactory(columnIndex),
+      columnIndex,
+      displayName: text(column?.displayName)
+        || text(sourceMetadata?.sourceHeader || sourceMetadata?.displayName)
+        || `Column ${columnIndex + 1}`,
+      valueType,
+      unit: column?.unit || sourceMetadata?.unit || null,
+      headerSourceRefs: clone(sourceMetadata?.headerSourceRefs) || [],
+    };
+  });
+}
+
+function normalizeField(field, inputs, outputColumns, errors, path, diagnostic = {}) {
+  const columnIndex = Number(field?.columnIndex);
+  const definition = Number.isInteger(columnIndex) && columnIndex >= 0
+    ? outputColumns[columnIndex]
+    : null;
+  if (!definition) {
+    errors.push(error(
+      "experiment_patch_column_index_invalid",
+      "Every scalar output must reference one columns[] item by non-negative columnIndex.",
+      { path, columnIndex: Number.isFinite(columnIndex) ? columnIndex : null, ...diagnostic },
+    ));
+  }
+  const unknownProperties = Object.keys(field || {}).filter((key) => ![
+    "columnIndex",
+    "value",
+    "formattedValue",
+    "missingReason",
+    "confidence",
+    "warnings",
+    "sources",
+  ].includes(key));
+  if (unknownProperties.length) {
     errors.push(error(
       "experiment_patch_field_metadata_forbidden",
-      "Python must not redefine accepted scalar field metadata.",
-      { path, targetFieldId: targetFieldId || null, properties: forbiddenMetadata, ...diagnostic },
-    ));
-  }
-  const existing = target?.existingColumnId
-    ? fieldCatalog.get(target.existingColumnId)
-    : null;
-  if (target?.existingColumnId && !existing) {
-    errors.push(error(
-      "experiment_patch_field_selector_invalid",
-      "The accepted target field no longer exists in the active project field catalog.",
-      { path, targetFieldId, columnId: target.existingColumnId, ...diagnostic },
-    ));
-  }
-  const definition = target || {
-    fieldKey: "",
-    displayName: "",
-    role: "",
-    valueType: "",
-    unit: null,
-    columnId: "",
-  };
-  if (
-    !definition.fieldKey
-    || !definition.displayName
-    || !FIELD_ROLES.has(definition.role)
-    || !VALUE_TYPES.has(definition.valueType)
-  ) {
-    errors.push(error(
-      "experiment_patch_field_definition_invalid",
-      "The accepted target field definition is incomplete or unsupported.",
-      {
-        path,
-        targetFieldId: targetFieldId || null,
-        role: definition.role || null,
-        valueType: definition.valueType || null,
-        allowedRoles: [...FIELD_ROLES],
-        allowedValueTypes: [...VALUE_TYPES],
-        ...diagnostic,
-      },
+      "Scalar values may reference only columnIndex and cannot redefine output-column metadata.",
+      { path, columnIndex, properties: unknownProperties, ...diagnostic },
     ));
   }
   const hasValue = Object.prototype.hasOwnProperty.call(field || {}, "value");
   const value = hasValue ? field.value : null;
   const missingReason = text(field?.missingReason) || null;
   const normalized = {
-    fieldKey: definition.fieldKey,
-    displayName: definition.displayName,
-    role: definition.role,
-    valueType: definition.valueType,
-    unit: definition.unit || null,
-    headerSourceRefs: clone(definition.sourceField?.headerSourceRefs) || [],
+    columnId: definition?.columnId || "",
+    displayName: definition?.displayName || `Column ${columnIndex + 1}`,
+    valueType: definition?.valueType || "",
+    unit: definition?.unit || null,
+    headerSourceRefs: clone(definition?.headerSourceRefs) || [],
     value,
     formattedValue: value === null ? null : field?.formattedValue ?? null,
     ...(missingReason ? { missingReason } : {}),
@@ -540,7 +586,7 @@ function normalizeField(field, inputs, fieldTargets, fieldCatalog, errors, path,
   const fieldDiagnostic = {
     path,
     experimentLabel: diagnostic.experimentLabel || null,
-    fieldName: normalized.displayName || normalized.fieldKey || null,
+    fieldName: normalized.displayName || null,
   };
   if (!hasValue) {
     errors.push(error(
@@ -607,14 +653,6 @@ function normalizeField(field, inputs, fieldTargets, fieldCatalog, errors, path,
       "experiment_patch_text_value_invalid",
       "String and date Experiment Browser fields require string values.",
       fieldDiagnostic,
-    ));
-  }
-  normalized.columnId = text(definition.columnId) || experimentFieldColumnId(normalized);
-  if (existing && normalized.columnId !== existing.columnId) {
-    errors.push(error(
-      "experiment_patch_field_selector_mismatch",
-      "An accepted replacement target may not change its field key, unit, or value type.",
-      { ...fieldDiagnostic, columnId: definition.existingColumnId },
     ));
   }
   return normalized;
@@ -693,13 +731,10 @@ function mergeRecord(baseRecord, patch, experimentId) {
     series,
   ]));
   const changes = [];
-  patch.upsertFields.forEach((field) => {
+  patch.values.forEach((field) => {
     const prior = fieldById.get(field.columnId);
     if (prior?.value != null && field.value === null) return;
-    fieldById.set(field.columnId, {
-      ...clone(field),
-      columnId: undefined,
-    });
+    fieldById.set(field.columnId, clone(field));
     changes.push({
       kind: prior ? "changed_field" : "new_field",
       columnId: field.columnId,
@@ -722,7 +757,7 @@ function mergeRecord(baseRecord, patch, experimentId) {
   });
   const sourceRefs = [
     ...asArray(base.sourceRefs),
-    ...patch.upsertFields.flatMap((field) => asArray(field.sourceRefs)),
+    ...patch.values.flatMap((field) => asArray(field.sourceRefs)),
     ...patch.upsertSeries.flatMap((series) => asArray(series.sourceRefs)),
   ];
   return {
@@ -731,11 +766,7 @@ function mergeRecord(baseRecord, patch, experimentId) {
       experimentId,
       label: patch.label || base.label,
       aliases: [...new Set([...asArray(base.aliases), patch.label].map(text).filter(Boolean))],
-      fields: [...fieldById.values()].map((field) => {
-        const next = clone(field);
-        delete next.columnId;
-        return next;
-      }),
+      fields: [...fieldById.values()].map(clone),
       series: [...seriesById.values()],
       warnings: [...asArray(base.warnings), ...asArray(patch.warnings)],
       sourceRefs: sourceRefs.filter((ref, index, all) => (
@@ -778,24 +809,22 @@ function identityCandidates(patches, context) {
   });
 }
 
-function proposedBrowserView(rawView, projection, changedColumnIds) {
+function proposedBrowserView(projection, changedColumnIds) {
   const available = new Set(asArray(projection.columns).map((column) => column.id));
-  const requested = asArray(rawView?.visibleColumnIds).map(text).filter((id) => available.has(id));
   const visibleColumnIds = [
     "experiment",
     ...changedColumnIds,
-    ...requested,
   ].filter((id, index, all) => available.has(id) && all.indexOf(id) === index);
   return {
     schemaVersion: "labrat.browserView.v1",
-    name: text(rawView?.name) || "LabRat data update",
+    name: "LabRat data update",
     visibleColumnIds,
     columnOrder: visibleColumnIds,
     columnWidths: {},
-    filters: asArray(rawView?.filters).filter((filter) => available.has(text(filter?.columnId))),
-    sort: asArray(rawView?.sort).filter((item) => available.has(text(item?.columnId))).slice(0, 3),
+    filters: [],
+    sort: [],
     selectedExperimentIds: [],
-    makeDefault: rawView?.makeDefault === true,
+    makeDefault: false,
   };
 }
 
@@ -805,6 +834,7 @@ export function validateExperimentBrowserResult({
   executorResult,
   inputs,
   activeContext,
+  columnIdFactory = () => `column_${randomUUID()}`,
 } = {}) {
   const errors = [];
   const warnings = [];
@@ -817,7 +847,30 @@ export function validateExperimentBrowserResult({
   const raw = executorResult?.result && typeof executorResult.result === "object"
     ? executorResult.result
     : {};
+  const unknownResultProperties = Object.keys(raw).filter(
+    (key) => !["columns", "recordPatches", "exclusions"].includes(key),
+  );
+  if (unknownResultProperties.length) {
+    errors.push(error(
+      "experiment_output_properties_forbidden",
+      "Python may return only columns, recordPatches, and exclusions.",
+      { properties: unknownResultProperties },
+    ));
+  }
   const rawPatches = asArray(raw.recordPatches);
+  if (!Array.isArray(raw.recordPatches)) {
+    errors.push(error(
+      "experiment_record_patches_required",
+      "Python must return recordPatches as a list.",
+    ));
+  }
+  if (!Array.isArray(raw.exclusions)) {
+    errors.push(error(
+      "experiment_exclusions_required",
+      "Python must return exclusions as a list.",
+    ));
+  }
+  const outputColumns = normalizeOutputColumns(raw, inputs, errors, columnIdFactory);
   if (!rawPatches.length) {
     errors.push(error(
       "experiment_record_patches_required",
@@ -828,19 +881,6 @@ export function validateExperimentBrowserResult({
     errors.push(error(
       "experiment_record_patch_limit_exceeded",
       `Python returned more than ${MAX_RECORD_PATCHES} record patches.`,
-    ));
-  }
-  const fieldCatalog = new Map(buildProjectFieldCatalog(activeContext.entries)
-    .map((field) => [field.columnId, field]));
-  const fieldTargets = new Map(asArray(
-    plan?.plan?.fieldTargets
-      || plan?.fieldTargets
-      || inputs?.targetFields,
-  ).map((target) => [text(target?.targetFieldId), target]));
-  if (!fieldTargets.size) {
-    errors.push(error(
-      "experiment_patch_field_targets_required",
-      "The accepted Experiment Browser plan contains no scalar field targets.",
     ));
   }
   const seenAliases = new Set();
@@ -862,7 +902,7 @@ export function validateExperimentBrowserResult({
       ));
     }
     seenAliases.add(normalized);
-    if (asArray(patch?.upsertFields).length > MAX_FIELDS_PER_PATCH) {
+    if (asArray(patch?.values).length > MAX_FIELDS_PER_PATCH) {
       errors.push(error(
         "experiment_patch_field_limit_exceeded",
         `A record patch may contain at most ${MAX_FIELDS_PER_PATCH} fields.`,
@@ -876,28 +916,49 @@ export function validateExperimentBrowserResult({
         { patchIndex },
       ));
     }
-    if (asArray(patch?.removeFields).length || asArray(patch?.removeSeries).length) {
+    if (
+      Object.prototype.hasOwnProperty.call(patch || {}, "upsertFields")
+      || Object.prototype.hasOwnProperty.call(patch || {}, "removeFields")
+    ) {
       errors.push(error(
-        "experiment_patch_removal_not_supported",
-        "Scientific field and series removal is not supported in this release; hide fields with a BrowserView.",
+        "experiment_patch_legacy_field_contract_forbidden",
+        "Scalar output must use recordPatches[].values with columns[] indexes.",
         { patchIndex },
       ));
     }
-    const upsertFields = asArray(patch?.upsertFields).map((field, fieldIndex) => (
+    if (asArray(patch?.removeSeries).length) {
+      errors.push(error(
+        "experiment_patch_removal_not_supported",
+        "Scientific series removal is not supported in this release.",
+        { patchIndex },
+      ));
+    }
+    const seenColumnIndexes = new Set();
+    const values = asArray(patch?.values).map((field, fieldIndex) => {
+      const columnIndex = Number(field?.columnIndex);
+      if (seenColumnIndexes.has(columnIndex)) {
+        errors.push(error(
+          "experiment_patch_column_duplicate",
+          "One experiment patch may provide at most one value for each output column.",
+          { patchIndex, columnIndex },
+        ));
+      }
+      seenColumnIndexes.add(columnIndex);
+      return (
       normalizeField(
         field,
         inputs,
-        fieldTargets,
-        fieldCatalog,
+        outputColumns,
         errors,
-        `recordPatches[${patchIndex}].upsertFields[${fieldIndex}]`,
+        `recordPatches[${patchIndex}].values[${fieldIndex}]`,
         {
           patchIndex,
           experimentLabel: label,
-          fieldName: fieldTargets.get(text(field?.targetFieldId))?.displayName || null,
+          fieldName: outputColumns[columnIndex]?.displayName || null,
         },
       )
-    ));
+      );
+    });
     const upsertSeries = asArray(patch?.upsertSeries).map((series, seriesIndex) => {
       const normalizedSeries = normalizeSeries(
         series,
@@ -908,7 +969,7 @@ export function validateExperimentBrowserResult({
       totalSeriesPoints += asArray(normalizedSeries.points).length;
       return normalizedSeries;
     });
-    if (!upsertFields.length && !upsertSeries.length) {
+    if (!values.length && !upsertSeries.length) {
       errors.push(error(
         "experiment_patch_empty",
         "Every record patch must add or replace at least one field or series.",
@@ -918,7 +979,7 @@ export function validateExperimentBrowserResult({
     return {
       patchId: `record_patch_${patchIndex + 1}`,
       label,
-      upsertFields,
+      values,
       upsertSeries,
       warnings: asArray(patch?.warnings),
     };
@@ -943,25 +1004,6 @@ export function validateExperimentBrowserResult({
       : null;
     const experimentId = identity?.id || candidate.candidateId;
     const entry = identity ? activeContext.entryByExperimentId.get(identity.id) : null;
-    const existingFields = new Map(asArray(entry?.record?.fields).map((field) => [
-      experimentFieldColumnId(field),
-      field,
-    ]));
-    patch.upsertFields.forEach((field) => {
-      const prior = existingFields.get(field.columnId);
-      if (prior?.value != null && field.value === null) {
-        errors.push(error(
-          "experiment_patch_missing_cannot_replace_value",
-          "A missing value cannot replace an existing non-null scientific value.",
-          {
-            patchIndex: index,
-            experimentLabel: patch.label,
-            fieldName: field.displayName || field.fieldKey,
-            columnId: field.columnId,
-          },
-        ));
-      }
-    });
     patch.baseSnapshotRef = entry ? {
       experimentId: identity.id,
       headId: entry.head.id,
@@ -993,7 +1035,7 @@ export function validateExperimentBrowserResult({
       identityStatus: candidate.status,
       changes: merged.changes,
       preservedFieldCount: Math.max(
-        asArray(merged.record.fields).length - patch.upsertFields.length,
+        asArray(merged.record.fields).length - patch.values.length,
         0,
       ),
     });
@@ -1020,12 +1062,13 @@ export function validateExperimentBrowserResult({
     patch.baseSnapshotRef ? [clone(patch.baseSnapshotRef)] : []
   ));
   const result = {
+    columns: outputColumns,
     recordPatches: patches,
     identityCandidates: candidates,
     previewRecords,
     rowChanges,
     projection,
-    browserView: proposedBrowserView(raw.browserView, projection, [...new Set(changedColumnIds)]),
+    browserView: proposedBrowserView(projection, [...new Set(changedColumnIds)]),
     exclusions,
     baseHeadRefs,
     summary: {
@@ -1044,10 +1087,10 @@ export function validateExperimentBrowserResult({
       preservedFieldCount: rowChanges
         .reduce((total, row) => total + Number(row.preservedFieldCount || 0), 0),
       missingValueCount: patches.reduce((total, patch) => (
-        total + patch.upsertFields.filter((field) => field.value === null).length
+        total + patch.values.filter((field) => field.value === null).length
       ), 0),
       missingExperimentCount: patches.filter((patch) => (
-        patch.upsertFields.some((field) => field.value === null)
+        patch.values.some((field) => field.value === null)
       )).length,
       excludedCount: exclusions.length,
     },

@@ -50,14 +50,39 @@ test("accepts a complete Plotly-backed v3 analysis ChartSpec", () => {
   assert.deepEqual(result.chartSpec.plotly.data[0].x, ["C1", "C2"]);
 });
 
-test("rejects missing source selections and incomplete trace catalogs", () => {
+test("accepts experiment selections and rejects plans without reviewed evidence", () => {
+  const experimentProposal = chartSpec();
+  experimentProposal.sourceSelections = [];
+  experimentProposal.experimentSelections = [{
+    experimentSelectionId: "experiment_selection_1",
+    experimentId: "experiment_1",
+    columnIndexes: [0],
+    baseHeadRef: {
+      experimentId: "experiment_1",
+      headId: "head_1",
+      dataSnapshotId: "snapshot_1",
+      recordIndex: 0,
+    },
+  }];
+  assert.equal(validateChartSpecProposal({ proposal: experimentProposal }).ok, true);
+
   const proposal = chartSpec();
   proposal.sourceSelections = [];
-  proposal.traceCatalog = [];
+  proposal.experimentSelections = [];
 
   assert.throws(
     () => validateChartSpecProposal({ proposal }),
     (error) => error.code === "invalid_analysis_chart_spec",
+  );
+});
+
+test("rejects incomplete trace catalogs after evidence validation", () => {
+  const proposal = chartSpec();
+  proposal.traceCatalog = [];
+
+  assert.throws(
+    () => validateChartSpecProposal({ proposal }),
+    /trace catalog/i,
   );
 });
 

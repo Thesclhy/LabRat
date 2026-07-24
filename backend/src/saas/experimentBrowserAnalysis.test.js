@@ -3,27 +3,28 @@ import test from "node:test";
 
 import {
   applyExperimentRecordPatches,
+  materializeExperimentInputs,
   validateExperimentBrowserResult,
 } from "./experimentBrowserAnalysis.js";
-import { experimentFieldColumnId } from "./experimentProjection.js";
+import { MemorySaasStore } from "./memoryStore.js";
 
-function field(fieldKey, value, {
+function legacyField(fieldKey, value, {
   displayName = fieldKey,
   valueType = "number",
   unit = null,
-  role = "condition",
 } = {}) {
   return {
     fieldKey,
     displayName,
     valueType,
     unit,
-    role,
+    role: "condition",
     value,
     formattedValue: String(value),
     sourceRefs: [{
       sourceType: "excel_cell",
       sourceDocumentId: "source_master",
+      fileName: "Master.xlsx",
       sheet: "Master",
       cell: "B2",
     }],
@@ -31,7 +32,7 @@ function field(fieldKey, value, {
 }
 
 function fixture() {
-  const temperature = field("temperature", 250, {
+  const temperature = legacyField("temperature", 250, {
     displayName: "Temperature",
     unit: "degC",
   });
@@ -66,142 +67,438 @@ function fixture() {
   };
   const inputs = {
     tables: [{
-      tableId: "table_supplement",
+      tableId: "table_master",
       source: {
-        sourceDocumentId: "source_supplement",
-        sheetName: "Exp31",
+        sourceDocumentId: "source_master",
+        workbookName: "Master.xlsx",
+        sheetName: "Master",
       },
       startRow: 1,
       startColumn: 1,
-      rowCount: 2,
-      columnCount: 2,
-      values: [["Yield", "Viscosity"], [42.5, 8.2]],
-      displayValues: [["Yield", "Viscosity"], ["42.5", "8.2"]],
+      rowCount: 3,
+      columnCount: 3,
+      columns: [{
+        columnIndex: 0,
+        excelColumn: "A",
+        sourceHeader: "Experiment",
+        valueType: "string",
+        unit: null,
+      }, {
+        columnIndex: 1,
+        excelColumn: "B",
+        sourceHeader: "Impeller",
+        valueType: "string",
+        unit: null,
+      }, {
+        columnIndex: 2,
+        excelColumn: "C",
+        sourceHeader: null,
+        valueType: "number",
+        unit: "percent",
+      }],
+      values: [
+        ["Experiment", "Impeller", "Yield"],
+        ["Exp31", "flat", 42.5],
+        ["Exp32", "helix", "-"],
+      ],
+      displayValues: [
+        ["Experiment", "Impeller", "Yield"],
+        ["Exp31", "flat", "42.5"],
+        ["Exp32", "helix", "-"],
+      ],
+      formulas: [[], [], []],
     }],
     experiments: [{
       experimentId: identity.id,
       label: "Exp31",
       fields: [{
-        ...temperature,
-        columnId: experimentFieldColumnId(temperature),
+        columnIndex: 0,
+        displayName: "Temperature",
+        valueType: "number",
+        unit: "degC",
+        value: 250,
+        formattedValue: "250",
+        sourceRefs: structuredClone(temperature.sourceRefs),
       }],
       series: [],
       activeHead: head,
     }],
   };
-  return { activeContext, inputs, temperature };
+  return { activeContext, inputs };
 }
 
-function executorResult(recordPatches, inputs) {
-  const targetBySelector = new Map();
-  const normalizedPatches = structuredClone(recordPatches).map((patch) => ({
-    ...patch,
-    upsertFields: (patch.upsertFields || []).map((value) => {
-      const existing = value.columnId
-        ? inputs.experiments.flatMap((experiment) => experiment.fields || [])
-          .find((item) => item.columnId === value.columnId)
-        : null;
-      const definition = existing || value;
-      const selector = [
-        definition.fieldKey,
-        definition.unit || "unitless",
-        definition.valueType,
-      ].join("|");
-      let target = targetBySelector.get(selector);
-      if (!target) {
-        target = {
-          targetFieldId: `target_field_${targetBySelector.size + 1}`,
-          kind: existing ? "derived_field" : "source_field",
-          fieldKey: definition.fieldKey,
-          displayName: definition.displayName,
-          role: definition.role,
-          valueType: definition.valueType,
-          unit: definition.unit || null,
-          description: definition.displayName,
-          existingColumnId: existing?.columnId || null,
-          columnId: existing?.columnId || experimentFieldColumnId(definition),
-          sourceField: null,
-        };
-        targetBySelector.set(selector, target);
-      }
-      const {
-        fieldKey: _fieldKey,
-        displayName: _displayName,
-        role: _role,
-        valueType: _valueType,
-        unit: _unit,
-        columnId: _columnId,
-        ...output
-      } = value;
-      return { targetFieldId: target.targetFieldId, ...output };
-    }),
-  }));
-  inputs.targetFields = [...targetBySelector.values()];
-  return {
-    ok: true,
-    adapter: "test_executor",
-    runtime: { version: "python-json-v1" },
-    result: {
-      recordPatches: normalizedPatches,
-      browserView: { name: "Updated experiment fields" },
-      exclusions: [],
-    },
-  };
-}
-
-test("merges replacement and new fields while preserving untouched experiment data", () => {
-  const { activeContext, inputs, temperature } = fixture();
-  const checked = validateExperimentBrowserResult({
+function checkedResult({
+  columns,
+  recordPatches,
+  inputs,
+  activeContext,
+  columnIdFactory = (index) => `generated_${index}`,
+  extra = {},
+}) {
+  return validateExperimentBrowserResult({
     projectId: "project_1",
     activeContext,
     inputs,
-    executorResult: executorResult([{
-      label: "Exp31",
-      upsertFields: [{
-        fieldKey: "temperature",
-        displayName: "Temperature",
-        valueType: "number",
-        role: "condition",
-        unit: "degC",
-        value: 260,
-        sources: [{
-          experimentId: "experiment_31",
-          columnId: experimentFieldColumnId(temperature),
-        }],
-      }, {
-        fieldKey: "product_yield",
-        displayName: "Product yield",
-        valueType: "number",
-        role: "outcome",
-        unit: "percent",
-        value: 42.5,
-        sources: [{ tableId: "table_supplement", rowOffset: 1, columnOffset: 0 }],
-      }],
-      upsertSeries: [],
-    }], inputs),
+    columnIdFactory,
+    executorResult: {
+      ok: true,
+      adapter: "test_executor",
+      runtime: { version: "labrat-python-v2" },
+      result: {
+        columns,
+        recordPatches,
+        exclusions: [],
+        ...extra,
+      },
+    },
+  });
+}
+
+function scalar(columnIndex, value, rowOffset, columnOffset, extra = {}) {
+  return {
+    columnIndex,
+    value,
+    formattedValue: value == null ? null : String(value),
+    confidence: 1,
+    warnings: [],
+    sources: [{ tableId: "table_master", rowOffset, columnOffset }],
+    ...extra,
+  };
+}
+
+test("61 experiment values share one backend-assigned random column id", () => {
+  const { activeContext, inputs } = fixture();
+  for (let row = 3; row <= 61; row += 1) {
+    inputs.tables[0].values.push([`Exp${row}`, "flat", row]);
+    inputs.tables[0].displayValues.push([`Exp${row}`, "flat", String(row)]);
+    inputs.tables[0].formulas.push([]);
+  }
+  inputs.tables[0].rowCount = inputs.tables[0].values.length;
+  const recordPatches = Array.from({ length: 61 }, (_, index) => ({
+    label: `Exp${index + 1}`,
+    values: [scalar(0, "flat", index + 1, 1)],
+    upsertSeries: [],
+    removeSeries: [],
+    warnings: [],
+  }));
+  let allocationCount = 0;
+  const checked = checkedResult({
+    columns: [{ displayName: "Impeller", valueType: "string", unit: null }],
+    recordPatches,
+    inputs,
+    activeContext,
+    columnIdFactory: () => {
+      allocationCount += 1;
+      return "column_random_impeller";
+    },
   });
 
   assert.equal(checked.ok, true);
-  assert.equal(checked.result.summary.changedFieldCount, 1);
-  assert.equal(checked.result.summary.newFieldCount, 1);
-  assert.equal(checked.result.summary.changedSeriesCount, 0);
-  assert.equal(checked.result.summary.newSeriesCount, 0);
-  assert.equal(checked.result.previewRecords[0].fields.length, 2);
-  assert.equal(
-    checked.result.previewRecords[0].fields.find((item) => item.fieldKey === "temperature").value,
-    260,
+  assert.equal(allocationCount, 1);
+  assert.equal(checked.result.previewRecords.length, 61);
+  assert.deepEqual(
+    [...new Set(checked.result.recordPatches.map((patch) => patch.values[0].columnId))],
+    ["column_random_impeller"],
   );
-  assert.equal(
-    checked.result.previewRecords[0].fields.find((item) => item.fieldKey === "product_yield")
-      .sourceRefs[0].cell,
-    "A2",
-  );
-  assert.equal(
-    checked.result.previewRecords[0].fields.find((item) => item.fieldKey === "product_yield")
-      .sourceRefs[0].rawValue,
-    42.5,
-  );
+  assert.equal(checked.result.columns[0].columnId, "column_random_impeller");
+  assert.equal(checked.result.previewRecords[0].fields.at(-1).value, "flat");
+  assert.equal(Object.hasOwn(checked.result.previewRecords[0].fields.at(-1), "semanticKey"), false);
+  assert.equal(Object.hasOwn(checked.result.previewRecords[0].fields.at(-1), "role"), false);
+});
 
+test("direct string output needs no enum and Browser view is derived by the backend", () => {
+  const { activeContext, inputs } = fixture();
+  const checked = checkedResult({
+    columns: [{ displayName: "Impeller", valueType: "string", unit: null }],
+    recordPatches: [{
+      label: "Exp31",
+      values: [scalar(0, "flat", 1, 1)],
+      upsertSeries: [],
+      removeSeries: [],
+      warnings: [],
+    }],
+    inputs,
+    activeContext,
+  });
+
+  assert.equal(checked.ok, true);
+  const added = checked.result.previewRecords[0].fields.find(
+    (field) => field.columnId === "generated_0",
+  );
+  assert.equal(added.displayName, "Impeller");
+  assert.equal(added.valueType, "string");
+  assert.equal(added.value, "flat");
+  assert.equal(added.sourceRefs[0].cell, "B2");
+  assert.deepEqual(checked.result.browserView.visibleColumnIds, [
+    "experiment",
+    "generated_0",
+  ]);
+});
+
+test("duplicate output names remain independent and are source-disambiguated in Browser labels", () => {
+  const { activeContext, inputs } = fixture();
+  inputs.tables[0].columns[2].sourceHeader = "Impeller";
+  inputs.tables[0].columns[2].valueType = "string";
+  inputs.tables[0].columns[2].unit = null;
+  inputs.tables[0].values[1][2] = "gas-in";
+  inputs.tables[0].displayValues[1][2] = "gas-in";
+  const checked = checkedResult({
+    columns: [
+      { displayName: "Impeller", valueType: "string", unit: null },
+      { displayName: "Impeller", valueType: "string", unit: null },
+    ],
+    recordPatches: [{
+      label: "Exp31",
+      values: [
+        scalar(0, "flat", 1, 1),
+        scalar(1, "gas-in", 1, 2),
+      ],
+      upsertSeries: [],
+      removeSeries: [],
+      warnings: [],
+    }],
+    inputs,
+    activeContext,
+    columnIdFactory: (index) => `column_${index + 1}`,
+  });
+
+  assert.equal(checked.ok, true);
+  assert.deepEqual(checked.result.columns.map((column) => column.columnId), [
+    "column_1",
+    "column_2",
+  ]);
+  const duplicateColumns = checked.result.projection.columns.filter(
+    (column) => column.displayName === "Impeller",
+  );
+  assert.equal(duplicateColumns.length, 2);
+  duplicateColumns.forEach((column) => assert.match(column.label, /Master\.xlsx/));
+
+  const next = checkedResult({
+    columns: [{ displayName: "Impeller", valueType: "string", unit: null }],
+    recordPatches: [{
+      label: "Exp31",
+      values: [scalar(0, "flat", 1, 1)],
+      upsertSeries: [],
+      removeSeries: [],
+      warnings: [],
+    }],
+    inputs,
+    activeContext,
+    columnIdFactory: () => "column_from_second_result",
+  });
+  assert.notEqual(next.result.columns[0].columnId, checked.result.columns[0].columnId);
+});
+
+test("blank display names fall back to source headers and safe ordered names", () => {
+  const { activeContext, inputs } = fixture();
+  const checked = checkedResult({
+    columns: [
+      { displayName: "", valueType: "string", unit: null },
+      { displayName: "", valueType: "number", unit: "percent" },
+    ],
+    recordPatches: [{
+      label: "Exp31",
+      values: [
+        scalar(0, "flat", 1, 1),
+        scalar(1, 42.5, 1, 2),
+      ],
+      upsertSeries: [],
+      removeSeries: [],
+      warnings: [],
+    }],
+    inputs,
+    activeContext,
+  });
+
+  assert.equal(checked.ok, true);
+  assert.deepEqual(checked.result.columns.map((column) => column.displayName), [
+    "Impeller",
+    "Column 2",
+  ]);
+});
+
+test("validates nulls, finite values, types, and exact source evidence", () => {
+  const { activeContext, inputs } = fixture();
+  const valid = checkedResult({
+    columns: [
+      { displayName: "Yield", valueType: "number", unit: "percent" },
+      { displayName: "Impeller", valueType: "string", unit: null },
+    ],
+    recordPatches: [{
+      label: "Exp32",
+      values: [
+        scalar(0, null, 2, 2, { missingReason: "source_placeholder" }),
+        scalar(1, "helix", 2, 1),
+      ],
+      upsertSeries: [],
+      removeSeries: [],
+      warnings: [],
+    }],
+    inputs,
+    activeContext,
+  });
+
+  assert.equal(valid.ok, true);
+  assert.equal(valid.result.summary.missingValueCount, 1);
+  assert.equal(valid.result.previewRecords[0].fields[0].sourceRefs[0].rawValue, "-");
+
+  const invalid = checkedResult({
+    columns: [
+      { displayName: "Yield", valueType: "number", unit: "percent" },
+      { displayName: "Flag", valueType: "boolean", unit: null },
+    ],
+    recordPatches: [{
+      label: "Exp31",
+      values: [
+        scalar(0, Number.POSITIVE_INFINITY, 1, 2),
+        scalar(1, "true", 1, 1),
+      ],
+      upsertSeries: [],
+      removeSeries: [],
+      warnings: [],
+    }],
+    inputs,
+    activeContext,
+  });
+  assert.equal(invalid.ok, false);
+  assert.equal(invalid.errors.some((item) => item.code === "experiment_patch_numeric_value_invalid"), true);
+  assert.equal(invalid.errors.some((item) => item.code === "experiment_patch_boolean_value_invalid"), true);
+
+  const missingType = checkedResult({
+    columns: [{ displayName: "Unknown", unit: null }],
+    recordPatches: [{
+      label: "Exp31",
+      values: [scalar(0, "flat", 1, 1)],
+      upsertSeries: [],
+      removeSeries: [],
+      warnings: [],
+    }],
+    inputs,
+    activeContext,
+  });
+  assert.equal(missingType.ok, false);
+  assert.equal(
+    missingType.errors.some((item) => item.code === "experiment_output_column_type_invalid"),
+    true,
+  );
+});
+
+test("rejects invalid column indexes, legacy metadata, and forged source cells", () => {
+  const { activeContext, inputs } = fixture();
+  const checked = checkedResult({
+    columns: [{
+      displayName: "Yield",
+      valueType: "number",
+      unit: "percent",
+      semanticKey: "yield",
+    }],
+    recordPatches: [{
+      label: "Exp31",
+      values: [{
+        ...scalar(4, 42.5, 99, 0),
+        role: "outcome",
+      }],
+      upsertSeries: [],
+      removeSeries: [],
+      warnings: [],
+    }],
+    inputs,
+    activeContext,
+  });
+
+  assert.equal(checked.ok, false);
+  assert.equal(checked.errors.some((item) => item.code === "experiment_output_column_metadata_forbidden"), true);
+  assert.equal(checked.errors.some((item) => item.code === "experiment_patch_column_index_invalid"), true);
+  assert.equal(checked.errors.some((item) => item.code === "experiment_patch_field_metadata_forbidden"), true);
+  assert.equal(checked.errors.some((item) => item.code === "experiment_patch_source_cell_invalid"), true);
+
+  const legacy = validateExperimentBrowserResult({
+    projectId: "project_1",
+    activeContext,
+    inputs,
+    executorResult: {
+      ok: true,
+      result: {
+        columns: [{ displayName: "Yield", valueType: "number", unit: "percent" }],
+        recordPatches: [{
+          label: "Exp31",
+          upsertFields: [],
+          upsertSeries: [],
+        }],
+        exclusions: [],
+      },
+    },
+  });
+  assert.equal(
+    legacy.errors.some((item) => item.code === "experiment_patch_legacy_field_contract_forbidden"),
+    true,
+  );
+});
+
+test("existing experiment inputs expose ordered indexes and accept index-based sources", async () => {
+  const { activeContext, inputs } = fixture();
+  const store = new MemorySaasStore();
+  store.experimentIdentities.set("experiment_31", activeContext.experimentIdentities[0]);
+  store.dataSnapshots.set("snapshot_1", {
+    id: "snapshot_1",
+    projectId: "project_1",
+    status: "accepted",
+    experimentRecords: [activeContext.entries[0].record],
+  });
+  store.experimentSnapshotHeads.set("head_31", activeContext.experimentSnapshotHeads[0]);
+  const materialized = await materializeExperimentInputs({
+    store,
+    projectId: "project_1",
+    experimentSelections: [{
+      experimentId: "experiment_31",
+      columnIndexes: [0],
+      includeSeries: false,
+    }],
+  });
+
+  assert.equal(materialized.experiments[0].fields[0].columnIndex, 0);
+  assert.equal(Object.hasOwn(materialized.experiments[0].fields[0], "columnId"), false);
+  const checked = checkedResult({
+    columns: [{ displayName: "Temperature copy", valueType: "number", unit: "degC" }],
+    recordPatches: [{
+      label: "Exp31",
+      values: [{
+        columnIndex: 0,
+        value: 250,
+        formattedValue: "250",
+        confidence: 1,
+        warnings: [],
+        sources: [{ experimentId: "experiment_31", columnIndex: 0 }],
+      }],
+      upsertSeries: [],
+      removeSeries: [],
+      warnings: [],
+    }],
+    inputs: {
+      tables: [],
+      experiments: materialized.experiments,
+    },
+    activeContext,
+  });
+  assert.equal(checked.ok, true);
+  assert.equal(checked.result.previewRecords[0].fields.at(-1).sourceRefs[0].cell, "B2");
+});
+
+test("validated random ids survive patch application unchanged", () => {
+  const { activeContext, inputs } = fixture();
+  const checked = checkedResult({
+    columns: [{ displayName: "Impeller", valueType: "string", unit: null }],
+    recordPatches: [{
+      label: "Exp31",
+      values: [scalar(0, "flat", 1, 1)],
+      upsertSeries: [],
+      removeSeries: [],
+      warnings: [],
+    }],
+    inputs,
+    activeContext,
+    columnIdFactory: () => "column_persisted",
+  });
   const applied = applyExperimentRecordPatches({
     projectId: "project_1",
     result: checked.result,
@@ -211,392 +508,7 @@ test("merges replacement and new fields while preserving untouched experiment da
       throw new Error("Existing Exp31 should be reused.");
     },
   });
-  assert.equal(applied.experimentRecords[0].experimentId, "experiment_31");
-  assert.equal(applied.experimentRecords[0].fields.length, 2);
+
+  assert.equal(applied.experimentRecords[0].fields.at(-1).columnId, "column_persisted");
   assert.equal(applied.experimentRecords[0].baseSnapshotRef.dataSnapshotId, "snapshot_1");
-});
-
-test("uses accepted Impeller metadata while Python returns only a string value", () => {
-  const { activeContext, inputs } = fixture();
-  inputs.tables[0].values = [["Experiment", "Impeller"], ["Exp31", "flat"]];
-  inputs.tables[0].displayValues = [["Experiment", "Impeller"], ["Exp31", "flat"]];
-  inputs.targetFields = [{
-    targetFieldId: "target_field_1",
-    kind: "source_field",
-    fieldKey: "impeller",
-    displayName: "Impeller",
-    role: "condition",
-    valueType: "string",
-    unit: null,
-    description: "Impeller used in each experiment.",
-    existingColumnId: null,
-    columnId: "field:impeller:unitless:string",
-    sourceField: {
-      regionUnderstandingRevisionId: "region_revision_1",
-      sourceSelectionId: "source_selection_1",
-      column: "B",
-      headerSourceRefs: [{
-        sourceType: "excel_cell",
-        sourceDocumentId: "source_supplement",
-        sheet: "Exp31",
-        cell: "B1",
-      }],
-    },
-  }];
-  const checked = validateExperimentBrowserResult({
-    projectId: "project_1",
-    activeContext,
-    inputs,
-    executorResult: {
-      ok: true,
-      adapter: "test_executor",
-      result: {
-        recordPatches: [{
-          label: "Exp31",
-          upsertFields: [{
-            targetFieldId: "target_field_1",
-            value: "flat",
-            formattedValue: "flat",
-            confidence: 1,
-            warnings: [],
-            sources: [{ tableId: "table_supplement", rowOffset: 1, columnOffset: 1 }],
-          }],
-          upsertSeries: [],
-        }],
-        browserView: {
-          visibleColumnIds: ["field:temperature:degC:number"],
-        },
-        exclusions: [],
-      },
-    },
-  });
-
-  assert.equal(checked.ok, true);
-  const impeller = checked.result.previewRecords[0].fields
-    .find((item) => item.fieldKey === "impeller");
-  assert.equal(impeller.value, "flat");
-  assert.equal(impeller.role, "condition");
-  assert.equal(impeller.valueType, "string");
-  assert.equal(impeller.headerSourceRefs[0].cell, "B1");
-  assert.deepEqual(checked.result.browserView.visibleColumnIds, [
-    "experiment",
-    "field:impeller:unitless:string",
-    "field:temperature:degC:number",
-  ]);
-});
-
-test("rejects Python field metadata and forged source pointers", () => {
-  const { activeContext, inputs } = fixture();
-  const target = {
-    targetFieldId: "target_field_1",
-    kind: "derived_field",
-    fieldKey: "product_yield",
-    displayName: "Product yield",
-    role: "outcome",
-    valueType: "number",
-    unit: "percent",
-    description: "Product yield",
-    existingColumnId: null,
-    columnId: experimentFieldColumnId({
-      fieldKey: "product_yield",
-      valueType: "number",
-      unit: "percent",
-    }),
-    sourceField: null,
-  };
-  inputs.targetFields = [target];
-  const checked = validateExperimentBrowserResult({
-    projectId: "project_1",
-    activeContext,
-    inputs,
-    executorResult: {
-      ok: true,
-      result: { recordPatches: [{
-      label: "Exp31",
-      upsertFields: [{
-        targetFieldId: target.targetFieldId,
-        fieldKey: "forged_metadata",
-        value: 42.5,
-        sources: [{ tableId: "table_supplement", rowOffset: 99, columnOffset: 0 }],
-      }],
-      upsertSeries: [],
-      }],
-      browserView: {},
-      exclusions: [] },
-    },
-  });
-
-  assert.equal(checked.ok, false);
-  assert.equal(
-    checked.errors.some((item) => item.code === "experiment_patch_field_metadata_forbidden"),
-    true,
-  );
-  assert.equal(
-    checked.errors.some((item) => item.code === "experiment_patch_source_cell_invalid"),
-    true,
-  );
-});
-
-test("rejects scalar outputs that are not declared by the accepted plan", () => {
-  const { activeContext, inputs } = fixture();
-  inputs.targetFields = [{
-    targetFieldId: "target_field_1",
-    kind: "derived_field",
-    fieldKey: "product_yield",
-    displayName: "Product yield",
-    role: "outcome",
-    valueType: "number",
-    unit: "percent",
-    columnId: "field:product_yield:percent:number",
-  }];
-  const checked = validateExperimentBrowserResult({
-    projectId: "project_1",
-    activeContext,
-    inputs,
-    executorResult: {
-      ok: true,
-      result: { recordPatches: [{
-      label: "Exp31",
-      upsertFields: [{
-        targetFieldId: "target_field_unknown",
-        value: 42.5,
-        sources: [{ tableId: "table_supplement", rowOffset: 1, columnOffset: 0 }],
-      }],
-      upsertSeries: [],
-      }],
-      browserView: {},
-      exclusions: [] },
-    },
-  });
-
-  assert.equal(checked.ok, false);
-  assert.equal(
-    checked.errors.some((item) => item.code === "experiment_patch_field_target_invalid"),
-    true,
-  );
-});
-
-test("accepts source-backed null values for every scalar type and excludes them from coverage", () => {
-  const { activeContext, inputs } = fixture();
-  inputs.tables[0].values[1][0] = "-";
-  inputs.tables[0].displayValues[1][0] = "-";
-  const checked = validateExperimentBrowserResult({
-    projectId: "project_1",
-    activeContext,
-    inputs,
-    executorResult: executorResult([{
-      label: "Exp5",
-      upsertFields: ["number", "string", "date", "boolean"].map((valueType) => ({
-        fieldKey: `missing_${valueType}`,
-        displayName: `Missing ${valueType}`,
-        valueType,
-        role: "outcome",
-        unit: null,
-        value: null,
-        formattedValue: null,
-        missingReason: "source_placeholder",
-        sources: [{ tableId: "table_supplement", rowOffset: 1, columnOffset: 0 }],
-      })),
-      upsertSeries: [],
-    }], inputs),
-  });
-
-  assert.equal(checked.ok, true);
-  assert.equal(checked.result.summary.experimentCount, 1);
-  assert.equal(checked.result.summary.missingValueCount, 4);
-  assert.equal(checked.result.summary.missingExperimentCount, 1);
-  assert.equal(checked.result.projection.columns[1].coverageCount, 0);
-  checked.result.previewRecords[0].fields.forEach((item) => {
-    assert.equal(item.value, null);
-    assert.equal(item.formattedValue, null);
-    assert.equal(item.missingReason, "source_placeholder");
-    assert.equal(item.sourceRefs[0].rawValue, "-");
-    assert.equal(item.sourceRefs[0].formattedValue, "-");
-  });
-});
-
-test("distinguishes blank, placeholder, zero, and invalid scalar values", () => {
-  const { activeContext, inputs } = fixture();
-  inputs.tables[0].values = [
-    ["Blank", "Placeholder", "Zero", "NA"],
-    [null, "--", 0, "N/A"],
-  ];
-  inputs.tables[0].displayValues = [
-    ["Blank", "Placeholder", "Zero", "NA"],
-    ["", "--", "0", "N/A"],
-  ];
-  inputs.tables[0].columnCount = 4;
-
-  const valid = validateExperimentBrowserResult({
-    projectId: "project_1",
-    activeContext,
-    inputs,
-    executorResult: executorResult([{
-      label: "Exp5",
-      upsertFields: [{
-        fieldKey: "blank_value",
-        displayName: "Blank value",
-        valueType: "number",
-        role: "outcome",
-        value: null,
-        formattedValue: null,
-        missingReason: "source_blank",
-        sources: [{ tableId: "table_supplement", rowOffset: 1, columnOffset: 0 }],
-      }, {
-        fieldKey: "placeholder_value",
-        displayName: "Placeholder value",
-        valueType: "number",
-        role: "outcome",
-        value: null,
-        formattedValue: null,
-        missingReason: "source_placeholder",
-        sources: [{ tableId: "table_supplement", rowOffset: 1, columnOffset: 1 }],
-      }, {
-        fieldKey: "real_zero",
-        displayName: "Real zero",
-        valueType: "number",
-        role: "outcome",
-        value: 0,
-        formattedValue: "0",
-        sources: [{ tableId: "table_supplement", rowOffset: 1, columnOffset: 2 }],
-      }, {
-        fieldKey: "na_value",
-        displayName: "NA value",
-        valueType: "number",
-        role: "outcome",
-        value: null,
-        formattedValue: null,
-        missingReason: "source_placeholder",
-        sources: [{ tableId: "table_supplement", rowOffset: 1, columnOffset: 3 }],
-      }],
-      upsertSeries: [],
-    }], inputs),
-  });
-
-  assert.equal(valid.ok, true);
-  assert.equal(valid.result.summary.missingValueCount, 3);
-  assert.equal(
-    valid.result.previewRecords[0].fields.find((item) => item.fieldKey === "real_zero").value,
-    0,
-  );
-
-  const invalid = validateExperimentBrowserResult({
-    projectId: "project_1",
-    activeContext,
-    inputs,
-    executorResult: executorResult([{
-      label: "Exp6",
-      upsertFields: [{
-        fieldKey: "missing_reason",
-        displayName: "Missing reason",
-        valueType: "number",
-        role: "outcome",
-        value: null,
-        formattedValue: null,
-        sources: [{ tableId: "table_supplement", rowOffset: 1, columnOffset: 0 }],
-      }, {
-        fieldKey: "wrong_reason",
-        displayName: "Wrong reason",
-        valueType: "number",
-        role: "outcome",
-        value: null,
-        formattedValue: null,
-        missingReason: "source_placeholder",
-        sources: [{ tableId: "table_supplement", rowOffset: 1, columnOffset: 2 }],
-      }, {
-        fieldKey: "dash_string",
-        displayName: "Dash string",
-        valueType: "number",
-        role: "outcome",
-        value: "-",
-        sources: [{ tableId: "table_supplement", rowOffset: 1, columnOffset: 1 }],
-      }, {
-        fieldKey: "not_finite",
-        displayName: "Not finite",
-        valueType: "number",
-        role: "outcome",
-        value: Number.POSITIVE_INFINITY,
-        sources: [{ tableId: "table_supplement", rowOffset: 1, columnOffset: 2 }],
-      }, {
-        fieldKey: "reason_on_value",
-        displayName: "Reason on value",
-        valueType: "number",
-        role: "outcome",
-        value: 1,
-        missingReason: "source_blank",
-        sources: [{ tableId: "table_supplement", rowOffset: 1, columnOffset: 2 }],
-      }],
-      upsertSeries: [],
-    }], inputs),
-  });
-
-  assert.equal(invalid.ok, false);
-  assert.equal(invalid.errors.some((item) => item.code === "experiment_patch_missing_reason_required"), true);
-  assert.equal(invalid.errors.some((item) => item.code === "experiment_patch_missing_source_mismatch"), true);
-  assert.equal(invalid.errors.filter((item) => item.code === "experiment_patch_numeric_value_invalid").length, 2);
-  assert.equal(invalid.errors.some((item) => item.code === "experiment_patch_missing_reason_unexpected"), true);
-});
-
-test("preserves an existing non-null value when a patch tries to replace it with null", () => {
-  const { activeContext, inputs, temperature } = fixture();
-  const checked = validateExperimentBrowserResult({
-    projectId: "project_1",
-    activeContext,
-    inputs,
-    executorResult: executorResult([{
-      label: "Exp31",
-      upsertFields: [{
-        columnId: experimentFieldColumnId(temperature),
-        value: null,
-        formattedValue: null,
-        missingReason: "calculation_unavailable",
-        sources: [{
-          experimentId: "experiment_31",
-          columnId: experimentFieldColumnId(temperature),
-        }],
-      }],
-      upsertSeries: [],
-    }], inputs),
-  });
-
-  assert.equal(checked.ok, false);
-  assert.equal(
-    checked.errors.some((item) => item.code === "experiment_patch_missing_cannot_replace_value"),
-    true,
-  );
-  assert.equal(checked.result.previewRecords[0].fields[0].value, 250);
-});
-
-test("allows a finite number to replace an existing null field", () => {
-  const { activeContext, inputs, temperature } = fixture();
-  const prior = activeContext.entries[0].record.fields[0];
-  prior.value = null;
-  prior.formattedValue = null;
-  prior.missingReason = "source_placeholder";
-  prior.sourceRefs[0].rawValue = "-";
-  prior.sourceRefs[0].formattedValue = "-";
-  inputs.experiments[0].fields[0] = {
-    ...structuredClone(prior),
-    columnId: experimentFieldColumnId(temperature),
-  };
-
-  const checked = validateExperimentBrowserResult({
-    projectId: "project_1",
-    activeContext,
-    inputs,
-    executorResult: executorResult([{
-      label: "Exp31",
-      upsertFields: [{
-        columnId: experimentFieldColumnId(temperature),
-        value: 42.5,
-        formattedValue: "42.5",
-        sources: [{ tableId: "table_supplement", rowOffset: 1, columnOffset: 0 }],
-      }],
-      upsertSeries: [],
-    }], inputs),
-  });
-
-  assert.equal(checked.ok, true);
-  assert.equal(checked.result.previewRecords[0].fields[0].value, 42.5);
-  assert.equal("missingReason" in checked.result.previewRecords[0].fields[0], false);
 });

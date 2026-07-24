@@ -18,10 +18,10 @@ Upload workbook
   -> user independently confirms/corrects/ignores/deletes each region
   -> accepted RegionUnderstandingRevisions
   -> natural-language Experiment Browser AnalysisThread
-  -> reviewed source selections, scalar field targets, and readable data-change plan
+  -> reviewed workbook and/or active-experiment selections and readable data-change plan
   -> post-acceptance Python against real workbook/snapshot inputs
-  -> reviewed record-patch Browser preview
-  -> explicit Publish to Browser as DataSnapshot v3
+  -> reviewed list-column Browser preview
+  -> explicit Publish to Browser as DataSnapshot v4
   -> Experiment Browser
 ```
 
@@ -31,11 +31,12 @@ The first complete product target is reviewed and sustainably editable data in
 Experiment Browser. LabRat may select exact accepted workbook ranges, active
 experiment fields, or both. The user reviews only sources and a natural-language
 plan. Direct workbook fields inherit their stable metadata from accepted region
-understanding; derived fields fix metadata in the plan. After acceptance,
-Python returns source-backed values keyed by `targetFieldId`; the backend merges
-them with frozen active records, previews the resulting Browser table, and
-atomically publishes an immutable DataSnapshot v3 plus a new BrowserView.
-Unmentioned fields and series are preserved.
+understanding only as input hints. After acceptance, Python sees ordered real
+input lists and returns `columns[]` plus source-backed values addressed by
+zero-based `columnIndex`. The backend validates the values, assigns each output
+column one random internal `columnId`, merges complete frozen active records,
+previews the Browser table, and atomically publishes an immutable DataSnapshot
+v4 plus a new BrowserView. Unmentioned fields and series are preserved.
 
 The obsolete aggregate dataset/generic import implementation has been removed. No legacy local-data migration or dual-write path is required.
 
@@ -43,7 +44,7 @@ Use this split when deciding what to build:
 
 - Product mainline: Workbook Understanding First, ending in Experiment Browser.
 - Engineering mainline: accepted regions/active snapshots -> AnalysisThread
-  `outputTarget: experiment_browser` -> record patches -> DataSnapshot v3 ->
+  `outputTarget: experiment_browser` -> list-column patches -> DataSnapshot v4 ->
   Browser projection.
 - Completed execution milestone: backend conversational analysis, reviewed calculation, analysis-result ChartSpec publication, and placement-local trace visibility.
 
@@ -51,14 +52,21 @@ Use this split when deciding what to build:
 
 - Sustainable natural-language Experiment Browser publication: AnalysisThread
   now supports `outputTarget: experiment_browser`, mixed workbook and active
-  snapshot selections, reviewed scalar field targets, post-acceptance Python,
+  snapshot selections, ordered list inputs, post-acceptance Python,
   source-validated field/series
   patches, complete-record merge previews, automated identity suggestions,
-  stale-head and idempotency protection, atomic DataSnapshot v3/BrowserView
+  stale-head and idempotency protection, atomic DataSnapshot v4/BrowserView
   publication, and automatic opening of the published view. Pure column
   visibility/order/filter/sort remains BrowserView-only. The old DataPlan
   draft/publish routes, frontend review panel, and deterministic writer modules
   are retired; historical accepted snapshots remain readable.
+- List-indexed scalar publication: plans no longer contain `fieldTargets`,
+  semantic keys, roles, or Browser ids. Python returns readable column
+  definitions and per-experiment values by output `columnIndex`; the backend
+  assigns and persists opaque random ids once per validated result. Duplicate
+  readable columns stay independent and are disambiguated by source in Browser
+  and model catalogs. Chart planning can select published fields by ordered
+  position without exposing those ids.
 - Real Anthropic plus local-Python Browser publication has been exercised from
   a confirmed 1,024-cell supplemental workbook through a mixed workbook +
   active-snapshot plan. The accepted result preserved 14 scalar fields, added

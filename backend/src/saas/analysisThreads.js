@@ -10,13 +10,10 @@ import {
   inspectConfirmedSourceRange,
   inspectRunInput,
   materializeAnalysisInputs,
-  resolveAnalysisFieldTargets,
   resolveAnalysisSourceSelections,
-  sourceFieldCandidatesForRequest,
   sourceRectanglesForSelections,
 } from "./analysisSourceSelections.js";
 import {
-  buildProjectFieldCatalog,
   experimentInputCatalog,
   inspectExperimentInput,
   loadActiveExperimentContext,
@@ -103,13 +100,14 @@ function groupedProgramRepairDiagnostics(values) {
       current.repairGuidance = "For missing scalar data, emit value None, formattedValue None, a source-backed missingReason, and the exact accepted source pointer.";
     }
     if ([
-      "experiment_patch_field_target_invalid",
+      "experiment_patch_column_index_invalid",
       "experiment_patch_field_metadata_forbidden",
+      "experiment_output_column_metadata_forbidden",
     ].includes(normalized.code)) {
-      current.repairGuidance = "Copy targetFieldId exactly from inputs['targetFields'] and output only the value payload and source pointers. Do not emit fieldKey, displayName, role, valueType, unit, or columnId.";
+      current.repairGuidance = "Define scalar metadata once in top-level columns, then reference it from recordPatches[].values with a valid zero-based columnIndex. Do not output semanticKey, role, targetFieldId, or columnId.";
     }
-    if (normalized.code === "experiment_patch_field_definition_invalid") {
-      current.repairGuidance = "The accepted target field definition is invalid. Do not invent replacement metadata in Python; return values only for valid inputs['targetFields'] entries.";
+    if (normalized.code === "experiment_output_column_type_invalid") {
+      current.repairGuidance = "Each top-level output column requires displayName, valueType (number, string, date, or boolean), and unit (or None).";
     }
     grouped.set(key, current);
   });
@@ -163,7 +161,6 @@ export function analysisPlanRevisionSummary(revision) {
     requestSummary: revision.requestSummary,
     sourceSelections: revision.sourceSelections || plan.sourceSelections || [],
     experimentSelections: revision.experimentSelections || plan.experimentSelections || [],
-    fieldTargets: revision.fieldTargets || plan.fieldTargets || [],
     reviewPlan: revision.reviewPlan || plan.reviewPlan || {},
     displayPlan: revision.displayPlan || plan.displayPlan || [],
     sourceRectangles: revision.sourceRectangles || [],
@@ -291,7 +288,6 @@ function modelPlanCandidate(rawDraft, originalRequest, outputTarget = ANALYSIS_O
     requestSummary: text(rawDraft?.requestSummary) || originalRequest,
     sourceSelections: asArray(rawDraft?.sourceSelections),
     experimentSelections: asArray(rawDraft?.experimentSelections),
-    fieldTargets: asArray(rawDraft?.fieldTargets),
     reviewPlan: rawDraft?.reviewPlan || {},
     displayPlan: asArray(rawDraft?.displayPlan).map(text).filter(Boolean),
     warnings: asArray(rawDraft?.warnings),
@@ -299,12 +295,6 @@ function modelPlanCandidate(rawDraft, originalRequest, outputTarget = ANALYSIS_O
 }
 
 function compactExperimentPlanningCatalog(activeExperiments = []) {
-  const fields = new Map();
-  asArray(activeExperiments).forEach((experiment) => {
-    asArray(experiment?.fields).forEach((field) => {
-      if (field?.columnId && !fields.has(field.columnId)) fields.set(field.columnId, field);
-    });
-  });
   return {
     experimentCount: asArray(activeExperiments).length,
     experiments: asArray(activeExperiments).map((experiment) => ({
@@ -312,10 +302,15 @@ function compactExperimentPlanningCatalog(activeExperiments = []) {
       label: experiment.label,
       aliases: experiment.aliases,
       activeHead: experiment.activeHead,
-      availableColumnIds: asArray(experiment.fields).map((field) => field.columnId),
-      availableSeriesKeys: asArray(experiment.series).map((series) => series.seriesKey),
+      fields: asArray(experiment.fields).map((field) => ({
+        columnIndex: field.columnIndex,
+        displayName: field.displayName,
+        valueType: field.valueType,
+        unit: field.unit,
+        sourceSummary: field.sourceSummary || null,
+      })),
+      series: asArray(experiment.series),
     })),
-    fields: [...fields.values()],
   };
 }
 
@@ -350,22 +345,12 @@ export async function draftAnalysisPlanRevision({
       store,
       projectId: project.id,
     }),
-    outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
-      ? experimentInputCatalog({ store, projectId: project.id })
-      : Promise.resolve([]),
+    experimentInputCatalog({ store, projectId: project.id }),
   ]);
-  if (
-    !confirmedRegions.length
-    && (
-      outputTarget !== ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
-      || !activeExperiments.length
-    )
-  ) {
+  if (!confirmedRegions.length && !activeExperiments.length) {
     throw analysisError(
       "analysis_evidence_required",
-      outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
-        ? "Confirm workbook regions or publish experiment data before drafting an Experiment Browser plan."
-        : "Confirm workbook regions before drafting an analysis plan.",
+      "Confirm workbook regions or publish experiment data before drafting an analysis plan.",
       409,
     );
   }
@@ -374,7 +359,7 @@ export async function draftAnalysisPlanRevision({
   });
   const activeExperimentCatalog = compactExperimentPlanningCatalog(activeExperiments);
   const request = {
-    schemaVersion: "labrat.analysisPlanDraftRequest.v3",
+    schemaVersion: "labrat.analysisPlanDraftRequest.v4",
     project: {
       id: project.id,
       name: project.name,
@@ -392,14 +377,9 @@ export async function draftAnalysisPlanRevision({
       requestSummary: revision.requestSummary,
       sourceSelections: revision.plan?.sourceSelections || [],
       experimentSelections: revision.plan?.experimentSelections || [],
-      fieldTargets: revision.plan?.fieldTargets || [],
       displayPlan: revision.plan?.displayPlan || [],
     })),
     confirmedRegions,
-    sourceFieldCandidates: sourceFieldCandidatesForRequest({
-      originalRequest: thread.originalRequest,
-      confirmedRegions,
-    }),
     activeExperimentCatalog,
   };
   let draft = null;
@@ -435,27 +415,15 @@ export async function draftAnalysisPlanRevision({
           sourceSelections: candidate.sourceSelections,
         })
         : [];
-      const experimentSelections = outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
-        ? await resolveExperimentSelections({
-          store,
-          projectId: project.id,
-          experimentSelections: candidate.experimentSelections,
-        })
-        : [];
-      const fieldTargets = outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
-        ? await resolveAnalysisFieldTargets({
-          store,
-          projectId: project.id,
-          fieldTargets: candidate.fieldTargets,
-          sourceSelections,
-          existingFieldCatalog: activeExperimentCatalog.fields,
-        })
-        : [];
+      const experimentSelections = await resolveExperimentSelections({
+        store,
+        projectId: project.id,
+        experimentSelections: candidate.experimentSelections,
+      });
       plan = {
         ...candidate,
         sourceSelections,
         experimentSelections,
-        fieldTargets,
       };
       const validation = validateAnalysisPlanRevision(plan);
       if (!validation.ok) {
@@ -557,25 +525,11 @@ export async function createAnalysisPlanRevision({
       sourceSelections: plan?.sourceSelections,
     })
     : [];
-  const experimentSelections = outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
-    ? await resolveExperimentSelections({
-      store,
-      projectId: project.id,
-      experimentSelections: plan?.experimentSelections,
-    })
-    : [];
-  const activeExperiments = outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
-    ? await experimentInputCatalog({ store, projectId: project.id })
-    : [];
-  const fieldTargets = outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
-    ? await resolveAnalysisFieldTargets({
-      store,
-      projectId: project.id,
-      fieldTargets: plan?.fieldTargets,
-      sourceSelections,
-      existingFieldCatalog: compactExperimentPlanningCatalog(activeExperiments).fields,
-    })
-    : [];
+  const experimentSelections = await resolveExperimentSelections({
+    store,
+    projectId: project.id,
+    experimentSelections: plan?.experimentSelections,
+  });
   const normalizedPlan = {
     ...plan,
     schemaVersion: ANALYSIS_PLAN_REVISION_VERSION,
@@ -583,7 +537,6 @@ export async function createAnalysisPlanRevision({
     outputTarget,
     sourceSelections,
     experimentSelections,
-    fieldTargets,
   };
   const validation = validateAnalysisPlanRevision(normalizedPlan);
   if (!validation.ok) {
@@ -611,7 +564,6 @@ export async function createAnalysisPlanRevision({
     plan: normalizedPlan,
     sourceSelections,
     experimentSelections,
-    fieldTargets,
     reviewPlan: normalizedPlan.reviewPlan,
     displayPlan: normalizedPlan.displayPlan,
     sourceRectangles,
@@ -665,13 +617,12 @@ export async function getAnalysisPlanSelectionPage({
   const sourceSelections = revision.plan?.sourceSelections || [];
   const experimentSelections = revision.plan?.experimentSelections || [];
   return {
-    schemaVersion: "labrat.analysisSourceSelectionPage.v2",
+    schemaVersion: "labrat.analysisSourceSelectionPage.v3",
     projectId: revision.projectId,
     analysisThreadId: revision.analysisThreadId,
     planRevisionId: revision.id,
     sourceSelections,
     experimentSelections,
-    fieldTargets: revision.plan?.fieldTargets || [],
     sourceRectangles: revision.sourceRectangles || [],
     records: [],
     warnings: revision.warnings || [],
@@ -704,7 +655,7 @@ export async function acceptAnalysisPlanRevision({
     throw analysisError("analysis_plan_revision_not_found", "Analysis plan revision was not found.", 404);
   }
   const requestHash = stableDataHash({
-    operation: "accept_analysis_plan_v2",
+    operation: "accept_analysis_plan_v3",
     projectId: project.id,
     planRevisionId: revision.id,
   });
@@ -741,7 +692,7 @@ export async function acceptAnalysisPlanRevision({
       sourceSelections: revision.plan?.sourceSelections,
     });
   }
-  if ((revision.outputTarget || revision.plan?.outputTarget) === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER) {
+  if (asArray(revision.plan?.experimentSelections).length) {
     await resolveExperimentSelections({
       store,
       projectId: project.id,
@@ -755,7 +706,7 @@ export async function acceptAnalysisPlanRevision({
     projectId: project.id,
     analysisThreadId: revision.analysisThreadId,
     acceptedPlanRevisionId: revision.id,
-    schemaVersion: "labrat.analysisRun.v2",
+    schemaVersion: "labrat.analysisRun.v3",
     status: "queued",
     outputTarget: revision.outputTarget || revision.plan?.outputTarget || ANALYSIS_OUTPUT_TARGETS.CHART,
     idempotencyKey: key,
@@ -847,6 +798,7 @@ function inputManifest(inputs) {
       startColumn: table.startColumn,
       rowCount: table.rowCount,
       columnCount: table.columnCount,
+      columns: asArray(table.columns),
     })),
     experiments: asArray(inputs.experiments).map((experiment) => ({
       experimentSelectionId: experiment.experimentSelectionId,
@@ -856,8 +808,6 @@ function inputManifest(inputs) {
       seriesCount: asArray(experiment.series).length,
       activeHead: experiment.activeHead,
     })),
-    fieldCatalog: asArray(inputs.fieldCatalog),
-    targetFields: asArray(inputs.targetFields),
   };
 }
 
@@ -893,13 +843,12 @@ async function draftPythonProgram({
   let response = null;
   for (let attempt = 1; attempt <= MODEL_DRAFT_ATTEMPT_LIMIT; attempt += 1) {
     response = await programProvider.call(modelProvider, {
-      schemaVersion: "labrat.analysisProgramDraftRequest.v3",
+      schemaVersion: "labrat.analysisProgramDraftRequest.v4",
       originalRequest: thread.originalRequest,
       acceptedPlan: {
         requestSummary: revision.requestSummary,
         sourceSelections: revision.plan?.sourceSelections || [],
         experimentSelections: revision.plan?.experimentSelections || [],
-        fieldTargets: revision.plan?.fieldTargets || [],
         reviewPlan: revision.plan?.reviewPlan || {},
         displayPlan: revision.plan?.displayPlan || [],
       },
@@ -1086,28 +1035,18 @@ export async function executeAnalysisRun({
       projectId: project.id,
       sourceSelections: revision.plan?.sourceSelections,
     });
-    const experimentInputs = outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
-      ? await materializeExperimentInputs({
-        store,
-        projectId: project.id,
-        experimentSelections: revision.plan?.experimentSelections,
-      })
-      : { experiments: [], fieldCatalog: [], expectedHeadRefs: [] };
+    const experimentInputs = await materializeExperimentInputs({
+      store,
+      projectId: project.id,
+      experimentSelections: revision.plan?.experimentSelections,
+    });
     activeContext = outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
       ? await loadActiveExperimentContext({ store, projectId: project.id })
       : null;
     inputs = {
       ...workbookInputs,
-      schemaVersion: outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
-        ? "labrat.analysisInputs.v4"
-        : workbookInputs.schemaVersion,
+      schemaVersion: "labrat.analysisInputs.v5",
       experiments: experimentInputs.experiments,
-      fieldCatalog: outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
-        ? buildProjectFieldCatalog(activeContext.entries)
-        : [],
-      targetFields: outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
-        ? asArray(revision.plan?.fieldTargets)
-        : [],
     };
   } catch (error) {
     return finalizeFailedRun({
@@ -1329,7 +1268,7 @@ export async function executeAnalysisRun({
     projectId: project.id,
     analysisThreadId: run.analysisThreadId,
     analysisRunId: run.id,
-    schemaVersion: "labrat.analysisResult.v2",
+    schemaVersion: "labrat.analysisResult.v3",
     status: "awaiting_review",
     outputTarget,
     contentHash: checked.contentHash,
@@ -1447,7 +1386,7 @@ export async function getAnalysisResultPreview({
     const boundedLimit = Math.min(Math.max(Number.parseInt(limit, 10) || 200, 1), 1_000);
     const rows = asArray(projection.rows).slice(boundedOffset, boundedOffset + boundedLimit);
     return {
-      schemaVersion: "labrat.experimentBrowserResultPreview.v1",
+      schemaVersion: "labrat.experimentBrowserResultPreview.v2",
       outputTarget,
       projectId: detail.analysisRun.projectId,
       analysisThreadId: detail.analysisRun.analysisThreadId,

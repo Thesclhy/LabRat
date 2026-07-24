@@ -1,5 +1,6 @@
 import { validateChartSpecProposal } from "./chartSpecValidation.js";
 import { resolveAnalysisSourceSelections } from "./analysisSourceSelections.js";
+import { resolveExperimentSelections } from "./experimentBrowserAnalysis.js";
 import { stableDataHash } from "./dataPlanSchemas.js";
 import { makeId } from "./ids.js";
 
@@ -85,6 +86,7 @@ export function buildAnalysisResultChartSpec({
     analysisRunId: run.id,
     analysisResultId: result.id,
     sourceSelections: structuredClone(planRevision.plan?.sourceSelections || []),
+    experimentSelections: structuredClone(planRevision.plan?.experimentSelections || []),
     sourceRefs: structuredClone(result.sourceRefs || []),
     plotly,
     traceCatalog: catalog,
@@ -205,11 +207,25 @@ export async function publishAcceptedAnalysisChart({
       409,
     );
   }
-  await resolveAnalysisSourceSelections({
-    store,
-    projectId: project.id,
-    sourceSelections: planRevision.plan?.sourceSelections,
-  });
+  const sourceSelections = asArray(planRevision.plan?.sourceSelections);
+  const experimentSelections = asArray(planRevision.plan?.experimentSelections);
+  if (sourceSelections.length) {
+    await resolveAnalysisSourceSelections({
+      store,
+      projectId: project.id,
+      sourceSelections,
+    });
+  }
+  if (experimentSelections.length) {
+    await resolveExperimentSelections({
+      store,
+      projectId: project.id,
+      experimentSelections,
+    });
+  }
+  const expectedHeadRefs = experimentSelections
+    .map((selection) => selection.baseHeadRef)
+    .filter(Boolean);
   const createdAt = new Date().toISOString();
   const spec = buildAnalysisResultChartSpec({
     thread,
@@ -269,7 +285,7 @@ export async function publishAcceptedAnalysisChart({
     analysisRun: completedRun,
     analysisResult: acceptedResult,
     chartSpec,
-    expectedHeadRefs: [],
+    expectedHeadRefs,
     response,
     auditEvents: [{
       labId: project.labId,

@@ -1139,7 +1139,9 @@ export function AnalysisReviewWorkspace({
                       <span>
                         {asArray(selection.fieldLabels).length
                           ? selection.fieldLabels.join(", ")
-                          : asArray(selection.fieldKeys).join(", ") || "Reviewed experiment fields"}
+                          : asArray(selection.columnIndexes).length
+                            ? selection.columnIndexes.map((columnIndex) => `Column ${Number(columnIndex) + 1}`).join(", ")
+                            : "Reviewed experiment fields"}
                       </span>
                     </article>
                   ))}

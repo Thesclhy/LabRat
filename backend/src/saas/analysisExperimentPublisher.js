@@ -60,7 +60,7 @@ export async function publishAcceptedExperimentAnalysis({
     store.findAnalysisResultById(analysisResultId),
   ]);
   const requestHash = stableDataHash({
-    operation: "publish_experiment_analysis_v1",
+    operation: "publish_experiment_analysis_v2",
     projectId: project.id,
     analysisRunId: run.id,
     analysisResultId: result.id,
@@ -139,7 +139,7 @@ export async function publishAcceptedExperimentAnalysis({
 
   const dataSnapshotId = makeId("data_snapshot");
   const acceptedContent = {
-    schemaVersion: "labrat.dataSnapshot.v3",
+    schemaVersion: "labrat.dataSnapshot.v4",
     status: "accepted",
     outputShape: "experiment_records",
     analysisPlanRevisionId: revision.id,

@@ -59,11 +59,9 @@ function setup() {
       recordPatches: [{
         patchId: "record_patch_1",
         label: "Exp31",
-        upsertFields: [{
-          columnId: "field:product_yield:percent:number",
-          fieldKey: "product_yield",
+        values: [{
+          columnId: "column_product_yield",
           displayName: "Product yield",
-          role: "outcome",
           valueType: "number",
           unit: "percent",
           value: 42.5,
@@ -98,8 +96,8 @@ function setup() {
       browserView: {
         name: "Supplemental fields",
         makeDefault: true,
-        visibleColumnIds: ["experiment", "field:product_yield:percent:number"],
-        columnOrder: ["experiment", "field:product_yield:percent:number"],
+        visibleColumnIds: ["experiment", "column_product_yield"],
+        columnOrder: ["experiment", "column_product_yield"],
         filters: [],
         sort: [],
       },
@@ -155,7 +153,7 @@ function setup() {
   return { store, project, result };
 }
 
-test("publishes one immutable v3 snapshot, advances heads, and replays idempotently", async () => {
+test("publishes one immutable v4 snapshot, advances heads, and replays idempotently", async () => {
   const { store, project, result } = setup();
   const first = await publishAcceptedExperimentAnalysis({
     store,
@@ -176,15 +174,17 @@ test("publishes one immutable v3 snapshot, advances heads, and replays idempoten
     idempotencyKey: "publish_browser_result_1",
   });
 
-  assert.equal(first.dataSnapshot.schemaVersion, "labrat.dataSnapshot.v3");
+  assert.equal(first.dataSnapshot.schemaVersion, "labrat.dataSnapshot.v4");
   assert.equal(first.dataSnapshot.dataPlanId, null);
   assert.equal(first.dataSnapshot.experimentRecords[0].fields.length, 2);
   assert.equal(first.dataSnapshot.experimentRecords[0].fields[0].fieldKey, "temperature");
-  assert.equal(first.dataSnapshot.experimentRecords[0].fields[1].fieldKey, "product_yield");
+  assert.equal(first.dataSnapshot.experimentRecords[0].fields[1].columnId, "column_product_yield");
+  assert.equal(first.dataSnapshot.experimentRecords[0].fields[1].displayName, "Product yield");
+  assert.equal(Object.hasOwn(first.dataSnapshot.experimentRecords[0].fields[1], "fieldKey"), false);
   assert.equal(first.experimentSnapshotHeads[0].dataSnapshotId, first.dataSnapshot.id);
   assert.equal(
     first.browserView.payload.columns.some((column) => (
-      column.columnId === "field:product_yield:percent:number" && column.hidden === false
+      column.columnId === "column_product_yield" && column.hidden === false
     )),
     true,
   );

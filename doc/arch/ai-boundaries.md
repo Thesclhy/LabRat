@@ -71,34 +71,35 @@ stages.
 - Planning may select exact accepted workbook ranges, active snapshot fields,
   or both; it never embeds final values or Python.
 - Existing `experimentSelections` are calculation inputs only. Requests for a
-  new workbook column use `sourceSelections` and a `source_field` target;
-  explicit column letters and accepted semantic names are supplied as
-  deterministic planning candidates.
-- Direct source-field metadata is derived from the accepted
-  RegionUnderstandingRevision. Derived field metadata is fixed in the reviewed
-  plan. Both receive stable `targetFieldId` values before acceptance.
-- After plan acceptance, code generation sees only materialized reviewed input
-  plus the project field catalog and accepted target fields.
-- Python returns field/series patches rather than complete replacement records.
-- Python scalar patches return only `targetFieldId`, value/format/missing data,
-  warnings, confidence, and source pointers. Generated code cannot define or
-  replace field keys, names, roles, value types, units, or column ids.
+  new workbook column use `sourceSelections`. Existing fields are selected only
+  by zero-based position in the ordered model-facing field list; internal
+  Browser column ids are never exposed to a model.
+- After plan acceptance, code generation sees only materialized ordered
+  `inputs.tables` and `inputs.experiments` lists.
+- Python returns top-level readable scalar `columns`, per-record values by
+  output `columnIndex`, optional series patches, and exclusions rather than
+  complete replacement records.
+- Generated code cannot define semantic keys, roles, target ids, internal
+  column ids, or Browser view state. The backend assigns one random internal
+  id per validated output column and persists it with the AnalysisResult.
+- Duplicate readable output columns remain independent. Source summaries
+  disambiguate them for later Browser and chart-model selection.
 - Every output value must cite selected workbook cells or snapshot fields.
 - Missing scalar output must remain `null` with an allowed `missingReason` and
   the exact missing source pointer. Models must not convert missing values to
   zero, placeholder strings, exclusions, interpolation, or imputation unless a
   reviewed plan explicitly authorizes the latter operation.
-- The backend preserves unmentioned data, blocks selector/type conflicts, and
-  validates identity decisions and stale heads before writes.
-- Only explicit result acceptance can atomically publish DataSnapshot v3 and a
+- The backend preserves unmentioned data and validates indexes, value types,
+  source pointers, identity decisions, and stale heads before writes.
+- Only explicit result acceptance can atomically publish DataSnapshot v4 and a
   BrowserView.
 
 ## Analysis Planning Rules
 
 - Analysis evidence comes only from active accepted
-  RegionUnderstandingRevisions and, for Experiment Browser output, explicitly
-  selected fields from active accepted DataSnapshots. A DataSnapshot or Browser
-  publication is not a prerequisite for chart planning.
+  RegionUnderstandingRevisions and explicitly selected fields from active
+  accepted DataSnapshots. Chart and Experiment Browser plans may both use
+  ordered snapshot fields.
 - Planning receives a bounded confirmed-region catalog and may use
   `inspect_source_range` to page through exact cells. It selects one or more
   rectangular `sourceSelections`; each must stay inside its accepted region.
@@ -108,10 +109,10 @@ stages.
   no aggregate analysis-selection limit. Workbook Review, ordinary source
   preview, and the public SourceDocument range API retain their 500-cell
   request limit.
-- A PlanRevision stores only output target, source/snapshot selections, reviewed
-  scalar field targets, structured review meaning, readable display steps,
-  warnings, and derived rectangles. Python, input values, expected result rows,
-  traces, and Plotly are forbidden.
+- A PlanRevision stores only output target, source/snapshot selections,
+  structured review meaning, readable display steps, warnings, and derived
+  rectangles. Field definitions, semantic keys, roles, internal ids, Python,
+  input values, expected result rows, traces, and Plotly are forbidden.
 - Feedback creates a later immutable numbered PlanRevision instead of patching
   prior plans. Draft validation happens before review persistence; one
   repairable range/plan failure may be returned to the provider for a bounded
@@ -121,9 +122,11 @@ stages.
   and does not create an AnalysisResult/ChartSpec.
 - Execution materializes one `inputs.tables` item per workbook selection with source
   metadata, starting row/column, typed values, display values, and optional
-  formulas. Snapshot selections become `inputs.experiments`; reviewed scalar
-  definitions become `inputs.targetFields`. Large inputs may be paged read-only
-  with `inspect_run_input` and `inspect_experiment_input`.
+  formulas plus ordered column metadata. Snapshot selections become ordered
+  `inputs.experiments` fields carrying `columnIndex`, readable metadata,
+  source summary, value/missing state, and exact source refs. Large inputs may
+  be paged read-only with `inspect_run_input` and
+  `inspect_experiment_input`.
 - Only after materialization may the code-generation model produce
   `labrat-python-v2` implementing `analyze(inputs, labrat)`. The model sees the
   real dictionary input contract; users do not review Python.

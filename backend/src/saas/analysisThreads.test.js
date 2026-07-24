@@ -14,7 +14,6 @@ import {
   reviseAnalysisRun,
 } from "./analysisThreads.js";
 import { ANALYSIS_PLAN_REVISION_VERSION, ANALYSIS_RUNTIME_VERSION } from "./analysisSchemas.js";
-import { experimentFieldColumnId } from "./experimentProjection.js";
 import { MemorySaasStore } from "./memoryStore.js";
 
 function plan(range = "A1:C3") {
@@ -438,7 +437,6 @@ test("Experiment Browser analysis materializes active fields and returns a patch
       cell: "A2",
     }],
   };
-  const columnId = experimentFieldColumnId(temperature);
   store.experimentIdentities.set("experiment_31", {
     id: "experiment_31",
     projectId: project.id,
@@ -486,20 +484,9 @@ test("Experiment Browser analysis materializes active fields and returns a patch
       sourceSelections: [],
       experimentSelections: [{
         experimentId: "experiment_31",
-        columnIds: [columnId],
+        columnIndexes: [0],
         includeSeries: false,
         purpose: "Use the accepted temperature value.",
-      }],
-      fieldTargets: [{
-        kind: "derived_field",
-        regionUnderstandingRevisionId: "",
-        column: "",
-        fieldKey: "normalized_temperature",
-        displayName: "Normalized temperature",
-        role: "condition",
-        valueType: "number",
-        unit: "degC",
-        description: "A normalized copy of the accepted temperature.",
       }],
       reviewPlan: {
         processingSteps: ["Copy the accepted temperature into a new normalized field."],
@@ -527,7 +514,8 @@ test("Experiment Browser analysis materializes active fields and returns a patch
     async draftExperimentBrowserProgram(request, options) {
       browserProgramDraftCount += 1;
       assert.equal(request.inputManifest.experiments[0].experimentId, "experiment_31");
-      assert.equal(request.inputManifest.targetFields[0].targetFieldId, "target_field_1");
+      assert.equal(Object.hasOwn(request.inputManifest, "targetFields"), false);
+      assert.equal(Object.hasOwn(request.acceptedPlan, "fieldTargets"), false);
       const input = options.inspectExperimentInput({
         experimentId: "experiment_31",
         fieldOffset: 0,
@@ -535,14 +523,16 @@ test("Experiment Browser analysis materializes active fields and returns a patch
       });
       assert.equal(input.fields[0].value, 250);
       if (browserProgramDraftCount === 2) {
-        assert.equal(request.repairContext.errors.length, 1);
-        assert.equal(
-          request.repairContext.errors[0].code,
-          "experiment_patch_numeric_value_invalid",
+        const numericError = request.repairContext.errors.find(
+          (item) => item.code === "experiment_patch_numeric_value_invalid",
         );
-        assert.equal(request.repairContext.errors[0].count, 3);
-        assert.match(request.repairContext.errors[0].repairGuidance, /value None/i);
-        assert.deepEqual(request.repairContext.errors[0].examples, [
+        assert.ok(numericError);
+        assert.equal(
+          numericError.count,
+          3,
+        );
+        assert.match(numericError.repairGuidance, /value None/i);
+        assert.deepEqual(numericError.examples, [
           "Exp31 / Normalized temperature",
         ]);
       }
@@ -553,7 +543,7 @@ test("Experiment Browser analysis materializes active fields and returns a patch
           entrypoint: "analyze",
           source: [
             "def analyze(inputs, labrat):",
-            "    return {'recordPatches': [], 'browserView': {}, 'exclusions': []}",
+            "    return {'columns': [], 'recordPatches': [], 'exclusions': []}",
           ].join("\n"),
         },
       };
@@ -569,22 +559,25 @@ test("Experiment Browser analysis materializes active fields and returns a patch
           adapter: "test_executor",
           runtime: { version: ANALYSIS_RUNTIME_VERSION },
           result: {
+            columns: [{
+              displayName: "Normalized temperature",
+              valueType: "number",
+              unit: "degC",
+            }],
             recordPatches: [{
               label: "Exp31",
-              upsertFields: [1, 2, 3].map(() => ({
-                targetFieldId: "target_field_1",
+              values: [1, 2, 3].map(() => ({
+                columnIndex: 0,
                 value: "-",
                 formattedValue: "-",
                 confidence: 1,
                 warnings: [],
-                sources: [{ experimentId: "experiment_31", columnId }],
+                sources: [{ experimentId: "experiment_31", columnIndex: 0 }],
               })),
               upsertSeries: [],
-              removeFields: [],
               removeSeries: [],
               warnings: [],
             }],
-            browserView: { name: "Invalid first attempt" },
             exclusions: [],
           },
         };
@@ -594,22 +587,25 @@ test("Experiment Browser analysis materializes active fields and returns a patch
         adapter: "test_executor",
         runtime: { version: ANALYSIS_RUNTIME_VERSION },
         result: {
+          columns: [{
+            displayName: "Normalized temperature",
+            valueType: "number",
+            unit: "degC",
+          }],
           recordPatches: [{
             label: "Exp31",
-            upsertFields: [{
-              targetFieldId: "target_field_1",
+            values: [{
+              columnIndex: 0,
               value: 250,
               formattedValue: "250",
               confidence: 1,
               warnings: [],
-              sources: [{ experimentId: "experiment_31", columnId }],
+              sources: [{ experimentId: "experiment_31", columnIndex: 0 }],
             }],
             upsertSeries: [],
-            removeFields: [],
             removeSeries: [],
             warnings: [],
           }],
-          browserView: { name: "Normalized temperature" },
           exclusions: [],
         },
       };
@@ -643,4 +639,176 @@ test("Experiment Browser analysis materializes active fields and returns a patch
   assert.equal(preview.identityCandidates[0].suggestedExperimentId, "experiment_31");
   assert.equal(browserProgramDraftCount, 2);
   assert.equal(browserExecutionCount, 2);
+});
+
+test("chart planning selects duplicate Browser columns by ordered index and source", async () => {
+  const { store, project } = await setup();
+  store.experimentIdentities.set("experiment_31", {
+    id: "experiment_31",
+    projectId: project.id,
+    canonicalLabel: "Exp31",
+    aliases: [],
+  });
+  store.dataSnapshots.set("snapshot_columns", {
+    id: "snapshot_columns",
+    projectId: project.id,
+    status: "accepted",
+    experimentRecords: [{
+      experimentId: "experiment_31",
+      label: "Exp31",
+      fields: [{
+        columnId: "internal_first",
+        displayName: "Yield",
+        valueType: "number",
+        unit: "percent",
+        value: 10,
+        formattedValue: "10",
+        sourceRefs: [{
+          sourceType: "excel_cell",
+          sourceDocumentId: "source_first",
+          fileName: "First.xlsx",
+          sheet: "Runs",
+          cell: "B2",
+        }],
+      }, {
+        columnId: "internal_second",
+        displayName: "Yield",
+        valueType: "number",
+        unit: "percent",
+        value: 20,
+        formattedValue: "20",
+        sourceRefs: [{
+          sourceType: "excel_cell",
+          sourceDocumentId: "source_second",
+          fileName: "Second.xlsx",
+          sheet: "Runs",
+          cell: "C2",
+        }],
+      }],
+      series: [],
+      sourceRefs: [],
+    }],
+  });
+  store.experimentSnapshotHeads.set("head_columns", {
+    id: "head_columns",
+    projectId: project.id,
+    experimentId: "experiment_31",
+    dataSnapshotId: "snapshot_columns",
+    recordIndex: 0,
+  });
+  const thread = await createAnalysisThread({
+    store,
+    project,
+    actorUserId: "user_1",
+    originalRequest: "Chart the Yield column from Second.xlsx for Exp31.",
+    outputTarget: "chart",
+  });
+  const modelProvider = {
+    async draftAnalysisPlan(request) {
+      const catalog = request.activeExperimentCatalog.experiments[0];
+      assert.equal(catalog.fields.length, 2);
+      assert.equal(catalog.fields[0].displayName, catalog.fields[1].displayName);
+      assert.match(catalog.fields[1].sourceSummary, /Second\.xlsx/);
+      assert.equal(Object.hasOwn(catalog.fields[1], "columnId"), false);
+      return {
+        ok: true,
+        requestSummary: "Chart the second source-backed Yield column for Exp31.",
+        sourceSelections: [],
+        experimentSelections: [{
+          experimentId: "experiment_31",
+          columnIndexes: [1],
+          includeSeries: false,
+          purpose: "Use Yield from Second.xlsx.",
+        }],
+        reviewPlan: {
+          processingSteps: ["Read the selected Yield value from Exp31."],
+          missingValueHandling: "Skip the point if Yield is missing.",
+          chart: {
+            title: "Exp31 Yield",
+            chartType: "bar",
+            xDescription: "Experiment",
+            yDescription: "Yield",
+            seriesDescription: "Yield from Second.xlsx",
+          },
+          invariants: [],
+        },
+        displayPlan: ["Plot Exp31 Yield from Second.xlsx."],
+        warnings: [],
+      };
+    },
+    async draftAnalysisProgram(request, options) {
+      assert.equal(request.inputManifest.tables.length, 0);
+      assert.equal(request.inputManifest.experiments.length, 1);
+      const input = options.inspectExperimentInput({
+        experimentId: "experiment_31",
+        fieldOffset: 0,
+        fieldLimit: 10,
+        includeSeries: false,
+      });
+      assert.equal(input.fields.length, 1);
+      assert.equal(input.fields[0].columnIndex, 1);
+      assert.equal(input.fields[0].value, 20);
+      assert.equal(Object.hasOwn(input.fields[0], "columnId"), false);
+      return {
+        ok: true,
+        pythonProgram: {
+          runtime: ANALYSIS_RUNTIME_VERSION,
+          entrypoint: "analyze",
+          source: [
+            "def analyze(inputs, labrat):",
+            "    value = inputs['experiments'][0]['fields'][0]['value']",
+            "    return {'plotly': {'data': [{'type': 'bar', 'name': 'Yield', 'x': ['Exp31'], 'y': [value]}], 'layout': {}}, 'exclusions': [], 'checks': []}",
+          ].join("\n"),
+        },
+      };
+    },
+  };
+  const revision = await draftAnalysisPlanRevision({
+    store,
+    project,
+    analysisThreadId: thread.id,
+    actorUserId: "user_1",
+    modelProvider,
+  });
+  const accepted = await acceptAnalysisPlanRevision({
+    store,
+    project,
+    actorUserId: "user_1",
+    planRevisionId: revision.id,
+    idempotencyKey: "accept_chart_browser_column",
+  });
+  const executed = await executeAnalysisRun({
+    store,
+    project,
+    actorUserId: "user_1",
+    analysisRunId: accepted.analysisRun.id,
+    modelProvider,
+    executor: {
+      async executeAcceptedRun(runPackage) {
+        const field = runPackage.inputs.experiments[0].fields[0];
+        return {
+          ok: true,
+          adapter: "test_executor",
+          runtime: { version: ANALYSIS_RUNTIME_VERSION },
+          result: {
+            plotly: {
+              data: [{
+                traceId: "yield",
+                type: "bar",
+                name: "Yield",
+                x: ["Exp31"],
+                y: [field.value],
+              }],
+              layout: {},
+            },
+            exclusions: [],
+            checks: [],
+          },
+        };
+      },
+    },
+  });
+
+  assert.equal(executed.analysisRun.status, "awaiting_result_review");
+  assert.deepEqual(executed.analysisResult.result.plotly.data[0].y, [20]);
 });

@@ -100,6 +100,13 @@ test("analysis migrations and Postgres store expose retry receipt persistence pa
   );
   assert.match(experimentBrowserMigration, /create table if not exists analysis_experiment_publications/);
   assert.match(experimentBrowserMigration, /add column if not exists output_target text/);
+  const listColumnResetMigration = await fs.readFile(
+    path.resolve(here, "..", "..", "..", "migrations", "020_reset_list_column_analysis.sql"),
+    "utf8",
+  );
+  assert.match(listColumnResetMigration, /update data_snapshots/);
+  assert.match(listColumnResetMigration, /delete from analysis_experiment_publications/);
+  assert.match(listColumnResetMigration, /delete from analysis_plan_revisions/);
   const store = new PostgresSaasStore({ databaseUrl: "" });
   for (const method of [
     "createAnalysisThread",
@@ -196,7 +203,7 @@ test("Postgres SaaS routes preserve workbook review, source documents, and suppo
             entrypoint: "analyze",
             source: [
               "def analyze(inputs, labrat):",
-              "    return {'recordPatches': [], 'browserView': {}, 'exclusions': []}",
+              "    return {'columns': [], 'recordPatches': [], 'exclusions': []}",
             ].join("\n"),
           },
         };
@@ -211,10 +218,15 @@ test("Postgres SaaS routes preserve workbook review, source documents, and suppo
             adapter: "postgres_test",
             runtime: { version: runPackage.runtimeVersion, exitCode: 0 },
             result: {
+              columns: [{
+                displayName: "C1",
+                valueType: "number",
+                unit: null,
+              }],
               recordPatches: [{
                 label: "Exp30",
-                upsertFields: [{
-                  targetFieldId: runPackage.inputs.targetFields[0].targetFieldId,
+                values: [{
+                  columnIndex: 0,
                   value: table.values[1][1],
                   formattedValue: table.displayValues[1][1],
                   confidence: 1,
@@ -226,11 +238,9 @@ test("Postgres SaaS routes preserve workbook review, source documents, and suppo
                   }],
                 }],
                 upsertSeries: [],
-                removeFields: [],
                 removeSeries: [],
                 warnings: [],
               }],
-              browserView: { name: "Exp30 carbon data" },
               exclusions: [],
             },
           };
@@ -449,17 +459,6 @@ test("Postgres SaaS routes preserve workbook review, source documents, and suppo
         purpose: "Read the accepted Exp30 carbon data.",
       }],
       experimentSelections: [],
-      fieldTargets: [{
-        kind: "source_field",
-        regionUnderstandingRevisionId: confirmedUnderstandingBody.acceptedRevision.id,
-        column: "B",
-        fieldKey: "",
-        displayName: "",
-        role: "",
-        valueType: "",
-        unit: "",
-        description: "Add the accepted C1 value.",
-      }],
       reviewPlan: {
         processingSteps: [
           "Read Exp30 C1 from the accepted workbook range.",
@@ -522,7 +521,7 @@ test("Postgres SaaS routes preserve workbook review, source documents, and suppo
     assert.equal(publish.status, 201);
     const publishBody = await publish.json();
     assert.equal(publishBody.dataSnapshot.status, "accepted");
-    assert.equal(publishBody.dataSnapshot.schemaVersion, "labrat.dataSnapshot.v3");
+    assert.equal(publishBody.dataSnapshot.schemaVersion, "labrat.dataSnapshot.v4");
     assert.equal(publishBody.dataSnapshot.analysisResultId, browserExecuteBody.analysisResult.id);
     assert.equal(publishBody.browserView.isDefault, false);
     const publishRetry = await jsonFetch(

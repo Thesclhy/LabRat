@@ -210,7 +210,7 @@ Evidence retrieval returns exact active accepted RegionUnderstandingRevisions as
 `GET .../data-plans` is historical read-only provenance. The former
 `POST .../data-plans/draft` and `POST .../data-plans/publish` routes are retired
 and return `404`. New Experiment Browser data is created only through reviewed
-AnalysisThreads and DataSnapshot v3 publication.
+AnalysisThreads and DataSnapshot v4 publication.
 
 ## Experiment Browser
 
@@ -273,12 +273,13 @@ return clarification.
 
 `POST /api/projects/:projectId/agent/runs` returns user-facing text in the top-level `reply` field plus nullable `analysisThread` and `currentPlanRevision` fields. Provider configuration and credentials are backend-only. AgentRun usage stores provider, model, token, and latency metadata while planning records visible workflow steps rather than hidden chain-of-thought.
 
-The planning provider receives a bounded catalog of active confirmed
-RegionUnderstandingRevisions and may call `inspect_source_range` to page through
-their cells. After plan acceptance, the code-generation provider receives a
-manifest plus initial pages of the materialized multi-table input and may call
-read-only `inspect_run_input` for additional pages. Neither tool can execute,
-accept, publish, or mutate source evidence.
+The planning provider receives bounded catalogs of active confirmed
+RegionUnderstandingRevisions and active experiment fields as ordered readable
+lists. It may call `inspect_source_range` to page through workbook cells. After
+plan acceptance, the code-generation provider receives a manifest plus initial
+pages of materialized table/experiment inputs and may call read-only
+`inspect_run_input` or `inspect_experiment_input` for additional pages. Neither
+tool can execute, accept, publish, or mutate source evidence.
 
 ## Reviewed Analysis Planning
 
@@ -325,10 +326,11 @@ Rules:
   or publishes an artifact. A second failure returns a durable planning warning
   with bounded error details so the frontend can name the policy and offending
   line instead of showing only a generic provider/runtime error.
-- Each revision declares `outputTarget: chart | experiment_browser` and stores exact `sourceSelections`, optional active `experimentSelections`, reviewed
-  `fieldTargets` for Experiment Browser scalar output, structured `reviewPlan`,
-  readable `displayPlan`, derived non-contiguous source rectangles, validation,
-  and visible feedback. It stores no Python, input values, expected
+- Each revision declares `outputTarget: chart | experiment_browser` and stores
+  exact `sourceSelections`, optional active `experimentSelections`, structured
+  `reviewPlan`, readable `displayPlan`, derived non-contiguous source
+  rectangles, validation, and visible feedback. It stores no scalar field
+  definitions, semantic keys, roles, Browser ids, Python, input values, expected
   result table, or user-review hash. Creating revision N marks the prior
   awaiting-review revision `superseded` without changing its payload.
 - Each source selection names one accepted RegionUnderstandingRevision,
@@ -336,17 +338,12 @@ Rules:
   selection becomes one `inputs.tables` item. Selections may span multiple
   files, sheets, and non-contiguous ranges.
 - Each experiment selection names one active experiment, its frozen snapshot
-  head, exact unit-aware field column ids, and whether series are included.
+  head, exact zero-based `columnIndexes` from that experiment's ordered
+  model-facing field list, and whether series are included.
   These selections are existing calculation inputs only; a desired new
-  workbook field cannot be represented as an experiment selection. Experiment
-  Browser plans may combine workbook and snapshot inputs.
-- Each Experiment Browser scalar output has one stable `targetFieldId`.
-  A direct `source_field` target references an accepted region revision and
-  Excel column; the backend derives its key, readable name, role, value type,
-  unit, header evidence, and stable Browser column id from the accepted region
-  understanding. A `derived_field` target declares those semantics in the
-  reviewed plan and is validated before acceptance. Python never defines or
-  changes field metadata.
+  workbook field cannot be represented as an experiment selection. Chart and
+  Experiment Browser plans may combine workbook and snapshot inputs. Internal
+  Browser column ids are never sent to planning or code-generation models.
 - `GET .../selection` returns the exact source selections and derived source
   rectangles for the Source review page; it returns no result records.
 - Plan acceptance requires only an `Idempotency-Key` header. The request body
@@ -360,14 +357,15 @@ Rules:
   materializes complete typed/display/formula grids. SourceDocument reads remain
   individually bounded, but the analysis selection has no 500-cell aggregate
   limit; configurable executor input/output limits remain.
-- For `experiment_browser`, execution also verifies frozen active heads and
-  materializes `inputs["experiments"]`, the current project field catalog, and
-  the accepted `inputs["targetFields"]`. Code generation may page selected
+- Execution verifies frozen active heads for any snapshot selections and
+  materializes ordered `inputs["experiments"]` lists. Each field contains its
+  original `columnIndex`, readable name, value type, unit, source summary,
+  value/missing state, and exact source refs. Code generation may page selected
   experiment values with `inspect_experiment_input`.
 - Only after materialization does the model generate `labrat-python-v2` with
   entrypoint `analyze(inputs, labrat)`. Programs read the dictionary
-  whose `tables`, `experiments`, `fieldCatalog`, and `targetFields` members are
-  arrays; large inputs can be inspected with `inspect_run_input`.
+  whose `tables` and `experiments` members are ordered arrays; large inputs can
+  be inspected with `inspect_run_input` and `inspect_experiment_input`.
   Python policy errors include the policy name, offending line, and reason.
 - A Python execution error or backend output-contract failure may trigger one
   bounded automatic code-repair attempt inside the same immutable AnalysisRun.
@@ -383,16 +381,19 @@ Rules:
   reviewed plan. Missing trace ids are assigned deterministically by output
   order. The backend does not reconstruct Plotly from result rows, remap X/Y,
   require field ids, or reject one-to-many reshaping.
-- For `experiment_browser`, Python instead returns `recordPatches`,
-  `browserView`, and readable `exclusions`. Each patch can upsert scalar fields
-  or series but cannot remove scientific data. Every generated value references
-  accepted workbook cell coordinates or selected snapshot fields. Every scalar
-  upsert contains an accepted `targetFieldId`, value payload, and sources; it
-  cannot repeat or override `fieldKey`, `displayName`, `role`, `valueType`,
-  `unit`, or `columnId`. The backend applies the frozen target definition,
-  reuses stable field selectors, blocks same-key/same-unit type conflicts,
-  validates finite values and payload limits, and merges patches with complete
-  frozen active records so unmentioned fields and series are preserved.
+- For `experiment_browser`, Python instead returns top-level `columns`,
+  per-record `values`, optional series patches, and readable `exclusions`.
+  Each column contains only `displayName`, `valueType`, and optional `unit`;
+  each scalar value references it by zero-based `columnIndex`. Python cannot
+  output semantic keys, roles, target ids, internal column ids, or Browser view
+  state. Every generated value references accepted workbook cell coordinates
+  or selected snapshot fields. The backend validates types, finite values,
+  indexes, source ownership, and payload limits, then assigns one random
+  `columnId` to every validated output column and persists it in the
+  AnalysisResult. All records for that output column share the same id.
+  Duplicate names/types/units remain separate columns; no automatic merge or
+  replacement occurs. Complete frozen active records are merged so unmentioned
+  fields and series are preserved.
   Scalars of every supported value type may use source-backed `null` only with
   `formattedValue: null`, an allowed `missingReason`, and a trusted source
   pointer. Workbook source refs preserve raw/display values such as `"-"`.
@@ -412,7 +413,9 @@ Rules:
   experiment counts. It never returns Python, hashes, internal patch JSON, or
   full records to the review UI.
 - Experiment publication always creates and opens a new non-default
-  BrowserView. Model output cannot replace the user's existing default view.
+  BrowserView derived by the backend. Model output cannot replace the user's
+  existing default view. Accepted publication creates DataSnapshot v4; legacy
+  accepted snapshots remain read-only.
 - Revision requires feedback only. It sends bounded prior run/result validation
   context to planning and creates a later immutable PlanRevision; prior runs and
   results remain unchanged.
@@ -422,11 +425,13 @@ Rules:
 - Successful result publication atomically marks the existing AnalysisResult
   `accepted`, moves its AnalysisRun and AnalysisThread to `completed`, and
   creates one `labrat.chartSpec.v3` `origin: analysis_result` ChartSpec with
-  complete authoritative Plotly, source selections, a flat trace catalog, and
-  the reviewed default visible curves.
+  complete authoritative Plotly, reviewed workbook and/or active-experiment
+  selections, a flat trace catalog, and the reviewed default visible curves.
+  Pure Experiment Browser charts are valid without workbook selections; their
+  frozen snapshot heads are rechecked inside the publication transaction.
 - Experiment publication requires the exact `analysisResultId`, unresolved
   identity decisions, and `Idempotency-Key`. It atomically accepts the result,
-  creates one immutable `labrat.dataSnapshot.v3`, creates any reviewed
+  creates one immutable `labrat.dataSnapshot.v4`, creates any reviewed
   identities, advances only affected snapshot heads, creates a new owner-scoped
   BrowserView, completes the run/thread, and records audit plus idempotency
   receipt. A changed base head returns stale preview and performs no writes.

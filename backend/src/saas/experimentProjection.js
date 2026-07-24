@@ -24,7 +24,13 @@ function normalizedType(value) {
   return text(value).toLowerCase() || "string";
 }
 
-export function experimentFieldColumnId({ fieldKey, unit, valueType } = {}) {
+export function experimentFieldColumnId({
+  columnId,
+  fieldKey,
+  unit,
+  valueType,
+} = {}) {
+  if (text(columnId)) return text(columnId);
   return ["field", text(fieldKey), normalizedUnit(unit), normalizedType(valueType)]
     .map((part) => encodeURIComponent(part))
     .join(":");
@@ -49,6 +55,29 @@ function roleWeight(role) {
   if (role === "identifier") return 50;
   if (role === "series_summary") return 45;
   return 25;
+}
+
+function columnSourceSummary(sourceRefs) {
+  const refs = asArray(sourceRefs).filter((ref) => ref?.sourceType === "excel_cell");
+  if (!refs.length) return null;
+  const first = refs[0];
+  const last = refs[refs.length - 1];
+  const workbook = text(first.fileName || first.sourceDocumentId) || "Workbook";
+  const sheet = text(first.sheet) || "Sheet";
+  const firstCell = text(first.cell || first.range);
+  const lastCell = text(last.cell || last.range);
+  const sameSource = refs.every((ref) => (
+    text(ref.fileName || ref.sourceDocumentId) === text(first.fileName || first.sourceDocumentId)
+    && text(ref.sheet) === text(first.sheet)
+  ));
+  if (!sameSource) {
+    const suffix = refs.length > 1 ? ` + ${refs.length - 1} sources` : "";
+    return `${workbook} · ${sheet}${firstCell ? `!${firstCell}` : ""}${suffix}`;
+  }
+  const range = firstCell && lastCell && firstCell !== lastCell
+    ? `${firstCell}:${lastCell}`
+    : firstCell || lastCell;
+  return range ? `${workbook} · ${sheet}!${range}` : `${workbook} · ${sheet}`;
 }
 
 function canonicalFilter(filter) {
@@ -125,6 +154,8 @@ function buildColumns(entries) {
         confidenceTotal: 0,
         confidenceCount: 0,
         warningCount: 0,
+        sourceRefs: [],
+        sourceRefKeys: new Set(),
       };
       current.seenCount += 1;
       if (field.value !== null && field.value !== undefined && field.value !== "") current.coverageCount += 1;
@@ -133,6 +164,13 @@ function buildColumns(entries) {
         current.confidenceCount += 1;
       }
       current.warningCount += asArray(field.warnings).length;
+      asArray(field.sourceRefs).forEach((sourceRef) => {
+        const key = JSON.stringify(sourceRef);
+        if (!current.sourceRefKeys.has(key)) {
+          current.sourceRefKeys.add(key);
+          current.sourceRefs.push(clone(sourceRef));
+        }
+      });
       stats.set(id, current);
     });
   });
@@ -159,6 +197,7 @@ function buildColumns(entries) {
       coverageRatio,
       confidenceAverage,
       warningCount: column.warningCount,
+      sourceSummary: columnSourceSummary(column.sourceRefs),
       recommendationScore,
       recommended: false,
       pinned: false,
@@ -168,6 +207,16 @@ function buildColumns(entries) {
     || a.label.localeCompare(b.label)
     || a.id.localeCompare(b.id)
   ));
+  const duplicateLabels = new Map();
+  fieldColumns.forEach((column) => {
+    const key = column.label.toLowerCase();
+    duplicateLabels.set(key, (duplicateLabels.get(key) || 0) + 1);
+  });
+  fieldColumns.forEach((column) => {
+    if ((duplicateLabels.get(column.label.toLowerCase()) || 0) > 1 && column.sourceSummary) {
+      column.label = `${column.label} · ${column.sourceSummary}`;
+    }
+  });
   fieldColumns.slice(0, RECOMMENDED_FIELD_LIMIT).forEach((column) => { column.recommended = true; });
   return [{
     id: "experiment",
@@ -181,6 +230,7 @@ function buildColumns(entries) {
     coverageRatio: rowCount ? 1 : 0,
     confidenceAverage: 1,
     warningCount: 0,
+    sourceSummary: null,
     recommendationScore: 100,
     recommended: true,
     pinned: true,

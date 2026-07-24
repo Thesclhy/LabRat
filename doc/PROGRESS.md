@@ -15,6 +15,30 @@ Keep entries concise, newest first, and include:
 
 ## 2026-07-24
 
+- Replaced the Experiment Browser analysis field-target contract with ordered
+  list columns. Plans now store only reviewed workbook/snapshot selections and
+  natural-language meaning; materialized inputs expose real ordered values,
+  headers, types, units, and source cells. Python returns top-level
+  `columns[]` plus per-record values addressed by `columnIndex`, without
+  `semanticKey`, `role`, target ids, or Browser ids. The backend validates
+  values and exact input pointers, assigns one random internal `columnId` per
+  result column, preserves it across preview/publication, allows independent
+  duplicate readable columns, and publishes DataSnapshot v4 while preserving
+  untouched fields. Browser and later chart planning expose only ordered
+  indices and source summaries. Added migration 020 to retire incompatible
+  development analysis artifacts while retaining accepted snapshots. Real
+  Anthropic plus local-Python Docker E2E selected master-table labels and
+  column K, published 61 Impeller values sharing one persisted random column
+  id, displayed the new string column beside three preserved selectivity
+  fields, then selected it from 61 active experiments to create and accept a
+  four-point category-count ChartSpec. The E2E found and fixed Anthropic's
+  rejection of `integer.minimum` in structured output schemas and the old
+  ChartSpec publisher assumption that every chart required workbook ranges;
+  pure snapshot charts now retain frozen experiment selections and reject
+  changed heads transactionally. Verification passed: `npm run codex:verify`
+  (frontend 257/257, backend 208 passed with four existing skips, production
+  build with the existing Plotly chunk warning), configured PostgreSQL
+  integration 2/2, and the complete real-provider browser E2E.
 - Replaced model-authored Experiment Browser field metadata with reviewed
   `fieldTargets`. Source fields now inherit their stable key, display name,
   role, value type, unit, and header evidence from the accepted

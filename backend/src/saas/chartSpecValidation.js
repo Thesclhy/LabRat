@@ -60,10 +60,13 @@ function validateAnalysisResultChartSpec(chartSpec) {
     "analysisRunId",
     "analysisResultId",
   ].forEach((field) => requiredText(chartSpec[field], field));
-  if (!asArray(chartSpec.sourceSelections).length) {
+  if (
+    !asArray(chartSpec.sourceSelections).length
+    && !asArray(chartSpec.experimentSelections).length
+  ) {
     throw validationError(
       "invalid_analysis_chart_spec",
-      "Analysis-result ChartSpecs require reviewed source selections.",
+      "Analysis-result ChartSpecs require reviewed workbook or experiment selections.",
     );
   }
   if (!isObject(chartSpec.plotly) || !Array.isArray(chartSpec.plotly.data) || !isObject(chartSpec.plotly.layout)) {

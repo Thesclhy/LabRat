@@ -119,6 +119,64 @@ function seededStore() {
   return { store, ...value };
 }
 
+function useExperimentSelection(value) {
+  const baseHeadRef = {
+    experimentId: "experiment_1",
+    headId: "head_1",
+    dataSnapshotId: "snapshot_1",
+    recordIndex: 0,
+  };
+  value.store.experimentIdentities.set("experiment_1", {
+    id: "experiment_1",
+    projectId: value.project.id,
+    canonicalLabel: "Exp1",
+    aliases: ["Exp1"],
+  });
+  value.store.dataSnapshots.set("snapshot_1", {
+    id: "snapshot_1",
+    labId: value.project.labId,
+    projectId: value.project.id,
+    schemaVersion: "labrat.dataSnapshot.v4",
+    status: "accepted",
+    experimentRecords: [{
+      experimentId: "experiment_1",
+      label: "Exp1",
+      fields: [{
+        columnId: "column_impeller",
+        displayName: "Impeller",
+        valueType: "string",
+        unit: null,
+        value: "flat",
+        formattedValue: "flat",
+        sourceRefs: [],
+      }],
+      series: [],
+    }],
+  });
+  value.store.experimentSnapshotHeads.set("head_1", {
+    id: "head_1",
+    projectId: value.project.id,
+    experimentId: "experiment_1",
+    dataSnapshotId: "snapshot_1",
+    recordIndex: 0,
+  });
+  value.planRevision.plan.sourceSelections = [];
+  value.planRevision.plan.experimentSelections = [{
+    experimentSelectionId: "experiment_selection_1",
+    experimentId: "experiment_1",
+    columnIndexes: [0],
+    fieldLabels: ["Impeller"],
+    includeSeries: false,
+    purpose: "Count the selected Impeller values.",
+    baseHeadRef,
+  }];
+  value.store.analysisPlanRevisions.set(
+    value.planRevision.id,
+    structuredClone(value.planRevision),
+  );
+  return baseHeadRef;
+}
+
 test("builds a v3 ChartSpec with authoritative Plotly and a flat trace catalog", () => {
   const value = fixture();
   const spec = buildAnalysisResultChartSpec({
@@ -154,6 +212,42 @@ test("publishes a validated result atomically and replays the idempotency key", 
   assert.equal(first.analysisResult.status, "accepted");
   assert.equal(replay.idempotentReplay, true);
   assert.equal(value.store.chartSpecs.size, 1);
+});
+
+test("publishes a chart from reviewed experiment selections and protects frozen heads", async () => {
+  const value = seededStore();
+  useExperimentSelection(value);
+  const request = {
+    store: value.store,
+    project: value.project,
+    actorUserId: "user_1",
+    runId: value.run.id,
+    analysisResultId: value.result.id,
+    defaultVisibleTraceIds: ["exp33", "exp32"],
+    idempotencyKey: "publish_experiment_chart",
+  };
+
+  const published = await publishAcceptedAnalysisChart(request);
+  assert.deepEqual(published.chartSpec.spec.sourceSelections, []);
+  assert.equal(published.chartSpec.spec.experimentSelections[0].fieldLabels[0], "Impeller");
+
+  const stale = seededStore();
+  useExperimentSelection(stale);
+  stale.store.experimentSnapshotHeads.set("head_1", {
+    id: "head_2",
+    projectId: stale.project.id,
+    experimentId: "experiment_1",
+    dataSnapshotId: "snapshot_1",
+    recordIndex: 0,
+  });
+  await assert.rejects(
+    () => publishAcceptedAnalysisChart({
+      ...request,
+      store: stale.store,
+      idempotencyKey: "publish_stale_experiment_chart",
+    }),
+    (error) => error.code === "analysis_result_stale",
+  );
 });
 
 test("rejects unknown or empty visible curve selections before publication", async () => {

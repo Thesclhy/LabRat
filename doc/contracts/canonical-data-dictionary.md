@@ -15,7 +15,7 @@ FileObject
   -> accepted RegionUnderstandingRevision
   -> reviewed Experiment Browser AnalysisPlanRevision
   -> validated record patches
-  -> accepted immutable DataSnapshot v3
+  -> accepted immutable DataSnapshot v4
   -> ExperimentIdentity + ExperimentSnapshotHead
   -> Experiment Browser row/detail
 ```
@@ -134,23 +134,24 @@ Required semantics:
 
 The plan must not embed final result arrays. Draft execution is transient until publish.
 
-## DataSnapshot v2/v3
+## DataSnapshot v2/v3/v4
 
 An immutable accepted collection of complete experiment records. V2 snapshots
 were produced by historical DataPlans. V3 snapshots are produced by an accepted
-Experiment Browser AnalysisResult after backend patch merge.
+Experiment Browser AnalysisResult using the retired semantic-field contract.
+New list-column AnalysisResults produce V4 snapshots.
 
 Contains:
 
-- `schemaVersion: labrat.dataSnapshot.v2 | labrat.dataSnapshot.v3`
+- `schemaVersion: labrat.dataSnapshot.v2 | labrat.dataSnapshot.v3 | labrat.dataSnapshot.v4`
 - either an accepted DataPlan id (v2) or exact
-  AnalysisPlanRevision/AnalysisRun/AnalysisResult ids (v3)
+  AnalysisPlanRevision/AnalysisRun/AnalysisResult ids (v3/v4)
 - content hash and dependency hash
 - ordered `experimentRecords[]`
 - aggregate source refs, warnings, summary
 - accepted actor/timestamp
 
-Snapshots are append-only. V3 records may reference `baseSnapshotRef`; inherited
+Snapshots are append-only. V3/V4 records may reference `baseSnapshotRef`; inherited
 fields preserve their original source refs, while new or replaced values keep
 this run's exact workbook cells and/or selected snapshot field refs.
 
@@ -166,9 +167,8 @@ Typical shape:
   "experimentId": "experiment_identity_33",
   "fields": [
     {
-      "fieldKey": "temperature",
+      "columnId": "column_c4f810fd-d31d-4ac2-9b5a-38d6a25c7676",
       "displayName": "Temperature",
-      "role": "condition",
       "valueType": "number",
       "value": 250,
       "unit": "C",
@@ -176,9 +176,8 @@ Typical shape:
       "sourceRefs": []
     },
     {
-      "fieldKey": "selectivity_solid",
+      "columnId": "column_4d813b0e-3f0b-4d6a-9e96-cc5cba88d8bd",
       "displayName": "Selectivity - Solid",
-      "role": "outcome",
       "valueType": "number",
       "value": null,
       "formattedValue": null,
@@ -212,7 +211,19 @@ Typical shape:
 }
 ```
 
-Scalar and series values retain typed values, raw-value context when needed, units, and exact source refs. Scalar `headerSourceRefs` preserve the accepted header interpretation separately from value-cell `sourceRefs`; grouped headers retain both parent and leaf header cells. Series may retain corresponding `xHeaderSourceRefs` and `yHeaderSourceRefs`.
+V4 scalar fields require an opaque backend-assigned `columnId`, readable
+`displayName`, `valueType`, optional unit, value/missing state, and exact source
+refs. They do not require a semantic key or role. One output column id is shared
+across every record value in that validated result. Duplicate names, units, and
+types remain separate columns because their ids differ. Historical fields
+without an explicit id retain their legacy derived id only for read
+compatibility.
+
+Scalar and series values retain typed values, raw-value context when needed,
+units, and exact source refs. Scalar `headerSourceRefs` may preserve accepted
+header evidence separately from value-cell `sourceRefs`; grouped headers retain
+both parent and leaf header cells. Series may retain corresponding
+`xHeaderSourceRefs` and `yHeaderSourceRefs`.
 
 All scalar value types may use `value: null` only for explicit, source-backed
 missing scientific data. New null writes require `formattedValue: null`, at
@@ -229,7 +240,7 @@ cell values. The UI may render null as `"-"`, but that display token is never
 stored as a scientific value. Null is never zero and is excluded from field
 coverage and calculations by default. A null patch cannot replace an active
 non-null value; a later valid scalar may replace an active null. Historical
-snapshots are read tolerantly, while new AnalysisResult/DataSnapshot v3 writes
+snapshots are read tolerantly, while new AnalysisResult/DataSnapshot v4 writes
 use this strict contract.
 
 ## ExperimentIdentity
@@ -280,30 +291,28 @@ One selection becomes one materialized Python input table. Multiple files,
 worksheets, and non-contiguous ranges remain separate selections. Red Source
 rectangles are derived UI data rather than separately reviewed evidence.
 
-## AnalysisPlanRevision v3
+## AnalysisPlanRevision v4
 
 A durable immutable review proposal declaring `outputTarget: chart |
 experiment_browser` and containing `sourceSelections`, optional frozen active
-`experimentSelections`, reviewed scalar `fieldTargets`, structured
-`reviewPlan`, user-readable `displayPlan`, warnings, validation, and feedback.
-Direct source targets bind an accepted RegionUnderstandingRevision and Excel
-column to the accepted field key, display name, role, value type, unit, header
-evidence, and stable Browser column id. Derived targets declare the same
-metadata before review. It contains no Python, materialized values, result
-rows, traces, Plotly, or user-review hashes. Feedback creates a later numbered
-revision and marks the prior awaiting-review revision superseded without
-modifying it.
+`experimentSelections`, structured `reviewPlan`, user-readable `displayPlan`,
+warnings, validation, and feedback. Experiment selections use zero-based
+`columnIndexes` into an ordered model-facing field list. It contains no field
+targets, semantic keys, roles, Browser column ids, Python, materialized values,
+result rows, traces, Plotly, or user-review hashes. Feedback creates a later
+numbered revision and marks the prior awaiting-review revision superseded
+without modifying it.
 
 ## AnalysisThread v1
 
 A project-scoped conversational workflow container for one analysis goal. It stores the original request, output target, bounded visible messages, status, and ordered ids for plan revisions, runs, accepted results, charts, DataSnapshots, and BrowserViews. It does not store hidden reasoning or duplicate full result arrays into project state.
 
-## AnalysisRun v2
+## AnalysisRun v3
 
 An immutable execution-attempt record linked to one accepted PlanRevision.
 Idempotent plan acceptance creates a `queued` run with no Python. Execution
 re-resolves source selections and frozen snapshot heads, materializes complete
-`inputs.tables` and/or `inputs.experiments` plus accepted `inputs.targetFields`,
+ordered `inputs.tables` and/or `inputs.experiments`,
 generates Python against that real input, applies policy checks, and then runs
 it through the configured executor. The run records input/program/runtime
 hashes, generated Python, execution phases, bounded diagnostics, warnings, and
@@ -311,14 +320,16 @@ validation. Bounded technical regeneration attempts are recorded as
 `programAttempts` with program hashes, outcomes, and diagnostics; internal
 claim tokens and generated Python are never public.
 
-## AnalysisResult v2
+## AnalysisResult v3
 
 An append-only backend-validated output linked to one AnalysisRun. Chart output
 contains authoritative Plotly `data/layout`. Experiment Browser output contains
-validated source-backed `recordPatches`, merged preview records, change
-summaries, identity candidates, exclusions, and a proposed BrowserView.
-Scalar patch values reference accepted `targetFieldId` values; field metadata
-comes from the immutable plan rather than generated Python.
+validated output `columns`, source-backed record `values`, merged preview
+records, change summaries, identity candidates, exclusions, and a
+backend-derived BrowserView. Each output column receives one random internal
+`columnId` during result creation; the persisted result is authoritative for
+preview and publication retries. Scalar values reference the output list by
+`columnIndex`, not semantic or target ids.
 Experiment Browser summaries include `missingValueCount` and
 `missingExperimentCount`; scalar coverage counts only non-null values.
 It begins as `awaiting_review`; executor or validation failures create no
@@ -331,7 +342,7 @@ A durable chart definition. Only the analysis-result-backed form is valid:
 
 - `schemaVersion: labrat.chartSpec.v3` and `origin: analysis_result`
 - exact thread/plan/run/result ids
-- reviewed source selections and source refs
+- reviewed workbook and/or active-experiment selections plus source refs
 - complete authoritative Plotly `data/layout`
 - a matching flat catalog of stable unique curves
 - a reviewed `defaultChartView.visibleTraceIds` subset

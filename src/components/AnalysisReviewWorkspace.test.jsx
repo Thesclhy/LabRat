@@ -1139,7 +1139,8 @@ describe("AnalysisReviewWorkspace", () => {
         experimentSelectionId: "experiment_selection_1",
         experimentId: "experiment_31",
         label: "Exp31",
-        columnIds: ["field:temperature:degC:number"],
+        columnIndexes: [0],
+        fieldLabels: ["Temperature (degC)"],
       }],
     };
     const browserRun = { ...validatedRun, outputTarget: "experiment_browser" };

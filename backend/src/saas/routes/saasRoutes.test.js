@@ -373,9 +373,9 @@ const testModelProvider = {
   },
   async draftExperimentBrowserPlan(input) {
     const experiment = input.activeExperimentCatalog?.experiments?.[0];
-    const sourceField = input.activeExperimentCatalog?.fields
-      ?.find((field) => field.fieldKey === "solid")
-      || input.activeExperimentCatalog?.fields?.[0];
+    const sourceField = experiment?.fields
+      ?.find((field) => String(field.displayName).toLowerCase() === "solid")
+      || experiment?.fields?.[0];
     if (!experiment || !sourceField) {
       return { ok: false, warning: { code: "analysis_evidence_required" } };
     }
@@ -385,20 +385,9 @@ const testModelProvider = {
       sourceSelections: [],
       experimentSelections: [{
         experimentId: experiment.experimentId,
-        columnIds: [sourceField.columnId],
+        columnIndexes: [sourceField.columnIndex],
         includeSeries: false,
         purpose: "Use the accepted Solid value.",
-      }],
-      fieldTargets: [{
-        kind: "derived_field",
-        regionUnderstandingRevisionId: "",
-        column: "",
-        fieldKey: "normalized_solid",
-        displayName: "Normalized Solid",
-        role: "outcome",
-        valueType: "number",
-        unit: "percent",
-        description: "Normalized Solid derived from the accepted value.",
       }],
       reviewPlan: {
         processingSteps: [
@@ -425,7 +414,7 @@ const testModelProvider = {
         entrypoint: "analyze",
         source: [
           "def analyze(inputs, labrat):",
-          "    return {'recordPatches': [], 'browserView': {}, 'exclusions': []}",
+          "    return {'columns': [], 'recordPatches': [], 'exclusions': []}",
         ].join("\n"),
       },
     };
@@ -471,32 +460,37 @@ const testAnalysisExecutor = {
   async executeAcceptedRun(runPackage) {
     if (runPackage.inputs.experiments?.length) {
       const experiment = runPackage.inputs.experiments[0];
-      const sourceField = experiment.fields.find((field) => field.fieldKey === "solid")
+      const sourceField = experiment.fields.find(
+        (field) => String(field.displayName).toLowerCase() === "solid",
+      )
         || experiment.fields[0];
       return {
         ok: true,
         adapter: "test_executor",
         runtime: { version: runPackage.runtimeVersion, exitCode: 0 },
         result: {
+          columns: [{
+            displayName: "Normalized Solid",
+            valueType: "number",
+            unit: "percent",
+          }],
           recordPatches: [{
             label: experiment.label,
-            upsertFields: [{
-              targetFieldId: runPackage.inputs.targetFields[0].targetFieldId,
+            values: [{
+              columnIndex: 0,
               value: sourceField.value,
               formattedValue: String(sourceField.value),
               confidence: 1,
               warnings: [],
               sources: [{
                 experimentId: experiment.experimentId,
-                columnId: sourceField.columnId,
+                columnIndex: sourceField.columnIndex,
               }],
             }],
             upsertSeries: [],
-            removeFields: [],
             removeSeries: [],
             warnings: [],
           }],
-          browserView: { name: "Normalized Solid" },
           exclusions: [],
         },
       };
@@ -1668,7 +1662,7 @@ test("confirmed workbook chart request completes Source to Plotly to ChartSpec w
   assert.equal(plannedResponse.status, 201);
   const planned = await plannedResponse.json();
   const revision = planned.currentPlanRevision;
-  assert.equal(revision.schemaVersion, "labrat.analysisPlanRevision.v3");
+  assert.equal(revision.schemaVersion, "labrat.analysisPlanRevision.v4");
   assert.equal(revision.sourceSelections.length, 1);
   assert.equal(Object.hasOwn(revision, "pythonProgram"), false);
 
@@ -1730,7 +1724,7 @@ test("confirmed workbook chart request completes Source to Plotly to ChartSpec w
   );
 });
 
-test("natural-language Experiment Browser request publishes a patch-based v3 snapshot", async () => {
+test("natural-language Experiment Browser request publishes a list-backed v4 snapshot", async () => {
   const project = await createProject("Experiment Browser Analysis Project");
   const seeded = await publishGroupedSelectivityDataForAnalysis(project, `browser_${Date.now()}`);
   const baseHead = seeded.experimentSnapshotHeads[0];
@@ -1795,13 +1789,13 @@ test("natural-language Experiment Browser request publishes a patch-based v3 sna
   );
   assert.equal(publishResponse.status, 201);
   const published = await publishResponse.json();
-  assert.equal(published.dataSnapshot.schemaVersion, "labrat.dataSnapshot.v3");
+  assert.equal(published.dataSnapshot.schemaVersion, "labrat.dataSnapshot.v4");
   assert.equal(published.dataSnapshot.dataPlanId, null);
   assert.equal(published.dataSnapshot.analysisResultId, executed.analysisResult.id);
   assert.equal(published.dataSnapshot.experimentRecords[0].fields.length, 4);
   assert.equal(
     published.dataSnapshot.experimentRecords[0].fields.some((field) => (
-      field.fieldKey === "normalized_solid"
+      field.displayName === "Normalized Solid" && Boolean(field.columnId)
     )),
     true,
   );
@@ -1844,7 +1838,7 @@ test("two confirmed workbook selections materialize as two Python input tables a
     method: "POST",
     body: {
       plan: {
-        schemaVersion: "labrat.analysisPlanRevision.v3",
+        schemaVersion: "labrat.analysisPlanRevision.v4",
         status: "awaiting_review",
         requestSummary: "Compare two carbon distributions.",
         sourceSelections,

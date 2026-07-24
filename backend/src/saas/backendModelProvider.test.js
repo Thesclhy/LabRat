@@ -175,11 +175,17 @@ test("draftAnalysisPlan selects exact confirmed ranges without generating Python
       assert.deepEqual(body.output_config.format.schema.required, [
         "requestSummary",
         "sourceSelections",
+        "experimentSelections",
         "reviewPlan",
         "displayPlan",
         "warnings",
       ]);
       assert.equal(body.output_config.format.schema.additionalProperties, false);
+      assert.equal(
+        "minimum" in body.output_config.format.schema.properties
+          .experimentSelections.items.properties.columnIndexes.items,
+        false,
+      );
       assert.ok(body.max_tokens >= 6000);
       return {
         ok: true,
@@ -198,6 +204,7 @@ test("draftAnalysisPlan selects exact confirmed ranges without generating Python
                   label: "Carbon distributions",
                   purpose: "Create one series per experiment",
                 }],
+                experimentSelections: [],
                 reviewPlan: {
                   processingSteps: ["Read the selected carbon values."],
                   missingValueHandling: "Exclude a selected experiment only when its row is empty.",
@@ -249,6 +256,13 @@ test("draftExperimentBrowserPlan uses an Anthropic-compatible empty invariants s
       assert.match(body.system, /count actual non-header data rows/i);
       assert.match(body.system, /distinguish creating new experiment records from appending/i);
       assert.match(body.system, /remain selected source-backed null fields/i);
+      assert.match(body.system, /zero-based columnIndexes/i);
+      assert.equal(Object.hasOwn(body.output_config.format.schema.properties, "fieldTargets"), false);
+      assert.equal(
+        "minimum" in body.output_config.format.schema.properties
+          .experimentSelections.items.properties.columnIndexes.items,
+        false,
+      );
       assert.equal(body.tools[0].name, "inspect_source_range");
       assert.match(body.tools[0].description, /2500 cells/);
       return {
@@ -345,7 +359,7 @@ test("draftAnalysisProgram sees exact inputs and returns Python only after plan 
   assert.equal(result.pythonProgram.runtime, "labrat-python-v2");
 });
 
-test("draftExperimentBrowserProgram describes list-shaped multi-table inputs and patch arrays", async () => {
+test("draftExperimentBrowserProgram describes indexed columns and backend-assigned ids", async () => {
   const provider = createBackendModelProvider({
     config: {
       aiProvider: "anthropic",
@@ -357,15 +371,17 @@ test("draftExperimentBrowserProgram describes list-shaped multi-table inputs and
       assert.match(body.system, /inputs\['tables'\].*always lists, never dictionaries/i);
       assert.match(body.system, /tables_by_id = \{item\['tableId'\]/);
       assert.match(body.system, /row-major lists of lists/i);
-      assert.match(body.system, /upsertFields.*upsertSeries.*must be lists/i);
+      assert.match(body.system, /columns, recordPatches, values, upsertSeries/i);
       assert.match(body.system, /do not upsert an existing field merely to preserve it/i);
       assert.match(body.system, /seriesKey.*label.*xField.*yField/i);
-      assert.match(body.system, /never add series IDs/i);
+      assert.match(body.system, /Do not output Browser view state/i);
       assert.match(body.system, /Generated Python cannot call either inspection tool/i);
       assert.match(body.system, /value None.*formattedValue None.*missingReason/i);
-      assert.match(body.system, /targetFields list is authoritative/i);
-      assert.match(body.system, /targetFieldId.*value.*formattedValue.*confidence.*warnings.*sources/i);
-      assert.match(body.system, /never output fieldKey, displayName, role, valueType, unit, or columnId/i);
+      assert.match(body.system, /columnIndex.*zero-based index into the output columns list/i);
+      assert.match(body.system, /backend assigns an internal random columnId/i);
+      assert.match(body.system, /Duplicate display names.*allowed/i);
+      assert.match(body.system, /String categories such as impeller names.*ordinary string/i);
+      assert.doesNotMatch(body.system, /targetFields list is authoritative/i);
       assert.match(body.system, /Do not output zero, a placeholder string, NaN, or Infinity/i);
       assert.match(body.system, /must cite the exact missing workbook cell/i);
       assert.deepEqual(body.tools.map((tool) => tool.name), [
@@ -382,7 +398,7 @@ test("draftExperimentBrowserProgram describes list-shaped multi-table inputs and
                 pythonProgram: {
                   runtime: "labrat-python-v2",
                   entrypoint: "analyze",
-                  source: "def analyze(inputs, labrat):\n    tables = {item['tableId']: item for item in inputs['tables']}\n    return {'recordPatches': [], 'browserView': {'visibleColumnIds': [], 'filters': [], 'sort': []}, 'exclusions': []}",
+                  source: "def analyze(inputs, labrat):\n    tables = {item['tableId']: item for item in inputs['tables']}\n    return {'columns': [], 'recordPatches': [], 'exclusions': []}",
                 },
               }),
             }],
@@ -397,7 +413,6 @@ test("draftExperimentBrowserProgram describes list-shaped multi-table inputs and
     inputManifest: {
       tables: [{ tableId: "table_1" }, { tableId: "table_2" }],
       experiments: [{ experimentId: "experiment_1" }],
-      fieldCatalog: [],
     },
   }, {
     inspectRunInput: async () => ({ tableId: "table_1", values: [[1]] }),

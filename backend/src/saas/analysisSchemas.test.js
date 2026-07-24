@@ -68,7 +68,7 @@ test("rejects plans without exact source selections or readable chart semantics"
   assert.equal(result.ok, false);
   assert.deepEqual(
     result.errors.map((item) => item.code),
-    ["analysis_source_selection_required", "analysis_chart_plan_required"],
+    ["analysis_input_selection_required", "analysis_chart_plan_required"],
   );
 });
 
@@ -128,25 +128,8 @@ test("accepts review-only Experiment Browser plans with workbook or snapshot inp
     experimentSelections: [{
       experimentSelectionId: "experiment_selection_1",
       experimentId: "experiment_31",
-      columnIds: [
-        "field:solid:percent:number",
-        "field:liquid:percent:number",
-        "field:gas:percent:number",
-      ],
+      columnIndexes: [0, 1, 2],
       includeSeries: false,
-    }],
-    fieldTargets: [{
-      targetFieldId: "target_field_1",
-      kind: "derived_field",
-      fieldKey: "normalized_selectivity_solid",
-      displayName: "Normalized selectivity - Solid",
-      role: "outcome",
-      valueType: "number",
-      unit: "percent",
-      description: "Normalized solid selectivity",
-      existingColumnId: null,
-      columnId: "field:normalized_selectivity_solid:percent:number",
-      sourceField: null,
     }],
     reviewPlan: {
       processingSteps: ["Normalize Solid, Liquid, and Gas to 100% for Exp31."],
@@ -163,6 +146,9 @@ test("accepts review-only Experiment Browser plans with workbook or snapshot inp
   };
 
   assert.equal(validateAnalysisPlanRevision(plan).ok, true);
+  plan.fieldTargets = [];
+  assert.equal(validateAnalysisPlanRevision(plan).ok, false);
+  delete plan.fieldTargets;
   plan.reviewPlan.invariants = [{
     type: "trace_y_sum",
     target: 100,

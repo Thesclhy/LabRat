@@ -149,8 +149,8 @@ The frontend renders the backend-validated authoritative Plotly stored in an
 internal ChartSpec. Model output is never rendered before backend validation.
 
 ```text
-active confirmed RegionUnderstandingRevisions
-  -> LLM-selected exact sourceSelections
+active confirmed RegionUnderstandingRevisions and/or active DataSnapshot heads
+  -> LLM-selected exact sourceSelections and/or experimentSelections
   -> user-reviewed red boxes and natural-language plan
   -> materialized multi-table input
   -> post-acceptance generated Python
@@ -162,8 +162,9 @@ active confirmed RegionUnderstandingRevisions
 ```
 
 ChartSpecs require `origin: analysis_result`, exact analysis artifact ids,
-reviewed source selections, complete finite Plotly `data/layout`, a matching
-flat trace catalog, and a reviewed non-empty default-visible subset.
+reviewed workbook or frozen experiment selections, complete finite Plotly
+`data/layout`, a matching flat trace catalog, and a reviewed non-empty
+default-visible subset.
 
 ## AI Boundary
 
