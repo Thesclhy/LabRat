@@ -13,9 +13,9 @@ Upload workbook
   -> deterministic SourceDocument/SourceRegion index
   -> WorkbookReviewSession grouping + WorkbookReviewRegions
   -> accepted RegionUnderstandingRevisions
-  -> reviewed experiment-record DataPlan preview
-  -> explicit transactional publish
-  -> accepted immutable DataSnapshot
+  -> reviewed Experiment Browser AnalysisPlanRevision
+  -> post-acceptance Python record patches
+  -> explicit transactional DataSnapshot v3 publish
   -> ExperimentIdentity/SnapshotHead projection
   -> Experiment Browser
 ```
@@ -40,16 +40,31 @@ natural-language analysis request
 
 Execution creates no ChartSpec. Only explicit result acceptance crosses the atomic ChartSpec publication boundary.
 
+Experiment Browser data uses the same reviewed workflow with
+`outputTarget: experiment_browser`. Planning may combine exact confirmed
+workbook ranges and active snapshot fields. Execution returns source-backed
+record patches; backend merge preview and explicit acceptance create one
+DataSnapshot v3 plus BrowserView without overwriting historical snapshots.
+
+WorkbookReviewSession creation stops after deterministic indexing and durable
+candidate-region creation. It returns pending regions immediately; Workbook
+Review opens the source workspace and performs bounded per-region
+interpretation with a three-request concurrency limit. This is a resumable
+browser-orchestrated queue, not a durable backend worker.
+
 ## Runtime Topology
 
 ```text
-React/Vite frontend :5173
-  -> Node HTTP API :8787
-      -> Postgres when DATABASE_URL is configured
-      -> in-memory store for isolated development/tests
-      -> local uploaded-file storage
-      -> disabled executor by default
-      -> local bounded runner outside production or configured hardened HTTPS worker
+Docker Compose (default local development runtime)
+  -> React/Vite frontend :5173
+      -> Node HTTP API :8787
+          -> Postgres :5432 in-network / :5433 on the host
+          -> persistent uploaded-file volume
+          -> development-only local Python executor
+
+Isolated tests may still use the in-memory store. Production uses persistent
+Postgres/file storage and must replace the local executor with the configured
+hardened HTTPS worker.
 ```
 
 Logged-in server mode treats backend project state as the source of truth. Old IndexedDB/project-file shapes are not migration targets.
@@ -58,7 +73,9 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 
 - **Projects/Overview**: project selection, profile, evidence/workflow summaries, and routing into active review work.
 - **Workbook Review**: progressively loaded Excel grid, active-card blue range, compact independent region summaries, feedback revisions, and per-region confirm/ignore/logical-delete controls.
-- **DataPlan Review**: deterministic experiment records, identity decisions, units, warnings, source navigation, stale-preview recovery, and explicit publish.
+- **Experiment Data Review**: Source/Result review for selected workbook ranges
+  and active experiment fields, natural-language transformations, merged Browser
+  table preview, ambiguous identity decisions, and explicit publication.
 - **Experiment Browser**: accepted-head-only rows, configurable columns, typed filters/sort/search, saved personal views, persistent selection, comparison tray, and lazy detail/source evidence.
 - **Chart Review**: reviewed analysis plan/result flow plus accepted ChartSpec management.
 - **Manuscript**: page/block canvas, analysis-result ChartSpec insertion, placement-local trace controls, editable chart layers, persistence, and PPTX export.
@@ -72,16 +89,19 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 - **Workbook Indexer**: conservative workbook scan and SourceDocument/SourceRegion/cell-index persistence.
 - **Workbook Review Engine**: stable regions, bounded backend-model interpretation, immutable revisions, optimistic state changes, and exact accepted revision pointers.
 - **Evidence Retrieval Agent**: active accepted-region-revision-only usable results plus explicitly non-usable unconfirmed suggestions.
-- **DataPlan Agent/Executor**: deterministic row/region extraction, typed scalars/series, exact source refs, canonical hashes, and identity blockers.
-- **Snapshot Publisher**: idempotent atomic accepted DataPlan/DataSnapshot/identity/head/audit transaction.
+- **Experiment Browser Analysis**: mixed workbook/snapshot input catalogs,
+  source-backed record-patch validation, complete-record merge, change preview,
+  and identity candidates.
+- **Experiment Snapshot Publisher**: stale-head-protected, idempotent atomic
+  AnalysisResult/DataSnapshot v3/identity/head/BrowserView/audit transaction.
 - **Experiment Projection**: unit-aware field catalog, cursor rows, filters/sort/search, and lazy detail.
 - **Analysis Source Selection Service**: catalogs active confirmed regions,
   validates exact subranges, derives red rectangles, performs bounded paged
   reads, and materializes multi-table executor input.
-- **Analysis Thread Service**: immutable review-only plan revisions, feedback
+- **Analysis Thread Service**: target-specific immutable review-only plan revisions, feedback
   revisioning, idempotent queued-run creation, post-acceptance Python
-  generation, run orchestration, complete Plotly preview, and result-linked
-  replanning.
+  generation, run orchestration, complete Plotly or Experiment Browser preview,
+  and result-linked replanning.
 - **Analysis Executor/Validator**: exact materialized run packages, internal
   claim-token leases, versioned static/runner Python policy, non-production
   local adapter, production hardened-worker adapter, and deterministic Plotly
@@ -95,7 +115,8 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 
 - SourceDocument is the evidence layer.
 - WorkbookReviewRegion is the mutable source-range anchor; RegionUnderstandingRevision is immutable semantic interpretation.
-- DataPlan is the reviewed deterministic extraction recipe.
+- DataPlan is historical provenance only; new Browser writes use reviewed
+  AnalysisPlanRevisions.
 - DataSnapshot is immutable accepted structured data.
 - ExperimentIdentity is stable project identity.
 - ExperimentSnapshotHead selects the current accepted record for one experiment.

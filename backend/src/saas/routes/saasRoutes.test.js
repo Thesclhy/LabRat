@@ -193,14 +193,29 @@ async function createProject(name = "Route Test Project") {
 }
 
 async function confirmReviewRegion(sessionId, reviewRegion) {
+  let reviewableRegion = reviewRegion;
+  if (!reviewableRegion.currentRevision?.id) {
+    const interpretation = await jsonFetch(
+      `/api/workbook-review-sessions/${sessionId}/regions/${reviewableRegion.id}/interpret`,
+      {
+        method: "POST",
+        body: {
+          expectedRegionVersion: reviewableRegion.version,
+          idempotencyKey: `interpret_${reviewableRegion.id}_${Date.now()}`,
+        },
+      },
+    );
+    assert.equal(interpretation.status, 201);
+    reviewableRegion = (await interpretation.json()).region;
+  }
   const response = await jsonFetch(
-    `/api/workbook-review-sessions/${sessionId}/regions/${reviewRegion.id}/confirm`,
+    `/api/workbook-review-sessions/${sessionId}/regions/${reviewableRegion.id}/confirm`,
     {
       method: "POST",
       body: {
-        revisionId: reviewRegion.currentRevision.id,
-        expectedRegionVersion: reviewRegion.version,
-        idempotencyKey: `confirm_${reviewRegion.id}_${Date.now()}`,
+        revisionId: reviewableRegion.currentRevision.id,
+        expectedRegionVersion: reviewableRegion.version,
+        idempotencyKey: `confirm_${reviewableRegion.id}_${Date.now()}`,
       },
     },
   );
@@ -223,37 +238,66 @@ async function publishGroupedSelectivityDataForAnalysis(project, suffix) {
   const createdBody = await created.json();
   const reviewRegion = createdBody.reviewRegions.find((region) => region.rangeRef === "A1:N4")
     || createdBody.reviewRegions[0];
-  const confirmed = await confirmReviewRegion(createdBody.workbookReviewSession.id, reviewRegion);
-  const identityDecisions = ["Exp1", "Exp2"].map((sourceAlias) => ({
-    sourceAlias,
-    action: "create",
+  await confirmReviewRegion(createdBody.workbookReviewSession.id, reviewRegion);
+  const snapshotId = `analysis_fixture_snapshot_${suffix}`;
+  const experimentIdentities = ["Exp1", "Exp2"].map((label, index) => ({
+    id: `analysis_fixture_experiment_${suffix}_${index + 1}`,
+    projectId: project.id,
+    labId: project.labId,
+    canonicalLabel: label,
+    aliases: [label],
   }));
-  const drafted = await jsonFetch(`/api/projects/${project.id}/data-plans/draft`, {
-    method: "POST",
-    body: {
-      intent: "experiment_browser_publish",
-      regionUnderstandingRevisionIds: [confirmed.acceptedRevision.id],
-      identityDecisions,
-    },
+  const sourceRef = {
+    sourceType: "excel_range",
+    sourceDocumentId: createdBody.sourceDocument.id,
+    sheet: "Sheet1",
+    range: "A1:N4",
+  };
+  const experimentRecords = experimentIdentities.map((identity, index) => ({
+    experimentId: identity.id,
+    label: identity.canonicalLabel,
+    aliases: [identity.canonicalLabel],
+    fields: [
+      ["solid", "Solid", index === 0 ? 92.8 : 92],
+      ["liquid", "Liquid", index === 0 ? 0.1 : 0.34],
+      ["gas", "Gas", index === 0 ? 0.35 : 0.41],
+    ].map(([fieldKey, displayName, value]) => ({
+      fieldKey,
+      displayName,
+      role: "outcome",
+      valueType: "number",
+      unit: "percent",
+      value,
+      formattedValue: String(value),
+      sourceRefs: [sourceRef],
+    })),
+    series: [],
+    warnings: [],
+    sourceRefs: [sourceRef],
+  }));
+  experimentIdentities.forEach((identity) => store.experimentIdentities.set(identity.id, identity));
+  store.dataSnapshots.set(snapshotId, {
+    id: snapshotId,
+    projectId: project.id,
+    labId: project.labId,
+    schemaVersion: "labrat.dataSnapshot.v3",
+    status: "accepted",
+    experimentRecords,
   });
-  assert.equal(drafted.status, 200);
-  const draftBody = await drafted.json();
-  assert.deepEqual(draftBody.reviewSummary.blockers, []);
-  const published = await jsonFetch(`/api/projects/${project.id}/data-plans/publish`, {
-    method: "POST",
-    body: {
-      dataPlan: draftBody.dataPlan,
-      identityDecisions,
-      expectedPreviewHash: draftBody.snapshotPreview.previewHash,
-      expectedDependencyHash: draftBody.dataPlan.dependencyHash,
-      idempotencyKey: `golden_analysis_data_${suffix}`,
-    },
-  });
-  assert.equal(published.status, 201);
-  return published.json();
+  const experimentSnapshotHeads = experimentRecords.map((record, recordIndex) => ({
+    id: `analysis_fixture_head_${suffix}_${recordIndex + 1}`,
+    projectId: project.id,
+    labId: project.labId,
+    experimentId: record.experimentId,
+    dataSnapshotId: snapshotId,
+    recordIndex,
+  }));
+  experimentSnapshotHeads.forEach((head) => store.experimentSnapshotHeads.set(head.id, head));
+  return { experimentIdentities, experimentSnapshotHeads };
 }
 
 const testModelProvider = {
+  workbookInterpretCalls: [],
   publicConfig() {
     return {
       provider: "anthropic",
@@ -326,7 +370,55 @@ const testModelProvider = {
       },
     };
   },
+  async draftExperimentBrowserPlan(input) {
+    const experiment = input.activeExperiments?.[0];
+    const sourceField = experiment?.fields?.find((field) => field.fieldKey === "solid")
+      || experiment?.fields?.[0];
+    if (!experiment || !sourceField) {
+      return { ok: false, warning: { code: "analysis_evidence_required" } };
+    }
+    return {
+      ok: true,
+      requestSummary: "Add normalized Solid to the selected experiment.",
+      sourceSelections: [],
+      experimentSelections: [{
+        experimentId: experiment.experimentId,
+        columnIds: [sourceField.columnId],
+        includeSeries: false,
+        purpose: "Use the accepted Solid value.",
+      }],
+      reviewPlan: {
+        processingSteps: [
+          "Read Solid from the active experiment snapshot.",
+          "Add Normalized Solid and preserve every existing field.",
+        ],
+        missingValueHandling: "Exclude experiments without Solid.",
+        experimentOutput: { summary: "Add Normalized Solid without replacing other data." },
+        browserView: { summary: "Show the experiment and the new Normalized Solid column." },
+        invariants: [],
+      },
+      displayPlan: [
+        "Use the accepted Solid value for the selected experiment.",
+        "Add Normalized Solid and keep all existing fields.",
+      ],
+      warnings: [],
+    };
+  },
+  async draftExperimentBrowserProgram() {
+    return {
+      ok: true,
+      pythonProgram: {
+        runtime: "labrat-python-v2",
+        entrypoint: "analyze",
+        source: [
+          "def analyze(inputs, labrat):",
+          "    return {'recordPatches': [], 'browserView': {}, 'exclusions': []}",
+        ].join("\n"),
+      },
+    };
+  },
   async interpretWorkbookRegion(input) {
+    this.workbookInterpretCalls.push(input);
     const candidate = input.region?.deterministicCandidate || {};
     return {
       ok: true,
@@ -364,6 +456,42 @@ const testAnalysisExecutor = {
     };
   },
   async executeAcceptedRun(runPackage) {
+    if (runPackage.inputs.experiments?.length) {
+      const experiment = runPackage.inputs.experiments[0];
+      const sourceField = experiment.fields.find((field) => field.fieldKey === "solid")
+        || experiment.fields[0];
+      return {
+        ok: true,
+        adapter: "test_executor",
+        runtime: { version: runPackage.runtimeVersion, exitCode: 0 },
+        result: {
+          recordPatches: [{
+            label: experiment.label,
+            upsertFields: [{
+              fieldKey: "normalized_solid",
+              displayName: "Normalized Solid",
+              role: "outcome",
+              valueType: "number",
+              unit: "percent",
+              value: sourceField.value,
+              formattedValue: String(sourceField.value),
+              confidence: 1,
+              warnings: [],
+              sources: [{
+                experimentId: experiment.experimentId,
+                columnId: sourceField.columnId,
+              }],
+            }],
+            upsertSeries: [],
+            removeFields: [],
+            removeSeries: [],
+            warnings: [],
+          }],
+          browserView: { name: "Normalized Solid" },
+          exclusions: [],
+        },
+      };
+    }
     const traces = runPackage.inputs.tables.map((table, index) => {
       const rows = table.values || [];
       const displayRows = table.displayValues || [];
@@ -505,6 +633,7 @@ test("workbook review region APIs independently revise confirm ignore and delete
   const project = await createProject("Region Review API Project");
   const upload = await uploadProjectFile(project.id, makeWorkbookBlob(), "regions.xlsx");
   assert.equal(upload.response.status, 201);
+  const interpretationCallCountBeforeCreate = testModelProvider.workbookInterpretCalls.length;
   const sessionResponse = await jsonFetch(`/api/projects/${project.id}/workbook-review-sessions`, {
     method: "POST",
     body: { fileObjectId: upload.body.fileObject.id },
@@ -513,7 +642,11 @@ test("workbook review region APIs independently revise confirm ignore and delete
   const sessionBody = await sessionResponse.json();
   const sessionId = sessionBody.workbookReviewSession.id;
   assert.ok(sessionBody.reviewRegions.length >= 1);
-  assert.ok(sessionBody.reviewRegions.every((region) => region.currentRevision?.summary.length >= 2));
+  assert.equal(sessionBody.interpretationDeferred, true);
+  assert.equal(testModelProvider.workbookInterpretCalls.length, interpretationCallCountBeforeCreate);
+  assert.ok(sessionBody.reviewRegions.every((region) => (
+    region.reviewStatus === "interpreting" && region.currentRevision === null
+  )));
 
   const createdResponse = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/regions`, {
     method: "POST",
@@ -669,7 +802,9 @@ test("workbook review sessions summarize detected source regions and reuse index
   assert.match(createBody.workbookReviewSession.id, /^workbook_review_session_/);
   assert.equal(createBody.workbookReviewSession.sourceDocumentId, createBody.sourceDocument.id);
   assert.equal(createBody.importRun.status, "source_review_ready");
+  assert.equal(createBody.interpretationDeferred, true);
   assert.equal(createBody.regions.length > 0, true);
+  assert.ok(createBody.reviewRegions.every((region) => region.reviewStatus === "interpreting"));
   assert.equal(createBody.workbookReviewSession.messages.some((message) => message.role === "assistant"), true);
 
   const list = await jsonFetch(`/api/projects/${project.id}/workbook-review-sessions`);
@@ -691,6 +826,88 @@ test("workbook review sessions summarize detected source regions and reuse index
   const reusedBody = await reused.json();
   assert.equal(reusedBody.importRun, null);
   assert.equal(reusedBody.sourceDocument.id, createBody.sourceDocument.id);
+});
+
+test("deleting a workbook review session hides it and retires its active regions", async () => {
+  const project = await createProject("Delete Workbook Review Project");
+  const upload = await uploadProjectFile(project.id, makeWorkbookBlob(), "delete-review.xlsx");
+  const create = await jsonFetch(`/api/projects/${project.id}/workbook-review-sessions`, {
+    method: "POST",
+    body: { fileObjectId: upload.body.fileObject.id },
+  });
+  assert.equal(create.status, 201);
+  const createBody = await create.json();
+  const session = createBody.workbookReviewSession;
+  const reviewRegion = createBody.reviewRegions[0];
+  await confirmReviewRegion(session.id, reviewRegion);
+  const ignoredRegionResponse = await jsonFetch(
+    `/api/workbook-review-sessions/${session.id}/regions`,
+    {
+      method: "POST",
+      body: {
+        sourceDocumentId: createBody.sourceDocument.id,
+        sheetName: "Runs",
+        range: "A1:B2",
+        selectionMethod: "manual",
+        idempotencyKey: `ignored_before_session_delete_${Date.now()}`,
+      },
+    },
+  );
+  assert.equal(ignoredRegionResponse.status, 201);
+  const ignoredRegion = (await ignoredRegionResponse.json()).region;
+  const ignoreResponse = await jsonFetch(
+    `/api/workbook-review-sessions/${session.id}/regions/${ignoredRegion.id}/ignore`,
+    {
+      method: "POST",
+      body: {
+        expectedRegionVersion: ignoredRegion.version,
+        reason: "Keep ignored history unchanged.",
+      },
+    },
+  );
+  assert.equal(ignoreResponse.status, 200);
+
+  const staleDelete = await jsonFetch(`/api/workbook-review-sessions/${session.id}`, {
+    method: "DELETE",
+    body: {
+      expectedVersion: session.version + 1,
+      reason: "Stale delete attempt.",
+    },
+  });
+  assert.equal(staleDelete.status, 409);
+  assert.equal((await staleDelete.json()).error.code, "workbook_review_session_version_conflict");
+
+  const deleted = await jsonFetch(`/api/workbook-review-sessions/${session.id}`, {
+    method: "DELETE",
+    body: {
+      expectedVersion: session.version,
+      reason: "Remove this workbook from review.",
+    },
+  });
+  assert.equal(deleted.status, 200);
+  const deletedBody = await deleted.json();
+  assert.equal(deletedBody.workbookReviewSession.status, "deleted");
+  assert.ok(deletedBody.deletedRegionCount >= 1);
+  assert.equal((await store.findWorkbookReviewRegionById(ignoredRegion.id)).disposition, "ignored");
+
+  const list = await (await jsonFetch(`/api/projects/${project.id}/workbook-review-sessions`)).json();
+  assert.equal(list.workbookReviewSessions.some((item) => item.id === session.id), false);
+
+  const state = await (await jsonFetch(`/api/projects/${project.id}/state`)).json();
+  assert.equal(state.workbookReviewSessions.some((item) => item.id === session.id), false);
+  assert.equal(
+    state.workbookReviewRegions.some((region) => region.workbookReviewSessionId === session.id),
+    false,
+  );
+  assert.equal(
+    state.regionUnderstandings.some((understanding) => understanding.workbookReviewSessionId === session.id),
+    false,
+  );
+  assert.equal(state.sourceDocuments.some((document) => document.id === createBody.sourceDocument.id), true);
+  assert.equal(state.fileObjects.some((file) => file.id === upload.body.fileObject.id), true);
+
+  const deletedSession = await jsonFetch(`/api/workbook-review-sessions/${session.id}`);
+  assert.equal(deletedSession.status, 404);
 });
 
 test("aggregate workbook understanding routes stay retired", async () => {
@@ -774,7 +991,7 @@ test("project evidence retrieve returns accepted region revisions only as usable
   assert.equal(nonexistentBody.results.some((result) => result.sheetName === "Runs"), false);
 });
 
-test("project data plan draft reloads accepted region revisions and returns a transient experiment-record preview", async () => {
+test.skip("retired DataPlan draft and publish workflow", async () => {
   const project = await createProject("Tool DataPlan Agent Project");
   const upload = await uploadProjectFile(project.id, makeReactionRateWorkbookBlob(), "Reaction_Rate_Exp33.xlsx");
   const create = await jsonFetch(`/api/projects/${project.id}/workbook-review-sessions`, {
@@ -1004,7 +1221,7 @@ test("project data plan draft reloads accepted region revisions and returns a tr
   assert.equal(wrongIntentBody.clarification.code, "invalid_data_plan_intent");
 });
 
-test("golden workbook publishes three reviewed experiments to Browser without legacy artifacts", async () => {
+test.skip("retired golden workbook DataPlan publication workflow", async () => {
   const project = await createProject("Golden Workbook Browser Project");
   const upload = await uploadProjectFile(
     project.id,
@@ -1070,7 +1287,7 @@ test("golden workbook publishes three reviewed experiments to Browser without le
   assert.equal(JSON.stringify(projection.rows).includes('"points"'), false);
 });
 
-test("grouped selectivity headers publish Solid, Liquid, and Gas fields to Browser", async () => {
+test.skip("retired grouped-header DataPlan publication workflow", async () => {
   const project = await createProject("Grouped Selectivity Browser Project");
   const upload = await uploadProjectFile(
     project.id,
@@ -1099,7 +1316,19 @@ test("grouped selectivity headers publish Solid, Liquid, and Gas fields to Brows
 
   const reviewRegion = createBody.reviewRegions.find((region) => region.rangeRef === "A1:N4")
     || createBody.reviewRegions[0];
-  const interpretation = reviewRegion.currentRevision.interpretation;
+  const interpretResponse = await jsonFetch(
+    `/api/workbook-review-sessions/${sessionId}/regions/${reviewRegion.id}/interpret`,
+    {
+      method: "POST",
+      body: {
+        expectedRegionVersion: reviewRegion.version,
+        idempotencyKey: `interpret_grouped_selectivity_${Date.now()}`,
+      },
+    },
+  );
+  assert.equal(interpretResponse.status, 201);
+  const interpretedRegion = (await interpretResponse.json()).region;
+  const interpretation = interpretedRegion.currentRevision.interpretation;
   assert.deepEqual(
     interpretation.fields
       .filter((field) => field.semanticKey.startsWith("selectivity_"))
@@ -1117,7 +1346,7 @@ test("grouped selectivity headers publish Solid, Liquid, and Gas fields to Brows
     }))),
   );
 
-  const accepted = await confirmReviewRegion(sessionId, reviewRegion);
+  const accepted = await confirmReviewRegion(sessionId, interpretedRegion);
   const identityDecisions = ["Exp1", "Exp2"].map((sourceAlias) => ({ sourceAlias, action: "create" }));
   const draft = await jsonFetch(`/api/projects/${project.id}/data-plans/draft`, {
     method: "POST",
@@ -1338,6 +1567,8 @@ test("legacy dataset, source-extract, chart-proposal, and planner routes are ret
     { path: `/api/projects/${project.id}/chart-proposal-sets`, method: "GET" },
     { path: `/api/projects/${project.id}/chart-specs/from-proposal`, method: "POST", body: {} },
     { path: `/api/projects/${project.id}/agent/plan`, method: "POST", body: { message: "plot gas selectivity" } },
+    { path: `/api/projects/${project.id}/data-plans/draft`, method: "POST", body: {} },
+    { path: `/api/projects/${project.id}/data-plans/publish`, method: "POST", body: {} },
   ]) {
     const response = await jsonFetch(request.path, { method: request.method, body: request.body });
     assert.equal(response.status, 404, `${request.method} ${request.path}`);
@@ -1395,12 +1626,11 @@ async function uploadAndConfirmAnalysisWorkbook(project, blob, filename) {
   assert.equal(sessionResponse.status, 201);
   const session = await sessionResponse.json();
   const reviewRegion = session.reviewRegions[0];
-  assert.ok(reviewRegion?.currentRevision?.id);
   const confirmed = await confirmReviewRegion(session.workbookReviewSession.id, reviewRegion);
   return {
     sourceDocument: session.sourceDocument,
     reviewRegion: confirmed.region,
-    regionRevision: reviewRegion.currentRevision,
+    regionRevision: confirmed.acceptedRevision,
   };
 }
 
@@ -1479,6 +1709,89 @@ test("confirmed workbook chart request completes Source to Plotly to ChartSpec w
     published.chartSpec.spec.defaultChartView.visibleTraceIds,
     preview.plotly.data.map((trace) => trace.traceId),
   );
+});
+
+test("natural-language Experiment Browser request publishes a patch-based v3 snapshot", async () => {
+  const project = await createProject("Experiment Browser Analysis Project");
+  const seeded = await publishGroupedSelectivityDataForAnalysis(project, `browser_${Date.now()}`);
+  const baseHead = seeded.experimentSnapshotHeads[0];
+
+  const plannedResponse = await jsonFetch(`/api/projects/${project.id}/agent/runs`, {
+    method: "POST",
+    body: {
+      message: "Add normalized Solid to Experiment Browser and preserve the current fields.",
+      selectedContext: {
+        tab: "experiment_browser",
+        analysisOutputTarget: "experiment_browser",
+      },
+    },
+  });
+  assert.equal(plannedResponse.status, 201);
+  const planned = await plannedResponse.json();
+  assert.equal(planned.analysisThread.outputTarget, "experiment_browser");
+  assert.equal(planned.currentPlanRevision.outputTarget, "experiment_browser");
+  assert.equal(planned.currentPlanRevision.experimentSelections.length, 1);
+  assert.equal(Object.hasOwn(planned.currentPlanRevision, "pythonProgram"), false);
+
+  const acceptResponse = await jsonFetch(
+    `/api/analysis-plan-revisions/${planned.currentPlanRevision.id}/accept`,
+    {
+      method: "POST",
+      headers: { "idempotency-key": `accept_browser_${Date.now()}` },
+      body: {},
+    },
+  );
+  assert.equal(acceptResponse.status, 201);
+  const accepted = await acceptResponse.json();
+  const executeResponse = await jsonFetch(`/api/analysis-runs/${accepted.analysisRun.id}/execute`, {
+    method: "POST",
+    body: {},
+  });
+  assert.equal(executeResponse.status, 201);
+  const executed = await executeResponse.json();
+  assert.equal(executed.analysisRun.status, "awaiting_result_review");
+  assert.equal(executed.analysisResult.outputTarget, "experiment_browser");
+
+  const previewResponse = await jsonFetch(
+    `/api/analysis-runs/${accepted.analysisRun.id}/result-preview?offset=0&limit=100`,
+  );
+  assert.equal(previewResponse.status, 200);
+  const preview = await previewResponse.json();
+  assert.equal(preview.outputTarget, "experiment_browser");
+  assert.equal(preview.rows.length, 1);
+  assert.equal(preview.changeSummary.newFieldCount, 1);
+  assert.equal(preview.changeSummary.preservedFieldCount, 3);
+  assert.equal(preview.identityCandidates[0].status, "reuse");
+
+  const publishResponse = await jsonFetch(
+    `/api/analysis-runs/${accepted.analysisRun.id}/accept-and-publish-experiments`,
+    {
+      method: "POST",
+      headers: { "idempotency-key": `publish_browser_${Date.now()}` },
+      body: {
+        analysisResultId: executed.analysisResult.id,
+        identityResolutions: [],
+      },
+    },
+  );
+  assert.equal(publishResponse.status, 201);
+  const published = await publishResponse.json();
+  assert.equal(published.dataSnapshot.schemaVersion, "labrat.dataSnapshot.v3");
+  assert.equal(published.dataSnapshot.dataPlanId, null);
+  assert.equal(published.dataSnapshot.analysisResultId, executed.analysisResult.id);
+  assert.equal(published.dataSnapshot.experimentRecords[0].fields.length, 4);
+  assert.equal(
+    published.dataSnapshot.experimentRecords[0].fields.some((field) => (
+      field.fieldKey === "normalized_solid"
+    )),
+    true,
+  );
+  assert.equal(published.experimentSnapshotHeads[0].id, baseHead.id);
+  assert.equal(
+    published.experimentSnapshotHeads[0].dataSnapshotId,
+    published.dataSnapshot.id,
+  );
+  assert.equal(published.browserView.isDefault, false);
 });
 
 test("two confirmed workbook selections materialize as two Python input tables and curves", async () => {

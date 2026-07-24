@@ -96,8 +96,10 @@ function autoFitColumnWidth(column, rows) {
 export function ExperimentBrowser({
   projectId,
   initialSelectedExperimentIds = EMPTY_SELECTION,
+  initialViewId = "",
   onSelectionChange,
   onOpenImportReview,
+  onRequestDataChange,
   onOpenSourceRange,
   loadProjection = listExperimentBrowserRows,
   loadDetail = getExperimentBrowserDetail,
@@ -180,15 +182,16 @@ export function ExperimentBrowser({
         if (!active) return;
         const views = asArray(response?.browserViews ?? response);
         setBrowserViews(views);
+        const requestedView = views.find((view) => view.id === initialViewId);
         const defaultView = views.find((view) => view.isDefault);
-        if (defaultView) applyView(defaultView);
+        if (requestedView || defaultView) applyView(requestedView || defaultView);
       })
       .catch((requestError) => {
         if (active) setViewError(errorMessage(requestError, "Saved views could not be loaded."));
       })
       .finally(() => { if (active) setViewLoading(false); });
     return () => { active = false; };
-  }, [applyView, listViews, projectId]);
+  }, [applyView, initialViewId, listViews, projectId]);
 
   const fetchPage = useCallback(async (cursor, append, signal) => {
     append ? setLoadingMore(true) : setLoading(true);
@@ -612,6 +615,11 @@ export function ExperimentBrowser({
             <p>{rows.length} loaded of {totalCount} accepted experiment records. Click a row for source-backed detail.</p>
           </div>
           <div className="experiment-browser-toolbar-actions">
+            {onRequestDataChange ? (
+              <button type="button" className="primary-action" onClick={onRequestDataChange}>
+                Add or update data
+              </button>
+            ) : null}
             {onOpenImportReview ? <button type="button" className="primary-action" onClick={onOpenImportReview}>Import workbook</button> : null}
             <button ref={columnsTriggerRef} type="button" aria-expanded={columnsOpen} onClick={() => setColumnsOpen(true)}>Choose columns</button>
           </div>

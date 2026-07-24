@@ -7,6 +7,7 @@ export const ANALYSIS_INTENTS = new Set([
   "open_or_filter_browser",
   "upload_workbook",
   "create_analysis_chart",
+  "publish_experiment_data",
   "manuscript_action",
   "clarification",
 ]);
@@ -57,7 +58,7 @@ function result({
   };
 }
 
-export function deterministicAnalysisIntent({ message = "" } = {}) {
+export function deterministicAnalysisIntent({ message = "", selectedContext = {} } = {}) {
   const raw = text(message);
   const value = normalized(raw);
   if (!value) {
@@ -69,13 +70,51 @@ export function deterministicAnalysisIntent({ message = "" } = {}) {
     });
   }
 
+  const browserDataDestination = /\b(?:to|into)\s+(?:the\s+)?(?:experiment\s+)?browser\b/.test(value);
   const upload = /\b(upload|attach|import|add)\b/.test(value)
-    && /\b(workbook|excel|xlsx|xls|spreadsheet|file)\b/.test(value);
+    && /\b(workbook|excel|xlsx|xls|spreadsheet|file)\b/.test(value)
+    && !browserDataDestination;
   if (upload || /上传.*(?:工作簿|表格|excel|文件)/i.test(raw)) {
     return result({
       intent: "upload_workbook",
       disposition: "action",
       actionType: "upload_workbook_for_review",
+    });
+  }
+
+  const activeSurface = text(selectedContext?.activeSurface || selectedContext?.tab).toLowerCase();
+  const browserSurface = activeSurface === "browser" || activeSurface === "experiment_browser";
+  const chartRequest = /\b(plot|chart|figure|graph|visuali[sz]e|draw)\b/.test(value)
+    || /(?:画图|图表|绘图|可视化)/.test(raw);
+  const dataChangeVerb = /\b(add|append|publish|include|update|replace|merge|derive|calculate|compute|normalize|populate)\b/.test(value)
+    || /(?:增加|添加|追加|发布|导入|更新|替换|合并|计算|归一化|生成)/.test(raw);
+  const substantiveDataChange = /\b(add|append|publish|include|replace|merge|derive|calculate|compute|normalize|populate)\b/.test(value)
+    || /(?:增加|添加|追加|发布|导入|替换|合并|计算|归一化|生成)/.test(raw);
+  const dataObject = /\b(data|field|fields|column|columns|results?|series|record|records|scalar|scalars|measurements?|values?)\b/.test(value)
+    || /(?:数据|字段|列|结果|序列|记录|数值|指标)/.test(raw);
+  const experimentObject = /\bexp(?:eriment)?\s*0*\d+\b/.test(value)
+    || /\bexperiments?\b/.test(value)
+    || /实验\s*\d*/.test(raw);
+  const browserMention = /\b(?:experiment\s+)?browser(?:\s+view)?\b/.test(value);
+  const displayOnly = /\b(hide|show|display|filter|sort|order|reorder)\b/.test(value)
+    || /(?:隐藏|显示|筛选|过滤|排序|重排)/.test(raw);
+  const pureDisplayRequest = displayOnly && !substantiveDataChange;
+  const explicitBrowserPublication = dataChangeVerb
+    && browserMention
+    && (dataObject || experimentObject)
+    && !pureDisplayRequest;
+  const contextualBrowserPublication = browserSurface
+    && dataChangeVerb
+    && (dataObject || experimentObject)
+    && !pureDisplayRequest
+    && !chartRequest;
+  const publishExperimentData = selectedContext?.analysisOutputTarget === "experiment_browser"
+    || explicitBrowserPublication
+    || contextualBrowserPublication;
+  if (publishExperimentData) {
+    return result({
+      intent: "publish_experiment_data",
+      disposition: "analysis_thread",
     });
   }
 
@@ -122,9 +161,7 @@ export function deterministicAnalysisIntent({ message = "" } = {}) {
     });
   }
 
-  const chart = /\b(plot|chart|figure|graph|visuali[sz]e|draw)\b/.test(value)
-    || /(?:画图|图表|绘图|可视化)/.test(raw);
-  if (chart) {
+  if (chartRequest) {
     return result({
       intent: "create_analysis_chart",
       disposition: "analysis_thread",
@@ -173,9 +210,18 @@ export function deterministicAnalysisIntent({ message = "" } = {}) {
 }
 
 function boundedIntentInput(input = {}) {
+  const selectedContext = input.selectedContext || {};
   return {
     message: text(input.message),
-    selectedContextKeys: Object.keys(input.selectedContext || {}).sort(),
+    selectedContextKeys: Object.keys(selectedContext).sort(),
+    selectedContext: {
+      tab: text(selectedContext.tab).slice(0, 64),
+      activeSurface: text(selectedContext.activeSurface).slice(0, 64),
+      analysisOutputTarget: text(selectedContext.analysisOutputTarget).slice(0, 64),
+      requestedWorkflow: text(selectedContext.requestedWorkflow).slice(0, 64),
+      hasSelectedExperiment: Boolean(selectedContext.selectedExperimentLabel),
+      hasSelectedChart: Boolean(selectedContext.selectedChartTitle || selectedContext.selectedChartBlockId),
+    },
     projectContext: {
       publishedExperimentCount: Number(input.projectContext?.publishedExperimentCount) || 0,
       sourceDocumentCount: Number(input.projectContext?.sourceDocumentCount) || 0,

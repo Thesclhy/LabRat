@@ -11,6 +11,7 @@ import {
   getProjectAnalysisCapabilities,
   listAnalysisThreads,
   publishAcceptedAnalysisChart,
+  publishAcceptedExperimentData,
   retryAnalysisThread,
   reviseAnalysisRun,
 } from "./analysisApi.js";
@@ -116,7 +117,7 @@ describe("analysisApi", () => {
     expect(fetchImpl.mock.calls[1][0]).toBe("/api/analysis-runs/analysis%2Frun%201/execute");
     expect(fetchImpl.mock.calls[1][1].method).toBe("POST");
     expect(fetchImpl.mock.calls[2][0]).toBe(
-      "/api/analysis-runs/analysis%2Frun%201/result-preview",
+      "/api/analysis-runs/analysis%2Frun%201/result-preview?offset=25&limit=100",
     );
   });
 
@@ -161,6 +162,40 @@ describe("analysisApi", () => {
     expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
       analysisResultId: "analysis_result_1",
       defaultVisibleTraceIds: ["trace_1", "trace_2"],
+    });
+  });
+
+  it("publishes reviewed Experiment Browser data without sending records or field mappings", async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse({
+      analysisResult: { id: "analysis_result_2", status: "accepted" },
+      dataSnapshot: { id: "data_snapshot_2" },
+      browserView: { id: "browser_view_2" },
+    }, { status: 201 }));
+
+    await publishAcceptedExperimentData("analysis/run 2", {
+      analysisResultId: "analysis_result_2",
+      identityResolutions: [{
+        candidateId: "candidate_1",
+        action: "reuse",
+        experimentId: "experiment_31",
+      }],
+    }, {
+      fetch: fetchImpl,
+      idempotencyKey: "publish_experiment_result_2",
+    });
+
+    expect(fetchImpl.mock.calls[0][0]).toBe(
+      "/api/analysis-runs/analysis%2Frun%202/accept-and-publish-experiments",
+    );
+    expect(fetchImpl.mock.calls[0][1].headers["idempotency-key"])
+      .toBe("publish_experiment_result_2");
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
+      analysisResultId: "analysis_result_2",
+      identityResolutions: [{
+        candidateId: "candidate_1",
+        action: "reuse",
+        experimentId: "experiment_31",
+      }],
     });
   });
 });

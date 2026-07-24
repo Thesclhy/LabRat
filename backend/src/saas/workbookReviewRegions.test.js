@@ -294,11 +294,21 @@ test("deferred region creation persists an interpreting record before invoking t
     store,
     ...fixture,
     actorUserId: "user_1",
-    input: { sheetName: "Runs", range: "A1:C3", selectionMethod: "drag_select" },
+    input: {
+      sheetName: "Runs",
+      range: "A1:C3",
+      selectionMethod: "drag_select",
+      semanticType: "experiment_table",
+      description: "Rows are experiments.",
+    },
   });
 
   assert.equal(region.reviewStatus, "interpreting");
   assert.equal(region.currentRevisionId, null);
+  assert.deepEqual(region.interpretationHint, {
+    semanticType: "experiment_table",
+    description: "Rows are experiments.",
+  });
   assert.equal(provider.calls.length, 0);
 
   const interpreted = await interpretWorkbookReviewRegion({
@@ -312,6 +322,7 @@ test("deferred region creation persists an interpreting record before invoking t
   });
 
   assert.equal(provider.calls.length, 1);
+  assert.equal(provider.calls[0].userFeedback, "Rows are experiments.");
   assert.equal(interpreted.region.reviewStatus, "awaiting_review");
   assert.equal(interpreted.region.currentRevisionId, interpreted.revision.id);
 });

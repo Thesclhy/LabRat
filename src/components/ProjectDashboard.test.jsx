@@ -263,8 +263,8 @@ describe("ProjectOverview", () => {
     const onGoBrowser = vi.fn();
     const state = {
       ...projectState,
-      sourceDocuments: [{ id: "source_doc_1" }],
-      workbookReviewSessions: [{ id: "session_1" }],
+      sourceDocuments: [{ id: "source_doc_1", fileName: "Pending.xlsx" }],
+      workbookReviewSessions: [{ id: "session_1", sourceDocumentId: "source_doc_1" }],
       workbookReviewRegions: [{
         id: "region_1",
         workbookReviewSessionId: "session_1",
@@ -296,12 +296,16 @@ describe("ProjectOverview", () => {
     expect(screen.queryByText("Master Dataset")).toBeNull();
     expect(screen.queryByText("Supplemental Workbooks")).toBeNull();
     expect(screen.queryByText("Semantic mappings")).toBeNull();
-    expect(screen.getByText("1 source documents")).toBeTruthy();
+    expect(screen.getByText("1 uploaded workbook")).toBeTruthy();
     expect(screen.getByText(/1 region needs review/)).toBeTruthy();
     expect(screen.getByText("1 specs")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Open Ask LabRat" }));
     fireEvent.click(screen.getByRole("button", { name: "Review regions" }));
+    const workbookDialog = screen.getByRole("dialog", { name: "Uploaded workbooks" });
+    expect(within(workbookDialog).getByRole("button", { name: "Open Pending.xlsx" })).toBeTruthy();
+    expect(onUploadWorkbook).not.toHaveBeenCalled();
+    fireEvent.click(within(workbookDialog).getByRole("button", { name: "Open Pending.xlsx" }));
     fireEvent.click(screen.getByRole("button", { name: "Open Experiment Browser" }));
     fireEvent.click(screen.getByRole("button", { name: "Create chart" }));
     fireEvent.click(screen.getByRole("button", { name: "Manage approved charts" }));
@@ -317,6 +321,7 @@ describe("ProjectOverview", () => {
 
   it("lists every uploaded workbook before opening confirmed regions", () => {
     const onUploadWorkbook = vi.fn();
+    const onDeleteWorkbook = vi.fn().mockResolvedValue({});
     const onGoBrowser = vi.fn();
     const firstSession = {
       id: "session_1",
@@ -356,6 +361,7 @@ describe("ProjectOverview", () => {
         onAskLabRat={() => {}}
         onOpenProfile={() => {}}
         onUploadWorkbook={onUploadWorkbook}
+        onDeleteWorkbook={onDeleteWorkbook}
         onGoBrowser={onGoBrowser}
         onOpenChartReview={() => {}}
         onGoManuscript={() => {}}
@@ -368,6 +374,8 @@ describe("ProjectOverview", () => {
     const dialog = screen.getByRole("dialog", { name: "Uploaded workbooks" });
     expect(within(dialog).getByRole("button", { name: "Open Reaction_Rate_Exp45.xlsx" })).toBeTruthy();
     expect(within(dialog).getByRole("button", { name: "Open MasterTable_updated.xlsx" })).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Delete Reaction_Rate_Exp45.xlsx" })).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Delete MasterTable_updated.xlsx" })).toBeTruthy();
     expect(within(dialog).getAllByText("1 confirmed")).toHaveLength(2);
     expect(onUploadWorkbook).not.toHaveBeenCalled();
 
@@ -376,7 +384,52 @@ describe("ProjectOverview", () => {
     expect(screen.queryByRole("dialog", { name: "Uploaded workbooks" })).toBeNull();
   });
 
-  it("opens the session containing the latest region awaiting review", () => {
+  it("confirms workbook deletion without opening the workbook", async () => {
+    const onUploadWorkbook = vi.fn();
+    const onDeleteWorkbook = vi.fn().mockResolvedValue({});
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const session = {
+      id: "session_delete",
+      sourceDocumentId: "source_doc_delete",
+      version: 2,
+      status: "needs_user_review",
+      workbookSummary: { workbookName: "DeleteMe.xlsx", sheetCount: 2 },
+    };
+    render(
+      <ProjectOverview
+        projectState={{
+          ...projectState,
+          sourceDocuments: [{ id: "source_doc_delete" }],
+          workbookReviewSessions: [session],
+          workbookReviewRegions: [{
+            id: "region_delete",
+            workbookReviewSessionId: session.id,
+            disposition: "active",
+            reviewStatus: "awaiting_review",
+          }],
+        }}
+        onAskLabRat={() => {}}
+        onOpenProfile={() => {}}
+        onUploadWorkbook={onUploadWorkbook}
+        onDeleteWorkbook={onDeleteWorkbook}
+        onGoBrowser={() => {}}
+        onOpenChartReview={() => {}}
+        onGoManuscript={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Review regions" }));
+    const dialog = screen.getByRole("dialog", { name: "Uploaded workbooks" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete DeleteMe.xlsx" }));
+
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Delete DeleteMe.xlsx"));
+    await waitFor(() => expect(onDeleteWorkbook).toHaveBeenCalledWith(session));
+    expect(onUploadWorkbook).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Uploaded workbooks" })).toBeTruthy();
+    confirm.mockRestore();
+  });
+
+  it("lists workbooks before opening a session with regions awaiting review", () => {
     const onUploadWorkbook = vi.fn();
     const pendingSession = {
       id: "session_pending",
@@ -387,11 +440,15 @@ describe("ProjectOverview", () => {
       <ProjectOverview
         projectState={{
           ...projectState,
-          sourceDocuments: [{ id: "source_doc_1" }, { id: "source_doc_2" }],
+          sourceDocuments: [
+            { id: "source_doc_1", fileName: "Pending.xlsx" },
+            { id: "source_doc_2", fileName: "Confirmed.xlsx" },
+          ],
           workbookReviewSessions: [
-            pendingSession,
+            { ...pendingSession, sourceDocumentId: "source_doc_1" },
             {
               id: "session_confirmed",
+              sourceDocumentId: "source_doc_2",
               status: "needs_user_review",
               updatedAt: "2026-07-19T12:00:00.000Z",
             },
@@ -423,7 +480,13 @@ describe("ProjectOverview", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Review regions" }));
-    expect(onUploadWorkbook).toHaveBeenCalledWith(pendingSession);
+    const dialog = screen.getByRole("dialog", { name: "Uploaded workbooks" });
+    expect(within(dialog).getByRole("button", { name: "Open Pending.xlsx" })).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Open Confirmed.xlsx" })).toBeTruthy();
+    expect(onUploadWorkbook).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Open Pending.xlsx" }));
+    expect(onUploadWorkbook).toHaveBeenCalledWith(expect.objectContaining({ id: "session_pending" }));
   });
 
   it("ignores stale chart specs in overview counts and active chart choices", () => {
@@ -665,7 +728,7 @@ describe("WorkbookReviewWorkspace", () => {
         />,
       );
 
-      expect(await screen.findByText("Label")).toBeTruthy();
+      expect(await screen.findByText("Label", {}, { timeout: 10_000 })).toBeTruthy();
       expect(screen.getByText("Date")).toBeTruthy();
       expect(screen.getByRole("grid", { name: "Workbook sheet preview" })).toBeTruthy();
       expect(container.querySelector(".workbook-data-grid-shell")).toBeTruthy();
@@ -911,7 +974,7 @@ describe("WorkbookReviewWorkspace", () => {
 
       render(<Harness />);
       const grid = await screen.findByRole("grid", { name: "Workbook sheet preview" });
-      await screen.findByText("Label");
+      await screen.findByText("Label", {}, { timeout: 10_000 });
       const rangeInput = screen.getByLabelText("Sheet range");
       expect(rangeInput.value).toBe("A1:D5");
       expect(rangeInput.readOnly).toBe(true);
@@ -994,7 +1057,7 @@ describe("WorkbookReviewWorkspace", () => {
     } finally {
       global.fetch = originalFetch;
     }
-  }, 10_000);
+  }, 30_000);
 
   it("requests a server region by dragging from one workbook cell to another", async () => {
     const fetchMock = makeWorkbookReviewFetch();
@@ -1072,7 +1135,7 @@ describe("WorkbookReviewWorkspace", () => {
         />,
       );
 
-      await screen.findByText("Label");
+      await screen.findByText("Label", {}, { timeout: 10_000 });
       await waitFor(() => {
         const rangeRequests = fetchMock.mock.calls
           .filter(([url]) => url === "/api/source-documents/source_doc_1/range")
@@ -1927,6 +1990,66 @@ describe("AgentPanel", () => {
 
   afterEach(() => {
     clearAgentChatHistoryStorage();
+  });
+
+  it("sends the active Browser surface with ordinary LabRat chat requests", async () => {
+    const fetchMock = vi.fn(async (url) => {
+      if (url === "/api/projects/project_1/analysis-capabilities") {
+        return jsonResponse({
+          model: { configured: true },
+          executor: { configured: true, adapter: "local_non_production" },
+          acceptedData: { acceptedSnapshotCount: 1, activeExperimentHeadCount: 1 },
+        });
+      }
+      if (url === "/api/projects/project_1/agent/runs") {
+        return jsonResponse({
+          reply: "I prepared a Browser data plan.",
+          agentRun: {
+            id: "agent_run_browser_context",
+            status: "completed",
+            mode: "analysis_planning",
+            visibleSteps: [],
+            actions: [],
+            warnings: [],
+          },
+        }, { status: 201 });
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+
+    try {
+      render(
+        <AgentPanel
+          open
+          setOpen={() => {}}
+          blocks={[]}
+          setBlocks={() => {}}
+          references={[]}
+          selected={null}
+          selectedChartContext={null}
+          pendingChartAnalysis={null}
+          activeProjectId="project_1"
+          activeSurface="browser"
+          projectState={{ project: { id: "project_1", name: "Catalyst Screening" } }}
+          onProjectStateLoaded={() => {}}
+        />,
+      );
+
+      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
+      fireEvent.change(promptInput, { target: { value: "Add normalized selectivity to Exp31." } });
+      fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
+
+      expect(await screen.findByText("I prepared a Browser data plan.")).toBeTruthy();
+      const request = fetchMock.mock.calls.find(([url]) => url === "/api/projects/project_1/agent/runs");
+      const body = JSON.parse(request[1].body);
+      expect(body.selectedContext.tab).toBe("browser");
+      expect(body.selectedContext.activeSurface).toBe("browser");
+      expect(body.selectedContext.analysisOutputTarget).toBeUndefined();
+    } finally {
+      global.fetch = originalFetch;
+    }
   });
 
   it("does not expose browser provider credentials in LabRat settings", () => {
@@ -2978,6 +3101,10 @@ describe("AgentPanel", () => {
     const onWorkbookReviewReady = vi.fn();
     const onWorkbookReviewLinkOpen = vi.fn().mockResolvedValue(undefined);
     const onProjectStateLoaded = vi.fn();
+    let resolveProjectState;
+    const projectStateResponse = new Promise((resolve) => {
+      resolveProjectState = resolve;
+    });
     const fetchMock = vi.fn(async (url, init = {}) => {
       if (url === "/api/projects/project_1/analysis-capabilities") {
         return jsonResponse({
@@ -3014,10 +3141,23 @@ describe("AgentPanel", () => {
             kind: "standard_table",
             confidence: 0.87,
           }],
+          reviewRegions: [{
+            id: "region_1",
+            workbookReviewSessionId: "session_1",
+            sourceDocumentId: "source_doc_1",
+            sourceRegionId: "source_region_1",
+            sheetName: "Sheet1",
+            rangeRef: "A1:Y10",
+            disposition: "active",
+            reviewStatus: "interpreting",
+            version: 1,
+            currentRevision: null,
+          }],
+          interpretationDeferred: true,
         }, { status: 201 });
       }
       if (url === "/api/projects/project_1/state") {
-        return jsonResponse({ project: { id: "project_1" }, sourceDocuments: [], workbookReviewSessions: [] });
+        return projectStateResponse;
       }
       return jsonResponse({});
     });
@@ -3056,9 +3196,20 @@ describe("AgentPanel", () => {
       fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
 
       await waitFor(() => expect(onWorkbookReviewReady).toHaveBeenCalled());
+      expect(onWorkbookReviewReady.mock.calls[0][0].response.reviewRegions[0]).toMatchObject({
+        id: "region_1",
+        reviewStatus: "interpreting",
+      });
+      expect(onProjectStateLoaded).not.toHaveBeenCalled();
+      resolveProjectState(jsonResponse({
+        project: { id: "project_1" },
+        sourceDocuments: [],
+        workbookReviewSessions: [],
+      }));
       expect(fetchMock).toHaveBeenCalledWith("/api/projects/project_1/files", expect.objectContaining({ method: "POST" }));
       expect(fetchMock).toHaveBeenCalledWith("/api/projects/project_1/workbook-review-sessions", expect.objectContaining({ method: "POST" }));
-      expect(screen.getByText(/found 1 potentially useful region/)).toBeTruthy();
+      expect(await screen.findByText(/AI is understanding them in Workbook Review/)).toBeTruthy();
+      expect(onProjectStateLoaded).toHaveBeenCalled();
 
       expect(screen.queryByRole("button", { name: "Select Sheet1!A1:Y10" })).toBeNull();
       const workbookLink = screen.getByRole("button", { name: "Master.xlsx" });

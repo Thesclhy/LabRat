@@ -69,6 +69,7 @@ test("builds one canonical package from materialized multi-table input and post-
   const value = runPackage();
 
   assert.equal(value.schemaVersion, "labrat.analysisRunPackage.v2");
+  assert.equal(value.outputTarget, "chart");
   assert.equal(value.inputs.tables[0].values[0][0], 42);
   assert.equal(value.reviewPlan.chart.title, "Carbon");
   assert.equal(value.program.entrypoint, "analyze");

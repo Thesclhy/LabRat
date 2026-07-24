@@ -17,7 +17,24 @@ function fieldValue(field) {
 }
 
 function sourceLabel(source) {
+  if (source?.fileName) {
+    return [source.fileName, source?.sheet, source?.range || source?.cell].filter(Boolean).join(" · ");
+  }
   return [source?.sheet, source?.range || source?.cell].filter(Boolean).join(" ") || "Source range";
+}
+
+function missingReasonLabel(reason) {
+  if (reason === "source_blank") return "Source cell is blank";
+  if (reason === "source_placeholder") return "Source contains a missing-value placeholder";
+  if (reason === "calculation_unavailable") return "Required calculation input is unavailable";
+  return "Missing in source";
+}
+
+function sourceRawValue(source) {
+  if (source?.rawValue === null || source?.rawValue === undefined || source.rawValue === "") {
+    return "blank";
+  }
+  return String(source.rawValue);
 }
 
 export function ExperimentDetailDrawer({ detail = null, loading = false, error = "", onClose, onOpenSourceRange }) {
@@ -48,6 +65,24 @@ export function ExperimentDetailDrawer({ detail = null, loading = false, error =
                     <span>{field.displayName || field.fieldKey || "Field"}</span>
                     <strong>{fieldValue(field)}</strong>
                     <small>{field.role || "field"} | {confidenceLabel(field.confidence)} confidence</small>
+                    {field.value == null && field.missingReason && (
+                      <div className="experiment-missing-detail">
+                        <strong>Missing in source</strong>
+                        <span>{missingReasonLabel(field.missingReason)}</span>
+                        {asArray(field.sourceRefs).map((source, sourceIndex) => (
+                          <button
+                            type="button"
+                            className="experiment-source-button"
+                            key={`${source.sourceDocumentId || "source"}-${source.sheet || "sheet"}-${source.cell || sourceIndex}`}
+                            aria-label={`Open ${sourceLabel(source)}`}
+                            onClick={() => onOpenSourceRange?.(source)}
+                          >
+                            <strong>{sourceLabel(source)}</strong>
+                            <span>Original value: {sourceRawValue(source)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
                 {!asArray(record.fields).length && <p className="browser-muted">No scalar fields.</p>}

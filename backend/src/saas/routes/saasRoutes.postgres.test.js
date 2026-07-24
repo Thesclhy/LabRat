@@ -89,9 +89,21 @@ test("analysis migrations and Postgres store expose retry receipt persistence pa
   assert.match(resetMigration, /drop column if exists selection/);
   assert.match(resetMigration, /drop column if exists python_program/);
   assert.match(resetMigration, /drop column if exists plan_hash/);
+  const deferredRegionMigration = await fs.readFile(
+    path.resolve(here, "..", "..", "..", "migrations", "018_deferred_region_interpretation.sql"),
+    "utf8",
+  );
+  assert.match(deferredRegionMigration, /add column if not exists interpretation_hint jsonb/);
+  const experimentBrowserMigration = await fs.readFile(
+    path.resolve(here, "..", "..", "..", "migrations", "019_experiment_browser_analysis.sql"),
+    "utf8",
+  );
+  assert.match(experimentBrowserMigration, /create table if not exists analysis_experiment_publications/);
+  assert.match(experimentBrowserMigration, /add column if not exists output_target text/);
   const store = new PostgresSaasStore({ databaseUrl: "" });
   for (const method of [
     "createAnalysisThread",
+    "deleteWorkbookReviewSession",
     "findAnalysisThreadById",
     "listAnalysisThreads",
     "claimAnalysisThreadRetry",
@@ -108,6 +120,7 @@ test("analysis migrations and Postgres store expose retry receipt persistence pa
     "createAnalysisResult",
     "findAnalysisResultById",
     "publishAnalysisResult",
+    "publishExperimentAnalysis",
     "acceptAnalysisPlan",
     "findChartSpecById",
   ]) {
@@ -140,6 +153,28 @@ test("Postgres SaaS routes preserve workbook review, source documents, and suppo
     store = new PostgresSaasStore(config);
     await store.initialize();
     const modelProvider = {
+      async interpretWorkbookRegion(input) {
+        const candidate = input.region?.deterministicCandidate || {};
+        return {
+          ok: true,
+          summary: [
+            `The selected range ${input.region?.sheetName}!${input.region?.range} contains a structured table.`,
+            "The table contains a component distribution suitable for reviewed extraction.",
+          ],
+          interpretation: {
+            ...candidate,
+            semanticType: candidate.semanticType || "component_distribution",
+            confidence: 0.9,
+            warnings: [],
+          },
+          metadata: {
+            provider: "test",
+            model: "postgres-workbook-model",
+            latencyMs: 1,
+            usage: { inputTokens: 10, outputTokens: 10 },
+          },
+        };
+      },
       async draftAnalysisProgram() {
         return {
           ok: true,
@@ -153,10 +188,57 @@ test("Postgres SaaS routes preserve workbook review, source documents, and suppo
           },
         };
       },
+      async draftExperimentBrowserProgram() {
+        return {
+          ok: true,
+          pythonProgram: {
+            runtime: "labrat-python-v2",
+            entrypoint: "analyze",
+            source: [
+              "def analyze(inputs, labrat):",
+              "    return {'recordPatches': [], 'browserView': {}, 'exclusions': []}",
+            ].join("\n"),
+          },
+        };
+      },
     };
     const analysisExecutor = {
       async executeAcceptedRun(runPackage) {
         const table = runPackage.inputs.tables[0];
+        if (runPackage.outputTarget === "experiment_browser") {
+          return {
+            ok: true,
+            adapter: "postgres_test",
+            runtime: { version: runPackage.runtimeVersion, exitCode: 0 },
+            result: {
+              recordPatches: [{
+                label: "Exp30",
+                upsertFields: [{
+                  fieldKey: "carbon_c1",
+                  displayName: "C1",
+                  role: "outcome",
+                  valueType: "number",
+                  unit: "unitless",
+                  value: table.values[1][1],
+                  formattedValue: table.displayValues[1][1],
+                  confidence: 1,
+                  warnings: [],
+                  sources: [{
+                    tableId: table.tableId,
+                    rowOffset: 1,
+                    columnOffset: 1,
+                  }],
+                }],
+                upsertSeries: [],
+                removeFields: [],
+                removeSeries: [],
+                warnings: [],
+              }],
+              browserView: { name: "Exp30 carbon data" },
+              exclusions: [],
+            },
+          };
+        }
         return {
           ok: true,
           adapter: "postgres_test",
@@ -290,22 +372,42 @@ test("Postgres SaaS routes preserve workbook review, source documents, and suppo
 
     const reviewRegion = reviewBody.reviewRegions.find((region) => region.rangeRef === "A1:E3")
       || reviewBody.reviewRegions[0];
-    assert.equal(reviewRegion.currentRevision.semanticType, "component_distribution");
+    assert.equal(reviewBody.interpretationDeferred, true);
+    assert.equal(reviewRegion.reviewStatus, "interpreting");
+    assert.equal(reviewRegion.currentRevision, null);
+    assert.equal(reviewRegion.interpretationHint.semanticType, "experiment_table");
+
+    const interpretedUnderstanding = await jsonFetch(
+      `/api/workbook-review-sessions/${reviewBody.workbookReviewSession.id}/regions/${reviewRegion.id}/interpret`,
+      {
+        method: "POST",
+        body: {
+          expectedRegionVersion: reviewRegion.version,
+          idempotencyKey: "postgres_interpret_region_1",
+        },
+      },
+    );
+    assert.equal(interpretedUnderstanding.status, 201);
+    const interpretedUnderstandingBody = await interpretedUnderstanding.json();
+    assert.equal(
+      interpretedUnderstandingBody.currentRevision.interpretation.semanticType,
+      "component_distribution",
+    );
 
     const confirmedUnderstanding = await jsonFetch(
       `/api/workbook-review-sessions/${reviewBody.workbookReviewSession.id}/regions/${reviewRegion.id}/confirm`,
       {
       method: "POST",
       body: {
-        revisionId: reviewRegion.currentRevision.id,
-        expectedRegionVersion: reviewRegion.version,
+        revisionId: interpretedUnderstandingBody.currentRevision.id,
+        expectedRegionVersion: interpretedUnderstandingBody.region.version,
         idempotencyKey: "postgres_confirm_region_1",
       },
       },
     );
     assert.equal(confirmedUnderstanding.status, 200);
     const confirmedUnderstandingBody = await confirmedUnderstanding.json();
-    assert.equal(confirmedUnderstandingBody.region.reviewStatus, "confirmed");
+    assert.equal(confirmedUnderstandingBody.region.reviewStatus, "accepted");
 
     const listedUnderstandings = await jsonFetch(`/api/projects/${project.project.id}/region-understandings?status=accepted`);
     assert.equal(listedUnderstandings.status, 200);
@@ -314,58 +416,124 @@ test("Postgres SaaS routes preserve workbook review, source documents, and suppo
       (item) => item.revision.id === confirmedUnderstandingBody.acceptedRevision.id,
     ), true);
 
-    const dataPlanDraft = await jsonFetch(`/api/projects/${project.project.id}/data-plans/draft`, {
+    const retiredDataPlanDraft = await jsonFetch(`/api/projects/${project.project.id}/data-plans/draft`, {
       method: "POST",
-      body: {
-        intent: "experiment_browser_publish",
-        regionUnderstandingRevisionIds: [confirmedUnderstandingBody.acceptedRevision.id],
-        identityDecisions: [],
-      },
+      body: {},
     });
-    assert.equal(dataPlanDraft.status, 200);
-    const dataPlanDraftBody = await dataPlanDraft.json();
-    assert.equal(dataPlanDraftBody.resultKind, "data_plan_review");
-    const experimentAlias = dataPlanDraftBody.identityCandidates[0].sourceAlias;
-    const reviewedDataPlan = await jsonFetch(`/api/projects/${project.project.id}/data-plans/draft`, {
+    assert.equal(retiredDataPlanDraft.status, 404);
+    const retiredDataPlanPublish = await jsonFetch(`/api/projects/${project.project.id}/data-plans/publish`, {
       method: "POST",
-      body: {
-        intent: "experiment_browser_publish",
-        regionUnderstandingRevisionIds: [confirmedUnderstandingBody.acceptedRevision.id],
-        identityDecisions: [{ sourceAlias: experimentAlias, action: "create" }],
-      },
+      body: {},
     });
-    assert.equal(reviewedDataPlan.status, 200);
-    const reviewedDataPlanBody = await reviewedDataPlan.json();
-    assert.deepEqual(reviewedDataPlanBody.reviewSummary.blockers, []);
-    const publish = await jsonFetch(`/api/projects/${project.project.id}/data-plans/publish`, {
+    assert.equal(retiredDataPlanPublish.status, 404);
+
+    const browserThreadResponse = await jsonFetch(
+      `/api/projects/${project.project.id}/analysis-threads`,
+      {
+        method: "POST",
+        body: {
+          originalRequest: "Add the accepted Exp30 carbon data to Experiment Browser.",
+          outputTarget: "experiment_browser",
+        },
+      },
+    );
+    assert.equal(browserThreadResponse.status, 201);
+    const browserThread = (await browserThreadResponse.json()).analysisThread;
+    const browserPlan = {
+      schemaVersion: ANALYSIS_PLAN_REVISION_VERSION,
+      status: "awaiting_review",
+      requestSummary: "Add Exp30 C1 to Experiment Browser.",
+      sourceSelections: [{
+        sourceSelectionId: "postgres_browser_source_selection",
+        regionUnderstandingRevisionId: confirmedUnderstandingBody.acceptedRevision.id,
+        sourceDocumentId: reviewBody.sourceDocument.id,
+        sheetName: reviewRegion.sheetName,
+        range: reviewRegion.rangeRef,
+        label: "Calculation Exp30",
+        purpose: "Read the accepted Exp30 carbon data.",
+      }],
+      experimentSelections: [],
+      reviewPlan: {
+        processingSteps: [
+          "Read Exp30 C1 from the accepted workbook range.",
+          "Add the value while preserving existing experiment data.",
+        ],
+        missingValueHandling: "Exclude the experiment when C1 is blank.",
+        experimentOutput: {
+          summary: "Create or update Exp30 with the accepted C1 value.",
+        },
+        browserView: {
+          summary: "Show Exp30 and the newly added C1 column.",
+        },
+        invariants: [],
+      },
+      displayPlan: [
+        "Use the accepted Exp30 workbook range.",
+        "Publish C1 and keep all unrelated fields.",
+      ],
+      warnings: [],
+    };
+    const browserRevisionResponse = await jsonFetch(
+      `/api/analysis-threads/${browserThread.id}/plan-revisions`,
+      {
+        method: "POST",
+        body: { plan: browserPlan },
+      },
+    );
+    assert.equal(browserRevisionResponse.status, 201);
+    const browserRevision = (await browserRevisionResponse.json()).analysisPlanRevision;
+    const browserAccept = await jsonFetch(
+      `/api/analysis-plan-revisions/${browserRevision.id}/accept`,
+      {
+        method: "POST",
+        headers: { "idempotency-key": "postgres_browser_accept_1" },
+        body: {},
+      },
+    );
+    assert.equal(browserAccept.status, 201);
+    const browserRun = (await browserAccept.json()).analysisRun;
+    const browserExecute = await jsonFetch(`/api/analysis-runs/${browserRun.id}/execute`, {
       method: "POST",
-      body: {
-        dataPlan: reviewedDataPlanBody.dataPlan,
-        identityDecisions: [{ sourceAlias: experimentAlias, action: "create" }],
-        expectedPreviewHash: reviewedDataPlanBody.snapshotPreview.previewHash,
-        expectedDependencyHash: reviewedDataPlanBody.dataPlan.dependencyHash,
-        idempotencyKey: "postgres_publish_1",
-      },
+      body: {},
     });
+    assert.equal(browserExecute.status, 201);
+    const browserExecuteBody = await browserExecute.json();
+    assert.ok(browserExecuteBody.analysisResult, JSON.stringify(browserExecuteBody));
+    assert.equal(browserExecuteBody.analysisResult.outputTarget, "experiment_browser");
+    const publishRequest = {
+      method: "POST",
+      headers: { "idempotency-key": "postgres_browser_publish_1" },
+      body: {
+        analysisResultId: browserExecuteBody.analysisResult.id,
+        identityResolutions: [],
+      },
+    };
+    const publish = await jsonFetch(
+      `/api/analysis-runs/${browserRun.id}/accept-and-publish-experiments`,
+      publishRequest,
+    );
     assert.equal(publish.status, 201);
     const publishBody = await publish.json();
     assert.equal(publishBody.dataSnapshot.status, "accepted");
-    const publishRetry = await jsonFetch(`/api/projects/${project.project.id}/data-plans/publish`, {
-      method: "POST",
-      body: {
-        dataPlan: reviewedDataPlanBody.dataPlan,
-        identityDecisions: [{ sourceAlias: experimentAlias, action: "create" }],
-        expectedPreviewHash: reviewedDataPlanBody.snapshotPreview.previewHash,
-        expectedDependencyHash: reviewedDataPlanBody.dataPlan.dependencyHash,
-        idempotencyKey: "postgres_publish_1",
-      },
-    });
+    assert.equal(publishBody.dataSnapshot.schemaVersion, "labrat.dataSnapshot.v3");
+    assert.equal(publishBody.dataSnapshot.analysisResultId, browserExecuteBody.analysisResult.id);
+    assert.equal(publishBody.browserView.isDefault, false);
+    const publishRetry = await jsonFetch(
+      `/api/analysis-runs/${browserRun.id}/accept-and-publish-experiments`,
+      publishRequest,
+    );
     assert.equal(publishRetry.status, 200);
     assert.equal((await publishRetry.json()).dataSnapshot.id, publishBody.dataSnapshot.id);
-    assert.equal((await store.listDataPlans({ projectId: project.project.id })).length, 1);
+    assert.equal((await store.listDataPlans({ projectId: project.project.id })).length, 0);
     assert.equal((await store.listDataSnapshots({ projectId: project.project.id })).length, 1);
-    assert.equal((await store.listExperimentIdentities({ projectId: project.project.id })).length, 1);
-    assert.equal((await store.listExperimentSnapshotHeads({ projectId: project.project.id })).length, 1);
+    assert.equal(
+      (await store.listExperimentIdentities({ projectId: project.project.id })).length,
+      1,
+    );
+    assert.equal(
+      (await store.listExperimentSnapshotHeads({ projectId: project.project.id })).length,
+      1,
+    );
 
     const analysisPlan = {
       schemaVersion: ANALYSIS_PLAN_REVISION_VERSION,
@@ -440,7 +608,10 @@ test("Postgres SaaS routes preserve workbook review, source documents, and suppo
       (await analysisAcceptReplay.json()).analysisRun.id,
       acceptedAnalysisBody.analysisRun.id,
     );
-    assert.equal((await store.listAnalysisRuns({ projectId: project.project.id })).length, 1);
+    assert.equal((await store.listAnalysisRuns({
+      projectId: project.project.id,
+      analysisThreadId: analysisThread.id,
+    })).length, 1);
     assert.equal((await store.listChartSpecs({ projectId: project.project.id })).length, 0);
 
     const analysisExecute = await jsonFetch(
@@ -477,11 +648,30 @@ test("Postgres SaaS routes preserve workbook review, source documents, and suppo
     assert.equal(analysisPublicationBody.chartSpec.spec.origin, "analysis_result");
     assert.equal((await store.listChartSpecs({ projectId: project.project.id })).length, 1);
 
+    const deleteWorkbook = await jsonFetch(
+      `/api/workbook-review-sessions/${reviewBody.workbookReviewSession.id}`,
+      {
+        method: "DELETE",
+        body: {
+          expectedVersion: reviewBody.workbookReviewSession.version,
+          reason: "Remove from active workbook review.",
+        },
+      },
+    );
+    assert.equal(deleteWorkbook.status, 200);
+    assert.ok((await deleteWorkbook.json()).deletedRegionCount >= 1);
+    assert.equal((await store.listWorkbookReviewSessions({ projectId: project.project.id })).length, 0);
+    assert.equal((await store.listAcceptedRegionUnderstandings({ projectId: project.project.id })).length, 0);
+    assert.equal((await store.listSourceDocuments({ projectId: project.project.id })).length, 1);
+    assert.equal((await store.listDataSnapshots({ projectId: project.project.id })).length, 1);
+    assert.equal((await store.listChartSpecs({ projectId: project.project.id })).length, 1);
+
     const auditEvents = await store.listAuditEvents({ projectId: project.project.id });
     assert.equal(auditEvents.some((event) => event.action === "file.reuse"), true);
     assert.equal(auditEvents.some((event) => event.action === "workbook_review_session.create"), true);
-    assert.equal(auditEvents.some((event) => event.action === "workbook_review.confirm_understanding"), true);
+    assert.equal(auditEvents.some((event) => event.action === "workbook_review_region.confirm"), true);
     assert.equal(auditEvents.some((event) => event.action === "analysis_result.publish_chart"), true);
+    assert.equal(auditEvents.some((event) => event.action === "workbook_review_session.delete"), true);
   } finally {
     if (server) await closeServer(server);
     if (store?.pool) await store.pool.end();

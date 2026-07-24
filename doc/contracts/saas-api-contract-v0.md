@@ -116,6 +116,7 @@ Rules:
 GET  /api/projects/:projectId/workbook-review-sessions
 POST /api/projects/:projectId/workbook-review-sessions
 GET  /api/workbook-review-sessions/:sessionId
+DELETE /api/workbook-review-sessions/:sessionId
 GET  /api/workbook-review-sessions/:sessionId/regions
 POST /api/workbook-review-sessions/:sessionId/regions
 POST /api/workbook-review-sessions/:sessionId/regions/:regionId/interpret
@@ -174,62 +175,42 @@ Revision and confirmation requests:
 
 Rules:
 
+- Creating a WorkbookReviewSession never waits for region LLM calls. It
+  persists all deterministic candidate regions with `reviewStatus:
+  "interpreting"`, returns `interpretationDeferred: true`, and lets Workbook
+  Review schedule the per-region interpret endpoint.
+- A WorkbookReviewRegion persists a bounded `interpretationHint` containing
+  its initial semantic type and description so pending work can resume after a
+  refresh without relying on browser memory.
 - Creating or revising one region sends the backend model only that bounded range, limited neighboring cells, and a workbook manifest. The complete workbook is never model context.
 - Deferred creation makes the exact sheet/range and version available before the model call so the UI can show an immediate pending card and permit version-checked Ignore/Delete. A late interpretation is discarded when the region changed or became inactive while the model was running.
+- Workbook Review schedules active pending regions with at most three
+  concurrent model requests. The active region is first, individual failures
+  do not stop later regions, and failed cards require explicit retry.
 - Each region owns immutable numbered revisions plus separate current and accepted revision pointers.
 - Confirm applies to one exact revision. Ignore and logical delete apply to one exact version and do not erase revision history or downstream artifacts.
 - `WorkbookReviewSession` groups regions for one source workbook; there is no workbook-wide confirmation state.
+- Deleting a WorkbookReviewSession is a version-checked logical delete. It
+  removes the workbook from active review lists and atomically marks its active
+  WorkbookReviewRegions deleted. Immutable source files, prior revisions,
+  accepted DataSnapshots, ChartSpecs, and audit history are retained.
 - The retired aggregate session revision/confirm and project `workbook-understandings` routes return `404`.
 - Region confirmation does not publish Browser rows or create output artifacts.
 
-## Evidence Retrieval And DataPlan
+## Evidence Retrieval And Historical Data
 
 ```text
 POST /api/projects/:projectId/evidence/retrieve
-POST /api/projects/:projectId/data-plans/draft
-POST /api/projects/:projectId/data-plans/publish
 GET  /api/projects/:projectId/data-plans
 GET  /api/projects/:projectId/data-snapshots
 ```
 
 Evidence retrieval returns exact active accepted RegionUnderstandingRevisions as usable evidence. Unconfirmed candidates may be returned as suggestions but must use `canUseForDataPlan: false`.
 
-Draft request:
-
-```json
-{
-  "intent": "experiment_browser_publish",
-  "regionUnderstandingRevisionIds": ["region_understanding_revision_2"],
-  "identityDecisions": [
-    {
-      "sourceAlias": "Exp33",
-      "action": "create"
-    }
-  ]
-}
-```
-
-Draft response contains a transient `labrat.dataPlan.v2` plus deterministic `labrat.dataSnapshot.v2` preview, dependency hash, preview hash, warnings, skipped rows, and source refs. Field bindings preserve accepted `headerSourceRefs` separately from each emitted value's `sourceRefs`, including every parent and leaf cell used to interpret grouped headers. Drafting performs no durable scientific write.
-
-Publish request:
-
-```json
-{
-  "idempotencyKey": "publish_20260716_001",
-  "dataPlan": {},
-  "identityDecisions": [],
-  "expectedPreviewHash": "sha256_preview",
-  "expectedDependencyHash": "sha256_dependency"
-}
-```
-
-Publish rules:
-
-- Required role: `editor` or above.
-- The backend re-reads source evidence and deterministically re-executes the plan.
-- Dependency/preview mismatch returns a stale-review error before writes.
-- One atomic transaction creates the accepted DataPlan, immutable DataSnapshot, explicit experiment identities, affected snapshot heads, idempotency receipt, and audit event.
-- Reusing an idempotency key with the same request returns the recorded response; reusing it for another request is rejected.
+`GET .../data-plans` is historical read-only provenance. The former
+`POST .../data-plans/draft` and `POST .../data-plans/publish` routes are retired
+and return `404`. New Experiment Browser data is created only through reviewed
+AnalysisThreads and DataSnapshot v3 publication.
 
 ## Experiment Browser
 
@@ -273,7 +254,22 @@ GET  /api/agent-runs/:agentRunId
 POST /api/agent-runs/:agentRunId/cancel
 ```
 
-Agent requests pass through the backend intent router and have three product dispositions: workbook upload/region review, read-only project question answering, and reviewed analysis/chart planning. Explicit Browser navigation may still return a deterministic navigation reply, but it is not a fallback for project questions. Every chart, trend, comparison, derived calculation, and explicit Excel-range chart request returns `mode: "analysis_planning"`, creates a durable AnalysisThread, and selects only active confirmed workbook regions. Publishing a DataSnapshot is not required for chart planning. Unknown requests return clarification.
+Agent requests pass through the backend intent router and have three product
+dispositions: workbook upload/region review, read-only project question
+answering, and reviewed analysis planning for charts or Experiment Browser data
+publication. `selectedContext.tab` and `selectedContext.activeSurface` may carry
+the current workspace surface, while `selectedContext.analysisOutputTarget`
+marks an explicit workflow entry. Surface context alone never authorizes a
+write: Browser publication requires a data-change intent and still creates a
+reviewed `AnalysisThread` with `outputTarget: experiment_browser`. Explicit
+Browser navigation may return a deterministic navigation reply, but it is not
+a fallback for project questions. Chart requests remain chart analysis even
+when sent from Browser, and display-only show/hide/filter/sort requests do not
+create a DataSnapshot. Every chart, trend, comparison, derived calculation, and
+explicit Excel-range chart request returns `mode: "analysis_planning"`, creates
+a durable AnalysisThread, and selects only active confirmed workbook regions.
+Publishing a DataSnapshot is not required for chart planning. Unknown requests
+return clarification.
 
 `POST /api/projects/:projectId/agent/runs` returns user-facing text in the top-level `reply` field plus nullable `analysisThread` and `currentPlanRevision` fields. Provider configuration and credentials are backend-only. AgentRun usage stores provider, model, token, and latency metadata while planning records visible workflow steps rather than hidden chain-of-thought.
 
@@ -300,6 +296,7 @@ GET  /api/analysis-runs/:analysisRunId
 GET  /api/analysis-runs/:analysisRunId/result-preview
 POST /api/analysis-runs/:analysisRunId/revise
 POST /api/analysis-runs/:analysisRunId/accept-and-create-chart
+POST /api/analysis-runs/:analysisRunId/accept-and-publish-experiments
 ```
 
 Rules:
@@ -328,7 +325,7 @@ Rules:
   or publishes an artifact. A second failure returns a durable planning warning
   with bounded error details so the frontend can name the policy and offending
   line instead of showing only a generic provider/runtime error.
-- Each revision stores exact `sourceSelections`, structured `reviewPlan`, readable
+- Each revision declares `outputTarget: chart | experiment_browser` and stores exact `sourceSelections`, optional active `experimentSelections`, structured `reviewPlan`, readable
   `displayPlan`, derived non-contiguous source rectangles, validation, and
   visible feedback. It stores no Python, input values, field mapping, expected
   result table, or user-review hash. Creating revision N marks the prior
@@ -337,6 +334,9 @@ Rules:
   SourceDocument, workbook name, worksheet, and exact rectangular range. One
   selection becomes one `inputs.tables` item. Selections may span multiple
   files, sheets, and non-contiguous ranges.
+- Each experiment selection names one active experiment, its frozen snapshot
+  head, exact unit-aware field column ids, and whether series are included.
+  Experiment Browser plans may combine workbook and snapshot inputs.
 - `GET .../selection` returns the exact source selections and derived source
   rectangles for the Source review page; it returns no result records.
 - Plan acceptance requires only an `Idempotency-Key` header. The request body
@@ -350,10 +350,19 @@ Rules:
   materializes complete typed/display/formula grids. SourceDocument reads remain
   individually bounded, but the analysis selection has no 500-cell aggregate
   limit; configurable executor input/output limits remain.
+- For `experiment_browser`, execution also verifies frozen active heads and
+  materializes `inputs["experiments"]` plus the current project field catalog.
+  Code generation may page these values with `inspect_experiment_input`.
 - Only after materialization does the model generate `labrat-python-v2` with
   entrypoint `analyze(inputs, labrat)`. Programs read the dictionary
-  `inputs["tables"]`; large inputs can be inspected with `inspect_run_input`.
+  whose `tables`, `experiments`, and `fieldCatalog` members are arrays; large
+  inputs can be inspected with `inspect_run_input`.
   Python policy errors include the policy name, offending line, and reason.
+- A Python execution error or backend output-contract failure may trigger one
+  bounded automatic code-repair attempt inside the same immutable AnalysisRun.
+  The repair receives the prior program and bounded diagnostics, cannot change
+  the accepted selections or review plan, and is recorded in
+  `execution.programAttempts`. Infrastructure failures are not retried.
 - A running claim uses an internal token and six-minute lease. An expired claim may be recovered with a new token; an old worker cannot finalize after recovery. The claim token is never returned by public summaries.
 - Python output is authoritative Plotly `{ data, layout }` plus readable
   `exclusions` and optional declared-constraint `checks`. Backend validation
@@ -363,10 +372,33 @@ Rules:
   reviewed plan. Missing trace ids are assigned deterministically by output
   order. The backend does not reconstruct Plotly from result rows, remap X/Y,
   require field ids, or reject one-to-many reshaping.
-- Executor or validation failure records a terminal run status and audit event but creates no AnalysisResult or ChartSpec. Repeating `execute` on a terminal run returns the original state with `idempotentReplay: true`.
+- For `experiment_browser`, Python instead returns `recordPatches`,
+  `browserView`, and readable `exclusions`. Each patch can upsert scalar fields
+  or series but cannot remove scientific data. Every generated value references
+  accepted workbook cell coordinates or selected snapshot fields. The backend
+  reuses stable field selectors, blocks same-key/same-unit type conflicts,
+  validates finite values and payload limits, and merges patches with complete
+  frozen active records so unmentioned fields and series are preserved.
+  Scalars of every supported value type may use source-backed `null` only with
+  `formattedValue: null`, an allowed `missingReason`, and a trusted source
+  pointer. Workbook source refs preserve raw/display values such as `"-"`.
+  Null never means zero, does not count toward field coverage, cannot replace
+  an active non-null value, and does not cause the containing experiment to be
+  excluded. A later finite value may replace an active null.
+- Executor or validation failure after the bounded repair records a terminal
+  run status and audit event but creates no AnalysisResult, DataSnapshot, or
+  ChartSpec. Repeating `execute` on a terminal run returns the original state
+  with `idempotentReplay: true`.
 - Result preview returns complete validated Plotly, summary, exclusions,
   validation, and the result id needed for acceptance. It does not return the
   former technical result table, row lineage, or user-review hashes.
+- Experiment Browser result preview is paginated and returns `columns`, merged
+  `rows`, per-record change summaries, identity candidates, exclusions, and the
+  proposed BrowserView. Its change summary includes missing value and affected
+  experiment counts. It never returns Python, hashes, internal patch JSON, or
+  full records to the review UI.
+- Experiment publication always creates and opens a new non-default
+  BrowserView. Model output cannot replace the user's existing default view.
 - Revision requires feedback only. It sends bounded prior run/result validation
   context to planning and creates a later immutable PlanRevision; prior runs and
   results remain unchanged.
@@ -378,6 +410,12 @@ Rules:
   creates one `labrat.chartSpec.v3` `origin: analysis_result` ChartSpec with
   complete authoritative Plotly, source selections, a flat trace catalog, and
   the reviewed default visible curves.
+- Experiment publication requires the exact `analysisResultId`, unresolved
+  identity decisions, and `Idempotency-Key`. It atomically accepts the result,
+  creates one immutable `labrat.dataSnapshot.v3`, creates any reviewed
+  identities, advances only affected snapshot heads, creates a new owner-scoped
+  BrowserView, completes the run/thread, and records audit plus idempotency
+  receipt. A changed base head returns stale preview and performs no writes.
 - `LABRAT_ANALYSIS_EXECUTOR` defaults to `disabled`. `local` is non-production only; production execution requires a valid configured HTTPS hardened worker. Executor command, endpoint, timeout, and provider credentials are backend-only configuration.
 - Closing the AgentRun request aborts any in-flight backend provider request.
   The frontend may expose this as a phase/elapsed-time status with an explicit

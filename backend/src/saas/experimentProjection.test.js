@@ -69,6 +69,7 @@ function fixture() {
     record("exp_1", "Exp 1", [
       field("temperature", 250, { displayName: "Temperature (degC)", unit: "degC" }),
       field("yield", 31.2, { displayName: "Yield (%)", role: "outcome", unit: "percent", confidence: 0.95 }),
+      field("rpm", 500, { displayName: "RPM", unit: "RPM" }),
     ], {
       series: [{
         seriesKey: "rate_over_time",
@@ -118,6 +119,7 @@ test("projects one bounded row per active accepted snapshot head with stable uni
   assert.deepEqual(temperatureColumns.map((column) => column.unit).sort(), ["K", "degC"]);
   assert.equal(temperatureColumns.find((column) => column.unit === "degC").label, "Temperature (degC)");
   assert.equal(projection.columns.find((column) => column.fieldKey === "yield").label, "Yield (%)");
+  assert.equal(projection.columns.find((column) => column.fieldKey === "rpm").label, "RPM");
   assert.equal(new Set(projection.columns.map((column) => column.id)).size, projection.columns.length);
   assert.equal(projection.columns[0].id, "experiment");
   assert.equal(projection.columns[0].pinned, true);

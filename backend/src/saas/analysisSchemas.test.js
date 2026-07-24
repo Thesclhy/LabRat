@@ -117,3 +117,43 @@ test("accepts only explicit supported result invariants", () => {
   assert.equal(result.ok, false);
   assert.equal(result.errors[0].code, "analysis_invariant_unsupported");
 });
+
+test("accepts review-only Experiment Browser plans with workbook or snapshot inputs", () => {
+  const plan = {
+    schemaVersion: ANALYSIS_PLAN_REVISION_VERSION,
+    outputTarget: "experiment_browser",
+    status: "awaiting_review",
+    requestSummary: "Add normalized selectivity while preserving existing fields.",
+    sourceSelections: [],
+    experimentSelections: [{
+      experimentSelectionId: "experiment_selection_1",
+      experimentId: "experiment_31",
+      columnIds: [
+        "field:solid:percent:number",
+        "field:liquid:percent:number",
+        "field:gas:percent:number",
+      ],
+      includeSeries: false,
+    }],
+    reviewPlan: {
+      processingSteps: ["Normalize Solid, Liquid, and Gas to 100% for Exp31."],
+      missingValueHandling: "Exclude Exp31 if any component is missing.",
+      experimentOutput: { summary: "Add three normalized selectivity fields." },
+      browserView: { summary: "Show Exp31 and the normalized fields." },
+      invariants: [],
+    },
+    displayPlan: [
+      "Use the accepted Solid, Liquid, and Gas values.",
+      "Add normalized fields and preserve the current record.",
+    ],
+    warnings: [],
+  };
+
+  assert.equal(validateAnalysisPlanRevision(plan).ok, true);
+  plan.reviewPlan.invariants = [{
+    type: "trace_y_sum",
+    target: 100,
+    absoluteTolerance: 0.01,
+  }];
+  assert.equal(validateAnalysisPlanRevision(plan).ok, false);
+});

@@ -33,4 +33,45 @@ describe("ExperimentDetailDrawer", () => {
     rerender(<ExperimentDetailDrawer error="Detail unavailable" onClose={vi.fn()} />);
     expect(screen.getByRole("alert").textContent).toContain("Detail unavailable");
   });
+
+  it("shows source-backed missing details without appending a unit to the dash", () => {
+    const missingDetail = structuredClone(detail);
+    missingDetail.record.fields = [{
+      fieldKey: "selectivity_solid",
+      displayName: "Selectivity - Solid",
+      valueType: "number",
+      value: null,
+      formattedValue: null,
+      missingReason: "source_placeholder",
+      unit: "%",
+      confidence: 1,
+      warnings: [],
+      sourceRefs: [{
+        sourceDocumentId: "source_master",
+        fileName: "MasterTable_updated.xlsx",
+        sheet: "Sheet1",
+        cell: "L7",
+        rawValue: "-",
+        formattedValue: "-",
+      }],
+    }];
+    const onOpenSourceRange = vi.fn();
+    render(
+      <ExperimentDetailDrawer
+        detail={missingDetail}
+        onClose={vi.fn()}
+        onOpenSourceRange={onOpenSourceRange}
+      />,
+    );
+
+    expect(screen.getByText("-")).toBeTruthy();
+    expect(screen.queryByText("- %")).toBeNull();
+    expect(screen.getByText("Missing in source")).toBeTruthy();
+    expect(screen.getByText("Source contains a missing-value placeholder")).toBeTruthy();
+    expect(screen.getByText("Original value: -")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", {
+      name: "Open MasterTable_updated.xlsx · Sheet1 · L7",
+    }));
+    expect(onOpenSourceRange).toHaveBeenCalledWith(missingDetail.record.fields[0].sourceRefs[0]);
+  });
 });

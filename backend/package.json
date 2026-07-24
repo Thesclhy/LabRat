@@ -8,6 +8,7 @@
     "dev": "node --env-file-if-exists=../.env --env-file-if-exists=../.env.local src/server.js",
     "start": "node src/server.js",
     "migrate": "node src/saas/migrate.js",
+    "bootstrap:admin": "node scripts/bootstrap-admin.mjs",
     "test": "node --test",
     "test:postgres": "node --test src/saas/routes/saasRoutes.postgres.test.js"
   },

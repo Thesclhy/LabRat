@@ -2,9 +2,46 @@
 
 Status: reference
 Read when: checking durable architecture or product decisions.
-Last reviewed: 2026-07-20
+Last reviewed: 2026-07-23
 
 Durable decisions for LabRat architecture, product workflow, and Codex execution belong here. Keep entries newest first. Each entry should explain the decision, the context, the consequences, and any follow-up.
+
+## 2026-07-23 - Experiment Browser Writes Use Reviewed Record Patches
+
+Status: Accepted
+
+Decision:
+New Experiment Browser data uses AnalysisThread
+`outputTarget: experiment_browser`. Planning selects accepted workbook ranges
+and/or active snapshot fields and stores only a user-readable plan. After plan
+acceptance, Python receives the real materialized inputs and returns
+source-backed field/series patches. The backend merges patches with complete
+frozen active records; explicit result acceptance atomically publishes a new
+DataSnapshot v3 and BrowserView.
+
+Context:
+Full-record replacement loses previously appended fields, while the former
+deterministic DataPlan path was difficult to understand and could not support
+iterative natural-language additions and replacements. Display-only column
+changes should not create scientific revisions.
+
+Consequences:
+
+- Unmentioned fields and series are preserved; matching stable selectors are
+  replaced with visible before/after changes.
+- Same field key/unit with conflicting types is blocked; different units remain
+  separate columns.
+- Every new value cites accepted workbook cells or selected snapshot fields.
+- Stale snapshot heads, forged sources, invalid values, and unresolved identity
+  conflicts block publication.
+- Hiding, showing, sorting, filtering, and reordering remain BrowserView-only.
+- Python execution/output-contract errors receive one bounded automatic code
+  repair inside the same run because users did not change the accepted
+  scientific plan. A scientific change still requires a new PlanRevision.
+- Published analysis views open directly but never replace the user's default
+  BrowserView.
+- Old DataPlan draft/publish write routes and UI are retired; historical
+  accepted snapshots remain read-only.
 
 ## 2026-07-20 - Region-Level Workbook Understanding Replaces Aggregate Acceptance
 

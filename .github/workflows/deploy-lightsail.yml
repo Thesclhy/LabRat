@@ -1,0 +1,108 @@
+name: Deploy to Lightsail
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: lightsail-production
+  cancel-in-progress: false
+
+jobs:
+  test-build-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: labrat_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d labrat_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      LABRAT_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/labrat_ci
+      RELEASE_ARCHIVE: labrat-release-${{ github.sha }}.tar.gz
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install backend dependencies
+        run: npm --prefix backend ci
+
+      - name: Run frontend tests
+        run: npm test
+
+      - name: Run backend tests
+        run: npm --prefix backend test
+
+      - name: Run Postgres integration tests
+        run: npm --prefix backend run test:postgres
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Create release archive
+        run: |
+          rm -rf .release
+          mkdir -p .release/backend
+          cp -R dist .release/dist
+          cp -R backend/src .release/backend/src
+          cp -R backend/scripts .release/backend/scripts
+          cp -R backend/migrations .release/backend/migrations
+          cp backend/package.json backend/package-lock.json .release/backend/
+          tar -czf "$RELEASE_ARCHIVE" -C .release .
+
+      - name: Prepare SSH
+        env:
+          LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          LIGHTSAIL_SSH_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+        run: |
+          test -n "$LIGHTSAIL_HOST"
+          test -n "$LIGHTSAIL_SSH_KEY"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$LIGHTSAIL_SSH_KEY" > ~/.ssh/labrat_lightsail
+          chmod 600 ~/.ssh/labrat_lightsail
+          ssh-keyscan -H "$LIGHTSAIL_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload release
+        env:
+          LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          LIGHTSAIL_USER: ${{ secrets.LIGHTSAIL_USER }}
+          LIGHTSAIL_PORT: ${{ secrets.LIGHTSAIL_PORT || '22' }}
+        run: |
+          scp -P "$LIGHTSAIL_PORT" -i ~/.ssh/labrat_lightsail "$RELEASE_ARCHIVE" \
+            "$LIGHTSAIL_USER@$LIGHTSAIL_HOST:/tmp/$RELEASE_ARCHIVE"
+
+      - name: Deploy release
+        env:
+          LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          LIGHTSAIL_USER: ${{ secrets.LIGHTSAIL_USER }}
+          LIGHTSAIL_PORT: ${{ secrets.LIGHTSAIL_PORT || '22' }}
+          LIGHTSAIL_DEPLOY_PATH: ${{ secrets.LIGHTSAIL_DEPLOY_PATH || '/opt/labrat' }}
+        run: |
+          ssh -p "$LIGHTSAIL_PORT" -i ~/.ssh/labrat_lightsail "$LIGHTSAIL_USER@$LIGHTSAIL_HOST" \
+            "sudo bash -s -- /tmp/$RELEASE_ARCHIVE '${{ github.sha }}' '$LIGHTSAIL_DEPLOY_PATH'" \
+            < deploy/lightsail/remote-deploy.sh
+
+      - name: Report deployed commit
+        run: echo "Deployed ${{ github.sha }} to Lightsail"

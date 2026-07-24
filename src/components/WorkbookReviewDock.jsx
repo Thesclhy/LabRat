@@ -23,6 +23,7 @@ function RegionReviewCard({
   onActivate,
   onRevise,
   onConfirm,
+  onRetry,
   onIgnore,
   onDelete,
 }) {
@@ -87,7 +88,7 @@ function RegionReviewCard({
         {interpreting ? (
           <div className="workbook-region-interpreting" role="status">
             <span className="thinking-spinner" aria-hidden="true" />
-            <span>AI is interpreting this region...</span>
+            <span>AI is understanding this region...</span>
           </div>
         ) : asArray(revision?.summary).length ? asArray(revision.summary).map((sentence, index) => (
           <p key={`${revision.id}-summary-${index}`}>{sentence}</p>
@@ -150,6 +151,16 @@ function RegionReviewCard({
             </>
           )}
           <div className="workbook-region-secondary-actions">
+            {region.reviewStatus === "interpretation_failed" && (
+              <button
+                type="button"
+                aria-label={`Retry AI for ${label}`}
+                disabled={busy || !onRetry}
+                onClick={() => run("retry", () => onRetry?.(region.id))}
+              >
+                {pendingAction === "retry" ? "Retrying..." : "Retry AI"}
+              </button>
+            )}
             <button
               type="button"
               aria-label={`Ignore region ${label}`}
@@ -180,6 +191,7 @@ export function WorkbookReviewDock({
   onActiveRegionChange,
   onReviseRegion,
   onConfirmRegion,
+  onRetryRegion,
   onIgnoreRegion,
   onDeleteRegion,
   onReviewExtractedExperiments,
@@ -222,6 +234,7 @@ export function WorkbookReviewDock({
             onActivate={onActiveRegionChange}
             onRevise={onReviseRegion}
             onConfirm={onConfirmRegion}
+            onRetry={onRetryRegion}
             onIgnore={onIgnoreRegion}
             onDelete={onDeleteRegion}
           />

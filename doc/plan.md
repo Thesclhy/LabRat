@@ -17,26 +17,67 @@ Upload workbook
   -> backend-LLM-drafted + backend-validated region revisions
   -> user independently confirms/corrects/ignores/deletes each region
   -> accepted RegionUnderstandingRevisions
-  -> reviewed DataPlan / DataSnapshot preview
-  -> explicit Publish to Browser
-  -> accepted DataSnapshot
+  -> natural-language Experiment Browser AnalysisThread
+  -> reviewed source selections and readable data-change plan
+  -> post-acceptance Python against real workbook/snapshot inputs
+  -> reviewed record-patch Browser preview
+  -> explicit Publish to Browser as DataSnapshot v3
   -> Experiment Browser
 ```
 
 Uploading Excel defaults to evidence indexing and region understanding only. It does not publish accepted records, create a ChartSpec, or insert manuscript content. SourceExtractProposal and ChartProposalSet are retired and must not be recreated.
 
-The first complete product target is now reviewed workbook data in Experiment Browser. Exact active accepted RegionUnderstandingRevision evidence is compiled into reviewable experiment-record DataPlans and deterministic DataSnapshot previews. Explicit publish persists an immutable accepted DataSnapshot and advances the affected experiment identities. Experiment Browser derives its rows from those accepted snapshots.
+The first complete product target is reviewed and sustainably editable data in
+Experiment Browser. LabRat may select exact accepted workbook ranges, active
+experiment fields, or both. The user reviews only sources and a natural-language
+plan. After acceptance, Python returns source-backed `recordPatches`; the backend
+merges them with frozen active records, previews the resulting Browser table,
+and atomically publishes an immutable DataSnapshot v3 plus a new BrowserView.
+Unmentioned fields and series are preserved.
 
 The obsolete aggregate dataset/generic import implementation has been removed. No legacy local-data migration or dual-write path is required.
 
 Use this split when deciding what to build:
 
 - Product mainline: Workbook Understanding First, ending in Experiment Browser.
-- Engineering mainline: accepted RegionUnderstandingRevisions -> experiment-record DataPlan -> accepted DataSnapshot -> Browser projection.
+- Engineering mainline: accepted regions/active snapshots -> AnalysisThread
+  `outputTarget: experiment_browser` -> record patches -> DataSnapshot v3 ->
+  Browser projection.
 - Completed execution milestone: backend conversational analysis, reviewed calculation, analysis-result ChartSpec publication, and placement-local trace visibility.
 
 ## Recently Completed
 
+- Sustainable natural-language Experiment Browser publication: AnalysisThread
+  now supports `outputTarget: experiment_browser`, mixed workbook and active
+  snapshot selections, post-acceptance Python, source-validated field/series
+  patches, complete-record merge previews, automated identity suggestions,
+  stale-head and idempotency protection, atomic DataSnapshot v3/BrowserView
+  publication, and automatic opening of the published view. Pure column
+  visibility/order/filter/sort remains BrowserView-only. The old DataPlan
+  draft/publish routes, frontend review panel, and deterministic writer modules
+  are retired; historical accepted snapshots remain readable.
+- Real Anthropic plus local-Python Browser publication has been exercised from
+  a confirmed 1,024-cell supplemental workbook through a mixed workbook +
+  active-snapshot plan. The accepted result preserved 14 scalar fields, added
+  two source-backed 62-point series, advanced only Exp1's snapshot head, and
+  opened a new non-default BrowserView. One bounded automatic code repair now
+  handles Python execution or output-contract errors without asking the user
+  to revise an unchanged scientific plan.
+- Immediate asynchronous workbook-region review: upload/session creation stops
+  after deterministic indexing and durable pending-region creation, then opens
+  Workbook Review while a three-request browser queue fills each card's AI
+  explanation. Initial hints survive refresh, failed regions retry
+  independently, and manual selections share the same queue.
+- Uploaded-workbook lifecycle controls: the Overview chooser lists every active
+  WorkbookReviewSession with separate Open/Delete actions. Delete is
+  editor-only, confirmation-gated, version-checked, and logical; it removes the
+  session and active regions from current review/evidence surfaces while
+  retaining immutable source, ignored history, downstream artifacts, and audit.
+- Docker-first local runtime: Compose now starts persistent Postgres, the Node
+  backend with Python available for the development-only local analysis
+  executor, and Vite behind health-gated dependencies. Backend migrations use
+  a checksum ledger and advisory lock, so one-time migrations are not replayed
+  on process restart. Full stack down/up preserves login-visible project data.
 - Two-page analysis review: `Source` keeps exact workbook red boxes and the
   natural-language plan; after acceptance, `Result` materializes the reviewed
   workbook selections, generates Python from the real multi-table input, and
@@ -56,7 +97,10 @@ Use this split when deciding what to build:
   without cancelling or deleting earlier selections.
 - Region Understanding MVP: upload, WorkbookReviewSession grouping, server-owned WorkbookReviewRegions, immutable AI/user-feedback revisions, and independent confirm/ignore/logical-delete decisions.
 - Tool-Governed Evidence Retrieval MVP: `POST /api/projects/:projectId/evidence/retrieve` returns usable accepted evidence and non-usable unconfirmed suggestions.
-- Transient DataPlan Agent Phase 1-2: DataPlan/DataSnapshot schemas, backend DataPlan tools, deterministic preview execution, `POST /api/projects/:projectId/data-plans/draft`, and frontend helper coverage.
+- Historical DataPlan Agent Phase 1-2 (now retired): DataPlan/DataSnapshot
+  schemas, deterministic preview execution, draft API, and frontend helper
+  coverage established the first Browser publication path before the
+  AnalysisThread record-patch replacement.
 - Structured region interpretation: the backend model receives only the selected bounded range, limited neighboring context, and workbook manifest; typed experiment/field/unit/inclusion proposals are independently revised and exact accepted revisions become read-only evidence.
 - Integrated region-review completion: desktop and 390x844 QA now cover upload, bounded summaries, immutable feedback revision, independent confirm/ignore, bulk identity creation, deterministic preview, publish, reload, and all three selectivity fields in Browser. Initial active-region sheet focus and narrow-screen page overflow were fixed during QA.
 - Experiment-record DataPlan preview: deterministic row/region extraction, typed values and series, canonical dependency/preview hashes, explicit identity decisions, source-backed warnings, bounded reads, and a transient review panel.
@@ -94,8 +138,9 @@ Use this split when deciding what to build:
 
 ## Next Recommended Slices
 
-1. Run a fresh real Anthropic plus local-Python E2E for all three LabRat dispositions, including one multi-workbook chart selected only from confirmed regions.
-2. Run migrations 013/014/016/017 and the region-to-DataPlan plus reviewed-analysis paths against configured Postgres in CI or staging.
+1. Repeat the real-provider workflow with a second supplemental field batch,
+   then derive one scalar field entirely from active snapshot data.
+2. Add the configured Postgres route suite and repeatable migration smoke to CI.
 3. Deploy and exercise the hardened no-network analysis worker with production secret management, audit telemetry, timeout controls, and provider cost/latency monitoring.
 
 ## Operating Loop
@@ -118,8 +163,11 @@ npm run codex:preflight
 - AI produces intent, explanations, and reviewable patches; it does not invent scientific values or directly write final data.
 - Raw files are immutable evidence.
 - Mutating actions require explicit user confirmation.
-- RegionUnderstandingRevisions, DataPlans, DataSnapshots, and later chart/manuscript artifacts must remain traceable to source refs.
-- SourceDocument is the evidence layer; accepted RegionUnderstandingRevision is the interpretation layer; DataPlan is the reviewed extraction recipe; DataSnapshot is immutable accepted structured data; Experiment Browser is a read model.
+- RegionUnderstandingRevisions, AnalysisPlanRevisions, DataSnapshots, and later chart/manuscript artifacts must remain traceable to source refs.
+- SourceDocument is the evidence layer; accepted RegionUnderstandingRevision is
+  the interpretation layer; an Experiment Browser AnalysisPlanRevision is the
+  reviewed transformation recipe; DataSnapshot is immutable accepted
+  structured data; Experiment Browser is a read model.
 - Browser publish must not create ChartSpecs, FigurePackages, or manuscript placements.
 - MCP and embedding/RAG adapters are future access layers, not the source of truth.
 

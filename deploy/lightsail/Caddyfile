@@ -1,0 +1,19 @@
+{{LABRAT_DOMAIN}} {
+  encode zstd gzip
+
+  handle /api/* {
+    reverse_proxy 127.0.0.1:8787
+  }
+
+  handle /health {
+    reverse_proxy 127.0.0.1:8787
+  }
+
+  handle_path /LabRat/* {
+    root * {{LABRAT_DEPLOY_ROOT}}/current/dist
+    try_files {path} {path}/ /index.html
+    file_server
+  }
+
+  redir / /LabRat/
+}

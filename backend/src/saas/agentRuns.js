@@ -322,6 +322,9 @@ export async function buildAgentRunDraft({
       analysisRequest: {
         schemaVersion: "labrat.analysisRequest.v2",
         intent: route.intent,
+        outputTarget: route.intent === "publish_experiment_data"
+          ? "experiment_browser"
+          : "chart",
         message: request,
         selectedContext,
       },

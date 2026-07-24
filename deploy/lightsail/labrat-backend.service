@@ -1,0 +1,19 @@
+[Unit]
+Description=LabRat backend
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User={{LABRAT_APP_USER}}
+Group={{LABRAT_APP_USER}}
+WorkingDirectory={{LABRAT_DEPLOY_ROOT}}/current/backend
+EnvironmentFile=/etc/labrat/backend.env
+ExecStart=/usr/bin/node src/server.js
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

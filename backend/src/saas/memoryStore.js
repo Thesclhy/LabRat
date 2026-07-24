@@ -50,6 +50,7 @@ export class MemorySaasStore {
     this.analysisRuns = new Map();
     this.analysisResults = new Map();
     this.analysisPublications = new Map();
+    this.analysisExperimentPublications = new Map();
     this.chartSpecs = new Map();
     this.manuscripts = new Map();
     this.auditEvents = new Map();
@@ -555,9 +556,55 @@ export class MemorySaasStore {
     return copy(next);
   }
 
-  async listWorkbookReviewSessions({ projectId }) {
+  async deleteWorkbookReviewSession(id, {
+    expectedVersion,
+    reason = "",
+    actorUserId = null,
+  } = {}) {
+    const existing = this.workbookReviewSessions.get(id);
+    if (!existing) return null;
+    if (!Number.isInteger(Number(expectedVersion)) || Number(expectedVersion) !== Number(existing.version)) {
+      throw Object.assign(new Error("Workbook review session changed; reload before deleting it."), {
+        statusCode: 409,
+        code: "workbook_review_session_version_conflict",
+        details: {
+          expectedVersion: Number.isInteger(Number(expectedVersion)) ? Number(expectedVersion) : null,
+          currentVersion: Number(existing.version) || 1,
+        },
+      });
+    }
+    const deletedAt = nowIso();
+    const deletedSession = {
+      ...existing,
+      status: "deleted",
+      version: (Number(existing.version) || 1) + 1,
+      updatedAt: deletedAt,
+      updatedBy: actorUserId || existing.updatedBy,
+    };
+    this.workbookReviewSessions.set(id, deletedSession);
+
+    let deletedRegionCount = 0;
+    for (const [regionId, region] of this.workbookReviewRegions.entries()) {
+      if (region.workbookReviewSessionId !== id || region.disposition !== "active") continue;
+      this.workbookReviewRegions.set(regionId, {
+        ...region,
+        disposition: "deleted",
+        deletedAt,
+        deletedBy: actorUserId,
+        deletedReason: String(reason || "").trim(),
+        version: (Number(region.version) || 1) + 1,
+        updatedAt: deletedAt,
+        updatedBy: actorUserId || region.updatedBy,
+      });
+      deletedRegionCount += 1;
+    }
+    return { workbookReviewSession: copy(deletedSession), deletedRegionCount };
+  }
+
+  async listWorkbookReviewSessions({ projectId, includeDeleted = false }) {
     return [...this.workbookReviewSessions.values()]
       .filter((session) => session.projectId === projectId)
+      .filter((session) => includeDeleted || session.status !== "deleted")
       .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
       .map(copy);
   }
@@ -574,6 +621,7 @@ export class MemorySaasStore {
       sheetName: input.sheetName,
       rangeRef: input.rangeRef,
       selectionMethod: input.selectionMethod || "manual",
+      interpretationHint: copy(input.interpretationHint) || {},
       disposition: input.disposition || "active",
       reviewStatus: input.reviewStatus || "interpreting",
       currentRevisionId: input.currentRevisionId || null,
@@ -951,12 +999,15 @@ export class MemorySaasStore {
       projectId: input.projectId,
       schemaVersion: input.schemaVersion || "labrat.analysisThread.v1",
       status: input.status || "planning",
+      outputTarget: input.outputTarget || "chart",
       originalRequest: String(input.originalRequest || ""),
       messages: copy(input.messages) || [],
       planRevisionIds: copy(input.planRevisionIds) || [],
       analysisRunIds: copy(input.analysisRunIds) || [],
       acceptedAnalysisResultIds: copy(input.acceptedAnalysisResultIds) || [],
       chartSpecIds: copy(input.chartSpecIds) || [],
+      dataSnapshotIds: copy(input.dataSnapshotIds) || [],
+      browserViewIds: copy(input.browserViewIds) || [],
       createdAt,
       updatedAt: input.updatedAt || createdAt,
       createdBy: input.createdBy,
@@ -981,6 +1032,7 @@ export class MemorySaasStore {
     const thread = this.analysisThreads.get(id);
     if (!thread) return null;
     if (changes.status != null) thread.status = String(changes.status);
+    if (changes.outputTarget != null) thread.outputTarget = String(changes.outputTarget);
     if (changes.messages != null) thread.messages = copy(changes.messages) || [];
     if (changes.planRevisionIds != null) thread.planRevisionIds = copy(changes.planRevisionIds) || [];
     if (changes.analysisRunIds != null) thread.analysisRunIds = copy(changes.analysisRunIds) || [];
@@ -988,6 +1040,8 @@ export class MemorySaasStore {
       thread.acceptedAnalysisResultIds = copy(changes.acceptedAnalysisResultIds) || [];
     }
     if (changes.chartSpecIds != null) thread.chartSpecIds = copy(changes.chartSpecIds) || [];
+    if (changes.dataSnapshotIds != null) thread.dataSnapshotIds = copy(changes.dataSnapshotIds) || [];
+    if (changes.browserViewIds != null) thread.browserViewIds = copy(changes.browserViewIds) || [];
     thread.updatedAt = changes.updatedAt || nowIso();
     thread.updatedBy = changes.updatedBy || thread.updatedBy;
     return copy(thread);
@@ -1809,6 +1863,166 @@ export class MemorySaasStore {
     this.analysisResults = nextResults;
     this.chartSpecs = nextChartSpecs;
     this.analysisPublications = nextPublications;
+    this.auditEvents = nextAuditEvents;
+    return copy(response);
+  }
+
+  async findExperimentAnalysisPublication({ projectId, idempotencyKey }) {
+    return copy(this.analysisExperimentPublications.get(`${projectId}:${idempotencyKey}`) || null);
+  }
+
+  async publishExperimentAnalysis(input) {
+    const publicationKey = `${input.projectId}:${input.idempotencyKey}`;
+    const prior = this.analysisExperimentPublications.get(publicationKey);
+    if (prior) {
+      if (prior.requestHash !== input.requestHash) {
+        throw Object.assign(new Error("This idempotency key was already used for another Experiment Browser publication."), {
+          statusCode: 409,
+          code: "idempotency_key_conflict",
+        });
+      }
+      return { ...copy(prior.response), idempotentReplay: true };
+    }
+    const thread = this.analysisThreads.get(input.analysisThread?.id);
+    const revision = this.analysisPlanRevisions.get(input.analysisPlanRevision?.id);
+    const run = this.analysisRuns.get(input.analysisRun?.id);
+    const storedResult = this.analysisResults.get(input.analysisResult?.id);
+    const snapshot = copy(input.dataSnapshot);
+    const browserView = copy(input.browserView);
+    const identities = asArray(input.experimentIdentities).map(copy);
+    const heads = asArray(input.experimentSnapshotHeads).map(copy);
+    const records = asArray(snapshot?.experimentRecords);
+    if (
+      !input.idempotencyKey
+      || !input.requestHash
+      || !thread
+      || thread.status !== "awaiting_result_review"
+      || thread.outputTarget !== "experiment_browser"
+      || !revision
+      || revision.status !== "accepted"
+      || revision.analysisThreadId !== thread.id
+      || !run
+      || run.status !== "awaiting_result_review"
+      || run.outputTarget !== "experiment_browser"
+      || run.acceptedPlanRevisionId !== revision.id
+      || !storedResult
+      || storedResult.status !== "awaiting_review"
+      || storedResult.outputTarget !== "experiment_browser"
+      || storedResult.validation?.ok !== true
+      || input.analysisResult.status !== "accepted"
+      || input.analysisRun.status !== "completed"
+      || !snapshot?.id
+      || snapshot.projectId !== input.projectId
+      || snapshot.analysisResultId !== storedResult.id
+      || !browserView?.id
+      || browserView.projectId !== input.projectId
+      || browserView.ownerUserId !== input.actorUserId
+      || heads.some((head) => {
+        const record = records[Number(head.recordIndex)];
+        return !record
+          || head.dataSnapshotId !== snapshot.id
+          || record.experimentId !== head.experimentId;
+      })
+    ) {
+      throw Object.assign(new Error("The Experiment Browser publication package is invalid."), {
+        statusCode: 400,
+        code: "invalid_experiment_analysis_publication_package",
+      });
+    }
+    const headMismatches = asArray(input.expectedHeadRefs).flatMap((expected) => {
+      const current = [...this.experimentSnapshotHeads.values()].find((head) => (
+        head.projectId === input.projectId && head.experimentId === expected.experimentId
+      ));
+      return (
+        current
+        && current.id === expected.headId
+        && current.dataSnapshotId === expected.dataSnapshotId
+        && Number(current.recordIndex) === Number(expected.recordIndex)
+      ) ? [] : [{ experimentId: expected.experimentId, expected: copy(expected), current: copy(current) }];
+    });
+    if (headMismatches.length) {
+      throw Object.assign(new Error("Accepted experiment snapshots changed before publication."), {
+        statusCode: 409,
+        code: "analysis_result_stale",
+        details: { headMismatches },
+      });
+    }
+    const nextThreads = new Map(this.analysisThreads);
+    const nextRuns = new Map(this.analysisRuns);
+    const nextResults = new Map(this.analysisResults);
+    const nextSnapshots = new Map(this.dataSnapshots);
+    const nextIdentities = new Map(this.experimentIdentities);
+    const nextHeads = new Map(this.experimentSnapshotHeads);
+    const nextViews = new Map(this.browserViews);
+    const nextPublications = new Map(this.analysisExperimentPublications);
+    const nextAuditEvents = new Map(this.auditEvents);
+    identities.forEach((identity) => {
+      const existing = nextIdentities.get(identity.id);
+      if (existing && existing.projectId !== input.projectId) {
+        throw Object.assign(new Error("Experiment identity belongs to another project."), {
+          statusCode: 422,
+          code: "identity_reuse_not_found",
+        });
+      }
+      nextIdentities.set(identity.id, identity);
+    });
+    nextSnapshots.set(snapshot.id, snapshot);
+    heads.forEach((head) => nextHeads.set(head.id, head));
+    if (browserView.isDefault) {
+      for (const [id, view] of nextViews) {
+        if (
+          view.projectId === browserView.projectId
+          && view.ownerUserId === browserView.ownerUserId
+          && view.isDefault
+        ) {
+          nextViews.set(id, { ...view, isDefault: false, updatedAt: browserView.createdAt });
+        }
+      }
+    }
+    nextViews.set(browserView.id, browserView);
+    nextThreads.set(thread.id, copy(input.analysisThread));
+    nextRuns.set(run.id, copy(input.analysisRun));
+    nextResults.set(storedResult.id, copy(input.analysisResult));
+    const response = { ...copy(input.response), idempotentReplay: false };
+    nextPublications.set(publicationKey, {
+      id: input.publicationId || makeId("analysis_experiment_publication"),
+      labId: input.labId,
+      projectId: input.projectId,
+      analysisThreadId: thread.id,
+      analysisResultId: storedResult.id,
+      dataSnapshotId: snapshot.id,
+      browserViewId: browserView.id,
+      idempotencyKey: input.idempotencyKey,
+      requestHash: input.requestHash,
+      response,
+      createdAt: snapshot.createdAt,
+      createdBy: input.actorUserId,
+    });
+    asArray(input.auditEvents).forEach((auditInput) => {
+      const event = {
+        id: auditInput.id || makeId("audit"),
+        labId: auditInput.labId || input.labId || null,
+        projectId: auditInput.projectId || input.projectId,
+        actorUserId: auditInput.actorUserId || input.actorUserId || null,
+        action: auditInput.action,
+        targetType: auditInput.targetType || null,
+        targetId: auditInput.targetId || null,
+        summary: auditInput.summary || null,
+        metadata: copy(auditInput.metadata) || {},
+        createdAt: auditInput.createdAt || snapshot.createdAt,
+        ipAddress: auditInput.ipAddress || null,
+        userAgent: auditInput.userAgent || null,
+      };
+      nextAuditEvents.set(event.id, event);
+    });
+    this.analysisThreads = nextThreads;
+    this.analysisRuns = nextRuns;
+    this.analysisResults = nextResults;
+    this.dataSnapshots = nextSnapshots;
+    this.experimentIdentities = nextIdentities;
+    this.experimentSnapshotHeads = nextHeads;
+    this.browserViews = nextViews;
+    this.analysisExperimentPublications = nextPublications;
     this.auditEvents = nextAuditEvents;
     return copy(response);
   }

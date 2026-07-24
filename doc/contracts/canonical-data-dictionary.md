@@ -13,8 +13,9 @@ FileObject
   -> WorkbookReviewSession
   -> WorkbookReviewRegion
   -> accepted RegionUnderstandingRevision
-  -> reviewed DataPlan
-  -> accepted immutable DataSnapshot
+  -> reviewed Experiment Browser AnalysisPlanRevision
+  -> validated record patches
+  -> accepted immutable DataSnapshot v3
   -> ExperimentIdentity + ExperimentSnapshotHead
   -> Experiment Browser row/detail
 ```
@@ -90,6 +91,7 @@ Contains:
 
 - session/source-document/source-region ownership
 - sheet name, A1 range, and selection method
+- bounded initial interpretation hint used only to resume deferred AI work
 - `active`, `ignored`, or logically `deleted` disposition
 - interpretation/review status and optimistic version
 - current and accepted RegionUnderstandingRevision ids
@@ -97,6 +99,11 @@ Contains:
 
 Ignoring or deleting a region never erases its immutable revision history or
 already-created downstream artifacts.
+
+Automatically detected and manually selected regions are persisted before any
+model call. While `reviewStatus` is `interpreting`, Workbook Review can display
+the exact source rectangle immediately and asynchronously request the first
+RegionUnderstandingRevision.
 
 ## RegionUnderstandingRevision
 
@@ -109,9 +116,10 @@ The backend model receives only the selected bounded range, limited neighboring
 context, and workbook manifest. Feedback creates a later revision. Confirmation
 moves the region's accepted pointer to one exact revision.
 
-## DataPlan v2
+## DataPlan v2 (Historical)
 
-A reviewed deterministic extraction recipe.
+A retired deterministic extraction recipe retained only as provenance for
+already-accepted DataSnapshot v2 records. New writes do not create DataPlans.
 
 Required semantics:
 
@@ -126,20 +134,25 @@ Required semantics:
 
 The plan must not embed final result arrays. Draft execution is transient until publish.
 
-## DataSnapshot v2
+## DataSnapshot v2/v3
 
-An immutable accepted result of executing one DataPlan against SourceDocument evidence.
+An immutable accepted collection of complete experiment records. V2 snapshots
+were produced by historical DataPlans. V3 snapshots are produced by an accepted
+Experiment Browser AnalysisResult after backend patch merge.
 
 Contains:
 
-- `schemaVersion: labrat.dataSnapshot.v2`
-- accepted DataPlan id
+- `schemaVersion: labrat.dataSnapshot.v2 | labrat.dataSnapshot.v3`
+- either an accepted DataPlan id (v2) or exact
+  AnalysisPlanRevision/AnalysisRun/AnalysisResult ids (v3)
 - content hash and dependency hash
 - ordered `experimentRecords[]`
 - aggregate source refs, warnings, summary
 - accepted actor/timestamp
 
-Snapshots are append-only. A methodology or source change creates a new reviewed plan/snapshot.
+Snapshots are append-only. V3 records may reference `baseSnapshotRef`; inherited
+fields preserve their original source refs, while new or replaced values keep
+this run's exact workbook cells and/or selected snapshot field refs.
 
 ## ExperimentRecord
 
@@ -151,21 +164,42 @@ Typical shape:
 {
   "sourceAlias": "Exp33",
   "experimentId": "experiment_identity_33",
-  "scalars": [
+  "fields": [
     {
-      "fieldId": "temperature",
-      "label": "Temperature",
+      "fieldKey": "temperature",
+      "displayName": "Temperature",
       "role": "condition",
       "valueType": "number",
       "value": 250,
       "unit": "C",
       "headerSourceRefs": [],
       "sourceRefs": []
+    },
+    {
+      "fieldKey": "selectivity_solid",
+      "displayName": "Selectivity - Solid",
+      "role": "outcome",
+      "valueType": "number",
+      "value": null,
+      "formattedValue": null,
+      "missingReason": "source_placeholder",
+      "unit": "%",
+      "sourceRefs": [
+        {
+          "sourceType": "excel_cell",
+          "sourceDocumentId": "source_master",
+          "fileName": "MasterTable_updated.xlsx",
+          "sheet": "Sheet1",
+          "cell": "L7",
+          "rawValue": "-",
+          "formattedValue": "-"
+        }
+      ]
     }
   ],
   "series": [
     {
-      "seriesId": "reaction_rate",
+      "seriesKey": "reaction_rate",
       "label": "Reaction rate",
       "xField": { "fieldId": "time", "unit": "min" },
       "yField": { "fieldId": "rate", "unit": "mol/g/h" },
@@ -179,6 +213,24 @@ Typical shape:
 ```
 
 Scalar and series values retain typed values, raw-value context when needed, units, and exact source refs. Scalar `headerSourceRefs` preserve the accepted header interpretation separately from value-cell `sourceRefs`; grouped headers retain both parent and leaf header cells. Series may retain corresponding `xHeaderSourceRefs` and `yHeaderSourceRefs`.
+
+All scalar value types may use `value: null` only for explicit, source-backed
+missing scientific data. New null writes require `formattedValue: null`, at
+least one accepted source pointer, and exactly one `missingReason`:
+
+- `source_blank`: the cited workbook cell is empty.
+- `source_placeholder`: the cited raw/display value is `-`, `--`, `—`, `N/A`,
+  or `NA`.
+- `calculation_unavailable`: the reviewed calculation cannot produce a value
+  because cited required input is missing.
+
+The source ref for a workbook-backed null retains its exact raw and formatted
+cell values. The UI may render null as `"-"`, but that display token is never
+stored as a scientific value. Null is never zero and is excluded from field
+coverage and calculations by default. A null patch cannot replace an active
+non-null value; a later valid scalar may replace an active null. Historical
+snapshots are read tolerantly, while new AnalysisResult/DataSnapshot v3 writes
+use this strict contract.
 
 ## ExperimentIdentity
 
@@ -230,7 +282,9 @@ rectangles are derived UI data rather than separately reviewed evidence.
 
 ## AnalysisPlanRevision v2
 
-A durable immutable review proposal containing `sourceSelections`, structured
+A durable immutable review proposal declaring `outputTarget: chart |
+experiment_browser` and containing `sourceSelections`, optional frozen active
+`experimentSelections`, structured
 `reviewPlan`, user-readable `displayPlan`, warnings, validation, and feedback.
 It contains no Python, field mapping, materialized values, result rows, traces,
 Plotly, or user-review hashes. Feedback creates a later numbered revision and
@@ -238,26 +292,32 @@ marks the prior awaiting-review revision superseded without modifying it.
 
 ## AnalysisThread v1
 
-A project-scoped conversational workflow container for one analysis goal. It stores the original request, bounded visible messages, status, and ordered ids for plan revisions, runs, accepted results, and charts. It does not store hidden reasoning or duplicate full result arrays into project state.
+A project-scoped conversational workflow container for one analysis goal. It stores the original request, output target, bounded visible messages, status, and ordered ids for plan revisions, runs, accepted results, charts, DataSnapshots, and BrowserViews. It does not store hidden reasoning or duplicate full result arrays into project state.
 
 ## AnalysisRun v2
 
 An immutable execution-attempt record linked to one accepted PlanRevision.
 Idempotent plan acceptance creates a `queued` run with no Python. Execution
-re-resolves the source selections, materializes complete `inputs.tables`,
+re-resolves source selections and frozen snapshot heads, materializes complete
+`inputs.tables` and/or `inputs.experiments`,
 generates Python against that real input, applies policy checks, and then runs
 it through the configured executor. The run records input/program/runtime
 hashes, generated Python, execution phases, bounded diagnostics, warnings, and
-validation; internal claim tokens are never public.
+validation. Bounded technical regeneration attempts are recorded as
+`programAttempts` with program hashes, outcomes, and diagnostics; internal
+claim tokens and generated Python are never public.
 
 ## AnalysisResult v2
 
-An append-only backend-validated output linked to one AnalysisRun. It contains
-authoritative Plotly `data/layout`, readable exclusions, declared constraint
-checks, source refs, validation, warnings, internal content hashes, and later
-acceptance metadata. It begins as `awaiting_review`; executor or validation
-failures create no AnalysisResult. The ordinary review API returns the complete
-validated Plotly payload and no technical result table or row-lineage UI.
+An append-only backend-validated output linked to one AnalysisRun. Chart output
+contains authoritative Plotly `data/layout`. Experiment Browser output contains
+validated source-backed `recordPatches`, merged preview records, change
+summaries, identity candidates, exclusions, and a proposed BrowserView.
+Experiment Browser summaries include `missingValueCount` and
+`missingExperimentCount`; scalar coverage counts only non-null values.
+It begins as `awaiting_review`; executor or validation failures create no
+AnalysisResult. Public review APIs return only target-specific user review data,
+not Python, hashes, internal patch JSON, or technical lineage tables.
 
 ## ChartSpec
 

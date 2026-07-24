@@ -366,6 +366,10 @@ export async function createWorkbookReviewRegionRecord({
     sheetName: sheet.name,
     rangeRef,
     selectionMethod: text(input.selectionMethod) || "manual",
+    interpretationHint: {
+      semanticType: semanticType(input.semanticType),
+      description: text(input.description).slice(0, 2000),
+    },
     disposition: "active",
     reviewStatus: "interpreting",
     warnings: [],
@@ -396,6 +400,7 @@ export async function interpretWorkbookReviewRegion({
   const priorRevision = loaded.currentRevisionId
     ? await store.findRegionUnderstandingRevisionById(loaded.currentRevisionId)
     : null;
+  const interpretationHint = cleanObject(loaded.interpretationHint);
   return draftRevision({
     store,
     region: loaded,
@@ -404,9 +409,12 @@ export async function interpretWorkbookReviewRegion({
     modelProvider,
     actorUserId,
     trigger: priorRevision ? "retry" : "initial",
-    userFeedback: input.description || "",
+    userFeedback: text(input.description) || text(interpretationHint.description),
     priorRevision,
-    initialSemanticType: input.semanticType || priorRevision?.interpretation?.semanticType || "generic_table",
+    initialSemanticType: input.semanticType
+      || interpretationHint.semanticType
+      || priorRevision?.interpretation?.semanticType
+      || "generic_table",
   });
 }
 

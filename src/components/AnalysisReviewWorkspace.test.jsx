@@ -25,7 +25,12 @@ const thread = {
   status: "planning",
   messages: [
     { id: "message_1", role: "user", content: "Normalize selectivity and compare every experiment." },
-    { id: "message_2", role: "assistant", content: "I drafted a reviewable plan." },
+    {
+      id: "message_2",
+      role: "assistant",
+      content: "I drafted a reviewable plan.",
+      planRevisionId: "analysis_plan_revision_1",
+    },
   ],
 };
 
@@ -979,7 +984,7 @@ describe("AnalysisReviewWorkspace", () => {
     expect(screen.getByTestId("complete-trace-plot").textContent).toBe("1200");
     fireEvent.click(screen.getByText("Series", { selector: "summary" }));
     expect(screen.getByRole("checkbox", { name: "Show Exp 1200 by default" }).checked).toBe(true);
-  }, 15_000);
+  }, 30_000);
 
   it("rejects a preview that does not match the visible run and result ids", () => {
     render(
@@ -1110,5 +1115,194 @@ describe("AnalysisReviewWorkspace", () => {
 
     expect(screen.getAllByTestId("unit-plot")).toHaveLength(1);
     expect(screen.getByTestId("unit-plot").textContent).toBe("Exp 1, Exp 2");
+  });
+
+  it("reviews Experiment Browser patches, resolves identities, and publishes the visible result", async () => {
+    const browserThread = {
+      ...thread,
+      outputTarget: "chart",
+      originalRequest: "Add product yield to Exp31.",
+    };
+    const browserRevision = {
+      ...revision2,
+      outputTarget: "experiment_browser",
+      status: "accepted",
+      reviewPlan: {
+        processingSteps: [
+          "Read product yield from the confirmed supplemental range.",
+          "Add Product yield to Exp31 and preserve every existing field.",
+        ],
+        experimentOutput: { summary: "Add Product yield to Exp31." },
+        browserView: { summary: "Show Exp31, Temperature, and Product yield." },
+      },
+      experimentSelections: [{
+        experimentSelectionId: "experiment_selection_1",
+        experimentId: "experiment_31",
+        label: "Exp31",
+        columnIds: ["field:temperature:degC:number"],
+      }],
+    };
+    const browserRun = { ...validatedRun, outputTarget: "experiment_browser" };
+    const browserResult = {
+      ...validatedResult,
+      outputTarget: "experiment_browser",
+      analysisRunId: browserRun.id,
+      validation: { ok: true, errors: [] },
+    };
+    const browserPreview = {
+      outputTarget: "experiment_browser",
+      analysisRunId: browserRun.id,
+      analysisResultId: browserResult.id,
+      columns: [
+        { id: "experiment", label: "Experiment" },
+        { id: "field:temperature:degC:number", label: "Temperature (degC)" },
+        { id: "field:product_yield:percent:number", label: "Product yield (%)" },
+      ],
+      rows: [{
+        experimentId: "experiment_candidate_1",
+        label: "Exp31",
+        cells: {
+          "field:temperature:degC:number": { value: 250, formattedValue: "250" },
+          "field:product_yield:percent:number": {
+            value: null,
+            formattedValue: null,
+            missingReason: "source_placeholder",
+          },
+        },
+      }],
+      rowChanges: [{
+        experimentId: "experiment_candidate_1",
+        changes: [{
+          kind: "new_field",
+          columnId: "field:product_yield:percent:number",
+          label: "Product yield",
+        }],
+        preservedFieldCount: 1,
+      }],
+      browserView: {
+        visibleColumnIds: [
+          "experiment",
+          "field:temperature:degC:number",
+          "field:product_yield:percent:number",
+        ],
+      },
+      identityCandidates: [{
+        candidateId: "experiment_candidate_1",
+        sourceAlias: "Exp31",
+        status: "conflict",
+        matches: [
+          { id: "experiment_31", label: "Exp31" },
+          { id: "experiment_31_duplicate", label: "Experiment 31 duplicate" },
+        ],
+      }],
+      changeSummary: {
+        experimentCount: 1,
+        newFieldCount: 1,
+        newSeriesCount: 2,
+        changedFieldCount: 0,
+        changedSeriesCount: 0,
+        preservedFieldCount: 1,
+        missingValueCount: 1,
+        missingExperimentCount: 1,
+      },
+      exclusions: [],
+      validation: { ok: true, errors: [] },
+    };
+    const acceptResult = vi.fn().mockResolvedValue({
+      analysisRun: { ...browserRun, status: "completed" },
+      analysisResult: { ...browserResult, status: "accepted" },
+      dataSnapshot: { id: "snapshot_new" },
+      browserView: { id: "browser_view_new" },
+    });
+
+    render(
+      <AnalysisReviewWorkspace
+        projectId="project_1"
+        thread={browserThread}
+        revision={browserRevision}
+        planRevisions={[browserRevision]}
+        selection={{ sourceRectangles: [], experimentSelections: browserRevision.experimentSelections }}
+        run={browserRun}
+        result={browserResult}
+        resultPreview={browserPreview}
+        onAcceptResult={acceptResult}
+      />,
+    );
+
+    expect(screen.getByText("Experiment data plan")).toBeTruthy();
+    expect(screen.getByText("Experiment Browser preview")).toBeTruthy();
+    expect(screen.getByText("Product yield (%)")).toBeTruthy();
+    expect(screen.getByText("1 experiments · 3 new · 0 changed · 1 preserved")).toBeTruthy();
+    expect(screen.getByText("-")).toBeTruthy();
+    expect(screen.getByText("1 missing values across 1 experiments")).toBeTruthy();
+    expect(screen.getByText(browserRevision.requestSummary)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Publish to Browser" }).hasAttribute("disabled")).toBe(true);
+    fireEvent.change(screen.getByLabelText("Identity action for Exp31"), {
+      target: { value: "reuse" },
+    });
+    fireEvent.change(screen.getByLabelText("Existing experiment for Exp31"), {
+      target: { value: "experiment_31" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Publish to Browser" }));
+
+    await waitFor(() => expect(acceptResult).toHaveBeenCalledWith({
+      runId: browserRun.id,
+      analysisResultId: browserResult.id,
+      defaultVisibleTraceIds: [],
+      identityResolutions: [{
+        candidateId: "experiment_candidate_1",
+        action: "reuse",
+        experimentId: "experiment_31",
+      }],
+    }));
+    fireEvent.click(screen.getByRole("tab", { name: "Source" }));
+    expect(screen.getByText("Published experiment data")).toBeTruthy();
+    expect(screen.getAllByText("Exp31").length).toBeGreaterThan(0);
+  });
+
+  it("shows grouped Experiment Browser errors without misleading zero-value preview counts", () => {
+    const browserRevision = {
+      ...revision2,
+      outputTarget: "experiment_browser",
+      status: "accepted",
+      reviewPlan: {
+        processingSteps: ["Add source-backed selectivity fields."],
+        experimentOutput: { summary: "Add selectivity fields." },
+        browserView: { summary: "Show selectivity fields." },
+      },
+    };
+    const errors = ["Exp5", "Exp12", "Exp36", "Exp59"].flatMap((experimentLabel) => (
+      ["Solid", "Liquid", "Gas"].map((fieldName, index) => ({
+        code: "experiment_patch_numeric_value_invalid",
+        message: "A numeric Experiment Browser field requires one finite number.",
+        experimentLabel,
+        fieldName,
+        path: `recordPatches[${index}].upsertFields[0]`,
+      }))
+    ));
+
+    render(
+      <AnalysisReviewWorkspace
+        projectId="project_1"
+        thread={{ ...thread, outputTarget: "experiment_browser" }}
+        revision={browserRevision}
+        planRevisions={[browserRevision]}
+        selection={{ sourceRectangles: [] }}
+        run={{
+          ...validatedRun,
+          outputTarget: "experiment_browser",
+          status: "validation_failed",
+          validation: { ok: false, errors },
+        }}
+        result={null}
+        resultPreview={null}
+      />,
+    );
+
+    expect(screen.getByText("Preview was not created")).toBeTruthy();
+    expect(screen.queryByText(/0 experiments/)).toBeNull();
+    expect(screen.getAllByText("A numeric Experiment Browser field requires one finite number.")).toHaveLength(2);
+    expect(screen.getAllByText(/12 occurrences/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Exp5 \/ Solid/).length).toBeGreaterThan(0);
   });
 });

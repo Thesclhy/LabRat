@@ -322,11 +322,13 @@ export async function materializeAnalysisInputs({
   projectId,
   sourceSelections = [],
 } = {}) {
-  const selections = await resolveAnalysisSourceSelections({
-    store,
-    projectId,
-    sourceSelections,
-  });
+  const selections = asArray(sourceSelections).length
+    ? await resolveAnalysisSourceSelections({
+      store,
+      projectId,
+      sourceSelections,
+    })
+    : [];
   const tables = [];
   for (const selection of selections) {
     tables.push(await materializeSelection({ store, projectId, selection }));

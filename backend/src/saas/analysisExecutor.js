@@ -58,7 +58,10 @@ export function buildAnalysisRunPackage({
     run.acceptedPlanRevisionId !== planRevision.id
     || planRevision.schemaVersion !== "labrat.analysisPlanRevision.v2"
     || !Array.isArray(inputs?.tables)
-    || !inputs.tables.length
+    || (
+      !inputs.tables.length
+      && (!Array.isArray(inputs?.experiments) || !inputs.experiments.length)
+    )
     || pythonProgram?.runtime !== ANALYSIS_RUNTIME_VERSION
     || pythonProgram?.entrypoint !== "analyze"
     || !source
@@ -74,6 +77,7 @@ export function buildAnalysisRunPackage({
     projectId: run.projectId,
     analysisThreadId: run.analysisThreadId,
     acceptedPlanRevisionId: planRevision.id,
+    outputTarget: run.outputTarget || planRevision.outputTarget || "chart",
     runtimeVersion: ANALYSIS_RUNTIME_VERSION,
     inputs: copy(inputs),
     reviewPlan: copy(planRevision.reviewPlan || planRevision.plan?.reviewPlan || {}),

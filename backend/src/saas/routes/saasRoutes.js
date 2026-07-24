@@ -11,10 +11,6 @@ import { isJsonContentType, readJsonBody, routeUrl, sendError } from "../http.js
 import { verifyPassword } from "../passwords.js";
 import { runEvidenceRetrievalAgent } from "../evidenceAgentRetrieval.js";
 import {
-  loadExperimentDataPlanReview,
-  publishExperimentBrowserData,
-} from "../experimentBrowserPublish.js";
-import {
   buildExperimentProjection,
   getExperimentProjectionDetail,
 } from "../experimentProjection.js";
@@ -62,6 +58,7 @@ import {
   reviseAnalysisRun,
 } from "../analysisThreads.js";
 import { publishAcceptedAnalysisChart } from "../analysisChartPublisher.js";
+import { publishAcceptedExperimentAnalysis } from "../analysisExperimentPublisher.js";
 
 const PROJECT_PROFILE_SCHEMA_VERSION = "labrat.projectProfile.v1";
 const ANALYSIS_RETRY_LEASE_MS = 6 * 60 * 1000;
@@ -400,6 +397,12 @@ async function workbookReviewSessionAuth(req, context, sessionId, role = "viewer
   const auth = requireAuth(await authFor(req, context));
   const workbookReviewSession = await context.store.findWorkbookReviewSessionById?.(sessionId);
   if (!workbookReviewSession) {
+    throw Object.assign(new Error("Workbook review session not found."), {
+      statusCode: 404,
+      code: "workbook_review_session_not_found",
+    });
+  }
+  if (workbookReviewSession.status === "deleted") {
     throw Object.assign(new Error("Workbook review session not found."), {
       statusCode: 404,
       code: "workbook_review_session_not_found",
@@ -835,6 +838,15 @@ async function handleProjectState(req, res, context, projectId) {
     context.store.listSourceDocuments ? context.store.listSourceDocuments({ projectId }) : [],
   ]);
   const supportedChartSpecs = chartSpecs.filter(isSupportedChartSpec);
+  const activeWorkbookReviewSessionIds = new Set(
+    workbookReviewSessions.map((session) => session.id),
+  );
+  const activeWorkbookReviewRegions = workbookReviewRegions.filter(
+    (region) => activeWorkbookReviewSessionIds.has(region.workbookReviewSessionId),
+  );
+  const activeRegionUnderstandings = regionUnderstandings.filter(
+    ({ region }) => activeWorkbookReviewSessionIds.has(region.workbookReviewSessionId),
+  );
   sendJson(res, 200, {
     project: projectSummary(project),
     projectProfile: projectProfileFor(project),
@@ -843,8 +855,8 @@ async function handleProjectState(req, res, context, projectId) {
     chartSpecs: supportedChartSpecs.map(chartSpecListItem),
     manuscripts,
     workbookReviewSessions: workbookReviewSessions.map(workbookReviewSessionSummary),
-    workbookReviewRegions: await Promise.all(workbookReviewRegions.map((region) => workbookReviewRegionSummary(context, region))),
-    regionUnderstandings: regionUnderstandings.map(({ region, revision }) => ({
+    workbookReviewRegions: await Promise.all(activeWorkbookReviewRegions.map((region) => workbookReviewRegionSummary(context, region))),
+    regionUnderstandings: activeRegionUnderstandings.map(({ region, revision }) => ({
       regionId: region.id,
       regionUnderstandingRevisionId: revision.id,
       workbookReviewSessionId: region.workbookReviewSessionId,
@@ -916,50 +928,6 @@ async function handleProjectEvidenceRetrieve(req, res, context, projectId) {
     }),
   });
   sendJson(res, 200, response);
-}
-
-async function handleProjectDataPlanDraft(req, res, context, projectId) {
-  const { project } = await projectAuth(req, context, projectId, "editor");
-  const body = await readJsonBody(req);
-  if (body.intent !== "experiment_browser_publish") {
-    sendJson(res, 200, {
-      projectId: project.id,
-      resultKind: "clarification",
-      clarification: {
-        code: "invalid_data_plan_intent",
-        message: "This endpoint drafts only experiment_browser_publish DataPlans from accepted region understanding revisions.",
-      },
-    });
-    return;
-  }
-  const response = await loadExperimentDataPlanReview({
-    store: context.store,
-    project,
-    regionUnderstandingRevisionIds: body.regionUnderstandingRevisionIds,
-    identityDecisions: body.identityDecisions,
-  });
-  sendJson(res, 200, {
-    ...response,
-    projectId: project.id,
-  });
-}
-
-async function handleProjectDataPlanPublish(req, res, context, projectId) {
-  const { auth, project } = await projectAuth(req, context, projectId, "editor");
-  const body = await readJsonBody(req);
-  const response = await publishExperimentBrowserData({
-    store: context.store,
-    project,
-    actorUserId: auth.user.id,
-    dataPlan: body.dataPlan,
-    identityDecisions: body.identityDecisions,
-    expectedPreviewHash: body.expectedPreviewHash,
-    expectedDependencyHash: body.expectedDependencyHash,
-    idempotencyKey: body.idempotencyKey,
-    ipAddress: clientIp(req),
-    userAgent: userAgent(req),
-  });
-  sendJson(res, response.idempotentReplay ? 200 : 201, response);
 }
 
 async function handleProjectDataPlans(req, res, context, projectId) {
@@ -1219,6 +1187,7 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
       project,
       actorUserId: auth.user.id,
       originalRequest: body.message || "",
+      outputTarget: draft.analysisRequest?.outputTarget || "chart",
       messages: [{
         id: makeId("analysis_message"),
         role: "user",
@@ -1228,7 +1197,13 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
       }],
     });
     const planningWarnings = [...asArray(agentRun.warnings)];
-    if (acceptedRegionUnderstandings.length) {
+    if (
+      acceptedRegionUnderstandings.length
+      || (
+        draft.analysisRequest?.outputTarget === "experiment_browser"
+        && experimentSnapshotHeads.length
+      )
+    ) {
       try {
         currentPlanRevision = await draftAnalysisPlanRevision({
           store: context.store,
@@ -1246,10 +1221,14 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
     } else {
       planningWarnings.push({
         code: "analysis_evidence_required",
-        message: "Confirm workbook regions before drafting an analysis plan.",
+        message: draft.analysisRequest?.outputTarget === "experiment_browser"
+          ? "Confirm workbook regions or publish experiment data before drafting an Experiment Browser plan."
+          : "Confirm workbook regions before drafting an analysis plan.",
         severity: "info",
       });
-      reply = "I created an analysis thread, but user-confirmed workbook regions are required before I can draft the reviewed analysis plan.";
+      reply = draft.analysisRequest?.outputTarget === "experiment_browser"
+        ? "I created an Experiment Browser data thread, but confirmed workbook regions or active experiment data are required before I can draft the reviewed plan."
+        : "I created an analysis thread, but user-confirmed workbook regions are required before I can draft the reviewed analysis plan.";
     }
     const draftMetadata = currentPlanRevision?.draftMetadata || {};
     const existingUsage = agentRun.usage || {};
@@ -1427,6 +1406,7 @@ async function handleProjectAnalysisThreads(req, res, context, projectId, url) {
     project,
     actorUserId: auth.user.id,
     originalRequest: body.originalRequest || body.request || body.message,
+    outputTarget: body.outputTarget || "chart",
   });
   await context.store.recordAuditEvent({
     labId: project.labId,
@@ -1887,6 +1867,46 @@ async function handleAnalysisResultChartPublication(req, res, context, analysisR
   });
 }
 
+async function handleAnalysisResultExperimentPublication(req, res, context, analysisRunId) {
+  const { auth, analysisRun } = await analysisRunAuth(
+    req,
+    context,
+    analysisRunId,
+    "editor",
+  );
+  const project = await context.store.findProjectById(analysisRun.projectId);
+  if (!project) {
+    throw Object.assign(new Error("Project not found."), {
+      statusCode: 404,
+      code: "project_not_found",
+    });
+  }
+  const body = await readJsonBody(req);
+  const result = await publishAcceptedExperimentAnalysis({
+    store: context.store,
+    project,
+    actorUserId: auth.user.id,
+    analysisRunId: analysisRun.id,
+    analysisResultId: body.analysisResultId,
+    identityResolutions: body.identityResolutions,
+    idempotencyKey: req.headers["idempotency-key"],
+    ipAddress: clientIp(req),
+    userAgent: userAgent(req),
+  });
+  sendJson(res, result.idempotentReplay ? 200 : 201, {
+    analysisThread: analysisThreadSummary(result.analysisThread),
+    analysisPlanRevision: analysisPlanRevisionSummary(result.analysisPlanRevision),
+    analysisRun: analysisRunSummary(result.analysisRun),
+    analysisResult: analysisResultSummary(result.analysisResult),
+    dataSnapshot: result.dataSnapshot,
+    browserView: result.browserView,
+    experimentIdentities: result.experimentIdentities,
+    experimentSnapshotHeads: result.experimentSnapshotHeads,
+    changeSummary: result.changeSummary,
+    idempotentReplay: result.idempotentReplay,
+  });
+}
+
 async function handleProjectImportRunsList(req, res, context, projectId) {
   await projectAuth(req, context, projectId, "viewer");
   const importRuns = await context.store.listImportRuns({ projectId });
@@ -2209,6 +2229,7 @@ async function workbookReviewRegionSummary(context, region) {
     sheetName: region.sheetName,
     rangeRef: region.rangeRef,
     selectionMethod: region.selectionMethod,
+    interpretationHint: region.interpretationHint || {},
     disposition: region.disposition,
     reviewStatus: region.reviewStatus,
     currentRevisionId: region.currentRevisionId,
@@ -2277,10 +2298,7 @@ async function handleProjectWorkbookReviewSessions(req, res, context, projectId)
   const regions = context.store.listSourceRegions
     ? await context.store.listSourceRegions({ sourceDocumentId: sourceDocument.id })
     : [];
-  const indexBlobs = context.store.listSourceIndexBlobs
-    ? await context.store.listSourceIndexBlobs({ sourceDocumentId: sourceDocument.id })
-    : [];
-  const draft = buildWorkbookReviewSessionDraft({ sourceDocument, regions, indexBlobs });
+  const draft = buildWorkbookReviewSessionDraft({ sourceDocument, regions });
   const session = await context.store.createWorkbookReviewSession({
     labId: project.labId,
     projectId: project.id,
@@ -2290,12 +2308,10 @@ async function handleProjectWorkbookReviewSessions(req, res, context, projectId)
     createdBy: auth.user.id,
   });
   for (const detectedRegion of asArray(draft.candidateRegions)) {
-    await createWorkbookReviewRegionDraft({
+    await createWorkbookReviewRegionRecord({
       store: context.store,
       session,
       sourceDocument,
-      indexBlobs,
-      modelProvider: context.modelProvider,
       actorUserId: auth.user.id,
       input: {
         sourceRegionId: detectedRegion.sourceRegionId,
@@ -2324,6 +2340,7 @@ async function handleProjectWorkbookReviewSessions(req, res, context, projectId)
     sourceDocument: sourceDocumentSummary(sourceDocument),
     regions: regions.map(sourceRegionSummary),
     reviewRegions,
+    interpretationDeferred: true,
     importRun: importRun ? importRunSummary(importRun) : null,
   });
 }
@@ -2341,7 +2358,45 @@ async function handleProjectRegionUnderstandings(req, res, context, projectId) {
 }
 
 async function handleWorkbookReviewSessionById(req, res, context, sessionId) {
-  const { workbookReviewSession } = await workbookReviewSessionAuth(req, context, sessionId, "viewer");
+  const { auth, workbookReviewSession } = await workbookReviewSessionAuth(
+    req,
+    context,
+    sessionId,
+    req.method === "DELETE" ? "editor" : "viewer",
+  );
+  if (req.method === "DELETE") {
+    const body = await readOptionalJsonBody(req);
+    const deleted = await context.store.deleteWorkbookReviewSession(workbookReviewSession.id, {
+      expectedVersion: body.expectedVersion,
+      reason: body.reason || "",
+      actorUserId: auth.user.id,
+    });
+    if (!deleted) {
+      throw Object.assign(new Error("Workbook review session not found."), {
+        statusCode: 404,
+        code: "workbook_review_session_not_found",
+      });
+    }
+    await context.store.recordAuditEvent({
+      labId: workbookReviewSession.labId,
+      projectId: workbookReviewSession.projectId,
+      actorUserId: auth.user.id,
+      action: "workbook_review_session.delete",
+      targetType: "workbook_review_session",
+      targetId: workbookReviewSession.id,
+      summary: `Deleted workbook review session for ${workbookReviewSession.workbookSummary?.workbookName || "workbook"}.`,
+      metadata: {
+        sourceDocumentId: workbookReviewSession.sourceDocumentId,
+        deletedRegionCount: deleted.deletedRegionCount,
+        reason: body.reason || "",
+      },
+    });
+    sendJson(res, 200, {
+      workbookReviewSession: workbookReviewSessionSummary(deleted.workbookReviewSession),
+      deletedRegionCount: deleted.deletedRegionCount,
+    });
+    return;
+  }
   const sourceDocument = await context.store.findSourceDocumentById?.(workbookReviewSession.sourceDocumentId);
   const regions = sourceDocument && context.store.listSourceRegions
     ? await context.store.listSourceRegions({ sourceDocumentId: sourceDocument.id })
@@ -2673,10 +2728,6 @@ async function dispatch(req, res, context) {
   }
   const projectEvidenceRetrieveMatch = pathName.match(/^\/api\/projects\/([^/]+)\/evidence\/retrieve$/);
   if (projectEvidenceRetrieveMatch && req.method === "POST") return handleProjectEvidenceRetrieve(req, res, context, projectEvidenceRetrieveMatch[1]);
-  const projectDataPlanDraftMatch = pathName.match(/^\/api\/projects\/([^/]+)\/data-plans\/draft$/);
-  if (projectDataPlanDraftMatch && req.method === "POST") return handleProjectDataPlanDraft(req, res, context, projectDataPlanDraftMatch[1]);
-  const projectDataPlanPublishMatch = pathName.match(/^\/api\/projects\/([^/]+)\/data-plans\/publish$/);
-  if (projectDataPlanPublishMatch && req.method === "POST") return handleProjectDataPlanPublish(req, res, context, projectDataPlanPublishMatch[1]);
   const projectDataPlansMatch = pathName.match(/^\/api\/projects\/([^/]+)\/data-plans$/);
   if (projectDataPlansMatch && req.method === "GET") return handleProjectDataPlans(req, res, context, projectDataPlansMatch[1]);
   const projectDataSnapshotsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/data-snapshots$/);
@@ -2750,7 +2801,9 @@ async function dispatch(req, res, context) {
     return handleWorkbookReviewSessionRegions(req, res, context, workbookReviewSessionRegionsMatch[1]);
   }
   const workbookReviewSessionMatch = pathName.match(/^\/api\/workbook-review-sessions\/([^/]+)$/);
-  if (workbookReviewSessionMatch && req.method === "GET") return handleWorkbookReviewSessionById(req, res, context, workbookReviewSessionMatch[1]);
+  if (workbookReviewSessionMatch && (req.method === "GET" || req.method === "DELETE")) {
+    return handleWorkbookReviewSessionById(req, res, context, workbookReviewSessionMatch[1]);
+  }
   const agentRunCancelMatch = pathName.match(/^\/api\/agent-runs\/([^/]+)\/cancel$/);
   if (agentRunCancelMatch && req.method === "POST") return handleAgentRunCancel(req, res, context, agentRunCancelMatch[1]);
   const agentRunMatch = pathName.match(/^\/api\/agent-runs\/([^/]+)$/);
@@ -2784,6 +2837,17 @@ async function dispatch(req, res, context) {
       res,
       context,
       analysisRunPublishChartMatch[1],
+    );
+  }
+  const analysisRunPublishExperimentsMatch = pathName.match(
+    /^\/api\/analysis-runs\/([^/]+)\/accept-and-publish-experiments$/,
+  );
+  if (analysisRunPublishExperimentsMatch && req.method === "POST") {
+    return handleAnalysisResultExperimentPublication(
+      req,
+      res,
+      context,
+      analysisRunPublishExperimentsMatch[1],
     );
   }
   const analysisRunMatch = pathName.match(/^\/api\/analysis-runs\/([^/]+)$/);

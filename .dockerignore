@@ -1,0 +1,13 @@
+.git
+.codex
+.superpowers
+.tmp
+.vite
+.vitest
+artifacts
+backend/.labrat-files
+backend/node_modules
+dist
+node_modules
+postman/cookies.txt
+*.log

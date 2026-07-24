@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-07-23
+Last reviewed: 2026-07-24
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -13,8 +13,172 @@ Keep entries concise, newest first, and include:
 - verification
 - follow-ups or residual risk
 
+## 2026-07-24
+
+- Added source-backed nullable scalar values to the Experiment Browser analysis
+  and DataSnapshot v3 path. New nulls require a reviewed missing reason and
+  exact source evidence, retain source raw/formatted placeholders, never
+  become zero, cannot replace an existing non-null value, and can later be
+  replaced by a valid value. Prompts and grouped repair diagnostics now teach
+  the Python model the null contract and exact `number` value type. Result and
+  Browser tables render null as `-`; experiment detail shows the missing
+  reason, workbook/sheet/cell, and original source placeholder. Summaries
+  report missing values and experiments, failed previews no longer show
+  misleading zero totals, and conversation history labels its plan revision.
+  Real Anthropic plus local-Python Docker E2E published 61 master-table
+  experiments with 183 fields and 12 source-placeholder nulls across Exp5,
+  Exp12, Exp36, and Exp59. Post-publish PostgreSQL verification confirmed 61
+  active heads and exact L7/M7/N7 evidence for Exp5. Also narrowed upload
+  intent detection so "add fields from X.xlsx to Experiment Browser" routes to
+  reviewed data publication rather than requesting another attachment. Final
+  `npm run codex:verify` passed frontend 244/244, backend 202 passed with four
+  retired-flow skips, and the production build with only the existing Plotly
+  chunk-size warning. Configured PostgreSQL integration passed 2/2.
+- Provisioned the temporary production Lightsail deployment at
+  `https://labrat.100.50.25.194.nip.io/LabRat/`. Created the
+  `labrat-prod-1` Ubuntu 24.04 `small_3_0` instance in `us-east-1`, attached
+  static IP `100.50.25.194`, restricted the public firewall to 22/80/443,
+  installed Node 22, Postgres 16, Caddy, the `labrat-backend` systemd service,
+  and backup cron, then deployed the current local working tree as release
+  `c12d035fec35-local-20260724005525`. Verification passed: frontend
+  242/242, backend 197 passed with four retired-flow skips, `npm run build`
+  with the existing Plotly chunk-size warning, production migrations 001-019,
+  HTTPS `/health`, frontend HTML under `/LabRat/`, bootstrap admin login with
+  `HttpOnly`/`Secure` cookie, default dev-account rejection, active
+  `labrat-backend`/`caddy`, and one manual backup set in `/var/backups/labrat`.
+  Follow-up: configure GitHub repository secrets and push the intended local
+  state to `main` before relying on automatic GitHub Actions deployment; later
+  replace the temporary `nip.io` hostname with a owned domain.
+- Connected sustainable Experiment Browser publication to ordinary LabRat chat.
+  AgentPanel now submits the actual active workspace surface instead of
+  defaulting every non-button request to `project`. The backend combines that
+  weak Browser context with explicit data-change semantics to route additions,
+  calculations, replacements, and publication to
+  `publish_experiment_data`; chart requests and display-only show/hide/filter/
+  sort requests remain separate. Bounded model classification now receives
+  safe context values rather than only their key names. Verification passed:
+  frontend 242/242, backend 197 passed with four retired-flow skips, and
+  `npm run build` with the existing Plotly chunk-size warning.
+- Implemented the AWS Lightsail deployment automation plan without creating
+  billable AWS resources. Added a GitHub Actions workflow that tests, runs the
+  configured Postgres integration suite, builds, assembles a clean release
+  archive, uploads it to Lightsail over SSH, and runs a remote deploy script
+  with migration, symlink switch, systemd restart, health check, retention, and
+  rollback behavior. Added Lightsail provisioning, Caddy, systemd, backup, and
+  production env templates; added a production-only first-admin bootstrap
+  script that refuses to run with development seed accounts and only creates an
+  admin when the users table is empty. Documented the single-instance
+  deployment, GitHub secrets, local-current-state-to-main requirement,
+  bootstrap, backup, rollback, and acceptance checks. Verification:
+  `node --check backend/scripts/bootstrap-admin.mjs`, Git Bash `bash -n` for
+  deploy scripts, `npm --prefix backend run bootstrap:admin -- --help`,
+  `npm --prefix backend test`, `npm test`, `npm run build`, and targeted
+  `git diff --check` passed; the build kept the existing Plotly chunk-size
+  warning. Follow-up: create the actual Lightsail instance, configure DNS and
+  GitHub secrets, push the intended local state to `main`, run the first
+  deployment, then perform the documented smoke, backup, and restore checks.
+
 ## 2026-07-23
 
+- Completed real Anthropic + local-Python Docker E2E for sustainable
+  Experiment Browser updates. A confirmed `A1:P64` supplemental workbook
+  (1,024 cells) and the active Exp1 snapshot produced a mixed four-selection
+  review plan without the old 500-cell failure. Publication created
+  DataSnapshot v3, preserved all 14 Exp1 scalar fields, added two source-backed
+  62-point reaction-rate series, advanced only Exp1's snapshot head, opened a
+  new BrowserView, and exposed both series in Browser detail. E2E exposed and
+  fixed narrow Browser-write intent routing, Anthropic-incompatible schema
+  keywords, list-vs-map Python input ambiguity, series output naming,
+  duplicated identity fields, repeated unit labels, and unsafe default-view
+  replacement. Python execution/output-contract failures now receive one
+  bounded automatic replacement-program attempt inside the same immutable run;
+  attempt hashes and diagnostics are persisted without asking users to revise
+  an unchanged scientific plan. Result summaries now count new/changed series
+  with fields, planning counts must exclude header rows, and LabRat's panel
+  stays above the comparison tray at the default 1280px viewport. Focused
+  Browser/provider/executor tests passed 31/31 and Review Workspace passed
+  25/25. After extending only the heavy 1,200-series and workbook-grid test
+  timeouts, `npm run codex:verify` passed frontend 241/241, backend 194 passed
+  with four retired-flow skips, and the production build with the existing
+  Plotly chunk-size warning. Configured PostgreSQL integration passed 2/2.
+- Rebuilt Experiment Browser publication as a sustainable natural-language
+  analysis target. Plans may combine confirmed workbook ranges and frozen
+  active experiment fields; Python is generated only after plan acceptance and
+  returns source-backed record patches. Backend validation now reuses stable
+  field selectors, blocks same-key/same-unit type conflicts and forged sources,
+  preserves untouched fields/series, reports new/changed/preserved/excluded
+  records, and enforces identity and stale-head review. Explicit publication
+  atomically creates DataSnapshot v3, advances only affected heads, creates a
+  non-default BrowserView, and completes the analysis with idempotent audit
+  receipt. Source/Result frontend review now renders the merged Browser table,
+  resolves only ambiguous identities, and opens the published view. Retired the
+  old DataPlan draft/publish routes, frontend API/panel, and deterministic
+  writer modules. Added backend unit/route E2E and frontend review/API coverage.
+  Targeted frontend 241/241 and build passed; backend was rerun after fixing a
+  BrowserView payload-contract fallback. Full repository and Docker/Postgres
+  verification follows in this milestone.
+- Removed region-model latency from workbook upload/session creation.
+  Deterministic candidate regions now persist immediately with recoverable
+  interpretation hints and `reviewStatus: interpreting`; Workbook Review opens
+  before project refresh or model completion, displays pending range cards,
+  and runs one shared active-region-first queue for automatic and manual
+  selections with a maximum of three concurrent calls. Results update cards in
+  place, stale responses remain isolated by session/version, and individual
+  failures expose Retry AI without blocking the queue. Focused verification
+  passed frontend/API/hook tests 83/83, backend routes/region tests 32/32,
+  and configured PostgreSQL integration 2/2. Full `npm run codex:verify`
+  passed frontend 250/250, backend 204 passed with one optional PostgreSQL
+  integration skip, and the production build with the existing Plotly
+  chunk-size warning. Docker rebuild/restart left all three services healthy
+  and migration 018 exposed the expected `interpretation_hint` JSONB column.
+  An authenticated seven-region QA workbook returned all persisted
+  `interpreting` regions in 177 ms; browser QA then showed all range cards,
+  review controls, and red/active highlights before sheet loading completed,
+  followed their progressive interpretation, and confirmed all seven cards
+  reached reviewable natural-language results. Reloading and reopening the
+  workbook resumed its remaining pending region without duplicating completed
+  work. One initial full-suite run timed out in an existing workbook-cell load
+  assertion under parallel load; the isolated test and the subsequent complete
+  verification both passed.
+- Added per-workbook deletion to the `Uploaded workbooks` chooser. Each row now
+  has separate Open and Delete actions, a destructive-action confirmation,
+  in-row busy state, and visible failure feedback. The backend uses
+  editor-only, version-checked logical deletion: the session and its active
+  regions leave project review/evidence responses, while ignored-region
+  history, SourceDocument/FileObject evidence, accepted DataSnapshots,
+  ChartSpecs, and audit history remain intact. Focused verification passed
+  backend routes 22/22, frontend/API tests 72/72, and configured PostgreSQL
+  integration 2/2. Full `npm run codex:verify` passed frontend 245/245,
+  backend 204 passed with one optional PostgreSQL integration skip, and the
+  production build with the existing Plotly chunk-size warning. After a Docker
+  restart all three services were healthy. Browser QA confirmed all seven
+  workbook rows exposed separate accessible Open/Delete controls; an
+  automation-triggered logical deletion of `MasterTable_updated.xlsx` was
+  immediately restored with an audit event, and the active workbook count was
+  reverified as seven.
+- Unified the Project Overview workbook-review entry through the uploaded
+  workbook chooser. `Review regions`, `View confirmed regions`, `Review
+  workbook`, and the matching primary next action no longer open the most
+  recent session automatically. The chooser lists every workbook with sheet,
+  confirmed-region, pending-region, and update metadata; only an explicit file
+  click loads its Workbook Review workspace. Focused ProjectDashboard coverage
+  passed 56/56. Docker browser QA confirmed seven workbooks were listed before
+  any workbook workspace loaded, then opened `MasterTable_updated.xlsx`
+  correctly with no console warnings or errors. The production build passed
+  with the existing Plotly chunk-size warning.
+- Made Docker Compose the default local runtime. Added a Python-enabled backend
+  development image, persistent Postgres/file/dependency volumes, health-gated
+  startup, restart policies, and host Postgres port `5433` to avoid unrelated
+  local services on `5432`. The backend migration runner now uses an advisory
+  lock plus immutable checksum ledger and safely baselines the already-current
+  local schema instead of replaying one-time migrations on every restart.
+  Verified backend restart, full Compose down/up, retained login-visible project
+  data, frontend API proxying, configured Anthropic/local-executor capabilities,
+  Python 3.14.5, and two consecutive full migration runs in an isolated
+  Postgres schema. All three services ended healthy. `npm run codex:verify`
+  passed frontend 243/243, backend 203 passed with one optional PostgreSQL
+  integration skip, and the production build with the existing Plotly
+  chunk-size warning.
 - Rebuilt reviewed chart analysis around exact confirmed workbook selections.
   The planning model now pages through active accepted regions and persists only
   `sourceSelections`, structured review meaning, and readable display steps.

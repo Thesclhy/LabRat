@@ -38,6 +38,7 @@ function columnLabel(field) {
     .replace(/°/g, "deg")
     .replace(/%/g, "percent")
     .replace(/[^a-z0-9]/g, "");
+  if (field.unit && unitToken(displayName) === unitToken(field.unit)) return displayName;
   if (field.unit && parentheticalUnit && unitToken(parentheticalUnit) === unitToken(field.unit)) return displayName;
   return field.unit ? `${displayName} (${field.unit})` : displayName;
 }
@@ -218,6 +219,7 @@ function buildRows(entries, columns) {
       cells[columnId] = {
         value: field.value ?? null,
         formattedValue: field.formattedValue ?? null,
+        missingReason: field.missingReason || null,
         confidence: field.confidence ?? null,
         warningCount: asArray(field.warnings).length,
       };

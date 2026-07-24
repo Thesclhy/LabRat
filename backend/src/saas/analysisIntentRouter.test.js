@@ -42,6 +42,84 @@ test("keeps explicit Browser navigation deterministic", async () => {
   assert.equal(result.actionType, "open_experiment_browser");
 });
 
+test("forces Browser data changes into an Experiment Browser analysis thread", async () => {
+  const result = await routeAnalysisIntent({
+    message: "Add normalized selectivity and keep the existing columns.",
+    selectedContext: {
+      tab: "experiment_browser",
+      analysisOutputTarget: "experiment_browser",
+    },
+    projectContext,
+  });
+
+  assert.equal(result.intent, "publish_experiment_data");
+  assert.equal(result.disposition, "analysis_thread");
+  assert.equal(result.actionType, null);
+});
+
+test("routes series additions to a Browser view without requiring exact product wording", async () => {
+  const result = await routeAnalysisIntent({
+    message: "Add the two confirmed Exp1 reaction-rate series to the existing Exp1 record. Preserve every existing scalar field and show the updated experiment in a new Browser view.",
+    projectContext,
+  });
+
+  assert.equal(result.intent, "publish_experiment_data");
+  assert.equal(result.disposition, "analysis_thread");
+  assert.equal(result.actionType, null);
+  assert.equal(result.metadata.provider, "deterministic");
+});
+
+test("routes data from an already uploaded workbook into Browser publication", async () => {
+  const result = await routeAnalysisIntent({
+    message: "Add the selectivity columns from MasterTable_updated.xlsx to Experiment Browser.",
+    projectContext,
+  });
+
+  assert.equal(result.intent, "publish_experiment_data");
+  assert.equal(result.disposition, "analysis_thread");
+  assert.equal(result.actionType, null);
+});
+
+test("uses the active Browser surface to route concise data changes", async () => {
+  const result = await routeAnalysisIntent({
+    message: "Add normalized selectivity to Exp31.",
+    selectedContext: {
+      tab: "browser",
+      activeSurface: "browser",
+    },
+    projectContext,
+  });
+
+  assert.equal(result.intent, "publish_experiment_data");
+  assert.equal(result.disposition, "analysis_thread");
+});
+
+test("keeps a substantive Browser data change when the user also asks to show it", async () => {
+  const result = await routeAnalysisIntent({
+    message: "Add normalized selectivity to Exp31 and show it in the new view.",
+    selectedContext: { activeSurface: "browser" },
+    projectContext,
+  });
+
+  assert.equal(result.intent, "publish_experiment_data");
+});
+
+test("does not turn Browser display or chart requests into data publication", async () => {
+  const displayResult = await routeAnalysisIntent({
+    message: "Show Exp31.",
+    selectedContext: { activeSurface: "browser" },
+    projectContext,
+  });
+  const chartResult = await routeAnalysisIntent({
+    message: "Draw a chart for Exp31.",
+    selectedContext: { activeSurface: "browser" },
+    projectContext,
+  });
+
+  assert.notEqual(displayResult.intent, "publish_experiment_data");
+  assert.equal(chartResult.intent, "create_analysis_chart");
+});
+
 test("keeps explicit upload commands ahead of model classification", async () => {
   let modelCalled = false;
   const result = await routeAnalysisIntent({
@@ -68,6 +146,14 @@ test("uses bounded provider classification for ambiguous questions", async () =>
     modelProvider: {
       async classifyIntent(input) {
         assert.deepEqual(input.selectedContextKeys, ["selectedExperimentIds"]);
+        assert.deepEqual(input.selectedContext, {
+          tab: "",
+          activeSurface: "",
+          analysisOutputTarget: "",
+          requestedWorkflow: "",
+          hasSelectedExperiment: false,
+          hasSelectedChart: false,
+        });
         assert.equal("records" in input, false);
         return {
           intent: "experiment_compare",

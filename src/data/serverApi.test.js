@@ -9,8 +9,7 @@ import {
   createServerProject,
   createServerWorkbookReviewSession,
   deleteServerProject,
-  draftServerProjectDataPlan,
-  publishServerProjectDataPlan,
+  deleteServerWorkbookReviewSession,
   getServerAgentRun,
   getServerChartSpec,
   getServerProjectState,
@@ -177,6 +176,8 @@ describe("serverApi", () => {
       sheetName: "Runs",
       range: "A1:D3",
       selectionMethod: "drag_select",
+      description: "",
+      semanticType: "generic_table",
       idempotencyKey: "create_region_1",
       deferInterpretation: true,
     });
@@ -193,9 +194,28 @@ describe("serverApi", () => {
     expect(fetchImpl.mock.calls[8][0]).toBe("/api/workbook-review-sessions/session_1/regions/region_1/interpret");
     expect(JSON.parse(fetchImpl.mock.calls[8][1].body)).toEqual({
       expectedRegionVersion: 1,
-      description: "",
       semanticType: "experiment_table",
       idempotencyKey: "interpret_region_1",
+    });
+  });
+
+  it("routes workbook review session deletion with its reviewed version", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({
+      workbookReviewSession: { id: "session_1", status: "deleted" },
+      deletedRegionCount: 2,
+    }));
+
+    await deleteServerWorkbookReviewSession("session_1", {
+      expectedVersion: 3,
+      reason: "Remove this workbook from review.",
+    }, { fetch: fetchImpl });
+
+    const { url, options } = lastCall(fetchImpl);
+    expect(url).toBe("/api/workbook-review-sessions/session_1");
+    expect(options.method).toBe("DELETE");
+    expect(JSON.parse(options.body)).toEqual({
+      expectedVersion: 3,
+      reason: "Remove this workbook from review.",
     });
   });
 
@@ -225,87 +245,6 @@ describe("serverApi", () => {
     });
     expect(() => retrieveProjectEvidence("", { query: "x" }, { fetch: fetchImpl }))
       .toThrow(/project/i);
-  });
-
-  it("routes project data plan draft helper", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({
-      resultKind: "data_plan_review",
-      dataPlan: { id: "data_plan_preview_1" },
-    }));
-
-    await draftServerProjectDataPlan("project_1", {
-      intent: "experiment_browser_publish",
-      regionUnderstandingRevisionIds: ["region_understanding_revision_1"],
-      identityDecisions: [{ sourceAlias: "Exp1", action: "create" }],
-    }, { fetch: fetchImpl });
-
-    expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects/project_1/data-plans/draft");
-    expect(fetchImpl.mock.calls[0][1].method).toBe("POST");
-    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
-      intent: "experiment_browser_publish",
-      regionUnderstandingRevisionIds: ["region_understanding_revision_1"],
-      identityDecisions: [{ sourceAlias: "Exp1", action: "create" }],
-    });
-    expect(() => draftServerProjectDataPlan("", { query: "x" }, { fetch: fetchImpl }))
-      .toThrow(/project/i);
-
-    const clarificationFetch = vi.fn().mockResolvedValue(jsonResponse({
-      resultKind: "clarification",
-      clarification: { code: "region_understanding_incomplete", message: "Review experiment identity first." },
-    }));
-    await expect(draftServerProjectDataPlan("project_1", {
-      regionUnderstandingRevisionIds: ["region_understanding_revision_1"],
-    }, { fetch: clarificationFetch })).rejects.toMatchObject({
-      code: "region_understanding_incomplete",
-      message: "Review experiment identity first.",
-    });
-  });
-
-  it("publishes a reviewed data plan with stale-preview details intact", async () => {
-    const fetchImpl = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({
-        dataPlan: { id: "data_plan_accepted_1", status: "accepted" },
-        dataSnapshot: { id: "data_snapshot_1", status: "accepted" },
-        idempotentReplay: false,
-      }, { status: 201 }))
-      .mockResolvedValueOnce(jsonResponse({
-        error: {
-          code: "preview_stale",
-          message: "The preview changed.",
-          details: {
-            currentReview: {
-              dataPlan: { id: "data_plan_preview_2" },
-              snapshotPreview: { previewHash: "sha256_current" },
-            },
-          },
-        },
-      }, { status: 409 }));
-    const request = {
-      dataPlan: {
-        id: "data_plan_preview_1",
-        sourceEvidence: [{ regionUnderstandingRevisionId: "region_understanding_revision_1" }],
-      },
-      identityDecisions: [{ sourceAlias: "Exp1", action: "create" }],
-      expectedPreviewHash: "sha256_preview",
-      expectedDependencyHash: "sha256_dependency",
-      idempotencyKey: "publish_client_1",
-    };
-
-    const published = await publishServerProjectDataPlan("project_1", request, { fetch: fetchImpl });
-    expect(published.dataSnapshot.id).toBe("data_snapshot_1");
-    expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects/project_1/data-plans/publish");
-    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual(request);
-    expect(() => publishServerProjectDataPlan("", request, { fetch: fetchImpl })).toThrow(/project/i);
-
-    await expect(publishServerProjectDataPlan("project_1", request, { fetch: fetchImpl })).rejects.toMatchObject({
-      status: 409,
-      code: "preview_stale",
-      details: {
-        currentReview: {
-          snapshotPreview: { previewHash: "sha256_current" },
-        },
-      },
-    });
   });
 
   it("routes AgentRun operations", async () => {

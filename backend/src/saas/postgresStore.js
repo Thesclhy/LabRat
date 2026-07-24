@@ -212,6 +212,7 @@ function workbookReviewRegionFromRow(row) {
     sheetName: row.sheet_name,
     rangeRef: row.range_ref,
     selectionMethod: row.selection_method,
+    interpretationHint: row.interpretation_hint || {},
     disposition: row.disposition,
     reviewStatus: row.review_status,
     currentRevisionId: row.current_revision_id,
@@ -292,6 +293,9 @@ function dataSnapshotFromRow(row) {
     labId: row.lab_id,
     projectId: row.project_id,
     dataPlanId: row.data_plan_id,
+    analysisPlanRevisionId: row.analysis_plan_revision_id || null,
+    analysisRunId: row.analysis_run_id || null,
+    analysisResultId: row.analysis_result_id || null,
     schemaVersion: row.schema_version,
     status: row.status,
     outputShape: row.output_shape,
@@ -402,12 +406,15 @@ function analysisThreadFromRow(row) {
     projectId: row.project_id,
     schemaVersion: row.schema_version || "labrat.analysisThread.v1",
     status: row.status,
+    outputTarget: row.output_target || "chart",
     originalRequest: row.original_request,
     messages: row.messages || [],
     planRevisionIds: row.plan_revision_ids || [],
     analysisRunIds: row.analysis_run_ids || [],
     acceptedAnalysisResultIds: row.accepted_analysis_result_ids || [],
     chartSpecIds: row.chart_spec_ids || [],
+    dataSnapshotIds: row.data_snapshot_ids || [],
+    browserViewIds: row.browser_view_ids || [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     createdBy: row.created_by,
@@ -446,6 +453,7 @@ function analysisPlanRevisionFromRow(row) {
     schemaVersion: row.schema_version || "labrat.analysisPlanRevision.v2",
     revision: Number(row.revision),
     status: row.status,
+    outputTarget: row.output_target || plan.outputTarget || "chart",
     requestSummary: row.request_summary,
     plan,
     sourceSelections: plan.sourceSelections || [],
@@ -474,6 +482,7 @@ function analysisRunFromRow(row) {
     acceptedPlanRevisionId: row.accepted_plan_revision_id,
     schemaVersion: row.schema_version || "labrat.analysisRun.v1",
     status: row.status,
+    outputTarget: row.output_target || "chart",
     idempotencyKey: row.idempotency_key,
     requestHash: row.request_hash,
     inputHash: row.input_hash,
@@ -500,6 +509,7 @@ function analysisResultFromRow(row) {
     analysisRunId: row.analysis_run_id,
     schemaVersion: row.schema_version || "labrat.analysisResult.v1",
     status: row.status,
+    outputTarget: row.output_target || "chart",
     contentHash: row.content_hash,
     resultPreviewHash: row.result_preview_hash,
     result: row.result || {},
@@ -524,6 +534,24 @@ function analysisPublicationFromRow(row) {
     analysisThreadId: row.analysis_thread_id,
     analysisResultId: row.analysis_result_id,
     chartSpecId: row.chart_spec_id,
+    idempotencyKey: row.idempotency_key,
+    requestHash: row.request_hash,
+    response: row.response || {},
+    createdAt: row.created_at,
+    createdBy: row.created_by,
+  };
+}
+
+function analysisExperimentPublicationFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    analysisThreadId: row.analysis_thread_id,
+    analysisResultId: row.analysis_result_id,
+    dataSnapshotId: row.data_snapshot_id,
+    browserViewId: row.browser_view_id,
     idempotencyKey: row.idempotency_key,
     requestHash: row.request_hash,
     response: row.response || {},
@@ -574,11 +602,11 @@ async function insertAnalysisPlanRevisionRow(client, input) {
   const result = await client.query(
     `insert into analysis_plan_revisions
      (id, lab_id, project_id, analysis_thread_id, schema_version, revision, status,
-      request_summary, plan, source_rectangles, feedback, warnings, validation,
+      output_target, request_summary, plan, source_rectangles, feedback, warnings, validation,
       accepted_at, accepted_by, created_at, updated_at, created_by, updated_by)
      values
      ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-      $16, $17, $18, $19)
+      $16, $17, $18, $19, $20)
      returning *`,
     [
       input.id,
@@ -588,6 +616,7 @@ async function insertAnalysisPlanRevisionRow(client, input) {
       input.schemaVersion || "labrat.analysisPlanRevision.v2",
       input.revision,
       input.status || "awaiting_review",
+      input.outputTarget || input.plan?.outputTarget || "chart",
       input.requestSummary,
       jsonb(input.plan || {}),
       jsonb(input.sourceRectangles || [], []),
@@ -609,12 +638,12 @@ async function insertAnalysisRunRow(client, input) {
   const result = await client.query(
     `insert into analysis_runs
      (id, lab_id, project_id, analysis_thread_id, accepted_plan_revision_id,
-      schema_version, status, idempotency_key, request_hash, input_hash,
+      schema_version, status, output_target, idempotency_key, request_hash, input_hash,
       program_hash, runtime_version, result_preview_hash, payload, warnings,
       validation, created_at, updated_at, created_by, updated_by)
      values
      ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-      $15, $16, $17, $18, $19, $20)
+      $15, $16, $17, $18, $19, $20, $21)
      returning *`,
     [
       input.id,
@@ -624,6 +653,7 @@ async function insertAnalysisRunRow(client, input) {
       input.acceptedPlanRevisionId,
       input.schemaVersion || "labrat.analysisRun.v1",
       input.status || "queued",
+      input.outputTarget || "chart",
       input.idempotencyKey,
       input.requestHash,
       input.inputHash,
@@ -646,12 +676,12 @@ async function insertAnalysisResultRow(client, input) {
   const result = await client.query(
     `insert into analysis_results
      (id, lab_id, project_id, analysis_thread_id, analysis_run_id, schema_version,
-      status, content_hash, result_preview_hash, result, source_refs, warnings,
+      status, output_target, content_hash, result_preview_hash, result, source_refs, warnings,
       validation, accepted_at, accepted_by, created_at, updated_at, created_by,
       updated_by)
      values
      ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-      $15, $16, $17, $18, $19)
+      $15, $16, $17, $18, $19, $20)
      returning *`,
     [
       input.id,
@@ -661,6 +691,7 @@ async function insertAnalysisResultRow(client, input) {
       input.analysisRunId,
       input.schemaVersion || "labrat.analysisResult.v1",
       input.status || "awaiting_review",
+      input.outputTarget || "chart",
       input.contentHash,
       input.resultPreviewHash || null,
       jsonb(input.result || {}),
@@ -1247,10 +1278,77 @@ export class PostgresSaasStore {
     return workbookReviewSessionFromRow(result.rows[0]);
   }
 
-  async listWorkbookReviewSessions({ projectId }) {
+  async deleteWorkbookReviewSession(id, {
+    expectedVersion,
+    reason = "",
+    actorUserId = null,
+  } = {}) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const currentResult = await client.query(
+        "select * from workbook_review_sessions where id = $1 for update",
+        [id],
+      );
+      const current = workbookReviewSessionFromRow(currentResult.rows[0]);
+      if (!current) {
+        await client.query("rollback");
+        return null;
+      }
+      if (!Number.isInteger(Number(expectedVersion)) || Number(expectedVersion) !== Number(current.version)) {
+        throw Object.assign(new Error("Workbook review session changed; reload before deleting it."), {
+          statusCode: 409,
+          code: "workbook_review_session_version_conflict",
+          details: {
+            expectedVersion: Number.isInteger(Number(expectedVersion)) ? Number(expectedVersion) : null,
+            currentVersion: Number(current.version) || 1,
+          },
+        });
+      }
+      const sessionResult = await client.query(
+        `update workbook_review_sessions
+         set status = 'deleted',
+             version = version + 1,
+             updated_at = now(),
+             updated_by = coalesce($2, updated_by)
+         where id = $1
+         returning *`,
+        [id, actorUserId],
+      );
+      const regionsResult = await client.query(
+        `update workbook_review_regions
+         set disposition = 'deleted',
+             deleted_at = now(),
+             deleted_by = $2,
+             deleted_reason = $3,
+             version = version + 1,
+             updated_at = now(),
+             updated_by = coalesce($2, updated_by)
+         where workbook_review_session_id = $1
+           and disposition = 'active'
+         returning id`,
+        [id, actorUserId, String(reason || "").trim()],
+      );
+      await client.query("commit");
+      return {
+        workbookReviewSession: workbookReviewSessionFromRow(sessionResult.rows[0]),
+        deletedRegionCount: regionsResult.rowCount,
+      };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async listWorkbookReviewSessions({ projectId, includeDeleted = false }) {
     const result = await this.query(
-      "select * from workbook_review_sessions where project_id = $1 order by updated_at desc",
-      [projectId],
+      `select * from workbook_review_sessions
+       where project_id = $1
+         and ($2::boolean = true or status <> 'deleted')
+       order by updated_at desc`,
+      [projectId, includeDeleted === true],
     );
     return result.rows.map(workbookReviewSessionFromRow);
   }
@@ -1259,11 +1357,12 @@ export class PostgresSaasStore {
     const result = await this.query(
       `insert into workbook_review_regions
        (id, lab_id, project_id, workbook_review_session_id, source_document_id, source_region_id,
-        sheet_name, range_ref, selection_method, disposition, review_status, current_revision_id,
-        accepted_revision_id, version, warnings, accepted_at, accepted_by, ignored_at, ignored_by, ignored_reason, deleted_at,
-        deleted_by, deleted_reason, created_at, updated_at, created_by, updated_by)
+        sheet_name, range_ref, selection_method, interpretation_hint, disposition, review_status,
+        current_revision_id, accepted_revision_id, version, warnings, accepted_at, accepted_by,
+        ignored_at, ignored_by, ignored_reason, deleted_at, deleted_by, deleted_reason,
+        created_at, updated_at, created_by, updated_by)
        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-               $16, $17, $18, $19, $20, $21, $22, $23, now(), now(), $24, $24)
+               $16, $17, $18, $19, $20, $21, $22, $23, $24, now(), now(), $25, $25)
        returning *`,
       [
         input.id || makeId("workbook_review_region"),
@@ -1275,6 +1374,7 @@ export class PostgresSaasStore {
         input.sheetName,
         input.rangeRef,
         input.selectionMethod || "manual",
+        jsonb(input.interpretationHint || {}),
         input.disposition || "active",
         input.reviewStatus || "interpreting",
         input.currentRevisionId || null,
@@ -1827,8 +1927,9 @@ export class PostgresSaasStore {
       `insert into analysis_threads
        (id, lab_id, project_id, schema_version, status, original_request, messages,
         plan_revision_ids, analysis_run_ids, accepted_analysis_result_ids,
-        chart_spec_ids, created_at, updated_at, created_by, updated_by)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        chart_spec_ids, output_target, data_snapshot_ids, browser_view_ids,
+        created_at, updated_at, created_by, updated_by)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
        returning *`,
       [
         input.id || makeId("analysis_thread"),
@@ -1842,6 +1943,9 @@ export class PostgresSaasStore {
         jsonb(input.analysisRunIds || [], []),
         jsonb(input.acceptedAnalysisResultIds || [], []),
         jsonb(input.chartSpecIds || [], []),
+        input.outputTarget || "chart",
+        jsonb(input.dataSnapshotIds || [], []),
+        jsonb(input.browserViewIds || [], []),
         input.createdAt || nowIso(),
         input.updatedAt || input.createdAt || nowIso(),
         input.createdBy,
@@ -1870,23 +1974,29 @@ export class PostgresSaasStore {
     const result = await this.query(
       `update analysis_threads
        set status = $2,
-           messages = $3,
-           plan_revision_ids = $4,
-           analysis_run_ids = $5,
-           accepted_analysis_result_ids = $6,
-           chart_spec_ids = $7,
-           updated_at = $8,
-           updated_by = $9
+           output_target = $3,
+           messages = $4,
+           plan_revision_ids = $5,
+           analysis_run_ids = $6,
+           accepted_analysis_result_ids = $7,
+           chart_spec_ids = $8,
+           data_snapshot_ids = $9,
+           browser_view_ids = $10,
+           updated_at = $11,
+           updated_by = $12
        where id = $1
        returning *`,
       [
         id,
         changes.status ?? current.status,
+        changes.outputTarget ?? current.outputTarget ?? "chart",
         jsonb(changes.messages ?? current.messages ?? [], []),
         jsonb(changes.planRevisionIds ?? current.planRevisionIds ?? [], []),
         jsonb(changes.analysisRunIds ?? current.analysisRunIds ?? [], []),
         jsonb(changes.acceptedAnalysisResultIds ?? current.acceptedAnalysisResultIds ?? [], []),
         jsonb(changes.chartSpecIds ?? current.chartSpecIds ?? [], []),
+        jsonb(changes.dataSnapshotIds ?? current.dataSnapshotIds ?? [], []),
+        jsonb(changes.browserViewIds ?? current.browserViewIds ?? [], []),
         changes.updatedAt || nowIso(),
         changes.updatedBy || current.updatedBy,
       ],
@@ -2640,10 +2750,14 @@ export class PostgresSaasStore {
             code: "idempotency_key_conflict",
           });
         }
-        const [threadResult, revisionResult] = await Promise.all([
-          client.query("select * from analysis_threads where id = $1", [prior.analysisThreadId]),
-          client.query("select * from analysis_plan_revisions where id = $1", [prior.acceptedPlanRevisionId]),
-        ]);
+        const threadResult = await client.query(
+          "select * from analysis_threads where id = $1",
+          [prior.analysisThreadId],
+        );
+        const revisionResult = await client.query(
+          "select * from analysis_plan_revisions where id = $1",
+          [prior.acceptedPlanRevisionId],
+        );
         await client.query("commit");
         return {
           analysisThread: analysisThreadFromRow(threadResult.rows[0]),
@@ -2969,6 +3083,305 @@ export class PostgresSaasStore {
         ],
       );
       await insertAuditEventRows(client, input.auditEvents || []);
+      await client.query("commit");
+      return response;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async findExperimentAnalysisPublication({ projectId, idempotencyKey }) {
+    const result = await this.query(
+      `select * from analysis_experiment_publications
+       where project_id = $1 and idempotency_key = $2`,
+      [projectId, idempotencyKey],
+    );
+    return analysisExperimentPublicationFromRow(result.rows[0]);
+  }
+
+  async publishExperimentAnalysis(input) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      await client.query(
+        "select pg_advisory_xact_lock(hashtext($1), hashtext($2))",
+        [input.projectId, input.idempotencyKey],
+      );
+      const priorResult = await client.query(
+        `select * from analysis_experiment_publications
+         where project_id = $1 and idempotency_key = $2`,
+        [input.projectId, input.idempotencyKey],
+      );
+      const prior = analysisExperimentPublicationFromRow(priorResult.rows[0]);
+      if (prior) {
+        if (prior.requestHash !== input.requestHash) {
+          throw Object.assign(new Error("This idempotency key was already used for another Experiment Browser publication."), {
+            statusCode: 409,
+            code: "idempotency_key_conflict",
+          });
+        }
+        await client.query("commit");
+        return { ...prior.response, idempotentReplay: true };
+      }
+      const threadResult = await client.query(
+        "select * from analysis_threads where id = $1 and project_id = $2 for update",
+        [input.analysisThread.id, input.projectId],
+      );
+      const revisionResult = await client.query(
+        "select * from analysis_plan_revisions where id = $1 and project_id = $2 for share",
+        [input.analysisPlanRevision.id, input.projectId],
+      );
+      const runResult = await client.query(
+        "select * from analysis_runs where id = $1 and project_id = $2 for update",
+        [input.analysisRun.id, input.projectId],
+      );
+      const storedResultQuery = await client.query(
+        "select * from analysis_results where id = $1 and project_id = $2 for update",
+        [input.analysisResult.id, input.projectId],
+      );
+      const thread = analysisThreadFromRow(threadResult.rows[0]);
+      const revision = analysisPlanRevisionFromRow(revisionResult.rows[0]);
+      const run = analysisRunFromRow(runResult.rows[0]);
+      const storedResult = analysisResultFromRow(storedResultQuery.rows[0]);
+      const snapshot = input.dataSnapshot;
+      const browserView = input.browserView;
+      const records = Array.isArray(snapshot?.experimentRecords) ? snapshot.experimentRecords : [];
+      const heads = Array.isArray(input.experimentSnapshotHeads) ? input.experimentSnapshotHeads : [];
+      if (
+        !thread
+        || thread.status !== "awaiting_result_review"
+        || thread.outputTarget !== "experiment_browser"
+        || !revision
+        || revision.status !== "accepted"
+        || revision.analysisThreadId !== thread.id
+        || !run
+        || run.status !== "awaiting_result_review"
+        || run.outputTarget !== "experiment_browser"
+        || run.acceptedPlanRevisionId !== revision.id
+        || !storedResult
+        || storedResult.status !== "awaiting_review"
+        || storedResult.outputTarget !== "experiment_browser"
+        || storedResult.validation?.ok !== true
+        || input.analysisResult.status !== "accepted"
+        || input.analysisRun.status !== "completed"
+        || !snapshot?.id
+        || snapshot.projectId !== input.projectId
+        || snapshot.analysisResultId !== storedResult.id
+        || !browserView?.id
+        || browserView.projectId !== input.projectId
+        || browserView.ownerUserId !== input.actorUserId
+        || heads.some((head) => {
+          const record = records[Number(head.recordIndex)];
+          return !record
+            || head.dataSnapshotId !== snapshot.id
+            || record.experimentId !== head.experimentId;
+        })
+      ) {
+        throw Object.assign(new Error("The Experiment Browser publication package is invalid."), {
+          statusCode: 400,
+          code: "invalid_experiment_analysis_publication_package",
+        });
+      }
+      const expectedRefs = Array.isArray(input.expectedHeadRefs) ? input.expectedHeadRefs : [];
+      const expectedIds = [...new Set(expectedRefs.map((item) => item.experimentId).filter(Boolean))];
+      const currentHeadsResult = expectedIds.length
+        ? await client.query(
+          `select * from experiment_snapshot_heads
+           where project_id = $1 and experiment_id = any($2::text[])
+           for share`,
+          [input.projectId, expectedIds],
+        )
+        : { rows: [] };
+      const currentHeads = currentHeadsResult.rows.map(experimentSnapshotHeadFromRow);
+      const headMismatches = expectedRefs.flatMap((expected) => {
+        const current = currentHeads.find((head) => head.experimentId === expected.experimentId);
+        return (
+          current
+          && current.id === expected.headId
+          && current.dataSnapshotId === expected.dataSnapshotId
+          && Number(current.recordIndex) === Number(expected.recordIndex)
+        ) ? [] : [{ experimentId: expected.experimentId, expected, current: current || null }];
+      });
+      if (headMismatches.length) {
+        throw Object.assign(new Error("Accepted experiment snapshots changed before publication."), {
+          statusCode: 409,
+          code: "analysis_result_stale",
+          details: { headMismatches },
+        });
+      }
+
+      for (const identity of input.experimentIdentities || []) {
+        const existing = await client.query(
+          "select project_id from experiment_identities where id = $1",
+          [identity.id],
+        );
+        if (existing.rows[0] && existing.rows[0].project_id !== input.projectId) {
+          throw Object.assign(new Error("Experiment identity belongs to another project."), {
+            statusCode: 422,
+            code: "identity_reuse_not_found",
+          });
+        }
+        await client.query(
+          `insert into experiment_identities
+           (id, lab_id, project_id, canonical_label, normalized_label, aliases,
+            created_at, updated_at, created_by, updated_by)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           on conflict (id) do update
+           set aliases = excluded.aliases,
+               updated_at = excluded.updated_at,
+               updated_by = excluded.updated_by`,
+          [
+            identity.id,
+            identity.labId,
+            identity.projectId,
+            identity.canonicalLabel,
+            identity.normalizedLabel,
+            jsonb(identity.aliases || [], []),
+            identity.createdAt,
+            identity.updatedAt,
+            identity.createdBy,
+            identity.updatedBy,
+          ],
+        );
+      }
+      await client.query(
+        `insert into data_snapshots
+         (id, lab_id, project_id, data_plan_id, analysis_plan_revision_id,
+          analysis_run_id, analysis_result_id, schema_version, status, output_shape,
+          content_hash, dependency_hash, snapshot, experiment_records, source_refs,
+          summary, warnings, accepted_at, accepted_by, created_at, created_by)
+         values
+         ($1, $2, $3, null, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+          $14, $15, $16, $17, $18, $19, $20)`,
+        [
+          snapshot.id,
+          snapshot.labId,
+          snapshot.projectId,
+          snapshot.analysisPlanRevisionId,
+          snapshot.analysisRunId,
+          snapshot.analysisResultId,
+          snapshot.schemaVersion,
+          snapshot.status,
+          snapshot.outputShape,
+          snapshot.contentHash,
+          snapshot.dependencyHash,
+          jsonb(snapshot.snapshot || {}),
+          jsonb(snapshot.experimentRecords || [], []),
+          jsonb(snapshot.sourceRefs || [], []),
+          jsonb(snapshot.summary || {}),
+          jsonb(snapshot.warnings || [], []),
+          snapshot.acceptedAt,
+          snapshot.acceptedBy,
+          snapshot.createdAt,
+          snapshot.createdBy,
+        ],
+      );
+      for (const head of heads) {
+        await client.query(
+          `insert into experiment_snapshot_heads
+           (id, lab_id, project_id, experiment_id, data_snapshot_id, record_index,
+            updated_at, updated_by)
+           values ($1, $2, $3, $4, $5, $6, $7, $8)
+           on conflict (project_id, experiment_id) do update
+           set data_snapshot_id = excluded.data_snapshot_id,
+               record_index = excluded.record_index,
+               updated_at = excluded.updated_at,
+               updated_by = excluded.updated_by`,
+          [
+            head.id,
+            head.labId,
+            head.projectId,
+            head.experimentId,
+            head.dataSnapshotId,
+            head.recordIndex,
+            head.updatedAt,
+            head.updatedBy,
+          ],
+        );
+      }
+      if (browserView.isDefault) {
+        await client.query(
+          `update browser_views
+           set is_default = false, updated_at = $3
+           where project_id = $1 and owner_user_id = $2 and is_default = true`,
+          [input.projectId, browserView.ownerUserId, browserView.createdAt],
+        );
+      }
+      await client.query(
+        `insert into browser_views
+         (id, lab_id, project_id, owner_user_id, schema_version, name, payload,
+          is_default, created_at, updated_at)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          browserView.id,
+          browserView.labId,
+          browserView.projectId,
+          browserView.ownerUserId,
+          browserView.schemaVersion,
+          browserView.name,
+          jsonb(browserView.payload || {}),
+          browserView.isDefault,
+          browserView.createdAt,
+          browserView.updatedAt,
+        ],
+      );
+      await client.query(
+        `update analysis_results
+         set status = 'accepted', accepted_at = $2, accepted_by = $3,
+             updated_at = $2, updated_by = $3
+         where id = $1`,
+        [storedResult.id, input.analysisResult.acceptedAt, input.actorUserId],
+      );
+      await client.query(
+        `update analysis_runs
+         set status = 'completed', updated_at = $2, updated_by = $3
+         where id = $1`,
+        [run.id, input.analysisRun.updatedAt, input.actorUserId],
+      );
+      await client.query(
+        `update analysis_threads
+         set status = 'completed',
+             accepted_analysis_result_ids = $2,
+             data_snapshot_ids = $3,
+             browser_view_ids = $4,
+             updated_at = $5,
+             updated_by = $6
+         where id = $1`,
+        [
+          thread.id,
+          jsonb(input.analysisThread.acceptedAnalysisResultIds || [], []),
+          jsonb(input.analysisThread.dataSnapshotIds || [], []),
+          jsonb(input.analysisThread.browserViewIds || [], []),
+          input.analysisThread.updatedAt,
+          input.actorUserId,
+        ],
+      );
+      await insertAuditEventRows(client, input.auditEvents || []);
+      const response = { ...input.response, idempotentReplay: false };
+      await client.query(
+        `insert into analysis_experiment_publications
+         (id, lab_id, project_id, analysis_thread_id, analysis_result_id,
+          data_snapshot_id, browser_view_id, idempotency_key, request_hash,
+          response, created_at, created_by)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        [
+          input.publicationId,
+          input.labId,
+          input.projectId,
+          thread.id,
+          storedResult.id,
+          snapshot.id,
+          browserView.id,
+          input.idempotencyKey,
+          input.requestHash,
+          jsonb(response),
+          snapshot.createdAt,
+          input.actorUserId,
+        ],
+      );
       await client.query("commit");
       return response;
     } catch (error) {

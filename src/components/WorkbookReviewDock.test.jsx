@@ -106,7 +106,7 @@ describe("WorkbookReviewDock", () => {
     const card = screen.getByRole("article", { name: "Region Rates!E12:K14" });
     expect(within(card).getByText("E12:K14")).toBeTruthy();
     expect(within(card).getByText("Rates")).toBeTruthy();
-    expect(within(card).getByRole("status").textContent).toMatch(/AI is interpreting/i);
+    expect(within(card).getByRole("status").textContent).toMatch(/AI is understanding/i);
     expect(within(card).queryByPlaceholderText("Describe what this region means or what should change...")).toBeNull();
     expect(within(card).queryByRole("button", { name: "Confirm region Rates!E12:K14" })).toBeNull();
 
@@ -116,6 +116,28 @@ describe("WorkbookReviewDock", () => {
       reason: "Excluded during workbook review.",
     }));
     expect(within(card).getByRole("button", { name: "Delete region Rates!E12:K14" })).toBeTruthy();
+  });
+
+  it("retries only a failed region", async () => {
+    const failedRegion = {
+      ...reviewRegions[0],
+      id: "region_failed",
+      reviewStatus: "interpretation_failed",
+      currentRevisionId: null,
+      currentRevision: null,
+      warnings: [{ code: "ai_unavailable", message: "Provider unavailable." }],
+    };
+    const onRetryRegion = vi.fn(async () => true);
+    render(
+      <WorkbookReviewDock
+        reviewState={reviewState()}
+        reviewRegions={[failedRegion]}
+        onRetryRegion={onRetryRegion}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry AI for Runs!A1:D3" }));
+    await waitFor(() => expect(onRetryRegion).toHaveBeenCalledWith("region_failed"));
   });
 
   it("submits feedback only for the card that owns the input", async () => {

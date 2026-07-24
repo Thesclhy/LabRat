@@ -13,6 +13,15 @@ export function aiUnavailableWarning() {
   };
 }
 
+async function responseErrorDetail(response) {
+  try {
+    const body = await response.json();
+    return String(body?.error?.message || body?.message || "").trim().slice(0, 1000);
+  } catch {
+    return "";
+  }
+}
+
 export async function requestAnthropicJson({
   system,
   prompt,
@@ -61,12 +70,14 @@ export async function requestAnthropicJson({
       signal,
     });
     if (!response.ok) {
+      const detail = await responseErrorDetail(response);
       return {
         ok: false,
         warning: {
           code: "ai_request_failed",
           message: `Anthropic request failed with HTTP ${response.status}; deterministic proposals were returned.`,
           severity: "warning",
+          ...(detail ? { detail } : {}),
         },
       };
     }
@@ -163,12 +174,14 @@ export async function requestAnthropicJsonWithTools({
         signal,
       });
       if (!response.ok) {
+        const detail = await responseErrorDetail(response);
         return {
           ok: false,
           warning: {
             code: "ai_request_failed",
             message: `Anthropic request failed with HTTP ${response.status}; deterministic proposals were returned.`,
             severity: "warning",
+            ...(detail ? { detail } : {}),
           },
         };
       }

@@ -115,6 +115,9 @@ function validationErrors(validation) {
   return groupDiagnostics(asArray(validation?.errors).map((error) => ({
     code: error?.code || "analysis_validation_failed",
     message: error?.message || error?.code || String(error),
+    path: error?.path || null,
+    experimentLabel: error?.experimentLabel || null,
+    fieldName: error?.fieldName || null,
     traceId: error?.traceId || null,
     traceIndex: Number.isInteger(error?.traceIndex) ? error.traceIndex : null,
     actualUnit: error?.actualUnit ?? null,
@@ -145,7 +148,14 @@ function groupDiagnostics(items) {
     asArray(normalized.examples).forEach((example) => {
       if (current.examples.length < 3 && !current.examples.includes(example)) current.examples.push(example);
     });
-    const example = normalized.traceId || (Number.isInteger(normalized.traceIndex) ? `trace ${normalized.traceIndex + 1}` : "");
+    const example = [
+      normalized.experimentLabel,
+      normalized.fieldName,
+    ].filter(Boolean).join(" / ")
+      || normalized.traceId
+      || (Number.isInteger(normalized.traceIndex) ? `trace ${normalized.traceIndex + 1}` : "")
+      || normalized.path
+      || "";
     if (example && current.examples.length < 3 && !current.examples.includes(example)) current.examples.push(example);
     grouped.set(key, current);
   });
@@ -196,7 +206,7 @@ function AnalysisActionError({ error }) {
 }
 
 function resultSummary(run, result, preview) {
-  const summary = preview?.summary || result?.summary;
+  const summary = preview?.changeSummary || preview?.summary || result?.summary;
   if (summary) return summary;
   const validation = resultValidation(run, result, preview);
   return {
@@ -204,6 +214,13 @@ function resultSummary(run, result, preview) {
     seriesCount: validation?.traceCount,
     excludedCount: validation?.excludedCount,
   };
+}
+
+function previewCellValue(row, column) {
+  if (column.id === "experiment") return row.label;
+  const cell = row.cells?.[column.id];
+  if (!cell || cell.value == null || cell.value === "") return "-";
+  return cell.formattedValue ?? cell.value;
 }
 
 function resultReady(run, result, preview) {
@@ -275,8 +292,10 @@ function resultPlot(traces, plotlyLayout = {}) {
   };
 }
 
-async function loadCompleteResultPreview(loadResultPreview, runId) {
-  return loadResultPreview(runId);
+async function loadCompleteResultPreview(loadResultPreview, runId, options = {}) {
+  return Object.keys(options).length
+    ? loadResultPreview(runId, options)
+    : loadResultPreview(runId);
 }
 
 function ChartResultStage({
@@ -430,6 +449,161 @@ function ChartResultStage({
   );
 }
 
+function BrowserResultStage({
+  run,
+  result,
+  preview,
+  loading,
+  error,
+  identityResolutions,
+  onIdentityResolutionChange,
+}) {
+  const columns = asArray(preview?.columns);
+  const requestedColumns = asArray(preview?.browserView?.visibleColumnIds);
+  const visibleIds = requestedColumns.length
+    ? requestedColumns
+    : columns.slice(0, 9).map((column) => column.id);
+  const visibleColumns = columns.filter((column) => visibleIds.includes(column.id));
+  const rows = asArray(preview?.rows);
+  const changesByExperiment = new Map(asArray(preview?.rowChanges)
+    .map((item) => [item.experimentId, item]));
+  const conflicts = asArray(preview?.identityCandidates)
+    .filter((candidate) => candidate.status === "conflict");
+  const validation = resultValidation(run, result, preview);
+  const errors = validationErrors(validation);
+  const calculating = !error && (loading || ["queued", "running"].includes(run?.status));
+  const failed = Boolean(error) || errors.length > 0 || ["failed", "validation_failed"].includes(run?.status);
+  const ready = Boolean(result?.id && preview && !calculating && !failed);
+
+  return (
+    <section className="analysis-browser-stage" aria-label="Experiment Browser result">
+      <header className="analysis-result-toolbar">
+        <div>
+          <strong>Experiment Browser preview</strong>
+          <span>
+            {ready
+              ? `${preview.totalCount ?? rows.length} experiments · ${columns.length} columns`
+              : calculating
+                ? "Preparing reviewed experiment records"
+                : failed ? "Experiment data could not be prepared" : "Waiting for result"}
+          </span>
+        </div>
+      </header>
+      <div className="analysis-browser-preview">
+        {calculating && (
+          <div className="analysis-result-empty" role="status">
+            <strong>Preparing Experiment Browser data</strong>
+            <span>LabRat is running the accepted Python plan, preserving existing fields, and validating source references.</span>
+          </div>
+        )}
+        {!calculating && failed && (
+          <div className="analysis-result-empty failed" role="alert">
+            <strong>Experiment data could not be prepared</strong>
+            <span>{error || errors[0]?.message || "The generated record patches did not pass backend validation."}</span>
+          </div>
+        )}
+        {ready && !rows.length && (
+          <div className="analysis-result-empty failed" role="alert">
+            <strong>No experiment records were returned</strong>
+            <span>Submit a modification so LabRat can revise the data plan.</span>
+          </div>
+        )}
+        {ready && rows.length > 0 && (
+          <div className="analysis-browser-table-wrap">
+            <table className="analysis-browser-table">
+              <thead>
+                <tr>
+                  {visibleColumns.map((column) => <th key={column.id}>{column.label}</th>)}
+                  <th>Changes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => {
+                  const change = changesByExperiment.get(row.experimentId);
+                  return (
+                    <tr key={row.experimentId}>
+                      {visibleColumns.map((column) => (
+                        <td key={column.id}>
+                          {previewCellValue(row, column)}
+                        </td>
+                      ))}
+                      <td>
+                        <div className="analysis-browser-change-list">
+                          {asArray(change?.changes).slice(0, 4).map((item, index) => (
+                            <span className={item.kind} key={`${item.kind}-${item.columnId || item.seriesKey}-${index}`}>
+                              {item.kind === "new_field" || item.kind === "new_series" ? "New" : "Changed"}: {item.label}
+                            </span>
+                          ))}
+                          {Number(change?.preservedFieldCount) > 0 && (
+                            <span className="preserved">{change.preservedFieldCount} preserved</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      {ready && conflicts.length > 0 && (
+        <section className="analysis-identity-conflicts" aria-label="Experiment identity conflicts">
+          <header>
+            <strong>Resolve experiment matches</strong>
+            <span>{conflicts.length} require review</span>
+          </header>
+          {conflicts.map((candidate) => {
+            const decision = identityResolutions[candidate.candidateId] || {};
+            return (
+              <div key={candidate.candidateId}>
+                <strong>{candidate.sourceAlias}</strong>
+                <select
+                  aria-label={`Identity action for ${candidate.sourceAlias}`}
+                  value={decision.action || ""}
+                  onChange={(event) => onIdentityResolutionChange(candidate.candidateId, {
+                    action: event.target.value,
+                    experimentId: "",
+                  })}
+                >
+                  <option value="">Choose...</option>
+                  <option value="create">Create new</option>
+                  <option value="reuse">Reuse existing</option>
+                </select>
+                {decision.action === "reuse" && (
+                  <select
+                    aria-label={`Existing experiment for ${candidate.sourceAlias}`}
+                    value={decision.experimentId || ""}
+                    onChange={(event) => onIdentityResolutionChange(candidate.candidateId, {
+                      ...decision,
+                      experimentId: event.target.value,
+                    })}
+                  >
+                    <option value="">Choose experiment...</option>
+                    {asArray(candidate.matches).map((match) => (
+                      <option value={match.id} key={match.id}>{match.label}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            );
+          })}
+        </section>
+      )}
+      {ready && asArray(preview?.exclusions).length > 0 && (
+        <div className="analysis-result-notices">
+          {asArray(preview.exclusions).map((excluded, index) => (
+            <p key={`${excluded.label}-${index}`}>
+              <strong>{excluded.label}</strong>
+              <span>{excluded.reason}</span>
+            </p>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function AnalysisReviewWorkspace({
   projectId,
   thread: initialThread,
@@ -482,6 +656,7 @@ export function AnalysisReviewWorkspace({
   const [defaultVisibleTraceIds, setDefaultVisibleTraceIds] = useState(
     () => previewTraces(initialResultPreview).map(traceIdentifier),
   );
+  const [identityResolutions, setIdentityResolutions] = useState({});
   const [runHistory, setRunHistory] = useState(() => (
     initialRun ? [{ run: initialRun, result: initialResult }] : []
   ));
@@ -504,6 +679,7 @@ export function AnalysisReviewWorkspace({
     setDefaultVisibleTraceIds(
       previewTraces(initialResultPreview).map(traceIdentifier),
     );
+    setIdentityResolutions({});
     setRunHistory(initialRun ? [{ run: initialRun, result: initialResult }] : []);
     setActiveTab(initialRun || initialResult || initialResultPreview ? "result" : "source");
     setActionError("");
@@ -572,12 +748,12 @@ export function AnalysisReviewWorkspace({
             : item
         )));
         if (hydratedResult?.id) {
-          const loadedPreview = await loadCompleteResultPreview(loadResultPreview, hydratedRun.id, {
-            offset: 0,
-            limit: 1,
-            sourceOffset: 0,
-            sourceLimit: 1,
-          });
+          const loadedPreview = activeRevision?.outputTarget === "experiment_browser"
+            ? await loadCompleteResultPreview(loadResultPreview, hydratedRun.id, {
+              offset: 0,
+              limit: 100,
+            })
+            : await loadCompleteResultPreview(loadResultPreview, hydratedRun.id);
           if (cancelled || requestToken !== previewRequestRef.current) return;
           setResultState({ loading: false, error: "", value: loadedPreview });
           setDefaultVisibleTraceIds(
@@ -631,6 +807,10 @@ export function AnalysisReviewWorkspace({
     () => sourceReviewRegions(selectionState.value?.sourceRectangles || revision?.sourceRectangles),
     [revision?.id, revision?.sourceRectangles, selectionState.value?.sourceRectangles],
   );
+  const experimentSelections = useMemo(
+    () => asArray(selectionState.value?.experimentSelections || revision?.experimentSelections),
+    [revision?.experimentSelections, revision?.id, selectionState.value?.experimentSelections],
+  );
   const visibleCalculationSteps = useMemo(
     () => calculationPlanSteps(revision),
     [revision],
@@ -653,6 +833,15 @@ export function AnalysisReviewWorkspace({
   const executorUnavailable = !executorReady;
   const planAcceptanceDisabled = !awaitingReview || busy || !executorReady;
   const preview = resultState.value;
+  const declaredOutputTargets = [
+    thread?.outputTarget,
+    revision?.outputTarget,
+    run?.outputTarget,
+    result?.outputTarget,
+    preview?.outputTarget,
+  ].filter(Boolean);
+  const browserMode = declaredOutputTargets.includes("experiment_browser");
+  const outputTarget = browserMode ? "experiment_browser" : declaredOutputTargets[0] || "chart";
   const validation = resultValidation(run, result, preview);
   const identityError = previewIdentityError(run, result, preview);
   const errors = [
@@ -661,14 +850,26 @@ export function AnalysisReviewWorkspace({
   ];
   const hasResultStage = Boolean(run || result || preview);
   const hasChartStage = previewTraces(preview).length > 0;
+  const hasBrowserStage = asArray(preview?.rows).length > 0;
   const chartReady = resultReady(run, result, preview);
   const chartCalculating = ["queued", "running"].includes(run?.status) || pendingAction === "execute";
   const chartFinalized = result?.status === "accepted";
   const visibleResultSummary = resultSummary(run, result, preview);
+  const browserPreviewUnavailable = browserMode
+    && ["failed", "validation_failed"].includes(run?.status);
+  const revisionById = new Map(revisions.map((item) => [item.id, item]));
   const resultExclusions = asArray(preview?.exclusions);
+  const unresolvedIdentityConflicts = asArray(preview?.identityCandidates)
+    .filter((candidate) => candidate.status === "conflict")
+    .filter((candidate) => {
+      const resolution = identityResolutions[candidate.candidateId];
+      return !resolution?.action
+        || resolution.action === "reuse" && !resolution.experimentId;
+    });
   const canAcceptResult = chartReady
-    && hasChartStage
-    && defaultVisibleTraceIds.length > 0
+    && (browserMode
+      ? hasBrowserStage && unresolvedIdentityConflicts.length === 0
+      : hasChartStage && defaultVisibleTraceIds.length > 0)
     && Boolean(onAcceptResult);
   const resultReviewMode = hasResultStage && revision?.status === "accepted";
 
@@ -692,6 +893,7 @@ export function AnalysisReviewWorkspace({
       setRevision(nextRevision);
       setFeedback("");
       setActiveRectangleId("");
+      setIdentityResolutions({});
       setActiveTab("source");
     } catch (error) {
       setActionError(error);
@@ -716,6 +918,7 @@ export function AnalysisReviewWorkspace({
       const queuedRun = response?.analysisRun || { status: "queued" };
       const requestToken = ++previewRequestRef.current;
       setRun(queuedRun);
+      setIdentityResolutions({});
       setRunHistory((current) => [...current, { run: queuedRun, result: null }]);
       setActiveTab("result");
       onAccepted?.(response);
@@ -734,12 +937,12 @@ export function AnalysisReviewWorkspace({
       )));
       if (executedResult?.id) {
         setResultState((current) => ({ ...current, loading: true, error: "" }));
-        const loadedPreview = await loadCompleteResultPreview(loadResultPreview, executedRun.id, {
-          offset: 0,
-          limit: 1,
-          sourceOffset: 0,
-          sourceLimit: 1,
-        });
+        const loadedPreview = acceptedRevision?.outputTarget === "experiment_browser"
+          ? await loadCompleteResultPreview(loadResultPreview, executedRun.id, {
+            offset: 0,
+            limit: 100,
+          })
+          : await loadCompleteResultPreview(loadResultPreview, executedRun.id);
         if (requestToken !== previewRequestRef.current) return;
         setResultState({ loading: false, error: "", value: loadedPreview });
         setDefaultVisibleTraceIds(
@@ -778,6 +981,7 @@ export function AnalysisReviewWorkspace({
       setResult(null);
       setResultState({ loading: false, error: "", value: null });
       setDefaultVisibleTraceIds([]);
+      setIdentityResolutions({});
       setFeedback("");
       setActiveRectangleId("");
       setActiveTab("source");
@@ -797,6 +1001,12 @@ export function AnalysisReviewWorkspace({
         runId: run.id,
         analysisResultId: result.id,
         defaultVisibleTraceIds,
+        ...(browserMode ? {
+          identityResolutions: Object.entries(identityResolutions).map(([candidateId, value]) => ({
+            candidateId,
+            ...value,
+          })),
+        } : {}),
       });
       if (response?.analysisRun) setRun(response.analysisRun);
       if (response?.analysisResult) setResult(response.analysisResult);
@@ -817,6 +1027,7 @@ export function AnalysisReviewWorkspace({
     setRun(historyItem?.run || null);
     setResult(historyItem?.result || null);
     setResultState({ loading: false, error: "", value: null });
+    setIdentityResolutions({});
     setActiveRectangleId("");
     setActiveTab(historyItem?.run ? "result" : "source");
     if (!historyItem?.run?.id) return;
@@ -836,16 +1047,12 @@ export function AnalysisReviewWorkspace({
           : entry
       )));
       if (!historicalResult?.id) return;
-      const historicalPreview = await loadCompleteResultPreview(
-        loadResultPreview,
-        historicalRun.id,
-        {
+      const historicalPreview = item?.outputTarget === "experiment_browser"
+        ? await loadCompleteResultPreview(loadResultPreview, historicalRun.id, {
           offset: 0,
-          limit: 1,
-          sourceOffset: 0,
-          sourceLimit: 1,
-        },
-      );
+          limit: 100,
+        })
+        : await loadCompleteResultPreview(loadResultPreview, historicalRun.id);
       if (requestToken !== previewRequestRef.current) return;
       setResultState({ loading: false, error: "", value: historicalPreview });
       setDefaultVisibleTraceIds(
@@ -903,22 +1110,42 @@ export function AnalysisReviewWorkspace({
         >
           {activeTab === "source" && (
             <section className="analysis-review-source" aria-label="Selected source data">
-              <div className="analysis-source-rectangles" aria-label="Analysis source ranges">
-                {rectangles.map((rectangle, index) => (
-                  <button
-                    type="button"
-                    className={rectangle.draftRegionId === currentActiveId ? "active" : ""}
-                    key={rectangle.draftRegionId}
-                    onClick={() => setActiveRectangleId(rectangle.draftRegionId)}
-                  >
-                    <span>{rectangle.label || `Input ${index + 1}`}</span>
-                    <small>{rectangle.sheetName}!{rectangle.range}</small>
-                  </button>
-                ))}
-              </div>
+              {rectangles.length > 0 && (
+                <div className="analysis-source-rectangles" aria-label="Analysis source ranges">
+                  {rectangles.map((rectangle, index) => (
+                    <button
+                      type="button"
+                      className={rectangle.draftRegionId === currentActiveId ? "active" : ""}
+                      key={rectangle.draftRegionId}
+                      onClick={() => setActiveRectangleId(rectangle.draftRegionId)}
+                    >
+                      <span>{rectangle.label || `Input ${index + 1}`}</span>
+                      <small>{rectangle.sheetName}!{rectangle.range}</small>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {experimentSelections.length > 0 && (
+                <section className="analysis-experiment-selections" aria-label="Selected published experiment data">
+                  <header>
+                    <strong>Published experiment data</strong>
+                    <span>{experimentSelections.length} selection{experimentSelections.length === 1 ? "" : "s"}</span>
+                  </header>
+                  {experimentSelections.map((selection, index) => (
+                    <article key={selection.selectionId || `${selection.experimentId}-${index}`}>
+                      <strong>{selection.experimentLabel || selection.label || selection.experimentId || `Experiment ${index + 1}`}</strong>
+                      <span>
+                        {asArray(selection.fieldLabels).length
+                          ? selection.fieldLabels.join(", ")
+                          : asArray(selection.fieldKeys).join(", ") || "Reviewed experiment fields"}
+                      </span>
+                    </article>
+                  ))}
+                </section>
+              )}
               {selectionState.loading && <p className="analysis-review-state">Loading selected source data...</p>}
               {selectionState.error && <p className="analysis-review-error" role="alert">{selectionState.error}</p>}
-              {WorkbookWorkspaceComponent && (
+              {WorkbookWorkspaceComponent && rectangles.length > 0 && (
                 <WorkbookWorkspaceComponent
                   projectId={projectId || thread?.projectId}
                   reviewState={{
@@ -937,22 +1164,40 @@ export function AnalysisReviewWorkspace({
             </section>
           )}
           {activeTab === "result" && (
-            <ChartResultStage
-              run={run}
-              result={result}
-              preview={preview}
-              loading={resultState.loading}
-              error={resultState.error || (
-                run?.status === "queued" && executorUnavailable
-                  ? "Python execution is unavailable. Configure an analysis executor before calculating this chart."
-                  : ""
-              )}
-              reviewErrors={identityError ? [identityError] : []}
-              defaultVisibleTraceIds={defaultVisibleTraceIds}
-              onDefaultVisibleTraceIdsChange={setDefaultVisibleTraceIds}
-              PlotComponent={PlotComponent}
-              reviewPlan={revision?.reviewPlan}
-            />
+            browserMode ? (
+              <BrowserResultStage
+                run={run}
+                result={result}
+                preview={preview}
+                loading={resultState.loading}
+                error={resultState.error || (
+                  run?.status === "queued" && executorUnavailable
+                    ? "Python execution is unavailable. Configure an analysis executor before preparing experiment data."
+                    : ""
+                )}
+                identityResolutions={identityResolutions}
+                onIdentityResolutionChange={(candidateId, value) => {
+                  setIdentityResolutions((current) => ({ ...current, [candidateId]: value }));
+                }}
+              />
+            ) : (
+              <ChartResultStage
+                run={run}
+                result={result}
+                preview={preview}
+                loading={resultState.loading}
+                error={resultState.error || (
+                  run?.status === "queued" && executorUnavailable
+                    ? "Python execution is unavailable. Configure an analysis executor before calculating this chart."
+                    : ""
+                )}
+                reviewErrors={identityError ? [identityError] : []}
+                defaultVisibleTraceIds={defaultVisibleTraceIds}
+                onDefaultVisibleTraceIdsChange={setDefaultVisibleTraceIds}
+                PlotComponent={PlotComponent}
+                reviewPlan={revision?.reviewPlan}
+              />
+            )
           )}
         </div>
 
@@ -964,7 +1209,7 @@ export function AnalysisReviewWorkspace({
             </div>
             <span>
               {chartFinalized
-                ? "Chart created"
+                ? browserMode ? "Data published" : "Chart created"
                 : chartReady
                   ? "Result ready"
                   : chartCalculating
@@ -978,7 +1223,12 @@ export function AnalysisReviewWorkspace({
           <div className="analysis-review-messages">
             {asArray(thread?.messages).map((message, index) => (
               <article className={`analysis-review-message ${message.role || "assistant"}`} key={message.id || index}>
-                <span>{message.role === "user" ? "You" : "the lab rat"}</span>
+                <span>
+                  {message.role === "user" ? "You" : "the lab rat"}
+                  {message.planRevisionId && revisionById.has(message.planRevisionId)
+                    ? ` · Revision ${revisionById.get(message.planRevisionId).revision}`
+                    : ""}
+                </span>
                 <p>{messageText(message)}</p>
               </article>
             ))}
@@ -986,8 +1236,9 @@ export function AnalysisReviewWorkspace({
             {revision && (
               <article className="analysis-plan-card">
                 <header>
-                  <strong>Chart plan</strong>
+                  <strong>{browserMode ? "Experiment data plan" : "Chart plan"}</strong>
                 </header>
+                {revision.requestSummary && <p>{revision.requestSummary}</p>}
                 <section className="analysis-plan-section">
                   <strong>Processing and calculation</strong>
                   <ol>
@@ -1036,13 +1287,21 @@ export function AnalysisReviewWorkspace({
             {run && !result && ["queued", "running"].includes(run.status) && (
               <div className="analysis-review-queued" role="status">
                 <strong>{run.status === "running" ? "Calculating accepted plan" : "Queued for calculation"}</strong>
-                <span>The chart will appear in Result after backend validation passes.</span>
+                <span>
+                  {browserMode
+                    ? "The Experiment Browser preview will appear after backend validation passes."
+                    : "The chart will appear in Result after backend validation passes."}
+                </span>
               </div>
             )}
             {hasResultStage && (
               <article className="analysis-result-conversation-card">
                 <header>
-                  <strong>{chartFinalized ? "Chart created" : chartReady ? "Chart ready" : "Chart result"}</strong>
+                  <strong>
+                    {browserMode
+                      ? chartFinalized ? "Experiment data published" : chartReady ? "Browser preview ready" : "Experiment data result"
+                      : chartFinalized ? "Chart created" : chartReady ? "Chart ready" : "Chart result"}
+                  </strong>
                   <span>
                     {chartFinalized
                       ? "Created"
@@ -1052,20 +1311,41 @@ export function AnalysisReviewWorkspace({
                   </span>
                 </header>
                 <p>
-                  {visibleResultSummary.pointCount ?? 0} points ·{" "}
-                  {visibleResultSummary.seriesCount ?? previewTraces(preview).length} series ·{" "}
-                  {(visibleResultSummary.excludedCount ?? resultExclusions.length) > 0
-                    ? `${visibleResultSummary.excludedCount ?? resultExclusions.length} excluded`
-                    : "no exclusions"}
+                  {browserPreviewUnavailable
+                    ? "Preview was not created"
+                    : browserMode
+                    ? `${visibleResultSummary.experimentCount ?? preview?.totalCount ?? 0} experiments · ${
+                      Number(visibleResultSummary.newFieldCount || 0) + Number(visibleResultSummary.newSeriesCount || 0)
+                    } new · ${
+                      Number(visibleResultSummary.changedFieldCount || 0) + Number(visibleResultSummary.changedSeriesCount || 0)
+                    } changed · ${visibleResultSummary.preservedFieldCount ?? 0} preserved`
+                    : `${visibleResultSummary.pointCount ?? 0} points · ${visibleResultSummary.seriesCount ?? previewTraces(preview).length} series · ${
+                      (visibleResultSummary.excludedCount ?? resultExclusions.length) > 0
+                        ? `${visibleResultSummary.excludedCount ?? resultExclusions.length} excluded`
+                        : "no exclusions"
+                    }`}
                 </p>
+                {browserMode
+                  && !browserPreviewUnavailable
+                  && Number(visibleResultSummary.missingValueCount || 0) > 0 && (
+                    <p>
+                      {visibleResultSummary.missingValueCount} missing values across{" "}
+                      {visibleResultSummary.missingExperimentCount} experiments
+                    </p>
+                )}
                 {resultExclusions.map((excluded, index) => (
                   <p className="analysis-result-exclusion-message" key={`${excluded.label || "excluded"}-${index}`}>
                     <strong>{excluded.label || `Excluded item ${index + 1}`}</strong>
                     <span>{excluded.reason || "Excluded by the reviewed plan."}</span>
                   </p>
                 ))}
-                {chartReady && !defaultVisibleTraceIds.length && (
+                {!browserMode && chartReady && !defaultVisibleTraceIds.length && (
                   <p className="analysis-review-error">Select at least one series before accepting this chart.</p>
+                )}
+                {browserMode && unresolvedIdentityConflicts.length > 0 && (
+                  <p className="analysis-review-error">
+                    Resolve {unresolvedIdentityConflicts.length} experiment identity conflict{unresolvedIdentityConflicts.length === 1 ? "" : "s"} before publishing.
+                  </p>
                 )}
                 {errors.map((item, index) => (
                   <p className="analysis-review-error" key={`${item.code}-${index}`}>
@@ -1087,10 +1367,12 @@ export function AnalysisReviewWorkspace({
             >
               {resultReviewMode
                 ? chartFinalized
-                  ? "Chart created"
+                  ? browserMode ? "Data published" : "Chart created"
                   : chartCalculating
                     ? "Calculating..."
-                    : pendingAction === "accept_result" ? "Creating..." : "Accept chart"
+                    : pendingAction === "accept_result"
+                      ? browserMode ? "Publishing..." : "Creating..."
+                      : browserMode ? "Publish to Browser" : "Accept chart"
                 : pendingAction === "accept" || pendingAction === "execute" ? "Working..." : "Accept plan"}
             </button>
             {!resultReviewMode && executorUnavailable && (
@@ -1116,12 +1398,16 @@ export function AnalysisReviewWorkspace({
                     else submitFeedback();
                   }
                 }}
-                placeholder={resultReviewMode ? "Describe a chart modification" : "Describe a modification"}
+                placeholder={resultReviewMode
+                  ? browserMode ? "Describe a data modification" : "Describe a chart modification"
+                  : "Describe a modification"}
                 disabled={resultReviewMode ? (!run?.id || busy || chartFinalized) : (!awaitingReview || busy)}
               />
               <button
                 type="button"
-                aria-label={resultReviewMode ? "Send chart modification" : "Send modification"}
+                aria-label={resultReviewMode
+                  ? browserMode ? "Send data modification" : "Send chart modification"
+                  : "Send modification"}
                 onClick={resultReviewMode ? submitResultFeedback : submitFeedback}
                 disabled={!feedback.trim()
                   || (resultReviewMode ? (!run?.id || chartFinalized) : !awaitingReview)

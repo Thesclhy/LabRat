@@ -1151,23 +1151,54 @@ textarea {
   overflow-y: auto;
   padding: 0 18px 18px;
 }
+.workbook-session-browser-error {
+  margin: 0 18px 8px;
+  color: var(--danger);
+  font-size: 12px;
+}
 .workbook-session-browser-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 66px;
+  border-bottom: 1px solid var(--color-border-soft);
+  padding: 0 4px;
+}
+.workbook-session-browser-main {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto 48px;
   align-items: center;
   gap: 16px;
-  width: 100%;
-  min-height: 66px;
+  min-width: 0;
   border: 0;
-  border-bottom: 1px solid var(--color-border-soft);
   background: transparent;
   color: var(--text);
   padding: 10px 4px;
   text-align: left;
 }
-.workbook-session-browser-row:hover,
-.workbook-session-browser-row:focus-visible {
+.workbook-session-browser-main:hover,
+.workbook-session-browser-main:focus-visible {
   background: var(--color-blue-50);
+}
+.workbook-session-browser-main:disabled {
+  opacity: 0.55;
+}
+.workbook-session-browser-delete {
+  border: 0;
+  background: transparent;
+  color: var(--danger);
+  padding: 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.workbook-session-browser-delete:hover:not(:disabled),
+.workbook-session-browser-delete:focus-visible {
+  background: var(--color-danger-bg);
+}
+.workbook-session-browser-delete:disabled {
+  color: var(--muted);
 }
 .workbook-session-browser-file {
   display: grid;
@@ -4198,7 +4229,7 @@ td button {
   top: 0;
   right: 0;
   bottom: 0;
-  z-index: 120;
+  z-index: 170;
   width: 430px;
   max-width: 92vw;
   transform: translateX(100%);
@@ -8006,6 +8037,10 @@ tbody tr:hover {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px;
   }
+  .workbook-session-browser-main {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+  }
   .workbook-session-browser-counts {
     grid-column: 1 / -1;
     display: flex;
@@ -9180,6 +9215,23 @@ tbody tr:hover {
   color: var(--muted);
   font-size: 10px;
 }
+.experiment-missing-detail {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border-soft);
+}
+.experiment-missing-detail > strong {
+  color: var(--color-red-700);
+  font-size: 12px;
+  text-align: left;
+}
+.experiment-missing-detail > span {
+  color: var(--muted);
+  font-size: 11px;
+}
 .experiment-warning-list {
   margin: 0;
   padding-left: 18px;
@@ -9294,4 +9346,113 @@ tbody tr:hover {
     width: 100%;
     height: 100vh;
   }
+}
+.analysis-browser-stage {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  flex-direction: column;
+  background: #fff;
+}
+
+.analysis-browser-preview {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+.analysis-browser-table-wrap {
+  min-width: 720px;
+}
+
+.analysis-browser-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.analysis-browser-table th,
+.analysis-browser-table td {
+  max-width: 240px;
+  padding: 9px 10px;
+  overflow: hidden;
+  border-right: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e5e7eb;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analysis-browser-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fafc;
+  color: #334155;
+  font-weight: 650;
+}
+
+.analysis-browser-change-list {
+  display: flex;
+  min-width: 180px;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.analysis-browser-change-list span {
+  border-radius: 4px;
+  padding: 2px 5px;
+  background: #eef2f7;
+  color: #475569;
+  font-size: 11px;
+}
+
+.analysis-browser-change-list .new_field,
+.analysis-browser-change-list .new_series {
+  background: #e8f4ec;
+  color: #21643b;
+}
+
+.analysis-browser-change-list .changed_field,
+.analysis-browser-change-list .changed_series {
+  background: #fff3d6;
+  color: #7a5310;
+}
+
+.analysis-experiment-selections,
+.analysis-identity-conflicts {
+  padding: 12px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+.analysis-experiment-selections > header,
+.analysis-identity-conflicts > header,
+.analysis-experiment-selections article,
+.analysis-identity-conflicts > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.analysis-experiment-selections article,
+.analysis-identity-conflicts > div {
+  padding: 8px 0;
+  border-top: 1px solid #eef2f7;
+}
+
+.analysis-experiment-selections span,
+.analysis-identity-conflicts span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.analysis-identity-conflicts select {
+  min-width: 150px;
+  padding: 6px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: #fff;
 }

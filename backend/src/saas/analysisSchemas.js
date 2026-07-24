@@ -3,6 +3,10 @@ import { SUPPORTED_CHART_TYPES } from "../charts/services/chartSpec.js";
 
 export const ANALYSIS_PLAN_REVISION_VERSION = "labrat.analysisPlanRevision.v2";
 export const ANALYSIS_RUNTIME_VERSION = "labrat-python-v2";
+export const ANALYSIS_OUTPUT_TARGETS = Object.freeze({
+  CHART: "chart",
+  EXPERIMENT_BROWSER: "experiment_browser",
+});
 
 const SUPPORTED_ANALYSIS_CHART_TYPES = new Set(SUPPORTED_CHART_TYPES);
 const FORBIDDEN_PLAN_KEYS = new Set([
@@ -43,7 +47,9 @@ export function pythonSourceHash(source) {
 
 export function frozenPlanHash(plan = {}) {
   return stableDataHash({
+    outputTarget: plan.outputTarget || ANALYSIS_OUTPUT_TARGETS.CHART,
     sourceSelections: asArray(plan.sourceSelections),
+    experimentSelections: asArray(plan.experimentSelections),
     reviewPlan: plan.reviewPlan || {},
     displayPlan: asArray(plan.displayPlan),
   });
@@ -51,6 +57,13 @@ export function frozenPlanHash(plan = {}) {
 
 export function validateAnalysisPlanRevision(plan = {}) {
   const errors = [];
+  const outputTarget = text(plan.outputTarget) || ANALYSIS_OUTPUT_TARGETS.CHART;
+  if (!Object.values(ANALYSIS_OUTPUT_TARGETS).includes(outputTarget)) {
+    errors.push(error(
+      "analysis_output_target_invalid",
+      "Analysis outputTarget must be chart or experiment_browser.",
+    ));
+  }
   if (plan.schemaVersion !== ANALYSIS_PLAN_REVISION_VERSION) {
     errors.push(error(
       "analysis_plan_schema_invalid",
@@ -69,10 +82,23 @@ export function validateAnalysisPlanRevision(plan = {}) {
       "A reviewable request summary is required.",
     ));
   }
-  if (!asArray(plan.sourceSelections).length) {
+  if (
+    outputTarget === ANALYSIS_OUTPUT_TARGETS.CHART
+    && !asArray(plan.sourceSelections).length
+  ) {
     errors.push(error(
       "analysis_source_selection_required",
       "The analysis plan must select at least one confirmed workbook range.",
+    ));
+  }
+  if (
+    outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
+    && !asArray(plan.sourceSelections).length
+    && !asArray(plan.experimentSelections).length
+  ) {
+    errors.push(error(
+      "analysis_input_selection_required",
+      "An Experiment Browser plan must select workbook ranges or active experiment fields.",
     ));
   }
   asArray(plan.sourceSelections).forEach((selection, index) => {
@@ -90,6 +116,22 @@ export function validateAnalysisPlanRevision(plan = {}) {
       ));
     }
   });
+  asArray(plan.experimentSelections).forEach((selection, index) => {
+    if (!text(selection?.experimentSelectionId) || !text(selection?.experimentId)) {
+      errors.push(error(
+        "analysis_experiment_selection_invalid",
+        "Every active experiment selection requires a stable selection id and experiment id.",
+        { selectionIndex: index },
+      ));
+    }
+    if (!Array.isArray(selection?.columnIds)) {
+      errors.push(error(
+        "analysis_experiment_selection_invalid",
+        "Every active experiment selection requires a columnIds array.",
+        { selectionIndex: index },
+      ));
+    }
+  });
   if (!plan.reviewPlan || typeof plan.reviewPlan !== "object" || Array.isArray(plan.reviewPlan)) {
     errors.push(error(
       "analysis_review_plan_required",
@@ -102,24 +144,43 @@ export function validateAnalysisPlanRevision(plan = {}) {
         "The review plan requires at least one processing step.",
       ));
     }
-    const chart = plan.reviewPlan.chart || {};
-    if (
-      !text(chart.title)
-      || !text(chart.chartType)
-      || !text(chart.xDescription)
-      || !text(chart.yDescription)
-    ) {
-      errors.push(error(
-        "analysis_chart_plan_required",
-        "The review plan requires a title, chart type, and readable X/Y descriptions.",
-      ));
-    } else if (!SUPPORTED_ANALYSIS_CHART_TYPES.has(text(chart.chartType))) {
-      errors.push(error(
-        "analysis_chart_type_unsupported",
-        `Analysis chart type must be one of ${[...SUPPORTED_ANALYSIS_CHART_TYPES].join(", ")}.`,
-      ));
+    if (outputTarget === ANALYSIS_OUTPUT_TARGETS.CHART) {
+      const chart = plan.reviewPlan.chart || {};
+      if (
+        !text(chart.title)
+        || !text(chart.chartType)
+        || !text(chart.xDescription)
+        || !text(chart.yDescription)
+      ) {
+        errors.push(error(
+          "analysis_chart_plan_required",
+          "The review plan requires a title, chart type, and readable X/Y descriptions.",
+        ));
+      } else if (!SUPPORTED_ANALYSIS_CHART_TYPES.has(text(chart.chartType))) {
+        errors.push(error(
+          "analysis_chart_type_unsupported",
+          `Analysis chart type must be one of ${[...SUPPORTED_ANALYSIS_CHART_TYPES].join(", ")}.`,
+        ));
+      }
+    } else {
+      const experimentOutput = plan.reviewPlan.experimentOutput || {};
+      const browserView = plan.reviewPlan.browserView || {};
+      if (!text(experimentOutput.summary) || !text(browserView.summary)) {
+        errors.push(error(
+          "analysis_experiment_browser_plan_required",
+          "An Experiment Browser review plan requires readable data-change and Browser-view summaries.",
+        ));
+      }
     }
     asArray(plan.reviewPlan.invariants).forEach((invariant, index) => {
+      if (outputTarget !== ANALYSIS_OUTPUT_TARGETS.CHART) {
+        errors.push(error(
+          "analysis_invariant_unsupported",
+          "Chart invariants are not valid for Experiment Browser plans.",
+          { invariantIndex: index },
+        ));
+        return;
+      }
       if (!["trace_y_sum", "x_group_y_sum"].includes(invariant?.type)) {
         errors.push(error(
           "analysis_invariant_unsupported",

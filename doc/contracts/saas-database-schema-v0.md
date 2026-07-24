@@ -52,7 +52,21 @@ region_understanding_revisions
 
 `workbook_review_sessions` groups review activity for one SourceDocument and stores bounded summary/messages/warnings/version metadata. It has no aggregate understanding or workbook-wide accepted state.
 
-`workbook_review_regions` stores stable source ownership, sheet/range, selection method, active/ignored/deleted disposition, review status, optimistic version, and current/accepted revision pointers. `region_understanding_revisions` stores immutable numbered AI/user-feedback interpretations with summary, typed semantics, source refs, source/dependency hashes, validation, provider metadata, warnings, and confidence. Accepting one exact revision does not create accepted experiment data.
+`workbook_review_sessions.status = deleted` is the project-facing workbook
+removal boundary. Deleting a session atomically marks its active
+`workbook_review_regions` deleted so the workbook cannot supply new accepted
+evidence, while retaining immutable SourceDocument, revision, audit, accepted
+snapshot, and chart history.
+
+`workbook_review_regions` stores stable source ownership, sheet/range,
+selection method, a bounded initial `interpretation_hint`,
+active/ignored/deleted disposition, review status, optimistic version, and
+current/accepted revision pointers. The hint allows deferred pending work to
+resume without browser-only state. `region_understanding_revisions` stores
+immutable numbered AI/user-feedback interpretations with summary, typed
+semantics, source refs, source/dependency hashes, validation, provider
+metadata, warnings, and confidence. Accepting one exact revision does not
+create accepted experiment data.
 
 ### Accepted Data Layer
 
@@ -122,12 +136,14 @@ analysis_thread_retry_receipts
 analysis_runs
 analysis_results
 analysis_publications
+analysis_experiment_publications
 ```
 
 `analysis_threads` is the durable project-scoped conversation/workflow container. It stores bounded visible messages and ordered artifact ids, not full result arrays in project state.
 
 `analysis_plan_revisions` is append-only except for workflow status. Each row
-stores one complete reviewed `sourceSelections + reviewPlan + displayPlan`
+stores one complete reviewed `outputTarget + sourceSelections +
+experimentSelections + reviewPlan + displayPlan`
 payload, derived source rectangles, validation, feedback, and actor timestamps.
 It stores no Python, materialized values, field mapping, expected result table,
 or plan/selection/dependency/program review hashes.
@@ -137,8 +153,9 @@ or plan/selection/dependency/program review hashes.
 
 `analysis_runs` links one accepted plan revision to an immutable execution
 attempt. Plan acceptance creates a `queued` row without Python. Execution
-re-resolves accepted source selections, materializes the exact multi-table
-input, generates policy-checked Python against that input, and moves the run
+re-resolves accepted source selections and frozen experiment heads, materializes
+the exact multi-table/experiment input, generates policy-checked Python against
+that input, and moves the run
 through `running` to `failed`, `validation_failed`, or
 `awaiting_result_review`. Running claims carry an internal token and lease
 metadata so an expired worker may be replaced without allowing the old worker
@@ -146,24 +163,26 @@ to finalize. The run records the materialized input, generated Python,
 input/program/runtime hashes, execution phases, diagnostics, warnings, and
 validation. `(project_id, idempotency_key)` makes acceptance retry-safe.
 
-`analysis_results` stores only backend-validated immutable executor output. A valid run finalization inserts one `awaiting_review` result in the same transaction that updates its AnalysisRun and AnalysisThread; failed or invalid output inserts no result. Result publication updates only acceptance workflow metadata, never the immutable result payload/hashes. `analysis_publications` records the atomic accepted-result plus ChartSpec boundary and is keyed by `(project_id, idempotency_key)`.
+`analysis_results` stores only backend-validated immutable executor output. A valid run finalization inserts one `awaiting_review` result in the same transaction that updates its AnalysisRun and AnalysisThread; failed or invalid output inserts no result. Result publication updates only acceptance workflow metadata, never the immutable result payload/hashes. `analysis_publications` records the atomic accepted-result plus ChartSpec boundary. `analysis_experiment_publications` records the accepted-result plus DataSnapshot v3 and BrowserView boundary. Both are keyed by `(project_id, idempotency_key)`.
 
 `chart_specs.analysis_result_id` identifies the accepted AnalysisResult that owns the complete validated trace catalog in the immutable spec.
 
 ## Transaction Boundary
 
-Publishing accepted workbook data is one atomic operation:
+Publishing an accepted Experiment Browser analysis result is one atomic operation:
 
 ```text
-validate exact active accepted RegionUnderstandingRevisions
-  -> re-read SourceDocument evidence
-  -> deterministically re-execute DataPlan
-  -> validate dependency and preview hashes
-  -> create accepted DataPlan
-  -> create immutable DataSnapshot
-  -> create/reuse explicit ExperimentIdentities
+lock thread, revision, run, result, and idempotency key
+  -> verify exact validated AnalysisResult
+  -> verify every frozen base snapshot head is unchanged
+  -> resolve reviewed identity decisions
+  -> merge record patches with complete active records
+  -> create immutable DataSnapshot v3
+  -> create/reuse reviewed ExperimentIdentities
   -> advance affected ExperimentSnapshotHeads
-  -> store idempotency receipt
+  -> create one owner-scoped BrowserView
+  -> accept result and complete run/thread
+  -> store analysis_experiment_publications receipt
   -> record audit event
 ```
 
@@ -182,10 +201,11 @@ lock project/idempotency key
 ```
 
 This transaction does not generate or execute Python and does not create an
-AnalysisResult/ChartSpec. A later explicit execution transaction claims only
-that queued run, materializes the selected SourceDocument ranges, generates and
-policy-checks Python, validates its Plotly output, and may create one
-awaiting-review AnalysisResult. It never creates a ChartSpec.
+AnalysisResult, ChartSpec, or DataSnapshot. A later explicit execution
+transaction claims only that queued run, materializes selected SourceDocument
+ranges and/or active experiment fields, generates and policy-checks Python,
+validates target-specific Plotly or record-patch output, and may create one
+awaiting-review AnalysisResult.
 
 Accepting a validated analysis result is another atomic operation:
 
@@ -219,6 +239,8 @@ Any validation, stale-head, conflicting-idempotency, or insert failure rolls bac
 015_analysis_retry_receipts.sql
 016_drop_legacy_chart_proposals.sql
 017_reset_analysis_v2.sql
+018_deferred_region_interpretation.sql
+019_experiment_browser_analysis.sql
 ```
 
 Migration 011 removes the obsolete aggregate dataset, mapping, analysis-view, and observation-series tables/foreign keys from development databases. New databases never need those product paths.

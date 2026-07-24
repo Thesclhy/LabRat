@@ -133,6 +133,29 @@ test("rejects malformed provider JSON as a bounded warning", async () => {
   assert.equal(result.warning.code, "ai_invalid_response");
 });
 
+test("preserves bounded Anthropic request diagnostics", async () => {
+  const provider = createBackendModelProvider({
+    config: {
+      aiProvider: "anthropic",
+      anthropicApiKey: "server-secret",
+      anthropicModel: "claude-test",
+    },
+    fetchImpl: async () => ({
+      ok: false,
+      status: 400,
+      async json() {
+        return { error: { message: "Unsupported structured output keyword." } };
+      },
+    }),
+  });
+
+  const result = await provider.classifyIntent({ message: "Compare these experiments." });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.warning.code, "ai_request_failed");
+  assert.equal(result.warning.detail, "Unsupported structured output keyword.");
+});
+
 test("draftAnalysisPlan selects exact confirmed ranges without generating Python", async () => {
   const provider = createBackendModelProvider({
     config: {
@@ -208,6 +231,70 @@ test("draftAnalysisPlan selects exact confirmed ranges without generating Python
   assert.equal(Object.hasOwn(result, "pythonProgram"), false);
 });
 
+test("draftExperimentBrowserPlan uses an Anthropic-compatible empty invariants schema", async () => {
+  const provider = createBackendModelProvider({
+    config: {
+      aiProvider: "anthropic",
+      anthropicApiKey: "server-secret",
+      anthropicModel: "claude-test",
+    },
+    fetchImpl: async (_url, request) => {
+      const body = JSON.parse(request.body);
+      const invariantsSchema = body.output_config.format.schema
+        .properties.reviewPlan.properties.invariants;
+      assert.equal("maxItems" in invariantsSchema, false);
+      assert.equal(invariantsSchema.items.type, "object");
+      assert.match(body.system, /invariants as an empty array/i);
+      assert.match(body.system, /count actual non-header data rows/i);
+      assert.match(body.system, /distinguish creating new experiment records from appending/i);
+      assert.match(body.system, /remain selected source-backed null fields/i);
+      return {
+        ok: true,
+        async json() {
+          return {
+            usage: { input_tokens: 10, output_tokens: 20 },
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                requestSummary: "Publish Exp1.",
+                sourceSelections: [{
+                  regionUnderstandingRevisionId: "revision_1",
+                  sourceDocumentId: "source_1",
+                  sheetName: "Runs",
+                  range: "A1:C2",
+                  label: "Exp1",
+                  purpose: "Read the accepted experiment row.",
+                }],
+                experimentSelections: [],
+                reviewPlan: {
+                  processingSteps: ["Read Exp1 and publish its fields."],
+                  missingValueHandling: "Exclude rows without an experiment label.",
+                  experimentOutput: { summary: "Add Exp1 fields." },
+                  browserView: { summary: "Show the new fields." },
+                  invariants: [],
+                },
+                displayPlan: ["Add Exp1 and show the new fields."],
+                warnings: [],
+              }),
+            }],
+          };
+        },
+      };
+    },
+  });
+
+  const result = await provider.draftExperimentBrowserPlan({
+    originalRequest: "Publish Exp1.",
+    confirmedRegions: [],
+    activeExperiments: [],
+  }, {
+    inspectSourceRange: async () => ({}),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.reviewPlan.invariants.length, 0);
+});
+
 test("draftAnalysisProgram sees exact inputs and returns Python only after plan acceptance", async () => {
   const provider = createBackendModelProvider({
     config: {
@@ -220,6 +307,9 @@ test("draftAnalysisProgram sees exact inputs and returns Python only after plan 
       assert.match(body.system, /analyze\(inputs, labrat\)/);
       assert.match(body.system, /inputs\['tables'\]/);
       assert.match(body.system, /Plotly data is authoritative/i);
+      assert.match(body.system, /Generated Python cannot call inspect_run_input/i);
+      assert.match(body.system, /Treat null as missing scientific data/i);
+      assert.match(body.system, /Never convert a missing value to zero/i);
       assert.equal(body.tools[0].name, "inspect_run_input");
       return {
         ok: true,
@@ -250,6 +340,68 @@ test("draftAnalysisProgram sees exact inputs and returns Python only after plan 
 
   assert.equal(result.ok, true);
   assert.equal(result.pythonProgram.runtime, "labrat-python-v2");
+});
+
+test("draftExperimentBrowserProgram describes list-shaped multi-table inputs and patch arrays", async () => {
+  const provider = createBackendModelProvider({
+    config: {
+      aiProvider: "anthropic",
+      anthropicApiKey: "server-secret",
+      anthropicModel: "claude-test",
+    },
+    fetchImpl: async (_url, request) => {
+      const body = JSON.parse(request.body);
+      assert.match(body.system, /inputs\['tables'\].*always lists, never dictionaries/i);
+      assert.match(body.system, /tables_by_id = \{item\['tableId'\]/);
+      assert.match(body.system, /row-major lists of lists/i);
+      assert.match(body.system, /upsertFields.*upsertSeries.*must be lists/i);
+      assert.match(body.system, /do not upsert an existing field merely to preserve it/i);
+      assert.match(body.system, /seriesKey.*label.*xField.*yField/i);
+      assert.match(body.system, /never add series IDs/i);
+      assert.match(body.system, /Generated Python cannot call either inspection tool/i);
+      assert.match(body.system, /value None.*formattedValue None.*missingReason/i);
+      assert.match(body.system, /valueType must be exactly one of number, string, date, or boolean/i);
+      assert.match(body.system, /never use numeric, float, integer/i);
+      assert.match(body.system, /Do not output zero, a placeholder string, NaN, or Infinity/i);
+      assert.match(body.system, /must cite the exact missing workbook cell/i);
+      assert.deepEqual(body.tools.map((tool) => tool.name), [
+        "inspect_run_input",
+        "inspect_experiment_input",
+      ]);
+      return {
+        ok: true,
+        async json() {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                pythonProgram: {
+                  runtime: "labrat-python-v2",
+                  entrypoint: "analyze",
+                  source: "def analyze(inputs, labrat):\n    tables = {item['tableId']: item for item in inputs['tables']}\n    return {'recordPatches': [], 'browserView': {'visibleColumnIds': [], 'filters': [], 'sort': []}, 'exclusions': []}",
+                },
+              }),
+            }],
+          };
+        },
+      };
+    },
+  });
+
+  const result = await provider.draftExperimentBrowserProgram({
+    acceptedPlan: { displayPlan: ["Add two series."] },
+    inputManifest: {
+      tables: [{ tableId: "table_1" }, { tableId: "table_2" }],
+      experiments: [{ experimentId: "experiment_1" }],
+      fieldCatalog: [],
+    },
+  }, {
+    inspectRunInput: async () => ({ tableId: "table_1", values: [[1]] }),
+    inspectExperimentInput: async () => ({ experimentId: "experiment_1", fields: [] }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.pythonProgram.entrypoint, "analyze");
 });
 
 test("interpretWorkbookRegion requests a concise structured region explanation", async () => {

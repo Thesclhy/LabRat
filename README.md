@@ -16,9 +16,17 @@ npm run dev:docker
 
 This starts:
 
-- Postgres at `127.0.0.1:5432`
+- Postgres at `127.0.0.1:5433` by default (override with
+  `LABRAT_POSTGRES_PORT`)
 - backend API at `http://127.0.0.1:8787`
 - frontend at `http://127.0.0.1:5173/LabRat/`
+- the development-only local Python analysis executor inside the backend
+  container
+
+Docker Compose is the default local development runtime. It keeps project
+state in the Postgres volume, uploaded files in a separate backend volume, and
+restarts unhealthy frontend/backend processes without relying on temporary
+terminal sessions.
 
 Seeded development accounts:
 
@@ -105,9 +113,13 @@ $env:LABRAT_ANALYSIS_PYTHON_COMMAND="python"
 npm --prefix backend run dev
 ```
 
+The Docker Compose stack configures the equivalent local executor with
+`python3` inside `backend/Dockerfile.dev`; no host Python configuration is
+required.
+
 Production must use `LABRAT_ANALYSIS_EXECUTOR=worker` plus an HTTPS `LABRAT_ANALYSIS_WORKER_ENDPOINT` backed by an isolated no-network worker. The local subprocess adapter is rejected in production.
 
-The next major engineering goal is production operationalization of reviewed analysis execution: deploy the hardened no-network worker, configure provider secrets outside the browser, exercise migration 012 and atomic publication against Postgres, and add cost/latency/audit telemetry. Server workflow reliability, Docker/Postgres readiness, and admin/audit usability remain guardrails. New server-mode work does not need compatibility migrations for old IndexedDB, `.labrat.json`, or previous local project shapes.
+The next major engineering goal is production operationalization of reviewed analysis execution: deploy the hardened no-network worker, configure provider secrets outside the browser, run the Postgres integration suite in CI, and add cost/latency/audit telemetry. The local Compose stack is the development runtime; it is not the production executor architecture. New server-mode work does not need compatibility migrations for old IndexedDB, `.labrat.json`, or previous local project shapes.
 
 ## Example Templates
 
@@ -127,6 +139,15 @@ npm run build
 ```
 
 The backend workbook scan/source indexing, accepted snapshot publication, Experiment Browser, and source-backed chart endpoints are active. Old normalize/apply, aggregate dataset, mapping, analysis-view, observation-series, and unscoped chart endpoints are removed.
+
+## Deployment
+
+The low-cost production path is one AWS Lightsail Ubuntu instance running
+Caddy, the Node backend, Postgres, and durable uploaded-file storage. GitHub
+Actions can deploy every pushed `main` commit after tests and build pass.
+
+See `doc/deployment/lightsail.md` for provisioning, GitHub secrets, first-admin
+bootstrap, backup, rollback, and acceptance checks.
 
 ## Documentation Map
 

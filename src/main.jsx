@@ -10,13 +10,13 @@ import { ProjectProfileChat } from "./components/ProjectProfileChat.jsx";
 import { ServerLogin } from "./components/ServerLogin.jsx";
 import { ThinkingIndicator } from "./components/ThinkingIndicator.jsx";
 import { WorkbookReviewDock } from "./components/WorkbookReviewDock.jsx";
-import { DataPlanReviewPanel } from "./components/DataPlanReviewPanel.jsx";
 import { ExperimentBrowser } from "./components/ExperimentBrowser.jsx";
 import { AnalysisConversationCard } from "./components/AnalysisConversationCard.jsx";
 import { AnalysisReviewWorkspace } from "./components/AnalysisReviewWorkspace.jsx";
 import {
   getProjectAnalysisCapabilities,
   publishAcceptedAnalysisChart,
+  publishAcceptedExperimentData,
   retryAnalysisThread,
 } from "./data/analysisApi.js";
 import { Plot } from "./charts/Plot";
@@ -28,8 +28,7 @@ import {
   createServerManuscript,
   createServerProject,
   createServerWorkbookReviewSession,
-  draftServerProjectDataPlan,
-  publishServerProjectDataPlan,
+  deleteServerWorkbookReviewSession,
   deleteServerProject,
   getServerChartSpec,
   getServerProjectState,
@@ -64,6 +63,7 @@ import {
   workbookTileCacheKey,
   workbookVisibleTileBounds,
 } from "./data/workbookRangeTiles.js";
+import { useWorkbookRegionInterpretationQueue } from "./hooks/useWorkbookRegionInterpretationQueue.js";
 import "./styles.css";
 
 const BLANK_MODE = isBlankDataMode();
@@ -702,7 +702,17 @@ function workbookReviewSessionFileName(session, sourceDocuments = []) {
     || "Workbook";
 }
 
-function WorkbookReviewSessionDialog({ open, sessions = [], sourceDocuments = [], regions = [], onOpenSession, onClose }) {
+function WorkbookReviewSessionDialog({
+  open,
+  sessions = [],
+  sourceDocuments = [],
+  regions = [],
+  deletingSessionId = "",
+  deleteError = "",
+  onOpenSession,
+  onDeleteSession,
+  onClose,
+}) {
   if (!open) return null;
   const activeRegions = asArray(regions).filter((region) => !region?.disposition || region.disposition === "active");
   const orderedSessions = [...asArray(sessions)].sort((left, right) => (
@@ -715,37 +725,53 @@ function WorkbookReviewSessionDialog({ open, sessions = [], sourceDocuments = []
         <div className="modal-head">
           <div>
             <h2>Uploaded workbooks</h2>
-            <p>Select a workbook to browse its reviewed regions.</p>
+            <p>Select a workbook to review its source regions.</p>
           </div>
           <button type="button" aria-label="Close uploaded workbooks" onClick={onClose}>x</button>
         </div>
+        {deleteError && <p className="workbook-session-browser-error" role="alert">{deleteError}</p>}
         <div className="workbook-session-browser-list">
           {orderedSessions.map((session) => {
             const sessionRegions = activeRegions.filter((region) => region?.workbookReviewSessionId === session.id);
             const confirmedCount = sessionRegions.filter((region) => region?.reviewStatus === "accepted").length;
             const pendingCount = sessionRegions.length - confirmedCount;
             const fileName = workbookReviewSessionFileName(session, sourceDocuments);
+            const deleting = deletingSessionId === session.id;
             return (
-              <button
-                type="button"
+              <div
                 className="workbook-session-browser-row"
-                aria-label={`Open ${fileName}`}
                 key={session.id}
-                onClick={() => onOpenSession?.(session)}
               >
-                <span className="workbook-session-browser-file">
-                  <strong>{fileName}</strong>
-                  <small>
-                    {session?.workbookSummary?.sheetCount || 0} sheets
-                    {session?.updatedAt || session?.createdAt ? ` - Updated ${formatShortDate(session.updatedAt || session.createdAt)}` : ""}
-                  </small>
-                </span>
-                <span className="workbook-session-browser-counts">
-                  <span>{confirmedCount} confirmed</span>
-                  <span>{pendingCount} need review</span>
-                </span>
-                <span className="workbook-session-browser-open" aria-hidden="true">Open</span>
-              </button>
+                <button
+                  type="button"
+                  className="workbook-session-browser-main"
+                  aria-label={`Open ${fileName}`}
+                  disabled={deleting}
+                  onClick={() => onOpenSession?.(session)}
+                >
+                  <span className="workbook-session-browser-file">
+                    <strong>{fileName}</strong>
+                    <small>
+                      {session?.workbookSummary?.sheetCount || 0} sheets
+                      {session?.updatedAt || session?.createdAt ? ` - Updated ${formatShortDate(session.updatedAt || session.createdAt)}` : ""}
+                    </small>
+                  </span>
+                  <span className="workbook-session-browser-counts">
+                    <span>{confirmedCount} confirmed</span>
+                    <span>{pendingCount} need review</span>
+                  </span>
+                  <span className="workbook-session-browser-open" aria-hidden="true">Open</span>
+                </button>
+                <button
+                  type="button"
+                  className="workbook-session-browser-delete"
+                  aria-label={`Delete ${fileName}`}
+                  disabled={deleting}
+                  onClick={() => onDeleteSession?.(session, fileName)}
+                >
+                  {deleting ? "Deleting..." : "Delete"}
+                </button>
+              </div>
             );
           })}
           {!orderedSessions.length && <p className="browser-muted">No uploaded workbooks are available.</p>}
@@ -755,25 +781,48 @@ function WorkbookReviewSessionDialog({ open, sessions = [], sourceDocuments = []
   );
 }
 
-export function ProjectOverview({ projectState, onAskLabRat, onOpenProfile, onUploadWorkbook, onGoBrowser, onOpenChartReview, onGoManuscript }) {
+export function ProjectOverview({
+  projectState,
+  onAskLabRat,
+  onOpenProfile,
+  onUploadWorkbook,
+  onDeleteWorkbook,
+  onGoBrowser,
+  onOpenChartReview,
+  onGoManuscript,
+}) {
   const [workbookListOpen, setWorkbookListOpen] = useState(false);
+  const [deletingWorkbookSessionId, setDeletingWorkbookSessionId] = useState("");
+  const [deleteWorkbookError, setDeleteWorkbookError] = useState("");
   const summary = projectWorkflowSummary(projectState?.project, projectState);
-  const workbookReviewSessions = asArray(projectState?.workbookReviewSessions);
+  const workbookReviewSessions = asArray(projectState?.workbookReviewSessions)
+    .filter((session) => session?.status !== "deleted");
   const activeWorkbookReviewRegions = asArray(projectState?.workbookReviewRegions)
     .filter((region) => !region?.disposition || region.disposition === "active");
   const pendingWorkbookReviewRegions = activeWorkbookReviewRegions
     .filter((region) => region?.reviewStatus !== "accepted");
   const confirmedWorkbookReviewRegions = activeWorkbookReviewRegions
     .filter((region) => region?.reviewStatus === "accepted");
-  const pendingWorkbookReviewRegion = latestItem(pendingWorkbookReviewRegions);
-  const pendingWorkbookReviewSession = workbookReviewSessions.find(
-    (session) => session?.id === pendingWorkbookReviewRegion?.workbookReviewSessionId,
-  ) || latestItem(workbookReviewSessions);
-  const sourceDocumentCount = asArray(projectState?.sourceDocuments).length;
   const openWorkbookList = () => setWorkbookListOpen(true);
   const openWorkbookSession = (session) => {
     setWorkbookListOpen(false);
     onUploadWorkbook?.(session);
+  };
+  const deleteWorkbookSession = async (session, fileName) => {
+    if (!session?.id || typeof onDeleteWorkbook !== "function") return;
+    const confirmed = window.confirm(
+      `Delete ${fileName} from workbook review? Its source history and existing downstream data or charts will be retained.`,
+    );
+    if (!confirmed) return;
+    setDeletingWorkbookSessionId(session.id);
+    setDeleteWorkbookError("");
+    try {
+      await onDeleteWorkbook(session);
+    } catch (error) {
+      setDeleteWorkbookError(error?.message || String(error));
+    } finally {
+      setDeletingWorkbookSessionId("");
+    }
   };
   const chartReviewDetail = summary.pendingAnalysisCount
     ? `${summary.pendingAnalysisCount} analysis request${summary.pendingAnalysisCount === 1 ? "" : "s"} still need review`
@@ -786,15 +835,15 @@ export function ProjectOverview({ projectState, onAskLabRat, onOpenProfile, onUp
   const nextAction = !summary.profileComplete
     ? { label: "Edit profile", action: onOpenProfile }
     : pendingWorkbookReviewRegions.length
-      ? { label: "Review workbook regions", action: () => onUploadWorkbook?.(pendingWorkbookReviewSession) }
-      : !sourceDocumentCount
+      ? { label: "Review workbook regions", action: openWorkbookList }
+      : !workbookReviewSessions.length
         ? { label: "Upload workbook", action: onAskLabRat }
         : summary.hasPublishedData
           ? { label: "Open Experiment Browser", action: onGoBrowser }
           : confirmedWorkbookReviewRegions.length
             ? { label: "View confirmed regions", action: openWorkbookList }
             : workbookReviewSessions.length
-              ? { label: "Review workbook", action: () => onUploadWorkbook?.(latestItem(workbookReviewSessions)) }
+              ? { label: "Review workbook", action: openWorkbookList }
               : !summary.chartSpecCount
         ? { label: "Create chart", action: onOpenChartReview }
         : { label: "Build manuscript", action: onGoManuscript };
@@ -818,7 +867,7 @@ export function ProjectOverview({ projectState, onAskLabRat, onOpenProfile, onUp
         <ProjectOverviewCard title="Project profile" value={`${summary.profileCount}/7`} detail={summary.profileComplete ? "Enough context for chart AI" : "Add research goal, materials, methods, and analysis notes"} action="Edit profile" onClick={onOpenProfile} />
         <ProjectOverviewCard
           title="Workbook review"
-          value={`${sourceDocumentCount} source documents`}
+          value={`${workbookReviewSessions.length} uploaded workbook${workbookReviewSessions.length === 1 ? "" : "s"}`}
           detail={pendingWorkbookReviewRegions.length
             ? `${pendingWorkbookReviewRegions.length} ${pendingWorkbookReviewRegions.length === 1 ? "region needs" : "regions need"} review. ${confirmedWorkbookReviewRegions.length} confirmed.`
             : confirmedWorkbookReviewRegions.length
@@ -833,18 +882,10 @@ export function ProjectOverview({ projectState, onAskLabRat, onOpenProfile, onUp
               : workbookReviewSessions.length
                 ? "Review workbook"
                 : "Upload workbook"}
-          onClick={pendingWorkbookReviewRegions.length && pendingWorkbookReviewSession
-            ? () => onUploadWorkbook?.(pendingWorkbookReviewSession)
-            : confirmedWorkbookReviewRegions.length
-              ? openWorkbookList
-              : onAskLabRat}
-          actionTitle={pendingWorkbookReviewRegions.length
-            ? "Open the session containing the latest region awaiting review"
-            : confirmedWorkbookReviewRegions.length
-              ? "Inspect confirmed workbook regions"
-              : workbookReviewSessions.length
-                ? "Open the latest workbook review session"
-              : "Open Ask LabRat, then use the + button to attach a spreadsheet"}
+          onClick={workbookReviewSessions.length ? openWorkbookList : onAskLabRat}
+          actionTitle={workbookReviewSessions.length
+            ? "Choose an uploaded workbook and review its regions"
+            : "Open Ask LabRat, then use the + button to attach a spreadsheet"}
         />
         <ProjectOverviewCard
           title="Experiment Browser"
@@ -864,7 +905,10 @@ export function ProjectOverview({ projectState, onAskLabRat, onOpenProfile, onUp
         sessions={workbookReviewSessions}
         sourceDocuments={projectState?.sourceDocuments}
         regions={projectState?.workbookReviewRegions}
+        deletingSessionId={deletingWorkbookSessionId}
+        deleteError={deleteWorkbookError}
         onOpenSession={openWorkbookSession}
+        onDeleteSession={deleteWorkbookSession}
         onClose={() => setWorkbookListOpen(false)}
       />
     </main>
@@ -1867,6 +1911,9 @@ export function AgentPanel({
   onWorkbookReviewReady,
   onWorkbookReviewLinkOpen,
   onOpenAnalysisReview,
+  activeSurface = "project",
+  requestedAnalysisOutputTarget = "",
+  onRequestedAnalysisTargetHandled,
 }) {
   const chatHistoryKey = useMemo(
     () => agentChatHistoryKey(activeProjectId, projectState),
@@ -2164,7 +2211,7 @@ export function AgentPanel({
         setHistory([...next, {
           role: "assistant",
           text: regionCount
-            ? `I indexed ${workbookName} and found ${regionCount} potentially useful ${regionCount === 1 ? "region" : "regions"}. Open the workbook to review them.`
+            ? `I indexed ${workbookName} and created ${regionCount} potentially useful ${regionCount === 1 ? "region" : "regions"}. AI is understanding them in Workbook Review.`
             : `I indexed ${workbookName}. You can inspect the workbook in the preview; select a range and describe it if you want LabRat to revise its understanding.`,
           workbookReviewLink,
         }]);
@@ -2187,6 +2234,11 @@ export function AgentPanel({
       });
       setBusy(true);
       try {
+        const requestSurface = requestedAnalysisOutputTarget === "experiment_browser"
+          ? "experiment_browser"
+          : selectedChartContext
+            ? "manuscript_chart"
+            : activeSurface || "project";
         const response = await createServerAgentRun(activeProjectId, {
           message: text,
           conversation: next.slice(-10).map((message) => ({
@@ -2194,7 +2246,11 @@ export function AgentPanel({
             text: message.text,
           })),
           selectedContext: {
-            tab: selectedChartContext ? "manuscript_chart" : "project",
+            tab: requestSurface,
+            activeSurface: requestSurface,
+            ...(requestedAnalysisOutputTarget
+              ? { analysisOutputTarget: requestedAnalysisOutputTarget }
+              : {}),
             selectedExperimentLabel: selected?.label || "",
             selectedChartTitle: selectedChartContext?.title || "",
             selectedChartBlockId: selectedChartContext?.blockId || "",
@@ -2206,6 +2262,7 @@ export function AgentPanel({
             },
           },
         }, { signal: requestAbortController.signal });
+        onRequestedAnalysisTargetHandled?.();
         const agentRun = response.agentRun || {};
         const warningText = asArray(agentRun.warnings).map((warning) => warning.message || warning.code).filter(Boolean).join(" ");
         const reply = response.reply || warningText || "I need more detail before I can answer or prepare an analysis plan.";
@@ -2512,6 +2569,7 @@ function App() {
   const [chartSpecInsertRequest, setChartSpecInsertRequest] = useState(null);
   const [dirty, setDirty] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
+  const [requestedAnalysisOutputTarget, setRequestedAnalysisOutputTarget] = useState("");
   const [analysisReviewState, setAnalysisReviewState] = useState(null);
   const [projectLoaded, setProjectLoaded] = useState(false);
   const [authState, setAuthState] = useState({ checking: true, loading: false, user: null, labs: [], error: "" });
@@ -2532,21 +2590,22 @@ function App() {
   const [chartReviewOpen, setChartReviewOpen] = useState(false);
   const [chartReviewStatusFilter, setChartReviewStatusFilter] = useState("");
   const [workbookReviewState, setWorkbookReviewState] = useState({ loading: false, error: "", revisionLoading: false, confirmLoading: false, revisionError: "", clarification: null, session: null, sourceDocument: null, regions: [] });
-  const [dataPlanReviewState, setDataPlanReviewState] = useState({ loading: false, error: "", review: null, identityDecisions: [] });
   const [workbookReviewDraftRegions, setWorkbookReviewDraftRegions] = useState([]);
   const [activeWorkbookReviewDraftRegionId, setActiveWorkbookReviewDraftRegionId] = useState("");
   const [workbookReviewFocusSelection, setWorkbookReviewFocusSelection] = useState(null);
   const [browserSelectedExperimentIds, setBrowserSelectedExperimentIds] = useState([]);
+  const [browserInitialViewId, setBrowserInitialViewId] = useState("");
   const [backendChartInterpretState, setBackendChartInterpretState] = useState({ loading: false, result: null, error: "" });
   const resetReviewState = () => {
     setBackendChartInterpretState({ loading: false, result: null, error: "" });
     setChartReviewStatusFilter("");
     setWorkbookReviewState({ loading: false, error: "", revisionLoading: false, confirmLoading: false, revisionError: "", clarification: null, session: null, sourceDocument: null, regions: [] });
-    setDataPlanReviewState({ loading: false, error: "", review: null, identityDecisions: [] });
     setWorkbookReviewDraftRegions([]);
     setActiveWorkbookReviewDraftRegionId("");
     setWorkbookReviewFocusSelection(null);
     setBrowserSelectedExperimentIds([]);
+    setBrowserInitialViewId("");
+    setRequestedAnalysisOutputTarget("");
     setAnalysisReviewState(null);
   };
 
@@ -2844,6 +2903,14 @@ function App() {
     }
     setAgentOpen(true);
   };
+  const openExperimentBrowserDataRequest = () => {
+    if (!activeProjectId) {
+      setSourceError("Select or create a server project before preparing experiment data.");
+      return;
+    }
+    setRequestedAnalysisOutputTarget("experiment_browser");
+    setAgentOpen(true);
+  };
   const openAppendImportReview = () => {
     openWorkbookUpload();
   };
@@ -2862,7 +2929,6 @@ function App() {
     setWorkbookReviewDraftRegions(nextReviewRegions);
     setActiveWorkbookReviewDraftRegionId(nextActiveRegionId);
     setWorkbookReviewFocusSelection(null);
-    setDataPlanReviewState({ loading: false, error: "", review: null, identityDecisions: [] });
     setWorkbookReviewState({
       loading: false,
       error: "",
@@ -2898,6 +2964,14 @@ function App() {
       }));
     }
   };
+  const deleteWorkbookReviewSessionFromProject = async (session) => {
+    if (!session?.id) throw new Error("Select a workbook before deleting it.");
+    await deleteServerWorkbookReviewSession(session.id, {
+      expectedVersion: session.version,
+      reason: "Deleted from Uploaded workbooks.",
+    });
+    await refreshProjectWorkspace();
+  };
   const handleWorkbookReviewLinkOpen = async (link) => {
     const sessionId = String(link?.workbookReviewSessionId || "").trim();
     if (!sessionId) throw new Error("Workbook review session is missing.");
@@ -2929,10 +3003,12 @@ function App() {
     const nextRegion = response?.region || null;
     if (!nextRegion?.id) return response;
     setWorkbookReviewDraftRegions((currentRegions) => {
-      const nextRegions = [
-        ...asArray(currentRegions).filter((region) => region.id !== nextRegion.id),
-        nextRegion,
-      ].filter((region) => region.disposition !== "deleted");
+      const existingRegions = asArray(currentRegions);
+      const nextRegions = (
+        existingRegions.some((region) => region.id === nextRegion.id)
+          ? existingRegions.map((region) => region.id === nextRegion.id ? nextRegion : region)
+          : [...existingRegions, nextRegion]
+      ).filter((region) => region.disposition !== "deleted");
       setWorkbookReviewState((current) => ({
         ...current,
         reviewRegions: nextRegions,
@@ -2953,60 +3029,105 @@ function App() {
     } else if (nextRegion.disposition !== "active") {
       setActiveWorkbookReviewDraftRegionId((currentId) => (currentId === nextRegion.id ? "" : currentId));
     }
-    setDataPlanReviewState({ loading: false, error: "", review: null, identityDecisions: [] });
     return response;
+  };
+  const markWorkbookReviewRegionInterpretationFailed = (region, error, context = {}) => {
+    const reconcileFromServer = [
+      "stale_workbook_review_region",
+      "workbook_review_region_not_pending",
+    ].includes(error?.code);
+    if (reconcileFromServer && context.sessionId) {
+      getServerWorkbookReviewSession(context.sessionId)
+        .then((response) => {
+          const currentSessionId = workbookReviewState.session?.id
+            || workbookReviewState.workbookReviewSession?.id
+            || "";
+          if (currentSessionId !== context.sessionId) return;
+          const latestRegion = asArray(response?.reviewRegions)
+            .find((candidate) => candidate.id === region?.id);
+          if (latestRegion) applyWorkbookReviewRegionResponse({ region: latestRegion }, { activate: false });
+        })
+        .catch(() => {
+          // A later explicit reopen will reload the authoritative region state.
+        });
+      return;
+    }
+    const superseded = [
+      "workbook_review_region_inactive",
+      "workbook_review_region_not_found",
+      "workbook_review_session_not_found",
+    ].includes(error?.code);
+    if (superseded || !region?.id) return;
+    const warning = {
+      code: error?.code || "region_interpretation_request_failed",
+      message: error?.message || String(error),
+    };
+    setWorkbookReviewDraftRegions((currentRegions) => {
+      const nextRegions = asArray(currentRegions).map((candidate) => (
+        candidate.id === region.id
+          && candidate.disposition === "active"
+          && candidate.reviewStatus === "interpreting"
+          ? { ...candidate, reviewStatus: "interpretation_failed", warnings: [warning] }
+          : candidate
+      ));
+      setWorkbookReviewState((current) => ({
+        ...current,
+        reviewRegions: nextRegions,
+        revisionError: "",
+      }));
+      return nextRegions;
+    });
+  };
+  const workbookReviewSessionId = workbookReviewState.session?.id
+    || workbookReviewState.workbookReviewSession?.id
+    || "";
+  const { retryRegion: queueWorkbookReviewRegionRetry } = useWorkbookRegionInterpretationQueue({
+    sessionId: workbookReviewSessionId,
+    regions: workbookReviewDraftRegions,
+    activeRegionId: activeWorkbookReviewDraftRegionId,
+    interpretRegion: ({ sessionId, region, signal }) => interpretServerWorkbookReviewRegion(
+      sessionId,
+      region.id,
+      {
+        expectedRegionVersion: region.version,
+        idempotencyKey: `interpret_region_${uid()}`,
+      },
+      { signal },
+    ),
+    onRegionResult: (response) => applyWorkbookReviewRegionResponse(response, { activate: false }),
+    onRegionError: markWorkbookReviewRegionInterpretationFailed,
+  });
+  const retryWorkbookReviewRegion = (regionId) => {
+    const started = queueWorkbookReviewRegionRetry(regionId);
+    if (!started) return false;
+    setWorkbookReviewDraftRegions((currentRegions) => {
+      const nextRegions = asArray(currentRegions).map((region) => (
+        region.id === regionId && region.disposition === "active"
+          ? { ...region, reviewStatus: "interpreting", warnings: [] }
+          : region
+      ));
+      setWorkbookReviewState((current) => ({
+        ...current,
+        reviewRegions: nextRegions,
+        revisionError: "",
+      }));
+      return nextRegions;
+    });
+    return true;
   };
   const createWorkbookReviewRegion = async (input = {}) => {
     const session = workbookReviewState.session || workbookReviewState.workbookReviewSession || null;
     if (!session?.id) throw new Error("Start a workbook review session before selecting a region.");
-    let createdRegion = null;
     try {
       const createdResponse = await createServerWorkbookReviewRegion(session.id, {
         ...input,
         deferInterpretation: true,
         idempotencyKey: `create_region_${uid()}`,
       });
-      createdRegion = createdResponse?.region || null;
-      applyWorkbookReviewRegionResponse(createdResponse);
-      if (!createdRegion?.id) return createdResponse;
-      const interpretedResponse = await interpretServerWorkbookReviewRegion(session.id, createdRegion.id, {
-        expectedRegionVersion: createdRegion.version,
-        description: input.description || "",
-        semanticType: input.semanticType || "generic_table",
-        idempotencyKey: `interpret_region_${uid()}`,
-      });
-      return applyWorkbookReviewRegionResponse(interpretedResponse, { activate: false });
+      return applyWorkbookReviewRegionResponse(createdResponse);
     } catch (err) {
-      const superseded = [
-        "stale_workbook_review_region",
-        "workbook_review_region_inactive",
-        "workbook_review_region_not_pending",
-      ].includes(err?.code);
-      if (!createdRegion?.id || superseded) {
-        if (!superseded) {
-          setWorkbookReviewState((current) => ({ ...current, revisionError: err.message || String(err) }));
-        }
-        if (!superseded) throw err;
-        return null;
-      }
-      const warning = {
-        code: err?.code || "region_interpretation_request_failed",
-        message: err?.message || String(err),
-      };
-      setWorkbookReviewDraftRegions((currentRegions) => {
-        const nextRegions = asArray(currentRegions).map((region) => (
-          region.id === createdRegion.id && region.disposition === "active" && region.reviewStatus === "interpreting"
-            ? { ...region, reviewStatus: "interpretation_failed", warnings: [warning] }
-            : region
-        ));
-        setWorkbookReviewState((current) => ({
-          ...current,
-          reviewRegions: nextRegions,
-          revisionError: "",
-        }));
-        return nextRegions;
-      });
-      return null;
+      setWorkbookReviewState((current) => ({ ...current, revisionError: err.message || String(err) }));
+      throw err;
     }
   };
   const reviseWorkbookReviewRegion = async (regionId, request) => {
@@ -3038,69 +3159,6 @@ function App() {
     if (!session?.id) throw new Error("Start a workbook review session before deleting a region.");
     const response = await deleteServerWorkbookReviewRegion(session.id, regionId, request);
     return applyWorkbookReviewRegionResponse(response, { activate: false });
-  };
-  const reviewWorkbookExperimentRecords = async (identityDecisions = []) => {
-    const acceptedRevisionIds = asArray(workbookReviewDraftRegions)
-      .filter((region) => region.disposition === "active" && region.acceptedRevisionId)
-      .map((region) => region.acceptedRevisionId);
-    setWorkbookReviewState((current) => ({ ...current, extractionReviewRequested: true }));
-    if (!acceptedRevisionIds.length) {
-      setDataPlanReviewState({
-        loading: false,
-        error: "Confirm at least one workbook region before reviewing extracted experiments.",
-        review: null,
-        identityDecisions,
-      });
-      return;
-    }
-    setDataPlanReviewState((current) => ({ ...current, loading: true, error: "", identityDecisions }));
-    try {
-      const review = await draftServerProjectDataPlan(activeProjectId, {
-        intent: "experiment_browser_publish",
-        regionUnderstandingRevisionIds: acceptedRevisionIds,
-        identityDecisions,
-      });
-      setDataPlanReviewState({ loading: false, error: "", review, identityDecisions });
-    } catch (error) {
-      setDataPlanReviewState((current) => ({
-        ...current,
-        loading: false,
-        error: error?.body?.clarification?.message || error?.message || String(error),
-      }));
-    }
-  };
-  const closeExperimentRecordReview = () => {
-    setWorkbookReviewState((current) => ({ ...current, extractionReviewRequested: false }));
-  };
-  const publishWorkbookExperimentRecords = async (request) => {
-    const previewKey = String(request.expectedPreviewHash || "").replace(/[^a-zA-Z0-9]/g, "").slice(-20);
-    const planKey = String(request.dataPlan?.id || "preview").replace(/[^a-zA-Z0-9._:-]/g, "");
-    const response = await publishServerProjectDataPlan(activeProjectId, {
-      ...request,
-      idempotencyKey: `publish_${planKey}_${previewKey}`,
-    });
-    const state = await getServerProjectState(activeProjectId);
-    applyProjectWorkspaceRefresh(state);
-    setBrowserSelectedExperimentIds(asArray(response.experimentIdentities).map((identity) => identity.id).filter(Boolean));
-    setTab("browser");
-    return response;
-  };
-  const refreshStaleExperimentRecordReview = (currentReview) => {
-    setDataPlanReviewState((current) => ({
-      ...current,
-      loading: false,
-      error: "Source evidence changed after this preview. Review the refreshed values before publishing again.",
-      review: currentReview,
-    }));
-  };
-  const focusDataPlanSource = (source) => {
-    setWorkbookReviewFocusSelection({
-      sourceDocumentId: source.sourceDocumentId,
-      sheetName: source.sheetName,
-      range: source.range,
-      requestId: uid(),
-      selectionMethod: "data_plan_source_link",
-    });
   };
   const focusExperimentBrowserSource = async (source) => {
     if (!source?.sourceDocumentId || !(source.sheet || source.sheetName) || !(source.range || source.cell)) return;
@@ -3229,6 +3287,39 @@ function App() {
     applyProjectWorkspaceRefresh({ ...state, chartSpecs });
     return response;
   };
+  const acceptAnalysisResultExperiments = async ({
+    runId,
+    analysisResultId,
+    identityResolutions,
+  }) => {
+    if (!activeProjectId || !runId || !analysisResultId) return null;
+    const response = await publishAcceptedExperimentData(runId, {
+      analysisResultId,
+      identityResolutions,
+    }, {
+      idempotencyKey: `publish_experiments_${runId}_${analysisResultId}`,
+    });
+    const state = await getServerProjectState(activeProjectId);
+    applyProjectWorkspaceRefresh(state);
+    setBrowserSelectedExperimentIds(
+      asArray(response.experimentSnapshotHeads)
+        .map((head) => head.experimentId)
+        .filter(Boolean),
+    );
+    setBrowserInitialViewId(response.browserView?.id || "");
+    setTab("browser");
+    return response;
+  };
+  const acceptAnalysisResult = (request) => (
+    [
+      analysisReviewState?.thread?.outputTarget,
+      analysisReviewState?.revision?.outputTarget,
+      analysisReviewState?.run?.outputTarget,
+      analysisReviewState?.result?.outputTarget,
+    ].includes("experiment_browser")
+      ? acceptAnalysisResultExperiments(request)
+      : acceptAnalysisResultChart(request)
+  );
   const loadChartSpecDetailForManuscript = useCallback(async (chartSpecId) => {
     const response = await getServerChartSpec(chartSpecId);
     const chartSpec = response?.chartSpec || null;
@@ -3340,6 +3431,7 @@ function App() {
         onAskLabRat={() => setAgentOpen(true)}
         onOpenProfile={() => setProfileChatOpen(true)}
         onUploadWorkbook={continueWorkbookReview}
+        onDeleteWorkbook={deleteWorkbookReviewSessionFromProject}
         onGoBrowser={() => setTab("browser")}
         onOpenChartReview={openChartReview}
         onGoManuscript={() => setTab("manuscript")}
@@ -3347,8 +3439,10 @@ function App() {
       {tab === "browser" && <ExperimentBrowser
         projectId={activeProjectId}
         initialSelectedExperimentIds={browserSelectedExperimentIds}
+        initialViewId={browserInitialViewId}
         onSelectionChange={setBrowserSelectedExperimentIds}
         onOpenImportReview={openWorkbookUpload}
+        onRequestDataChange={openExperimentBrowserDataRequest}
         onOpenSourceRange={focusExperimentBrowserSource}
       />}
       {tab === "workbook_review" && (
@@ -3362,30 +3456,18 @@ function App() {
           onCreateRegion={createWorkbookReviewRegion}
           focusSelection={workbookReviewFocusSelection}
           reviewDock={(
-            workbookReviewState.extractionReviewRequested ? (
-              <DataPlanReviewPanel
-                review={dataPlanReviewState.review}
-                loading={dataPlanReviewState.loading}
-                error={dataPlanReviewState.error}
-                onApplyIdentityDecisions={reviewWorkbookExperimentRecords}
-                onOpenSource={focusDataPlanSource}
-                onBack={closeExperimentRecordReview}
-                onPublish={publishWorkbookExperimentRecords}
-                onPreviewStale={refreshStaleExperimentRecordReview}
-              />
-            ) : (
-              <WorkbookReviewDock
-                reviewState={workbookReviewState}
-                reviewRegions={workbookReviewDraftRegions}
-                activeRegionId={activeWorkbookReviewDraftRegionId}
-                onActiveRegionChange={handleWorkbookReviewRegionActivate}
-                onReviseRegion={reviseWorkbookReviewRegion}
-                onConfirmRegion={confirmWorkbookReviewRegion}
-                onIgnoreRegion={ignoreWorkbookReviewRegion}
-                onDeleteRegion={deleteWorkbookReviewRegion}
-                onReviewExtractedExperiments={() => reviewWorkbookExperimentRecords([])}
-              />
-            )
+            <WorkbookReviewDock
+              reviewState={workbookReviewState}
+              reviewRegions={workbookReviewDraftRegions}
+              activeRegionId={activeWorkbookReviewDraftRegionId}
+              onActiveRegionChange={handleWorkbookReviewRegionActivate}
+              onReviseRegion={reviseWorkbookReviewRegion}
+              onConfirmRegion={confirmWorkbookReviewRegion}
+              onRetryRegion={retryWorkbookReviewRegion}
+              onIgnoreRegion={ignoreWorkbookReviewRegion}
+              onDeleteRegion={deleteWorkbookReviewRegion}
+              onReviewExtractedExperiments={openExperimentBrowserDataRequest}
+            />
           )}
         />
       )}
@@ -3399,7 +3481,7 @@ function App() {
           run={analysisReviewState.run}
           result={analysisReviewState.result}
           WorkbookWorkspaceComponent={WorkbookReviewWorkspace}
-          onAcceptResult={acceptAnalysisResultChart}
+          onAcceptResult={acceptAnalysisResult}
           onClose={closeAnalysisReview}
           onAccepted={(response) => {
             if (response?.chartSpec) return;
@@ -3455,6 +3537,9 @@ function App() {
         onWorkbookReviewReady={handleWorkbookReviewReadyFromAgent}
         onWorkbookReviewLinkOpen={handleWorkbookReviewLinkOpen}
         onOpenAnalysisReview={openAnalysisReview}
+        activeSurface={tab}
+        requestedAnalysisOutputTarget={requestedAnalysisOutputTarget}
+        onRequestedAnalysisTargetHandled={() => setRequestedAnalysisOutputTarget("")}
       />
     </>
   );

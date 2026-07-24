@@ -2,12 +2,13 @@ services:
   postgres:
     image: postgres:16
     container_name: labrat-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: labrat
       POSTGRES_PASSWORD: labrat_dev
       POSTGRES_DB: labrat
     ports:
-      - "5432:5432"
+      - "${LABRAT_POSTGRES_PORT:-5433}:5432"
     volumes:
       - labrat_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -17,8 +18,12 @@ services:
       retries: 20
 
   backend:
-    image: node:24-alpine
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.dev
     container_name: labrat-backend
+    restart: unless-stopped
+    init: true
     working_dir: /app
     depends_on:
       postgres:
@@ -31,6 +36,8 @@ services:
       HOST: 0.0.0.0
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-5}
+      LABRAT_ANALYSIS_EXECUTOR: local
+      LABRAT_ANALYSIS_PYTHON_COMMAND: python3
     ports:
       - "8787:8787"
     volumes:
@@ -38,16 +45,27 @@ services:
       - labrat_backend_node_modules:/app/backend/node_modules
       - labrat_backend_files:/app/backend/.labrat-files
     command: >
-      sh -c "npm --prefix backend install
+      sh -c "if [ ! -d backend/node_modules/pg ]; then
+      npm --prefix backend install;
+      fi
       && npm --prefix backend run migrate
       && npm --prefix backend run dev"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8787/health >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
 
   frontend:
     image: node:24-alpine
     container_name: labrat-frontend
+    restart: unless-stopped
+    init: true
     working_dir: /app
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     environment:
       VITE_LABRAT_DATA_MODE: blank
       VITE_LABRAT_API_PROXY_TARGET: http://backend:8787
@@ -57,8 +75,16 @@ services:
       - ./:/app
       - labrat_frontend_node_modules:/app/node_modules
     command: >
-      sh -c "npm install
-      && npm run dev -- --host 0.0.0.0"
+      sh -c "if [ ! -x node_modules/.bin/vite ]; then
+      npm install;
+      fi
+      && npm run dev"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5173/LabRat/ >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
 
 volumes:
   labrat_pgdata:

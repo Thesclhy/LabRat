@@ -113,7 +113,34 @@ export function executeAnalysisRun(analysisRunId, options = {}) {
 
 export function getAnalysisResultPreview(analysisRunId, options = {}) {
   const id = requireId(analysisRunId, "Select an analysis run before loading its result.");
-  return serverRequest(`/api/analysis-runs/${id}/result-preview`, requestOptions(options));
+  return serverRequest(
+    `/api/analysis-runs/${id}/result-preview${pageQuery(options)}`,
+    requestOptions(options),
+  );
+}
+
+export function publishAcceptedExperimentData(analysisRunId, request = {}, options = {}) {
+  const id = requireId(analysisRunId, "Select an analysis run before publishing experiment data.");
+  const analysisResultId = String(request.analysisResultId || "").trim();
+  const idempotencyKey = String(options.idempotencyKey || "").trim();
+  if (!analysisResultId) {
+    throw new ServerApiError("Experiment publication requires the visible analysis result.");
+  }
+  if (!idempotencyKey) {
+    throw new ServerApiError("Experiment publication requires an idempotency key.");
+  }
+  return serverJson(`/api/analysis-runs/${id}/accept-and-publish-experiments`, {
+    analysisResultId,
+    identityResolutions: Array.isArray(request.identityResolutions)
+      ? request.identityResolutions
+      : [],
+  }, {
+    ...requestOptions(options),
+    headers: {
+      "idempotency-key": idempotencyKey,
+      ...(options.headers || {}),
+    },
+  });
 }
 
 export function reviseAnalysisRun(analysisRunId, request = {}, options = {}) {

@@ -135,6 +135,14 @@ export function getServerWorkbookReviewSession(sessionId, options = {}) {
   return serverRequest(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}`, options);
 }
 
+export function deleteServerWorkbookReviewSession(sessionId, request = {}, options = {}) {
+  if (!sessionId) throw new ServerApiError("Select a workbook review session before deleting it.");
+  return serverJson(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}`, {
+    expectedVersion: request.expectedVersion,
+    reason: request.reason || "",
+  }, { ...options, method: "DELETE" });
+}
+
 export function listServerWorkbookReviewRegions(sessionId, options = {}) {
   if (!sessionId) throw new ServerApiError("Select a workbook review session before listing regions.");
   return serverRequest(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}/regions`, options);
@@ -150,6 +158,8 @@ export function createServerWorkbookReviewRegion(sessionId, request = {}, option
     sheetName: request.sheetName,
     range: request.range,
     selectionMethod: request.selectionMethod || "manual",
+    description: request.description || "",
+    semanticType: request.semanticType || "generic_table",
     idempotencyKey: request.idempotencyKey || null,
     ...(request.deferInterpretation === true ? { deferInterpretation: true } : {}),
   }, options);
@@ -159,8 +169,8 @@ export function interpretServerWorkbookReviewRegion(sessionId, regionId, request
   if (!sessionId || !regionId) throw new ServerApiError("Select a workbook review region before interpreting it.");
   return serverJson(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}/regions/${encodeURIComponent(regionId)}/interpret`, {
     expectedRegionVersion: request.expectedRegionVersion,
-    description: request.description || "",
-    semanticType: request.semanticType || "generic_table",
+    ...(request.description ? { description: request.description } : {}),
+    ...(request.semanticType ? { semanticType: request.semanticType } : {}),
     idempotencyKey: request.idempotencyKey || null,
   }, options);
 }
@@ -222,39 +232,6 @@ export function retrieveProjectEvidence(projectId, request = {}, options = {}) {
     includePreview: request.includePreview !== false,
     includeUnconfirmedSuggestions: request.includeUnconfirmedSuggestions === true,
     maxResults: request.maxResults || 5,
-  }, options);
-}
-
-export function draftServerProjectDataPlan(projectId, request = {}, options = {}) {
-  if (!projectId) throw new ServerApiError("Select a project before drafting a data plan.");
-  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/data-plans/draft`, {
-    intent: request.intent || "experiment_browser_publish",
-    regionUnderstandingRevisionIds: request.regionUnderstandingRevisionIds || [],
-    identityDecisions: request.identityDecisions || [],
-  }, options).then((response) => {
-    if (response?.resultKind === "clarification") {
-      throw new ServerApiError(
-        response.clarification?.message || "The experiment data preview needs more review.",
-        { code: response.clarification?.code || "data_plan_clarification", body: response },
-      );
-    }
-    return response;
-  });
-}
-
-export function publishServerProjectDataPlan(projectId, request = {}, options = {}) {
-  if (!projectId) throw new ServerApiError("Select a project before publishing experiment data.");
-  if (!request.dataPlan) throw new ServerApiError("Review an experiment data plan before publishing.");
-  if (!request.expectedPreviewHash || !request.expectedDependencyHash) {
-    throw new ServerApiError("Refresh the experiment preview before publishing.");
-  }
-  if (!request.idempotencyKey) throw new ServerApiError("A publish idempotency key is required.");
-  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/data-plans/publish`, {
-    dataPlan: request.dataPlan,
-    identityDecisions: request.identityDecisions || [],
-    expectedPreviewHash: request.expectedPreviewHash,
-    expectedDependencyHash: request.expectedDependencyHash,
-    idempotencyKey: request.idempotencyKey,
   }, options);
 }
 

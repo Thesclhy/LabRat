@@ -11,7 +11,7 @@ LabRat uses AI as a proposal and workflow layer. Authorization, bounded evidence
 - draft one structured RegionUnderstandingRevision from bounded selected source cells
 - interpret a user's correction for the active red box
 - rank accepted evidence for a stated task
-- draft DataPlan intent/operations for backend validation
+- draft Experiment Browser source selections and natural-language data-change plans
 - select exact ranges inside active confirmed workbook regions for a reviewable analysis/chart plan
 - explain Experiment Browser fields, comparison choices, source refs, and stale-review errors
 - draft captions or manuscript text from user-approved evidence
@@ -37,7 +37,7 @@ Send compact project-owned context only:
 - bounded source-document metadata/ranges
 - active red-box interpretation and validation blockers
 - accepted RegionUnderstandingRevision summaries/source refs
-- DataPlan preview summaries, hashes, warnings, and identity decisions
+- active experiment field catalogs, bounded selected values, and readable identity candidates
 - confirmed-region summaries and bounded source-range pages
 - approved analysis-result chart/manuscript summaries, including bounded trace metadata and current visible trace ids without full x/y arrays
 
@@ -54,7 +54,10 @@ AI draft
   -> audit event
 ```
 
-RegionUnderstandingRevision confirmation, DataPlan publish, analysis-plan acceptance, AnalysisResult acceptance/ChartSpec publication, and Manuscript save are separate boundaries. Confirmation at one stage does not authorize later stages.
+RegionUnderstandingRevision confirmation, analysis-plan acceptance,
+AnalysisResult acceptance into ChartSpec or DataSnapshot, and Manuscript save
+are separate boundaries. Confirmation at one stage does not authorize later
+stages.
 
 ## Evidence Rules
 
@@ -63,19 +66,29 @@ RegionUnderstandingRevision confirmation, DataPlan publish, analysis-plan accept
 - Accepted values cite exact source cells/ranges and accepted snapshot records.
 - If the requested experiment, range, field, or unit cannot be resolved, return clarification rather than substitute another candidate.
 
-## DataPlan Rules
+## Experiment Browser Publication Rules
 
-- The agent may draft intent and operations; validators enforce `labrat.dataPlan.v2`.
-- Result arrays are produced only by the deterministic executor.
-- Publish re-reads evidence and re-executes the plan.
-- Dependency/preview mismatches stop before writes.
-- Identity create/reuse decisions and low-confidence acknowledgements are explicit user state.
+- Planning may select exact accepted workbook ranges, active snapshot fields,
+  or both; it never embeds final values or Python.
+- After plan acceptance, code generation sees only materialized reviewed input
+  and the project field catalog.
+- Python returns field/series patches rather than complete replacement records.
+- Every output value must cite selected workbook cells or snapshot fields.
+- Missing scalar output must remain `null` with an allowed `missingReason` and
+  the exact missing source pointer. Models must not convert missing values to
+  zero, placeholder strings, exclusions, interpolation, or imputation unless a
+  reviewed plan explicitly authorizes the latter operation.
+- The backend preserves unmentioned data, blocks selector/type conflicts, and
+  validates identity decisions and stale heads before writes.
+- Only explicit result acceptance can atomically publish DataSnapshot v3 and a
+  BrowserView.
 
 ## Analysis Planning Rules
 
 - Analysis evidence comes only from active accepted
-  RegionUnderstandingRevisions. A DataSnapshot or Browser publication is not a
-  prerequisite for chart planning.
+  RegionUnderstandingRevisions and, for Experiment Browser output, explicitly
+  selected fields from active accepted DataSnapshots. A DataSnapshot or Browser
+  publication is not a prerequisite for chart planning.
 - Planning receives a bounded confirmed-region catalog and may use
   `inspect_source_range` to page through exact cells. It selects one or more
   rectangular `sourceSelections`; each must stay inside its accepted region.
@@ -83,7 +96,7 @@ RegionUnderstandingRevision confirmation, DataPlan publish, analysis-plan accept
   selections and separate red review rectangles. SourceDocument reads are
   individually bounded to 500 cells, but there is no 500-cell aggregate
   analysis-selection limit.
-- A PlanRevision stores only source selections, structured review meaning,
+- A PlanRevision stores only output target, source/snapshot selections, structured review meaning,
   readable display steps, warnings, and derived rectangles. Python, input
   values, field ids, expected result rows, traces, and Plotly are forbidden.
 - Feedback creates a later immutable numbered PlanRevision instead of patching
@@ -93,12 +106,17 @@ RegionUnderstandingRevision confirmation, DataPlan publish, analysis-plan accept
 - Plan acceptance requires idempotency and re-resolves each source selection.
   It creates only a queued AnalysisRun. It does not generate or execute Python
   and does not create an AnalysisResult/ChartSpec.
-- Execution materializes one `inputs.tables` item per selection with source
+- Execution materializes one `inputs.tables` item per workbook selection with source
   metadata, starting row/column, typed values, display values, and optional
-  formulas. Large inputs may be paged read-only with `inspect_run_input`.
+  formulas. Snapshot selections become `inputs.experiments`. Large inputs may
+  be paged read-only with `inspect_run_input` and `inspect_experiment_input`.
 - Only after materialization may the code-generation model produce
   `labrat-python-v2` implementing `analyze(inputs, labrat)`. The model sees the
   real dictionary input contract; users do not review Python.
+- Syntax/runtime or output-contract diagnostics may be returned to the code
+  model for one bounded replacement-program attempt inside the same run. This
+  technical repair cannot alter the accepted sources or natural-language plan;
+  scientific changes still require a new user-reviewed PlanRevision.
 - A model cannot call the executor. Only the authenticated AnalysisRun endpoint
   can policy-check and execute the accepted run package.
 - Static policy permits a bounded numeric-library allowlist and rejects dynamic code, direct numeric-library I/O, module/private-attribute escapes, process, network, filesystem, runtime-internal, and path-traversal operations. The runner repeats AST checks with restricted builtins.
@@ -166,7 +184,23 @@ unsupported experiment scope or whole-table numeric range are discarded.
 Region-level confidence describes structural interpretation only; a truncated
 inspection cannot receive the same confidence as a complete inspection.
 
-The backend intent router applies deterministic priority to explicit upload, navigation, and source-evidence commands. Bounded model classification may resolve ambiguous messages only into the supported intent/disposition enum. Invalid model output becomes clarification and cannot create an Experiment Browser fallback action.
+Workbook upload and deterministic candidate creation do not wait for model
+interpretation. The browser opens Workbook Review with durable pending regions
+and schedules at most three bounded region calls concurrently. Initial
+semantic hints are server-persisted; reopening a workbook can resume pending
+regions. Provider or request failure affects only one region and requires an
+explicit retry. No browser-independent worker is implied by this queue.
+
+The backend intent router applies deterministic priority to explicit upload,
+navigation, and source-evidence commands. LabRat supplies the active workspace
+surface as bounded context. That surface is only a weak routing hint: on the
+Browser surface, a request must still express a scientific data addition,
+derivation, replacement, or publication before it can become
+`publish_experiment_data`. Chart requests and display-only show/hide/filter/
+sort requests remain separate. Bounded model classification receives only safe
+context values and may resolve ambiguous messages only into the supported
+intent/disposition enum. Invalid model output becomes clarification and cannot
+create an Experiment Browser fallback action.
 
 ## Retired Inputs
 

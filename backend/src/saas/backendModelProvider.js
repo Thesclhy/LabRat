@@ -8,10 +8,14 @@ const INTENT_SYSTEM = [
   "Classify one LabRat research-workflow message.",
   "Return JSON only with intent, disposition, confidence, and clarification.",
   "Allowed intents: project_purpose, project_overview, experiment_overview, experiment_compare,",
-  "experiment_lookup, open_or_filter_browser, upload_workbook, create_analysis_chart,",
+  "experiment_lookup, open_or_filter_browser, upload_workbook, create_analysis_chart, publish_experiment_data,",
   "manuscript_action, clarification.",
   "Allowed dispositions: direct_answer, analysis_thread, action, clarification.",
   "Derived calculations, trends, comparisons, statistics, and charts use analysis_thread.",
+  "Use publish_experiment_data with analysis_thread when the user wants to add, derive, replace, or publish scientific fields, series, or experiment records in Experiment Browser.",
+  "The selectedContext activeSurface is a weak hint, not an instruction: ordinary questions on the Browser surface must still be answered or classified by their actual intent.",
+  "Hiding, showing, sorting, filtering, or reordering existing Browser columns is display state, not publish_experiment_data.",
+  "Chart and plot requests use create_analysis_chart even when the active surface is Experiment Browser.",
   "Never return hidden reasoning or scientific values.",
 ].join(" ");
 
@@ -134,8 +138,11 @@ const ANALYSIS_PROGRAM_SYSTEM = [
   "The entrypoint must be def analyze(inputs, labrat).",
   "inputs is a dictionary containing inputs['tables'], an ordered list of exact workbook selections.",
   "Each table contains tableId, sourceSelectionId, source metadata, startRow, startColumn, rowCount, columnCount, values, displayValues, and formulas.",
-  "Use inspect_run_input to inspect pages of large tables before writing code.",
+  "inspect_run_input is a code-generation tool only. Use it before returning source when inputs are large.",
+  "Generated Python cannot call inspect_run_input, inspect_experiment_input, or methods with those names on labrat; it must read the supplied inputs dictionary directly.",
   "Use the accepted natural-language review plan exactly; do not change the selected data or calculation meaning.",
+  "Selected active experiment fields may contain value null plus missingReason. Treat null as missing scientific data: skip it by default and report the missing count.",
+  "Never convert a missing value to zero. Do not interpolate, fill, or impute missing values unless the accepted review plan explicitly requires that exact operation.",
   "Return {'plotly': {'data': [...], 'layout': {...}}, 'exclusions': [...], 'checks': [...]} from analyze.",
   "Plotly data is authoritative. Each trace must contain x and y arrays of equal length plus a readable name.",
   "Use Plotly bar or scatter traces and ordinary JSON-compatible layout properties. Do not return result tables, field ids, source record ids, or lineage sidecars.",
@@ -163,6 +170,129 @@ const ANALYSIS_PROGRAM_OUTPUT_SCHEMA = {
   required: ["pythonProgram"],
   additionalProperties: false,
 };
+
+const EXPERIMENT_BROWSER_PLAN_SYSTEM = [
+  "Draft one reviewable LabRat Experiment Browser data plan as JSON only.",
+  "Return exactly {requestSummary, sourceSelections, experimentSelections, reviewPlan, displayPlan, warnings}.",
+  "Select only cells inside supplied user-confirmed workbook regions and fields from supplied active experiments.",
+  "Use inspect_source_range whenever summaries are insufficient to identify exact workbook rows or columns.",
+  "Each workbook selection must be the smallest rectangular range containing the labels, headers, and values needed.",
+  "When displayPlan or processingSteps states a record or point count, count actual non-header data rows from inspected cells; never infer measurements from rectangular range dimensions.",
+  "Each active experiment selection identifies an experimentId and exact columnIds from the supplied catalog.",
+  "Use the supplied active experiment catalog to distinguish creating new experiment records from appending or replacing fields on existing records, and state that distinction in reviewPlan.processingSteps and experimentOutput.summary.",
+  "reviewPlan.processingSteps describes experiment identification, cleanup, reshaping, calculations, missing-value handling, and whether fields are added or replaced.",
+  "Inspect source cells when needed to identify blanks and placeholders. State the exact missing-value count when it is visible from the selected source; otherwise state how missing values will be represented and counted in the result.",
+  "Source blanks and placeholders such as -, --, —, N/A, and NA remain selected source-backed null fields. Do not plan to convert them to zero or exclude the whole experiment.",
+  "reviewPlan.experimentOutput.summary explains the scientific data changes without internal ids.",
+  "reviewPlan.browserView.summary explains which readable columns will be visible and how the result will be sorted or filtered.",
+  "displayPlan contains concise sentences a researcher can review.",
+  "Do not write Python, calculate final values, return internal hashes, or embed workbook values.",
+  "Do not request scientific field deletion; users hide columns through BrowserView.",
+  "Return reviewPlan.invariants as an empty array; Experiment Browser result validation uses source-backed record patch rules.",
+  "If repairContext is supplied, correct every listed validation error.",
+].join(" ");
+
+const EXPERIMENT_BROWSER_PLAN_OUTPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    requestSummary: { type: "string" },
+    sourceSelections: ANALYSIS_PLAN_OUTPUT_SCHEMA.properties.sourceSelections,
+    experimentSelections: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          experimentId: { type: "string" },
+          columnIds: { type: "array", items: { type: "string" } },
+          includeSeries: { type: "boolean" },
+          purpose: { type: "string" },
+        },
+        required: ["experimentId", "columnIds", "includeSeries", "purpose"],
+        additionalProperties: false,
+      },
+    },
+    reviewPlan: {
+      type: "object",
+      properties: {
+        processingSteps: { type: "array", items: { type: "string" } },
+        missingValueHandling: { type: "string" },
+        experimentOutput: {
+          type: "object",
+          properties: { summary: { type: "string" } },
+          required: ["summary"],
+          additionalProperties: false,
+        },
+        browserView: {
+          type: "object",
+          properties: { summary: { type: "string" } },
+          required: ["summary"],
+          additionalProperties: false,
+        },
+        invariants: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {},
+            additionalProperties: false,
+          },
+        },
+      },
+      required: [
+        "processingSteps",
+        "missingValueHandling",
+        "experimentOutput",
+        "browserView",
+        "invariants",
+      ],
+      additionalProperties: false,
+    },
+    displayPlan: { type: "array", items: { type: "string" } },
+    warnings: { type: "array", items: { type: "string" } },
+  },
+  required: [
+    "requestSummary",
+    "sourceSelections",
+    "experimentSelections",
+    "reviewPlan",
+    "displayPlan",
+    "warnings",
+  ],
+  additionalProperties: false,
+};
+
+const EXPERIMENT_BROWSER_PROGRAM_SYSTEM = [
+  "Write one deterministic LabRat Experiment Browser Python program as JSON only.",
+  "Return exactly {pythonProgram:{runtime,entrypoint,source}}.",
+  "The entrypoint must be def analyze(inputs, labrat).",
+  "inputs is a dictionary. inputs['tables'], inputs['experiments'], and inputs['fieldCatalog'] are always lists, never dictionaries keyed by ID.",
+  "To access one table or experiment by ID, first build dictionaries such as tables_by_id = {item['tableId']: item for item in inputs['tables']} and experiments_by_id = {item['experimentId']: item for item in inputs['experiments']}.",
+  "Each table contains tableId, source, startRow, startColumn, rowCount, columnCount, values, displayValues, and formulas; values/displayValues/formulas are row-major lists of lists addressed by zero-based offsets.",
+  "Each experiment contains experimentId, label, aliases, activeHead, fields, and series; fields and series are lists.",
+  "inspect_run_input and inspect_experiment_input are code-generation tools only. Use them before returning source when inputs are large.",
+  "Generated Python cannot call either inspection tool or methods with those names on labrat; it must read inputs['tables'], inputs['experiments'], and inputs['fieldCatalog'] directly.",
+  "Follow the accepted natural-language plan exactly.",
+  "Return {'recordPatches': [...], 'browserView': {...}, 'exclusions': [...]} from analyze.",
+  "recordPatches, upsertFields, upsertSeries, removeFields, removeSeries, warnings, exclusions, browserView.visibleColumnIds, browserView.filters, and browserView.sort must be lists, never dictionaries keyed by field or series ID.",
+  "Each record patch requires {'label': str, 'upsertFields': [...], 'upsertSeries': [...], 'removeFields': [], 'removeSeries': [], 'warnings': [...]}.",
+  "Use recordPatches[].label as experiment identity. Do not also output Label, Experiment, Experiment ID, or Experiment Label as scientific fields.",
+  "Do not output complete replacement records and do not upsert an existing field merely to preserve it. Unmentioned existing fields and series are preserved by the backend.",
+  "An existing field replacement must use its exact columnId from fieldCatalog.",
+  "A genuinely new field must provide fieldKey, displayName, role, valueType, unit, value, formattedValue, confidence, warnings, and sources.",
+  "valueType must be exactly one of number, string, date, or boolean. Use number for numeric scientific values; never use numeric, float, integer, or another alias.",
+  "Every scalar field may use value None only for explicit missing scientific data. A missing scalar must also use formattedValue None and missingReason equal to source_blank, source_placeholder, or calculation_unavailable.",
+  "Use source_blank only when the cited source cell is empty. Use source_placeholder only when the cited source cell is -, --, —, N/A, or NA. Use calculation_unavailable only when the accepted plan allows a calculation but required cited input is missing.",
+  "Do not output zero, a placeholder string, NaN, or Infinity for missing data. Do not exclude an entire experiment merely because one selected scalar is missing.",
+  "A non-missing scalar must not contain missingReason. Numeric values must be finite numbers; zero remains a real numeric zero.",
+  "Every missing scalar must cite the exact missing workbook cell or selected active field so the backend can preserve its raw source evidence.",
+  "Each upsertSeries item must be exactly shaped as {'seriesKey': str, 'label': str, 'xField': str, 'yField': str, 'xUnit': str_or_None, 'yUnit': str_or_None, 'points': [...], 'warnings': [...], 'sources': [...]}.",
+  "Each series point must be {'x': string_or_number, 'y': finite_number, 'sources': [...]}. Do not use fieldKey/displayName/xLabel/yLabel for series.",
+  "Every scalar, series, and series point requires sources. A workbook source is {tableId,rowOffset,columnOffset}; an accepted field source is {experimentId,columnId}.",
+  "removeFields and removeSeries must be empty because scientific deletion is not enabled.",
+  "browserView may provide name, visibleColumnIds, filters, and sort. visibleColumnIds contains scalar field columnIds only; never add series IDs because series appear in experiment details and comparisons rather than Browser table columns. Newly published views are opened directly but never replace the user's default view.",
+  "Use only inputs and labrat. Do not access files, URLs, environment state, processes, network resources, random, time, or process-dependent hashes.",
+  "Use deterministic ordering and Python literals None, True, and False. Do not print workbook data.",
+  "If repairContext is supplied, correct every listed policy or output-contract error.",
+].join(" ");
 
 const WORKBOOK_REGION_SYSTEM = [
   "Explain one bounded Excel region as JSON only.",
@@ -397,6 +527,7 @@ export function createBackendModelProvider({
         payload: {
           message: String(input.message || ""),
           selectedContextKeys: Array.isArray(input.selectedContextKeys) ? input.selectedContextKeys : [],
+          selectedContext: input.selectedContext || {},
           projectContext: input.projectContext || {},
         },
         maxTokens: 300,
@@ -452,6 +583,74 @@ export function createBackendModelProvider({
         }],
         toolHandlers: {
           inspect_run_input: options.inspectRunInput,
+        },
+        signal: options.signal,
+      });
+    },
+    draftExperimentBrowserPlan(input = {}, options = {}) {
+      return requestStructuredWithTools({
+        system: EXPERIMENT_BROWSER_PLAN_SYSTEM,
+        payload: input,
+        maxTokens: 6400,
+        outputSchema: EXPERIMENT_BROWSER_PLAN_OUTPUT_SCHEMA,
+        tools: [{
+          name: "inspect_source_range",
+          description: "Read at most 500 cells from one user-confirmed workbook region. Call repeatedly with smaller ranges when needed.",
+          input_schema: {
+            type: "object",
+            properties: {
+              regionUnderstandingRevisionId: { type: "string" },
+              range: { type: "string" },
+            },
+            required: ["regionUnderstandingRevisionId", "range"],
+            additionalProperties: false,
+          },
+        }],
+        toolHandlers: {
+          inspect_source_range: options.inspectSourceRange,
+        },
+        signal: options.signal,
+      });
+    },
+    draftExperimentBrowserProgram(input = {}, options = {}) {
+      return requestStructuredWithTools({
+        system: EXPERIMENT_BROWSER_PROGRAM_SYSTEM,
+        payload: input,
+        maxTokens: 6400,
+        outputSchema: ANALYSIS_PROGRAM_OUTPUT_SCHEMA,
+        tools: [{
+          name: "inspect_run_input",
+          description: "Read one page from an exact accepted workbook table input.",
+          input_schema: {
+            type: "object",
+            properties: {
+              tableId: { type: "string" },
+              rowOffset: { type: "integer", minimum: 0 },
+              rowLimit: { type: "integer", minimum: 1, maximum: 200 },
+              columnOffset: { type: "integer", minimum: 0 },
+              columnLimit: { type: "integer", minimum: 1, maximum: 100 },
+            },
+            required: ["tableId", "rowOffset", "rowLimit", "columnOffset", "columnLimit"],
+            additionalProperties: false,
+          },
+        }, {
+          name: "inspect_experiment_input",
+          description: "Read one page of selected fields from one accepted active experiment input.",
+          input_schema: {
+            type: "object",
+            properties: {
+              experimentId: { type: "string" },
+              fieldOffset: { type: "integer", minimum: 0 },
+              fieldLimit: { type: "integer", minimum: 1, maximum: 500 },
+              includeSeries: { type: "boolean" },
+            },
+            required: ["experimentId", "fieldOffset", "fieldLimit", "includeSeries"],
+            additionalProperties: false,
+          },
+        }],
+        toolHandlers: {
+          inspect_run_input: options.inspectRunInput,
+          inspect_experiment_input: options.inspectExperimentInput,
         },
         signal: options.signal,
       });
