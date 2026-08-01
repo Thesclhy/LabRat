@@ -164,6 +164,12 @@ metadata so an expired worker may be replaced without allowing the old worker
 to finalize. The run records the materialized input, generated Python,
 input/program/runtime hashes, execution phases, diagnostics, warnings, and
 validation. `(project_id, idempotency_key)` makes acceptance retry-safe.
+An explicit generation retry creates another immutable queued row referencing
+the same accepted plan and records `retryOfAnalysisRunId` in its bounded
+payload; the failed predecessor is never reset or overwritten. The
+onboarding-only direct source mapper is recorded as the run's execution
+strategy and uses the same result/finalization tables, so no parallel accepted
+data model or migration is introduced.
 
 `analysis_results` stores only backend-validated immutable executor output. A valid run finalization inserts one `awaiting_review` result in the same transaction that updates its AnalysisRun and AnalysisThread; failed or invalid output inserts no result. Result publication updates only acceptance workflow metadata, never the immutable result payload/hashes. `analysis_publications` records the atomic accepted-result plus ChartSpec boundary. `analysis_experiment_publications` records the accepted-result plus DataSnapshot v3 and BrowserView boundary. Both are keyed by `(project_id, idempotency_key)`.
 

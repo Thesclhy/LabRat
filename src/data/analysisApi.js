@@ -27,6 +27,7 @@ function requestOptions(options = {}) {
     sourceOffset: _sourceOffset,
     sourceLimit: _sourceLimit,
     idempotencyKey: _idempotencyKey,
+    executionStrategy: _executionStrategy,
     ...rest
   } = options;
   return rest;
@@ -108,7 +109,24 @@ export function getAnalysisRun(analysisRunId, options = {}) {
 
 export function executeAnalysisRun(analysisRunId, options = {}) {
   const id = requireId(analysisRunId, "Select an analysis run before executing it.");
-  return serverJson(`/api/analysis-runs/${id}/execute`, {}, requestOptions(options));
+  return serverJson(`/api/analysis-runs/${id}/execute`, {
+    ...(options.executionStrategy ? { executionStrategy: options.executionStrategy } : {}),
+  }, requestOptions(options));
+}
+
+export function retryAnalysisRun(analysisRunId, options = {}) {
+  const id = requireId(analysisRunId, "Select a failed analysis run before retrying generation.");
+  const idempotencyKey = String(options.idempotencyKey || "").trim();
+  if (!idempotencyKey) {
+    throw new ServerApiError("Generation retry requires an idempotency key.");
+  }
+  return serverJson(`/api/analysis-runs/${id}/retry`, {}, {
+    ...requestOptions(options),
+    headers: {
+      "idempotency-key": idempotencyKey,
+      ...(options.headers || {}),
+    },
+  });
 }
 
 export function getAnalysisResultPreview(analysisRunId, options = {}) {

@@ -11,6 +11,7 @@ import {
   getAnalysisResultPreview,
   getAnalysisRun,
   getAnalysisThread,
+  retryAnalysisRun,
   reviseAnalysisRun,
 } from "../data/analysisApi.js";
 
@@ -105,6 +106,27 @@ function acceptanceKey(revision) {
   const randomPart = globalThis.crypto?.randomUUID?.()
     || `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
   return `accept_analysis_${revision.id}_${randomPart}`;
+}
+
+function generationRetryKey(run) {
+  const randomPart = globalThis.crypto?.randomUUID?.()
+    || `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  return `retry_generation_${run.id}_${randomPart}`;
+}
+
+function runFailureMessage(run) {
+  if (!["failed", "validation_failed"].includes(run?.status)) return "";
+  const code = run?.execution?.error?.code || run?.validation?.errors?.[0]?.code || "";
+  if (code === "analysis_program_draft_unavailable"
+    && run?.execution?.error?.warning?.code === "ai_output_truncated") {
+    return "Claude's generated program was too long and was cut off before it could run.";
+  }
+  if (run?.execution?.error?.warning?.code === "ai_output_truncated") {
+    return "Claude's generated program was too long and was cut off before it could run.";
+  }
+  return run?.execution?.error?.message
+    || run?.validation?.errors?.[0]?.message
+    || "Experiment Browser generation failed before a reviewable preview was created.";
 }
 
 function resultValidation(run, result, preview) {
@@ -621,6 +643,7 @@ export function AnalysisReviewWorkspace({
   loadSelection = getAnalysisPlanSelection,
   loadRun = getAnalysisRun,
   executeRun = executeAnalysisRun,
+  retryRun = retryAnalysisRun,
   loadResultPreview = getAnalysisResultPreview,
   reviseRun = reviseAnalysisRun,
   createRevision = createAnalysisPlanRevision,
@@ -630,6 +653,9 @@ export function AnalysisReviewWorkspace({
   onAcceptResult = null,
   onClose,
   onAccepted,
+  embedded = false,
+  onWorkflowStateChange = null,
+  executionStrategy = "model_generated_python",
 }) {
   const [thread, setThread] = useState(initialThread || null);
   const [revisions, setRevisions] = useState(() => (
@@ -669,6 +695,11 @@ export function AnalysisReviewWorkspace({
   const executorCapabilityReady = !capabilityState.loading
     && capabilityState.value?.executor?.configured === true;
   const previewRequestRef = useRef(0);
+  const executeRunForStrategy = (analysisRunId) => (
+    executionStrategy === "model_generated_python"
+      ? executeRun(analysisRunId)
+      : executeRun(analysisRunId, { executionStrategy })
+  );
 
   useEffect(() => {
     previewRequestRef.current += 1;
@@ -737,7 +768,7 @@ export function AnalysisReviewWorkspace({
         setActiveTab("result");
         if (latestRun.status === "queued" && !executorCapabilityReady) return;
         const runResponse = latestRun.status === "queued"
-          ? await executeRun(latestRun.id)
+          ? await executeRunForStrategy(latestRun.id)
           : await loadRun(latestRun.id);
         if (cancelled || requestToken !== previewRequestRef.current) return;
         const hydratedRun = runResponse?.analysisRun || latestRun;
@@ -772,9 +803,10 @@ export function AnalysisReviewWorkspace({
   }, [
     executorCapabilityReady,
     executeRun,
+    executionStrategy,
     initialPlanRevisions,
-    initialRevision,
-    initialThread,
+    initialRevision?.id,
+    initialThread?.id,
     loadResultPreview,
     loadRun,
     loadThread,
@@ -859,6 +891,7 @@ export function AnalysisReviewWorkspace({
   const visibleResultSummary = resultSummary(run, result, preview);
   const browserPreviewUnavailable = browserMode
     && ["failed", "validation_failed"].includes(run?.status);
+  const generationFailure = runFailureMessage(run);
   const revisionById = new Map(revisions.map((item) => [item.id, item]));
   const resultExclusions = asArray(preview?.exclusions);
   const unresolvedIdentityConflicts = asArray(preview?.identityCandidates)
@@ -874,6 +907,34 @@ export function AnalysisReviewWorkspace({
       : hasChartStage && defaultVisibleTraceIds.length > 0)
     && Boolean(onAcceptResult);
   const resultReviewMode = hasResultStage && revision?.status === "accepted";
+
+  useEffect(() => {
+    onWorkflowStateChange?.({
+      thread,
+      revision,
+      run,
+      result,
+      preview,
+      pendingAction,
+      previewReady: chartReady,
+      published: chartFinalized,
+      error: actionError || resultState.error || generationFailure || null,
+      generationFailure,
+    });
+  }, [
+    actionError,
+    chartFinalized,
+    chartReady,
+    generationFailure,
+    onWorkflowStateChange,
+    pendingAction,
+    preview,
+    result,
+    resultState.error,
+    revision,
+    run,
+    thread,
+  ]);
 
   const submitFeedback = async () => {
     const nextFeedback = feedback.trim();
@@ -926,7 +987,7 @@ export function AnalysisReviewWorkspace({
       onAccepted?.(response);
       if (!queuedRun.id) return;
       setPendingAction("execute");
-      const executionResponse = await executeRun(queuedRun.id);
+      const executionResponse = await executeRunForStrategy(queuedRun.id);
       if (requestToken !== previewRequestRef.current) return;
       const executedRun = executionResponse?.analysisRun || queuedRun;
       const executedResult = executionResponse?.analysisResult || null;
@@ -987,6 +1048,49 @@ export function AnalysisReviewWorkspace({
       setFeedback("");
       setActiveRectangleId("");
       setActiveTab("source");
+    } catch (error) {
+      setActionError(error);
+    } finally {
+      setPendingAction("");
+    }
+  };
+
+  const retryFailedGeneration = async () => {
+    if (!run?.id || busy || !["failed", "validation_failed"].includes(run.status)) return;
+    setPendingAction("retry_generation");
+    setActionError(null);
+    setResult(null);
+    setResultState({ loading: false, error: "", value: null });
+    setIdentityResolutions({});
+    try {
+      const retryResponse = await retryRun(run.id, {
+        idempotencyKey: generationRetryKey(run),
+      });
+      const queuedRun = retryResponse?.analysisRun;
+      if (!queuedRun?.id) throw new Error("The backend did not return a new generation attempt.");
+      const requestToken = ++previewRequestRef.current;
+      setThread(retryResponse?.analysisThread || thread);
+      setRun(queuedRun);
+      setRunHistory((current) => [...current, { run: queuedRun, result: null }]);
+      setPendingAction("execute");
+      const executionResponse = await executeRunForStrategy(queuedRun.id);
+      if (requestToken !== previewRequestRef.current) return;
+      const executedRun = executionResponse?.analysisRun || queuedRun;
+      const executedResult = executionResponse?.analysisResult || null;
+      setRun(executedRun);
+      setResult(executedResult);
+      setRunHistory((current) => current.map((item) => (
+        item.run.id === executedRun.id ? { run: executedRun, result: executedResult } : item
+      )));
+      if (executedResult?.id) {
+        setResultState((current) => ({ ...current, loading: true, error: "" }));
+        const loadedPreview = browserMode
+          ? await loadCompleteResultPreview(loadResultPreview, executedRun.id, { offset: 0, limit: 100 })
+          : await loadCompleteResultPreview(loadResultPreview, executedRun.id);
+        if (requestToken !== previewRequestRef.current) return;
+        setResultState({ loading: false, error: "", value: loadedPreview });
+        setDefaultVisibleTraceIds(previewTraces(loadedPreview).map(traceIdentifier));
+      }
     } catch (error) {
       setActionError(error);
     } finally {
@@ -1070,7 +1174,7 @@ export function AnalysisReviewWorkspace({
   };
 
   return (
-    <section className="analysis-review-workspace" aria-label="Analysis review">
+    <section className={`analysis-review-workspace${embedded ? " is-onboarding" : ""}${hasResultStage ? " has-result-stage" : ""}`} aria-label="Analysis review">
       <header className="analysis-review-header">
         <div>
           <strong>Reviewed analysis</strong>
@@ -1177,7 +1281,7 @@ export function AnalysisReviewWorkspace({
                 error={resultState.error || (
                   run?.status === "queued" && executorUnavailable
                     ? "Python execution is unavailable. Configure an analysis executor before preparing experiment data."
-                    : ""
+                    : generationFailure
                 )}
                 identityResolutions={identityResolutions}
                 onIdentityResolutionChange={(candidateId, value) => {
@@ -1360,6 +1464,18 @@ export function AnalysisReviewWorkspace({
               </article>
             )}
             <AnalysisActionError error={actionError} />
+            {browserMode && browserPreviewUnavailable && (
+              <button
+                type="button"
+                className="analysis-retry-generation"
+                onClick={retryFailedGeneration}
+                disabled={busy}
+              >
+                {pendingAction === "retry_generation" || pendingAction === "execute"
+                  ? "Retrying generation..."
+                  : "Retry generation"}
+              </button>
+            )}
           </div>
 
           <div className="analysis-review-composer">

@@ -1345,6 +1345,68 @@ export class MemorySaasStore {
     return copy(run);
   }
 
+  async retryAnalysisRun(input) {
+    const prior = await this.findAnalysisRunByIdempotencyKey({
+      projectId: input.projectId,
+      idempotencyKey: input.idempotencyKey,
+    });
+    if (prior) {
+      if (prior.requestHash !== input.requestHash) {
+        throw Object.assign(new Error("This idempotency key was already used for another generation retry."), {
+          statusCode: 409,
+          code: "idempotency_key_conflict",
+        });
+      }
+      return {
+        analysisThread: await this.findAnalysisThreadById(prior.analysisThreadId),
+        analysisRun: prior,
+      };
+    }
+    const failedRun = this.analysisRuns.get(input.failedAnalysisRunId);
+    const thread = this.analysisThreads.get(input.analysisThreadId);
+    const revision = this.analysisPlanRevisions.get(input.planRevisionId);
+    if (
+      !failedRun
+      || !thread
+      || !revision
+      || failedRun.projectId !== input.projectId
+      || !["failed", "validation_failed"].includes(failedRun.status)
+      || revision.status !== "accepted"
+      || revision.analysisThreadId !== thread.id
+      || input.analysisRun?.analysisThreadId !== thread.id
+      || input.analysisRun?.acceptedPlanRevisionId !== revision.id
+      || this.analysisRuns.has(input.analysisRun?.id)
+    ) {
+      throw Object.assign(new Error("The analysis generation retry package is invalid."), {
+        statusCode: 409,
+        code: "analysis_run_retry_unavailable",
+      });
+    }
+    const nextRuns = new Map(this.analysisRuns);
+    const nextThreads = new Map(this.analysisThreads);
+    const nextAuditEvents = new Map(this.auditEvents);
+    nextRuns.set(input.analysisRun.id, copy(input.analysisRun));
+    const updatedThread = {
+      ...copy(thread),
+      status: "executing",
+      analysisRunIds: [...asArray(thread.analysisRunIds), input.analysisRun.id],
+      updatedAt: input.analysisRun.createdAt,
+      updatedBy: input.actorUserId,
+    };
+    nextThreads.set(thread.id, updatedThread);
+    asArray(input.auditEvents).forEach((auditInput) => {
+      const event = {
+        id: auditInput.id || makeId("audit"),
+        ...copy(auditInput),
+      };
+      nextAuditEvents.set(event.id, event);
+    });
+    this.analysisRuns = nextRuns;
+    this.analysisThreads = nextThreads;
+    this.auditEvents = nextAuditEvents;
+    return { analysisThread: copy(updatedThread), analysisRun: copy(input.analysisRun) };
+  }
+
   async findAnalysisRunById(id) {
     return copy(this.analysisRuns.get(id) || null);
   }

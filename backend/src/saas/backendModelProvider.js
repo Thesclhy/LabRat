@@ -327,6 +327,9 @@ const EXPERIMENT_BROWSER_PROGRAM_SYSTEM = [
   "Do not output Browser view state. The backend creates a view that shows every new scalar column.",
   "Use only inputs and labrat. Do not access files, URLs, environment state, processes, network resources, random, time, or process-dependent hashes.",
   "Use deterministic ordering and Python literals None, True, and False. Do not print workbook data.",
+  "Keep source under 180 non-blank lines. Prefer one reusable loop over rows and columns; never emit one statement per experiment, cell, or output value.",
+  "Do not embed workbook rows, experiment values, output records, or repeated column definitions as Python literals. Read all values from inputs at runtime.",
+  "Return only the program object required by the schema, with no explanation, markdown, commented walkthrough, or duplicated implementation.",
   "If repairContext is supplied, correct every listed policy or output-contract error.",
 ].join(" ");
 
@@ -511,6 +514,7 @@ export function createBackendModelProvider({
     outputSchema,
     tools,
     toolHandlers,
+    maxToolRounds = 12,
     signal,
   }) => {
     if (providerName !== "anthropic") {
@@ -526,6 +530,7 @@ export function createBackendModelProvider({
       prompt: JSON.stringify(payload),
       tools,
       toolHandlers,
+      maxToolRounds,
       maxTokens,
       outputSchema,
       config: { apiKey, model },
@@ -600,6 +605,7 @@ export function createBackendModelProvider({
         system: ANALYSIS_PROGRAM_SYSTEM,
         payload: input,
         maxTokens: 6400,
+        maxToolRounds: 6,
         outputSchema: ANALYSIS_PROGRAM_OUTPUT_SCHEMA,
         tools: [{
           name: "inspect_run_input",
@@ -668,6 +674,7 @@ export function createBackendModelProvider({
         system: EXPERIMENT_BROWSER_PROGRAM_SYSTEM,
         payload: input,
         maxTokens: 6400,
+        maxToolRounds: 4,
         outputSchema: ANALYSIS_PROGRAM_OUTPUT_SCHEMA,
         tools: [{
           name: "inspect_run_input",

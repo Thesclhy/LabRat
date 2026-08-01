@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-07-24
+Last reviewed: 2026-08-01
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -12,6 +12,82 @@ Keep entries concise, newest first, and include:
 - meaningful changes
 - verification
 - follow-ups or residual risk
+
+## 2026-08-01
+
+- Fixed a full-page onboarding hydration feedback loop that repeatedly fetched
+  the same AnalysisThread and AnalysisRun after a result was already ready.
+  AnalysisReviewWorkspace hydration now keys equivalent incoming thread and
+  revision props by their stable ids instead of object identity, while
+  ProjectOnboarding suppresses state writes when workflow ids/statuses and
+  persisted onboarding values have not changed. This does not change layout,
+  wording, review boundaries, backend artifacts, or execution strategy; an
+  existing ready result is loaded once and shown without re-execution. Added a
+  regression test covering fresh object references with the same ids and
+  asserting exactly one thread, run, and preview load and zero execution calls.
+  Verification passed all 268 frontend tests and the production build with the
+  existing Plotly bundle-size warning. Live recovery remains for the user to
+  confirm against the already-running in-memory backend result.
+
+- Hardened Experiment Browser generation without changing accepted scientific
+  data or the general future-data path. Full-page onboarding now requests a
+  backend-owned `direct_source_mapping` strategy that compiles the already
+  accepted row/identifier/inclusion/field interpretation into one fixed concise
+  Python program; it makes no Claude code-generation call, preserves original
+  values, placeholders, units, and exact source-cell pointers, and still uses
+  the existing AnalysisResult review and atomic DataSnapshot v4 publication.
+  General Browser calculations, active-snapshot transformations, and future
+  external-file linking keep model-generated Python. That fallback now sends
+  12 initial rows instead of 50, permits four inspection rounds, enforces 180
+  nonblank lines/24 KB, and retries one truncated response with a compact-code
+  instruction. Failed runs can create an idempotent new immutable retry run
+  against the same accepted plan; onboarding stops stale spinners, explains
+  failure, and offers Retry generation or Quit for now without deleting prior
+  evidence or answers. Validation records exact source-coverage counts.
+  Verification passed all 267 frontend tests, all 211 active backend tests
+  (with four existing skips), and the production build. The existing Plotly
+  bundle-size warning remains; the backend route suite required localhost
+  permission in the verification environment but then completed normally.
+
+- Kept the complete workbook-to-Browser onboarding workflow inside the
+  full-page chat. Detected regions now use the existing interpretation queue
+  and revision/confirm/ignore controls inline; confirmed evidence directly
+  creates the reviewed Experiment Browser analysis plan without opening or
+  prefilling the side assistant. The existing AnalysisReviewWorkspace is
+  embedded for plan acceptance and result publication. Accepting a plan starts
+  the real materialization/Python/execution/validation request immediately,
+  then asks the experimental-workflow and data-analysis questions while that
+  request remains mounted in the background. A top-right live status reports
+  generation, readiness, or failure; after both answers the validated preview
+  returns for explicit Publish to Browser. Backend scientific boundaries and
+  routes are unchanged. Focused onboarding, region-review, analysis-workspace,
+  API, and ProjectDashboard tests passed (98 and 79 test batches). Full
+  `npm run codex:verify` then passed all 264 frontend tests, the backend suite,
+  and the production build with the existing Plotly chunk warning. The local
+  app reported no browser console warnings or errors after hot reload; a fresh
+  disposable-project live walkthrough was not created to avoid altering the
+  user's current local project list.
+
+## 2026-07-27
+
+- Added frontend-only conversational onboarding for pristine server projects on
+  `codex/onboarding-chat`, based on the latest `origin/main`. New projects now
+  enter a full-page LabRat chat that records project stage and master-table
+  status, uploads/indexes a workbook while collecting experimental-workflow and
+  analysis-process notes, hands off to the existing reviewed Workbook Review
+  and Experiment Browser publication flows, previews real accepted Browser
+  rows, and collects corrections as a prefilled reviewed data-change request.
+  Progress is local and project-scoped; no backend route, schema, provider call,
+  or scientific acceptance boundary changed. Added focused state/UI/Agent
+  coverage and a test-environment storage fallback for runtimes exposing an
+  incomplete Node `localStorage`. Verification passed `npm run codex:verify`
+  with 264 frontend tests, 208 backend tests plus four existing skips, and the
+  production build with the existing Plotly chunk warning. In-app browser QA
+  passed the new-project flow, immediate skip handoff, desktop layout,
+  390x844 width/overflow checks, and console inspection; two empty QA projects
+  were soft-deleted afterward. Docker image rebuilding stalled while installing
+  its Alpine runtime, so UI QA used the already-running healthy local backend
+  with Vite instead.
 
 ## 2026-07-24
 

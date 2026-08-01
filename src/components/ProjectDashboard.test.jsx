@@ -2076,6 +2076,33 @@ describe("AgentPanel", () => {
     expect(document.querySelector('input[type="password"]')).toBeNull();
   });
 
+  it("prefills a reviewed request handed off from onboarding", async () => {
+    const onRequestedDraftHandled = vi.fn();
+    render(
+      <AgentPanel
+        open
+        setOpen={() => {}}
+        blocks={[]}
+        setBlocks={() => {}}
+        references={[]}
+        selected={null}
+        selectedChartContext={null}
+        pendingChartAnalysis={null}
+        activeProjectId="project_1"
+        projectState={{ project: { id: "project_1", name: "Catalyst Screening" }, fileObjects: [] }}
+        onProjectStateLoaded={() => {}}
+        requestedDraft="Build reviewed Experiment Browser records from the confirmed master table."
+        onRequestedDraftHandled={onRequestedDraftHandled}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...").value)
+        .toBe("Build reviewed Experiment Browser records from the confirmed master table.");
+    });
+    expect(onRequestedDraftHandled).toHaveBeenCalled();
+  });
+
   it("shows backend-owned model, Python, and accepted-data readiness", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
       model: { provider: "anthropic", model: "claude-test", configured: true },

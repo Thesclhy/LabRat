@@ -12,6 +12,7 @@ import {
   listAnalysisThreads,
   publishAcceptedAnalysisChart,
   publishAcceptedExperimentData,
+  retryAnalysisRun,
   retryAnalysisThread,
   reviseAnalysisRun,
 } from "./analysisApi.js";
@@ -118,6 +119,21 @@ describe("analysisApi", () => {
     expect(fetchImpl.mock.calls[1][1].method).toBe("POST");
     expect(fetchImpl.mock.calls[2][0]).toBe(
       "/api/analysis-runs/analysis%2Frun%201/result-preview?offset=25&limit=100",
+    );
+  });
+
+  it("retries failed generation with an idempotency key", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ analysisRun: { id: "run_2" } }));
+    await retryAnalysisRun("run 1", {
+      idempotencyKey: "retry_1",
+      fetch: fetchImpl,
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/api/analysis-runs/run%201/retry",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "idempotency-key": "retry_1" }),
+      }),
     );
   });
 

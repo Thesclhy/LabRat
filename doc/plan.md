@@ -2,7 +2,7 @@
 
 Status: active
 Read when: deciding what LabRat should build next.
-Last reviewed: 2026-07-23
+Last reviewed: 2026-08-01
 
 This is the short active plan. Current execution status lives in `doc/current-milestone.md`; detailed implementation plans live under `doc/plans/`.
 
@@ -19,7 +19,8 @@ Upload workbook
   -> accepted RegionUnderstandingRevisions
   -> natural-language Experiment Browser AnalysisThread
   -> reviewed workbook and/or active-experiment selections and readable data-change plan
-  -> post-acceptance Python against real workbook/snapshot inputs
+  -> onboarding direct-source mapping or general post-acceptance Python
+     against real workbook/snapshot inputs
   -> reviewed list-column Browser preview
   -> explicit Publish to Browser as DataSnapshot v4
   -> Experiment Browser
@@ -37,6 +38,14 @@ zero-based `columnIndex`. The backend validates the values, assigns each output
 column one random internal `columnId`, merges complete frozen active records,
 previews the Browser table, and atomically publishes an immutable DataSnapshot
 v4 plus a new BrowserView. Unmentioned fields and series are preserved.
+
+Pristine-project onboarding explicitly requests the backend-owned
+`direct_source_mapping` strategy after plan acceptance. It compiles the exact
+accepted RegionUnderstandingRevision row axis, identifier, inclusion rules,
+field metadata, and materialized cells into the normal record-patch contract;
+it makes no code-generation provider call and adds no eligibility-model step.
+General Experiment Browser calculations, reshaping, active-snapshot work, and
+future external-file linking retain model-generated Python.
 
 The obsolete aggregate dataset/generic import implementation has been removed. No legacy local-data migration or dual-write path is required.
 

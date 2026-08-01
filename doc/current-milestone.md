@@ -2,7 +2,7 @@
 
 Status: complete
 Read when: checking what the next implementation slice should be.
-Last reviewed: 2026-07-24
+Last reviewed: 2026-08-01
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
 
@@ -30,6 +30,37 @@ golden workbook-to-Browser workflow. Full automated verification plus desktop
 and 390x844 browser QA now cover the integrated upload/review/publish path.
 
 ## Current Position
+
+Completed onboarding hydration regression fix: equivalent AnalysisThread and
+AnalysisPlanRevision objects are compared by stable ids/status rather than
+object reference, and no-op onboarding workflow updates retain the existing
+React state object. A ready run now hydrates its preview once without repeated
+thread/run requests or re-execution; no visible UI or backend contract changed.
+
+Completed reliability milestone: pristine-project onboarding now executes
+confirmed row-oriented master tables through a backend-owned compact source
+mapper instead of asking Claude to write a workbook-sized importer. The mapper
+uses the accepted region's experiment identifier, row inclusion, field names,
+types, units, and materialized cells; it preserves exact source pointers and
+placeholder-backed nulls, then passes through the existing AnalysisResult and
+DataSnapshot v4 validation/review/publication boundaries. General Browser
+calculations and future linked-file workflows retain model-generated Python;
+there is no separate eligibility-model call. Generated fallback programs now
+have bounded context/tool rounds, 180-line/24 KB limits, and one compact retry
+after provider truncation. Terminal generation failures stop onboarding's
+spinner, show a plain-language reason, and offer immutable Retry generation or
+Quit for now while preserving the workbook, accepted plan, and answers.
+
+Completed frontend milestone: the pristine-project onboarding chat now owns
+the complete reviewed workbook-to-Experiment-Browser presentation flow.
+Workbook regions are interpreted and confirmed inline, confirmed evidence
+directly creates a Browser-targeted AnalysisThread, and the existing plan/result
+review component is embedded instead of opening the side assistant or requiring
+the user to type a routing phrase. Plan acceptance starts real execution before
+the contextual questions are asked; a live chat-header status follows that run,
+and the validated result returns for separate explicit publication. Scientific
+artifacts remain backend-owned and refreshable by their persisted ids; the
+context answers remain display-only onboarding state.
 
 Completed milestone: source-backed nullable scientific scalar values. All
 ExperimentRecord scalar value types may now preserve an explicit `null` when
@@ -235,6 +266,14 @@ Deployment work not included in this completed milestone:
 - Wrong experiment aliases must return clarification or validation errors, not another experiment's data.
 
 ## Verification Target
+
+Latest full-page onboarding evidence: focused onboarding, region-review,
+analysis-workspace, API, and ProjectDashboard batches passed; full
+`npm run codex:verify` passed 264 frontend tests, the backend suite, and the
+production build with only the existing Plotly chunk-size warning. The running
+local app had no browser console warnings or errors after hot reload. Automated
+coverage verifies the critical concurrency transition from accepted plan to
+background execution plus context questions and a ready preview.
 
 Region-understanding milestone completion verification:
 

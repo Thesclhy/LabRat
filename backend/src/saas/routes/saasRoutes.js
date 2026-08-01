@@ -55,6 +55,7 @@ import {
   getAnalysisRunDetail,
   listAnalysisThreads,
   executeAnalysisRun,
+  retryAnalysisRunGeneration,
   reviseAnalysisRun,
 } from "../analysisThreads.js";
 import { publishAcceptedAnalysisChart } from "../analysisChartPublisher.js";
@@ -1747,7 +1748,7 @@ async function handleAnalysisRunExecute(req, res, context, analysisRunId) {
     analysisRunId,
     "editor",
   );
-  await readOptionalJsonBody(req);
+  const body = await readOptionalJsonBody(req);
   const project = await context.store.findProjectById(analysisRun.projectId);
   if (!project) {
     throw Object.assign(new Error("Project not found."), {
@@ -1762,6 +1763,7 @@ async function handleAnalysisRunExecute(req, res, context, analysisRunId) {
     analysisRunId,
     executor: context.analysisExecutor,
     modelProvider: context.modelProvider,
+    executionStrategy: body?.executionStrategy,
     ipAddress: clientIp(req),
     userAgent: userAgent(req),
   });
@@ -1770,6 +1772,38 @@ async function handleAnalysisRunExecute(req, res, context, analysisRunId) {
     analysisPlanRevision: analysisPlanRevisionSummary(result.analysisPlanRevision),
     analysisRun: analysisRunSummary(result.analysisRun),
     analysisResult: analysisResultSummary(result.analysisResult),
+    idempotentReplay: result.idempotentReplay,
+  });
+}
+
+async function handleAnalysisRunRetry(req, res, context, analysisRunId) {
+  const { auth, analysisRun } = await analysisRunAuth(
+    req,
+    context,
+    analysisRunId,
+    "editor",
+  );
+  await readOptionalJsonBody(req);
+  const project = await context.store.findProjectById(analysisRun.projectId);
+  if (!project) {
+    throw Object.assign(new Error("Project not found."), {
+      statusCode: 404,
+      code: "project_not_found",
+    });
+  }
+  const result = await retryAnalysisRunGeneration({
+    store: context.store,
+    project,
+    actorUserId: auth.user.id,
+    analysisRunId,
+    idempotencyKey: req.headers["idempotency-key"],
+    ipAddress: clientIp(req),
+    userAgent: userAgent(req),
+  });
+  sendJson(res, result.idempotentReplay ? 200 : 201, {
+    analysisThread: analysisThreadSummary(result.analysisThread),
+    analysisPlanRevision: analysisPlanRevisionSummary(result.analysisPlanRevision),
+    analysisRun: analysisRunSummary(result.analysisRun),
     idempotentReplay: result.idempotentReplay,
   });
 }
@@ -2827,6 +2861,10 @@ async function dispatch(req, res, context) {
   const analysisRunExecuteMatch = pathName.match(/^\/api\/analysis-runs\/([^/]+)\/execute$/);
   if (analysisRunExecuteMatch && req.method === "POST") {
     return handleAnalysisRunExecute(req, res, context, analysisRunExecuteMatch[1]);
+  }
+  const analysisRunRetryMatch = pathName.match(/^\/api\/analysis-runs\/([^/]+)\/retry$/);
+  if (analysisRunRetryMatch && req.method === "POST") {
+    return handleAnalysisRunRetry(req, res, context, analysisRunRetryMatch[1]);
   }
   const analysisRunReviseMatch = pathName.match(/^\/api\/analysis-runs\/([^/]+)\/revise$/);
   if (analysisRunReviseMatch && req.method === "POST") {

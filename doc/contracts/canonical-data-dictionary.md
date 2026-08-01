@@ -320,6 +320,14 @@ validation. Bounded technical regeneration attempts are recorded as
 `programAttempts` with program hashes, outcomes, and diagnostics; internal
 claim tokens and generated Python are never public.
 
+For pristine-project onboarding, an accepted row-oriented master-table plan
+may use the backend-owned `direct_source_mapping` program. Its mapping comes
+from the exact accepted RegionUnderstandingRevision and materialized source
+selection, not a second model interpretation. It emits the same source-backed
+record-patch contract and passes the same validation, identity, review, and
+DataSnapshot v4 publication boundaries. A retry creates a new AnalysisRun
+against the same accepted plan rather than resetting the failed attempt.
+
 ## AnalysisResult v3
 
 An append-only backend-validated output linked to one AnalysisRun. Chart output

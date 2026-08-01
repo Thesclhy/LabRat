@@ -11,6 +11,7 @@ import {
   executeAnalysisRun,
   getAnalysisPlanSelectionPage,
   getAnalysisResultPreview,
+  retryAnalysisRunGeneration,
   reviseAnalysisRun,
 } from "./analysisThreads.js";
 import { ANALYSIS_PLAN_REVISION_VERSION, ANALYSIS_RUNTIME_VERSION } from "./analysisSchemas.js";
@@ -418,6 +419,64 @@ test("execution errors trigger one automatic Python repair without revising the 
     ["execution_failed", "result_ready"],
   );
   assert.equal(store.analysisPlanRevisions.size, 1);
+});
+
+test("failed generation retries as a new immutable run against the same accepted plan", async () => {
+  const { store, project, thread } = await setup();
+  const revision = await createAnalysisPlanRevision({
+    store,
+    project,
+    analysisThreadId: thread.id,
+    actorUserId: "user_1",
+    plan: plan(),
+  });
+  const accepted = await acceptAnalysisPlanRevision({
+    store,
+    project,
+    actorUserId: "user_1",
+    planRevisionId: revision.id,
+    idempotencyKey: "accept_retry_test",
+  });
+  const failed = await executeAnalysisRun({
+    store,
+    project,
+    actorUserId: "user_1",
+    analysisRunId: accepted.analysisRun.id,
+    modelProvider: {
+      async draftAnalysisProgram() {
+        return {
+          ok: false,
+          warning: { code: "ai_output_truncated", message: "Program was truncated." },
+        };
+      },
+    },
+    executor: {},
+  });
+  assert.equal(failed.analysisRun.status, "failed");
+
+  const retried = await retryAnalysisRunGeneration({
+    store,
+    project,
+    actorUserId: "user_1",
+    analysisRunId: failed.analysisRun.id,
+    idempotencyKey: "retry_generation_test",
+  });
+  assert.equal(retried.analysisRun.status, "queued");
+  assert.notEqual(retried.analysisRun.id, failed.analysisRun.id);
+  assert.equal(retried.analysisRun.acceptedPlanRevisionId, revision.id);
+  assert.equal(retried.analysisRun.payload.retryOfAnalysisRunId, failed.analysisRun.id);
+  assert.equal(retried.analysisThread.status, "executing");
+  assert.equal((await store.findAnalysisRunById(failed.analysisRun.id)).status, "failed");
+
+  const replay = await retryAnalysisRunGeneration({
+    store,
+    project,
+    actorUserId: "user_1",
+    analysisRunId: failed.analysisRun.id,
+    idempotencyKey: "retry_generation_test",
+  });
+  assert.equal(replay.idempotentReplay, true);
+  assert.equal(replay.analysisRun.id, retried.analysisRun.id);
 });
 
 test("Experiment Browser analysis materializes active fields and returns a patch preview", async () => {

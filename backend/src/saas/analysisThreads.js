@@ -26,11 +26,14 @@ import { validateAnalysisResult } from "./analysisResultValidation.js";
 import { stableDataHash } from "./dataPlanSchemas.js";
 import { makeId } from "./ids.js";
 import { validatePythonPolicy } from "./pythonPolicy.js";
+import { deterministicExperimentBrowserProgram } from "./deterministicExperimentBrowserProgram.js";
 
 const THREAD_LIST_LIMIT = 100;
 const ANALYSIS_RUN_LEASE_MS = 360_000;
 const MODEL_DRAFT_ATTEMPT_LIMIT = 2;
 const PROGRAM_EXECUTION_REPAIR_LIMIT = 1;
+const EXPERIMENT_BROWSER_PROGRAM_MAX_NONBLANK_LINES = 180;
+const EXPERIMENT_BROWSER_PROGRAM_MAX_BYTES = 24_000;
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -112,6 +115,28 @@ function groupedProgramRepairDiagnostics(values) {
     grouped.set(key, current);
   });
   return [...grouped.values()].slice(0, 20);
+}
+
+function experimentBrowserProgramSizeErrors(source) {
+  const value = String(source || "");
+  const nonblankLines = value.split(/\r?\n/).filter((line) => line.trim()).length;
+  const bytes = Buffer.byteLength(value, "utf8");
+  const errors = [];
+  if (nonblankLines > EXPERIMENT_BROWSER_PROGRAM_MAX_NONBLANK_LINES) {
+    errors.push({
+      code: "analysis_program_line_limit_exceeded",
+      message: `Experiment Browser Python must contain at most ${EXPERIMENT_BROWSER_PROGRAM_MAX_NONBLANK_LINES} non-blank lines.`,
+      nonblankLines,
+    });
+  }
+  if (bytes > EXPERIMENT_BROWSER_PROGRAM_MAX_BYTES) {
+    errors.push({
+      code: "analysis_program_byte_limit_exceeded",
+      message: `Experiment Browser Python must be at most ${EXPERIMENT_BROWSER_PROGRAM_MAX_BYTES} bytes.`,
+      bytes,
+    });
+  }
+  return errors;
 }
 
 function publicExecution(payload = {}) {
@@ -751,6 +776,119 @@ export async function acceptAnalysisPlanRevision({
   return { ...result, idempotentReplay: false };
 }
 
+export async function retryAnalysisRunGeneration({
+  store,
+  project,
+  actorUserId,
+  analysisRunId,
+  idempotencyKey,
+  ipAddress = null,
+  userAgent = null,
+} = {}) {
+  const key = text(idempotencyKey);
+  if (!validIdempotencyKey(key)) {
+    throw analysisError(
+      "idempotency_key_required",
+      "A valid Idempotency-Key header is required to retry generation.",
+    );
+  }
+  const failedRun = await store.findAnalysisRunById(analysisRunId);
+  if (!failedRun || failedRun.projectId !== project?.id) {
+    throw analysisError("analysis_run_not_found", "Analysis run was not found.", 404);
+  }
+  if (!["failed", "validation_failed"].includes(failedRun.status)) {
+    throw analysisError(
+      "analysis_run_retry_unavailable",
+      "Only a failed analysis generation can be retried.",
+      409,
+    );
+  }
+  const revision = await store.findAnalysisPlanRevisionById(failedRun.acceptedPlanRevisionId);
+  if (!revision || revision.projectId !== project.id || revision.status !== "accepted") {
+    throw analysisError(
+      "analysis_run_plan_invalid",
+      "The failed run no longer references an accepted plan.",
+      409,
+    );
+  }
+  const requestHash = stableDataHash({
+    operation: "retry_analysis_generation_v1",
+    projectId: project.id,
+    failedAnalysisRunId: failedRun.id,
+    acceptedPlanRevisionId: revision.id,
+  });
+  const prior = await store.findAnalysisRunByIdempotencyKey?.({
+    projectId: project.id,
+    idempotencyKey: key,
+  });
+  if (prior) {
+    if (prior.requestHash !== requestHash) {
+      throw analysisError(
+        "idempotency_key_conflict",
+        "This idempotency key was already used for a different generation retry.",
+        409,
+      );
+    }
+    return {
+      analysisThread: await store.findAnalysisThreadById(prior.analysisThreadId),
+      analysisPlanRevision: revision,
+      analysisRun: prior,
+      idempotentReplay: true,
+    };
+  }
+  const createdAt = new Date().toISOString();
+  const analysisRun = {
+    id: makeId("analysis_run"),
+    labId: project.labId,
+    projectId: project.id,
+    analysisThreadId: failedRun.analysisThreadId,
+    acceptedPlanRevisionId: revision.id,
+    schemaVersion: "labrat.analysisRun.v3",
+    status: "queued",
+    outputTarget: failedRun.outputTarget || revision.outputTarget || ANALYSIS_OUTPUT_TARGETS.CHART,
+    idempotencyKey: key,
+    requestHash,
+    inputHash: "pending",
+    programHash: "pending",
+    runtimeVersion: ANALYSIS_RUNTIME_VERSION,
+    resultPreviewHash: null,
+    payload: { phase: "queued", retryOfAnalysisRunId: failedRun.id },
+    warnings: [],
+    validation: {},
+    createdAt,
+    updatedAt: createdAt,
+    createdBy: actorUserId,
+    updatedBy: actorUserId,
+  };
+  const result = await store.retryAnalysisRun({
+    projectId: project.id,
+    failedAnalysisRunId: failedRun.id,
+    analysisThreadId: failedRun.analysisThreadId,
+    planRevisionId: revision.id,
+    actorUserId,
+    idempotencyKey: key,
+    requestHash,
+    analysisRun,
+    auditEvents: [executionAuditEvent({
+      project,
+      actorUserId,
+      action: "analysis_run.retry",
+      targetType: "analysis_run",
+      targetId: analysisRun.id,
+      summary: "Queued a new generation attempt using the same accepted analysis plan.",
+      metadata: {
+        analysisThreadId: failedRun.analysisThreadId,
+        failedAnalysisRunId: failedRun.id,
+        acceptedPlanRevisionId: revision.id,
+      },
+      createdAt,
+      ipAddress,
+      userAgent,
+    })],
+  });
+  return { ...result, analysisPlanRevision: revision, idempotentReplay: false };
+}
+
 async function analysisResultForRun(store, run) {
   if (!run) return null;
   const results = await store.listAnalysisResults({
@@ -817,10 +955,30 @@ async function draftPythonProgram({
   revision,
   inputs,
   initialRepairContext = null,
+  executionStrategy = "model_generated_python",
 } = {}) {
   const outputTarget = revision.outputTarget
     || revision.plan?.outputTarget
     || ANALYSIS_OUTPUT_TARGETS.CHART;
+  if (
+    outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
+    && executionStrategy === "direct_source_mapping"
+  ) {
+    const program = deterministicExperimentBrowserProgram();
+    const policy = validatePythonPolicy(program.source, program.runtime);
+    if (!policy.ok) {
+      throw analysisError(
+        "analysis_python_policy_failed",
+        "The built-in Experiment Browser source mapper did not pass the backend runtime policy.",
+        500,
+        { errors: policy.errors },
+      );
+    }
+    return {
+      ...program,
+      sourceHash: pythonSourceHash(program.source),
+    };
+  }
   const programProvider = outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
     ? modelProvider?.draftExperimentBrowserProgram
     : modelProvider?.draftAnalysisProgram;
@@ -832,10 +990,13 @@ async function draftPythonProgram({
     );
   }
   const manifest = inputManifest(inputs);
+  const initialRowLimit = outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
+    ? 12
+    : 50;
   const initialInputPages = manifest.tables.map((table) => inspectRunInput(inputs, {
     tableId: table.tableId,
     rowOffset: 0,
-    rowLimit: Math.min(table.rowCount, 50),
+    rowLimit: Math.min(table.rowCount, initialRowLimit),
     columnOffset: 0,
     columnLimit: Math.min(table.columnCount, 50),
   }));
@@ -860,6 +1021,22 @@ async function draftPythonProgram({
       inspectExperimentInput: (request) => inspectExperimentInput(inputs, request),
     });
     if (!response?.ok) {
+      if (
+        response?.warning?.code === "ai_output_truncated"
+        && attempt < MODEL_DRAFT_ATTEMPT_LIMIT
+      ) {
+        repairContext = {
+          attempt,
+          instruction: outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
+            ? "The prior response exceeded the output limit. Return only one complete compact program under 180 non-blank lines. Use loops over inputs; do not embed rows, values, records, explanations, or a statement per experiment."
+            : "The prior response exceeded the output limit. Return only one complete compact replacement program with no explanation or embedded input data.",
+          errors: [{
+            code: "ai_output_truncated",
+            message: "The prior generated program exceeded the provider output-token limit.",
+          }],
+        };
+        continue;
+      }
       throw analysisError(
         "analysis_program_draft_unavailable",
         response?.warning?.message || "The backend model could not generate analysis Python.",
@@ -873,7 +1050,11 @@ async function draftPythonProgram({
       source: String(response.pythonProgram?.source || ""),
     };
     const policy = validatePythonPolicy(pythonProgram.source, pythonProgram.runtime);
-    if (policy.ok) {
+    const sizeErrors = outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
+      ? experimentBrowserProgramSizeErrors(pythonProgram.source)
+      : [];
+    const programErrors = [...asArray(policy.errors), ...sizeErrors];
+    if (policy.ok && !sizeErrors.length) {
       return {
         ...pythonProgram,
         sourceHash: pythonSourceHash(pythonProgram.source),
@@ -885,13 +1066,15 @@ async function draftPythonProgram({
         "analysis_python_policy_failed",
         "Generated analysis Python did not pass the backend runtime policy.",
         422,
-        { errors: policy.errors },
+        { errors: programErrors },
       );
     }
     repairContext = {
       attempt,
-      instruction: "Return a complete replacement Python program correcting every policy error.",
-      errors: policy.errors,
+      instruction: sizeErrors.length
+        ? "Return one complete compact replacement program under 180 non-blank lines and 24000 bytes. Use reusable loops and do not embed source rows or output records."
+        : "Return a complete replacement Python program correcting every policy error.",
+      errors: programErrors,
     };
   }
   throw analysisError(
@@ -964,6 +1147,7 @@ export async function executeAnalysisRun({
   analysisRunId,
   executor,
   modelProvider,
+  executionStrategy = "model_generated_python",
   ipAddress = null,
   userAgent = null,
 } = {}) {
@@ -1000,6 +1184,10 @@ export async function executeAnalysisRun({
     || revision.outputTarget
     || revision.plan?.outputTarget
     || ANALYSIS_OUTPUT_TARGETS.CHART;
+  const resolvedExecutionStrategy = outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
+    && executionStrategy === "direct_source_mapping"
+    ? "direct_source_mapping"
+    : "model_generated_python";
   const plannedHeadRefs = asArray(revision.plan?.experimentSelections)
     .map((selection) => selection.baseHeadRef)
     .filter(Boolean);
@@ -1069,7 +1257,9 @@ export async function executeAnalysisRun({
 
   const thread = await store.findAnalysisThreadById(run.analysisThreadId);
   let repairContext = null;
-  const maxProgramAttempts = PROGRAM_EXECUTION_REPAIR_LIMIT + 1;
+  const maxProgramAttempts = resolvedExecutionStrategy === "direct_source_mapping"
+    ? 1
+    : PROGRAM_EXECUTION_REPAIR_LIMIT + 1;
   for (let programAttempt = 1; programAttempt <= maxProgramAttempts; programAttempt += 1) {
     try {
       pythonProgram = await draftPythonProgram({
@@ -1078,6 +1268,7 @@ export async function executeAnalysisRun({
         revision,
         inputs,
         initialRepairContext: repairContext,
+        executionStrategy: resolvedExecutionStrategy,
       });
       runPackage = buildAnalysisRunPackage({
         run,
@@ -1097,6 +1288,7 @@ export async function executeAnalysisRun({
         payload: {
           phase: error?.code === "analysis_python_policy_failed" ? "policy_check" : "generating_python",
           inputManifest: inputManifest(inputs),
+          executionStrategy: resolvedExecutionStrategy,
           pythonProgram: pythonProgram || null,
           programAttempts,
         },
@@ -1296,6 +1488,7 @@ export async function executeAnalysisRun({
       completedAt,
       phase: "result_ready",
       inputManifest: inputManifest(inputs),
+      executionStrategy: resolvedExecutionStrategy,
       inputHash: runPackage.inputHash,
       programHash: runPackage.programHash,
       pythonProgram,

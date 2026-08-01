@@ -5,7 +5,7 @@ import { DataGrid } from "react-data-grid";
 import "react-data-grid/lib/styles.css";
 import { makePlot } from "./charts/makePlot";
 import { ChartReviewPanel } from "./components/BackendScanPanel";
-import { BlankOnboarding } from "./components/BlankOnboarding";
+import { ProjectOnboarding } from "./components/ProjectOnboarding.jsx";
 import { ProjectProfileChat } from "./components/ProjectProfileChat.jsx";
 import { ServerLogin } from "./components/ServerLogin.jsx";
 import { ThinkingIndicator } from "./components/ThinkingIndicator.jsx";
@@ -64,6 +64,7 @@ import {
   workbookVisibleTileBounds,
 } from "./data/workbookRangeTiles.js";
 import { useWorkbookRegionInterpretationQueue } from "./hooks/useWorkbookRegionInterpretationQueue.js";
+import { shouldShowProjectOnboarding } from "./data/projectOnboardingState.js";
 import "./styles.css";
 
 const BLANK_MODE = isBlankDataMode();
@@ -1914,6 +1915,8 @@ export function AgentPanel({
   activeSurface = "project",
   requestedAnalysisOutputTarget = "",
   onRequestedAnalysisTargetHandled,
+  requestedDraft = "",
+  onRequestedDraftHandled,
 }) {
   const chatHistoryKey = useMemo(
     () => agentChatHistoryKey(activeProjectId, projectState),
@@ -1961,6 +1964,11 @@ export function AgentPanel({
   useEffect(() => {
     activeProjectIdRef.current = activeProjectId;
   }, [activeProjectId]);
+  useEffect(() => {
+    if (!open || !requestedDraft) return;
+    setInput(requestedDraft);
+    onRequestedDraftHandled?.();
+  }, [onRequestedDraftHandled, open, requestedDraft]);
   useEffect(() => {
     if (!busyOperation) return undefined;
     const updateElapsed = () => {
@@ -2570,6 +2578,8 @@ function App() {
   const [dirty, setDirty] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
   const [requestedAnalysisOutputTarget, setRequestedAnalysisOutputTarget] = useState("");
+  const [requestedAgentDraft, setRequestedAgentDraft] = useState("");
+  const [onboardingRenderVersion, setOnboardingRenderVersion] = useState(0);
   const [analysisReviewState, setAnalysisReviewState] = useState(null);
   const [projectLoaded, setProjectLoaded] = useState(false);
   const [authState, setAuthState] = useState({ checking: true, loading: false, user: null, labs: [], error: "" });
@@ -2814,7 +2824,7 @@ function App() {
       });
       setNewProjectOpen(false);
       await loadProjectsForLab(activeLabId, response.project.id, { openPreferred: true });
-      setProfileChatOpen(true);
+      setProfileChatOpen(false);
     } catch (err) {
       const message = err.message || String(err);
       setSourceError(message);
@@ -2903,6 +2913,20 @@ function App() {
     }
     setAgentOpen(true);
   };
+  const uploadOnboardingWorkbook = async (file) => {
+    if (!activeProjectId) throw new Error("Select or create a server project before uploading a workbook.");
+    const uploaded = await uploadServerProjectFile(activeProjectId, file);
+    const fileObjectId = uploaded.fileObject?.id;
+    if (!fileObjectId) throw new Error("The server did not return an uploaded file id.");
+    const response = await createServerWorkbookReviewSession(activeProjectId, { fileObjectId });
+    const state = await getServerProjectState(activeProjectId);
+    applyProjectWorkspaceRefresh(state);
+    handleWorkbookReviewReadyFromAgent({ response, navigate: false });
+    return {
+      ...response,
+      session: response.workbookReviewSession || response.session || null,
+    };
+  };
   const openExperimentBrowserDataRequest = () => {
     if (!activeProjectId) {
       setSourceError("Select or create a server project before preparing experiment data.");
@@ -2910,6 +2934,18 @@ function App() {
     }
     setRequestedAnalysisOutputTarget("experiment_browser");
     setAgentOpen(true);
+  };
+  const createOnboardingExperimentPlan = async () => {
+    if (!activeProjectId) throw new Error("Select a project before preparing experiment data.");
+    return createServerAgentRun(activeProjectId, {
+      message: "Use the confirmed master table to build reviewed Experiment Browser records.",
+      conversation: [],
+      selectedContext: {
+        tab: "experiment_browser",
+        activeSurface: "experiment_browser",
+        analysisOutputTarget: "experiment_browser",
+      },
+    });
   };
   const openAppendImportReview = () => {
     openWorkbookUpload();
@@ -2920,7 +2956,7 @@ function App() {
   const openSupplementWorkbook = () => {
     openWorkbookUpload();
   };
-  const handleWorkbookReviewReadyFromAgent = ({ response, session, sourceDocument, regions = [] } = {}) => {
+  const handleWorkbookReviewReadyFromAgent = ({ response, session, sourceDocument, regions = [], navigate = true } = {}) => {
     const nextSession = session || response?.workbookReviewSession || response?.session || null;
     const nextSourceDocument = sourceDocument || response?.sourceDocument || null;
     const nextReviewRegions = asArray(response?.reviewRegions);
@@ -2941,8 +2977,10 @@ function App() {
       regions: asArray(regions.length ? regions : response?.regions),
       reviewRegions: nextReviewRegions,
     });
-    setTab("workbook_review");
-    setAgentOpen(false);
+    if (navigate) {
+      setTab("workbook_review");
+      setAgentOpen(false);
+    }
   };
   const continueWorkbookReview = async (requestedSession = null) => {
     const session = requestedSession?.id
@@ -2963,6 +3001,12 @@ function App() {
         error: error?.message || String(error),
       }));
     }
+  };
+  const hydrateOnboardingWorkbookReview = async (requestedSession) => {
+    if (!requestedSession?.id) return null;
+    const response = await getServerWorkbookReviewSession(requestedSession.id);
+    handleWorkbookReviewReadyFromAgent({ response, navigate: false });
+    return response;
   };
   const deleteWorkbookReviewSessionFromProject = async (session) => {
     if (!session?.id) throw new Error("Select a workbook before deleting it.");
@@ -3002,6 +3046,15 @@ function App() {
   const applyWorkbookReviewRegionResponse = (response, { activate = true } = {}) => {
     const nextRegion = response?.region || null;
     if (!nextRegion?.id) return response;
+    setProjectState((current) => {
+      if (!current) return current;
+      const nextRegions = (
+        asArray(current.workbookReviewRegions).some((region) => region.id === nextRegion.id)
+          ? asArray(current.workbookReviewRegions).map((region) => region.id === nextRegion.id ? nextRegion : region)
+          : [...asArray(current.workbookReviewRegions), nextRegion]
+      ).filter((region) => region.disposition !== "deleted");
+      return { ...current, workbookReviewRegions: nextRegions };
+    });
     setWorkbookReviewDraftRegions((currentRegions) => {
       const existingRegions = asArray(currentRegions);
       const nextRegions = (
@@ -3404,6 +3457,42 @@ function App() {
       </>
     );
   }
+  const showProjectOnboarding = shouldShowProjectOnboarding(activeProjectId, projectState)
+    && tab !== "workbook_review"
+    && !analysisReviewState
+    && !agentOpen;
+  if (showProjectOnboarding) {
+    return (
+      <ProjectOnboarding
+        key={`${activeProjectId}:${onboardingRenderVersion}`}
+        projectId={activeProjectId}
+        projectState={projectState}
+        onUploadWorkbook={uploadOnboardingWorkbook}
+        onHydrateWorkbookReview={hydrateOnboardingWorkbookReview}
+        reviewState={workbookReviewState}
+        reviewRegions={workbookReviewDraftRegions}
+        activeRegionId={activeWorkbookReviewDraftRegionId}
+        onActiveRegionChange={handleWorkbookReviewRegionActivate}
+        onReviseRegion={reviseWorkbookReviewRegion}
+        onConfirmRegion={confirmWorkbookReviewRegion}
+        onRetryRegion={retryWorkbookReviewRegion}
+        onIgnoreRegion={ignoreWorkbookReviewRegion}
+        onDeleteRegion={deleteWorkbookReviewRegion}
+        onCreateExperimentPlan={createOnboardingExperimentPlan}
+        onAcceptAnalysisResult={acceptAnalysisResultExperiments}
+        onRequestCorrection={(correction) => {
+          setRequestedAgentDraft(`The Experiment Browser preview needs this correction: ${correction}`);
+          setRequestedAnalysisOutputTarget("experiment_browser");
+          setAgentOpen(true);
+        }}
+        onComplete={() => {
+          setOnboardingRenderVersion((value) => value + 1);
+          setTab(asArray(projectState?.experimentSnapshotHeads).length ? "browser" : "overview");
+        }}
+        onExit={openProjectDashboard}
+      />
+    );
+  }
   return (
     <>
       <Topbar tab={tab} setTab={setTab} dirty={dirty} onSave={save} onAgent={() => setAgentOpen(true)}
@@ -3540,6 +3629,8 @@ function App() {
         activeSurface={tab}
         requestedAnalysisOutputTarget={requestedAnalysisOutputTarget}
         onRequestedAnalysisTargetHandled={() => setRequestedAnalysisOutputTarget("")}
+        requestedDraft={requestedAgentDraft}
+        onRequestedDraftHandled={() => setRequestedAgentDraft("")}
       />
     </>
   );
@@ -3549,4 +3640,3 @@ const rootElement = document.getElementById("root");
 if (rootElement) {
   createRoot(rootElement).render(<App />);
 }
-

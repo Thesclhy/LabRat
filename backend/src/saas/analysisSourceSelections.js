@@ -79,6 +79,9 @@ export async function confirmedSourceRegionCatalog({ store, projectId } = {}) {
       headerRow: Number.isInteger(Number(interpretation.headerRow))
         ? Number(interpretation.headerRow)
         : null,
+      inclusion: interpretation.inclusion && typeof interpretation.inclusion === "object"
+        ? structuredClone(interpretation.inclusion)
+        : null,
       summary: asArray(revision.summary).map(text).filter(Boolean),
       fields: asArray(interpretation.fields).map((field) => ({
         column: text(field?.column).toUpperCase(),
@@ -364,6 +367,23 @@ async function materializeSelection({ store, projectId, selection, region }) {
     rowCount: rows,
     columnCount: columns,
     columns: columnMetadata,
+    structure: {
+      experimentAxis: region?.experimentAxis || null,
+      experimentIdColumn: region?.experimentIdColumn || null,
+      headerRow: region?.headerRow || null,
+      inclusion: region?.inclusion || null,
+      fieldMappings: asArray(region?.fields).flatMap((field) => {
+        const column = columnMetadata.find((item) => item.excelColumn === field.column);
+        if (!column || field.role === "identifier") return [];
+        return [{
+          sourceColumnIndex: column.columnIndex,
+          displayName: text(field.displayName) || column.sourceHeader,
+          valueType: text(field.valueType).toLowerCase() || column.valueType,
+          unit: field.unit || null,
+          headerSourceRefs: asArray(field.sourceRefs),
+        }];
+      }),
+    },
     values,
     displayValues,
     formulas,

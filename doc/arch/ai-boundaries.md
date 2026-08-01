@@ -70,6 +70,12 @@ stages.
 
 - Planning may select exact accepted workbook ranges, active snapshot fields,
   or both; it never embeds final values or Python.
+- Pristine-project onboarding may request `direct_source_mapping` after plan
+  acceptance. It reuses the accepted RegionUnderstandingRevision mapping and
+  makes no code-generation provider call. The fixed mapper may copy/parse only
+  accepted source columns, retains exact source pointers and missing-value
+  evidence, and remains subject to the normal result review and publication
+  boundaries. General Browser work continues through reviewed generated Python.
 - Existing `experimentSelections` are calculation inputs only. Requests for a
   new workbook column use `sourceSelections`. Existing fields are selected only
   by zero-based position in the ordered model-facing field list; internal

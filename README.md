@@ -105,6 +105,19 @@ Upload workbook
 
 The current app supports server login, lab/project selection, project profile editing, workbook source indexing, independent region review with immutable accepted revisions, tool-governed evidence retrieval, deterministic experiment-record previews, transactional accepted snapshot publish, a cursor-paginated Experiment Browser with saved views/comparison/detail provenance, backend-owned durable analysis threads and reviewed immutable calculation plans, accepted-run execution with validated immutable result previews, separate result acceptance into trace-complete analysis-result ChartSpecs, source-backed chart review, Manuscript placement-local trace visibility, persistence, and PPTX export.
 
+Pristine projects begin with a full-page conversational onboarding flow. LabRat
+indexes the workbook, interprets and confirms regions inline, and drafts the
+reviewed Experiment Browser plan without opening the side assistant. After the
+user accepts that plan, the real source materialization, built-in source
+mapping, execution, and validation continue in the background while onboarding asks
+about the experimental and analysis workflows. The validated preview and final
+Publish to Browser action remain explicit review boundaries. Onboarding answers
+and display progress are project-scoped browser state for now; they do not alter
+backend analysis. This onboarding-only mapper consumes the already confirmed
+row/field interpretation, preserves exact source cells, and makes no provider
+call. General Experiment Browser changes, calculations, and future linked-file
+workflows retain the reviewed model-generated Python path.
+
 Analysis execution is disabled by default. For local non-production development only:
 
 ```bash

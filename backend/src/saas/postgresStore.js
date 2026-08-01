@@ -2439,6 +2439,93 @@ export class PostgresSaasStore {
     return insertAnalysisRunRow(this, input);
   }
 
+  async retryAnalysisRun(input) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      await client.query(
+        "select pg_advisory_xact_lock(hashtext($1), hashtext($2))",
+        [input.projectId, input.idempotencyKey],
+      );
+      const priorResult = await client.query(
+        "select * from analysis_runs where project_id = $1 and idempotency_key = $2",
+        [input.projectId, input.idempotencyKey],
+      );
+      const prior = analysisRunFromRow(priorResult.rows[0]);
+      if (prior) {
+        if (prior.requestHash !== input.requestHash) {
+          throw Object.assign(new Error("This idempotency key was already used for another generation retry."), {
+            statusCode: 409,
+            code: "idempotency_key_conflict",
+          });
+        }
+        const threadResult = await client.query(
+          "select * from analysis_threads where id = $1",
+          [prior.analysisThreadId],
+        );
+        await client.query("commit");
+        return { analysisThread: analysisThreadFromRow(threadResult.rows[0]), analysisRun: prior };
+      }
+      const failedResult = await client.query(
+        "select * from analysis_runs where id = $1 and project_id = $2 for update",
+        [input.failedAnalysisRunId, input.projectId],
+      );
+      const threadResult = await client.query(
+        "select * from analysis_threads where id = $1 and project_id = $2 for update",
+        [input.analysisThreadId, input.projectId],
+      );
+      const revisionResult = await client.query(
+        "select * from analysis_plan_revisions where id = $1 and project_id = $2 for update",
+        [input.planRevisionId, input.projectId],
+      );
+      const failedRun = analysisRunFromRow(failedResult.rows[0]);
+      const thread = analysisThreadFromRow(threadResult.rows[0]);
+      const revision = analysisPlanRevisionFromRow(revisionResult.rows[0]);
+      if (
+        !failedRun
+        || !thread
+        || !revision
+        || !["failed", "validation_failed"].includes(failedRun.status)
+        || revision.status !== "accepted"
+        || revision.analysisThreadId !== thread.id
+        || input.analysisRun?.analysisThreadId !== thread.id
+        || input.analysisRun?.acceptedPlanRevisionId !== revision.id
+      ) {
+        throw Object.assign(new Error("The analysis generation retry package is invalid."), {
+          statusCode: 409,
+          code: "analysis_run_retry_unavailable",
+        });
+      }
+      const analysisRun = await insertAnalysisRunRow(client, input.analysisRun);
+      const updatedThreadResult = await client.query(
+        `update analysis_threads
+         set status = 'executing',
+             analysis_run_ids = $2,
+             updated_at = $3,
+             updated_by = $4
+         where id = $1
+         returning *`,
+        [
+          thread.id,
+          jsonb([...(thread.analysisRunIds || []), analysisRun.id], []),
+          analysisRun.createdAt,
+          input.actorUserId,
+        ],
+      );
+      await insertAuditEventRows(client, input.auditEvents || []);
+      await client.query("commit");
+      return {
+        analysisThread: analysisThreadFromRow(updatedThreadResult.rows[0]),
+        analysisRun,
+      };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async findAnalysisRunById(id) {
     const result = await this.query("select * from analysis_runs where id = $1", [id]);
     return analysisRunFromRow(result.rows[0]);

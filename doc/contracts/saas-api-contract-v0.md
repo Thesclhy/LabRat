@@ -293,6 +293,7 @@ POST /api/analysis-threads/:analysisThreadId/plan-revisions
 GET  /api/analysis-plan-revisions/:planRevisionId/selection
 POST /api/analysis-plan-revisions/:planRevisionId/accept
 POST /api/analysis-runs/:analysisRunId/execute
+POST /api/analysis-runs/:analysisRunId/retry
 GET  /api/analysis-runs/:analysisRunId
 GET  /api/analysis-runs/:analysisRunId/result-preview
 POST /api/analysis-runs/:analysisRunId/revise
@@ -357,6 +358,13 @@ Rules:
   materializes complete typed/display/formula grids. SourceDocument reads remain
   individually bounded, but the analysis selection has no 500-cell aggregate
   limit; configurable executor input/output limits remain.
+- Full-page pristine-project onboarding may send `executionStrategy:
+  direct_source_mapping` when executing its accepted row-oriented master-table
+  plan. The backend compiles the already accepted region mapping into one fixed
+  policy-checked program, without a code-generation provider call or separate
+  eligibility classifier. It may use only accepted fields and exact
+  materialized cells, and it produces the ordinary validated AnalysisResult.
+  General Browser work keeps `model_generated_python`.
 - Execution verifies frozen active heads for any snapshot selections and
   materializes ordered `inputs["experiments"]` lists. Each field contains its
   original `columnIndex`, readable name, value type, unit, source summary,
@@ -404,6 +412,11 @@ Rules:
   run status and audit event but creates no AnalysisResult, DataSnapshot, or
   ChartSpec. Repeating `execute` on a terminal run returns the original state
   with `idempotentReplay: true`.
+- Generation retry is editor-only, requires an `Idempotency-Key`, and accepts
+  only a terminal `failed` or `validation_failed` run. It creates a new queued
+  immutable AnalysisRun against the same accepted PlanRevision, records
+  `retryOfAnalysisRunId`, preserves the failed run, and performs no execution
+  or publication by itself.
 - Result preview returns complete validated Plotly, summary, exclusions,
   validation, and the result id needed for acceptance. It does not return the
   former technical result table, row lineage, or user-review hashes.

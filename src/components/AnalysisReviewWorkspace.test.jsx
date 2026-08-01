@@ -474,6 +474,55 @@ describe("AnalysisReviewWorkspace", () => {
     expect(screen.getByRole("button", { name: "Accept plan" }).hasAttribute("disabled")).toBe(true);
   });
 
+  it("hydrates a thread only once when a parent passes equivalent objects with the same ids", async () => {
+    const acceptedRevision = { ...revision2, status: "accepted" };
+    const readyThread = { ...thread, status: "executing" };
+    const loadThread = vi.fn().mockResolvedValue({
+      analysisThread: readyThread,
+      planRevisions: [acceptedRevision],
+      analysisRuns: [validatedRun],
+    });
+    const loadRun = vi.fn().mockResolvedValue({
+      analysisRun: validatedRun,
+      analysisPlanRevision: acceptedRevision,
+      analysisResult: validatedResult,
+    });
+    const loadResultPreview = vi.fn().mockResolvedValue(resultPreview);
+    const capabilities = { executor: { configured: true, adapter: "local" } };
+    const sharedProps = {
+      projectId: "project_1",
+      selection,
+      WorkbookWorkspaceComponent: WorkbookWorkspaceStub,
+      loadThread,
+      loadRun,
+      loadResultPreview,
+      executeRun: vi.fn(),
+      analysisCapabilities: capabilities,
+    };
+    const { rerender } = render(
+      <AnalysisReviewWorkspace
+        {...sharedProps}
+        thread={readyThread}
+        revision={acceptedRevision}
+      />,
+    );
+
+    await waitFor(() => expect(loadResultPreview).toHaveBeenCalledTimes(1));
+    rerender(
+      <AnalysisReviewWorkspace
+        {...sharedProps}
+        thread={{ ...readyThread }}
+        revision={{ ...acceptedRevision }}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getAllByText("Result ready").length).toBeGreaterThan(0));
+    expect(loadThread).toHaveBeenCalledTimes(1);
+    expect(loadRun).toHaveBeenCalledTimes(1);
+    expect(loadResultPreview).toHaveBeenCalledTimes(1);
+    expect(sharedProps.executeRun).not.toHaveBeenCalled();
+  });
+
   it("does not auto-execute a rehydrated queued run when the executor is unavailable", async () => {
     const executeRun = vi.fn();
     const queuedRun = { ...validatedRun, status: "queued" };
@@ -1302,5 +1351,60 @@ describe("AnalysisReviewWorkspace", () => {
     expect(screen.getAllByText("A numeric Experiment Browser field requires one finite number.")).toHaveLength(2);
     expect(screen.getAllByText(/12 occurrences/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Exp5 \/ Solid/).length).toBeGreaterThan(0);
+  });
+
+  it("retries failed Experiment Browser generation as a new run", async () => {
+    const browserRevision = {
+      ...revision2,
+      outputTarget: "experiment_browser",
+      status: "accepted",
+      reviewPlan: {
+        processingSteps: ["Import confirmed source fields."],
+        experimentOutput: { summary: "Import confirmed source fields." },
+        browserView: { summary: "Show imported fields." },
+      },
+    };
+    const failedRun = {
+      ...validatedRun,
+      outputTarget: "experiment_browser",
+      status: "failed",
+      execution: {
+        error: {
+          code: "analysis_program_draft_unavailable",
+          message: "Anthropic output reached the token limit.",
+          warning: { code: "ai_output_truncated" },
+        },
+      },
+      validation: { ok: false, errors: [] },
+    };
+    const retryRun = vi.fn().mockResolvedValue({
+      analysisThread: { ...thread, outputTarget: "experiment_browser", status: "executing" },
+      analysisRun: { ...failedRun, id: "analysis_run_retry", status: "queued" },
+    });
+    const executeRun = vi.fn().mockResolvedValue({
+      analysisRun: { ...failedRun, id: "analysis_run_retry", status: "failed" },
+      analysisResult: null,
+    });
+
+    render(
+      <AnalysisReviewWorkspace
+        projectId="project_1"
+        thread={{ ...thread, outputTarget: "experiment_browser" }}
+        revision={browserRevision}
+        planRevisions={[browserRevision]}
+        selection={{ sourceRectangles: [] }}
+        run={failedRun}
+        retryRun={retryRun}
+        executeRun={executeRun}
+      />,
+    );
+
+    expect(screen.getByText(/too long and was cut off/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry generation" }));
+    await waitFor(() => expect(retryRun).toHaveBeenCalledWith(
+      failedRun.id,
+      expect.objectContaining({ idempotencyKey: expect.stringContaining("retry_generation_") }),
+    ));
+    await waitFor(() => expect(executeRun).toHaveBeenCalledWith("analysis_run_retry"));
   });
 });

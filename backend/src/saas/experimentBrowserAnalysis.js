@@ -1061,6 +1061,18 @@ export function validateExperimentBrowserResult({
   const baseHeadRefs = patches.flatMap((patch) => (
     patch.baseSnapshotRef ? [clone(patch.baseSnapshotRef)] : []
   ));
+  const scalarValues = patches.flatMap((patch) => patch.values);
+  const sourceFidelity = {
+    outputValueCount: scalarValues.length,
+    sourceBackedValueCount: scalarValues.filter((field) => asArray(field.sourceRefs).length > 0).length,
+    workbookCellBackedValueCount: scalarValues.filter((field) => (
+      asArray(field.sourceRefs).some((ref) => ref?.sourceType === "excel_cell" && text(ref?.cell))
+    )).length,
+    missingValueCount: scalarValues.filter((field) => field.value === null).length,
+    exactSourceCoverage: scalarValues.length
+      ? scalarValues.filter((field) => asArray(field.sourceRefs).length > 0).length / scalarValues.length
+      : 0,
+  };
   const result = {
     columns: outputColumns,
     recordPatches: patches,
@@ -1114,6 +1126,7 @@ export function validateExperimentBrowserResult({
     recordCount: previewRecords.length,
     conflictCount: result.summary.conflictCount,
     totalSeriesPoints,
+    sourceFidelity,
   };
   return {
     ok: validation.ok,

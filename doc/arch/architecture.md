@@ -14,7 +14,7 @@ Upload workbook
   -> WorkbookReviewSession grouping + WorkbookReviewRegions
   -> accepted RegionUnderstandingRevisions
   -> reviewed Experiment Browser AnalysisPlanRevision
-  -> post-acceptance Python record patches
+  -> onboarding direct-source mapping or general post-acceptance Python record patches
   -> explicit transactional DataSnapshot v3 publish
   -> ExperimentIdentity/SnapshotHead projection
   -> Experiment Browser
@@ -45,6 +45,13 @@ Experiment Browser data uses the same reviewed workflow with
 workbook ranges and active snapshot fields. Execution returns source-backed
 record patches; backend merge preview and explicit acceptance create one
 DataSnapshot v3 plus BrowserView without overwriting historical snapshots.
+
+The pristine-project onboarding surface opts into a backend-owned fixed source
+mapper after plan acceptance. It consumes only accepted row/field semantics
+and exact materialized cells, then returns the ordinary record-patch contract.
+This removes variable code generation from the master-table demonstration
+without changing the general Python path used by calculations, reshaping,
+active snapshots, or future external-file relationships.
 
 WorkbookReviewSession creation stops after deterministic indexing and durable
 candidate-region creation. It returns pending regions immediately; Workbook
