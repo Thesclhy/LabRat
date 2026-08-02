@@ -15,6 +15,20 @@ Keep entries concise, newest first, and include:
 
 ## 2026-08-01
 
+- Refined the full-page onboarding chat presentation without changing backend
+  behavior or scientific workflow. User answers and choices now appear in
+  right-aligned bubbles with the user avatar on the right, while LabRat remains
+  left-aligned. Each conversational response waits 500 ms behind a visible
+  three-dot thinking state; submitted text appears immediately and duplicate
+  input is disabled during that bounded delay. The accepted-plan message now
+  warns that Browser preview generation may take time, and the experimental
+  workflow/data-analysis prompts give concrete examples of the requested level
+  of detail and transparently state that this context supports future assistance
+  rather than changing the current import. Updated onboarding coverage verifies
+  the thinking state, delayed follow-up, and user-message role/alignment.
+  Verification passed all 268 frontend tests and the production build with the
+  existing Plotly bundle-size warning.
+
 - Fixed a full-page onboarding hydration feedback loop that repeatedly fetched
   the same AnalysisThread and AnalysisRun after a result was already ready.
   AnalysisReviewWorkspace hydration now keys equivalent incoming thread and

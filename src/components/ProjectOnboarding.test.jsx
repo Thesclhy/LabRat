@@ -81,8 +81,10 @@ describe("ProjectOnboarding", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Let’s get started" }));
-    fireEvent.click(screen.getByRole("button", { name: /We have an established workflow/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Yes" }));
+    expect(screen.getByRole("status", { name: "LabRat is thinking" })).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: /We have an established workflow/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Yes" }));
+    await screen.findByRole("button", { name: "Upload Excel workbook" });
 
     const fileInput = container.querySelector('input[type="file"]');
     const file = new File(["workbook"], "MasterTable.xlsx", {
@@ -100,11 +102,13 @@ describe("ProjectOnboarding", () => {
     fireEvent.change(workflowInput, { target: { value: "We run batch reactions and record each experiment in one row." } });
     fireEvent.click(screen.getByRole("button", { name: "Send onboarding answer" }));
 
-    const analysisInput = screen.getByPlaceholderText("Describe how you analyze your data...");
+    const pendingWorkflow = screen.getByText("We run batch reactions and record each experiment in one row.");
+    expect(pendingWorkflow.closest(".project-onboarding-message")?.classList.contains("user")).toBe(true);
+    const analysisInput = await screen.findByPlaceholderText("Describe how you analyze your data...");
     fireEvent.change(analysisInput, { target: { value: "We calculate conversion and selectivity in Excel." } });
     fireEvent.click(screen.getByRole("button", { name: "Send onboarding answer" }));
 
-    expect(screen.getByText(/still validating the Experiment Browser preview/i)).toBeTruthy();
+    expect(await screen.findByText(/still validating the Experiment Browser preview/i)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Finish preview", hidden: true }));
     expect(screen.getByText("Preview ready")).toBeTruthy();
     expect(screen.getByText(/Perfect—the preview is ready/i)).toBeTruthy();
@@ -195,8 +199,8 @@ describe("ProjectOnboarding", () => {
     fireEvent.change(correctionInput, { target: { value: "Reaction time should be reported in minutes." } });
     fireEvent.click(screen.getByRole("button", { name: "Send onboarding answer" }));
 
-    expect(onRequestCorrection).toHaveBeenCalledWith("Reaction time should be reported in minutes.");
-    expect(readProjectOnboarding("project_1").correction).toContain("minutes");
+    await waitFor(() => expect(onRequestCorrection).toHaveBeenCalledWith("Reaction time should be reported in minutes."));
+    await waitFor(() => expect(readProjectOnboarding("project_1").correction).toContain("minutes"));
   });
 
   it("stops the spinner and offers a safe quit when generation fails", async () => {

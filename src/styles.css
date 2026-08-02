@@ -9722,10 +9722,18 @@ tbody tr:hover {
 }
 
 .project-onboarding-message {
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
+  display: flex;
+  width: min(88%, 720px);
   gap: 13px;
   align-items: start;
+  justify-self: start;
+}
+
+.project-onboarding-message.user {
+  width: min(76%, 620px);
+  flex-direction: row-reverse;
+  justify-self: end;
+  margin-left: auto;
 }
 
 .project-onboarding-message > img,
@@ -9752,7 +9760,12 @@ tbody tr:hover {
 }
 
 .project-onboarding-message > div {
+  flex: 1 1 auto;
   min-width: 0;
+}
+
+.project-onboarding-message.user > div > strong {
+  text-align: right;
 }
 
 .project-onboarding-message > div > strong {
@@ -9776,9 +9789,11 @@ tbody tr:hover {
 }
 
 .project-onboarding-message.user > div > div {
+  margin-left: auto;
   border-color: #bfdbfe;
   border-radius: 18px 6px 18px 18px;
   background: #eff6ff;
+  text-align: left;
 }
 
 .project-onboarding-message p {
@@ -9813,6 +9828,11 @@ tbody tr:hover {
   border-color: #60a5fa;
   background: #f8fbff;
   outline: none;
+}
+
+.project-onboarding-choices button:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
 .project-onboarding-choices button span {
@@ -9872,6 +9892,35 @@ tbody tr:hover {
   border-top-color: #2563eb;
   border-radius: 50%;
   animation: project-onboarding-spin 800ms linear infinite;
+}
+
+.project-onboarding-thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 18px;
+  padding: 1px 2px;
+}
+
+.project-onboarding-thinking span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #64748b;
+  animation: project-onboarding-thinking 900ms ease-in-out infinite;
+}
+
+.project-onboarding-thinking span:nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.project-onboarding-thinking span:nth-child(3) {
+  animation-delay: 240ms;
+}
+
+@keyframes project-onboarding-thinking {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.45; }
+  30% { transform: translateY(-3px); opacity: 1; }
 }
 
 @keyframes project-onboarding-spin {
@@ -10035,8 +10084,11 @@ tbody tr:hover {
     padding: 26px 16px;
   }
   .project-onboarding-message {
-    grid-template-columns: 34px minmax(0, 1fr);
+    width: 96%;
     gap: 9px;
+  }
+  .project-onboarding-message.user {
+    width: 88%;
   }
   .project-onboarding-message > img,
   .project-onboarding-user-avatar {

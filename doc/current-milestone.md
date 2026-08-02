@@ -31,6 +31,13 @@ and 390x844 browser QA now cover the integrated upload/review/publish path.
 
 ## Current Position
 
+Completed onboarding conversation polish: submitted answers are presented as
+right-aligned user messages, LabRat remains left-aligned, and a bounded 500 ms
+thinking state separates each user input from the next assistant response. The
+workflow and analysis questions now explain the desired procedural detail and
+future diagnostic value without claiming that the answers alter the current
+import or analysis.
+
 Completed onboarding hydration regression fix: equivalent AnalysisThread and
 AnalysisPlanRevision objects are compared by stable ids/status rather than
 object reference, and no-op onboarding workflow updates retain the existing

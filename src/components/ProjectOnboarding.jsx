@@ -33,6 +33,8 @@ const MASTER_TABLE_OPTIONS = [
   { value: "changing", label: "Yes, but it will likely change" },
 ];
 
+const ASSISTANT_RESPONSE_DELAY_MS = 500;
+
 function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -78,11 +80,11 @@ function OnboardingMessage({ role = "assistant", children }) {
   );
 }
 
-function ChoiceButtons({ options, onChoose }) {
+function ChoiceButtons({ options, onChoose, disabled = false }) {
   return (
     <div className="project-onboarding-choices">
       {options.map((option) => (
-        <button type="button" key={option.value} onClick={() => onChoose(option)}>
+        <button type="button" key={option.value} onClick={() => onChoose(option)} disabled={disabled}>
           <strong>{option.label}</strong>
           {option.detail && <span>{option.detail}</span>}
         </button>
@@ -155,8 +157,11 @@ export function ProjectOnboarding({
   const [previewState, setPreviewState] = useState({ loading: false, error: "", value: null });
   const [analysisFlow, setAnalysisFlow] = useState({ loading: false, error: "", thread: null, revision: null });
   const [analysisHydrationAttempt, setAnalysisHydrationAttempt] = useState(0);
+  const [pendingAnswer, setPendingAnswer] = useState(null);
+  const [assistantThinking, setAssistantThinking] = useState(false);
   const fileInputRef = useRef(null);
   const hydratedSessionRef = useRef("");
+  const assistantResponseTimerRef = useRef(null);
   const publishedCount = asArray(projectState?.experimentSnapshotHeads).length;
   const activeRegions = asArray(reviewRegions.length ? reviewRegions : projectState?.workbookReviewRegions)
     .filter((region) => !region?.disposition || region.disposition === "active");
@@ -182,6 +187,24 @@ export function ProjectOnboarding({
       return next;
     });
   }, [projectId]);
+
+  const respondAfterThinking = useCallback((answer, callback) => {
+    if (assistantResponseTimerRef.current) return;
+    setPendingAnswer(answer || null);
+    setAssistantThinking(true);
+    assistantResponseTimerRef.current = globalThis.setTimeout(() => {
+      assistantResponseTimerRef.current = null;
+      callback();
+      setPendingAnswer(null);
+      setAssistantThinking(false);
+    }, ASSISTANT_RESPONSE_DELAY_MS);
+  }, []);
+
+  useEffect(() => () => {
+    if (assistantResponseTimerRef.current) {
+      globalThis.clearTimeout(assistantResponseTimerRef.current);
+    }
+  }, []);
 
   useEffect(() => {
     if (!readProjectOnboarding(projectId)) {
@@ -247,11 +270,17 @@ export function ProjectOnboarding({
   }, [loadBrowserPreview, projectId, publishedCount, state.step]);
 
   const selectProjectStage = (option) => {
-    updateState({ projectStage: option.value, step: "master_table" });
+    respondAfterThinking(
+      { kind: "project_stage", text: option.label },
+      () => updateState({ projectStage: option.value, step: "master_table" }),
+    );
   };
 
   const selectMasterTableStatus = (option) => {
-    updateState({ masterTableStatus: option.value, step: "upload" });
+    respondAfterThinking(
+      { kind: "master_table", text: option.label },
+      () => updateState({ masterTableStatus: option.value, step: "upload" }),
+    );
   };
 
   const uploadWorkbook = async (file) => {
@@ -284,24 +313,33 @@ export function ProjectOnboarding({
 
   const submitTextAnswer = () => {
     const answer = input.trim();
-    if (!answer) return;
+    if (!answer || assistantThinking) return;
     setInput("");
     if (state.step === "workflow") {
-      updateState({ experimentalWorkflow: answer, step: "analysis" });
+      respondAfterThinking(
+        { kind: "workflow", text: answer },
+        () => updateState({ experimentalWorkflow: answer, step: "analysis" }),
+      );
       return;
     }
     if (state.step === "analysis") {
-      updateState({
-        dataAnalysisProcess: answer,
-        step: ["ready", "error"].includes(state.generationStatus) ? "result_review" : "waiting_result",
-      });
+      respondAfterThinking(
+        { kind: "analysis", text: answer },
+        () => updateState((current) => ({
+          dataAnalysisProcess: answer,
+          step: ["ready", "error"].includes(current.generationStatus) ? "result_review" : "waiting_result",
+        })),
+      );
       return;
     }
     if (state.step === "correction") {
-      const next = { ...state, correction: answer };
-      writeProjectOnboarding(projectId, next);
-      setState(next);
-      onRequestCorrection?.(answer);
+      respondAfterThinking(
+        { kind: "correction", text: answer },
+        () => {
+          updateState({ correction: answer });
+          onRequestCorrection?.(answer);
+        },
+      );
     }
   };
 
@@ -456,7 +494,9 @@ export function ProjectOnboarding({
           </OnboardingMessage>
 
           {state.step === "welcome" && (
-            <button type="button" className="project-onboarding-primary" onClick={() => updateState({ step: "project_stage" })}>
+            <button type="button" className="project-onboarding-primary" disabled={assistantThinking} onClick={() => {
+              respondAfterThinking(null, () => updateState({ step: "project_stage" }));
+            }}>
               Let’s get started
             </button>
           )}
@@ -464,8 +504,14 @@ export function ProjectOnboarding({
           {state.step !== "welcome" && (
             <OnboardingMessage>
               <p>What stage is your project currently in?</p>
-              {state.step === "project_stage" && <ChoiceButtons options={PROJECT_STAGE_OPTIONS} onChoose={selectProjectStage} />}
+              {state.step === "project_stage" && (
+                <ChoiceButtons options={PROJECT_STAGE_OPTIONS} onChoose={selectProjectStage} disabled={assistantThinking} />
+              )}
             </OnboardingMessage>
+          )}
+
+          {pendingAnswer?.kind === "project_stage" && (
+            <OnboardingMessage role="user"><p>{pendingAnswer.text}</p></OnboardingMessage>
           )}
 
           {state.projectStage && (
@@ -475,9 +521,15 @@ export function ProjectOnboarding({
               </OnboardingMessage>
               <OnboardingMessage>
                 <p>Do you have a master table or another workbook that compiles your experimental data?</p>
-                {state.step === "master_table" && <ChoiceButtons options={MASTER_TABLE_OPTIONS} onChoose={selectMasterTableStatus} />}
+                {state.step === "master_table" && (
+                  <ChoiceButtons options={MASTER_TABLE_OPTIONS} onChoose={selectMasterTableStatus} disabled={assistantThinking} />
+                )}
               </OnboardingMessage>
             </>
+          )}
+
+          {pendingAnswer?.kind === "master_table" && (
+            <OnboardingMessage role="user"><p>{pendingAnswer.text}</p></OnboardingMessage>
           )}
 
           {state.masterTableStatus && (
@@ -570,15 +622,29 @@ export function ProjectOnboarding({
 
           {["workflow", "analysis", "waiting_result", "result_review"].includes(state.step) && (
             <OnboardingMessage>
-              <p>Plan accepted. I’m now creating your Experiment Browser preview. While I work on that, tell me more about your project: what does your experimental workflow look like?</p>
+              <p>Plan accepted. I’m now creating your Experiment Browser preview, and it may take a little while.</p>
+              <p>While I work, tell me more about your project. What does a typical experimental workflow look like—from preparing materials and setting up the reactor through reaction time, sampling, and data collection? Include details such as the reactor type, operating conditions, reaction duration, and your usual experimental routine.</p>
+              <p>The more detail you share about your experimental procedure, the more helpful LabRat can become in the future—for example, when diagnosing unusual data or checking calculations.</p>
             </OnboardingMessage>
+          )}
+
+          {pendingAnswer?.kind === "workflow" && (
+            <OnboardingMessage role="user"><p>{pendingAnswer.text}</p></OnboardingMessage>
           )}
 
           {state.experimentalWorkflow && (
             <>
               <OnboardingMessage role="user"><p>{state.experimentalWorkflow}</p></OnboardingMessage>
-              <OnboardingMessage><p>Got it. What does your data-analysis process look like?</p></OnboardingMessage>
+              <OnboardingMessage>
+                <p>Got it. Now tell me about your data-analysis process. How do you turn raw measurements into the final values you use?</p>
+                <p>Include details such as the software or spreadsheets you use, calculations, data cleaning or exclusions, unit conversions, quality checks, and how you prepare plots or summary tables.</p>
+                <p>This context does not change the current import yet, but it will help future LabRat versions diagnose data problems, verify calculations, and suggest more useful analyses.</p>
+              </OnboardingMessage>
             </>
+          )}
+
+          {pendingAnswer?.kind === "analysis" && (
+            <OnboardingMessage role="user"><p>{pendingAnswer.text}</p></OnboardingMessage>
           )}
 
           {state.dataAnalysisProcess && <OnboardingMessage role="user"><p>{state.dataAnalysisProcess}</p></OnboardingMessage>}
@@ -621,9 +687,23 @@ export function ProjectOnboarding({
               <p>Describe what looks wrong and what should be corrected. I’ll prepare that as a reviewed change instead of silently changing your accepted data.</p>
             </OnboardingMessage>
           )}
+
+          {pendingAnswer?.kind === "correction" && (
+            <OnboardingMessage role="user"><p>{pendingAnswer.text}</p></OnboardingMessage>
+          )}
+
+          {assistantThinking && (
+            <OnboardingMessage>
+              <div className="project-onboarding-thinking" role="status" aria-label="LabRat is thinking">
+                <span />
+                <span />
+                <span />
+              </div>
+            </OnboardingMessage>
+          )}
         </div>
 
-        {showComposer && (
+        {showComposer && !assistantThinking && (
           <div className="project-onboarding-composer">
             <textarea
               value={input}
