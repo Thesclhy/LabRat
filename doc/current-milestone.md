@@ -31,6 +31,27 @@ and 390x844 browser QA now cover the integrated upload/review/publish path.
 
 ## Current Position
 
+Completed post-publication Browser selection correction: publication-created
+BrowserViews and the frontend handoff now start with zero selected experiments,
+including when opening an older generated view that persisted all affected ids.
+The generated view's columns, filters, and sort still load, while later explicit
+selection or manual saved-view loading retains the personal comparison workflow.
+
+Completed onboarding publication-success clarification: publishing experiments
+is the final approval boundary, so onboarding no longer presents a second
+`Does this look right?` prompt or reloads a duplicate mini-preview afterward.
+The success state reports the published experiment count and offers three
+unambiguous routes: open Browser, request a reviewed correction, or finish on
+Overview. The first and third choices complete onboarding; correction preserves
+the reviewed-change boundary.
+
+Completed onboarding Experiment Browser preview expansion: a ready, validated
+result can be opened as a viewport-level dialog outside the onboarding scroll
+hierarchy. The table owns its horizontal and vertical scrolling, remains
+clearly marked as unpublished, and can be closed by button or Escape with focus
+restored. Expansion is display-only and does not alter result acceptance,
+publication, backend execution, or persisted experiment data.
+
 Completed onboarding viewport-scroll correction: ordinary conversation stages
 shrink inside the fixed-height chat shell and keep the message pane as their
 vertical scroll owner. Plan and result review stages instead expand into normal

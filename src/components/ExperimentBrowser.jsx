@@ -97,6 +97,7 @@ export function ExperimentBrowser({
   projectId,
   initialSelectedExperimentIds = EMPTY_SELECTION,
   initialViewId = "",
+  suppressInitialViewSelection = false,
   onSelectionChange,
   onOpenImportReview,
   onRequestDataChange,
@@ -151,7 +152,7 @@ export function ExperimentBrowser({
     onSelectionChange?.([...next]);
   }, [onSelectionChange]);
 
-  const applyView = useCallback((view) => {
+  const applyView = useCallback((view, { restoreSelection = true } = {}) => {
     if (!view) return;
     const payload = view.payload || {};
     setActiveViewId(view.id || "");
@@ -159,7 +160,9 @@ export function ExperimentBrowser({
     setColumnSettings(asArray(payload.columns));
     setFilters(asArray(payload.filters));
     setSort(asArray(payload.sort));
-    updateSelection(new Set(asArray(payload.selectedExperimentIds)));
+    if (restoreSelection) {
+      updateSelection(new Set(asArray(payload.selectedExperimentIds)));
+    }
     setCompareOpen(false);
     setViewError("");
   }, [updateSelection]);
@@ -184,14 +187,18 @@ export function ExperimentBrowser({
         setBrowserViews(views);
         const requestedView = views.find((view) => view.id === initialViewId);
         const defaultView = views.find((view) => view.isDefault);
-        if (requestedView || defaultView) applyView(requestedView || defaultView);
+        if (requestedView || defaultView) {
+          applyView(requestedView || defaultView, {
+            restoreSelection: !suppressInitialViewSelection,
+          });
+        }
       })
       .catch((requestError) => {
         if (active) setViewError(errorMessage(requestError, "Saved views could not be loaded."));
       })
       .finally(() => { if (active) setViewLoading(false); });
     return () => { active = false; };
-  }, [applyView, initialViewId, listViews, projectId]);
+  }, [applyView, initialViewId, listViews, projectId, suppressInitialViewSelection]);
 
   const fetchPage = useCallback(async (cursor, append, signal) => {
     append ? setLoadingMore(true) : setLoading(true);

@@ -240,7 +240,7 @@ export async function publishAcceptedExperimentAnalysis({
       filters: asArray(requestedView.filters),
       sort: asArray(requestedView.sort),
       groupBy: null,
-      selectedExperimentIds: experimentSnapshotHeads.map((head) => head.experimentId),
+      selectedExperimentIds: [],
     },
     isDefault: false,
     createdAt: now,

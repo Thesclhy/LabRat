@@ -189,6 +189,7 @@ test("publishes one immutable v4 snapshot, advances heads, and replays idempoten
     true,
   );
   assert.equal(first.browserView.isDefault, false);
+  assert.deepEqual(first.browserView.payload.selectedExperimentIds, []);
   assert.equal(first.analysisThread.status, "completed");
   assert.equal(first.analysisResult.status, "accepted");
   assert.equal(replay.idempotentReplay, true);

@@ -435,8 +435,10 @@ Rules:
   full records to the review UI.
 - Experiment publication always creates and opens a new non-default
   BrowserView derived by the backend. Model output cannot replace the user's
-  existing default view. Accepted publication creates DataSnapshot v4; legacy
-  accepted snapshots remain read-only.
+  existing default view. The publication-created view starts with an empty
+  `selectedExperimentIds` list; publication or navigation never auto-selects
+  experiments for comparison. Accepted publication creates DataSnapshot v4;
+  legacy accepted snapshots remain read-only.
 - Revision requires feedback only. It sends bounded prior run/result validation
   context to planning and creates a later immutable PlanRevision; prior runs and
   results remain unchanged.

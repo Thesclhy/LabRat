@@ -230,6 +230,44 @@ describe("ExperimentBrowser", () => {
     })));
   });
 
+  it("opens a post-publication view without auto-selecting its experiments", async () => {
+    const publishedView = {
+      id: "published_view",
+      name: "Published experiments",
+      isDefault: false,
+      payload: {
+        columns: [],
+        filters: [],
+        sort: [],
+        groupBy: null,
+        selectedExperimentIds: ["exp_1"],
+      },
+    };
+    const api = viewApi({
+      listViews: vi.fn(async () => ({ browserViews: [publishedView] })),
+    });
+
+    render(
+      <ExperimentBrowser
+        projectId="project_1"
+        initialViewId={publishedView.id}
+        suppressInitialViewSelection
+        loadProjection={vi.fn(async () => projection())}
+        loadDetail={vi.fn()}
+        {...api}
+      />,
+    );
+
+    expect(await screen.findByText("Exp 1")).toBeTruthy();
+    expect(screen.getByLabelText("Saved view").value).toBe(publishedView.id);
+    expect(screen.queryByText("1 selected")).toBeNull();
+    expect(screen.getByRole("checkbox", { name: "Select Exp 1" }).checked).toBe(false);
+
+    fireEvent.change(screen.getByLabelText("Saved view"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Saved view"), { target: { value: publishedView.id } });
+    expect(screen.getByText("1 selected")).toBeTruthy();
+  });
+
   it("keeps comparison selection across search changes and lazily loads selected details", async () => {
     const loadProjection = vi.fn(async () => projection());
     const loadDetail = vi.fn(async (_projectId, experimentId) => ({

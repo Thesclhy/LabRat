@@ -3384,11 +3384,7 @@ function App() {
     });
     const state = await getServerProjectState(activeProjectId);
     applyProjectWorkspaceRefresh(state);
-    setBrowserSelectedExperimentIds(
-      asArray(response.experimentSnapshotHeads)
-        .map((head) => head.experimentId)
-        .filter(Boolean),
-    );
+    setBrowserSelectedExperimentIds([]);
     setBrowserInitialViewId(response.browserView?.id || "");
     setTab("browser");
     return response;
@@ -3565,6 +3561,7 @@ function App() {
         projectId={activeProjectId}
         initialSelectedExperimentIds={browserSelectedExperimentIds}
         initialViewId={browserInitialViewId}
+        suppressInitialViewSelection={Boolean(browserInitialViewId)}
         onSelectionChange={setBrowserSelectedExperimentIds}
         onOpenImportReview={openWorkbookUpload}
         onRequestDataChange={openExperimentBrowserDataRequest}

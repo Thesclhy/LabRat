@@ -15,6 +15,46 @@ Keep entries concise, newest first, and include:
 
 ## 2026-08-10
 
+- Stopped Experiment Browser publication and onboarding navigation from
+  auto-selecting every affected experiment. Newly created backend-owned
+  publication BrowserViews now persist an empty `selectedExperimentIds` list;
+  the frontend also clears transient selection before opening Browser and
+  suppresses selection restoration when first applying the generated view.
+  This suppression is limited to post-publication entry, so explicitly choosing
+  a personal saved view still restores its intentionally saved comparison
+  selection. Updated the API contract and added backend plus legacy-view
+  regressions. Live QA opened the published 61-experiment project with no
+  selected tray or checked rows. Verification passed 282/282 frontend tests,
+  214 backend tests with four existing skips, and the production build with the
+  existing Plotly bundle-size warning. Restarted only the bind-mounted local
+  backend container so future publications use the new view state; its health
+  endpoint returned `{ok:true}` and PostgreSQL/project data remained running.
+
+- Replaced the redundant post-publication `Does this look right?` approval with
+  an explicit success state reporting the exact number of experiments published
+  to the Experiment Browser. Removed the duplicate Browser-row fetch and second
+  mini-preview. The user can now open the Experiment Browser, request a reviewed
+  correction, or finish onboarding; opening Browser completes onboarding and
+  navigates to Browser, while finishing completes onboarding and always returns
+  to Overview. Added singular/plural copy and destination regressions. Focused
+  onboarding coverage passed 17/17, the full frontend suite passed 281/281, and
+  the production build passed with the existing Plotly bundle-size warning.
+  The running local app loaded the published 61-experiment project successfully.
+  No backend workflow or accepted experiment data changed.
+
+- Added a viewport-level full-screen mode to the onboarding Experiment Browser
+  result preview. The validated preview table now offers `View full screen`,
+  renders through a body portal so onboarding and modal overflow cannot clip
+  it, keeps horizontal and vertical table scrolling inside the viewport, and
+  closes through `Exit full screen` or Escape with focus restored to the launch
+  control. The surface is explicitly labeled `Validated preview · Not
+  published`; opening it does not publish or mutate experiment data. Focused
+  AnalysisReviewWorkspace coverage passed 28/28, the full frontend suite passed
+  280/280, and the production build passed with the existing Plotly bundle-size
+  warning. Live Vite stylesheet inspection confirmed the fixed viewport,
+  contained scrolling, and stable scrollbar rules. No backend workflow or
+  scientific artifact changed.
+
 - Fixed the onboarding plan-review surface being rendered but unreachable at
   normal browser zoom. The first correction allowed the viewport-height chat's
   flex message pane to shrink, but live user retesting exposed a second nested
