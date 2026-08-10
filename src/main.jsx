@@ -14,7 +14,9 @@ import { ExperimentBrowser } from "./components/ExperimentBrowser.jsx";
 import { AnalysisConversationCard } from "./components/AnalysisConversationCard.jsx";
 import { AnalysisReviewWorkspace } from "./components/AnalysisReviewWorkspace.jsx";
 import {
+  getAnalysisThread,
   getProjectAnalysisCapabilities,
+  listAnalysisThreads,
   publishAcceptedAnalysisChart,
   publishAcceptedExperimentData,
   retryAnalysisThread,
@@ -68,6 +70,8 @@ import { shouldShowProjectOnboarding } from "./data/projectOnboardingState.js";
 import "./styles.css";
 
 const BLANK_MODE = isBlankDataMode();
+const ONBOARDING_EXPERIMENT_PLAN_REQUEST = "Use the confirmed master table to build reviewed Experiment Browser records.";
+const ONBOARDING_PLAN_DRAFT_STALE_MS = 6 * 60_000;
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -2935,17 +2939,43 @@ function App() {
     setRequestedAnalysisOutputTarget("experiment_browser");
     setAgentOpen(true);
   };
-  const createOnboardingExperimentPlan = async () => {
+  const createOnboardingExperimentPlan = async (options = {}) => {
     if (!activeProjectId) throw new Error("Select a project before preparing experiment data.");
     return createServerAgentRun(activeProjectId, {
-      message: "Use the confirmed master table to build reviewed Experiment Browser records.",
+      message: ONBOARDING_EXPERIMENT_PLAN_REQUEST,
       conversation: [],
       selectedContext: {
         tab: "experiment_browser",
         activeSurface: "experiment_browser",
         analysisOutputTarget: "experiment_browser",
       },
-    });
+    }, { signal: options.signal });
+  };
+  const recoverOnboardingExperimentPlan = async () => {
+    if (!activeProjectId) return null;
+    const response = await listAnalysisThreads(activeProjectId, { limit: 100 });
+    const candidate = asArray(response?.analysisThreads)
+      .filter((thread) => (
+        thread?.outputTarget === "experiment_browser"
+        && thread?.originalRequest === ONBOARDING_EXPERIMENT_PLAN_REQUEST
+        && !["completed", "cancelled"].includes(thread?.status)
+        && !(
+          ["planning", "retry_drafting", "plan_drafting"].includes(thread?.status)
+          && Number.isFinite(Date.parse(thread?.updatedAt || ""))
+          && Date.now() - Date.parse(thread.updatedAt) > ONBOARDING_PLAN_DRAFT_STALE_MS
+        )
+      ))
+      .sort((left, right) => String(right.updatedAt || "").localeCompare(String(left.updatedAt || "")))[0];
+    if (!candidate?.id) return null;
+    const threadResponse = await getAnalysisThread(candidate.id);
+    const currentPlanRevision = asArray(threadResponse?.planRevisions)
+      .findLast((revision) => ["awaiting_review", "accepted"].includes(revision?.status))
+      || null;
+    if (!threadResponse?.analysisThread?.id) return null;
+    return {
+      ...threadResponse,
+      currentPlanRevision,
+    };
   };
   const openAppendImportReview = () => {
     openWorkbookUpload();
@@ -3479,6 +3509,7 @@ function App() {
         onIgnoreRegion={ignoreWorkbookReviewRegion}
         onDeleteRegion={deleteWorkbookReviewRegion}
         onCreateExperimentPlan={createOnboardingExperimentPlan}
+        onRecoverExperimentPlan={recoverOnboardingExperimentPlan}
         onAcceptAnalysisResult={acceptAnalysisResultExperiments}
         onRequestCorrection={(correction) => {
           setRequestedAgentDraft(`The Experiment Browser preview needs this correction: ${correction}`);

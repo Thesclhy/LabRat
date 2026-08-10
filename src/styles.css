@@ -9588,7 +9588,8 @@ tbody tr:hover {
   position: relative;
   display: flex;
   width: min(900px, calc(100% - 32px));
-  min-height: calc(100vh - 104px);
+  height: calc(100dvh - 104px);
+  min-height: 0;
   flex-direction: column;
   margin: 20px auto 16px;
   overflow: hidden;
@@ -9599,10 +9600,10 @@ tbody tr:hover {
 }
 
 .project-onboarding-generation-status {
-  position: absolute;
-  top: 18px;
+  position: fixed;
+  top: 82px;
   right: 22px;
-  z-index: 3;
+  z-index: 20;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -9651,10 +9652,31 @@ tbody tr:hover {
 .project-onboarding-messages {
   display: grid;
   flex: 1;
+  min-height: 0;
   align-content: start;
   gap: 18px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 40px clamp(22px, 7vw, 76px);
+  scroll-behavior: smooth;
+  scrollbar-gutter: stable;
+}
+
+.project-onboarding-page.has-review-surface .project-onboarding-chat {
+  height: auto;
+  min-height: calc(100dvh - 104px);
+  overflow: visible;
+}
+
+.project-onboarding-page.has-review-surface .project-onboarding-messages {
+  flex: 0 0 auto;
+  overflow-y: visible;
+}
+
+.project-onboarding-scroll-anchor {
+  order: 2;
+  width: 1px;
+  height: 1px;
 }
 
 .project-onboarding-inline-review,
@@ -9665,9 +9687,16 @@ tbody tr:hover {
 
 .project-onboarding-inline-review .workbook-review-chat {
   position: static;
-  max-height: none;
+  max-height: min(720px, calc(100dvh - 150px));
+  overflow: hidden;
   border-radius: 14px;
   box-shadow: 0 8px 24px rgba(51, 65, 85, 0.08);
+}
+
+.project-onboarding-inline-review .workbook-region-list {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .project-onboarding-analysis {
@@ -9683,12 +9712,30 @@ tbody tr:hover {
   display: none;
 }
 
+.project-onboarding-plan-recovery {
+  min-height: min(240px, calc(100dvh - 180px));
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 10px;
+  padding: 28px;
+  color: #475569;
+}
+
+.project-onboarding-plan-recovery strong,
+.project-onboarding-plan-recovery p {
+  margin: 0;
+}
+
 .analysis-review-workspace.is-onboarding {
   position: static;
   inset: auto;
   z-index: auto;
-  display: block;
-  min-height: 480px;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  height: min(680px, calc(100dvh - 150px));
+  min-height: min(480px, calc(100dvh - 150px));
+  overflow: hidden;
   background: #fff;
 }
 
@@ -9699,7 +9746,8 @@ tbody tr:hover {
 
 .analysis-review-workspace.is-onboarding .analysis-review-split {
   display: grid;
-  min-height: 480px;
+  height: 100%;
+  min-height: 0;
   grid-template-columns: minmax(0, 1fr);
 }
 
@@ -9708,7 +9756,7 @@ tbody tr:hover {
 }
 
 .analysis-review-workspace.is-onboarding.has-result-stage .analysis-review-split {
-  grid-template-rows: minmax(360px, auto) minmax(360px, auto);
+  grid-template-rows: minmax(280px, 1fr) minmax(280px, 1fr);
 }
 
 .analysis-review-workspace.is-onboarding .analysis-review-stage {
@@ -9718,7 +9766,8 @@ tbody tr:hover {
 }
 
 .analysis-review-workspace.is-onboarding .analysis-review-conversation {
-  min-height: 480px;
+  height: 100%;
+  min-height: 0;
 }
 
 .project-onboarding-message {
@@ -9892,6 +9941,24 @@ tbody tr:hover {
   border-top-color: #2563eb;
   border-radius: 50%;
   animation: project-onboarding-spin 800ms linear infinite;
+}
+
+.project-onboarding-plan-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.project-onboarding-plan-status small {
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+
+.project-onboarding-plan-status .project-onboarding-secondary {
+  margin-top: 0;
+  padding: 7px 11px;
 }
 
 .project-onboarding-thinking {
@@ -10070,15 +10137,16 @@ tbody tr:hover {
   }
   .project-onboarding-chat {
     width: 100%;
-    min-height: calc(100vh - 68px);
+    height: calc(100dvh - 68px);
+    min-height: 0;
     margin: 0;
     border-width: 0;
     border-radius: 0;
   }
   .project-onboarding-generation-status {
-    position: static;
-    align-self: flex-end;
-    margin: 10px 12px 0;
+    top: 78px;
+    right: 12px;
+    max-width: calc(100vw - 24px);
   }
   .project-onboarding-messages {
     padding: 26px 16px;

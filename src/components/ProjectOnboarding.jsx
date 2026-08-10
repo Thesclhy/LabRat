@@ -34,9 +34,27 @@ const MASTER_TABLE_OPTIONS = [
 ];
 
 const ASSISTANT_RESPONSE_DELAY_MS = 500;
+const PLAN_GENERATION_TIMEOUT_MS = 120_000;
+const PLAN_HYDRATION_POLL_MS = 1_500;
+const PLAN_DRAFT_STALE_MS = 6 * 60_000;
+const PLAN_DRAFTING_STATUSES = new Set(["planning", "retry_drafting", "plan_drafting"]);
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
+}
+
+function planFailureMessage(response) {
+  const failure = response?.planFailure || null;
+  const provider = failure?.details?.provider || null;
+  return provider?.detail
+    || provider?.message
+    || failure?.message
+    || "The backend could not draft this reviewable plan. Try again after checking the model provider and confirmed data.";
+}
+
+function planDraftIsStale(thread) {
+  const updatedAt = Date.parse(thread?.updatedAt || "");
+  return Number.isFinite(updatedAt) && Date.now() - updatedAt > PLAN_DRAFT_STALE_MS;
 }
 
 function sameWorkflowEntity(current, next) {
@@ -140,6 +158,7 @@ export function ProjectOnboarding({
   onIgnoreRegion,
   onDeleteRegion,
   onCreateExperimentPlan,
+  onRecoverExperimentPlan,
   onAcceptAnalysisResult,
   onRequestCorrection,
   onComplete,
@@ -159,14 +178,33 @@ export function ProjectOnboarding({
   const [analysisHydrationAttempt, setAnalysisHydrationAttempt] = useState(0);
   const [pendingAnswer, setPendingAnswer] = useState(null);
   const [assistantThinking, setAssistantThinking] = useState(false);
+  const [planGenerationElapsed, setPlanGenerationElapsed] = useState(0);
+  const [planRecoveryChecking, setPlanRecoveryChecking] = useState(
+    () => ["plan_generating", "plan_review"].includes(state.step)
+      && !state.analysisThreadId
+      && Boolean(onRecoverExperimentPlan),
+  );
   const fileInputRef = useRef(null);
+  const messagesRef = useRef(null);
+  const latestContentRef = useRef(null);
   const hydratedSessionRef = useRef("");
   const assistantResponseTimerRef = useRef(null);
+  const planAbortControllerRef = useRef(null);
+  const planAbortReasonRef = useRef("");
+  const planRecoveryAttemptedRef = useRef(false);
+  const analysisHydrationTimerRef = useRef(null);
   const publishedCount = asArray(projectState?.experimentSnapshotHeads).length;
   const activeRegions = asArray(reviewRegions.length ? reviewRegions : projectState?.workbookReviewRegions)
     .filter((region) => !region?.disposition || region.disposition === "active");
   const acceptedRegionCount = activeRegions
     .filter((region) => Boolean(region.acceptedRevisionId)).length;
+  const reviewContentKey = activeRegions.map((region) => [
+    region.id,
+    region.reviewStatus,
+    region.currentRevisionId,
+    region.acceptedRevisionId,
+  ].join(":"))
+    .join("|");
   const currentSession = useMemo(() => {
     const activeSessions = asArray(projectState?.workbookReviewSessions)
       .filter((session) => session?.status !== "deleted");
@@ -204,7 +242,50 @@ export function ProjectOnboarding({
     if (assistantResponseTimerRef.current) {
       globalThis.clearTimeout(assistantResponseTimerRef.current);
     }
+    planAbortReasonRef.current = "unmounted";
+    planAbortControllerRef.current?.abort();
+    if (analysisHydrationTimerRef.current) {
+      globalThis.clearTimeout(analysisHydrationTimerRef.current);
+    }
   }, []);
+
+  useEffect(() => {
+    if (state.step !== "plan_generating" || !analysisFlow.loading) {
+      setPlanGenerationElapsed(0);
+      return undefined;
+    }
+    const startedAt = Date.now();
+    const updateElapsed = () => setPlanGenerationElapsed(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
+    updateElapsed();
+    const interval = globalThis.setInterval(updateElapsed, 1000);
+    return () => globalThis.clearInterval(interval);
+  }, [analysisFlow.loading, state.step]);
+
+  useEffect(() => {
+    const timer = globalThis.setTimeout(() => {
+      const messages = messagesRef.current;
+      if (messages?.scrollTo) {
+        messages.scrollTo({ top: messages.scrollHeight, behavior: "smooth" });
+      }
+      latestContentRef.current?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+    }, 0);
+    return () => globalThis.clearTimeout(timer);
+  }, [
+    state,
+    pendingAnswer,
+    assistantThinking,
+    planRecoveryChecking,
+    acceptedRegionCount,
+    activeRegionId,
+    reviewContentKey,
+    analysisFlow.loading,
+    analysisFlow.error,
+    analysisFlow.thread?.id,
+    analysisFlow.revision?.id,
+    previewState.loading,
+    previewState.error,
+    previewState.value,
+  ]);
 
   useEffect(() => {
     if (!readProjectOnboarding(projectId)) {
@@ -214,7 +295,21 @@ export function ProjectOnboarding({
 
   useEffect(() => {
     if (!state.analysisThreadId) return undefined;
+    if (
+      analysisFlow.thread?.id === state.analysisThreadId
+      && analysisFlow.revision?.id
+      && analysisFlow.revision?.id === state.analysisPlanRevisionId
+    ) return undefined;
+    if (
+      analysisFlow.thread?.id === state.analysisThreadId
+      && analysisFlow.thread?.status === "plan_failed"
+      && analysisFlow.error
+    ) return undefined;
     let cancelled = false;
+    if (analysisHydrationTimerRef.current) {
+      globalThis.clearTimeout(analysisHydrationTimerRef.current);
+      analysisHydrationTimerRef.current = null;
+    }
     setAnalysisFlow((current) => ({ ...current, loading: true, error: "" }));
     loadAnalysisThread(state.analysisThreadId)
       .then((response) => {
@@ -224,11 +319,51 @@ export function ProjectOnboarding({
           || revisions.findLast((item) => ["awaiting_review", "accepted"].includes(item.status))
           || revisions.at(-1)
           || null;
+        const thread = response?.analysisThread || null;
+        if (!thread?.id) {
+          throw new Error("The saved analysis thread did not include a reviewable plan.");
+        }
+        if (!revision?.id && PLAN_DRAFTING_STATUSES.has(thread.status) && !planDraftIsStale(thread)) {
+          setAnalysisFlow({ loading: true, error: "", thread, revision: null });
+          analysisHydrationTimerRef.current = globalThis.setTimeout(() => {
+            analysisHydrationTimerRef.current = null;
+            setAnalysisHydrationAttempt((value) => value + 1);
+          }, PLAN_HYDRATION_POLL_MS);
+          return;
+        }
+        if (!revision?.id && PLAN_DRAFTING_STATUSES.has(thread.status)) {
+          setAnalysisFlow({
+            loading: false,
+            error: "The saved server draft became stale before producing a plan. Your confirmed regions are safe; start a new attempt.",
+            thread,
+            revision: null,
+          });
+          updateState({ step: "region_review", analysisThreadId: "", analysisPlanRevisionId: "" });
+          return;
+        }
+        if (!revision?.id && thread.status === "plan_failed") {
+          setAnalysisFlow({
+            loading: false,
+            error: planFailureMessage(response),
+            thread,
+            revision: null,
+          });
+          updateState({ step: "region_review", analysisThreadId: "", analysisPlanRevisionId: "" });
+          return;
+        }
+        if (!revision?.id) {
+          throw new Error("The saved analysis thread did not include a reviewable plan.");
+        }
         setAnalysisFlow({
           loading: false,
           error: "",
-          thread: response?.analysisThread || null,
+          thread,
           revision,
+        });
+        updateState({
+          step: "plan_review",
+          analysisPlanRevisionId: revision.id,
+          generationStatus: "idle",
         });
       })
       .catch((error) => {
@@ -236,8 +371,100 @@ export function ProjectOnboarding({
       });
     return () => {
       cancelled = true;
+      if (analysisHydrationTimerRef.current) {
+        globalThis.clearTimeout(analysisHydrationTimerRef.current);
+        analysisHydrationTimerRef.current = null;
+      }
     };
-  }, [analysisHydrationAttempt, loadAnalysisThread, state.analysisPlanRevisionId, state.analysisThreadId]);
+  }, [
+    analysisFlow.revision?.id,
+    analysisFlow.thread?.id,
+    analysisHydrationAttempt,
+    loadAnalysisThread,
+    state.analysisPlanRevisionId,
+    state.analysisThreadId,
+    updateState,
+  ]);
+
+  useEffect(() => {
+    if (
+      !["plan_generating", "plan_review"].includes(state.step)
+      || state.analysisThreadId
+      || analysisFlow.loading
+      || !onRecoverExperimentPlan
+      || planRecoveryAttemptedRef.current
+    ) return undefined;
+    planRecoveryAttemptedRef.current = true;
+    let cancelled = false;
+    setPlanRecoveryChecking(true);
+    Promise.resolve(onRecoverExperimentPlan())
+      .then((response) => {
+        if (cancelled) return;
+        const thread = response?.analysisThread || null;
+        const revision = response?.currentPlanRevision
+          || asArray(response?.planRevisions).findLast((item) => ["awaiting_review", "accepted"].includes(item.status))
+          || null;
+        if (thread?.id && !revision?.id && PLAN_DRAFTING_STATUSES.has(thread.status)) {
+          setPlanRecoveryChecking(false);
+          setAnalysisFlow({ loading: true, error: "", thread, revision: null });
+          updateState({
+            step: "plan_generating",
+            analysisThreadId: thread.id,
+            analysisPlanRevisionId: "",
+          });
+          setAnalysisHydrationAttempt((value) => value + 1);
+          return;
+        }
+        if (thread?.id && !revision?.id && thread.status === "plan_failed") {
+          setPlanRecoveryChecking(false);
+          setAnalysisFlow({
+            loading: false,
+            error: planFailureMessage(response),
+            thread,
+            revision: null,
+          });
+          updateState({ step: "region_review", analysisThreadId: "", analysisPlanRevisionId: "" });
+          return;
+        }
+        if (!thread?.id || !revision?.id) {
+          setPlanRecoveryChecking(false);
+          setAnalysisFlow((current) => ({
+            ...current,
+            loading: false,
+            error: state.step === "plan_review"
+              ? "The server did not return the saved reviewable plan."
+              : current.error,
+          }));
+          return;
+        }
+        setAnalysisFlow({ loading: false, error: "", thread, revision });
+        setPlanRecoveryChecking(false);
+        updateState({
+          step: "plan_review",
+          analysisThreadId: thread.id,
+          analysisPlanRevisionId: revision.id,
+          generationStatus: "idle",
+        });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setPlanRecoveryChecking(false);
+        setAnalysisFlow((current) => ({
+          ...current,
+          error: `LabRat could not check for the completed plan: ${error?.message || String(error)}`,
+        }));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    analysisFlow.loading,
+    analysisHydrationAttempt,
+    onRecoverExperimentPlan,
+    state.analysisThreadId,
+    state.step,
+    updateState,
+  ]);
 
   useEffect(() => {
     if (!currentSession?.id || reviewState?.session?.id === currentSession.id) return;
@@ -345,10 +572,44 @@ export function ProjectOnboarding({
 
   const createExperimentPlan = async () => {
     if (analysisFlow.loading || !onCreateExperimentPlan) return;
+    const controller = new AbortController();
+    planAbortControllerRef.current = controller;
+    planAbortReasonRef.current = "";
     setAnalysisFlow({ loading: true, error: "", thread: null, revision: null });
     updateState({ step: "plan_generating" });
+    const timeout = globalThis.setTimeout(() => {
+      planAbortReasonRef.current = "timeout";
+      controller.abort();
+    }, PLAN_GENERATION_TIMEOUT_MS);
     try {
-      const response = await onCreateExperimentPlan();
+      if (onRecoverExperimentPlan) {
+        const recovered = await onRecoverExperimentPlan();
+        const recoveredThread = recovered?.analysisThread || null;
+        const recoveredRevision = recovered?.currentPlanRevision
+          || asArray(recovered?.planRevisions).findLast((item) => ["awaiting_review", "accepted"].includes(item.status))
+          || null;
+        if (recoveredThread?.id && !recoveredRevision?.id && PLAN_DRAFTING_STATUSES.has(recoveredThread.status)) {
+          setAnalysisFlow({ loading: true, error: "", thread: recoveredThread, revision: null });
+          updateState({
+            step: "plan_generating",
+            analysisThreadId: recoveredThread.id,
+            analysisPlanRevisionId: "",
+          });
+          setAnalysisHydrationAttempt((value) => value + 1);
+          return;
+        }
+        if (recoveredThread?.id && recoveredRevision?.id) {
+          setAnalysisFlow({ loading: false, error: "", thread: recoveredThread, revision: recoveredRevision });
+          updateState({
+            step: "plan_review",
+            analysisThreadId: recoveredThread.id,
+            analysisPlanRevisionId: recoveredRevision.id,
+            generationStatus: "idle",
+          });
+          return;
+        }
+      }
+      const response = await onCreateExperimentPlan({ signal: controller.signal });
       const thread = response?.analysisThread || null;
       const revision = response?.currentPlanRevision || response?.analysisPlanRevision || null;
       if (!thread?.id || !revision?.id) {
@@ -362,9 +623,77 @@ export function ProjectOnboarding({
         generationStatus: "idle",
       });
     } catch (error) {
-      setAnalysisFlow({ loading: false, error: error?.message || String(error), thread: null, revision: null });
+      const abortReason = planAbortReasonRef.current;
+      if (!abortReason && onRecoverExperimentPlan) {
+        try {
+          const recovered = await onRecoverExperimentPlan();
+          const recoveredThread = recovered?.analysisThread || null;
+          const recoveredRevision = recovered?.currentPlanRevision
+            || asArray(recovered?.planRevisions).findLast((item) => ["awaiting_review", "accepted"].includes(item.status))
+            || null;
+          if (recoveredThread?.id && !recoveredRevision?.id && PLAN_DRAFTING_STATUSES.has(recoveredThread.status)) {
+            setAnalysisFlow({ loading: true, error: "", thread: recoveredThread, revision: null });
+            updateState({
+              step: "plan_generating",
+              analysisThreadId: recoveredThread.id,
+              analysisPlanRevisionId: "",
+            });
+            setAnalysisHydrationAttempt((value) => value + 1);
+            return;
+          }
+          if (recoveredThread?.id && recoveredRevision?.id) {
+            setAnalysisFlow({ loading: false, error: "", thread: recoveredThread, revision: recoveredRevision });
+            updateState({
+              step: "plan_review",
+              analysisThreadId: recoveredThread.id,
+              analysisPlanRevisionId: recoveredRevision.id,
+              generationStatus: "idle",
+            });
+            return;
+          }
+        } catch {
+          // Preserve the original plan-generation error when recovery also fails.
+        }
+      }
+      const message = abortReason === "timeout"
+        ? "This page stopped waiting after two minutes. The server may still finish the plan; your confirmed regions are safe, and retry will check the server first."
+        : abortReason === "cancelled"
+          ? "This page stopped waiting. The server may still finish the plan; retry will reopen it instead of starting a duplicate."
+          : error?.message || String(error);
+      setAnalysisFlow({ loading: false, error: message, thread: null, revision: null });
       updateState({ step: "region_review" });
+    } finally {
+      globalThis.clearTimeout(timeout);
+      if (planAbortControllerRef.current === controller) {
+        planAbortControllerRef.current = null;
+        planAbortReasonRef.current = "";
+      }
     }
+  };
+
+  const cancelExperimentPlan = () => {
+    if (planAbortControllerRef.current) {
+      planAbortReasonRef.current = "cancelled";
+      planAbortControllerRef.current.abort();
+      return;
+    }
+    setAnalysisFlow((current) => ({
+      ...current,
+      loading: false,
+      error: "This page stopped waiting. The server may still finish the plan; retry will reopen it instead of starting a duplicate.",
+    }));
+    updateState({ step: "region_review", analysisThreadId: "", analysisPlanRevisionId: "" });
+  };
+
+  const retryPlanReviewHydration = () => {
+    setAnalysisFlow((current) => ({ ...current, loading: false, error: "", thread: null, revision: null }));
+    if (state.analysisThreadId) {
+      setAnalysisHydrationAttempt((value) => value + 1);
+      return;
+    }
+    planRecoveryAttemptedRef.current = false;
+    setPlanRecoveryChecking(true);
+    setAnalysisHydrationAttempt((value) => value + 1);
   };
 
   const handleAnalysisWorkflowState = useCallback((workflow) => {
@@ -438,9 +767,15 @@ export function ProjectOnboarding({
     : state.step === "analysis"
       ? "Describe how you analyze your data..."
       : "Describe what looks wrong and what should be corrected...";
+  const planGenerationWorking = state.step === "plan_generating" && analysisFlow.loading;
+  const planGenerationStatusVisible = planGenerationWorking || planRecoveryChecking;
+  const planReviewMissing = state.step === "plan_review"
+    && (!analysisFlow.thread?.id || !analysisFlow.revision?.id);
+  const reviewSurfaceVisible = ["plan_review", "result_review"].includes(state.step)
+    && Boolean(analysisFlow.thread?.id && analysisFlow.revision?.id);
 
   return (
-    <main className="project-onboarding-page">
+    <main className={`project-onboarding-page${reviewSurfaceVisible ? " has-review-surface" : ""}`}>
       <header className="project-onboarding-header">
         <button type="button" className="project-onboarding-brand" onClick={onExit}>
           <img src={`${import.meta.env.BASE_URL}labrat-logo.png`} alt="" />
@@ -472,13 +807,17 @@ export function ProjectOnboarding({
           }[state.step] || 8)}%` }} />
         </div>
 
-        {["working", "ready", "error"].includes(state.generationStatus) && (
-          <div className={`project-onboarding-generation-status is-${state.generationStatus}`} role="status" aria-live="polite">
-            {state.generationStatus === "working" && <span className="project-onboarding-status-spinner" aria-hidden="true" />}
+        {(planGenerationStatusVisible || ["working", "ready", "error"].includes(state.generationStatus)) && (
+          <div className={`project-onboarding-generation-status is-${planGenerationStatusVisible ? "working" : state.generationStatus}`} role="status" aria-live="polite">
+            {(planGenerationStatusVisible || state.generationStatus === "working") && <span className="project-onboarding-status-spinner" aria-hidden="true" />}
             {state.generationStatus === "ready" && <span aria-hidden="true">✓</span>}
-            {state.generationStatus === "error" && <span aria-hidden="true">!</span>}
+            {!planGenerationStatusVisible && state.generationStatus === "error" && <span aria-hidden="true">!</span>}
             <strong>
-              {state.generationStatus === "working"
+              {planRecoveryChecking
+                ? "Checking for your review plan…"
+                : planGenerationWorking
+                ? `Preparing review plan · ${planGenerationElapsed}s`
+                : state.generationStatus === "working"
                 ? "Generating your Experiment Browser preview…"
                 : state.generationStatus === "ready"
                   ? "Preview ready"
@@ -487,7 +826,7 @@ export function ProjectOnboarding({
           </div>
         )}
 
-        <div className="project-onboarding-messages">
+        <div className="project-onboarding-messages" ref={messagesRef}>
           <OnboardingMessage>
             <p>Hi, I’m LabRat, your AI research assistant.</p>
             <p>I can help you manage experimental data, create visualizations, and prepare research outputs. First, help me understand your project.</p>
@@ -584,24 +923,73 @@ export function ProjectOnboarding({
                 onDeleteRegion={onDeleteRegion}
                 onReviewExtractedExperiments={acceptedRegionCount > 0 ? createExperimentPlan : null}
               />
-              {analysisFlow.error && <p className="project-onboarding-error" role="alert">{analysisFlow.error}</p>}
+              {analysisFlow.error && (
+                <div className="project-onboarding-error" role="alert">
+                  <p>{analysisFlow.error}</p>
+                  <button type="button" className="project-onboarding-secondary" onClick={createExperimentPlan}>
+                    Try generating the plan again
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
-          {state.step === "plan_generating" && (
+          {state.step === "plan_generating" && analysisFlow.loading && (
             <OnboardingMessage>
               <p>I’m using the confirmed workbook evidence to prepare an Experiment Browser plan.</p>
               <div className="project-onboarding-processing"><span /> Generating a reviewable plan…</div>
+              <div className="project-onboarding-plan-status" role="status" aria-live="polite">
+                <small>{planGenerationElapsed}s elapsed</small>
+                <button type="button" className="project-onboarding-secondary" onClick={cancelExperimentPlan}>Stop waiting</button>
+              </div>
             </OnboardingMessage>
           )}
 
-          {state.analysisThreadId && analysisFlow.error && state.step !== "region_review" && (
+          {state.step === "plan_generating" && planRecoveryChecking && (
+            <OnboardingMessage>
+              <p>I’m checking whether the server finished your reviewable plan before this page was interrupted.</p>
+              <div className="project-onboarding-processing"><span /> Checking for the completed plan…</div>
+            </OnboardingMessage>
+          )}
+
+          {state.step === "plan_generating" && !analysisFlow.loading && !planRecoveryChecking && !analysisFlow.thread && (
+            <OnboardingMessage>
+              <p><strong>Plan generation was interrupted.</strong></p>
+              <p>Your workbook and confirmed regions are safe. LabRat will check the server before starting another plan.</p>
+              <button type="button" className="project-onboarding-primary" onClick={createExperimentPlan}>
+                Try generating the plan again
+              </button>
+            </OnboardingMessage>
+          )}
+
+          {state.analysisThreadId && analysisFlow.error && !["region_review", "plan_review"].includes(state.step) && (
             <div className="project-onboarding-error" role="alert">
               <p>{analysisFlow.error}</p>
               <button type="button" className="project-onboarding-secondary" onClick={() => {
                 setAnalysisFlow({ loading: false, error: "", thread: null, revision: null });
                 setAnalysisHydrationAttempt((value) => value + 1);
               }}>Retry loading the plan</button>
+            </div>
+          )}
+
+          {planReviewMissing && (
+            <div className="project-onboarding-analysis">
+              <section className="project-onboarding-plan-recovery" aria-live="polite">
+                {analysisFlow.error ? (
+                  <>
+                    <strong>LabRat could not reopen the saved review plan.</strong>
+                    <p>{analysisFlow.error}</p>
+                    <button type="button" className="project-onboarding-secondary" onClick={retryPlanReviewHydration}>
+                      Retry loading the plan
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="project-onboarding-processing"><span /> Restoring your review plan…</div>
+                    <p>Your generated plan is saved. LabRat is loading the review controls before anything can run.</p>
+                  </>
+                )}
+              </section>
             </div>
           )}
 
@@ -701,6 +1089,7 @@ export function ProjectOnboarding({
               </div>
             </OnboardingMessage>
           )}
+          <div className="project-onboarding-scroll-anchor" ref={latestContentRef} aria-hidden="true" />
         </div>
 
         {showComposer && !assistantThinking && (
