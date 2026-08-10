@@ -156,6 +156,27 @@ test("preserves bounded Anthropic request diagnostics", async () => {
   assert.equal(result.warning.detail, "Unsupported structured output keyword.");
 });
 
+test("preserves bounded Anthropic transport diagnostics", async () => {
+  const provider = createBackendModelProvider({
+    config: {
+      aiProvider: "anthropic",
+      anthropicApiKey: "server-secret",
+      anthropicModel: "claude-test",
+    },
+    fetchImpl: async () => {
+      const error = new TypeError("fetch failed");
+      error.cause = { code: "ECONNRESET" };
+      throw error;
+    },
+  });
+
+  const result = await provider.classifyIntent({ message: "Compare these experiments." });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.warning.code, "ai_request_failed");
+  assert.match(result.warning.detail, /TypeError: ECONNRESET: fetch failed/);
+});
+
 test("draftAnalysisPlan selects exact confirmed ranges without generating Python", async () => {
   const provider = createBackendModelProvider({
     config: {

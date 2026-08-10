@@ -2,7 +2,7 @@
 
 Status: complete
 Read when: checking what the next implementation slice should be.
-Last reviewed: 2026-08-01
+Last reviewed: 2026-08-10
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
 
@@ -30,6 +30,26 @@ golden workbook-to-Browser workflow. Full automated verification plus desktop
 and 390x844 browser QA now cover the integrated upload/review/publish path.
 
 ## Current Position
+
+Completed onboarding viewport-scroll correction: ordinary conversation stages
+shrink inside the fixed-height chat shell and keep the message pane as their
+vertical scroll owner. Plan and result review stages instead expand into normal
+page scrolling, while their embedded review workspace remains a constrained
+grid with a scrolling message body and pinned action footer. An already-rendered
+reviewable plan and its `Accept plan` control therefore remain reachable at
+normal browser zoom without relying on macOS overlay scrollbars. This
+frontend-only layout correction does not change plan generation, persistence,
+or review boundaries.
+
+Completed plan-drafting recovery milestone: after an analysis-planning
+AnalysisThread is durably created, its provider draft is owned by the backend
+and survives browser refresh, cancellation, and request timeout. Onboarding
+recovers and polls that thread instead of starting a duplicate, immediately
+shows its review controls when the PlanRevision appears, abandons stale
+server-restart remnants after a bounded window, and renders persisted bounded
+provider/validation diagnostics for `plan_failed` threads. Frontend cancellation
+now means “stop waiting here”; it does not destroy server work or accepted
+evidence.
 
 Completed onboarding conversation polish: submitted answers are presented as
 right-aligned user messages, LabRat remains left-aligned, and a bounded 500 ms

@@ -273,6 +273,14 @@ return clarification.
 
 `POST /api/projects/:projectId/agent/runs` returns user-facing text in the top-level `reply` field plus nullable `analysisThread` and `currentPlanRevision` fields. Provider configuration and credentials are backend-only. AgentRun usage stores provider, model, token, and latency metadata while planning records visible workflow steps rather than hidden chain-of-thought.
 
+For `analysis_planning`, the backend owns drafting after the AnalysisThread has
+been durably created. Closing, refreshing, timing out, or cancelling the browser
+request stops that client from waiting but does not cancel the provider call.
+The completed PlanRevision remains discoverable through the thread list/detail
+routes. A failed draft moves the thread to `plan_failed`; thread detail returns
+the persisted bounded `planFailure` copied from the owning AgentRun warning, so
+the UI can distinguish a provider/validation failure from an in-progress draft.
+
 The planning provider receives bounded catalogs of active confirmed
 RegionUnderstandingRevisions and active experiment fields as ordered readable
 lists. It may call `inspect_source_range` to page through workbook cells. After
@@ -449,9 +457,11 @@ Rules:
   BrowserView, completes the run/thread, and records audit plus idempotency
   receipt. A changed base head returns stale preview and performs no writes.
 - `LABRAT_ANALYSIS_EXECUTOR` defaults to `disabled`. `local` is non-production only; production execution requires a valid configured HTTPS hardened worker. Executor command, endpoint, timeout, and provider credentials are backend-only configuration.
-- Closing the AgentRun request aborts any in-flight backend provider request.
-  The frontend may expose this as a phase/elapsed-time status with an explicit
-  cancel action; cancellation does not fall through to a second planner.
+- Closing the AgentRun request aborts routing or direct-answer provider work
+  only before a durable analysis thread exists. Once an AnalysisThread exists,
+  planning is server-owned and survives client disconnect. The frontend may
+  stop observing it, then recover the same thread; it must check for an existing
+  in-progress/reviewable thread before starting another planner.
 
 Status flow:
 
@@ -461,6 +471,8 @@ AnalysisThread planning
   -> executing
   -> awaiting_result_review
   -> completed
+
+AnalysisThread planning -> plan_failed (persisted bounded failure; retryable)
 
 AnalysisPlanRevision awaiting_review -> superseded | accepted
 AnalysisRun queued -> running -> failed | validation_failed | awaiting_result_review -> completed

@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-08-01
+Last reviewed: 2026-08-10
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -12,6 +12,99 @@ Keep entries concise, newest first, and include:
 - meaningful changes
 - verification
 - follow-ups or residual risk
+
+## 2026-08-10
+
+- Fixed the onboarding plan-review surface being rendered but unreachable at
+  normal browser zoom. The first correction allowed the viewport-height chat's
+  flex message pane to shrink, but live user retesting exposed a second nested
+  boundary: the embedded analysis workspace had been changed from a constrained
+  grid to an unconstrained block, so its `Accept plan` footer could still be
+  clipped. Ordinary conversation stages keep their bounded message scroller;
+  plan/result review stages now use standard page scrolling, and the embedded
+  review is again a height-constrained grid with an independently scrolling
+  message body and pinned footer. This avoids dependence on macOS overlay
+  scrollbars. Added CSS and rendered-stage regressions for both boundaries. The
+  focused onboarding suite passed 16/16, the full frontend suite passed
+  280/280, the backend suite passed 214 tests with four existing skips, and the
+  production build passed with the existing Plotly bundle-size warning. Live
+  stylesheet inspection confirmed all corrected scroll properties. This is a
+  frontend-only layout fix; no backend workflow or scientific artifact changed.
+
+- Made reviewable-plan drafting server-owned after durable AnalysisThread
+  creation. A browser refresh, cancelled fetch, or two-minute UI timeout no
+  longer aborts the backend provider call; onboarding recovers and polls the
+  same in-progress thread, reopens `Accept plan` when its immutable revision is
+  ready, and avoids a duplicate provider request. Failed drafts now persist as
+  `plan_failed`, and thread detail exposes bounded provider/validation
+  diagnostics without credentials so every project gets an actionable retry
+  state. Stale planning remnants from a backend restart age out after six
+  minutes instead of hydrating forever. Added regressions for a real HTTP client
+  disconnect, durable provider failure inspection, transport diagnostics, and
+  frontend observation of an in-progress server plan. Full verification passed
+  278/278 frontend tests, 214 backend tests with four existing skips, and the
+  production build with the existing Plotly bundle-size warning.
+  Live local QA loaded the authenticated dashboard with no browser console
+  warnings/errors. The bind-mounted `labrat-backend-codex` process does not
+  watch source files, so it was restarted after verification; its health
+  endpoint returned `{ok:true}` and Postgres/project data were not restarted.
+
+- Fixed the blank onboarding dead end after `Generating a reviewable plan…`.
+  The successful create response already supplied the reviewable AnalysisThread
+  and plan revision, but persisting their ids immediately triggered a redundant
+  thread hydration request; an interrupted or failed second request then cleared
+  the valid in-memory plan and removed the `Accept plan` workspace. Onboarding
+  now retains a matching valid response, restores genuine reloads from the
+  server, recovers a missing saved thread id while already at `plan_review`, and
+  always renders an explicit restoring or retry state instead of an empty chat
+  ending. The scroll anchor now follows the ordered embedded review workspace so
+  automatic scrolling cannot stop immediately before the plan. Review/retry now
+  checks for and reopens an existing awaiting-review onboarding plan before
+  starting another provider request, so a later transient provider failure cannot
+  hide an earlier successful plan or create avoidable duplicate drafts. Added
+  regression coverage for immediate `Accept plan` visibility, persisted-thread
+  hydration, missing-id recovery, and saved-plan reuse. Focused
+  onboarding coverage passed 12/12, the full frontend suite passed 276/276,
+  the backend suite
+  passed 211 with four existing skips after granting its localhost test-server
+  permission, and the production build passed with the existing Plotly
+  bundle-size warning. No backend contract, provider call, or scientific
+  artifact changed.
+
+## 2026-08-05
+
+- Fixed onboarding becoming permanently stuck at `Generating a reviewable
+  plan…`. Plan drafting had no client timeout, and the persisted
+  `plan_generating` step could survive a refresh without retaining the server
+  response that identified the completed AnalysisThread. Onboarding now checks
+  for the latest matching reviewable Experiment Browser thread and reopens it
+  before offering a retry, preventing duplicate plans when the server already
+  finished. New attempts show elapsed time in the fixed status indicator,
+  support Cancel, stop after two minutes, and return to confirmed-region review
+  with a clear retry action while preserving evidence. Automated coverage now
+  includes server-plan recovery, stale persisted-state recovery, cancellation,
+  and timeout. Focused onboarding/dashboard/API tests passed 89/89; full
+  verification passed all 273 frontend tests and the backend suite, and the
+  production build passed with the existing Plotly bundle-size warning. Live
+  inspection confirmed the affected Project 2 already had one analysis request
+  awaiting review, matching the lost-response diagnosis; a clean reload added
+  no browser console warnings or errors.
+
+## 2026-08-02
+
+- Kept long onboarding conversations and their review controls usable within
+  the viewport. The onboarding chat now owns a viewport-height scroll surface
+  and smoothly follows newly added answers, AI states, region revisions, and
+  result previews. Inline workbook review restores a bounded internal region
+  list so region-confirmation and next-step controls remain reachable, while
+  embedded analysis review is viewport-bounded so Accept plan/Publish controls
+  stay visible. Experiment Browser generation status is now a fixed top-right
+  indicator on desktop and mobile instead of scrolling away with chat content.
+  Added an automatic-scroll regression test. Focused onboarding/workbook/
+  analysis tests passed 40/40; full verification passed all 269 frontend tests
+  and the backend suite, and the production build passed with the existing
+  Plotly bundle-size warning. The running app had no browser console warnings
+  or errors; a fresh onboarding project was not created solely for visual QA.
 
 ## 2026-08-01
 

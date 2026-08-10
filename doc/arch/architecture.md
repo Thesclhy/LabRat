@@ -109,6 +109,11 @@ Logged-in server mode treats backend project state as the source of truth. Old I
   revisioning, idempotent queued-run creation, post-acceptance Python
   generation, run orchestration, complete Plotly or Experiment Browser preview,
   and result-linked replanning.
+- **Server-owned plan drafting**: once routing has durably created an
+  AnalysisThread, the provider request outlives the initiating browser
+  connection. Frontends observe the thread by id, recover it after reload, and
+  treat `plan_failed` plus its bounded persisted failure as a retryable terminal
+  draft state instead of using browser memory as authority.
 - **Analysis Executor/Validator**: exact materialized run packages, internal
   claim-token leases, versioned static/runner Python policy, non-production
   local adapter, production hardened-worker adapter, and deterministic Plotly

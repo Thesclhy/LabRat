@@ -1647,6 +1647,95 @@ async function uploadAndConfirmAnalysisWorkbook(project, blob, filename) {
   };
 }
 
+test("analysis plan drafting survives the browser request disconnecting", async () => {
+  const project = await createProject("Durable Analysis Draft Project");
+  await uploadAndConfirmAnalysisWorkbook(
+    project,
+    makeComponentDistributionWorkbookBlob(),
+    "Durable Plan.xlsx",
+  );
+  const originalDraft = testModelProvider.draftAnalysisPlan;
+  let markDraftStarted;
+  let releaseDraft;
+  const draftStarted = new Promise((resolve) => { markDraftStarted = resolve; });
+  const draftRelease = new Promise((resolve) => { releaseDraft = resolve; });
+  testModelProvider.draftAnalysisPlan = async function durableDraft(input) {
+    markDraftStarted();
+    await draftRelease;
+    return originalDraft.call(this, input);
+  };
+
+  try {
+    const controller = new AbortController();
+    const request = fetch(`${baseUrl}/api/projects/${project.id}/agent/runs`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ message: "Plot the confirmed workbook values." }),
+      signal: controller.signal,
+    });
+    await Promise.race([
+      draftStarted,
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Timed out waiting for plan drafting to start.")), 2_000)),
+    ]);
+    controller.abort();
+    releaseDraft();
+    await assert.rejects(request, (error) => error?.name === "AbortError");
+
+    let durableThread = null;
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const threads = await store.listAnalysisThreads({ projectId: project.id });
+      durableThread = threads.find((thread) => thread.originalRequest === "Plot the confirmed workbook values.") || null;
+      if (durableThread?.status === "awaiting_plan_review") break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.equal(durableThread?.status, "awaiting_plan_review");
+    assert.equal(durableThread?.planRevisionIds.length, 1);
+  } finally {
+    releaseDraft?.();
+    testModelProvider.draftAnalysisPlan = originalDraft;
+  }
+});
+
+test("analysis planning failures remain inspectable on the durable thread", async () => {
+  const project = await createProject("Durable Analysis Failure Project");
+  await uploadAndConfirmAnalysisWorkbook(
+    project,
+    makeComponentDistributionWorkbookBlob(),
+    "Failed Plan.xlsx",
+  );
+  const originalDraft = testModelProvider.draftAnalysisPlan;
+  testModelProvider.draftAnalysisPlan = async () => ({
+    ok: false,
+    warning: {
+      code: "ai_request_failed",
+      message: "Anthropic request failed.",
+      detail: "TypeError: ECONNRESET: fetch failed",
+    },
+  });
+
+  try {
+    const response = await jsonFetch(`/api/projects/${project.id}/agent/runs`, {
+      method: "POST",
+      body: { message: "Plot the confirmed workbook values." },
+    });
+    assert.equal(response.status, 201);
+    const body = await response.json();
+    assert.equal(body.analysisThread.status, "plan_failed");
+    assert.equal(body.currentPlanRevision, null);
+    assert.equal(body.agentRun.warnings.at(-1).details.provider.code, "ai_request_failed");
+
+    await store.updateAnalysisThread(body.analysisThread.id, { status: "planning" });
+
+    const detailResponse = await jsonFetch(`/api/analysis-threads/${body.analysisThread.id}`);
+    assert.equal(detailResponse.status, 200);
+    const detail = await detailResponse.json();
+    assert.equal(detail.analysisThread.status, "plan_failed");
+    assert.equal(detail.planFailure.details.provider.detail, "TypeError: ECONNRESET: fetch failed");
+  } finally {
+    testModelProvider.draftAnalysisPlan = originalDraft;
+  }
+});
+
 test("confirmed workbook chart request completes Source to Plotly to ChartSpec without hashes", async () => {
   const project = await createProject("Analysis V2 Route Project");
   await uploadAndConfirmAnalysisWorkbook(

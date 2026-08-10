@@ -524,6 +524,7 @@ export async function createAnalysisPlanRevision({
   }
   if (![
     "planning",
+    "plan_failed",
     "awaiting_plan_review",
     "awaiting_result_review",
     "execution_failed",

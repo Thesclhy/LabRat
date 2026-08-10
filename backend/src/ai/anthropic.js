@@ -22,6 +22,13 @@ async function responseErrorDetail(response) {
   }
 }
 
+function transportErrorDetail(error) {
+  const code = String(error?.cause?.code || error?.code || "").trim().slice(0, 80);
+  const name = String(error?.name || "Error").trim().slice(0, 80);
+  const message = String(error?.message || "").trim().replace(/\s+/g, " ").slice(0, 500);
+  return [name, code, message].filter(Boolean).join(": ");
+}
+
 export async function requestAnthropicJson({
   system,
   prompt,
@@ -114,12 +121,14 @@ export async function requestAnthropicJson({
     };
   } catch (error) {
     if (error?.name === "AbortError") throw error;
+    const detail = transportErrorDetail(error);
     return {
       ok: false,
       warning: {
         code: "ai_request_failed",
         message: "Anthropic request failed; deterministic proposals were returned.",
         severity: "warning",
+        ...(detail ? { detail } : {}),
       },
     };
   }
@@ -270,12 +279,14 @@ export async function requestAnthropicJsonWithTools({
     };
   } catch (error) {
     if (error?.name === "AbortError") throw error;
+    const detail = transportErrorDetail(error);
     return {
       ok: false,
       warning: {
         code: "ai_request_failed",
         message: "Anthropic request failed; deterministic proposals were returned.",
         severity: "warning",
+        ...(detail ? { detail } : {}),
       },
     };
   }

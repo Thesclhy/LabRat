@@ -80,6 +80,7 @@ function asArray(value) {
 function planningWarningFromError(error) {
   const errors = asArray(error?.details?.errors).slice(0, 8);
   const first = errors[0] || null;
+  const providerWarning = error?.details?.warning || null;
   const location = Number.isInteger(Number(first?.line)) ? ` at line ${Number(first.line)}` : "";
   const detailMessage = first?.message
     ? `${first.message}${location}.`
@@ -91,8 +92,31 @@ function planningWarningFromError(error) {
       detailMessage,
     ].filter(Boolean).join(" "),
     severity: "warning",
-    ...(errors.length ? { details: { errors } } : {}),
+    ...((errors.length || providerWarning) ? {
+      details: {
+        ...(errors.length ? { errors } : {}),
+        ...(providerWarning ? {
+          provider: {
+            code: providerWarning.code || null,
+            message: providerWarning.message || null,
+            detail: providerWarning.detail || null,
+          },
+        } : {}),
+      },
+    } : {}),
   };
+}
+
+function analysisThreadPlanFailure(agentRuns, analysisThreadId) {
+  const run = asArray(agentRuns).find((candidate) => (
+    asArray(candidate?.proposalRefs).some((ref) => (
+      ref?.type === "analysis_thread" && ref.id === analysisThreadId
+    ))
+    && asArray(candidate?.warnings).some((warning) => warning?.code !== "analysis_evidence_required")
+  ));
+  return run
+    ? asArray(run.warnings).filter((warning) => warning?.code !== "analysis_evidence_required").at(-1) || null
+    : null;
 }
 
 function isObject(value) {
@@ -1187,6 +1211,9 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
   let currentPlanRevision = null;
   let reply = draft.reply || "";
   if (draft.mode === "analysis_planning") {
+    // Once the durable thread is created, plan drafting is server-owned. A
+    // browser refresh or cancelled fetch must not abort the provider call.
+    res.off("close", abortOnDisconnect);
     analysisThread = await createAnalysisThread({
       store: context.store,
       project,
@@ -1219,9 +1246,9 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
           signal: requestAbortController.signal,
         });
       } catch (error) {
-        if (error?.name === "AbortError") throw error;
-        planningWarnings.push(planningWarningFromError(error));
-        reply = "I created an analysis thread, but the backend could not draft a reviewable plan. The request is preserved and can be retried after the provider or accepted data is corrected.";
+        const planningWarning = planningWarningFromError(error);
+        planningWarnings.push(planningWarning);
+        reply = `I created an analysis thread, but the backend could not draft a reviewable plan. ${planningWarning.message}`;
       }
     } else {
       planningWarnings.push({
@@ -1304,6 +1331,12 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
       warnings: planningWarnings,
       updatedBy: auth.user.id,
     });
+    if (!currentPlanRevision && planningWarnings.some((warning) => warning.code !== "analysis_evidence_required")) {
+      await context.store.updateAnalysisThread(analysisThread.id, {
+        status: "plan_failed",
+        updatedBy: auth.user.id,
+      });
+    }
     analysisThread = await context.store.findAnalysisThreadById(analysisThread.id);
     await context.store.recordAuditEvent({
       labId: project.labId,
@@ -1472,20 +1505,26 @@ async function handleAnalysisThreadById(req, res, context, analysisThreadId) {
     analysisThreadId,
     "viewer",
   );
-  const [planRevisions, analysisRuns] = await Promise.all([
+  const [planRevisions, analysisRuns, agentRuns] = await Promise.all([
     context.store.listAnalysisPlanRevisions({ analysisThreadId: analysisThread.id }),
     context.store.listAnalysisRuns({
       projectId: analysisThread.projectId,
       analysisThreadId: analysisThread.id,
     }),
+    context.store.listAgentRuns({ projectId: analysisThread.projectId }),
   ]);
+  const planFailure = !planRevisions.length && !analysisRuns.length
+    ? analysisThreadPlanFailure(agentRuns, analysisThread.id)
+    : null;
   sendJson(res, 200, {
     analysisThread: {
       ...analysisThreadSummary(analysisThread),
+      ...(planFailure ? { status: "plan_failed" } : {}),
       messages: analysisThread.messages || [],
     },
     planRevisions: planRevisions.map(analysisPlanRevisionSummary),
     analysisRuns: analysisRuns.map(analysisRunSummary),
+    planFailure,
   });
 }
 
