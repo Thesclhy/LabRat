@@ -1281,12 +1281,22 @@ describe("AnalysisReviewWorkspace", () => {
 
     expect(screen.getByText("Experiment data plan")).toBeTruthy();
     expect(screen.getByText("Experiment Browser preview")).toBeTruthy();
+    expect(screen.getByText("Validated preview · Not published")).toBeTruthy();
     expect(screen.getByText("Product yield (%)")).toBeTruthy();
     expect(screen.getByText("1 experiments · 3 new · 0 changed · 1 preserved")).toBeTruthy();
     expect(screen.getByText("-")).toBeTruthy();
     expect(screen.getByText("1 missing values across 1 experiments")).toBeTruthy();
     expect(screen.getByText(browserRevision.requestSummary)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Publish to Browser" }).hasAttribute("disabled")).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "View full screen" }));
+    expect(screen.getByRole("dialog", { name: "Experiment Browser result" }).classList.contains("is-fullscreen")).toBe(true);
+    expect(screen.getByRole("button", { name: "Exit full screen" })).toBe(document.activeElement);
+    expect(document.body.style.overflow).toBe("hidden");
+    expect(acceptResult).not.toHaveBeenCalled();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Experiment Browser result" })).toBeNull();
+    expect(screen.getByRole("button", { name: "View full screen" })).toBe(document.activeElement);
+    expect(document.body.style.overflow).toBe("");
     fireEvent.change(screen.getByLabelText("Identity action for Exp31"), {
       target: { value: "reuse" },
     });

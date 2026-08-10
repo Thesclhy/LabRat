@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { Plot } from "../charts/Plot.jsx";
 import { plotLayout } from "../charts/chartLayout.js";
@@ -482,6 +483,10 @@ function BrowserResultStage({
   identityResolutions,
   onIdentityResolutionChange,
 }) {
+  const [fullscreen, setFullscreen] = useState(false);
+  const fullscreenButtonRef = useRef(null);
+  const returnFocusRef = useRef(null);
+  const shouldRestoreFocusRef = useRef(false);
   const columns = asArray(preview?.columns);
   const requestedColumns = asArray(preview?.browserView?.visibleColumnIds);
   const visibleIds = requestedColumns.length
@@ -499,8 +504,38 @@ function BrowserResultStage({
   const failed = Boolean(error) || errors.length > 0 || ["failed", "validation_failed"].includes(run?.status);
   const ready = Boolean(result?.id && preview && !calculating && !failed);
 
-  return (
-    <section className="analysis-browser-stage" aria-label="Experiment Browser result">
+  useEffect(() => {
+    if (!fullscreen) return undefined;
+
+    const previousBodyOverflow = document.body.style.overflow;
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") setFullscreen(false);
+    };
+
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", handleKeyDown);
+    shouldRestoreFocusRef.current = true;
+    fullscreenButtonRef.current?.focus();
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [fullscreen]);
+
+  useEffect(() => {
+    if (fullscreen || !shouldRestoreFocusRef.current) return;
+    shouldRestoreFocusRef.current = false;
+    returnFocusRef.current?.focus();
+  }, [fullscreen]);
+
+  const browserStage = (
+    <section
+      className={`analysis-browser-stage${fullscreen ? " is-fullscreen" : ""}`}
+      aria-label="Experiment Browser result"
+      aria-modal={fullscreen ? "true" : undefined}
+      role={fullscreen ? "dialog" : undefined}
+    >
       <header className="analysis-result-toolbar">
         <div>
           <strong>Experiment Browser preview</strong>
@@ -511,7 +546,18 @@ function BrowserResultStage({
                 ? "Preparing reviewed experiment records"
                 : failed ? "Experiment data could not be prepared" : "Waiting for result"}
           </span>
+          {ready && <span className="analysis-browser-preview-status">Validated preview · Not published</span>}
         </div>
+        {ready && rows.length > 0 && (
+          <button
+            type="button"
+            className="analysis-browser-fullscreen-button"
+            ref={fullscreen ? fullscreenButtonRef : returnFocusRef}
+            onClick={() => setFullscreen((current) => !current)}
+          >
+            {fullscreen ? "Exit full screen" : "View full screen"}
+          </button>
+        )}
       </header>
       <div className="analysis-browser-preview">
         {calculating && (
@@ -626,6 +672,8 @@ function BrowserResultStage({
       )}
     </section>
   );
+
+  return fullscreen ? createPortal(browserStage, document.body) : browserStage;
 }
 
 export function AnalysisReviewWorkspace({
