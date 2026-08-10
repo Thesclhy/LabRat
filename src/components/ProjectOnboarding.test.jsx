@@ -550,27 +550,13 @@ describe("ProjectOnboarding", () => {
     expect(stored.analysisResultId).toBe("result_1");
   });
 
-  it("shows real reviewed Browser rows and completes onboarding", async () => {
+  it("offers the published Experiment Browser as an explicit destination", () => {
     writeProjectOnboarding("project_1", {
       ...INITIAL_PROJECT_ONBOARDING,
       step: "preview",
       workbookStatus: "published",
     });
     const onComplete = vi.fn();
-    const loadBrowserPreview = vi.fn().mockResolvedValue({
-      columns: [
-        { id: "experiment", label: "Experiment", pinned: true },
-        { id: "temperature", label: "Temperature", unit: "C", recommended: true },
-      ],
-      rows: [
-        {
-          experimentId: "exp_1",
-          label: "Exp1",
-          cells: { temperature: { value: 250, formattedValue: "250" } },
-        },
-      ],
-      totalCount: 1,
-    });
     render(
       <ProjectOnboarding
         projectId="project_1"
@@ -578,21 +564,41 @@ describe("ProjectOnboarding", () => {
           ...baseProjectState,
           experimentSnapshotHeads: [{ experimentIdentityId: "exp_1" }],
         }}
-        loadBrowserPreview={loadBrowserPreview}
         onComplete={onComplete}
       />,
     );
 
-    expect(await screen.findByText("Exp1")).toBeTruthy();
-    expect(screen.getByText("250 C")).toBeTruthy();
-    expect(loadBrowserPreview).toHaveBeenCalledWith(
-      "project_1",
-      { limit: 8 },
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    expect(screen.getByText("Your 1 experiment has been published to the Experiment Browser.")).toBeTruthy();
+    expect(screen.queryByText(/Does this look right/i)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Open Experiment Browser/i }));
+    expect(onComplete).toHaveBeenCalledWith("browser");
+    expect(readProjectOnboarding("project_1").status).toBe("completed");
+  });
+
+  it("finishes onboarding on the project Overview", () => {
+    writeProjectOnboarding("project_1", {
+      ...INITIAL_PROJECT_ONBOARDING,
+      step: "preview",
+      workbookStatus: "published",
+    });
+    const onComplete = vi.fn();
+    render(
+      <ProjectOnboarding
+        projectId="project_1"
+        projectState={{
+          ...baseProjectState,
+          experimentSnapshotHeads: [
+            { experimentIdentityId: "exp_1" },
+            { experimentIdentityId: "exp_2" },
+          ],
+        }}
+        onComplete={onComplete}
+      />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Yes, this looks right" }));
-    expect(onComplete).toHaveBeenCalled();
+    expect(screen.getByText("Your 2 experiments have been published to the Experiment Browser.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Finish onboarding/i }));
+    expect(onComplete).toHaveBeenCalledWith("overview");
     expect(readProjectOnboarding("project_1").status).toBe("completed");
   });
 
@@ -610,17 +616,11 @@ describe("ProjectOnboarding", () => {
           ...baseProjectState,
           experimentSnapshotHeads: [{ experimentIdentityId: "exp_1" }],
         }}
-        loadBrowserPreview={vi.fn().mockResolvedValue({
-          columns: [{ id: "experiment", label: "Experiment", pinned: true }],
-          rows: [{ experimentId: "exp_1", label: "Exp1", cells: {} }],
-          totalCount: 1,
-        })}
         onRequestCorrection={onRequestCorrection}
       />,
     );
 
-    await screen.findByText("Exp1");
-    fireEvent.click(screen.getByRole("button", { name: "No, something needs correcting" }));
+    fireEvent.click(screen.getByRole("button", { name: /Request a correction/i }));
     const correctionInput = screen.getByPlaceholderText("Describe what looks wrong and what should be corrected...");
     fireEvent.change(correctionInput, { target: { value: "Reaction time should be reported in minutes." } });
     fireEvent.click(screen.getByRole("button", { name: "Send onboarding answer" }));

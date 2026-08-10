@@ -10069,68 +10069,6 @@ tbody tr:hover {
   opacity: 0.55;
 }
 
-.project-onboarding-browser-preview {
-  width: min(690px, calc(100vw - 150px));
-  margin-top: 16px;
-  overflow: hidden;
-  border: 1px solid #cbd5e1;
-  border-radius: 12px;
-  background: #fff;
-}
-
-.project-onboarding-browser-preview header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  border-bottom: 1px solid #e2e8f0;
-  padding: 11px 13px;
-}
-
-.project-onboarding-browser-preview header div {
-  display: grid;
-  gap: 2px;
-}
-
-.project-onboarding-browser-preview header span,
-.project-onboarding-browser-preview header small {
-  color: #64748b;
-  font-size: 11px;
-}
-
-.project-onboarding-browser-table-wrap {
-  overflow-x: auto;
-}
-
-.project-onboarding-browser-preview table {
-  min-width: 620px;
-  font-size: 12px;
-}
-
-.project-onboarding-browser-preview th,
-.project-onboarding-browser-preview td {
-  max-width: 190px;
-  padding: 9px 11px;
-  overflow: hidden;
-  border-right: 1px solid #e2e8f0;
-  border-bottom: 1px solid #e2e8f0;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.project-onboarding-browser-preview th {
-  position: static;
-  background: #f8fafc;
-  color: #475569;
-}
-
-.project-onboarding-confirm {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 9px;
-}
-
 .project-onboarding-composer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 42px;
@@ -10212,9 +10150,6 @@ tbody tr:hover {
   }
   .project-onboarding-composer {
     padding: 12px 16px;
-  }
-  .project-onboarding-browser-preview {
-    width: calc(100vw - 100px);
   }
   .analysis-review-workspace.is-onboarding.has-result-stage .analysis-review-split {
     grid-template-rows: minmax(320px, auto) minmax(380px, auto);

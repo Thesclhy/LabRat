@@ -3516,9 +3516,14 @@ function App() {
           setRequestedAnalysisOutputTarget("experiment_browser");
           setAgentOpen(true);
         }}
-        onComplete={() => {
+        onComplete={(destination = "overview") => {
           setOnboardingRenderVersion((value) => value + 1);
-          setTab(asArray(projectState?.experimentSnapshotHeads).length ? "browser" : "overview");
+          if (destination === "browser") setBrowserSelectedExperimentIds([]);
+          setTab(
+            destination === "browser" && asArray(projectState?.experimentSnapshotHeads).length
+              ? "browser"
+              : "overview",
+          );
         }}
         onExit={openProjectDashboard}
       />

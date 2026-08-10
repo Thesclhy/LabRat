@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AnalysisReviewWorkspace } from "./AnalysisReviewWorkspace.jsx";
 import { WorkbookReviewDock } from "./WorkbookReviewDock.jsx";
 import { getAnalysisThread } from "../data/analysisApi.js";
-import { listExperimentBrowserRows } from "../data/experimentBrowserApi.js";
 import {
   INITIAL_PROJECT_ONBOARDING,
   readProjectOnboarding,
@@ -69,21 +68,6 @@ function workbookNameForSession(session) {
   return session?.workbookSummary?.workbookName || session?.fileName || "your workbook";
 }
 
-function displayCell(row, column) {
-  if (column?.id === "experiment") return row?.label || "-";
-  const cell = row?.cells?.[column?.id];
-  if (!cell || cell.value == null || cell.value === "") return "-";
-  const value = cell.formattedValue ?? cell.value;
-  return `${value}${column?.unit ? ` ${column.unit}` : ""}`;
-}
-
-function previewColumns(columns) {
-  const all = asArray(columns);
-  const preferred = all.filter((column) => column.pinned || column.recommended);
-  const selected = preferred.length ? preferred : all;
-  return selected.slice(0, 6);
-}
-
 function OnboardingMessage({ role = "assistant", children }) {
   return (
     <div className={`project-onboarding-message ${role}`}>
@@ -111,38 +95,6 @@ function ChoiceButtons({ options, onChoose, disabled = false }) {
   );
 }
 
-function BrowserPreview({ preview }) {
-  const columns = previewColumns(preview?.columns);
-  const rows = asArray(preview?.rows).slice(0, 8);
-  return (
-    <section className="project-onboarding-browser-preview" aria-label="Experiment Browser preview">
-      <header>
-        <div>
-          <span>Experiment Browser preview</span>
-          <strong>{preview?.totalCount || rows.length} experiments found</strong>
-        </div>
-        <small>Showing the first {rows.length} reviewed records</small>
-      </header>
-      <div className="project-onboarding-browser-table-wrap">
-        <table>
-          <thead>
-            <tr>
-              {columns.map((column) => <th key={column.id}>{column.label || column.id}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.experimentId || row.label}>
-                {columns.map((column) => <td key={column.id}>{displayCell(row, column)}</td>)}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
-
 export function ProjectOnboarding({
   projectId,
   projectState,
@@ -163,7 +115,6 @@ export function ProjectOnboarding({
   onRequestCorrection,
   onComplete,
   onExit,
-  loadBrowserPreview = listExperimentBrowserRows,
   loadAnalysisThread = getAnalysisThread,
   AnalysisReviewComponent = AnalysisReviewWorkspace,
 }) {
@@ -173,7 +124,6 @@ export function ProjectOnboarding({
   }));
   const [input, setInput] = useState("");
   const [uploadError, setUploadError] = useState("");
-  const [previewState, setPreviewState] = useState({ loading: false, error: "", value: null });
   const [analysisFlow, setAnalysisFlow] = useState({ loading: false, error: "", thread: null, revision: null });
   const [analysisHydrationAttempt, setAnalysisHydrationAttempt] = useState(0);
   const [pendingAnswer, setPendingAnswer] = useState(null);
@@ -282,9 +232,6 @@ export function ProjectOnboarding({
     analysisFlow.error,
     analysisFlow.thread?.id,
     analysisFlow.revision?.id,
-    previewState.loading,
-    previewState.error,
-    previewState.value,
   ]);
 
   useEffect(() => {
@@ -481,20 +428,6 @@ export function ProjectOnboarding({
       updateState({ step: "preview", workbookStatus: "published" });
     }
   }, [publishedCount, state.step]);
-
-  useEffect(() => {
-    if (state.step !== "preview" || !publishedCount || previewState.loading || previewState.value) return undefined;
-    const controller = new AbortController();
-    setPreviewState({ loading: true, error: "", value: null });
-    loadBrowserPreview(projectId, { limit: 8 }, { signal: controller.signal })
-      .then((value) => setPreviewState({ loading: false, error: "", value }))
-      .catch((error) => {
-        if (error?.name !== "AbortError") {
-          setPreviewState({ loading: false, error: error?.message || String(error), value: null });
-        }
-      });
-    return () => controller.abort();
-  }, [loadBrowserPreview, projectId, publishedCount, state.step]);
 
   const selectProjectStage = (option) => {
     respondAfterThinking(
@@ -740,11 +673,11 @@ export function ProjectOnboarding({
     });
   }, [updateState]);
 
-  const completeOnboarding = () => {
+  const completeOnboarding = (destination = "overview") => {
     const next = { ...state, status: "completed", step: "complete" };
     writeProjectOnboarding(projectId, next);
     setState(next);
-    onComplete?.();
+    onComplete?.(destination);
   };
 
   const skipOnboarding = () => {
@@ -1059,14 +992,36 @@ export function ProjectOnboarding({
 
           {state.step === "preview" && (
             <OnboardingMessage>
-              <p>Here’s how I understood your experiments. Does this look right to you?</p>
-              {previewState.loading && <div className="project-onboarding-processing"><span /> Loading reviewed experiments…</div>}
-              {previewState.error && <p className="project-onboarding-error">{previewState.error}</p>}
-              {previewState.value && <BrowserPreview preview={previewState.value} />}
-              <div className="project-onboarding-confirm">
-                <button type="button" className="project-onboarding-primary" onClick={completeOnboarding}>Yes, this looks right</button>
-                <button type="button" className="project-onboarding-secondary" onClick={() => updateState({ step: "correction" })}>No, something needs correcting</button>
-              </div>
+              <p>
+                Your {publishedCount} {publishedCount === 1 ? "experiment has" : "experiments have"} been published to the Experiment Browser.
+              </p>
+              <p>Now you can:</p>
+              <ChoiceButtons
+                options={[
+                  {
+                    value: "browser",
+                    label: "Open Experiment Browser",
+                    detail: "View and explore the records you just published.",
+                  },
+                  {
+                    value: "correction",
+                    label: "Request a correction",
+                    detail: "Describe a reviewed change without silently altering accepted data.",
+                  },
+                  {
+                    value: "overview",
+                    label: "Finish onboarding",
+                    detail: "Return to the project overview.",
+                  },
+                ]}
+                onChoose={(option) => {
+                  if (option.value === "correction") {
+                    updateState({ step: "correction" });
+                    return;
+                  }
+                  completeOnboarding(option.value);
+                }}
+              />
             </OnboardingMessage>
           )}
 
