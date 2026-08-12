@@ -31,6 +31,13 @@ and 390x844 browser QA now cover the integrated upload/review/publish path.
 
 ## Current Position
 
+Completed responsive Projects-dashboard scaling correction: desktop side panels,
+gaps, and padding now shrink fluidly with the available CSS viewport, while the
+six project-table tracks can contract without clipping the rightmost `Open`
+action. Workflow-card text is constrained to its detail-panel track instead of
+colliding at higher OS display scaling. The existing one-column layout remains
+the narrow-screen fallback; no project data or navigation behavior changed.
+
 Completed shared Experiment Browser documentation columns: editors can add an
 empty text column immediately beside `Add or update data`, then double-click
 its header or cells to edit. Enter/blur saves and Escape cancels. Definitions

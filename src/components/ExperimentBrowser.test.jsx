@@ -451,6 +451,27 @@ describe("ExperimentBrowser", () => {
     expect(loadProjection).toHaveBeenLastCalledWith("project_2", expect.objectContaining({ cursor: "next_1" }), expect.anything());
   });
 
+  it("orders Browser toolbar actions consistently with matching standard styles", async () => {
+    render(
+      <ExperimentBrowser
+        projectId="project_1"
+        loadProjection={vi.fn(async () => projection())}
+        loadDetail={vi.fn()}
+        onOpenImportReview={vi.fn()}
+        onRequestDataChange={vi.fn()}
+        {...viewApi()}
+      />,
+    );
+    await screen.findByText("Exp 1");
+    const actions = document.querySelector(".experiment-browser-toolbar-actions");
+    expect(within(actions).getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "Import workbook",
+      "Add or update data",
+      "Add column",
+    ]);
+    within(actions).getAllByRole("button").forEach((button) => expect(button.className).not.toContain("primary-action"));
+  });
+
   it("loads shared project configuration, prunes stale columns, and persists display changes", async () => {
     const sharedConfig = {
       id: "config_1",

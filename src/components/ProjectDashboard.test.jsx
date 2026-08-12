@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentPanel, ChartReviewModal, DeleteProjectModal, NewProjectModal, ProjectDashboard, ProjectOverview, Topbar, WorkbookReviewWorkspace, activeChartSpecsForProject, latestItem, mergeProjectStateForWorkspaceRefresh } from "../main.jsx";
@@ -126,6 +128,19 @@ describe("Topbar", () => {
   });
 });
 describe("ProjectDashboard", () => {
+  it("keeps the Open action inside a fluid desktop project grid", () => {
+    const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
+    const dashboardRule = css.match(/\.project-dashboard\s*\{([^}]*)\}/)?.[1] || "";
+    const tableRule = css.match(/\.project-table\s*\{([^}]*)\}/)?.[1] || "";
+    const rowRule = css.match(/\.project-table-row\s*\{([^}]*)\}/)?.[1] || "";
+    const cellRule = css.match(/\.project-table-row\s*>\s*span\s*\{([^}]*)\}/)?.[1] || "";
+
+    expect(dashboardRule).toMatch(/grid-template-columns:\s*clamp\([^;]+\) minmax\(0, 1fr\) clamp\(/);
+    expect(tableRule).toMatch(/min-width:\s*0/);
+    expect(rowRule).toMatch(/minmax\(58px, auto\)/);
+    expect(cellRule).toMatch(/min-width:\s*0/);
+  });
+
   it("renders project workflow status and opens the selected project", () => {
     const onOpenProject = vi.fn();
     const onRequestDeleteProject = vi.fn();

@@ -631,13 +631,13 @@ export function ExperimentBrowser({
             <p>{rows.length} loaded of {totalCount} accepted experiment records. Click a row for source-backed detail.</p>
           </div>
           <div className="experiment-browser-toolbar-actions">
+            {onOpenImportReview ? <button type="button" onClick={onOpenImportReview}>Import workbook</button> : null}
             {onRequestDataChange ? (
-              <button type="button" className="primary-action" onClick={onRequestDataChange}>
+              <button type="button" onClick={onRequestDataChange}>
                 Add or update data
               </button>
             ) : null}
             <button type="button" disabled={!canEditSharedConfig} onClick={addCustomColumn}>Add column</button>
-            {onOpenImportReview ? <button type="button" className="primary-action" onClick={onOpenImportReview}>Import workbook</button> : null}
           </div>
         </header>
 

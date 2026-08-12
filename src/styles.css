@@ -827,9 +827,9 @@ textarea {
 .project-dashboard {
   min-height: calc(100vh - 56px);
   display: grid;
-  grid-template-columns: 220px minmax(420px, 1fr) 340px;
-  gap: 18px;
-  padding: 18px;
+  grid-template-columns: clamp(180px, 14vw, 220px) minmax(0, 1fr) clamp(280px, 22vw, 340px);
+  gap: clamp(12px, 1.15vw, 18px);
+  padding: clamp(12px, 1.15vw, 18px);
   background: var(--bg);
 }
 .project-dashboard-rail,
@@ -899,14 +899,15 @@ textarea {
 }
 .project-table {
   display: grid;
+  min-width: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   overflow: hidden;
 }
 .project-table-row {
   display: grid;
-  grid-template-columns: minmax(220px, 1.6fr) minmax(190px, 1.2fr) 130px 90px 110px 72px;
-  gap: 12px;
+  grid-template-columns: minmax(140px, 1.6fr) minmax(128px, 1.2fr) minmax(100px, 0.9fr) minmax(58px, 0.55fr) minmax(82px, 0.75fr) minmax(58px, auto);
+  gap: clamp(6px, 0.75vw, 12px);
   align-items: center;
   width: 100%;
   border: 0;
@@ -915,6 +916,9 @@ textarea {
   padding: 11px 12px;
   color: var(--text);
   text-align: left;
+}
+.project-table-row > span {
+  min-width: 0;
 }
 .project-table-row:last-child {
   border-bottom: 0;
@@ -1037,6 +1041,15 @@ textarea {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 9px;
+}
+.project-flow-item > div {
+  display: grid;
+  min-width: 0;
+}
+.project-flow-item strong,
+.project-flow-item small {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .project-flow-item > span {
   display: grid;
@@ -8545,8 +8558,7 @@ tbody tr:hover {
 }
 .experiment-browser-filter-actions button:first-child,
 .experiment-browser-empty button,
-.experiment-browser-view-actions .primary-action,
-.experiment-browser-toolbar-actions .primary-action {
+.experiment-browser-view-actions .primary-action {
   border-color: var(--accent);
   background: var(--accent);
   color: var(--color-white);

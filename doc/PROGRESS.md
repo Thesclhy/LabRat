@@ -15,6 +15,20 @@ Keep entries concise, newest first, and include:
 
 ## 2026-08-12
 
+- Made the Projects dashboard respond to effective viewport width and OS display
+  scaling. Desktop rail/detail widths, gaps, and padding now contract fluidly;
+  project-table columns use bounded flexible tracks so the rightmost `Open`
+  action stays visible; and detail workflow text wraps within its own track
+  instead of colliding. The existing narrow-screen stacked layout is retained.
+  Focused ProjectDashboard coverage passed 60/60 and the production build
+  passed with the existing Plotly chunk-size warning.
+
+- Standardized the Experiment Browser toolbar actions. `Import workbook` now
+  appears left of `Add or update data`, followed by `Add column`, and all three
+  use the same neutral button treatment. Click behavior and permissions are
+  unchanged. Focused Experiment Browser coverage passed 14/14 and the
+  production build passed with the existing Plotly chunk-size warning.
+
 - Added shared Experiment Browser documentation columns. `Add column` appears
   immediately after `Add or update data`; editors can double-click custom
   headers/cells to edit text with Enter/blur save and Escape cancel. Custom
