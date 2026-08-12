@@ -42,21 +42,38 @@ describe("ExperimentBrowser", () => {
     const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
     const frameRule = css.match(/\.experiment-grid-frame\s*\{([^}]*)\}/)?.[1] || "";
     const viewportRule = css.match(/\.experiment-grid-viewport\s*\{([^}]*)\}/)?.[1] || "";
+    const mainRule = css.match(/\.experiment-browser-main\s*\{([^}]*)\}/)?.[1] || "";
+    const headerCellRule = css.match(/\.experiment-grid-header\s*>\s*\[role="columnheader"\]\s*\{([^}]*)\}/)?.[1] || "";
+    const headerLabelContainerRule = css.match(/\.experiment-grid-header-label\s*\{([^}]*)\}/)?.[1] || "";
+    const headerLabelRule = css.match(/\.experiment-grid-header-label\s*>\s*span:last-child\s*\{([^}]*)\}/)?.[1] || "";
+    const sortDirectionRule = css.match(/\.experiment-sort-direction\s*\{([^}]*)\}/)?.[1] || "";
+    const cellValueRule = css.match(/\.experiment-grid-cell-value\s*\{([^}]*)\}/)?.[1] || "";
 
     expect(frameRule).toMatch(/overflow-x:\s*auto/);
+    expect(frameRule).toMatch(/grid-template-rows:\s*auto minmax\(0, 1fr\)/);
     expect(viewportRule).toMatch(/overflow-x:\s*clip/);
     expect(viewportRule).toMatch(/overflow-y:\s*auto/);
+    expect(mainRule).toMatch(/grid-template-rows:\s*auto minmax\(0, 1fr\) auto/);
+    expect(headerCellRule).toMatch(/font-size:\s*12px/);
+    expect(headerLabelContainerRule).toMatch(/flex:\s*1 1 100%/);
+    expect(headerLabelContainerRule).toMatch(/width:\s*100%/);
+    expect(headerLabelRule).toMatch(/white-space:\s*normal/);
+    expect(sortDirectionRule).toMatch(/position:\s*absolute/);
+    expect(cellValueRule).toMatch(/text-overflow:\s*ellipsis/);
   });
 
-  it("loads recommended columns, supports column visibility, search, filtering, and sorting", async () => {
+  it("shows every column on first visit and supports column visibility, search, filtering, and sorting", async () => {
     const loadProjection = vi.fn(async () => projection());
     render(<ExperimentBrowser projectId="project_1" loadProjection={loadProjection} loadDetail={vi.fn()} {...viewApi()} />);
 
     expect(await screen.findByText("Exp 1")).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: /Temperature/ })).toBeTruthy();
-    expect(screen.queryByRole("columnheader", { name: /Yield/ })).toBeNull();
+    expect(screen.getByRole("columnheader", { name: /Yield/ })).toBeTruthy();
+    expect(screen.queryByText("sort")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Choose columns" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Show Yield (percent)" }));
+    expect(screen.queryByRole("columnheader", { name: /Yield/ })).toBeNull();
     fireEvent.click(screen.getByRole("checkbox", { name: "Show Yield (percent)" }));
     expect(screen.getByRole("columnheader", { name: /Yield/ })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
@@ -122,7 +139,9 @@ describe("ExperimentBrowser", () => {
     );
 
     const temperatureHeader = await screen.findByRole("columnheader", { name: /Temperature/ });
-    expect(document.querySelector(".experiment-grid-viewport")?.style.width).toBe("412px");
+    expect(document.querySelector(".experiment-grid-viewport")?.style.width).toBe("572px");
+    expect(document.querySelector(".experiment-grid-viewport")?.style.height).toBe("");
+    expect(document.querySelector(".experiment-grid-viewport")?.style.minWidth).toBe("100%");
     fireEvent.contextMenu(temperatureHeader, { clientX: 180, clientY: 90 });
     fireEvent.click(screen.getByRole("menuitem", { name: "Hide column" }));
     expect(screen.queryByRole("columnheader", { name: /Temperature/ })).toBeNull();
@@ -136,7 +155,6 @@ describe("ExperimentBrowser", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Choose columns" }));
     expect(screen.getByRole("spinbutton", { name: "Width for Temperature (degC)" }).value).toBe("220");
-    fireEvent.click(screen.getByRole("checkbox", { name: "Show Yield (percent)" }));
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
     const yieldHeader = screen.getByRole("columnheader", { name: /Yield/ });

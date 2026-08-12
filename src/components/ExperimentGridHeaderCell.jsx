@@ -128,7 +128,7 @@ export function ExperimentGridHeaderCell({
         {draggable ? <span className="experiment-column-drag-grip" aria-hidden="true">::</span> : null}
         <span>{column.label}</span>
       </span>
-      {sortDirection ? <small>{sortDirection}</small> : <small className="experiment-sort-idle">sort</small>}
+      {sortDirection ? <small className="experiment-sort-direction">{sortDirection}</small> : null}
       <span
         className="experiment-column-resize-handle"
         role="separator"

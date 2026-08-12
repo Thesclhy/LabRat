@@ -14,7 +14,7 @@ import { ExperimentGridHeaderCell } from "./ExperimentGridHeaderCell.jsx";
 
 const PAGE_LIMIT = 200;
 const ROW_HEIGHT = 42;
-const VIEWPORT_HEIGHT = 504;
+const DEFAULT_VIEWPORT_HEIGHT = 504;
 const OVERSCAN = 5;
 const MAX_COMPARE_SELECTION = 12;
 const EMPTY_SELECTION = [];
@@ -51,7 +51,7 @@ function defaultColumnSettings(columns) {
     columnId: column.id,
     order,
     width: column.pinned ? 210 : 160,
-    hidden: column.pinned ? false : !column.recommended,
+    hidden: false,
   }));
 }
 
@@ -144,8 +144,10 @@ export function ExperimentBrowser({
   const [viewError, setViewError] = useState("");
   const [dragColumnId, setDragColumnId] = useState("");
   const [dropTarget, setDropTarget] = useState(null);
+  const [viewportHeight, setViewportHeight] = useState(DEFAULT_VIEWPORT_HEIGHT);
   const projectRef = useRef(projectId);
   const columnsTriggerRef = useRef(null);
+  const gridViewportRef = useRef(null);
 
   const updateSelection = useCallback((next) => {
     setSelectedIds(next);
@@ -306,7 +308,7 @@ export function ExperimentBrowser({
     42 + visibleColumns.reduce((total, column) => total + (column.width || (column.pinned ? 210 : 160)), 0)
   ), [visibleColumns]);
   const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
-  const visibleRowCount = Math.ceil(VIEWPORT_HEIGHT / ROW_HEIGHT) + OVERSCAN * 2;
+  const visibleRowCount = Math.ceil(viewportHeight / ROW_HEIGHT) + OVERSCAN * 2;
   const virtualRows = rows.slice(startIndex, startIndex + visibleRowCount);
   const selectedColumn = columns.find((column) => column.id === filterColumnId);
   const selectedExperimentIds = useMemo(() => [...selectedIds], [selectedIds]);
@@ -317,6 +319,25 @@ export function ExperimentBrowser({
     .map((id) => detailCache.get(id))
     .filter(Boolean), [detailCache, selectedExperimentIds]);
   const activeView = browserViews.find((view) => view.id === activeViewId) || null;
+
+  useEffect(() => {
+    const viewport = gridViewportRef.current;
+    if (!viewport) return undefined;
+    const updateViewportHeight = () => {
+      const measuredHeight = Math.round(viewport.getBoundingClientRect().height);
+      if (measuredHeight <= 0) return;
+      const nextHeight = Math.max(ROW_HEIGHT, measuredHeight);
+      setViewportHeight((current) => current === nextHeight ? current : nextHeight);
+    };
+    updateViewportHeight();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateViewportHeight);
+      return () => window.removeEventListener("resize", updateViewportHeight);
+    }
+    const observer = new ResizeObserver(updateViewportHeight);
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, [rows.length]);
 
   const toggleSelection = (row) => {
     const next = new Set(selectedIds);
@@ -642,7 +663,7 @@ export function ExperimentBrowser({
         )}
         {!loading && !error && rows.length > 0 && (
           <div className="experiment-grid-frame" role="table" aria-label="Cross-experiment data table">
-            <div className="experiment-grid-header" role="row" style={{ gridTemplateColumns }}>
+            <div className="experiment-grid-header" role="row" style={{ gridTemplateColumns, width: gridWidth, minWidth: "100%" }}>
               <div role="columnheader" aria-label="Select experiments" />
               {visibleColumns.map((column, index) => {
                 const activeSort = sort.find((item) => item.columnId === column.id);
@@ -672,7 +693,12 @@ export function ExperimentBrowser({
                 );
               })}
             </div>
-            <div className="experiment-grid-viewport" style={{ height: VIEWPORT_HEIGHT, width: gridWidth }} onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}>
+            <div
+              ref={gridViewportRef}
+              className="experiment-grid-viewport"
+              style={{ width: gridWidth, minWidth: "100%" }}
+              onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+            >
               <div className="experiment-grid-spacer" style={{ height: rows.length * ROW_HEIGHT }}>
                 {virtualRows.map((row, visibleIndex) => {
                   const rowIndex = startIndex + visibleIndex;
@@ -701,7 +727,7 @@ export function ExperimentBrowser({
                         <div role="cell" className={column.pinned ? "pinned" : ""} key={column.id} title={displayCell(row, column)}>
                           {column.id === "experiment" ? (
                             <button type="button" className="experiment-row-link" aria-label={`Open ${row.label}`} onClick={(event) => { event.stopPropagation(); setDetailId(row.experimentId); }}>{row.label}</button>
-                          ) : displayCell(row, column)}
+                          ) : <span className="experiment-grid-cell-value">{displayCell(row, column)}</span>}
                         </div>
                       ))}
                     </div>

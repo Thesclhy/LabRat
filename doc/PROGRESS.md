@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-08-10
+Last reviewed: 2026-08-12
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -12,6 +12,43 @@ Keep entries concise, newest first, and include:
 - meaningful changes
 - verification
 - follow-ups or residual risk
+
+## 2026-08-12
+
+- Removed first-visit Experiment Browser auto-hiding. When no saved/default
+  BrowserView supplies column settings, every projected column now starts
+  visible; users can still hide columns manually, and saved views continue to
+  restore their explicit visibility state. Updated Browser regressions for the
+  wider initial grid and visibility toggling. Focused Browser coverage passed
+  9/9, the full frontend suite passed 282/282, and the production build passed
+  with the existing Plotly chunk-size warning. No scientific data or backend
+  projection changed.
+
+- Tightened Experiment Browser column headers so resizing gives the heading
+  label the complete cell width instead of reserving an invisible `sort` word
+  on the right. Header labels now flex across the available width, active sort
+  direction floats in the lower-right corner without changing layout, and
+  header text matches the 12 px body-cell size while retaining wrapped long
+  labels. Focused Browser coverage passed 9/9, the full frontend suite passed
+  282/282, and the production build passed with the existing Plotly chunk-size
+  warning. Browser data, column widths, sorting behavior, and persistence are
+  unchanged.
+
+## 2026-08-11
+
+- Expanded the server-backed Experiment Browser into the complete viewport
+  below the top bar. The right workspace and grid now consume all remaining
+  height, the virtual row window follows its measured viewport through
+  `ResizeObserver` instead of a fixed 504 px constant, and the shared table
+  surface fills the available width while retaining horizontal scrolling for
+  wide datasets. The header remains fixed while rows scroll, long headings
+  wrap, and body values use explicit ellipsis spans with full-value tooltips.
+  Focused Browser coverage passed 9/9, the full frontend suite passed 282/282,
+  and the production build passed with the existing Plotly chunk-size warning.
+  Live QA on a 61-experiment project at 1280x720 confirmed a 666 px Browser
+  shell, a 564 px grid frame, a dynamically measured 514 px row viewport, no
+  outer-page scrolling, stable header position after 420 px of row scrolling,
+  and no browser console warnings or errors.
 
 ## 2026-08-10
 

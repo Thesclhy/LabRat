@@ -8432,7 +8432,9 @@ tbody tr:hover {
 .experiment-browser-shell {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
-  min-height: calc(100vh - var(--topbar-height));
+  height: calc(100vh - var(--topbar-height));
+  min-height: 0;
+  overflow: hidden;
   background: var(--color-bg-app);
 }
 .experiment-browser-shell.detail-open {
@@ -8440,7 +8442,7 @@ tbody tr:hover {
 }
 .experiment-browser-sidebar {
   min-width: 0;
-  height: calc(100vh - var(--topbar-height));
+  height: 100%;
   overflow-x: hidden;
   overflow-y: auto;
   padding: 18px 14px;
@@ -8599,7 +8601,11 @@ tbody tr:hover {
 }
 .experiment-browser-main {
   position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100%;
   min-width: 0;
+  min-height: 0;
   padding: 20px;
   overflow: hidden;
 }
@@ -8991,7 +8997,12 @@ tbody tr:hover {
   color: var(--muted);
 }
 .experiment-grid-frame {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
   overflow-x: auto;
+  overflow-y: hidden;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-sm);
   background: var(--panel);
@@ -9003,9 +9014,10 @@ tbody tr:hover {
   min-width: 100%;
 }
 .experiment-grid-header {
-  position: relative;
+  position: sticky;
   z-index: 4;
-  height: 39px;
+  top: 0;
+  min-height: 48px;
   border-bottom: 1px solid var(--color-border-strong);
   background: var(--color-surface-subtle);
 }
@@ -9013,13 +9025,11 @@ tbody tr:hover {
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 6px;
   min-width: 0;
-  padding: 0 10px;
+  padding: 7px 10px;
   border-right: 1px solid var(--color-border-soft);
   color: var(--color-slate-600);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   outline: none;
   user-select: none;
@@ -9061,15 +9071,19 @@ tbody tr:hover {
 }
 .experiment-grid-header-label {
   display: flex;
-  align-items: center;
+  flex: 1 1 100%;
+  align-items: flex-start;
   gap: 5px;
+  width: 100%;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 .experiment-grid-header-label > span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  line-height: 1.25;
 }
 .experiment-column-drag-grip {
   flex: 0 0 auto;
@@ -9081,12 +9095,12 @@ tbody tr:hover {
 .experiment-column-drag-grip:active {
   cursor: grabbing;
 }
-.experiment-sort-idle {
-  opacity: 0;
-}
-.experiment-grid-header-cell:hover .experiment-sort-idle,
-.experiment-grid-header-cell:focus-visible .experiment-sort-idle {
-  opacity: 0.6;
+.experiment-sort-direction {
+  position: absolute;
+  right: 2px;
+  bottom: 1px;
+  line-height: 1;
+  pointer-events: none;
 }
 .experiment-column-resize-handle {
   position: absolute;
@@ -9107,8 +9121,7 @@ tbody tr:hover {
   cursor: default;
 }
 .experiment-grid-viewport {
-  width: max-content;
-  min-width: max-content;
+  min-height: 0;
   overflow-x: clip;
   overflow-y: auto;
 }
@@ -9143,6 +9156,13 @@ tbody tr:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
+}
+.experiment-grid-cell-value {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .experiment-select-cell {
   justify-content: center;
@@ -9317,6 +9337,7 @@ tbody tr:hover {
   .experiment-browser-shell,
   .experiment-browser-shell.detail-open {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
   }
   .experiment-browser-sidebar {
     height: auto;
@@ -9330,6 +9351,7 @@ tbody tr:hover {
     padding: 10px 2px;
   }
   .experiment-browser-main {
+    height: auto;
     padding: 12px;
   }
   .experiment-browser-toolbar {
@@ -9371,9 +9393,6 @@ tbody tr:hover {
     top: 62px;
     right: 12px;
     width: calc(100% - 24px);
-  }
-  .experiment-grid-viewport {
-    height: 420px !important;
   }
   .experiment-detail-drawer {
     inset: 0;

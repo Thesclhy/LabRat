@@ -2,7 +2,7 @@
 
 Status: complete
 Read when: checking what the next implementation slice should be.
-Last reviewed: 2026-08-10
+Last reviewed: 2026-08-12
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
 
@@ -30,6 +30,28 @@ golden workbook-to-Browser workflow. Full automated verification plus desktop
 and 390x844 browser QA now cover the integrated upload/review/publish path.
 
 ## Current Position
+
+Completed Experiment Browser first-visit visibility correction: an unsaved
+Browser now shows every available projected column instead of automatically
+hiding fields outside the recommendation set. Explicit saved/default
+BrowserViews still restore their own hidden-column settings, and manual
+hide/show behavior is unchanged.
+
+Completed Experiment Browser header-width refinement: column labels now use
+the complete resizable header-cell width instead of leaving space for an
+invisible idle-sort label. Active sort direction is overlaid without consuming
+layout width, and heading text matches the 12 px Browser body-cell size while
+long headings continue to wrap. Sorting, resizing, and BrowserView persistence
+are unchanged.
+
+Completed Experiment Browser viewport presentation milestone: the two-pane
+Browser now occupies the complete viewport below the top bar, and the right
+grid expands through all remaining height instead of using a fixed 504 px row
+viewport. Virtualization tracks the rendered viewport through
+`ResizeObserver`; the fixed header remains visible during row scrolling, long
+column headings wrap, body values truncate with ellipses and retain full-value
+tooltips, and narrow layouts use the same dynamic sizing model. Browser data,
+filters, sorting, selection, detail, and BrowserView persistence are unchanged.
 
 Completed post-publication Browser selection correction: publication-created
 BrowserViews and the frontend handoff now start with zero selected experiments,
