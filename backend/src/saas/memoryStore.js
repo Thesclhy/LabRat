@@ -44,6 +44,7 @@ export class MemorySaasStore {
     this.experimentSnapshotPublishes = new Map();
     this.browserViews = new Map();
     this.projectBrowserConfigs = new Map();
+    this.experimentAnnotations = new Map();
     this.agentRuns = new Map();
     this.analysisThreads = new Map();
     this.analysisThreadRetryReceipts = new Map();
@@ -969,6 +970,46 @@ export class MemorySaasStore {
     };
     this.projectBrowserConfigs.set(input.projectId, config);
     return copy(config);
+  }
+
+  async listExperimentAnnotations({ projectId, userId }) {
+    return [...this.experimentAnnotations.values()]
+      .filter((annotation) => annotation.projectId === projectId && annotation.userId === userId)
+      .sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt)))
+      .map(copy);
+  }
+
+  async findExperimentAnnotation({ projectId, userId, experimentId }) {
+    const annotation = [...this.experimentAnnotations.values()].find((candidate) => (
+      candidate.projectId === projectId
+      && candidate.userId === userId
+      && candidate.experimentId === experimentId
+    ));
+    return copy(annotation || null);
+  }
+
+  async saveExperimentAnnotation(input) {
+    const existing = await this.findExperimentAnnotation(input);
+    const now = nowIso();
+    const annotation = {
+      id: existing?.id || input.id || makeId("experiment_annotation"),
+      labId: input.labId,
+      projectId: input.projectId,
+      userId: input.userId,
+      experimentId: input.experimentId,
+      schemaVersion: "labrat.experimentAnnotation.v1",
+      note: String(input.note || ""),
+      color: input.color || "amber",
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+    };
+    this.experimentAnnotations.set(annotation.id, annotation);
+    return copy(annotation);
+  }
+
+  async deleteExperimentAnnotation({ projectId, userId, experimentId }) {
+    const annotation = await this.findExperimentAnnotation({ projectId, userId, experimentId });
+    return annotation ? this.experimentAnnotations.delete(annotation.id) : false;
   }
 
   async createAgentRun(input) {

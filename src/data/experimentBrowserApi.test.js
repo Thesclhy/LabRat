@@ -1,11 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createExperimentBrowserView,
+  deleteExperimentAnnotation,
   deleteExperimentBrowserView,
   getExperimentBrowserDetail,
   getProjectBrowserConfig,
   listExperimentBrowserRows,
   listExperimentBrowserViews,
+  listExperimentAnnotations,
+  saveExperimentAnnotation,
   updateExperimentBrowserView,
   updateProjectBrowserConfig,
 } from "./experimentBrowserApi.js";
@@ -23,6 +26,7 @@ describe("experimentBrowserApi", () => {
       sort: [{ columnId: "experiment", direction: "asc" }],
       cursor: "cursor_1",
       limit: 125,
+      starredOnly: true,
     }, { fetch });
 
     const [endpoint, options] = fetch.mock.calls[0];
@@ -35,7 +39,23 @@ describe("experimentBrowserApi", () => {
     expect(JSON.parse(url.searchParams.get("sort"))).toEqual([{ columnId: "experiment", direction: "asc" }]);
     expect(url.searchParams.get("cursor")).toBe("cursor_1");
     expect(url.searchParams.get("limit")).toBe("125");
+    expect(url.searchParams.get("starredOnly")).toBe("true");
     expect(options.credentials).toBe("include");
+  });
+
+  it("saves and removes personal experiment annotations through project-scoped paths", async () => {
+    const fetch = vi.fn(async () => ok({ experimentAnnotation: { experimentId: "experiment / 1" } }));
+    await saveExperimentAnnotation("project / 1", "experiment / 1", { note: "Important", color: "blue" }, { fetch });
+    await deleteExperimentAnnotation("project / 1", "experiment / 1", { fetch });
+    await listExperimentAnnotations("project / 1", { fetch });
+
+    expect(fetch.mock.calls.map(([endpoint]) => endpoint)).toEqual([
+      "/api/projects/project%20%2F%201/experiments/experiment%20%2F%201/annotation",
+      "/api/projects/project%20%2F%201/experiments/experiment%20%2F%201/annotation",
+      "/api/projects/project%20%2F%201/experiment-annotations",
+    ]);
+    expect(fetch.mock.calls.map(([, options]) => options.method || "GET")).toEqual(["PUT", "DELETE", "GET"]);
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ note: "Important", color: "blue" });
   });
 
   it("loads detail through the project-scoped experiment path", async () => {

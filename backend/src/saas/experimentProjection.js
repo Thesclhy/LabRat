@@ -95,8 +95,8 @@ function canonicalSort(item) {
   };
 }
 
-function cursorSignature({ projectId, search, filters, sort }) {
-  return stableDataHash({ projectId, search: text(search).toLowerCase(), filters, sort });
+function cursorSignature({ projectId, search, filters, sort, starredOnly }) {
+  return stableDataHash({ projectId, search: text(search).toLowerCase(), filters, sort, starredOnly: Boolean(starredOnly) });
 }
 
 function decodeCursor(cursor, signature) {
@@ -259,7 +259,7 @@ function summarizedRange(sourceRef) {
   };
 }
 
-function buildRows(entries, columns) {
+function buildRows(entries, columns, annotationsByExperimentId = new Map()) {
   const fieldColumnIds = new Set(columns.slice(1).map((column) => column.id));
   return entries.map(({ head, snapshot, identity, record }) => {
     const cells = Object.fromEntries([...fieldColumnIds].map((columnId) => [columnId, null]));
@@ -274,6 +274,7 @@ function buildRows(entries, columns) {
         warningCount: asArray(field.warnings).length,
       };
     });
+    const annotation = annotationsByExperimentId.get(identity.id) || null;
     return {
       experimentId: identity.id,
       label: identity.canonicalLabel || record.label || identity.id,
@@ -288,6 +289,11 @@ function buildRows(entries, columns) {
         + asArray(record.series).reduce((total, series) => total + asArray(series.warnings).length, 0),
       sourceRanges: asArray(record.sourceRefs).map(summarizedRange),
       headId: head.id,
+      annotation: annotation ? {
+        note: annotation.note || "",
+        color: annotation.color || "amber",
+        updatedAt: annotation.updatedAt || null,
+      } : null,
     };
   });
 }
@@ -347,16 +353,20 @@ export function buildExperimentProjection({
   search = "",
   filters = [],
   sort = [],
+  experimentAnnotations = [],
+  starredOnly = false,
   cursor = null,
   limit = DEFAULT_LIMIT,
 } = {}) {
   const entries = resolveActiveExperimentRecords({ projectId, dataSnapshots, experimentIdentities, experimentSnapshotHeads });
   const columns = buildColumns(entries);
-  const allRows = buildRows(entries, columns);
+  const annotationsByExperimentId = new Map(asArray(experimentAnnotations).map((annotation) => [annotation.experimentId, annotation]));
+  const allRows = buildRows(entries, columns, annotationsByExperimentId);
   const normalizedSearch = text(search).toLowerCase();
   const normalizedFilters = asArray(filters).map(canonicalFilter).filter((filter) => filter.columnId);
   const normalizedSort = asArray(sort).map(canonicalSort).slice(0, 3);
   const filteredRows = allRows.filter((row) => {
+    if (starredOnly && !row.annotation) return false;
     if (normalizedSearch) {
       const haystack = [
         row.label,
@@ -382,7 +392,7 @@ export function buildExperimentProjection({
   });
 
   const pageLimit = Math.min(Math.max(Number.parseInt(limit, 10) || DEFAULT_LIMIT, 1), MAX_LIMIT);
-  const signature = cursorSignature({ projectId, search: normalizedSearch, filters: normalizedFilters, sort: normalizedSort });
+  const signature = cursorSignature({ projectId, search: normalizedSearch, filters: normalizedFilters, sort: normalizedSort, starredOnly });
   const offset = decodeCursor(cursor, signature);
   const rows = filteredRows.slice(offset, offset + pageLimit);
   const nextOffset = offset + rows.length;

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -34,6 +34,10 @@ function viewApi(overrides = {}) {
       projectBrowserConfig: { id: "config_1", version: request.expectedVersion + 1, payload: request.payload },
       canEdit: true,
     })),
+    saveAnnotation: vi.fn(async (_projectId, experimentId, annotation) => ({
+      experimentAnnotation: { experimentId, ...annotation, updatedAt: "2026-08-12T12:00:00.000Z" },
+    })),
+    deleteAnnotation: vi.fn(async () => ({ deleted: true })),
     ...overrides,
   };
 }
@@ -117,6 +121,34 @@ describe("ExperimentBrowser", () => {
     await waitFor(() => expect(screen.queryByText("Saving layout…")).toBeNull());
   });
 
+  it("stars, annotates, colors, filters, and unstars experiments through the existing rows", async () => {
+    const api = viewApi();
+    const loadProjection = vi.fn(async (_projectId, query = {}) => (
+      query.starredOnly
+        ? projection({ rows: [{ ...rows[0], annotation: { note: "Follow up", color: "purple" } }] })
+        : projection()
+    ));
+    render(<ExperimentBrowser projectId="project_1" loadProjection={loadProjection} loadDetail={vi.fn()} {...api} />);
+
+    await screen.findByText("Exp 1");
+    fireEvent.click(screen.getByRole("button", { name: "Star Exp 1" }));
+    const popover = screen.getByRole("dialog", { name: "Annotation for Exp 1" });
+    fireEvent.change(within(popover).getByPlaceholderText("Why does this experiment matter?"), { target: { value: "Follow up" } });
+    fireEvent.click(within(popover).getByRole("radio", { name: "purple" }));
+    fireEvent.click(within(popover).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(api.saveAnnotation).toHaveBeenCalledWith("project_1", "exp_1", { note: "Follow up", color: "purple" }));
+    const starredButton = await screen.findByRole("button", { name: "Edit star for Exp 1" });
+    expect(starredButton.title).toBe("Follow up");
+    expect(screen.getByRole("row", { name: /Exp 1/ }).className).toContain("annotation-purple");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Starred only" }));
+    await waitFor(() => expect(loadProjection).toHaveBeenLastCalledWith("project_1", expect.objectContaining({ starredOnly: true }), expect.anything()));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit star for Exp 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Unstar" }));
+    await waitFor(() => expect(api.deleteAnnotation).toHaveBeenCalledWith("project_1", "exp_1"));
+    expect(screen.queryByText("Exp 1")).toBeNull();
+  });
+
   it("shows every column on first visit and supports column visibility, search, filtering, and sorting", async () => {
     const loadProjection = vi.fn(async () => projection());
     render(<ExperimentBrowser projectId="project_1" loadProjection={loadProjection} loadDetail={vi.fn()} {...viewApi()} />);
@@ -151,27 +183,23 @@ describe("ExperimentBrowser", () => {
     }), expect.anything()));
   });
 
-  it("selects rows and loads full experiment detail only when a row is opened", async () => {
+  it("opens full experiment detail from the row without rendering comparison checkboxes", async () => {
     const loadDetail = vi.fn(async () => ({
       experiment: { id: "exp_1", canonicalLabel: "Exp 1", aliases: [] },
       dataSnapshot: { id: "snapshot_1" },
       record: { fields: [], series: [], warnings: [], sourceRefs: [] },
     }));
-    const onSelectionChange = vi.fn();
     render(
       <ExperimentBrowser
         projectId="project_1"
         loadProjection={vi.fn(async () => projection())}
         loadDetail={loadDetail}
-        onSelectionChange={onSelectionChange}
         {...viewApi()}
       />,
     );
 
     const row = await screen.findByRole("row", { name: /Exp 1/ });
-    fireEvent.click(within(row).getByRole("checkbox", { name: "Select Exp 1" }));
-    expect(onSelectionChange).toHaveBeenLastCalledWith(["exp_1"]);
-    expect(loadDetail).not.toHaveBeenCalled();
+    expect(within(row).queryByRole("checkbox")).toBeNull();
 
     fireEvent.click(within(row).getByRole("button", { name: "Open Exp 1" }));
     await waitFor(() => expect(loadDetail).toHaveBeenCalledWith("project_1", "exp_1", expect.anything()));
@@ -370,7 +398,6 @@ describe("ExperimentBrowser", () => {
       filters: sharedConfig.payload.filters,
       sort: sharedConfig.payload.sort,
     }), expect.anything()));
-    expect(screen.queryByText("1 selected")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Choose columns" }));
     expect(screen.queryByText("deleted:column")).toBeNull();
@@ -383,57 +410,4 @@ describe("ExperimentBrowser", () => {
     })));
   });
 
-  it("keeps comparison selection across search changes and lazily loads selected details", async () => {
-    const loadProjection = vi.fn(async () => projection());
-    const loadDetail = vi.fn(async (_projectId, experimentId) => ({
-      experiment: { id: experimentId, canonicalLabel: "Exp 1" },
-      dataSnapshot: { id: "snapshot_1" },
-      record: {
-        fields: [{ fieldKey: "temperature", displayName: "Temperature", valueType: "number", value: 250, formattedValue: "250", unit: "degC" }],
-        series: [{ seriesKey: "rate", label: "Rate", points: [{ x: 0, y: 1 }] }],
-        warnings: [],
-        sourceRefs: [{ sourceDocumentId: "source_1", sheet: "Runs", range: "A1:D4" }],
-      },
-    }));
-    render(<ExperimentBrowser projectId="project_1" loadProjection={loadProjection} loadDetail={loadDetail} {...viewApi()} />);
-
-    const row = await screen.findByRole("row", { name: /Exp 1/ });
-    fireEvent.click(within(row).getByRole("checkbox", { name: "Select Exp 1" }));
-    expect(screen.getByText("1 selected")).toBeTruthy();
-    expect(loadDetail).not.toHaveBeenCalled();
-
-    fireEvent.change(screen.getByLabelText("Search experiments"), { target: { value: "hidden by query" } });
-    fireEvent.submit(screen.getByRole("search"));
-    await waitFor(() => expect(loadProjection).toHaveBeenLastCalledWith("project_1", expect.objectContaining({ search: "hidden by query" }), expect.anything()));
-    expect(screen.getByText("1 selected")).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Compare selected experiments" }));
-    await waitFor(() => expect(loadDetail).toHaveBeenCalledWith("project_1", "exp_1", expect.anything()));
-    const comparison = await screen.findByRole("region", { name: "Experiment comparison" });
-    expect(within(comparison).getByRole("columnheader", { name: "Temperature (degC)" })).toBeTruthy();
-  });
-
-  it("does not echo controlled initial selection back to the parent during render", async () => {
-    const onSelectionChange = vi.fn();
-    function Harness() {
-      const [selection, setSelection] = useState(["exp_1"]);
-      return (
-        <ExperimentBrowser
-          projectId="project_1"
-          initialSelectedExperimentIds={selection}
-          onSelectionChange={(next) => {
-            onSelectionChange(next);
-            setSelection(next);
-          }}
-          loadProjection={vi.fn(async () => projection())}
-          loadDetail={vi.fn()}
-          {...viewApi()}
-        />
-      );
-    }
-    render(<Harness />);
-
-    expect(await screen.findByText("1 selected")).toBeTruthy();
-    expect(onSelectionChange).not.toHaveBeenCalled();
-  });
 });

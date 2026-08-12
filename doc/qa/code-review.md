@@ -36,6 +36,8 @@ Last reviewed: 2026-07-16
 - [ ] ProjectBrowserConfig stores shared display state only, is version-checked,
       and never contains authoritative values; historical BrowserViews remain
       owner-scoped provenance only.
+- [ ] Experiment annotations are owner-isolated, bounded, and never expose the
+      note, color, or annotator identity to another project user.
 
 ## Charts And Manuscript
 

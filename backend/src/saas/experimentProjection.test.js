@@ -192,6 +192,33 @@ test("sorts numeric-looking values numerically and keeps missing values last in 
   assert.deepEqual(descending.rows.map((row) => row.label), ["Exp 3", "Exp 1", "Exp 2"]);
 });
 
+test("attaches only supplied personal annotations and filters starred rows before pagination", () => {
+  const projectionState = fixture();
+  const experimentAnnotations = [{
+    experimentId: "exp_2",
+    note: "Personal follow-up",
+    color: "purple",
+    updatedAt: "2026-08-12T12:00:00.000Z",
+  }];
+  const projection = buildExperimentProjection({
+    projectId: "project_1",
+    ...projectionState,
+    experimentAnnotations,
+    starredOnly: true,
+    limit: 1,
+  });
+
+  assert.equal(projection.totalCount, 1);
+  assert.equal(projection.rows.length, 1);
+  assert.equal(projection.rows[0].experimentId, "exp_2");
+  assert.deepEqual(projection.rows[0].annotation, {
+    note: "Personal follow-up",
+    color: "purple",
+    updatedAt: "2026-08-12T12:00:00.000Z",
+  });
+  assert.equal(projection.nextCursor, null);
+});
+
 test("returns full active experiment detail lazily and rejects inactive or cross-project ids", () => {
   const detail = getExperimentProjectionDetail({ projectId: "project_1", experimentId: "exp_1", ...fixture() });
   assert.equal(detail.experiment.id, "exp_1");

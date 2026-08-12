@@ -374,6 +374,22 @@ function projectBrowserConfigFromRow(row) {
   };
 }
 
+function experimentAnnotationFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    userId: row.user_id,
+    experimentId: row.experiment_id,
+    schemaVersion: row.schema_version,
+    note: row.note || "",
+    color: row.color,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 function experimentSnapshotPublishFromRow(row) {
   if (!row) return null;
   return {
@@ -1905,6 +1921,56 @@ export class PostgresSaasStore {
       });
     }
     return projectBrowserConfigFromRow(result.rows[0]);
+  }
+
+  async listExperimentAnnotations({ projectId, userId }) {
+    const result = await this.query(
+      `select * from experiment_annotations
+       where project_id = $1 and user_id = $2
+       order by updated_at desc`,
+      [projectId, userId],
+    );
+    return result.rows.map(experimentAnnotationFromRow);
+  }
+
+  async findExperimentAnnotation({ projectId, userId, experimentId }) {
+    const result = await this.query(
+      `select * from experiment_annotations
+       where project_id = $1 and user_id = $2 and experiment_id = $3`,
+      [projectId, userId, experimentId],
+    );
+    return experimentAnnotationFromRow(result.rows[0]);
+  }
+
+  async saveExperimentAnnotation(input) {
+    const result = await this.query(
+      `insert into experiment_annotations
+       (id, lab_id, project_id, user_id, experiment_id, schema_version, note, color, created_at, updated_at)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, now(), now())
+       on conflict (project_id, user_id, experiment_id)
+       do update set note = excluded.note, color = excluded.color, updated_at = now()
+       returning *`,
+      [
+        input.id || makeId("experiment_annotation"),
+        input.labId,
+        input.projectId,
+        input.userId,
+        input.experimentId,
+        input.schemaVersion || "labrat.experimentAnnotation.v1",
+        String(input.note || ""),
+        input.color || "amber",
+      ],
+    );
+    return experimentAnnotationFromRow(result.rows[0]);
+  }
+
+  async deleteExperimentAnnotation({ projectId, userId, experimentId }) {
+    const result = await this.query(
+      `delete from experiment_annotations
+       where project_id = $1 and user_id = $2 and experiment_id = $3`,
+      [projectId, userId, experimentId],
+    );
+    return result.rowCount > 0;
   }
 
   async createAgentRun(input) {

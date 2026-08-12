@@ -31,6 +31,22 @@ and 390x844 browser QA now cover the integrated upload/review/publish path.
 
 ## Current Position
 
+Completed Experiment Browser checkbox removal: the row-selection checkbox and
+its transient comparison tray are retired. The leading row control now contains
+only the personal annotation star, while opening a row still provides its full
+experiment detail. This removes presentation-only comparison state and does not
+change accepted snapshots, shared layout, filters, or annotations.
+
+Completed personal Experiment Browser annotations milestone: every project user
+can independently star an active experiment, add a bounded note, and choose an
+amber, red, green, blue, purple, or pink row highlight. Clicking the row star
+opens the existing-table annotation popover; hovering a starred control shows
+its note, and Unstar deletes the annotation without touching scientific data.
+The sidebar's Starred-only option is evaluated by the backend before count,
+cursor, and pagination. Persistence and projection reads are always keyed by
+the authenticated user, so other project members see neither the star, note,
+color, nor annotator identity.
+
 Completed Experiment Browser refresh-stability correction: sorting or applying
 a shared query no longer unmounts and replaces an already populated grid. The
 table remains visible and marked busy while refreshed rows arrive, preserving
@@ -74,13 +90,13 @@ viewport. Virtualization tracks the rendered viewport through
 `ResizeObserver`; the fixed header remains visible during row scrolling, long
 column headings wrap, body values truncate with ellipses and retain full-value
 tooltips, and narrow layouts use the same dynamic sizing model. Browser data,
-filters, sorting, selection, detail, and BrowserView persistence are unchanged.
+filters, sorting, detail, and BrowserView persistence are unchanged.
 
-Completed post-publication Browser selection correction: publication-created
-BrowserViews and the frontend handoff now start with zero selected experiments,
-including when opening an older generated view that persisted all affected ids.
-The generated view's columns, filters, and sort still load, while later explicit
-selection or manual saved-view loading retains the personal comparison workflow.
+Historical post-publication Browser selection correction (now superseded by
+checkbox removal): publication-created BrowserViews and the frontend handoff
+were changed to start with zero selected experiments. BrowserViews still retain
+that historical field for contract compatibility, but the active Browser no
+longer restores or presents comparison selection.
 
 Completed onboarding publication-success clarification: publishing experiments
 is the final approval boundary, so onboarding no longer presents a second
@@ -312,8 +328,10 @@ Implemented:
 - Historical Milestone 3 experiment-record DataPlan preview (retired after the
   record-patch cutover).
 - Milestone 4 transactional publish: migration/store parity, backend evidence re-read and deterministic re-execution, mandatory idempotency, stale-preview recovery, atomic accepted DataPlan/DataSnapshot plus identity/head persistence, audit receipts, editor authorization, and a locked frontend success state.
-- Milestone 5 Snapshot-backed Experiment Browser: accepted-snapshot/head-only projection, project-isolated list/detail APIs, deterministic unit-aware recommended columns, cursor pagination, typed search/filter/sort, virtualized rows, lazy detail, selection, and read-only source evidence navigation.
-- Milestone 6 saved views and comparison: owner-isolated personal BrowserView CRUD, complete column configuration, default/load/save/rename/delete controls, persistent cross-query selection, and a lazy source-backed scalar/series comparison table without unit coercion.
+- Milestone 5 Snapshot-backed Experiment Browser: accepted-snapshot/head-only projection, project-isolated list/detail APIs, deterministic unit-aware recommended columns, cursor pagination, typed search/filter/sort, virtualized rows, lazy detail, and read-only source evidence navigation.
+- Historical Milestone 6 saved views and comparison was implemented, then
+  superseded by the shared project Browser configuration and the retirement of
+  row-selection checkboxes and the transient comparison tray.
 - Milestone 7 legacy retirement and golden workflow: removed aggregate dataset/mapping/analysis/observation stores, routes, helpers, and UI contracts; removed unscoped normalize/semantic-map/generic chart endpoints; added migration 011; made ChartSpec validation/rendering source-only; added golden workbook upload-review-draft-publish-reload-Browser coverage; retained source-backed chart/Manuscript workflows; accepted natural-language documentation exclusion; and stabilized local in-memory development sessions by running the backend without file-watch restarts.
 - Post-milestone regression hardening: direct project-content summaries no longer create confirmation-gated Browser actions while explicit upload/chart intent keeps priority; Project Overview reports pending/confirmed regions and always opens the uploaded-workbook chooser before loading a review session; Ctrl/Meta selection adds without cancellation; Experiment Browser uses one horizontal scroll owner; and grouped two-row workbook headers preserve all child fields plus parent/leaf header provenance through publish and Browser projection.
 - The reviewed-analysis architecture is implemented: backend intent routing,

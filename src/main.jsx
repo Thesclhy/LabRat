@@ -2607,7 +2607,6 @@ function App() {
   const [workbookReviewDraftRegions, setWorkbookReviewDraftRegions] = useState([]);
   const [activeWorkbookReviewDraftRegionId, setActiveWorkbookReviewDraftRegionId] = useState("");
   const [workbookReviewFocusSelection, setWorkbookReviewFocusSelection] = useState(null);
-  const [browserSelectedExperimentIds, setBrowserSelectedExperimentIds] = useState([]);
   const [backendChartInterpretState, setBackendChartInterpretState] = useState({ loading: false, result: null, error: "" });
   const resetReviewState = () => {
     setBackendChartInterpretState({ loading: false, result: null, error: "" });
@@ -2616,7 +2615,6 @@ function App() {
     setWorkbookReviewDraftRegions([]);
     setActiveWorkbookReviewDraftRegionId("");
     setWorkbookReviewFocusSelection(null);
-    setBrowserSelectedExperimentIds([]);
     setRequestedAnalysisOutputTarget("");
     setAnalysisReviewState(null);
   };
@@ -3382,7 +3380,6 @@ function App() {
     });
     const state = await getServerProjectState(activeProjectId);
     applyProjectWorkspaceRefresh(state);
-    setBrowserSelectedExperimentIds([]);
     setTab("browser");
     return response;
   };
@@ -3511,7 +3508,6 @@ function App() {
         }}
         onComplete={(destination = "overview") => {
           setOnboardingRenderVersion((value) => value + 1);
-          if (destination === "browser") setBrowserSelectedExperimentIds([]);
           setTab(
             destination === "browser" && asArray(projectState?.experimentSnapshotHeads).length
               ? "browser"
@@ -3556,8 +3552,6 @@ function App() {
       />}
       {tab === "browser" && <ExperimentBrowser
         projectId={activeProjectId}
-        initialSelectedExperimentIds={browserSelectedExperimentIds}
-        onSelectionChange={setBrowserSelectedExperimentIds}
         onOpenImportReview={openWorkbookUpload}
         onRequestDataChange={openExperimentBrowserDataRequest}
         onOpenSourceRange={focusExperimentBrowserSource}

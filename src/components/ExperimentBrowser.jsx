@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  deleteExperimentAnnotation,
   getExperimentBrowserDetail,
   getProjectBrowserConfig,
   listExperimentBrowserRows,
+  saveExperimentAnnotation,
   updateProjectBrowserConfig,
 } from "../data/experimentBrowserApi.js";
+import { ExperimentAnnotationStar } from "./ExperimentAnnotationStar.jsx";
 import { ExperimentColumnsDrawer } from "./ExperimentColumnsDrawer.jsx";
-import { ExperimentCompareTray } from "./ExperimentCompareTray.jsx";
 import { ExperimentDetailDrawer } from "./ExperimentDetailDrawer.jsx";
 import { ExperimentGridHeaderCell } from "./ExperimentGridHeaderCell.jsx";
 
@@ -14,8 +16,6 @@ const PAGE_LIMIT = 200;
 const ROW_HEIGHT = 42;
 const DEFAULT_VIEWPORT_HEIGHT = 504;
 const OVERSCAN = 5;
-const MAX_COMPARE_SELECTION = 12;
-const EMPTY_SELECTION = [];
 const MIN_COLUMN_WIDTH = 60;
 const MAX_COLUMN_WIDTH = 800;
 
@@ -93,8 +93,6 @@ function autoFitColumnWidth(column, rows) {
 
 export function ExperimentBrowser({
   projectId,
-  initialSelectedExperimentIds = EMPTY_SELECTION,
-  onSelectionChange,
   onOpenImportReview,
   onRequestDataChange,
   onOpenSourceRange,
@@ -102,6 +100,8 @@ export function ExperimentBrowser({
   loadDetail = getExperimentBrowserDetail,
   loadSharedConfig = getProjectBrowserConfig,
   saveSharedConfig = updateProjectBrowserConfig,
+  saveAnnotation = saveExperimentAnnotation,
+  deleteAnnotation = deleteExperimentAnnotation,
 }) {
   const [columns, setColumns] = useState([]);
   const [columnSettings, setColumnSettings] = useState([]);
@@ -115,21 +115,17 @@ export function ExperimentBrowser({
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState([]);
   const [sort, setSort] = useState([]);
+  const [starredOnly, setStarredOnly] = useState(false);
   const [filterColumnId, setFilterColumnId] = useState("");
   const [filterOperator, setFilterOperator] = useState("contains");
   const [filterInput, setFilterInput] = useState("");
   const [columnsOpen, setColumnsOpen] = useState(false);
-  const [selectedIds, setSelectedIds] = useState(() => new Set(initialSelectedExperimentIds));
-  const [summariesById, setSummariesById] = useState(() => new Map());
   const [scrollTop, setScrollTop] = useState(0);
   const [detailId, setDetailId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
   const [detailCache, setDetailCache] = useState(() => new Map());
-  const [compareOpen, setCompareOpen] = useState(false);
-  const [compareLoading, setCompareLoading] = useState(false);
-  const [compareError, setCompareError] = useState("");
   const [viewLoading, setViewLoading] = useState(false);
   const [viewSaving, setViewSaving] = useState(false);
   const [viewError, setViewError] = useState("");
@@ -144,15 +140,6 @@ export function ExperimentBrowser({
   const columnsTriggerRef = useRef(null);
   const gridViewportRef = useRef(null);
   const lastSavedPayloadRef = useRef("");
-
-  const updateSelection = useCallback((next) => {
-    setSelectedIds(next);
-    onSelectionChange?.([...next]);
-  }, [onSelectionChange]);
-
-  useEffect(() => {
-    setSelectedIds(new Set(initialSelectedExperimentIds));
-  }, [initialSelectedExperimentIds]);
 
   useEffect(() => {
     if (!projectId) {
@@ -197,6 +184,7 @@ export function ExperimentBrowser({
         search,
         filters,
         sort,
+        starredOnly,
         cursor: cursor || null,
         limit: PAGE_LIMIT,
       }, { signal });
@@ -204,14 +192,6 @@ export function ExperimentBrowser({
       const responseRows = asArray(response?.rows);
       setColumns(responseColumns);
       setRows((current) => append ? [...current, ...responseRows] : responseRows);
-      setSummariesById((current) => {
-        const next = new Map(current);
-        responseRows.forEach((row) => next.set(row.experimentId, {
-          experimentId: row.experimentId,
-          label: row.label,
-        }));
-        return next;
-      });
       setTotalCount(Number(response?.totalCount) || 0);
       setNextCursor(response?.nextCursor || null);
       if (!append) {
@@ -227,7 +207,7 @@ export function ExperimentBrowser({
     } finally {
       append ? setLoadingMore(false) : setLoading(false);
     }
-  }, [filters, loadProjection, projectId, search, sort]);
+  }, [filters, loadProjection, projectId, search, sort, starredOnly]);
 
   useEffect(() => {
     if (!projectId) {
@@ -243,7 +223,6 @@ export function ExperimentBrowser({
       setDetailId(null);
       setDetail(null);
       setDetailCache(new Map());
-      setCompareOpen(false);
       setScrollTop(0);
       setSharedConfigLoaded(false);
       return undefined;
@@ -309,13 +288,6 @@ export function ExperimentBrowser({
   const visibleRowCount = Math.ceil(viewportHeight / ROW_HEIGHT) + OVERSCAN * 2;
   const virtualRows = rows.slice(startIndex, startIndex + visibleRowCount);
   const selectedColumn = columns.find((column) => column.id === filterColumnId);
-  const selectedExperimentIds = useMemo(() => [...selectedIds], [selectedIds]);
-  const selectedSummaries = useMemo(() => selectedExperimentIds.map((id) => (
-    summariesById.get(id) || { experimentId: id, label: id }
-  )), [selectedExperimentIds, summariesById]);
-  const compareDetails = useMemo(() => selectedExperimentIds
-    .map((id) => detailCache.get(id))
-    .filter(Boolean), [detailCache, selectedExperimentIds]);
   useEffect(() => {
     if (!projectId || !sharedConfigLoaded || !canEditSharedConfig || !columnSettings.length || viewSaving) return undefined;
     const payload = { columns: columnSettings, filters, sort };
@@ -376,59 +348,23 @@ export function ExperimentBrowser({
     return () => observer.disconnect();
   }, [rows.length]);
 
-  const toggleSelection = (row) => {
-    const next = new Set(selectedIds);
-    if (next.has(row.experimentId)) {
-      next.delete(row.experimentId);
-    } else if (next.size < MAX_COMPARE_SELECTION) {
-      next.add(row.experimentId);
-      setSummariesById((current) => new Map(current).set(row.experimentId, {
-        experimentId: row.experimentId,
-        label: row.label,
-      }));
-    } else {
-      setCompareError(`Select up to ${MAX_COMPARE_SELECTION} experiments for comparison.`);
-      return;
-    }
-    if (!next.size) setCompareOpen(false);
-    setCompareError("");
-    updateSelection(next);
+  const updateRowAnnotation = (experimentId, annotation) => {
+    setRows((current) => current.flatMap((row) => {
+      if (row.experimentId !== experimentId) return [row];
+      if (!annotation && starredOnly) return [];
+      return [{ ...row, annotation }];
+    }));
+    if (!annotation && starredOnly) setTotalCount((current) => Math.max(0, current - 1));
   };
 
-  const removeSelection = (experimentId) => {
-    const next = new Set(selectedIds);
-    next.delete(experimentId);
-    if (!next.size) setCompareOpen(false);
-    updateSelection(next);
+  const saveRowAnnotation = async (row, annotation) => {
+    const response = await saveAnnotation(projectId, row.experimentId, annotation);
+    updateRowAnnotation(row.experimentId, response?.experimentAnnotation || annotation);
   };
 
-  const clearSelection = () => {
-    setCompareOpen(false);
-    setCompareError("");
-    updateSelection(new Set());
-  };
-
-  const openComparison = async () => {
-    const ids = [...selectedIds];
-    if (!ids.length) return;
-    setCompareOpen(true);
-    setCompareError("");
-    const missingIds = ids.filter((id) => !detailCache.has(id));
-    if (!missingIds.length) return;
-    const controller = new AbortController();
-    setCompareLoading(true);
-    try {
-      const loaded = await Promise.all(missingIds.map((id) => loadDetail(projectId, id, { signal: controller.signal })));
-      setDetailCache((current) => {
-        const next = new Map(current);
-        missingIds.forEach((id, index) => next.set(id, loaded[index]));
-        return next;
-      });
-    } catch (requestError) {
-      if (requestError?.name !== "AbortError") setCompareError(errorMessage(requestError, "Selected experiments could not be compared."));
-    } finally {
-      setCompareLoading(false);
-    }
+  const deleteRowAnnotation = async (row) => {
+    await deleteAnnotation(projectId, row.experimentId);
+    updateRowAnnotation(row.experimentId, null);
   };
 
   const applyFilter = () => {
@@ -497,7 +433,7 @@ export function ExperimentBrowser({
   };
 
   return (
-    <div className={`experiment-browser-shell ${detailId ? "detail-open" : ""} ${selectedIds.size ? "comparison-selected" : ""}`}>
+    <div className={`experiment-browser-shell ${detailId ? "detail-open" : ""}`}>
       <aside className="experiment-browser-sidebar">
         <div className="experiment-browser-sidebar-head">
           <span>Experiment Browser</span>
@@ -549,6 +485,15 @@ export function ExperimentBrowser({
               <button type="button" disabled={!canEditSharedConfig} aria-label="Remove filter" onClick={() => setFilters([])}>x</button>
             </div>
           ))}
+        </section>
+
+        <section className="experiment-browser-sidebar-section">
+          <h3>Personal</h3>
+          <label className="experiment-starred-only">
+            <input type="checkbox" checked={starredOnly} onChange={(event) => setStarredOnly(event.target.checked)} />
+            <span>Starred only</span>
+          </label>
+          <p className="browser-muted">Stars, notes, and highlights are visible only to you.</p>
         </section>
 
         <section className="experiment-browser-sidebar-section">
@@ -605,7 +550,7 @@ export function ExperimentBrowser({
             aria-busy={loading ? "true" : "false"}
           >
             <div className="experiment-grid-header" role="row" style={{ gridTemplateColumns, width: gridWidth, minWidth: "100%" }}>
-              <div role="columnheader" aria-label="Select experiments" />
+              <div role="columnheader" aria-label="Star experiments" />
               {visibleColumns.map((column, index) => {
                 const activeSort = sort.find((item) => item.columnId === column.id);
                 return (
@@ -648,7 +593,7 @@ export function ExperimentBrowser({
                   return (
                     <div
                       role="row"
-                      className={`experiment-grid-row ${selectedIds.has(row.experimentId) ? "selected" : ""}`}
+                      className={`experiment-grid-row ${row.annotation ? `has-annotation annotation-${row.annotation.color || "amber"}` : ""}`}
                       key={row.experimentId}
                       tabIndex={0}
                       style={{ gridTemplateColumns, height: ROW_HEIGHT, transform: `translateY(${rowIndex * ROW_HEIGHT}px)` }}
@@ -657,13 +602,11 @@ export function ExperimentBrowser({
                         if (event.key === "Enter") setDetailId(row.experimentId);
                       }}
                     >
-                      <div role="cell" className="experiment-select-cell">
-                        <input
-                          type="checkbox"
-                          aria-label={`Select ${row.label}`}
-                          checked={selectedIds.has(row.experimentId)}
-                          onClick={(event) => event.stopPropagation()}
-                          onChange={() => toggleSelection(row)}
+                      <div role="cell" className="experiment-annotation-cell">
+                        <ExperimentAnnotationStar
+                          row={row}
+                          onSave={(annotation) => saveRowAnnotation(row, annotation)}
+                          onDelete={() => deleteRowAnnotation(row)}
                         />
                       </div>
                       {visibleColumns.map((column) => (
@@ -695,20 +638,6 @@ export function ExperimentBrowser({
         readOnly={!canEditSharedConfig}
         onClose={() => setColumnsOpen(false)}
         returnFocusRef={columnsTriggerRef}
-      />
-
-      <ExperimentCompareTray
-        selectedExperimentIds={selectedExperimentIds}
-        summaries={selectedSummaries}
-        details={compareDetails}
-        expanded={compareOpen}
-        loading={compareLoading}
-        error={compareError}
-        onRemove={removeSelection}
-        onClear={clearSelection}
-        onOpen={openComparison}
-        onClose={() => setCompareOpen(false)}
-        onSourceClick={onOpenSourceRange}
       />
 
       {detailId && (

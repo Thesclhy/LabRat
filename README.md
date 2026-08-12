@@ -103,7 +103,7 @@ Upload workbook
   -> PPTX export
 ```
 
-The current app supports server login, lab/project selection, project profile editing, workbook source indexing, independent region review with immutable accepted revisions, tool-governed evidence retrieval, deterministic experiment-record previews, transactional accepted snapshot publish, a cursor-paginated Experiment Browser with saved views/comparison/detail provenance, backend-owned durable analysis threads and reviewed immutable calculation plans, accepted-run execution with validated immutable result previews, separate result acceptance into trace-complete analysis-result ChartSpecs, source-backed chart review, Manuscript placement-local trace visibility, persistence, and PPTX export.
+The current app supports server login, lab/project selection, project profile editing, workbook source indexing, independent region review with immutable accepted revisions, tool-governed evidence retrieval, deterministic experiment-record previews, transactional accepted snapshot publish, a cursor-paginated Experiment Browser with shared layout, personal annotations, and detail provenance, backend-owned durable analysis threads and reviewed immutable calculation plans, accepted-run execution with validated immutable result previews, separate result acceptance into trace-complete analysis-result ChartSpecs, source-backed chart review, Manuscript placement-local trace visibility, persistence, and PPTX export.
 
 Pristine projects begin with a full-page conversational onboarding flow. LabRat
 indexes the workbook, interprets and confirms regions inline, and drafts the

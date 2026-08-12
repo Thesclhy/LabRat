@@ -1004,18 +1004,66 @@ async function loadExperimentProjectionState(context, projectId) {
 }
 
 async function handleProjectExperimentBrowser(req, res, context, projectId, url) {
-  await projectAuth(req, context, projectId, "viewer");
-  const state = await loadExperimentProjectionState(context, projectId);
+  const { auth } = await projectAuth(req, context, projectId, "viewer");
+  const [state, experimentAnnotations] = await Promise.all([
+    loadExperimentProjectionState(context, projectId),
+    context.store.listExperimentAnnotations?.({ projectId, userId: auth.user.id }) || [],
+  ]);
   const projection = buildExperimentProjection({
     projectId,
     ...state,
     search: url.searchParams.get("search") || "",
     filters: parseBrowserQueryList(url, "filters"),
     sort: parseBrowserQueryList(url, "sort"),
+    experimentAnnotations,
+    starredOnly: url.searchParams.get("starredOnly") === "true",
     cursor: url.searchParams.get("cursor"),
     limit: url.searchParams.get("limit"),
   });
   sendJson(res, 200, projection);
+}
+
+const EXPERIMENT_ANNOTATION_COLORS = new Set(["amber", "red", "green", "blue", "purple", "pink"]);
+
+async function handleProjectExperimentAnnotations(req, res, context, projectId) {
+  const { auth } = await projectAuth(req, context, projectId, "viewer");
+  const experimentAnnotations = await context.store.listExperimentAnnotations({ projectId, userId: auth.user.id });
+  sendJson(res, 200, { experimentAnnotations });
+}
+
+async function handleProjectExperimentAnnotation(req, res, context, projectId, experimentId) {
+  const { auth, project } = await projectAuth(req, context, projectId, "viewer");
+  const state = await loadExperimentProjectionState(context, projectId);
+  const detail = getExperimentProjectionDetail({ projectId, experimentId, ...state });
+  if (!detail) {
+    sendError(res, 404, "experiment_not_found", "Experiment was not found in this project's active snapshots.");
+    return;
+  }
+  if (req.method === "DELETE") {
+    const deleted = await context.store.deleteExperimentAnnotation({ projectId, userId: auth.user.id, experimentId });
+    sendJson(res, 200, { deleted });
+    return;
+  }
+  const body = await readJsonBody(req);
+  const note = String(body.note ?? "").trim();
+  const color = String(body.color || "amber").trim().toLowerCase();
+  if (note.length > 1000) {
+    sendError(res, 400, "invalid_experiment_annotation", "Experiment annotation notes may contain at most 1,000 characters.");
+    return;
+  }
+  if (!EXPERIMENT_ANNOTATION_COLORS.has(color)) {
+    sendError(res, 400, "invalid_experiment_annotation", "Choose amber, red, green, blue, purple, or pink.");
+    return;
+  }
+  const experimentAnnotation = await context.store.saveExperimentAnnotation({
+    labId: project.labId,
+    projectId,
+    userId: auth.user.id,
+    experimentId,
+    note,
+    color,
+  });
+  sendJson(res, 200, { experimentAnnotation });
 }
 
 async function handleProjectExperimentDetail(req, res, context, projectId, experimentId) {
@@ -2880,6 +2928,14 @@ async function dispatch(req, res, context) {
   const projectExperimentDetailMatch = pathName.match(/^\/api\/projects\/([^/]+)\/experiments\/([^/]+)$/);
   if (projectExperimentDetailMatch && req.method === "GET") {
     return handleProjectExperimentDetail(req, res, context, projectExperimentDetailMatch[1], projectExperimentDetailMatch[2]);
+  }
+  const projectExperimentAnnotationMatch = pathName.match(/^\/api\/projects\/([^/]+)\/experiments\/([^/]+)\/annotation$/);
+  if (projectExperimentAnnotationMatch && (req.method === "PUT" || req.method === "DELETE")) {
+    return handleProjectExperimentAnnotation(req, res, context, projectExperimentAnnotationMatch[1], projectExperimentAnnotationMatch[2]);
+  }
+  const projectExperimentAnnotationsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/experiment-annotations$/);
+  if (projectExperimentAnnotationsMatch && req.method === "GET") {
+    return handleProjectExperimentAnnotations(req, res, context, projectExperimentAnnotationsMatch[1]);
   }
   const projectBrowserConfigMatch = pathName.match(/^\/api\/projects\/([^/]+)\/browser-config$/);
   if (projectBrowserConfigMatch && (req.method === "GET" || req.method === "PATCH")) {

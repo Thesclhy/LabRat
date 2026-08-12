@@ -229,11 +229,28 @@ search
 sortField
 sortDirection
 filters (JSON)
+starredOnly (boolean; current user's annotations only)
 ```
 
 The list response contains one bounded row per active experiment snapshot head, a stable field catalog, recommended columns, and an opaque next cursor. Series point arrays are excluded.
 
 The detail endpoint lazily returns the complete active experiment record, scalar values, series inventory/points, warnings, and exact source refs. Cross-project and inactive identities return not found.
+
+## Personal Experiment Annotations
+
+```text
+GET    /api/projects/:projectId/experiment-annotations
+PUT    /api/projects/:projectId/experiments/:experimentId/annotation
+DELETE /api/projects/:projectId/experiments/:experimentId/annotation
+```
+
+Each annotation is private to the authenticated user within one project. Its
+payload contains a note of at most 1,000 characters and one of `amber`, `red`,
+`green`, `blue`, `purple`, or `pink`. The Experiment Browser projection may
+include that user's annotation on each row and may apply `starredOnly=true`
+before count, cursor, and page calculation. It never exposes another user's
+annotation or annotator identity. Deleting an annotation unstarrs the
+experiment and does not alter ExperimentIdentity, DataSnapshot, or evidence.
 
 ## Shared Experiment Browser Configuration
 

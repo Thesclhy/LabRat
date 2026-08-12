@@ -136,6 +136,8 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 - ProjectBrowserConfig is the shared project-wide Experiment Browser display
   state. BrowserView is retained only as historical publication/view
   provenance and does not drive the active Browser UI.
+- ExperimentAnnotation is private per project user and adds only star, note,
+  and highlight presentation metadata to an active ExperimentIdentity.
 - AnalysisSourceSelection is an exact range inside one active accepted region.
 - AnalysisThread owns one durable reviewed-analysis conversation and its artifact ids.
 - AnalysisPlanRevision is a durable immutable set of source selections plus

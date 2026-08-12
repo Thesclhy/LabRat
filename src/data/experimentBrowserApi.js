@@ -6,10 +6,35 @@ export async function listExperimentBrowserRows(projectId, query = {}, options =
   if (String(query.search || "").trim()) searchParams.set("search", String(query.search).trim());
   if (Array.isArray(query.filters) && query.filters.length) searchParams.set("filters", JSON.stringify(query.filters));
   if (Array.isArray(query.sort) && query.sort.length) searchParams.set("sort", JSON.stringify(query.sort));
+  if (query.starredOnly) searchParams.set("starredOnly", "true");
   if (query.cursor) searchParams.set("cursor", query.cursor);
   if (query.limit) searchParams.set("limit", String(query.limit));
   const suffix = searchParams.size ? `?${searchParams.toString()}` : "";
   return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/experiment-browser${suffix}`, options);
+}
+
+export async function saveExperimentAnnotation(projectId, experimentId, annotation, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before annotating an experiment.");
+  if (!experimentId) throw new ServerApiError("Select an experiment before saving an annotation.");
+  return serverJson(
+    `/api/projects/${encodeURIComponent(projectId)}/experiments/${encodeURIComponent(experimentId)}/annotation`,
+    annotation || {},
+    { ...options, method: "PUT" },
+  );
+}
+
+export async function deleteExperimentAnnotation(projectId, experimentId, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before removing an annotation.");
+  if (!experimentId) throw new ServerApiError("Select an experiment before removing an annotation.");
+  return serverRequest(
+    `/api/projects/${encodeURIComponent(projectId)}/experiments/${encodeURIComponent(experimentId)}/annotation`,
+    { ...options, method: "DELETE" },
+  );
+}
+
+export async function listExperimentAnnotations(projectId, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before loading experiment annotations.");
+  return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/experiment-annotations`, options);
 }
 
 export async function getExperimentBrowserDetail(projectId, experimentId, options = {}) {

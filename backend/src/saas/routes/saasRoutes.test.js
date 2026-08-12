@@ -1500,6 +1500,104 @@ test("project Browser configuration is shared, versioned, and restored on reentr
   }
 });
 
+test("experiment annotations are private to each user and power Starred-only Browser filtering", async () => {
+  const project = await createProject("Personal Experiment Annotation Project");
+  const experimentId = `annotation_experiment_${Date.now()}`;
+  const snapshotId = `annotation_snapshot_${Date.now()}`;
+  store.experimentIdentities.set(experimentId, {
+    id: experimentId,
+    labId: project.labId,
+    projectId: project.id,
+    canonicalLabel: "Private star experiment",
+    aliases: [],
+  });
+  store.dataSnapshots.set(snapshotId, {
+    id: snapshotId,
+    labId: project.labId,
+    projectId: project.id,
+    schemaVersion: "labrat.dataSnapshot.v4",
+    status: "accepted",
+    experimentRecords: [{
+      experimentId,
+      label: "Private star experiment",
+      aliases: [],
+      fields: [],
+      series: [],
+      warnings: [],
+      sourceRefs: [],
+    }],
+  });
+  store.experimentSnapshotHeads.set(`annotation_head_${Date.now()}`, {
+    id: `annotation_head_${Date.now()}`,
+    labId: project.labId,
+    projectId: project.id,
+    experimentId,
+    dataSnapshotId: snapshotId,
+    recordIndex: 0,
+  });
+
+  const saved = await jsonFetch(`/api/projects/${project.id}/experiments/${experimentId}/annotation`, {
+    method: "PUT",
+    body: { note: "Only I can see this", color: "pink" },
+  });
+  assert.equal(saved.status, 200);
+  assert.equal((await saved.json()).experimentAnnotation.note, "Only I can see this");
+  const ownerAnnotations = await (await jsonFetch(`/api/projects/${project.id}/experiment-annotations`)).json();
+  assert.equal(ownerAnnotations.experimentAnnotations.length, 1);
+  assert.equal(ownerAnnotations.experimentAnnotations[0].experimentId, experimentId);
+  const invalidColor = await jsonFetch(`/api/projects/${project.id}/experiments/${experimentId}/annotation`, {
+    method: "PUT",
+    body: { note: "Invalid", color: "orange" },
+  });
+  assert.equal(invalidColor.status, 400);
+  const ownerProjection = await (await jsonFetch(`/api/projects/${project.id}/experiment-browser?starredOnly=true`)).json();
+  assert.equal(ownerProjection.totalCount, 1);
+  assert.deepEqual(ownerProjection.rows[0].annotation, {
+    note: "Only I can see this",
+    color: "pink",
+    updatedAt: ownerProjection.rows[0].annotation.updatedAt,
+  });
+
+  const ownerCookie = cookie;
+  try {
+    const adminLogin = await jsonFetch("/api/auth/login", {
+      method: "POST",
+      body: { username: "admin", password: "LabRatAdmin123!" },
+    });
+    cookie = cookieFrom(adminLogin);
+    const viewerUsername = `annotation_viewer_${Date.now()}`;
+    const viewerPassword = "AnnotationViewer123!";
+    const createViewer = await jsonFetch("/api/admin/users", {
+      method: "POST",
+      body: {
+        username: viewerUsername,
+        displayName: "Annotation Viewer",
+        temporaryPassword: viewerPassword,
+        labId: project.labId,
+        role: "viewer",
+      },
+    });
+    assert.equal(createViewer.status, 201);
+    const viewerLogin = await jsonFetch("/api/auth/login", {
+      method: "POST",
+      body: { username: viewerUsername, password: viewerPassword },
+    });
+    cookie = cookieFrom(viewerLogin);
+    const viewerProjection = await (await jsonFetch(`/api/projects/${project.id}/experiment-browser`)).json();
+    assert.equal(viewerProjection.rows[0].annotation, null);
+    const viewerAnnotations = await (await jsonFetch(`/api/projects/${project.id}/experiment-annotations`)).json();
+    assert.deepEqual(viewerAnnotations.experimentAnnotations, []);
+    const viewerStarred = await (await jsonFetch(`/api/projects/${project.id}/experiment-browser?starredOnly=true`)).json();
+    assert.equal(viewerStarred.totalCount, 0);
+  } finally {
+    cookie = ownerCookie;
+  }
+
+  const removed = await jsonFetch(`/api/projects/${project.id}/experiments/${experimentId}/annotation`, { method: "DELETE" });
+  assert.equal(removed.status, 200);
+  assert.equal((await removed.json()).deleted, true);
+});
+
 test("BrowserView routes retain historical owner-scoped personal display state", async () => {
   const project = await createProject("Personal Browser Views Project");
   const otherProject = await createProject("Other Browser Views Project");

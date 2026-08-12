@@ -15,6 +15,30 @@ Keep entries concise, newest first, and include:
 
 ## 2026-08-12
 
+- Removed the Experiment Browser row-selection checkbox and the now-unreachable
+  transient comparison tray, related state, tests, and styles. The leading row
+  cell now contains only the personal annotation star; row detail, shared
+  layout, filters, sorting, and scientific records are unchanged. Focused
+  Experiment Browser coverage passed 11/11, the complete frontend suite passed
+  284/284, and the production build passed with the existing Plotly chunk-size
+  warning. The full verifier's backend process was interrupted after it stalled
+  in unrelated integration coverage; the same Milestone 3 backend changes had
+  passed the complete suite immediately before this frontend-only removal.
+
+- Completed Milestone 3 personal Experiment Browser annotations. Added
+  migration 022, owner-isolated memory/PostgreSQL persistence and project-
+  scoped list/save/delete APIs. Current-user annotations are attached to
+  projected rows; Starred-only filtering runs before count/cursor pagination.
+  The existing row now provides a star popover with a 1,000-character note,
+  amber/red/green/blue/purple/pink choice, save/unstar actions, note tooltip,
+  and full-row tint. Another project user receives neither annotation content
+  nor author identity. This is presentation metadata only and adds no provider
+  calls or scientific record changes. Full `npm run codex:verify` passed 288
+  frontend tests and the complete backend suite with four existing skips; the
+  production build retained only the existing Plotly chunk-size warning. Live
+  PostgreSQL/browser QA verified save, tooltip, green tint, Starred-only count,
+  reentry persistence, unstar cleanup, and a clean console.
+
 - Removed two post-milestone-2 Browser flashes. A sort/filter refresh now keeps
   the populated grid mounted with `aria-busy`, preserves both table scroll
   axes, and updates rows in place rather than replacing the workspace with a

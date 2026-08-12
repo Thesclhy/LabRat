@@ -106,6 +106,7 @@ experiment_snapshot_publishes
 ```text
 project_browser_configs
 browser_views
+experiment_annotations
 ```
 
 `project_browser_configs` has one row per project and is the authoritative live
@@ -118,6 +119,12 @@ BrowserViews remain scoped by `(lab_id, project_id, owner_user_id)` as
 historical publication/view provenance. Their payload cannot contain
 authoritative scientific values, and they no longer drive the active Browser
 UI.
+
+`experiment_annotations` has at most one row per `(project_id, user_id,
+experiment_id)`. It stores a bounded personal note and one of six highlight
+colors. Reads and writes always include the authenticated `user_id`; annotation
+and author information are not shared with other project members. These rows
+are personal presentation metadata and never modify scientific records.
 
 ### Evidence-Backed Output Layer
 
