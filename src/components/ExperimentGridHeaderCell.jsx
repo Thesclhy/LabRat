@@ -27,12 +27,14 @@ export function ExperimentGridHeaderCell({
   onDragOver,
   onDrop,
   onDragEnd,
+  onDelete,
 }) {
   const [menu, setMenu] = useState(null);
   const [dragWidth, setDragWidth] = useState(null);
   const [renaming, setRenaming] = useState(false);
   const [draftLabel, setDraftLabel] = useState("");
   const headerRef = useRef(null);
+  const sortTimerRef = useRef(null);
   const renameCancelledRef = useRef(false);
 
   useEffect(() => {
@@ -52,6 +54,8 @@ export function ExperimentGridHeaderCell({
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [menu]);
+
+  useEffect(() => () => window.clearTimeout(sortTimerRef.current), []);
 
   const startResize = (event) => {
     if (!editable) return;
@@ -114,7 +118,18 @@ export function ExperimentGridHeaderCell({
       tabIndex={0}
       className={className}
       title={`${column.label}${column.unit ? ` (${column.unit})` : ""}. Click to sort; right-click for column actions.`}
-      onClick={() => onSort?.()}
+      onClick={() => {
+        if (!column.isCustom) { onSort?.(); return; }
+        window.clearTimeout(sortTimerRef.current);
+        sortTimerRef.current = window.setTimeout(() => onSort?.(), 220);
+      }}
+      onDoubleClick={(event) => {
+        if (!column.isCustom || !editable) return;
+        event.preventDefault();
+        event.stopPropagation();
+        window.clearTimeout(sortTimerRef.current);
+        beginRename();
+      }}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
@@ -204,6 +219,7 @@ export function ExperimentGridHeaderCell({
           <button type="button" role="menuitem" disabled={!canMoveLeft} onClick={() => { setMenu(null); onMove?.(-1); }}>Move left</button>
           <button type="button" role="menuitem" disabled={!canMoveRight} onClick={() => { setMenu(null); onMove?.(1); }}>Move right</button>
           <button type="button" role="menuitem" disabled={!editable} onClick={() => { setMenu(null); onAutoFit?.(); }}>Auto-fit width</button>
+          {column.isCustom ? <button type="button" role="menuitem" className="danger-action" disabled={!editable} onClick={() => { setMenu(null); onDelete?.(); }}>Delete column</button> : null}
         </div>
       ) : null}
     </div>

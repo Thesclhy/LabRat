@@ -45,6 +45,8 @@ export class MemorySaasStore {
     this.browserViews = new Map();
     this.projectBrowserConfigs = new Map();
     this.experimentAnnotations = new Map();
+    this.experimentCustomColumns = new Map();
+    this.experimentCustomValues = new Map();
     this.agentRuns = new Map();
     this.analysisThreads = new Map();
     this.analysisThreadRetryReceipts = new Map();
@@ -1010,6 +1012,64 @@ export class MemorySaasStore {
   async deleteExperimentAnnotation({ projectId, userId, experimentId }) {
     const annotation = await this.findExperimentAnnotation({ projectId, userId, experimentId });
     return annotation ? this.experimentAnnotations.delete(annotation.id) : false;
+  }
+
+  async listExperimentCustomColumns({ projectId }) {
+    return [...this.experimentCustomColumns.values()]
+      .filter((column) => column.projectId === projectId)
+      .sort((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)) || left.id.localeCompare(right.id))
+      .map(copy);
+  }
+
+  async findExperimentCustomColumn({ projectId, customColumnId }) {
+    const column = this.experimentCustomColumns.get(customColumnId);
+    return copy(column?.projectId === projectId ? column : null);
+  }
+
+  async createExperimentCustomColumn(input) {
+    const now = nowIso();
+    const column = {
+      id: input.id || makeId("experiment_custom_column"), labId: input.labId, projectId: input.projectId,
+      schemaVersion: "labrat.experimentCustomColumn.v1", label: input.label, version: 1,
+      createdAt: now, updatedAt: now, createdBy: input.actorUserId || null, updatedBy: input.actorUserId || null,
+    };
+    this.experimentCustomColumns.set(column.id, column);
+    return copy(column);
+  }
+
+  async updateExperimentCustomColumn({ projectId, customColumnId, expectedVersion, label, actorUserId }) {
+    const existing = this.experimentCustomColumns.get(customColumnId);
+    if (!existing || existing.projectId !== projectId) return null;
+    if (existing.version !== expectedVersion) throw Object.assign(new Error("The custom column changed. Reload and try again."), { statusCode: 409, code: "experiment_custom_column_conflict" });
+    const updated = { ...existing, label, version: existing.version + 1, updatedAt: nowIso(), updatedBy: actorUserId || null };
+    this.experimentCustomColumns.set(customColumnId, updated);
+    return copy(updated);
+  }
+
+  async deleteExperimentCustomColumn({ projectId, customColumnId }) {
+    const existing = this.experimentCustomColumns.get(customColumnId);
+    if (!existing || existing.projectId !== projectId) return false;
+    this.experimentCustomColumns.delete(customColumnId);
+    [...this.experimentCustomValues.entries()].forEach(([id, value]) => { if (value.customColumnId === customColumnId) this.experimentCustomValues.delete(id); });
+    return true;
+  }
+
+  async listExperimentCustomValues({ projectId }) {
+    return [...this.experimentCustomValues.values()].filter((value) => value.projectId === projectId).map(copy);
+  }
+
+  async saveExperimentCustomValue(input) {
+    const existing = [...this.experimentCustomValues.values()].find((value) => value.projectId === input.projectId && value.customColumnId === input.customColumnId && value.experimentId === input.experimentId);
+    if (input.expectedVersion != null && (existing?.version || 0) !== input.expectedVersion) throw Object.assign(new Error("The custom cell changed. Reload and try again."), { statusCode: 409, code: "experiment_custom_value_conflict" });
+    const now = nowIso();
+    const value = {
+      id: existing?.id || input.id || makeId("experiment_custom_value"), labId: input.labId, projectId: input.projectId,
+      customColumnId: input.customColumnId, experimentId: input.experimentId, schemaVersion: "labrat.experimentCustomValue.v1",
+      value: input.value, version: (existing?.version || 0) + 1, createdAt: existing?.createdAt || now, updatedAt: now,
+      createdBy: existing?.createdBy || input.actorUserId || null, updatedBy: input.actorUserId || null,
+    };
+    this.experimentCustomValues.set(value.id, value);
+    return copy(value);
   }
 
   async createAgentRun(input) {

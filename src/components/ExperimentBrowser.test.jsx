@@ -38,6 +38,10 @@ function viewApi(overrides = {}) {
       experimentAnnotation: { experimentId, ...annotation, updatedAt: "2026-08-12T12:00:00.000Z" },
     })),
     deleteAnnotation: vi.fn(async () => ({ deleted: true })),
+    createCustomColumn: vi.fn(async () => ({ experimentCustomColumn: { id: "custom_1", label: "Untitled column", version: 1 } })),
+    updateCustomColumn: vi.fn(async (_projectId, customColumnId, changes) => ({ experimentCustomColumn: { id: customColumnId, label: changes.label, version: changes.expectedVersion + 1 } })),
+    deleteCustomColumn: vi.fn(async () => ({ deleted: true })),
+    saveCustomValue: vi.fn(async (_projectId, customColumnId, experimentId, changes) => ({ experimentCustomValue: { customColumnId, experimentId, value: changes.value, version: 1 } })),
     ...overrides,
   };
 }
@@ -157,13 +161,13 @@ describe("ExperimentBrowser", () => {
     expect(screen.getByRole("columnheader", { name: /Temperature/ })).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: /Yield/ })).toBeTruthy();
     expect(screen.queryByText("sort")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Choose columns" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Choose columns" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Show Yield (percent)" }));
+    fireEvent.contextMenu(screen.getByRole("columnheader", { name: /Yield/ }), { clientX: 320, clientY: 90 });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Hide column" }));
     expect(screen.queryByRole("columnheader", { name: /Yield/ })).toBeNull();
-    fireEvent.click(screen.getByRole("checkbox", { name: "Show Yield (percent)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Yield (percent)" }));
     expect(screen.getByRole("columnheader", { name: /Yield/ })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
     fireEvent.change(screen.getByLabelText("Search experiments"), { target: { value: "Exp 7" } });
     fireEvent.submit(screen.getByRole("search"));
@@ -181,6 +185,80 @@ describe("ExperimentBrowser", () => {
     await waitFor(() => expect(loadProjection).toHaveBeenLastCalledWith("project_1", expect.objectContaining({
       sort: [{ columnId: "field:temperature:degC:number", direction: "asc" }],
     }), expect.anything()));
+  });
+
+  it("highlights every visible case-insensitive match after search results load", async () => {
+    const matchingRows = [{
+      ...rows[0],
+      label: "Exp 48",
+      cells: {
+        ...rows[0].cells,
+        "field:yield:percent:number": { value: 48.4, formattedValue: "48.4", confidence: 0.9, warningCount: 0 },
+      },
+    }];
+    const loadProjection = vi.fn(async () => projection({ rows: matchingRows }));
+    render(<ExperimentBrowser projectId="project_1" loadProjection={loadProjection} loadDetail={vi.fn()} {...viewApi()} />);
+
+    await screen.findByText("Exp 48");
+    fireEvent.change(screen.getByLabelText("Search experiments"), { target: { value: "48" } });
+    fireEvent.submit(screen.getByRole("search"));
+
+    await waitFor(() => expect(loadProjection).toHaveBeenLastCalledWith(
+      "project_1",
+      expect.objectContaining({ search: "48" }),
+      expect.anything(),
+    ));
+    await waitFor(() => expect(document.querySelectorAll("mark.experiment-search-match")).toHaveLength(2));
+    expect([...document.querySelectorAll("mark.experiment-search-match")].map((match) => match.textContent)).toEqual(["48", "48"]);
+  });
+
+  it("adds, edits, renames, hides, restores, and deletes a shared custom column", async () => {
+    const api = viewApi();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<ExperimentBrowser projectId="project_1" loadProjection={vi.fn(async () => projection())} loadDetail={vi.fn()} {...api} />);
+
+    await screen.findByText("Exp 1");
+    fireEvent.click(screen.getByRole("button", { name: "Add column" }));
+    const customHeader = await screen.findByRole("columnheader", { name: /Untitled column/ });
+    expect(api.createCustomColumn).toHaveBeenCalledWith("project_1", "Untitled column");
+
+    const customCell = screen.getByRole("row", { name: /Exp 1/ }).querySelector(".experiment-custom-cell-value");
+    fireEvent.doubleClick(customCell);
+    const cellInput = screen.getByRole("textbox", { name: "Edit Untitled column for Exp 1" });
+    fireEvent.change(cellInput, { target: { value: "Needs repeat 48" } });
+    fireEvent.keyDown(cellInput, { key: "Enter" });
+    await waitFor(() => expect(api.saveCustomValue).toHaveBeenCalledWith("project_1", "custom_1", "exp_1", { value: "Needs repeat 48", expectedVersion: 0 }));
+    expect(await screen.findByText("Needs repeat 48")).toBeTruthy();
+
+    fireEvent.doubleClick(screen.getByText("Needs repeat 48"));
+    const cancelInput = screen.getByRole("textbox", { name: "Edit Untitled column for Exp 1" });
+    fireEvent.change(cancelInput, { target: { value: "Do not save" } });
+    fireEvent.keyDown(cancelInput, { key: "Escape" });
+    expect(screen.getByText("Needs repeat 48")).toBeTruthy();
+    expect(api.saveCustomValue).toHaveBeenCalledTimes(1);
+
+    fireEvent.doubleClick(screen.getByText("Needs repeat 48"));
+    const blankInput = screen.getByRole("textbox", { name: "Edit Untitled column for Exp 1" });
+    fireEvent.change(blankInput, { target: { value: "" } });
+    fireEvent.blur(blankInput);
+    await waitFor(() => expect(api.saveCustomValue).toHaveBeenLastCalledWith("project_1", "custom_1", "exp_1", { value: "", expectedVersion: 1 }));
+
+    fireEvent.doubleClick(customHeader);
+    const headerInput = screen.getByRole("textbox", { name: "Rename Untitled column" });
+    fireEvent.change(headerInput, { target: { value: "Decision" } });
+    fireEvent.keyDown(headerInput, { key: "Enter" });
+    expect(await screen.findByRole("columnheader", { name: /Decision/ })).toBeTruthy();
+
+    fireEvent.contextMenu(screen.getByRole("columnheader", { name: /Decision/ }), { clientX: 300, clientY: 80 });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Hide column" }));
+    expect(screen.queryByRole("columnheader", { name: /Decision/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Decision" }));
+    const restored = screen.getByRole("columnheader", { name: /Decision/ });
+    fireEvent.contextMenu(restored, { clientX: 300, clientY: 80 });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete column" }));
+    await waitFor(() => expect(api.deleteCustomColumn).toHaveBeenCalledWith("project_1", "custom_1"));
+    expect(screen.queryByRole("columnheader", { name: /Decision/ })).toBeNull();
+    window.confirm.mockRestore();
   });
 
   it("opens full experiment detail from the row without rendering comparison checkboxes", async () => {
@@ -236,9 +314,7 @@ describe("ExperimentBrowser", () => {
     fireEvent.mouseMove(window, { clientX: 220 });
     fireEvent.mouseUp(window);
 
-    fireEvent.click(screen.getByRole("button", { name: "Choose columns" }));
-    expect(screen.getByRole("spinbutton", { name: "Width for Temperature (degC)" }).value).toBe("220");
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(document.querySelector(".experiment-grid-viewport")?.style.width).toBe("632px"));
 
     const yieldHeader = screen.getByRole("columnheader", { name: /Yield/ });
     fireEvent.contextMenu(yieldHeader, { clientX: 320, clientY: 90 });
@@ -399,9 +475,7 @@ describe("ExperimentBrowser", () => {
       sort: sharedConfig.payload.sort,
     }), expect.anything()));
 
-    fireEvent.click(screen.getByRole("button", { name: "Choose columns" }));
     expect(screen.queryByText("deleted:column")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
     fireEvent.click(screen.getByRole("columnheader", { name: /Yield/ }));
     await waitFor(() => expect(api.saveSharedConfig).toHaveBeenCalledWith("project_1", expect.objectContaining({

@@ -1005,9 +1005,11 @@ async function loadExperimentProjectionState(context, projectId) {
 
 async function handleProjectExperimentBrowser(req, res, context, projectId, url) {
   const { auth } = await projectAuth(req, context, projectId, "viewer");
-  const [state, experimentAnnotations] = await Promise.all([
+  const [state, experimentAnnotations, experimentCustomColumns, experimentCustomValues] = await Promise.all([
     loadExperimentProjectionState(context, projectId),
     context.store.listExperimentAnnotations?.({ projectId, userId: auth.user.id }) || [],
+    context.store.listExperimentCustomColumns?.({ projectId }) || [],
+    context.store.listExperimentCustomValues?.({ projectId }) || [],
   ]);
   const projection = buildExperimentProjection({
     projectId,
@@ -1016,11 +1018,61 @@ async function handleProjectExperimentBrowser(req, res, context, projectId, url)
     filters: parseBrowserQueryList(url, "filters"),
     sort: parseBrowserQueryList(url, "sort"),
     experimentAnnotations,
+    experimentCustomColumns,
+    experimentCustomValues,
     starredOnly: url.searchParams.get("starredOnly") === "true",
     cursor: url.searchParams.get("cursor"),
     limit: url.searchParams.get("limit"),
   });
   sendJson(res, 200, projection);
+}
+
+function customColumnLabel(value) {
+  const label = String(value ?? "").trim();
+  if (!label || label.length > 120) throw Object.assign(new Error("Custom column labels must contain 1 to 120 characters."), { statusCode: 400, code: "invalid_experiment_custom_column" });
+  return label;
+}
+
+async function handleProjectExperimentCustomColumns(req, res, context, projectId) {
+  const { auth, project } = await projectAuth(req, context, projectId, req.method === "POST" ? "editor" : "viewer");
+  if (req.method === "GET") {
+    const experimentCustomColumns = await context.store.listExperimentCustomColumns({ projectId });
+    sendJson(res, 200, { experimentCustomColumns });
+    return;
+  }
+  const body = await readJsonBody(req);
+  const experimentCustomColumn = await context.store.createExperimentCustomColumn({ labId: project.labId, projectId, label: customColumnLabel(body.label || "Untitled column"), actorUserId: auth.user.id });
+  sendJson(res, 201, { experimentCustomColumn });
+}
+
+async function handleProjectExperimentCustomColumn(req, res, context, projectId, customColumnId) {
+  const { auth, project } = await projectAuth(req, context, projectId, "editor");
+  const existing = await context.store.findExperimentCustomColumn({ projectId, customColumnId });
+  if (!existing) { sendError(res, 404, "experiment_custom_column_not_found", "Custom column was not found in this project."); return; }
+  if (req.method === "DELETE") {
+    await context.store.deleteExperimentCustomColumn({ projectId, customColumnId });
+    sendJson(res, 200, { deleted: true });
+    return;
+  }
+  const body = await readJsonBody(req);
+  const expectedVersion = Number(body.expectedVersion);
+  if (!Number.isInteger(expectedVersion) || expectedVersion < 1) throw Object.assign(new Error("Custom column updates require expectedVersion."), { statusCode: 400, code: "invalid_experiment_custom_column" });
+  const experimentCustomColumn = await context.store.updateExperimentCustomColumn({ projectId, customColumnId, expectedVersion, label: customColumnLabel(body.label), actorUserId: auth.user.id, labId: project.labId });
+  sendJson(res, 200, { experimentCustomColumn });
+}
+
+async function handleProjectExperimentCustomValue(req, res, context, projectId, customColumnId, experimentId) {
+  const { auth, project } = await projectAuth(req, context, projectId, "editor");
+  const [column, state] = await Promise.all([context.store.findExperimentCustomColumn({ projectId, customColumnId }), loadExperimentProjectionState(context, projectId)]);
+  if (!column) { sendError(res, 404, "experiment_custom_column_not_found", "Custom column was not found in this project."); return; }
+  if (!getExperimentProjectionDetail({ projectId, experimentId, ...state })) { sendError(res, 404, "experiment_not_found", "Experiment was not found in this project's active snapshots."); return; }
+  const body = await readJsonBody(req);
+  const value = String(body.value ?? "");
+  if (value.length > 2000) throw Object.assign(new Error("Custom cell values may contain at most 2,000 characters."), { statusCode: 400, code: "invalid_experiment_custom_value" });
+  const expectedVersion = body.expectedVersion == null ? null : Number(body.expectedVersion);
+  if (expectedVersion != null && (!Number.isInteger(expectedVersion) || expectedVersion < 0)) throw Object.assign(new Error("Custom cell expectedVersion must be non-negative."), { statusCode: 400, code: "invalid_experiment_custom_value" });
+  const experimentCustomValue = await context.store.saveExperimentCustomValue({ labId: project.labId, projectId, customColumnId, experimentId, value, expectedVersion, actorUserId: auth.user.id });
+  sendJson(res, 200, { experimentCustomValue });
 }
 
 const EXPERIMENT_ANNOTATION_COLORS = new Set(["amber", "red", "green", "blue", "purple", "pink"]);
@@ -2925,6 +2977,12 @@ async function dispatch(req, res, context) {
   if (projectExperimentBrowserMatch && req.method === "GET") {
     return handleProjectExperimentBrowser(req, res, context, projectExperimentBrowserMatch[1], url);
   }
+  const projectExperimentCustomValueMatch = pathName.match(/^\/api\/projects\/([^/]+)\/experiment-custom-columns\/([^/]+)\/experiments\/([^/]+)$/);
+  if (projectExperimentCustomValueMatch && req.method === "PUT") return handleProjectExperimentCustomValue(req, res, context, projectExperimentCustomValueMatch[1], projectExperimentCustomValueMatch[2], projectExperimentCustomValueMatch[3]);
+  const projectExperimentCustomColumnMatch = pathName.match(/^\/api\/projects\/([^/]+)\/experiment-custom-columns\/([^/]+)$/);
+  if (projectExperimentCustomColumnMatch && (req.method === "PATCH" || req.method === "DELETE")) return handleProjectExperimentCustomColumn(req, res, context, projectExperimentCustomColumnMatch[1], projectExperimentCustomColumnMatch[2]);
+  const projectExperimentCustomColumnsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/experiment-custom-columns$/);
+  if (projectExperimentCustomColumnsMatch && (req.method === "GET" || req.method === "POST")) return handleProjectExperimentCustomColumns(req, res, context, projectExperimentCustomColumnsMatch[1]);
   const projectExperimentDetailMatch = pathName.match(/^\/api\/projects\/([^/]+)\/experiments\/([^/]+)$/);
   if (projectExperimentDetailMatch && req.method === "GET") {
     return handleProjectExperimentDetail(req, res, context, projectExperimentDetailMatch[1], projectExperimentDetailMatch[2]);

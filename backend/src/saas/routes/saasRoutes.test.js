@@ -1598,6 +1598,40 @@ test("experiment annotations are private to each user and power Starred-only Bro
   assert.equal((await removed.json()).deleted, true);
 });
 
+test("shared custom documentation columns persist values and participate in Browser queries", async () => {
+  const project = await createProject("Custom Documentation Columns Project");
+  const experimentId = `custom_column_experiment_${Date.now()}`;
+  const snapshotId = `custom_column_snapshot_${Date.now()}`;
+  store.experimentIdentities.set(experimentId, { id: experimentId, labId: project.labId, projectId: project.id, canonicalLabel: "Exp 48", aliases: [] });
+  store.dataSnapshots.set(snapshotId, {
+    id: snapshotId, labId: project.labId, projectId: project.id, schemaVersion: "labrat.dataSnapshot.v4", status: "accepted",
+    experimentRecords: [{ experimentId, label: "Exp 48", aliases: [], fields: [], series: [], warnings: [], sourceRefs: [] }],
+  });
+  store.experimentSnapshotHeads.set(`custom_column_head_${Date.now()}`, { id: `custom_column_head_${Date.now()}`, labId: project.labId, projectId: project.id, experimentId, dataSnapshotId: snapshotId, recordIndex: 0 });
+
+  const createdResponse = await jsonFetch(`/api/projects/${project.id}/experiment-custom-columns`, { method: "POST", body: { label: "Follow-up" } });
+  assert.equal(createdResponse.status, 201);
+  const created = (await createdResponse.json()).experimentCustomColumn;
+  const valueResponse = await jsonFetch(`/api/projects/${project.id}/experiment-custom-columns/${created.id}/experiments/${experimentId}`, { method: "PUT", body: { value: "Repeat at 48 hours", expectedVersion: 0 } });
+  assert.equal(valueResponse.status, 200);
+  assert.equal((await valueResponse.json()).experimentCustomValue.value, "Repeat at 48 hours");
+
+  const projectionResponse = await jsonFetch(`/api/projects/${project.id}/experiment-browser?search=48&filters=${encodeURIComponent(JSON.stringify([{ columnId: `custom:${created.id}`, operator: "contains", value: "repeat" }]))}`);
+  assert.equal(projectionResponse.status, 200);
+  const projection = await projectionResponse.json();
+  assert.equal(projection.totalCount, 1);
+  assert.equal(projection.columns.at(-1).label, "Follow-up");
+  assert.equal(projection.rows[0].cells[`custom:${created.id}`].value, "Repeat at 48 hours");
+
+  const renamedResponse = await jsonFetch(`/api/projects/${project.id}/experiment-custom-columns/${created.id}`, { method: "PATCH", body: { label: "Decision", expectedVersion: 1 } });
+  assert.equal(renamedResponse.status, 200);
+  assert.equal((await renamedResponse.json()).experimentCustomColumn.label, "Decision");
+  const deletedResponse = await jsonFetch(`/api/projects/${project.id}/experiment-custom-columns/${created.id}`, { method: "DELETE" });
+  assert.equal(deletedResponse.status, 200);
+  const afterDelete = await (await jsonFetch(`/api/projects/${project.id}/experiment-browser`)).json();
+  assert.equal(afterDelete.columns.some((column) => column.id === `custom:${created.id}`), false);
+});
+
 test("BrowserView routes retain historical owner-scoped personal display state", async () => {
   const project = await createProject("Personal Browser Views Project");
   const otherProject = await createProject("Other Browser Views Project");

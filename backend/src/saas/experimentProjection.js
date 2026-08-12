@@ -136,7 +136,7 @@ export function resolveActiveExperimentRecords({ projectId, dataSnapshots, exper
     });
 }
 
-function buildColumns(entries) {
+function buildColumns(entries, customColumns = []) {
   const stats = new Map();
   entries.forEach(({ record }) => {
     asArray(record.fields).forEach((field) => {
@@ -234,7 +234,26 @@ function buildColumns(entries) {
     recommendationScore: 100,
     recommended: true,
     pinned: false,
-  }, ...fieldColumns];
+  }, ...fieldColumns, ...asArray(customColumns).map((column) => ({
+    id: `custom:${column.id}`,
+    customColumnId: column.id,
+    fieldKey: null,
+    displayName: column.label,
+    label: column.label,
+    role: "documentation",
+    valueType: "string",
+    unit: null,
+    coverageCount: 0,
+    coverageRatio: 0,
+    confidenceAverage: 1,
+    warningCount: 0,
+    sourceSummary: null,
+    recommendationScore: 0,
+    recommended: false,
+    pinned: false,
+    isCustom: true,
+    version: column.version,
+  }))];
 }
 
 function summarizedSeries(series) {
@@ -259,8 +278,9 @@ function summarizedRange(sourceRef) {
   };
 }
 
-function buildRows(entries, columns, annotationsByExperimentId = new Map()) {
+function buildRows(entries, columns, annotationsByExperimentId = new Map(), customValues = []) {
   const fieldColumnIds = new Set(columns.slice(1).map((column) => column.id));
+  const customValuesByCell = new Map(asArray(customValues).map((value) => [`${value.experimentId}:${value.customColumnId}`, value]));
   return entries.map(({ head, snapshot, identity, record }) => {
     const cells = Object.fromEntries([...fieldColumnIds].map((columnId) => [columnId, null]));
     asArray(record.fields).forEach((field) => {
@@ -273,6 +293,15 @@ function buildRows(entries, columns, annotationsByExperimentId = new Map()) {
         confidence: field.confidence ?? null,
         warningCount: asArray(field.warnings).length,
       };
+    });
+    columns.filter((column) => column.isCustom).forEach((column) => {
+      const customValue = customValuesByCell.get(`${identity.id}:${column.customColumnId}`);
+      cells[column.id] = customValue ? {
+        value: customValue.value,
+        formattedValue: customValue.value,
+        version: customValue.version,
+        isCustom: true,
+      } : { value: "", formattedValue: "", version: 0, isCustom: true };
     });
     const annotation = annotationsByExperimentId.get(identity.id) || null;
     return {
@@ -354,14 +383,16 @@ export function buildExperimentProjection({
   filters = [],
   sort = [],
   experimentAnnotations = [],
+  experimentCustomColumns = [],
+  experimentCustomValues = [],
   starredOnly = false,
   cursor = null,
   limit = DEFAULT_LIMIT,
 } = {}) {
   const entries = resolveActiveExperimentRecords({ projectId, dataSnapshots, experimentIdentities, experimentSnapshotHeads });
-  const columns = buildColumns(entries);
+  const columns = buildColumns(entries, experimentCustomColumns);
   const annotationsByExperimentId = new Map(asArray(experimentAnnotations).map((annotation) => [annotation.experimentId, annotation]));
-  const allRows = buildRows(entries, columns, annotationsByExperimentId);
+  const allRows = buildRows(entries, columns, annotationsByExperimentId, experimentCustomValues);
   const normalizedSearch = text(search).toLowerCase();
   const normalizedFilters = asArray(filters).map(canonicalFilter).filter((filter) => filter.columnId);
   const normalizedSort = asArray(sort).map(canonicalSort).slice(0, 3);

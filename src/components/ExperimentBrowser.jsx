@@ -1,14 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  createExperimentCustomColumn,
+  deleteExperimentCustomColumn,
   deleteExperimentAnnotation,
   getExperimentBrowserDetail,
   getProjectBrowserConfig,
   listExperimentBrowserRows,
   saveExperimentAnnotation,
+  saveExperimentCustomValue,
+  updateExperimentCustomColumn,
   updateProjectBrowserConfig,
 } from "../data/experimentBrowserApi.js";
 import { ExperimentAnnotationStar } from "./ExperimentAnnotationStar.jsx";
-import { ExperimentColumnsDrawer } from "./ExperimentColumnsDrawer.jsx";
 import { ExperimentDetailDrawer } from "./ExperimentDetailDrawer.jsx";
 import { ExperimentGridHeaderCell } from "./ExperimentGridHeaderCell.jsx";
 
@@ -37,6 +40,63 @@ function displayCell(row, column) {
   if (!cell || cell.value == null || cell.value === "") return "-";
   const value = cell.formattedValue ?? cell.value;
   return `${value}${column.unit ? ` ${column.unit}` : ""}`;
+}
+
+function HighlightedSearchText({ value, search }) {
+  const displayValue = String(value ?? "");
+  const normalizedSearch = String(search ?? "").trim().toLowerCase();
+  if (!normalizedSearch) return displayValue;
+
+  const normalizedValue = displayValue.toLowerCase();
+  const parts = [];
+  let cursor = 0;
+  let matchIndex = normalizedValue.indexOf(normalizedSearch, cursor);
+  while (matchIndex !== -1) {
+    if (matchIndex > cursor) parts.push(displayValue.slice(cursor, matchIndex));
+    const matchEnd = matchIndex + normalizedSearch.length;
+    parts.push(<mark className="experiment-search-match" key={`${matchIndex}-${matchEnd}`}>{displayValue.slice(matchIndex, matchEnd)}</mark>);
+    cursor = matchEnd;
+    matchIndex = normalizedValue.indexOf(normalizedSearch, cursor);
+  }
+  if (!parts.length) return displayValue;
+  if (cursor < displayValue.length) parts.push(displayValue.slice(cursor));
+  return parts;
+}
+
+function EditableCustomCell({ row, column, search, editable, onSave }) {
+  const cell = row.cells?.[column.id];
+  const value = String(cell?.formattedValue ?? cell?.value ?? "");
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const cancelledRef = useRef(false);
+  useEffect(() => { if (!editing) setDraft(value); }, [editing, value]);
+  const commit = async () => {
+    if (!editing) return;
+    if (cancelledRef.current) { cancelledRef.current = false; setEditing(false); return; }
+    setEditing(false);
+    if (draft !== value) await onSave(draft);
+  };
+  if (editing) return <input
+    className="experiment-custom-cell-input"
+    aria-label={`Edit ${column.label} for ${row.label}`}
+    value={draft}
+    autoFocus
+    maxLength={2000}
+    onChange={(event) => setDraft(event.target.value)}
+    onClick={(event) => event.stopPropagation()}
+    onDoubleClick={(event) => event.stopPropagation()}
+    onBlur={commit}
+    onKeyDown={(event) => {
+      event.stopPropagation();
+      if (event.key === "Enter") commit();
+      if (event.key === "Escape") { event.preventDefault(); cancelledRef.current = true; setDraft(value); setEditing(false); }
+    }}
+  />;
+  return <span
+    className="experiment-grid-cell-value experiment-custom-cell-value"
+    onClick={(event) => event.stopPropagation()}
+    onDoubleClick={(event) => { if (!editable) return; event.stopPropagation(); cancelledRef.current = false; setDraft(value); setEditing(true); }}
+  ><HighlightedSearchText value={value} search={search} /></span>;
 }
 
 function filterValue(column, value) {
@@ -102,6 +162,10 @@ export function ExperimentBrowser({
   saveSharedConfig = updateProjectBrowserConfig,
   saveAnnotation = saveExperimentAnnotation,
   deleteAnnotation = deleteExperimentAnnotation,
+  createCustomColumn = createExperimentCustomColumn,
+  updateCustomColumn = updateExperimentCustomColumn,
+  deleteCustomColumn = deleteExperimentCustomColumn,
+  saveCustomValue = saveExperimentCustomValue,
 }) {
   const [columns, setColumns] = useState([]);
   const [columnSettings, setColumnSettings] = useState([]);
@@ -119,7 +183,6 @@ export function ExperimentBrowser({
   const [filterColumnId, setFilterColumnId] = useState("");
   const [filterOperator, setFilterOperator] = useState("contains");
   const [filterInput, setFilterInput] = useState("");
-  const [columnsOpen, setColumnsOpen] = useState(false);
   const [scrollTop, setScrollTop] = useState(0);
   const [detailId, setDetailId] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -137,7 +200,6 @@ export function ExperimentBrowser({
   const [viewportHeight, setViewportHeight] = useState(DEFAULT_VIEWPORT_HEIGHT);
   const viewportHeightRef = useRef(DEFAULT_VIEWPORT_HEIGHT);
   const projectRef = useRef(projectId);
-  const columnsTriggerRef = useRef(null);
   const gridViewportRef = useRef(null);
   const lastSavedPayloadRef = useRef("");
 
@@ -367,6 +429,51 @@ export function ExperimentBrowser({
     updateRowAnnotation(row.experimentId, null);
   };
 
+  const addCustomColumn = async () => {
+    if (!canEditSharedConfig) return;
+    try {
+      setError("");
+      const response = await createCustomColumn(projectId, "Untitled column");
+      const custom = response?.experimentCustomColumn;
+      if (!custom) return;
+      const column = { id: `custom:${custom.id}`, customColumnId: custom.id, label: custom.label, displayName: custom.label, valueType: "string", unit: null, isCustom: true, version: custom.version };
+      setColumns((current) => [...current, column]);
+      setRows((current) => current.map((row) => ({ ...row, cells: { ...row.cells, [column.id]: { value: "", formattedValue: "", version: 0, isCustom: true } } })));
+      setColumnSettings((current) => [...current, { columnId: column.id, order: current.length, width: defaultWidth(column), hidden: false }]);
+    } catch (requestError) { setError(errorMessage(requestError, "Custom column could not be added.")); }
+  };
+
+  const renameColumn = async (column, labelOverride) => {
+    if (!column.isCustom) { patchColumnSetting(column.id, { labelOverride }); return; }
+    const label = String(labelOverride || column.label).trim();
+    try {
+      const response = await updateCustomColumn(projectId, column.customColumnId, { label, expectedVersion: column.version });
+      const updated = response?.experimentCustomColumn;
+      if (updated) setColumns((current) => current.map((item) => item.id === column.id ? { ...item, label: updated.label, displayName: updated.label, version: updated.version } : item));
+    } catch (requestError) { setError(errorMessage(requestError, "Custom column could not be renamed.")); }
+  };
+
+  const removeCustomColumn = async (column) => {
+    if (!column.isCustom || !window.confirm(`Delete custom column “${column.label}” and all of its documented values?`)) return;
+    try {
+      await deleteCustomColumn(projectId, column.customColumnId);
+      setColumns((current) => current.filter((item) => item.id !== column.id));
+      setColumnSettings((current) => normalizeColumnOrder(current.filter((setting) => setting.columnId !== column.id)));
+      setFilters((current) => current.filter((filter) => filter.columnId !== column.id));
+      setSort((current) => current.filter((item) => item.columnId !== column.id));
+    } catch (requestError) { setError(errorMessage(requestError, "Custom column could not be deleted.")); }
+  };
+
+  const saveCustomCell = async (row, column, value) => {
+    try {
+      const currentCell = row.cells?.[column.id];
+      const response = await saveCustomValue(projectId, column.customColumnId, row.experimentId, { value, expectedVersion: currentCell?.version || 0 });
+      const saved = response?.experimentCustomValue;
+      setRows((current) => current.map((item) => item.experimentId === row.experimentId ? { ...item, cells: { ...item.cells, [column.id]: { value: saved?.value ?? value, formattedValue: saved?.value ?? value, version: saved?.version || 1, isCustom: true } } } : item));
+      if (search || filters.length || sort.length) await fetchPage(null, false);
+    } catch (requestError) { setError(errorMessage(requestError, "Custom cell could not be saved.")); }
+  };
+
   const applyFilter = () => {
     if (!canEditSharedConfig) return;
     if (!filterColumnId) return;
@@ -529,8 +636,8 @@ export function ExperimentBrowser({
                 Add or update data
               </button>
             ) : null}
+            <button type="button" disabled={!canEditSharedConfig} onClick={addCustomColumn}>Add column</button>
             {onOpenImportReview ? <button type="button" className="primary-action" onClick={onOpenImportReview}>Import workbook</button> : null}
-            <button ref={columnsTriggerRef} type="button" aria-expanded={columnsOpen} onClick={() => setColumnsOpen(true)}>Choose columns</button>
           </div>
         </header>
 
@@ -567,7 +674,7 @@ export function ExperimentBrowser({
                     canMoveRight={canEditSharedConfig && index < visibleColumns.length - 1}
                     onSort={() => { if (canEditSharedConfig) toggleSort(column.id); }}
                     onHide={() => patchColumnSetting(column.id, { hidden: true })}
-                    onRename={(labelOverride) => patchColumnSetting(column.id, { labelOverride })}
+                    onRename={(labelOverride) => renameColumn(column, labelOverride)}
                     onResize={(width) => patchColumnSetting(column.id, { width: Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, width)) })}
                     onAutoFit={() => patchColumnSetting(column.id, { width: autoFitColumnWidth(column, rows) })}
                     onMove={(direction) => moveColumn(column.id, direction)}
@@ -577,6 +684,7 @@ export function ExperimentBrowser({
                     }}
                     onDrop={reorderColumn}
                     onDragEnd={() => { setDragColumnId(""); setDropTarget(null); }}
+                    onDelete={() => removeCustomColumn(column)}
                   />
                 );
               })}
@@ -610,10 +718,12 @@ export function ExperimentBrowser({
                         />
                       </div>
                       {visibleColumns.map((column) => (
-                        <div role="cell" key={column.id} title={displayCell(row, column)}>
+                        <div role="cell" key={column.id} title={column.isCustom ? String(row.cells?.[column.id]?.value ?? "") : displayCell(row, column)}>
                           {column.id === "experiment" ? (
-                            <button type="button" className="experiment-row-link" aria-label={`Open ${row.label}`} onClick={(event) => { event.stopPropagation(); setDetailId(row.experimentId); }}>{row.label}</button>
-                          ) : <span className="experiment-grid-cell-value">{displayCell(row, column)}</span>}
+                            <button type="button" className="experiment-row-link" aria-label={`Open ${row.label}`} onClick={(event) => { event.stopPropagation(); setDetailId(row.experimentId); }}><HighlightedSearchText value={row.label} search={search} /></button>
+                          ) : column.isCustom ? (
+                            <EditableCustomCell row={row} column={column} search={search} editable={canEditSharedConfig} onSave={(value) => saveCustomCell(row, column, value)} />
+                          ) : <span className="experiment-grid-cell-value"><HighlightedSearchText value={displayCell(row, column)} search={search} /></span>}
                         </div>
                       ))}
                     </div>
@@ -629,16 +739,6 @@ export function ExperimentBrowser({
           </button>
         )}
       </main>
-
-      <ExperimentColumnsDrawer
-        open={columnsOpen}
-        columns={displayColumns}
-        settings={columnSettings}
-        onChange={canEditSharedConfig ? setColumnSettings : undefined}
-        readOnly={!canEditSharedConfig}
-        onClose={() => setColumnsOpen(false)}
-        returnFocusRef={columnsTriggerRef}
-      />
 
       {detailId && (
         <ExperimentDetailDrawer

@@ -38,6 +38,8 @@ Last reviewed: 2026-07-16
       owner-scoped provenance only.
 - [ ] Experiment annotations are owner-isolated, bounded, and never expose the
       note, color, or annotator identity to another project user.
+- [ ] Custom Browser columns are project-shared, editor-writable, bounded, and
+      remain separate from immutable accepted DataSnapshots.
 
 ## Charts And Manuscript
 

@@ -107,6 +107,8 @@ experiment_snapshot_publishes
 project_browser_configs
 browser_views
 experiment_annotations
+experiment_custom_columns
+experiment_custom_values
 ```
 
 `project_browser_configs` has one row per project and is the authoritative live
@@ -125,6 +127,13 @@ experiment_id)`. It stores a bounded personal note and one of six highlight
 colors. Reads and writes always include the authenticated `user_id`; annotation
 and author information are not shared with other project members. These rows
 are personal presentation metadata and never modify scientific records.
+
+`experiment_custom_columns` stores shared project documentation-column
+definitions with versioned labels. `experiment_custom_values` stores bounded
+text keyed uniquely by `(project_id, custom_column_id, experiment_id)` with a
+version and actor timestamps. Both are editable by project editors and readable
+by project viewers. They are not accepted scientific values and never modify a
+DataSnapshot; deleting a definition cascades only its custom values.
 
 ### Evidence-Backed Output Layer
 

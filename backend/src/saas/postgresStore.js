@@ -390,6 +390,16 @@ function experimentAnnotationFromRow(row) {
   };
 }
 
+function experimentCustomColumnFromRow(row) {
+  if (!row) return null;
+  return { id: row.id, labId: row.lab_id, projectId: row.project_id, schemaVersion: row.schema_version, label: row.label, version: Number(row.version), createdAt: row.created_at, updatedAt: row.updated_at, createdBy: row.created_by, updatedBy: row.updated_by };
+}
+
+function experimentCustomValueFromRow(row) {
+  if (!row) return null;
+  return { id: row.id, labId: row.lab_id, projectId: row.project_id, customColumnId: row.custom_column_id, experimentId: row.experiment_id, schemaVersion: row.schema_version, value: row.value || "", version: Number(row.version), createdAt: row.created_at, updatedAt: row.updated_at, createdBy: row.created_by, updatedBy: row.updated_by };
+}
+
 function experimentSnapshotPublishFromRow(row) {
   if (!row) return null;
   return {
@@ -1971,6 +1981,68 @@ export class PostgresSaasStore {
       [projectId, userId, experimentId],
     );
     return result.rowCount > 0;
+  }
+
+  async listExperimentCustomColumns({ projectId }) {
+    const result = await this.query("select * from experiment_custom_columns where project_id = $1 order by created_at, id", [projectId]);
+    return result.rows.map(experimentCustomColumnFromRow);
+  }
+
+  async findExperimentCustomColumn({ projectId, customColumnId }) {
+    const result = await this.query("select * from experiment_custom_columns where project_id = $1 and id = $2", [projectId, customColumnId]);
+    return experimentCustomColumnFromRow(result.rows[0]);
+  }
+
+  async createExperimentCustomColumn(input) {
+    const result = await this.query(
+      `insert into experiment_custom_columns (id, lab_id, project_id, schema_version, label, version, created_at, updated_at, created_by, updated_by)
+       values ($1, $2, $3, $4, $5, 1, now(), now(), $6, $6) returning *`,
+      [input.id || makeId("experiment_custom_column"), input.labId, input.projectId, input.schemaVersion || "labrat.experimentCustomColumn.v1", input.label, input.actorUserId || null],
+    );
+    return experimentCustomColumnFromRow(result.rows[0]);
+  }
+
+  async updateExperimentCustomColumn({ projectId, customColumnId, expectedVersion, label, actorUserId }) {
+    const result = await this.query(
+      `update experiment_custom_columns set label = $1, version = version + 1, updated_at = now(), updated_by = $2
+       where project_id = $3 and id = $4 and version = $5 returning *`,
+      [label, actorUserId || null, projectId, customColumnId, expectedVersion],
+    );
+    if (!result.rows[0]) {
+      const existing = await this.findExperimentCustomColumn({ projectId, customColumnId });
+      if (!existing) return null;
+      throw Object.assign(new Error("The custom column changed. Reload and try again."), { statusCode: 409, code: "experiment_custom_column_conflict" });
+    }
+    return experimentCustomColumnFromRow(result.rows[0]);
+  }
+
+  async deleteExperimentCustomColumn({ projectId, customColumnId }) {
+    const result = await this.query("delete from experiment_custom_columns where project_id = $1 and id = $2", [projectId, customColumnId]);
+    return result.rowCount > 0;
+  }
+
+  async listExperimentCustomValues({ projectId }) {
+    const result = await this.query("select * from experiment_custom_values where project_id = $1", [projectId]);
+    return result.rows.map(experimentCustomValueFromRow);
+  }
+
+  async saveExperimentCustomValue(input) {
+    const expectedVersion = input.expectedVersion == null ? 0 : Number(input.expectedVersion);
+    const result = expectedVersion === 0
+      ? await this.query(
+        `insert into experiment_custom_values
+         (id, lab_id, project_id, custom_column_id, experiment_id, schema_version, value, version, created_at, updated_at, created_by, updated_by)
+         values ($1, $2, $3, $4, $5, $6, $7, 1, now(), now(), $8, $8)
+         on conflict (project_id, custom_column_id, experiment_id) do nothing returning *`,
+        [input.id || makeId("experiment_custom_value"), input.labId, input.projectId, input.customColumnId, input.experimentId, input.schemaVersion || "labrat.experimentCustomValue.v1", input.value, input.actorUserId || null],
+      )
+      : await this.query(
+        `update experiment_custom_values set value = $1, version = version + 1, updated_at = now(), updated_by = $2
+         where project_id = $3 and custom_column_id = $4 and experiment_id = $5 and version = $6 returning *`,
+        [input.value, input.actorUserId || null, input.projectId, input.customColumnId, input.experimentId, expectedVersion],
+      );
+    if (!result.rows[0]) throw Object.assign(new Error("The custom cell changed. Reload and try again."), { statusCode: 409, code: "experiment_custom_value_conflict" });
+    return experimentCustomValueFromRow(result.rows[0]);
   }
 
   async createAgentRun(input) {

@@ -9052,6 +9052,30 @@ tbody tr:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.experiment-search-match {
+  border-radius: 2px;
+  background: #fde68a;
+  color: inherit;
+  padding: 0 1px;
+}
+.experiment-custom-cell-value {
+  width: 100%;
+  min-height: 24px;
+}
+.experiment-custom-cell-input {
+  width: 100%;
+  height: 30px;
+  min-width: 0;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  background: var(--panel);
+  color: var(--text);
+  padding: 3px 6px;
+  font: inherit;
+}
+.experiment-grid-header-menu .danger-action {
+  color: var(--color-red-800);
+}
 .experiment-annotation-cell {
   position: relative;
   gap: 5px;

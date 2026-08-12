@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  createExperimentCustomColumn,
+  deleteExperimentCustomColumn,
   createExperimentBrowserView,
   deleteExperimentAnnotation,
   deleteExperimentBrowserView,
@@ -9,6 +11,8 @@ import {
   listExperimentBrowserViews,
   listExperimentAnnotations,
   saveExperimentAnnotation,
+  saveExperimentCustomValue,
+  updateExperimentCustomColumn,
   updateExperimentBrowserView,
   updateProjectBrowserConfig,
 } from "./experimentBrowserApi.js";
@@ -63,6 +67,22 @@ describe("experimentBrowserApi", () => {
     await getExperimentBrowserDetail("project / 1", "experiment / 1", { fetch });
 
     expect(fetch.mock.calls[0][0]).toBe("/api/projects/project%20%2F%201/experiments/experiment%20%2F%201");
+  });
+
+  it("creates, renames, edits, and deletes shared custom documentation columns", async () => {
+    const fetch = vi.fn(async () => ok({}));
+    await createExperimentCustomColumn("project / 1", "Follow-up", { fetch });
+    await updateExperimentCustomColumn("project / 1", "column / 1", { label: "Decision", expectedVersion: 1 }, { fetch });
+    await saveExperimentCustomValue("project / 1", "column / 1", "experiment / 1", { value: "Repeat", expectedVersion: 0 }, { fetch });
+    await deleteExperimentCustomColumn("project / 1", "column / 1", { fetch });
+
+    expect(fetch.mock.calls.map(([endpoint]) => endpoint)).toEqual([
+      "/api/projects/project%20%2F%201/experiment-custom-columns",
+      "/api/projects/project%20%2F%201/experiment-custom-columns/column%20%2F%201",
+      "/api/projects/project%20%2F%201/experiment-custom-columns/column%20%2F%201/experiments/experiment%20%2F%201",
+      "/api/projects/project%20%2F%201/experiment-custom-columns/column%20%2F%201",
+    ]);
+    expect(fetch.mock.calls.map(([, options]) => options.method || "GET")).toEqual(["POST", "PATCH", "PUT", "DELETE"]);
   });
 
   it("requires project and experiment identifiers", async () => {

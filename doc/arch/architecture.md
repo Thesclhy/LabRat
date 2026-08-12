@@ -83,7 +83,9 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 - **Experiment Data Review**: Source/Result review for selected workbook ranges
   and active experiment fields, natural-language transformations, merged Browser
   table preview, ambiguous identity decisions, and explicit publication.
-- **Experiment Browser**: accepted-head-only rows, configurable columns, typed filters/sort/search, saved personal views, persistent selection, comparison tray, and lazy detail/source evidence.
+- **Experiment Browser**: accepted-head-only scientific rows, shared custom
+  documentation columns, configurable columns, typed filters/sort/search,
+  personal annotations, and lazy detail/source evidence.
 - **Chart Review**: reviewed analysis plan/result flow plus accepted ChartSpec management.
 - **Manuscript**: page/block canvas, analysis-result ChartSpec insertion, placement-local trace controls, editable chart layers, persistence, and PPTX export.
 - **Ask LabRat**: project-scoped planning and review-gated actions, not a second data store.
@@ -138,6 +140,9 @@ Logged-in server mode treats backend project state as the source of truth. Old I
   provenance and does not drive the active Browser UI.
 - ExperimentAnnotation is private per project user and adds only star, note,
   and highlight presentation metadata to an active ExperimentIdentity.
+- ExperimentCustomColumn and ExperimentCustomValue are shared project
+  documentation metadata keyed to stable ExperimentIdentities, separate from
+  immutable accepted DataSnapshots.
 - AnalysisSourceSelection is an exact range inside one active accepted region.
 - AnalysisThread owns one durable reviewed-analysis conversation and its artifact ids.
 - AnalysisPlanRevision is a durable immutable set of source selections plus

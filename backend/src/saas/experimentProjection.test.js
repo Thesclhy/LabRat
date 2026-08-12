@@ -219,6 +219,30 @@ test("attaches only supplied personal annotations and filters starred rows befor
   assert.equal(projection.nextCursor, null);
 });
 
+test("projects custom documentation columns into search, filter, and sort without changing snapshots", () => {
+  const state = fixture();
+  const customColumn = { id: "custom_notes", label: "Decision", version: 1 };
+  const customValues = [
+    { customColumnId: "custom_notes", experimentId: "exp_1", value: "Repeat 48", version: 1 },
+    { customColumnId: "custom_notes", experimentId: "exp_2", value: "Archive", version: 1 },
+  ];
+  const result = buildExperimentProjection({
+    projectId: "project_1",
+    ...state,
+    experimentCustomColumns: [customColumn],
+    experimentCustomValues: customValues,
+    search: "48",
+    filters: [{ columnId: "custom:custom_notes", operator: "contains", value: "repeat" }],
+    sort: [{ columnId: "custom:custom_notes", direction: "asc" }],
+  });
+  const projectedColumn = result.columns.find((column) => column.id === "custom:custom_notes");
+  assert.equal(projectedColumn.label, "Decision");
+  assert.equal(projectedColumn.isCustom, true);
+  assert.equal(result.totalCount, 1);
+  assert.equal(result.rows[0].cells["custom:custom_notes"].value, "Repeat 48");
+  assert.equal(result.rows[0].cells["custom:custom_notes"].version, 1);
+});
+
 test("returns full active experiment detail lazily and rejects inactive or cross-project ids", () => {
   const detail = getExperimentProjectionDetail({ projectId: "project_1", experimentId: "exp_1", ...fixture() });
   assert.equal(detail.experiment.id, "exp_1");

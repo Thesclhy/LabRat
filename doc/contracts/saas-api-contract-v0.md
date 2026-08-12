@@ -218,6 +218,11 @@ AnalysisThreads and DataSnapshot v4 publication.
 ```text
 GET /api/projects/:projectId/experiment-browser
 GET /api/projects/:projectId/experiments/:experimentId
+GET  /api/projects/:projectId/experiment-custom-columns
+POST /api/projects/:projectId/experiment-custom-columns
+PATCH /api/projects/:projectId/experiment-custom-columns/:customColumnId
+DELETE /api/projects/:projectId/experiment-custom-columns/:customColumnId
+PUT /api/projects/:projectId/experiment-custom-columns/:customColumnId/experiments/:experimentId
 ```
 
 List query parameters:
@@ -235,6 +240,13 @@ starredOnly (boolean; current user's annotations only)
 The list response contains one bounded row per active experiment snapshot head, a stable field catalog, recommended columns, and an opaque next cursor. Series point arrays are excluded.
 
 The detail endpoint lazily returns the complete active experiment record, scalar values, series inventory/points, warnings, and exact source refs. Cross-project and inactive identities return not found.
+
+Custom columns are shared project documentation metadata. Editors create,
+rename, delete, and write bounded text cells; viewers read them through the
+normal Browser projection. Definitions and values are stored separately from
+immutable DataSnapshots. They participate in Browser search, filters, sort,
+visibility, order, and width like ordinary projected columns. Deleting a custom
+column cascades only its documentation values and never changes scientific data.
 
 ## Personal Experiment Annotations
 

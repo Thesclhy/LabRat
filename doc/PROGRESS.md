@@ -15,6 +15,38 @@ Keep entries concise, newest first, and include:
 
 ## 2026-08-12
 
+- Added shared Experiment Browser documentation columns. `Add column` appears
+  immediately after `Add or update data`; editors can double-click custom
+  headers/cells to edit text with Enter/blur save and Escape cancel. Custom
+  columns persist separately from accepted DataSnapshots, are shared with
+  project users, and use existing hide/show, order, resize, sort, filter,
+  search, and highlight behavior. Their header menu alone adds a confirmed
+  Delete column action that cascades documentation values only. Added migration
+  023, memory/PostgreSQL store parity, project-scoped APIs, projection support,
+  contracts, and regressions. Full frontend coverage passed 287/287, focused
+  custom store/projection coverage passed 8/8, and the production build passed with the
+  existing Plotly chunk-size warning. The route-test harness stalled during its
+  global database setup before reporting the targeted case; full backend
+  verification remains in progress. After the live Browser initially returned
+  `Route not found`, diagnosed the active `labrat-backend-codex` container as
+  stale, applied migration 023 inside it, restarted only that backend, verified
+  the health endpoint, and confirmed the new route now reaches authorization
+  (`401`) rather than routing failure. Authenticated browser QA remains.
+
+- Removed the top-right Experiment Browser `Choose columns` button and its
+  drawer wiring for now. Header context menus continue to hide, rename, move,
+  and auto-fit columns; header edges still resize; and sidebar Hidden columns
+  chips still restore individual columns. Shared layout persistence and data
+  are unchanged. Focused Experiment Browser coverage passed 12/12 and the
+  production build passed with the existing Plotly chunk-size warning.
+
+- Added Experiment Browser search-result highlighting. Submitted search text is
+  emphasized case-insensitively wherever it appears in visible experiment
+  labels or displayed cell values, including numeric substrings such as `48` in
+  `48.4`; backend filtering and hidden-column search coverage are unchanged.
+  Focused Experiment Browser coverage passed 12/12 and the production build
+  passed with the existing Plotly chunk-size warning.
+
 - Removed the Experiment Browser row-selection checkbox and the now-unreachable
   transient comparison tray, related state, tests, and styles. The leading row
   cell now contains only the personal annotation star; row detail, shared

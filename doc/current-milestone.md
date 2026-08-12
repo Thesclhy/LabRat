@@ -31,6 +31,28 @@ and 390x844 browser QA now cover the integrated upload/review/publish path.
 
 ## Current Position
 
+Completed shared Experiment Browser documentation columns: editors can add an
+empty text column immediately beside `Add or update data`, then double-click
+its header or cells to edit. Enter/blur saves and Escape cancels. Definitions
+and per-experiment values persist in project-scoped server tables, are visible
+to all project users after reentry, and participate in the existing rename,
+hide/show, reorder, resize, sort, filter, search, and match-highlighting paths.
+Only custom headers expose a confirmation-gated Delete column action. This
+documentation layer is separate from immutable accepted DataSnapshots.
+
+Completed temporary Experiment Browser column-drawer removal: the top-right
+`Choose columns` button and its unreachable drawer wiring are no longer part of
+the Browser surface. Users still manage columns through header context menus,
+drag/resize controls, and individual Hidden columns `+` chips in the sidebar;
+shared layout persistence is unchanged.
+
+Completed Experiment Browser search-result highlighting: after a search is
+submitted, every case-insensitive literal match in visible experiment labels
+and cell values is emphasized in the returned rows. The backend remains the
+source of truth for matching rows, including accepted values in hidden columns;
+highlighting is presentation-only and does not alter data, search pagination,
+shared configuration, or persisted state.
+
 Completed Experiment Browser checkbox removal: the row-selection checkbox and
 its transient comparison tray are retired. The leading row control now contains
 only the personal annotation star, while opening a row still provides its full

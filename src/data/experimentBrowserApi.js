@@ -32,6 +32,26 @@ export async function deleteExperimentAnnotation(projectId, experimentId, option
   );
 }
 
+export async function createExperimentCustomColumn(projectId, label = "Untitled column", options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before adding a custom column.");
+  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/experiment-custom-columns`, { label }, options);
+}
+
+export async function updateExperimentCustomColumn(projectId, customColumnId, changes, options = {}) {
+  if (!projectId || !customColumnId) throw new ServerApiError("Select a custom column before updating it.");
+  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/experiment-custom-columns/${encodeURIComponent(customColumnId)}`, changes || {}, { ...options, method: "PATCH" });
+}
+
+export async function deleteExperimentCustomColumn(projectId, customColumnId, options = {}) {
+  if (!projectId || !customColumnId) throw new ServerApiError("Select a custom column before deleting it.");
+  return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/experiment-custom-columns/${encodeURIComponent(customColumnId)}`, { ...options, method: "DELETE" });
+}
+
+export async function saveExperimentCustomValue(projectId, customColumnId, experimentId, changes, options = {}) {
+  if (!projectId || !customColumnId || !experimentId) throw new ServerApiError("Select a custom cell before updating it.");
+  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/experiment-custom-columns/${encodeURIComponent(customColumnId)}/experiments/${encodeURIComponent(experimentId)}`, changes || {}, { ...options, method: "PUT" });
+}
+
 export async function listExperimentAnnotations(projectId, options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before loading experiment annotations.");
   return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/experiment-annotations`, options);

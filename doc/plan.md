@@ -132,6 +132,9 @@ Use this split when deciding what to build:
 - Personal Experiment Browser annotations: per-user stars, bounded notes, six
   row-highlight colors, note tooltips, and server-side Starred-only filtering
   without exposing annotation authorship to other project members.
+- Shared Experiment Browser documentation columns: editor-created text columns
+  and per-experiment values remain separate from immutable DataSnapshots while
+  using the normal shared layout, search, filter, sort, and reentry behavior.
 - DataPlan identity review bulk workflow: unmatched experiments can be created in one action, unique exact matches can be accepted together, canonical labels identify reuse targets, selected rows can be changed or cleared, and summary/filter/undo controls preserve explicit review before publish.
 - WorkbookReviewWorkspace tile loading: stable 40-row by 12-column windows, bounded LRU caching, in-flight request reuse, scroll settling, directional prefetch, retained loaded cells, and correct document/Sheet/range resets avoid repeat SourceDocument `/range` reads and stale viewport state when users drag away, return, or switch workbooks.
 - Milestone 7 legacy retirement: removed aggregate dataset/mapping/analysis/observation stores and routes, retired unscoped normalize/chart endpoints, added migration 011, kept source-backed ChartSpecs, and passed the golden workbook-to-Browser workflow.
