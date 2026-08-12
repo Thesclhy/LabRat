@@ -122,7 +122,7 @@ test("projects one bounded row per active accepted snapshot head with stable uni
   assert.equal(projection.columns.find((column) => column.fieldKey === "rpm").label, "RPM");
   assert.equal(new Set(projection.columns.map((column) => column.id)).size, projection.columns.length);
   assert.equal(projection.columns[0].id, "experiment");
-  assert.equal(projection.columns[0].pinned, true);
+  assert.equal(projection.columns[0].pinned, false);
 });
 
 test("recommends deterministic high-coverage outcome and condition fields while penalizing warnings", () => {
@@ -163,6 +163,33 @@ test("applies search, typed field filters, stable sorting, and opaque cursor pag
   assert.deepEqual(second.rows.map((row) => row.label), ["Exp 1"]);
   assert.equal(second.nextCursor, null);
   assert.equal(second.totalCount, 2);
+});
+
+test("sorts numeric-looking values numerically and keeps missing values last in both directions", () => {
+  const data = fixture();
+  data.dataSnapshots.find((item) => item.id === "snapshot_active").experimentRecords[0].fields.push(
+    field("numeric_text", "9 mm", { displayName: "Numeric text", valueType: "string" }),
+  );
+  data.dataSnapshots.find((item) => item.id === "snapshot_active").experimentRecords[1].fields.push(
+    field("numeric_text", null, { displayName: "Numeric text", valueType: "string" }),
+  );
+  data.dataSnapshots.find((item) => item.id === "snapshot_third").experimentRecords[0].fields.push(
+    field("numeric_text", "12 mm", { displayName: "Numeric text", valueType: "string" }),
+  );
+  const columnId = experimentFieldColumnId({ fieldKey: "numeric_text", unit: null, valueType: "string" });
+  const ascending = buildExperimentProjection({
+    projectId: "project_1",
+    ...data,
+    sort: [{ columnId, direction: "asc" }],
+  });
+  const descending = buildExperimentProjection({
+    projectId: "project_1",
+    ...data,
+    sort: [{ columnId, direction: "desc" }],
+  });
+
+  assert.deepEqual(ascending.rows.map((row) => row.label), ["Exp 1", "Exp 3", "Exp 2"]);
+  assert.deepEqual(descending.rows.map((row) => row.label), ["Exp 3", "Exp 1", "Exp 2"]);
 });
 
 test("returns full active experiment detail lazily and rejects inactive or cross-project ids", () => {

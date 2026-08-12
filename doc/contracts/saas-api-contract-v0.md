@@ -69,6 +69,7 @@ GET   /api/projects/:projectId/state
   "dataSnapshots": [],
   "experimentSnapshotHeads": [],
   "browserViews": [],
+  "projectBrowserConfig": {},
   "agentRuns": [],
   "analysisThreads": [],
   "chartSpecs": [],
@@ -234,7 +235,27 @@ The list response contains one bounded row per active experiment snapshot head, 
 
 The detail endpoint lazily returns the complete active experiment record, scalar values, series inventory/points, warnings, and exact source refs. Cross-project and inactive identities return not found.
 
-## Personal Browser Views
+## Shared Experiment Browser Configuration
+
+```text
+GET   /api/projects/:projectId/browser-config
+PATCH /api/projects/:projectId/browser-config
+```
+
+Each project has at most one `labrat.projectBrowserConfig.v1` record. Every
+project member reads the same configuration whenever Experiment Browser opens.
+Editors, lab admins, and lab owners may update it; viewers receive `canEdit:
+false`. Its payload contains only `columns`, `filters`, and `sort`. Column
+entries store stable `columnId`, order, width, hidden state, and an optional
+shared `labelOverride`.
+
+`PATCH` requires `expectedVersion`. A stale version returns `409
+project_browser_config_conflict`; clients reload the latest shared state rather
+than silently overwriting it. This is presentation metadata only and never
+changes DataSnapshots, experiment records, or source evidence. Blank label
+overrides restore the projection's original label.
+
+## Historical Personal Browser Views
 
 ```text
 GET    /api/projects/:projectId/browser-views
@@ -243,7 +264,10 @@ PATCH  /api/projects/:projectId/browser-views/:browserViewId
 DELETE /api/projects/:projectId/browser-views/:browserViewId
 ```
 
-BrowserViews are owner-scoped display state only. They may store visible column ids/order/widths, filters, sort, selected experiment ids, and default status. They must never store authoritative scientific values.
+BrowserViews remain owner-scoped historical publication/view provenance for
+older clients. The active Experiment Browser no longer loads or saves them;
+its live layout uses the shared project configuration above. BrowserViews must
+never store authoritative scientific values.
 
 ## LabRat AgentRun
 

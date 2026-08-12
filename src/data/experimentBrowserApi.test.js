@@ -3,9 +3,11 @@ import {
   createExperimentBrowserView,
   deleteExperimentBrowserView,
   getExperimentBrowserDetail,
+  getProjectBrowserConfig,
   listExperimentBrowserRows,
   listExperimentBrowserViews,
   updateExperimentBrowserView,
+  updateProjectBrowserConfig,
 } from "./experimentBrowserApi.js";
 
 function ok(body) {
@@ -65,5 +67,20 @@ describe("experimentBrowserApi", () => {
     ]);
     expect(fetch.mock.calls.map(([, options]) => options.method || "GET")).toEqual(["GET", "POST", "PATCH", "DELETE"]);
     expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({ name: "My view", payload, isDefault: true });
+  });
+
+  it("loads and version-updates the shared project Browser configuration", async () => {
+    const fetch = vi.fn(async () => ok({ projectBrowserConfig: null, canEdit: true }));
+    const payload = { columns: [], filters: [], sort: [] };
+
+    await getProjectBrowserConfig("project / 1", { fetch });
+    await updateProjectBrowserConfig("project / 1", { expectedVersion: 0, payload }, { fetch });
+
+    expect(fetch.mock.calls.map(([endpoint]) => endpoint)).toEqual([
+      "/api/projects/project%20%2F%201/browser-config",
+      "/api/projects/project%20%2F%201/browser-config",
+    ]);
+    expect(fetch.mock.calls[1][1].method).toBe("PATCH");
+    expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({ expectedVersion: 0, payload });
   });
 });

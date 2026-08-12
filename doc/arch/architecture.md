@@ -133,7 +133,9 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 - ExperimentIdentity is stable project identity.
 - ExperimentSnapshotHead selects the current accepted record for one experiment.
 - Experiment Browser is a read model.
-- BrowserView is personal display state only.
+- ProjectBrowserConfig is the shared project-wide Experiment Browser display
+  state. BrowserView is retained only as historical publication/view
+  provenance and does not drive the active Browser UI.
 - AnalysisSourceSelection is an exact range inside one active accepted region.
 - AnalysisThread owns one durable reviewed-analysis conversation and its artifact ids.
 - AnalysisPlanRevision is a durable immutable set of source selections plus

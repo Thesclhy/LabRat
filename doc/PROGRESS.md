@@ -15,6 +15,33 @@ Keep entries concise, newest first, and include:
 
 ## 2026-08-12
 
+- Removed two post-milestone-2 Browser flashes. A sort/filter refresh now keeps
+  the populated grid mounted with `aria-busy`, preserves both table scroll
+  axes, and updates rows in place rather than replacing the workspace with a
+  loading card. Shared-layout autosave is silent, so transient save text no
+  longer flashes in the left sidebar; actionable errors remain visible. Added a deferred-request
+  regression proving the same grid node and scroll offsets survive header
+  sorting. Focused Browser coverage passed 11/11 and the production build
+  passed with the existing Plotly chunk-size warning. Live QA at horizontal
+  scroll 500 and vertical scroll 240 preserved both offsets through sorting,
+  and the console had no errors.
+
+- Completed Experiment Browser milestone 2 by extending the existing column,
+  filter, and sort controls around one project-scoped shared configuration.
+  Renames, hidden state, order, width, sort, and filters now persist on the
+  backend and restore for all project users after leaving/reentering; viewers
+  receive the layout read-only and version conflicts reload the latest state.
+  Inline rename supports Enter/blur save, Escape cancel, and blank-name source
+  restoration. Experiment is reorderable, individual hidden-column `+` chips
+  remain, Reset/Show All remain absent, and numeric-looking values with units
+  sort numerically with missing values last in both directions. Added migration
+  021 plus API/schema/architecture documentation and retained BrowserViews only
+  as historical provenance, avoiding a duplicate active state system. Full
+  `npm run codex:verify` passed (284 frontend tests; backend suite with four
+  existing skips; production build with the existing Plotly chunk warning).
+  Live PostgreSQL/browser QA verified save/reentry, rename restore/cancel,
+  Experiment movement, hide/show chips, and a clean console.
+
 - Removed first-visit Experiment Browser auto-hiding. When no saved/default
   BrowserView supplies column settings, every projected column now starts
   visible; users can still hide columns manually, and saved views continue to

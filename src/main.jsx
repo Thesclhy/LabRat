@@ -2608,7 +2608,6 @@ function App() {
   const [activeWorkbookReviewDraftRegionId, setActiveWorkbookReviewDraftRegionId] = useState("");
   const [workbookReviewFocusSelection, setWorkbookReviewFocusSelection] = useState(null);
   const [browserSelectedExperimentIds, setBrowserSelectedExperimentIds] = useState([]);
-  const [browserInitialViewId, setBrowserInitialViewId] = useState("");
   const [backendChartInterpretState, setBackendChartInterpretState] = useState({ loading: false, result: null, error: "" });
   const resetReviewState = () => {
     setBackendChartInterpretState({ loading: false, result: null, error: "" });
@@ -2618,7 +2617,6 @@ function App() {
     setActiveWorkbookReviewDraftRegionId("");
     setWorkbookReviewFocusSelection(null);
     setBrowserSelectedExperimentIds([]);
-    setBrowserInitialViewId("");
     setRequestedAnalysisOutputTarget("");
     setAnalysisReviewState(null);
   };
@@ -3385,7 +3383,6 @@ function App() {
     const state = await getServerProjectState(activeProjectId);
     applyProjectWorkspaceRefresh(state);
     setBrowserSelectedExperimentIds([]);
-    setBrowserInitialViewId(response.browserView?.id || "");
     setTab("browser");
     return response;
   };
@@ -3560,8 +3557,6 @@ function App() {
       {tab === "browser" && <ExperimentBrowser
         projectId={activeProjectId}
         initialSelectedExperimentIds={browserSelectedExperimentIds}
-        initialViewId={browserInitialViewId}
-        suppressInitialViewSelection={Boolean(browserInitialViewId)}
         onSelectionChange={setBrowserSelectedExperimentIds}
         onOpenImportReview={openWorkbookUpload}
         onRequestDataChange={openExperimentBrowserDataRequest}

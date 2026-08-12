@@ -1424,7 +1424,83 @@ test.skip("retired grouped-header DataPlan publication workflow", async () => {
   assert.equal(gasField.sourceRefs[0].cell, "N3");
 });
 
-test("BrowserView routes persist only owner-scoped personal display state", async () => {
+test("project Browser configuration is shared, versioned, and restored on reentry", async () => {
+  const project = await createProject("Shared Browser Configuration Project");
+  const initial = await jsonFetch(`/api/projects/${project.id}/browser-config`);
+  assert.equal(initial.status, 200);
+  assert.equal((await initial.json()).projectBrowserConfig, null);
+
+  const payload = {
+    columns: [
+      { columnId: "experiment", order: 1, width: 230, hidden: false, labelOverride: "Run" },
+      { columnId: "field:yield:percent:number", order: 0, width: 180, hidden: true },
+    ],
+    filters: [{ columnId: "field:yield:percent:number", operator: "gte", value: 40 }],
+    sort: [{ columnId: "experiment", direction: "desc" }],
+  };
+  const saved = await jsonFetch(`/api/projects/${project.id}/browser-config`, {
+    method: "PATCH",
+    body: { expectedVersion: 0, payload },
+  });
+  assert.equal(saved.status, 200);
+  const first = (await saved.json()).projectBrowserConfig;
+  assert.equal(first.version, 1);
+  assert.deepEqual(first.payload, payload);
+
+  const reentered = await jsonFetch(`/api/projects/${project.id}/browser-config`);
+  assert.equal(reentered.status, 200);
+  const reenteredBody = await reentered.json();
+  assert.deepEqual(reenteredBody.projectBrowserConfig.payload, payload);
+  assert.equal(reenteredBody.canEdit, true);
+
+  const conflict = await jsonFetch(`/api/projects/${project.id}/browser-config`, {
+    method: "PATCH",
+    body: { expectedVersion: 0, payload: { columns: [], filters: [], sort: [] } },
+  });
+  assert.equal(conflict.status, 409);
+
+  const ownerCookie = cookie;
+  try {
+    const adminLogin = await jsonFetch("/api/auth/login", {
+      method: "POST",
+      body: { username: "admin", password: "LabRatAdmin123!" },
+    });
+    cookie = cookieFrom(adminLogin);
+    const viewerUsername = `shared_browser_viewer_${Date.now()}`;
+    const viewerPassword = "SharedBrowserViewer123!";
+    const createViewer = await jsonFetch("/api/admin/users", {
+      method: "POST",
+      body: {
+        username: viewerUsername,
+        displayName: "Shared Browser Viewer",
+        temporaryPassword: viewerPassword,
+        labId: project.labId,
+        role: "viewer",
+      },
+    });
+    assert.equal(createViewer.status, 201);
+    const viewerLogin = await jsonFetch("/api/auth/login", {
+      method: "POST",
+      body: { username: viewerUsername, password: viewerPassword },
+    });
+    cookie = cookieFrom(viewerLogin);
+
+    const viewerRead = await jsonFetch(`/api/projects/${project.id}/browser-config`);
+    assert.equal(viewerRead.status, 200);
+    const viewerReadBody = await viewerRead.json();
+    assert.deepEqual(viewerReadBody.projectBrowserConfig.payload, payload);
+    assert.equal(viewerReadBody.canEdit, false);
+    const viewerWrite = await jsonFetch(`/api/projects/${project.id}/browser-config`, {
+      method: "PATCH",
+      body: { expectedVersion: 1, payload },
+    });
+    assert.equal(viewerWrite.status, 403);
+  } finally {
+    cookie = ownerCookie;
+  }
+});
+
+test("BrowserView routes retain historical owner-scoped personal display state", async () => {
   const project = await createProject("Personal Browser Views Project");
   const otherProject = await createProject("Other Browser Views Project");
   const ownerCookie = cookie;

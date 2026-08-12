@@ -16,8 +16,10 @@ export function ExperimentGridHeaderCell({
   dropEdge = null,
   canMoveLeft = false,
   canMoveRight = false,
+  editable = false,
   onSort,
   onHide,
+  onRename,
   onResize,
   onAutoFit,
   onMove,
@@ -28,7 +30,10 @@ export function ExperimentGridHeaderCell({
 }) {
   const [menu, setMenu] = useState(null);
   const [dragWidth, setDragWidth] = useState(null);
+  const [renaming, setRenaming] = useState(false);
+  const [draftLabel, setDraftLabel] = useState("");
   const headerRef = useRef(null);
+  const renameCancelledRef = useRef(false);
 
   useEffect(() => {
     if (!menu) return undefined;
@@ -49,6 +54,7 @@ export function ExperimentGridHeaderCell({
   }, [menu]);
 
   const startResize = (event) => {
+    if (!editable) return;
     event.preventDefault();
     event.stopPropagation();
     const startX = event.clientX;
@@ -75,11 +81,31 @@ export function ExperimentGridHeaderCell({
 
   const className = [
     "experiment-grid-header-cell",
-    column.pinned ? "pinned" : "",
     dragging ? "is-dragging" : "",
     dropEdge === "before" ? "drop-before" : "",
     dropEdge === "after" ? "drop-after" : "",
   ].filter(Boolean).join(" ");
+
+  const beginRename = () => {
+    if (!editable) return;
+    setMenu(null);
+    renameCancelledRef.current = false;
+    setDraftLabel(column.label || "");
+    setRenaming(true);
+  };
+
+  const commitRename = () => {
+    if (!renaming) return;
+    if (renameCancelledRef.current) {
+      renameCancelledRef.current = false;
+      setRenaming(false);
+      return;
+    }
+    const nextLabel = draftLabel.trim();
+    const originalLabel = String(column.originalLabel || column.label || "").trim();
+    onRename?.(nextLabel && nextLabel !== originalLabel ? nextLabel : undefined);
+    setRenaming(false);
+  };
 
   return (
     <div
@@ -114,7 +140,28 @@ export function ExperimentGridHeaderCell({
         onDrop?.();
       }}
     >
-      <span
+      {renaming ? (
+        <input
+          className="experiment-grid-header-rename"
+          aria-label={`Rename ${column.label}`}
+          value={draftLabel}
+          autoFocus
+          maxLength={120}
+          onChange={(event) => setDraftLabel(event.target.value)}
+          onClick={(event) => event.stopPropagation()}
+          onBlur={commitRename}
+          onKeyDown={(event) => {
+            event.stopPropagation();
+            if (event.key === "Enter") commitRename();
+            if (event.key === "Escape") {
+              event.preventDefault();
+              renameCancelledRef.current = true;
+              setDraftLabel(column.label || "");
+              setRenaming(false);
+            }
+          }}
+        />
+      ) : <span
         className="experiment-grid-header-label"
         draggable={draggable}
         onDragStart={(event) => {
@@ -127,9 +174,9 @@ export function ExperimentGridHeaderCell({
       >
         {draggable ? <span className="experiment-column-drag-grip" aria-hidden="true">::</span> : null}
         <span>{column.label}</span>
-      </span>
+      </span>}
       {sortDirection ? <small className="experiment-sort-direction">{sortDirection}</small> : null}
-      <span
+      {editable ? <span
         className="experiment-column-resize-handle"
         role="separator"
         aria-orientation="vertical"
@@ -143,7 +190,7 @@ export function ExperimentGridHeaderCell({
           onAutoFit?.();
         }}
         onClick={(event) => event.stopPropagation()}
-      />
+      /> : null}
       {menu ? (
         <div
           className="column-header-menu experiment-grid-header-menu"
@@ -152,10 +199,11 @@ export function ExperimentGridHeaderCell({
           onMouseDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
         >
-          <button type="button" role="menuitem" disabled={column.pinned} onClick={() => { setMenu(null); onHide?.(); }}>Hide column</button>
+          <button type="button" role="menuitem" disabled={!editable} onClick={() => { setMenu(null); onHide?.(); }}>Hide column</button>
+          <button type="button" role="menuitem" disabled={!editable} onClick={beginRename}>Rename column</button>
           <button type="button" role="menuitem" disabled={!canMoveLeft} onClick={() => { setMenu(null); onMove?.(-1); }}>Move left</button>
           <button type="button" role="menuitem" disabled={!canMoveRight} onClick={() => { setMenu(null); onMove?.(1); }}>Move right</button>
-          <button type="button" role="menuitem" onClick={() => { setMenu(null); onAutoFit?.(); }}>Auto-fit width</button>
+          <button type="button" role="menuitem" disabled={!editable} onClick={() => { setMenu(null); onAutoFit?.(); }}>Auto-fit width</button>
         </div>
       ) : null}
     </div>

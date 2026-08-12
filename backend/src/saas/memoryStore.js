@@ -43,6 +43,7 @@ export class MemorySaasStore {
     this.experimentSnapshotHeads = new Map();
     this.experimentSnapshotPublishes = new Map();
     this.browserViews = new Map();
+    this.projectBrowserConfigs = new Map();
     this.agentRuns = new Map();
     this.analysisThreads = new Map();
     this.analysisThreadRetryReceipts = new Map();
@@ -933,6 +934,41 @@ export class MemorySaasStore {
 
   async deleteBrowserView(id) {
     return this.browserViews.delete(id);
+  }
+
+  async findProjectBrowserConfig({ projectId }) {
+    return copy(this.projectBrowserConfigs.get(projectId) || null);
+  }
+
+  async saveProjectBrowserConfig(input) {
+    const existing = this.projectBrowserConfigs.get(input.projectId);
+    const expectedVersion = Number(input.expectedVersion) || 0;
+    if (existing && existing.version !== expectedVersion) {
+      throw Object.assign(new Error("The shared Experiment Browser configuration changed. Reload the latest configuration and try again."), {
+        statusCode: 409,
+        code: "project_browser_config_conflict",
+      });
+    }
+    if (!existing && expectedVersion !== 0) {
+      throw Object.assign(new Error("The shared Experiment Browser configuration changed. Reload the latest configuration and try again."), {
+        statusCode: 409,
+        code: "project_browser_config_conflict",
+      });
+    }
+    const now = nowIso();
+    const config = {
+      id: existing?.id || input.id || makeId("project_browser_config"),
+      labId: input.labId,
+      projectId: input.projectId,
+      schemaVersion: "labrat.projectBrowserConfig.v1",
+      payload: copy(input.payload) || {},
+      version: (existing?.version || 0) + 1,
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+      updatedBy: input.updatedBy || null,
+    };
+    this.projectBrowserConfigs.set(input.projectId, config);
+    return copy(config);
   }
 
   async createAgentRun(input) {

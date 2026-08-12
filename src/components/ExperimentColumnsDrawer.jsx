@@ -16,7 +16,7 @@ export function ExperimentColumnsDrawer({
   columns = [],
   settings = [],
   onChange,
-  onReset,
+  readOnly = false,
   onClose,
   returnFocusRef,
 }) {
@@ -67,7 +67,7 @@ export function ExperimentColumnsDrawer({
         <header className="experiment-columns-drawer__header">
           <div>
             <h3>Columns</h3>
-            <p>Choose the fields shown in this Browser view.</p>
+            <p>Choose the fields shown in the shared project Browser.</p>
           </div>
           <button
             ref={closeButtonRef}
@@ -91,13 +91,12 @@ export function ExperimentColumnsDrawer({
                   <input
                     type="checkbox"
                     checked={!setting.hidden}
-                    disabled={Boolean(column.pinned)}
+                    disabled={readOnly}
                     aria-label={`Show ${column.label}`}
                     onChange={(event) => updateSetting(column.id, { hidden: !event.target.checked })}
                   />
                   <span>
                     <strong>{column.label}</strong>
-                    {column.pinned ? <small>Pinned</small> : null}
                   </span>
                 </label>
                 <div className="experiment-column-setting__controls">
@@ -106,7 +105,7 @@ export function ExperimentColumnsDrawer({
                     className="icon-button"
                     aria-label={`Move ${column.label} up`}
                     title="Move up"
-                    disabled={index === 0}
+                    disabled={readOnly || index === 0}
                     onClick={() => move(column.id, -1)}
                   >
                     &#8593;
@@ -116,7 +115,7 @@ export function ExperimentColumnsDrawer({
                     className="icon-button"
                     aria-label={`Move ${column.label} down`}
                     title="Move down"
-                    disabled={index === ordered.length - 1}
+                    disabled={readOnly || index === ordered.length - 1}
                     onClick={() => move(column.id, 1)}
                   >
                     &#8595;
@@ -128,6 +127,7 @@ export function ExperimentColumnsDrawer({
                       min={MIN_COLUMN_WIDTH}
                       max={MAX_COLUMN_WIDTH}
                       value={setting.width}
+                      disabled={readOnly}
                       aria-label={`Width for ${column.label}`}
                       onChange={(event) => {
                         const width = Math.min(
@@ -145,9 +145,6 @@ export function ExperimentColumnsDrawer({
         </div>
 
         <footer className="experiment-columns-drawer__footer">
-          <button type="button" className="secondary-action" onClick={onReset}>
-            Reset columns
-          </button>
           <button type="button" className="primary-action" onClick={onClose}>
             Done
           </button>

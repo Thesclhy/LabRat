@@ -66,7 +66,7 @@ Use this split when deciding what to build:
   patches, complete-record merge previews, automated identity suggestions,
   stale-head and idempotency protection, atomic DataSnapshot v4/BrowserView
   publication, and automatic opening of the published view. Pure column
-  visibility/order/filter/sort remains BrowserView-only. The old DataPlan
+  visibility/order/filter/sort remains shared ProjectBrowserConfig-only. The old DataPlan
   draft/publish routes, frontend review panel, and deterministic writer modules
   are retired; historical accepted snapshots remain readable.
 - List-indexed scalar publication: plans no longer contain `fieldTargets`,
@@ -126,7 +126,10 @@ Use this split when deciding what to build:
 - Experiment-record DataPlan preview: deterministic row/region extraction, typed values and series, canonical dependency/preview hashes, explicit identity decisions, source-backed warnings, bounded reads, and a transient review panel.
 - Transactional accepted-snapshot publish: mandatory idempotency, backend evidence re-read/re-execution, stale-preview recovery, atomic accepted DataPlan/DataSnapshot persistence, explicit experiment identity updates, affected-head advancement, and audit receipts without DatasetCommit/chart/manuscript side effects.
 - Snapshot-backed Experiment Browser: accepted-head-only rows, project-isolated cursor APIs, unit-aware recommended columns, typed search/filter/sort, virtualized large-project rendering, lazy detail, and accepted source-evidence navigation.
-- Personal Browser views and comparison: owner-isolated saved display state, configurable columns, default view restoration, persistent selection, and source-backed scalar/series comparison without unit coercion.
+- Shared Browser configuration and comparison: project-wide renamed labels,
+  visibility, order, widths, filters, and sort with versioned reentry
+  restoration, plus transient source-backed scalar/series comparison without
+  unit coercion. Historical personal BrowserViews remain provenance only.
 - DataPlan identity review bulk workflow: unmatched experiments can be created in one action, unique exact matches can be accepted together, canonical labels identify reuse targets, selected rows can be changed or cleared, and summary/filter/undo controls preserve explicit review before publish.
 - WorkbookReviewWorkspace tile loading: stable 40-row by 12-column windows, bounded LRU caching, in-flight request reuse, scroll settling, directional prefetch, retained loaded cells, and correct document/Sheet/range resets avoid repeat SourceDocument `/range` reads and stale viewport state when users drag away, return, or switch workbooks.
 - Milestone 7 legacy retirement: removed aggregate dataset/mapping/analysis/observation stores and routes, retired unscoped normalize/chart endpoints, added migration 011, kept source-backed ChartSpecs, and passed the golden workbook-to-Browser workflow.

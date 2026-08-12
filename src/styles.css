@@ -9007,6 +9007,9 @@ tbody tr:hover {
   border-radius: var(--radius-sm);
   background: var(--panel);
 }
+.experiment-grid-frame.is-refreshing {
+  cursor: progress;
+}
 .experiment-grid-header,
 .experiment-grid-row {
   display: grid;
@@ -9084,6 +9087,17 @@ tbody tr:hover {
   overflow-wrap: anywhere;
   white-space: normal;
   line-height: 1.25;
+}
+.experiment-grid-header-rename {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  background: var(--panel);
+  color: var(--color-slate-800);
+  font: inherit;
+  font-weight: 600;
+  padding: 3px 5px;
 }
 .experiment-column-drag-grip {
   flex: 0 0 auto;

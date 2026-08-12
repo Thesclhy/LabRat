@@ -15,7 +15,10 @@ A logged-in project is loaded from:
 GET /api/projects/:projectId/state
 ```
 
-The response contains the project shell, editable project profile, evidence/review summaries, accepted DataPlan/DataSnapshot summaries, experiment snapshot heads, BrowserViews, and later output records:
+The response contains the project shell, editable project profile,
+evidence/review summaries, accepted DataPlan/DataSnapshot summaries,
+experiment snapshot heads, the shared ProjectBrowserConfig, historical
+BrowserViews, and later output records:
 
 ```text
 project
@@ -29,6 +32,7 @@ regionUnderstandings
 dataPlans
 dataSnapshots
 experimentSnapshotHeads
+projectBrowserConfig
 browserViews
 agentRuns
 analysisThreads
@@ -68,7 +72,9 @@ Use `POST /api/projects` for the initial profile and `PATCH /api/projects/:proje
 - Source evidence is stored in SourceDocuments; accepted interpretation is stored as exact RegionUnderstandingRevisions selected by active WorkbookReviewRegions.
 - Accepted structured data is stored in immutable DataSnapshots produced by accepted DataPlans.
 - One `experiment_snapshot_heads` row chooses the active accepted snapshot record for each stable experiment identity.
-- Personal Browser display state is stored in `browser_views`.
+- Live Experiment Browser display state is shared project-wide in
+  `project_browser_configs`; historical owner-scoped `browser_views` remain for
+  publication provenance and older clients.
 - Reviewed analysis conversations and immutable calculation plans are stored in `analysis_threads` and `analysis_plan_revisions`; accepted plans create queued `analysis_runs`.
 - Durable chart definitions are stored in `chart_specs`.
 - Manuscript canvas state is stored in `manuscripts`.

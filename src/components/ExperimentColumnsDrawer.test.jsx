@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ExperimentColumnsDrawer } from "./ExperimentColumnsDrawer.jsx";
 
 const columns = [
-  { id: "experiment", label: "Experiment", pinned: true, recommended: true },
+  { id: "experiment", label: "Experiment", pinned: false, recommended: true },
   { id: "temperature_c", label: "Temperature (degC)", unit: "degC", recommended: true },
   { id: "yield", label: "Yield (%)", unit: "percent", recommended: false },
 ];
@@ -16,16 +16,14 @@ const settings = [
 ];
 
 describe("ExperimentColumnsDrawer", () => {
-  it("adds, hides, reorders, resizes, and resets unit-aware columns", () => {
+  it("adds, hides, reorders, and resizes unit-aware columns without a global reset", () => {
     const onChange = vi.fn();
-    const onReset = vi.fn();
     render(
       <ExperimentColumnsDrawer
         open
         columns={columns}
         settings={settings}
         onChange={onChange}
-        onReset={onReset}
         onClose={vi.fn()}
       />,
     );
@@ -45,8 +43,7 @@ describe("ExperimentColumnsDrawer", () => {
       expect.objectContaining({ columnId: "temperature_c", width: 220 }),
     ]));
 
-    fireEvent.click(screen.getByRole("button", { name: "Reset columns" }));
-    expect(onReset).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Reset columns" })).toBeNull();
   });
 
   it("closes with Escape and restores focus to the trigger", () => {
@@ -61,7 +58,6 @@ describe("ExperimentColumnsDrawer", () => {
             columns={columns}
             settings={settings}
             onChange={() => {}}
-            onReset={() => {}}
             onClose={() => setOpen(false)}
             returnFocusRef={triggerRef}
           />

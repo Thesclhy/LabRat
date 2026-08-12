@@ -359,6 +359,21 @@ function browserViewFromRow(row) {
   };
 }
 
+function projectBrowserConfigFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    schemaVersion: row.schema_version,
+    payload: row.payload || {},
+    version: Number(row.version),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    updatedBy: row.updated_by,
+  };
+}
+
 function experimentSnapshotPublishFromRow(row) {
   if (!row) return null;
   return {
@@ -1843,6 +1858,53 @@ export class PostgresSaasStore {
   async deleteBrowserView(id) {
     const result = await this.query("delete from browser_views where id = $1", [id]);
     return result.rowCount > 0;
+  }
+
+  async findProjectBrowserConfig({ projectId }) {
+    const result = await this.query(
+      "select * from project_browser_configs where project_id = $1",
+      [projectId],
+    );
+    return projectBrowserConfigFromRow(result.rows[0]);
+  }
+
+  async saveProjectBrowserConfig(input) {
+    const expectedVersion = Number(input.expectedVersion) || 0;
+    const values = [
+      input.id || makeId("project_browser_config"),
+      input.labId,
+      input.projectId,
+      input.schemaVersion || "labrat.projectBrowserConfig.v1",
+      jsonb(input.payload || {}),
+      input.updatedBy || null,
+      expectedVersion,
+    ];
+    const result = expectedVersion === 0
+      ? await this.query(
+        `insert into project_browser_configs
+         (id, lab_id, project_id, schema_version, payload, version, created_at, updated_at, updated_by)
+         values ($1, $2, $3, $4, $5, 1, now(), now(), $6)
+         on conflict (project_id) do nothing
+         returning *`,
+        values.slice(0, 6),
+      )
+      : await this.query(
+        `update project_browser_configs
+         set payload = $1,
+             version = version + 1,
+             updated_at = now(),
+             updated_by = $2
+         where project_id = $3 and version = $4
+         returning *`,
+        [values[4], values[5], values[2], values[6]],
+      );
+    if (!result.rows[0]) {
+      throw Object.assign(new Error("The shared Experiment Browser configuration changed. Reload the latest configuration and try again."), {
+        statusCode: 409,
+        code: "project_browser_config_conflict",
+      });
+    }
+    return projectBrowserConfigFromRow(result.rows[0]);
   }
 
   async createAgentRun(input) {

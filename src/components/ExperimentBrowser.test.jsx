@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ExperimentBrowser } from "./ExperimentBrowser.jsx";
 
 const columns = [
-  { id: "experiment", label: "Experiment", pinned: true, recommended: true, valueType: "string", unit: null },
+  { id: "experiment", label: "Experiment", pinned: false, recommended: true, valueType: "string", unit: null },
   { id: "field:temperature:degC:number", label: "Temperature (degC)", recommended: true, valueType: "number", unit: "degC" },
   { id: "field:yield:percent:number", label: "Yield (percent)", recommended: false, valueType: "number", unit: "percent" },
 ];
@@ -29,10 +29,11 @@ function projection(overrides = {}) {
 
 function viewApi(overrides = {}) {
   return {
-    listViews: vi.fn(async () => ({ browserViews: [] })),
-    createView: vi.fn(async (_projectId, request) => ({ browserView: { id: "view_1", ...request } })),
-    updateView: vi.fn(async (_projectId, id, request) => ({ browserView: { id, name: "Saved view", isDefault: false, payload: {}, ...request } })),
-    deleteView: vi.fn(async () => ({ deleted: true })),
+    loadSharedConfig: vi.fn(async () => ({ projectBrowserConfig: null, canEdit: true })),
+    saveSharedConfig: vi.fn(async (_projectId, request) => ({
+      projectBrowserConfig: { id: "config_1", version: request.expectedVersion + 1, payload: request.payload },
+      canEdit: true,
+    })),
     ...overrides,
   };
 }
@@ -60,6 +61,60 @@ describe("ExperimentBrowser", () => {
     expect(headerLabelRule).toMatch(/white-space:\s*normal/);
     expect(sortDirectionRule).toMatch(/position:\s*absolute/);
     expect(cellValueRule).toMatch(/text-overflow:\s*ellipsis/);
+  });
+
+  it("keeps the mounted grid and its scroll positions while a header sort refreshes rows", async () => {
+    let resolveRefresh;
+    const scrollableRows = Array.from({ length: 30 }, (_, index) => ({
+      ...rows[0],
+      experimentId: `exp_${index + 1}`,
+      label: `Exp ${index + 1}`,
+    }));
+    const scrollableProjection = projection({ rows: scrollableRows, totalCount: scrollableRows.length });
+    const loadProjection = vi.fn()
+      .mockResolvedValueOnce(scrollableProjection)
+      .mockImplementationOnce(() => new Promise((resolvePromise) => { resolveRefresh = resolvePromise; }));
+    render(<ExperimentBrowser projectId="project_1" loadProjection={loadProjection} loadDetail={vi.fn()} {...viewApi()} />);
+
+    const temperatureHeader = await screen.findByRole("columnheader", { name: /Temperature/ });
+    const frame = screen.getByRole("table", { name: "Cross-experiment data table" });
+    const viewport = document.querySelector(".experiment-grid-viewport");
+    frame.scrollLeft = 240;
+    viewport.scrollTop = 84;
+    fireEvent.scroll(viewport);
+
+    fireEvent.click(temperatureHeader);
+    await waitFor(() => expect(loadProjection).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole("table", { name: "Cross-experiment data table" })).toBe(frame);
+    expect(frame.getAttribute("aria-busy")).toBe("true");
+    expect(frame.scrollLeft).toBe(240);
+    expect(viewport.scrollTop).toBe(84);
+
+    resolveRefresh(scrollableProjection);
+    await waitFor(() => expect(frame.getAttribute("aria-busy")).toBe("false"));
+    expect(screen.getByRole("table", { name: "Cross-experiment data table" })).toBe(frame);
+    expect(frame.scrollLeft).toBe(240);
+    expect(viewport.scrollTop).toBe(84);
+  });
+
+  it("autosaves shared layout changes without flashing transient save text", async () => {
+    let resolveSave;
+    const api = viewApi({
+      saveSharedConfig: vi.fn(() => new Promise((resolvePromise) => { resolveSave = resolvePromise; })),
+    });
+    render(<ExperimentBrowser projectId="project_1" loadProjection={vi.fn(async () => projection())} loadDetail={vi.fn()} {...api} />);
+
+    const temperatureHeader = await screen.findByRole("columnheader", { name: /Temperature/ });
+    fireEvent.click(temperatureHeader);
+    await waitFor(() => expect(api.saveSharedConfig).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText("Saving layout…")).toBeNull();
+
+    const request = api.saveSharedConfig.mock.calls[0][1];
+    resolveSave({
+      projectBrowserConfig: { id: "config_1", version: 1, payload: request.payload },
+      canEdit: true,
+    });
+    await waitFor(() => expect(screen.queryByText("Saving layout…")).toBeNull());
   });
 
   it("shows every column on first visit and supports column visibility, search, filtering, and sorting", async () => {
@@ -185,31 +240,117 @@ describe("ExperimentBrowser", () => {
     await waitFor(() => expect(loadDetail).toHaveBeenCalledWith("project_1", "exp_1", expect.anything()));
   });
 
+  it("renames and reorders the Experiment column through the existing header controls", async () => {
+    const api = viewApi();
+    render(
+      <ExperimentBrowser
+        projectId="project_1"
+        loadProjection={vi.fn(async () => projection())}
+        loadDetail={vi.fn()}
+        {...api}
+      />,
+    );
+
+    const experimentHeader = await screen.findByRole("columnheader", { name: /Experiment/ });
+    fireEvent.contextMenu(experimentHeader, { clientX: 180, clientY: 90 });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename column" }));
+    let renameInput = screen.getByRole("textbox", { name: "Rename Experiment" });
+    fireEvent.change(renameInput, { target: { value: "Cancelled name" } });
+    fireEvent.keyDown(renameInput, { key: "Escape" });
+    expect(screen.getByRole("columnheader", { name: /Experiment/ })).toBeTruthy();
+
+    fireEvent.contextMenu(screen.getByRole("columnheader", { name: /Experiment/ }), { clientX: 180, clientY: 90 });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename column" }));
+    renameInput = screen.getByRole("textbox", { name: "Rename Experiment" });
+    fireEvent.change(renameInput, { target: { value: "Run" } });
+    fireEvent.keyDown(renameInput, { key: "Enter" });
+    expect(screen.getByRole("columnheader", { name: /Run/ })).toBeTruthy();
+
+    fireEvent.contextMenu(screen.getByRole("columnheader", { name: /Run/ }), { clientX: 180, clientY: 90 });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename column" }));
+    renameInput = screen.getByRole("textbox", { name: "Rename Run" });
+    fireEvent.change(renameInput, { target: { value: "" } });
+    fireEvent.keyDown(renameInput, { key: "Enter" });
+    expect(screen.getByRole("columnheader", { name: /Experiment/ })).toBeTruthy();
+
+    fireEvent.contextMenu(screen.getByRole("columnheader", { name: /Experiment/ }), { clientX: 180, clientY: 90 });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename column" }));
+    renameInput = screen.getByRole("textbox", { name: "Rename Experiment" });
+    fireEvent.change(renameInput, { target: { value: "Run" } });
+    fireEvent.keyDown(renameInput, { key: "Enter" });
+
+    fireEvent.contextMenu(screen.getByRole("columnheader", { name: /Run/ }), { clientX: 180, clientY: 90 });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Move right" }));
+    expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
+      "",
+      expect.stringContaining("Temperature"),
+      expect.stringContaining("Run"),
+      expect.stringContaining("Yield"),
+    ]);
+
+    await waitFor(() => expect(api.saveSharedConfig).toHaveBeenCalledWith("project_1", expect.objectContaining({
+      payload: expect.objectContaining({
+        columns: expect.arrayContaining([expect.objectContaining({ columnId: "experiment", labelOverride: "Run", order: 1 })]),
+      }),
+    })));
+  });
+
+  it("shows shared settings to viewers without exposing editing controls", async () => {
+    const api = viewApi({
+      loadSharedConfig: vi.fn(async () => ({
+        projectBrowserConfig: {
+          id: "config_1",
+          version: 2,
+          payload: {
+            columns: columns.map((column, order) => ({ columnId: column.id, order, width: 160, hidden: false })),
+            filters: [],
+            sort: [],
+          },
+        },
+        canEdit: false,
+      })),
+    });
+    render(<ExperimentBrowser projectId="project_1" loadProjection={vi.fn(async () => projection())} loadDetail={vi.fn()} {...api} />);
+
+    const experimentHeader = await screen.findByRole("columnheader", { name: /Experiment/ });
+    expect(within(experimentHeader).queryByRole("separator")).toBeNull();
+    fireEvent.contextMenu(experimentHeader, { clientX: 180, clientY: 90 });
+    expect(screen.getByRole("menuitem", { name: "Rename column" }).disabled).toBe(true);
+    expect(screen.getByRole("menuitem", { name: "Hide column" }).disabled).toBe(true);
+    expect(screen.getByRole("menuitem", { name: "Auto-fit width" }).disabled).toBe(true);
+    expect(screen.getByRole("button", { name: "Apply filter" }).disabled).toBe(true);
+    expect(api.saveSharedConfig).not.toHaveBeenCalled();
+  });
+
   it("shows an actionable empty state and loads additional cursor pages", async () => {
     const onOpenImportReview = vi.fn();
-    const loadProjection = vi.fn()
-      .mockResolvedValueOnce(projection({ rows: [], totalCount: 0, nextCursor: null }))
-      .mockResolvedValueOnce(projection({ nextCursor: "next_1" }))
-      .mockResolvedValueOnce(projection({ rows: [{ ...rows[0], experimentId: "exp_2", label: "Exp 2" }], nextCursor: null }));
+    const loadProjection = vi.fn(async (projectId, query = {}) => {
+      if (projectId === "project_1") return projection({ rows: [], totalCount: 0, nextCursor: null });
+      if (query.cursor === "next_1") {
+        return projection({ rows: [{ ...rows[0], experimentId: "exp_2", label: "Exp 2" }], nextCursor: null });
+      }
+      return projection({ nextCursor: "next_1" });
+    });
+    const api = viewApi();
+    const loadDetail = vi.fn();
     const { rerender } = render(
-      <ExperimentBrowser projectId="project_1" loadProjection={loadProjection} loadDetail={vi.fn()} onOpenImportReview={onOpenImportReview} {...viewApi()} />,
+      <ExperimentBrowser projectId="project_1" loadProjection={loadProjection} loadDetail={loadDetail} onOpenImportReview={onOpenImportReview} {...api} />,
     );
     expect(await screen.findByText("No published experiments")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Import workbook" }));
     expect(onOpenImportReview).toHaveBeenCalledTimes(1);
 
-    rerender(<ExperimentBrowser projectId="project_2" loadProjection={loadProjection} loadDetail={vi.fn()} {...viewApi()} />);
+    rerender(<ExperimentBrowser projectId="project_2" loadProjection={loadProjection} loadDetail={loadDetail} {...api} />);
     expect(await screen.findByText("Exp 1")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Load more experiments" }));
     expect(await screen.findByText("Exp 2")).toBeTruthy();
     expect(loadProjection).toHaveBeenLastCalledWith("project_2", expect.objectContaining({ cursor: "next_1" }), expect.anything());
   });
 
-  it("loads a default personal view, prunes stale columns, and saves, renames, and defaults it", async () => {
-    const savedView = {
-      id: "view_1",
-      name: "High temperature",
-      isDefault: true,
+  it("loads shared project configuration, prunes stale columns, and persists display changes", async () => {
+    const sharedConfig = {
+      id: "config_1",
+      version: 4,
       payload: {
         columns: [
           { columnId: "experiment", order: 0, width: 240, hidden: false },
@@ -218,72 +359,28 @@ describe("ExperimentBrowser", () => {
         ],
         filters: [{ columnId: "field:temperature:degC:number", operator: "gte", value: 250 }],
         sort: [{ columnId: "field:yield:percent:number", direction: "desc" }],
-        groupBy: null,
-        selectedExperimentIds: ["exp_1"],
       },
     };
-    const api = viewApi({ listViews: vi.fn(async () => ({ browserViews: [savedView] })) });
+    const api = viewApi({ loadSharedConfig: vi.fn(async () => ({ projectBrowserConfig: sharedConfig, canEdit: true })) });
     const loadProjection = vi.fn(async () => projection());
     render(<ExperimentBrowser projectId="project_1" loadProjection={loadProjection} loadDetail={vi.fn()} {...api} />);
 
     expect(await screen.findByRole("columnheader", { name: /Yield/ })).toBeTruthy();
     await waitFor(() => expect(loadProjection).toHaveBeenLastCalledWith("project_1", expect.objectContaining({
-      filters: savedView.payload.filters,
-      sort: savedView.payload.sort,
+      filters: sharedConfig.payload.filters,
+      sort: sharedConfig.payload.sort,
     }), expect.anything()));
-    expect(screen.getByText("1 selected")).toBeTruthy();
+    expect(screen.queryByText("1 selected")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Choose columns" }));
     expect(screen.queryByText("deleted:column")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
-    fireEvent.change(screen.getByLabelText("View name"), { target: { value: "Renamed screen" } });
-    fireEvent.click(screen.getByRole("button", { name: "Rename view" }));
-    await waitFor(() => expect(api.updateView).toHaveBeenCalledWith("project_1", "view_1", { name: "Renamed screen" }));
-    fireEvent.click(screen.getByRole("button", { name: "Set default view" }));
-    await waitFor(() => expect(api.updateView).toHaveBeenCalledWith("project_1", "view_1", { isDefault: true }));
-    fireEvent.click(screen.getByRole("button", { name: "Update view" }));
-    await waitFor(() => expect(api.updateView).toHaveBeenLastCalledWith("project_1", "view_1", expect.objectContaining({
-      payload: expect.objectContaining({ selectedExperimentIds: ["exp_1"] }),
+    fireEvent.click(screen.getByRole("columnheader", { name: /Yield/ }));
+    await waitFor(() => expect(api.saveSharedConfig).toHaveBeenCalledWith("project_1", expect.objectContaining({
+      expectedVersion: 4,
+      payload: expect.objectContaining({ sort: [] }),
     })));
-  });
-
-  it("opens a post-publication view without auto-selecting its experiments", async () => {
-    const publishedView = {
-      id: "published_view",
-      name: "Published experiments",
-      isDefault: false,
-      payload: {
-        columns: [],
-        filters: [],
-        sort: [],
-        groupBy: null,
-        selectedExperimentIds: ["exp_1"],
-      },
-    };
-    const api = viewApi({
-      listViews: vi.fn(async () => ({ browserViews: [publishedView] })),
-    });
-
-    render(
-      <ExperimentBrowser
-        projectId="project_1"
-        initialViewId={publishedView.id}
-        suppressInitialViewSelection
-        loadProjection={vi.fn(async () => projection())}
-        loadDetail={vi.fn()}
-        {...api}
-      />,
-    );
-
-    expect(await screen.findByText("Exp 1")).toBeTruthy();
-    expect(screen.getByLabelText("Saved view").value).toBe(publishedView.id);
-    expect(screen.queryByText("1 selected")).toBeNull();
-    expect(screen.getByRole("checkbox", { name: "Select Exp 1" }).checked).toBe(false);
-
-    fireEvent.change(screen.getByLabelText("Saved view"), { target: { value: "" } });
-    fireEvent.change(screen.getByLabelText("Saved view"), { target: { value: publishedView.id } });
-    expect(screen.getByText("1 selected")).toBeTruthy();
   });
 
   it("keeps comparison selection across search changes and lazily loads selected details", async () => {

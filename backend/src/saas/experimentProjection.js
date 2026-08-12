@@ -233,7 +233,7 @@ function buildColumns(entries) {
     sourceSummary: null,
     recommendationScore: 100,
     recommended: true,
-    pinned: true,
+    pinned: false,
   }, ...fieldColumns];
 }
 
@@ -298,12 +298,29 @@ function cellValue(row, columnId) {
 }
 
 function compareValues(left, right) {
-  if (left == null && right == null) return 0;
-  if (left == null) return 1;
-  if (right == null) return -1;
   if (typeof left === "number" && typeof right === "number") return left - right;
   if (typeof left === "boolean" && typeof right === "boolean") return Number(left) - Number(right);
+  const numericValue = (value) => {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    const match = String(value ?? "").trim().match(/^[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?/);
+    if (!match) return null;
+    const parsed = Number(match[0]);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  const leftNumber = numericValue(left);
+  const rightNumber = numericValue(right);
+  if (leftNumber != null && rightNumber != null) return leftNumber - rightNumber;
   return String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: "base" });
+}
+
+function compareSortValues(left, right, direction) {
+  const leftBlank = left == null || left === "";
+  const rightBlank = right == null || right === "";
+  if (leftBlank && rightBlank) return 0;
+  if (leftBlank) return 1;
+  if (rightBlank) return -1;
+  const compared = compareValues(left, right);
+  return direction === "desc" ? -compared : compared;
 }
 
 function matchesFilter(row, filter) {
@@ -351,10 +368,14 @@ export function buildExperimentProjection({
     }
     return normalizedFilters.every((filter) => matchesFilter(row, filter));
   });
-  filteredRows.sort((left, right) => {
+  if (normalizedSort.length) filteredRows.sort((left, right) => {
     for (const sortItem of normalizedSort) {
-      const compared = compareValues(cellValue(left, sortItem.columnId), cellValue(right, sortItem.columnId));
-      if (compared) return sortItem.direction === "desc" ? -compared : compared;
+      const compared = compareSortValues(
+        cellValue(left, sortItem.columnId),
+        cellValue(right, sortItem.columnId),
+        sortItem.direction,
+      );
+      if (compared) return compared;
     }
     return left.label.localeCompare(right.label, undefined, { numeric: true, sensitivity: "base" })
       || left.experimentId.localeCompare(right.experimentId);

@@ -1,11 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  createExperimentBrowserView,
-  deleteExperimentBrowserView,
   getExperimentBrowserDetail,
+  getProjectBrowserConfig,
   listExperimentBrowserRows,
-  listExperimentBrowserViews,
-  updateExperimentBrowserView,
+  updateProjectBrowserConfig,
 } from "../data/experimentBrowserApi.js";
 import { ExperimentColumnsDrawer } from "./ExperimentColumnsDrawer.jsx";
 import { ExperimentCompareTray } from "./ExperimentCompareTray.jsx";
@@ -20,6 +18,10 @@ const MAX_COMPARE_SELECTION = 12;
 const EMPTY_SELECTION = [];
 const MIN_COLUMN_WIDTH = 60;
 const MAX_COLUMN_WIDTH = 800;
+
+function defaultWidth(column) {
+  return column.id === "experiment" ? 210 : 160;
+}
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -50,7 +52,7 @@ function defaultColumnSettings(columns) {
   return columns.map((column, order) => ({
     columnId: column.id,
     order,
-    width: column.pinned ? 210 : 160,
+    width: defaultWidth(column),
     hidden: false,
   }));
 }
@@ -62,8 +64,8 @@ function reconcileColumnSettings(columns, current) {
     .sort((left, right) => left.order - right.order)
     .map((setting) => ({
       ...setting,
-      hidden: available.get(setting.columnId).pinned ? false : Boolean(setting.hidden),
-      width: Number(setting.width) || (available.get(setting.columnId).pinned ? 210 : 160),
+      hidden: Boolean(setting.hidden),
+      width: Number(setting.width) || defaultWidth(available.get(setting.columnId)),
     }));
   const retainedIds = new Set(retained.map((setting) => setting.columnId));
   const appended = defaultColumnSettings(columns).filter((setting) => !retainedIds.has(setting.columnId));
@@ -73,10 +75,6 @@ function reconcileColumnSettings(columns, current) {
 function sameColumnIds(items, availableIds) {
   const filtered = asArray(items).filter((item) => availableIds.has(item.columnId));
   return filtered.length === asArray(items).length ? items : filtered;
-}
-
-function browserViewFromResponse(response) {
-  return response?.browserView || response || null;
 }
 
 function orderedColumnSettings(settings) {
@@ -90,24 +88,20 @@ function normalizeColumnOrder(settings) {
 function autoFitColumnWidth(column, rows) {
   const values = asArray(rows).slice(0, PAGE_LIMIT).map((row) => displayCell(row, column));
   const longest = Math.max(column.label?.length || 0, ...values.map((value) => String(value).length));
-  return Math.min(360, Math.max(column.pinned ? 150 : 90, longest * 7 + 34));
+  return Math.min(360, Math.max(column.id === "experiment" ? 150 : 90, longest * 7 + 34));
 }
 
 export function ExperimentBrowser({
   projectId,
   initialSelectedExperimentIds = EMPTY_SELECTION,
-  initialViewId = "",
-  suppressInitialViewSelection = false,
   onSelectionChange,
   onOpenImportReview,
   onRequestDataChange,
   onOpenSourceRange,
   loadProjection = listExperimentBrowserRows,
   loadDetail = getExperimentBrowserDetail,
-  listViews = listExperimentBrowserViews,
-  createView = createExperimentBrowserView,
-  updateView = updateExperimentBrowserView,
-  deleteView = deleteExperimentBrowserView,
+  loadSharedConfig = getProjectBrowserConfig,
+  saveSharedConfig = updateProjectBrowserConfig,
 }) {
   const [columns, setColumns] = useState([]);
   const [columnSettings, setColumnSettings] = useState([]);
@@ -136,38 +130,25 @@ export function ExperimentBrowser({
   const [compareOpen, setCompareOpen] = useState(false);
   const [compareLoading, setCompareLoading] = useState(false);
   const [compareError, setCompareError] = useState("");
-  const [browserViews, setBrowserViews] = useState([]);
-  const [activeViewId, setActiveViewId] = useState("");
-  const [viewName, setViewName] = useState("");
   const [viewLoading, setViewLoading] = useState(false);
   const [viewSaving, setViewSaving] = useState(false);
   const [viewError, setViewError] = useState("");
+  const [sharedConfigVersion, setSharedConfigVersion] = useState(0);
+  const [sharedConfigLoaded, setSharedConfigLoaded] = useState(false);
+  const [canEditSharedConfig, setCanEditSharedConfig] = useState(false);
   const [dragColumnId, setDragColumnId] = useState("");
   const [dropTarget, setDropTarget] = useState(null);
   const [viewportHeight, setViewportHeight] = useState(DEFAULT_VIEWPORT_HEIGHT);
+  const viewportHeightRef = useRef(DEFAULT_VIEWPORT_HEIGHT);
   const projectRef = useRef(projectId);
   const columnsTriggerRef = useRef(null);
   const gridViewportRef = useRef(null);
+  const lastSavedPayloadRef = useRef("");
 
   const updateSelection = useCallback((next) => {
     setSelectedIds(next);
     onSelectionChange?.([...next]);
   }, [onSelectionChange]);
-
-  const applyView = useCallback((view, { restoreSelection = true } = {}) => {
-    if (!view) return;
-    const payload = view.payload || {};
-    setActiveViewId(view.id || "");
-    setViewName(view.name || "");
-    setColumnSettings(asArray(payload.columns));
-    setFilters(asArray(payload.filters));
-    setSort(asArray(payload.sort));
-    if (restoreSelection) {
-      updateSelection(new Set(asArray(payload.selectedExperimentIds)));
-    }
-    setCompareOpen(false);
-    setViewError("");
-  }, [updateSelection]);
 
   useEffect(() => {
     setSelectedIds(new Set(initialSelectedExperimentIds));
@@ -175,32 +156,38 @@ export function ExperimentBrowser({
 
   useEffect(() => {
     if (!projectId) {
-      setBrowserViews([]);
+      setSharedConfigLoaded(false);
       setViewLoading(false);
       return undefined;
     }
+    setSharedConfigLoaded(false);
     let active = true;
     setViewLoading(true);
     setViewError("");
-    listViews(projectId)
+    loadSharedConfig(projectId)
       .then((response) => {
         if (!active) return;
-        const views = asArray(response?.browserViews ?? response);
-        setBrowserViews(views);
-        const requestedView = views.find((view) => view.id === initialViewId);
-        const defaultView = views.find((view) => view.isDefault);
-        if (requestedView || defaultView) {
-          applyView(requestedView || defaultView, {
-            restoreSelection: !suppressInitialViewSelection,
-          });
+        const config = response?.projectBrowserConfig || null;
+        const payload = config?.payload || { columns: [], filters: [], sort: [] };
+        if (config) {
+          setColumnSettings(asArray(payload.columns));
+          setFilters(asArray(payload.filters));
+          setSort(asArray(payload.sort));
         }
+        setSharedConfigVersion(Number(config?.version) || 0);
+        setCanEditSharedConfig(Boolean(response?.canEdit));
+        lastSavedPayloadRef.current = JSON.stringify(payload);
+        setSharedConfigLoaded(true);
       })
       .catch((requestError) => {
-        if (active) setViewError(errorMessage(requestError, "Saved views could not be loaded."));
+        if (active) {
+          setViewError(errorMessage(requestError, "Shared Browser configuration could not be loaded."));
+          setSharedConfigLoaded(true);
+        }
       })
       .finally(() => { if (active) setViewLoading(false); });
     return () => { active = false; };
-  }, [applyView, initialViewId, listViews, projectId, suppressInitialViewSelection]);
+  }, [loadSharedConfig, projectId]);
 
   const fetchPage = useCallback(async (cursor, append, signal) => {
     append ? setLoadingMore(true) : setLoading(true);
@@ -228,7 +215,8 @@ export function ExperimentBrowser({
       setTotalCount(Number(response?.totalCount) || 0);
       setNextCursor(response?.nextCursor || null);
       if (!append) {
-        setScrollTop(0);
+        const maximumScrollTop = Math.max(0, responseRows.length * ROW_HEIGHT - viewportHeightRef.current);
+        setScrollTop((current) => Math.min(current, maximumScrollTop));
         setColumnSettings((current) => reconcileColumnSettings(responseColumns, current));
         const availableIds = new Set(responseColumns.map((column) => column.id));
         setFilters((current) => sameColumnIds(current, availableIds));
@@ -256,13 +244,15 @@ export function ExperimentBrowser({
       setDetail(null);
       setDetailCache(new Map());
       setCompareOpen(false);
-      setActiveViewId("");
-      setViewName("");
+      setScrollTop(0);
+      setSharedConfigLoaded(false);
+      return undefined;
     }
+    if (!sharedConfigLoaded) return undefined;
     const controller = new AbortController();
     fetchPage(null, false, controller.signal);
     return () => controller.abort();
-  }, [fetchPage, projectId]);
+  }, [fetchPage, projectId, sharedConfigLoaded]);
 
   useEffect(() => {
     if (!detailId || !projectId) return undefined;
@@ -289,23 +279,31 @@ export function ExperimentBrowser({
     return () => controller.abort();
   }, [detailCache, detailId, loadDetail, projectId]);
 
+  const displayColumns = useMemo(() => {
+    const settingsById = new Map(columnSettings.map((setting) => [setting.columnId, setting]));
+    return columns.map((column) => ({
+      ...column,
+      originalLabel: column.label,
+      label: settingsById.get(column.id)?.labelOverride || column.label,
+    }));
+  }, [columnSettings, columns]);
   const visibleColumns = useMemo(() => {
-    const columnsById = new Map(columns.map((column) => [column.id, column]));
+    const columnsById = new Map(displayColumns.map((column) => [column.id, column]));
     return orderedColumnSettings(columnSettings)
       .filter((setting) => !setting.hidden && columnsById.has(setting.columnId))
       .map((setting) => ({ ...columnsById.get(setting.columnId), width: setting.width }));
-  }, [columnSettings, columns]);
+  }, [columnSettings, displayColumns]);
   const hiddenColumns = useMemo(() => {
-    const columnsById = new Map(columns.map((column) => [column.id, column]));
+    const columnsById = new Map(displayColumns.map((column) => [column.id, column]));
     return orderedColumnSettings(columnSettings)
       .filter((setting) => setting.hidden && columnsById.has(setting.columnId))
       .map((setting) => columnsById.get(setting.columnId));
-  }, [columnSettings, columns]);
+  }, [columnSettings, displayColumns]);
   const gridTemplateColumns = useMemo(() => (
-    `42px ${visibleColumns.map((column) => `${column.width || (column.pinned ? 210 : 160)}px`).join(" ")}`
+    `42px ${visibleColumns.map((column) => `${column.width || defaultWidth(column)}px`).join(" ")}`
   ), [visibleColumns]);
   const gridWidth = useMemo(() => (
-    42 + visibleColumns.reduce((total, column) => total + (column.width || (column.pinned ? 210 : 160)), 0)
+    42 + visibleColumns.reduce((total, column) => total + (column.width || defaultWidth(column)), 0)
   ), [visibleColumns]);
   const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
   const visibleRowCount = Math.ceil(viewportHeight / ROW_HEIGHT) + OVERSCAN * 2;
@@ -318,7 +316,45 @@ export function ExperimentBrowser({
   const compareDetails = useMemo(() => selectedExperimentIds
     .map((id) => detailCache.get(id))
     .filter(Boolean), [detailCache, selectedExperimentIds]);
-  const activeView = browserViews.find((view) => view.id === activeViewId) || null;
+  useEffect(() => {
+    if (!projectId || !sharedConfigLoaded || !canEditSharedConfig || !columnSettings.length || viewSaving) return undefined;
+    const payload = { columns: columnSettings, filters, sort };
+    const serialized = JSON.stringify(payload);
+    if (serialized === lastSavedPayloadRef.current) return undefined;
+    const timer = window.setTimeout(() => {
+      setViewSaving(true);
+      setViewError("");
+      saveSharedConfig(projectId, { expectedVersion: sharedConfigVersion, payload })
+        .then((response) => {
+          const saved = response?.projectBrowserConfig;
+          if (!saved) return;
+          setSharedConfigVersion(Number(saved.version) || sharedConfigVersion + 1);
+          lastSavedPayloadRef.current = JSON.stringify(saved.payload || payload);
+        })
+        .catch(async (requestError) => {
+          if (requestError?.status === 409 || requestError?.statusCode === 409) {
+            try {
+              const latest = await loadSharedConfig(projectId);
+              const config = latest?.projectBrowserConfig;
+              if (config) {
+                setColumnSettings(asArray(config.payload?.columns));
+                setFilters(asArray(config.payload?.filters));
+                setSort(asArray(config.payload?.sort));
+                setSharedConfigVersion(Number(config.version) || 0);
+                lastSavedPayloadRef.current = JSON.stringify(config.payload || {});
+              }
+              setViewError("The shared Browser layout changed in another session. The latest project layout was loaded.");
+            } catch (reloadError) {
+              setViewError(errorMessage(reloadError, "The latest shared Browser layout could not be loaded."));
+            }
+          } else {
+            setViewError(errorMessage(requestError, "Shared Browser configuration could not be saved."));
+          }
+        })
+        .finally(() => setViewSaving(false));
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [canEditSharedConfig, columnSettings, filters, loadSharedConfig, projectId, saveSharedConfig, sharedConfigLoaded, sharedConfigVersion, sort, viewSaving]);
 
   useEffect(() => {
     const viewport = gridViewportRef.current;
@@ -327,6 +363,7 @@ export function ExperimentBrowser({
       const measuredHeight = Math.round(viewport.getBoundingClientRect().height);
       if (measuredHeight <= 0) return;
       const nextHeight = Math.max(ROW_HEIGHT, measuredHeight);
+      viewportHeightRef.current = nextHeight;
       setViewportHeight((current) => current === nextHeight ? current : nextHeight);
     };
     updateViewportHeight();
@@ -395,6 +432,7 @@ export function ExperimentBrowser({
   };
 
   const applyFilter = () => {
+    if (!canEditSharedConfig) return;
     if (!filterColumnId) return;
     const valueOptional = ["is_empty", "not_empty"].includes(filterOperator);
     if (!valueOptional && !String(filterInput).trim()) return;
@@ -415,12 +453,14 @@ export function ExperimentBrowser({
   };
 
   const patchColumnSetting = (columnId, patch) => {
+    if (!canEditSharedConfig) return;
     setColumnSettings((current) => current.map((setting) => (
       setting.columnId === columnId ? { ...setting, ...patch } : setting
     )));
   };
 
   const moveColumn = (columnId, direction) => {
+    if (!canEditSharedConfig) return;
     setColumnSettings((current) => {
       const ordered = orderedColumnSettings(current);
       const visible = ordered.filter((setting) => !setting.hidden);
@@ -436,6 +476,7 @@ export function ExperimentBrowser({
   };
 
   const reorderColumn = () => {
+    if (!canEditSharedConfig) return;
     if (!dragColumnId || !dropTarget || dragColumnId === dropTarget.columnId) {
       setDragColumnId("");
       setDropTarget(null);
@@ -455,89 +496,6 @@ export function ExperimentBrowser({
     setDropTarget(null);
   };
 
-  const currentViewPayload = () => ({
-    columns: columnSettings,
-    filters,
-    sort,
-    groupBy: null,
-    selectedExperimentIds: [...selectedIds],
-  });
-
-  const mergeSavedView = (savedView) => {
-    if (!savedView) return;
-    setBrowserViews((current) => {
-      const withoutSaved = current.filter((view) => view.id !== savedView.id).map((view) => (
-        savedView.isDefault ? { ...view, isDefault: false } : view
-      ));
-      return [savedView, ...withoutSaved];
-    });
-    setActiveViewId(savedView.id);
-    setViewName(savedView.name);
-  };
-
-  const saveView = async () => {
-    const name = viewName.trim();
-    if (!name) {
-      setViewError("Enter a view name before saving.");
-      return;
-    }
-    setViewSaving(true);
-    setViewError("");
-    try {
-      const response = activeViewId
-        ? await updateView(projectId, activeViewId, { name, payload: currentViewPayload() })
-        : await createView(projectId, { name, isDefault: false, payload: currentViewPayload() });
-      mergeSavedView(browserViewFromResponse(response));
-    } catch (requestError) {
-      setViewError(errorMessage(requestError, "Browser view could not be saved."));
-    } finally {
-      setViewSaving(false);
-    }
-  };
-
-  const renameView = async () => {
-    const name = viewName.trim();
-    if (!activeViewId || !name) return;
-    setViewSaving(true);
-    setViewError("");
-    try {
-      mergeSavedView(browserViewFromResponse(await updateView(projectId, activeViewId, { name })));
-    } catch (requestError) {
-      setViewError(errorMessage(requestError, "Browser view could not be renamed."));
-    } finally {
-      setViewSaving(false);
-    }
-  };
-
-  const setDefaultView = async () => {
-    if (!activeViewId) return;
-    setViewSaving(true);
-    setViewError("");
-    try {
-      mergeSavedView(browserViewFromResponse(await updateView(projectId, activeViewId, { isDefault: true })));
-    } catch (requestError) {
-      setViewError(errorMessage(requestError, "Default Browser view could not be changed."));
-    } finally {
-      setViewSaving(false);
-    }
-  };
-
-  const removeView = async () => {
-    if (!activeViewId) return;
-    setViewSaving(true);
-    setViewError("");
-    try {
-      await deleteView(projectId, activeViewId);
-      setBrowserViews((current) => current.filter((view) => view.id !== activeViewId));
-      setActiveViewId("");
-      setViewName("");
-    } catch (requestError) {
-      setViewError(errorMessage(requestError, "Browser view could not be deleted."));
-    } finally {
-      setViewSaving(false);
-    }
-  };
-
   return (
     <div className={`experiment-browser-shell ${detailId ? "detail-open" : ""} ${selectedIds.size ? "comparison-selected" : ""}`}>
       <aside className="experiment-browser-sidebar">
@@ -546,32 +504,9 @@ export function ExperimentBrowser({
           <strong>{totalCount}</strong>
         </div>
 
-        <section className="experiment-browser-sidebar-section experiment-browser-view-controls" aria-label="Personal Browser views">
-          <h3>View</h3>
-          <select
-            aria-label="Saved view"
-            value={activeViewId}
-            disabled={viewLoading || viewSaving}
-            onChange={(event) => {
-              const nextId = event.target.value;
-              if (!nextId) {
-                setActiveViewId("");
-                setViewName("");
-                return;
-              }
-              applyView(browserViews.find((view) => view.id === nextId));
-            }}
-          >
-            <option value="">Unsaved view</option>
-            {browserViews.map((view) => <option value={view.id} key={view.id}>{view.name}{view.isDefault ? " (default)" : ""}</option>)}
-          </select>
-          <input aria-label="View name" value={viewName} maxLength={80} placeholder="View name" onChange={(event) => setViewName(event.target.value)} />
-          <div className="experiment-browser-view-actions">
-            <button type="button" className="primary-action" disabled={viewSaving || !viewName.trim()} onClick={saveView}>{activeViewId ? "Update view" : "Save view"}</button>
-            <button type="button" disabled={viewSaving || !activeViewId || !viewName.trim()} onClick={renameView}>Rename view</button>
-            <button type="button" disabled={viewSaving || !activeViewId || activeView?.isDefault} onClick={setDefaultView}>Set default view</button>
-            <button type="button" disabled={viewSaving || !activeViewId} onClick={removeView}>Delete view</button>
-          </div>
+        <section className="experiment-browser-sidebar-section" aria-label="Shared Browser layout">
+          <h3>Shared layout</h3>
+          <p className="browser-muted">{canEditSharedConfig ? "Changes save for everyone in this project." : "Project editors control this shared layout."}</p>
           {viewError ? <div className="experiment-view-error" role="alert">{viewError}</div> : null}
         </section>
 
@@ -589,7 +524,7 @@ export function ExperimentBrowser({
           <label htmlFor="experiment-browser-filter-column">Column</label>
           <select id="experiment-browser-filter-column" aria-label="Filter column" value={filterColumnId} onChange={(event) => setFilterColumnId(event.target.value)}>
             <option value="">Choose a column</option>
-            {columns.map((column) => <option value={column.id} key={column.id}>{column.label}</option>)}
+            {displayColumns.map((column) => <option value={column.id} key={column.id}>{column.label}</option>)}
           </select>
           <label htmlFor="experiment-browser-filter-operator">Operator</label>
           <select id="experiment-browser-filter-operator" aria-label="Filter operator" value={filterOperator} onChange={(event) => setFilterOperator(event.target.value)}>
@@ -605,13 +540,13 @@ export function ExperimentBrowser({
           <label htmlFor="experiment-browser-filter-value">Value</label>
           <input id="experiment-browser-filter-value" aria-label="Filter value" value={filterInput} disabled={["is_empty", "not_empty"].includes(filterOperator)} onChange={(event) => setFilterInput(event.target.value)} />
           <div className="experiment-browser-filter-actions">
-            <button type="button" onClick={applyFilter}>Apply filter</button>
-            <button type="button" disabled={!filters.length} onClick={() => setFilters([])}>Clear</button>
+            <button type="button" disabled={!canEditSharedConfig} onClick={applyFilter}>Apply filter</button>
+            <button type="button" disabled={!canEditSharedConfig || !filters.length} onClick={() => setFilters([])}>Clear</button>
           </div>
           {filters.map((filter) => (
             <div className="experiment-filter-chip" key={`${filter.columnId}-${filter.operator}`}>
-              <span>{columns.find((column) => column.id === filter.columnId)?.label || filter.columnId}</span>
-              <button type="button" aria-label="Remove filter" onClick={() => setFilters([])}>x</button>
+              <span>{displayColumns.find((column) => column.id === filter.columnId)?.label || filter.columnId}</span>
+              <button type="button" disabled={!canEditSharedConfig} aria-label="Remove filter" onClick={() => setFilters([])}>x</button>
             </div>
           ))}
         </section>
@@ -626,6 +561,7 @@ export function ExperimentBrowser({
                   className="chip hidden-column-chip"
                   key={column.id}
                   title={`Show ${column.label}`}
+                  disabled={!canEditSharedConfig}
                   onClick={() => patchColumnSetting(column.id, { hidden: false })}
                 >
                   {column.label} <span aria-hidden="true">+</span>
@@ -654,15 +590,20 @@ export function ExperimentBrowser({
         </header>
 
         {error && <div className="browser-error" role="alert">{error}</div>}
-        {loading && <div className="browser-status">Loading experiments...</div>}
-        {!loading && !error && !rows.length && (
+        {(loading || viewLoading) && !rows.length && <div className="browser-status">Loading experiments...</div>}
+        {!loading && !viewLoading && !error && !rows.length && (
           <div className="experiment-browser-empty">
             <h2>No published experiments</h2>
             <p>Confirm workbook semantics and publish reviewed experiment records to populate this table.</p>
           </div>
         )}
-        {!loading && !error && rows.length > 0 && (
-          <div className="experiment-grid-frame" role="table" aria-label="Cross-experiment data table">
+        {!viewLoading && !error && rows.length > 0 && (
+          <div
+            className={`experiment-grid-frame ${loading ? "is-refreshing" : ""}`}
+            role="table"
+            aria-label="Cross-experiment data table"
+            aria-busy={loading ? "true" : "false"}
+          >
             <div className="experiment-grid-header" role="row" style={{ gridTemplateColumns, width: gridWidth, minWidth: "100%" }}>
               <div role="columnheader" aria-label="Select experiments" />
               {visibleColumns.map((column, index) => {
@@ -673,19 +614,21 @@ export function ExperimentBrowser({
                     column={column}
                     width={column.width}
                     sortDirection={activeSort?.direction || null}
-                    draggable={!column.pinned}
+                    draggable={canEditSharedConfig}
+                    editable={canEditSharedConfig}
                     dragging={dragColumnId === column.id}
                     dropEdge={dropTarget?.columnId === column.id ? (dropTarget.before ? "before" : "after") : null}
-                    canMoveLeft={!column.pinned && index > 0 && !visibleColumns[index - 1]?.pinned}
-                    canMoveRight={!column.pinned && index < visibleColumns.length - 1}
-                    onSort={() => toggleSort(column.id)}
+                    canMoveLeft={canEditSharedConfig && index > 0}
+                    canMoveRight={canEditSharedConfig && index < visibleColumns.length - 1}
+                    onSort={() => { if (canEditSharedConfig) toggleSort(column.id); }}
                     onHide={() => patchColumnSetting(column.id, { hidden: true })}
+                    onRename={(labelOverride) => patchColumnSetting(column.id, { labelOverride })}
                     onResize={(width) => patchColumnSetting(column.id, { width: Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, width)) })}
                     onAutoFit={() => patchColumnSetting(column.id, { width: autoFitColumnWidth(column, rows) })}
                     onMove={(direction) => moveColumn(column.id, direction)}
                     onDragStart={() => setDragColumnId(column.id)}
                     onDragOver={(before) => {
-                      if (dragColumnId && dragColumnId !== column.id && !column.pinned) setDropTarget({ columnId: column.id, before });
+                      if (dragColumnId && dragColumnId !== column.id) setDropTarget({ columnId: column.id, before });
                     }}
                     onDrop={reorderColumn}
                     onDragEnd={() => { setDragColumnId(""); setDropTarget(null); }}
@@ -724,7 +667,7 @@ export function ExperimentBrowser({
                         />
                       </div>
                       {visibleColumns.map((column) => (
-                        <div role="cell" className={column.pinned ? "pinned" : ""} key={column.id} title={displayCell(row, column)}>
+                        <div role="cell" key={column.id} title={displayCell(row, column)}>
                           {column.id === "experiment" ? (
                             <button type="button" className="experiment-row-link" aria-label={`Open ${row.label}`} onClick={(event) => { event.stopPropagation(); setDetailId(row.experimentId); }}>{row.label}</button>
                           ) : <span className="experiment-grid-cell-value">{displayCell(row, column)}</span>}
@@ -746,10 +689,10 @@ export function ExperimentBrowser({
 
       <ExperimentColumnsDrawer
         open={columnsOpen}
-        columns={columns}
+        columns={displayColumns}
         settings={columnSettings}
-        onChange={setColumnSettings}
-        onReset={() => setColumnSettings(defaultColumnSettings(columns))}
+        onChange={canEditSharedConfig ? setColumnSettings : undefined}
+        readOnly={!canEditSharedConfig}
         onClose={() => setColumnsOpen(false)}
         returnFocusRef={columnsTriggerRef}
       />

@@ -101,13 +101,23 @@ experiment_snapshot_publishes
 
 `experiment_snapshot_publishes` is the idempotency receipt keyed by `(project_id, idempotency_key)`. It stores request hash and exact successful response.
 
-### Personal Browser State
+### Shared Browser State And Historical Views
 
 ```text
+project_browser_configs
 browser_views
 ```
 
-BrowserViews are scoped by `(lab_id, project_id, owner_user_id)`. `payload` may contain display configuration and selected ids only; it cannot contain authoritative scientific values. At most one default view should exist per owner/project after store operations.
+`project_browser_configs` has one row per project and is the authoritative live
+Experiment Browser presentation state shared by project members. Its versioned
+payload stores label overrides, visibility, order, widths, filters, and sort
+only. Optimistic version checks prevent stale-session overwrites. Editors may
+write; viewers read.
+
+BrowserViews remain scoped by `(lab_id, project_id, owner_user_id)` as
+historical publication/view provenance. Their payload cannot contain
+authoritative scientific values, and they no longer drive the active Browser
+UI.
 
 ### Evidence-Backed Output Layer
 

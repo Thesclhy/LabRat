@@ -31,6 +31,29 @@ and 390x844 browser QA now cover the integrated upload/review/publish path.
 
 ## Current Position
 
+Completed Experiment Browser refresh-stability correction: sorting or applying
+a shared query no longer unmounts and replaces an already populated grid. The
+table remains visible and marked busy while refreshed rows arrive, preserving
+its horizontal and vertical scroll positions instead of jumping back to the
+initial fit. Shared-layout autosave is silent, preventing transient save text
+from flashing in the left sidebar; only actionable save errors and conflicts
+are shown. Initial entry and genuinely empty states retain their existing
+loading and empty presentations.
+
+Completed Experiment Browser column-interaction milestone: the live Browser
+layout is now one versioned, project-scoped server record instead of competing
+personal BrowserView state. Renamed labels, hidden columns, visible order,
+widths, sort, and filters are shared with every project user and reload before
+the table is presented after reentry. Editors and lab owners can change the
+layout; viewers receive the same state read-only. Existing header controls were
+extended in place with inline rename (Enter/blur save, Escape cancels, blank
+restores the source label), movable Experiment, individual hidden-column `+`
+chips, and optimistic conflict recovery. The global Reset action remains
+removed. Sorting now cycles ascending, descending, and source order; values
+that begin numerically sort by that number even with units, and missing values
+remain last in both directions. Historical BrowserViews remain provenance and
+no longer compete with the active Browser surface.
+
 Completed Experiment Browser first-visit visibility correction: an unsaved
 Browser now shows every available projected column instead of automatically
 hiding fields outside the recommendation set. Explicit saved/default

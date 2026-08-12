@@ -21,6 +21,20 @@ export async function getExperimentBrowserDetail(projectId, experimentId, option
   );
 }
 
+export async function getProjectBrowserConfig(projectId, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before loading Browser configuration.");
+  return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/browser-config`, options);
+}
+
+export async function updateProjectBrowserConfig(projectId, changes, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before updating Browser configuration.");
+  return serverJson(
+    `/api/projects/${encodeURIComponent(projectId)}/browser-config`,
+    changes || {},
+    { ...options, method: "PATCH" },
+  );
+}
+
 export async function listExperimentBrowserViews(projectId, options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before listing Browser views.");
   return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/browser-views`, options);

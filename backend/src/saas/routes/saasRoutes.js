@@ -849,6 +849,7 @@ async function handleProjectState(req, res, context, projectId) {
     dataSnapshots,
     experimentSnapshotHeads,
     browserViews,
+    projectBrowserConfig,
     sourceDocuments,
   ] = await Promise.all([
     context.store.listFileObjects({ projectId }),
@@ -864,6 +865,7 @@ async function handleProjectState(req, res, context, projectId) {
     context.store.listDataSnapshots ? context.store.listDataSnapshots({ projectId }) : [],
     context.store.listExperimentSnapshotHeads ? context.store.listExperimentSnapshotHeads({ projectId }) : [],
     context.store.listBrowserViews ? context.store.listBrowserViews({ projectId, ownerUserId: auth.user.id }) : [],
+    context.store.findProjectBrowserConfig ? context.store.findProjectBrowserConfig({ projectId }) : null,
     context.store.listSourceDocuments ? context.store.listSourceDocuments({ projectId }) : [],
   ]);
   const supportedChartSpecs = chartSpecs.filter(isSupportedChartSpec);
@@ -905,6 +907,7 @@ async function handleProjectState(req, res, context, projectId) {
     dataSnapshots: dataSnapshots.map(dataSnapshotSummary),
     experimentSnapshotHeads,
     browserViews,
+    projectBrowserConfig,
     sourceDocuments: sourceDocuments.map(sourceDocumentSummary),
   });
 }
@@ -1027,6 +1030,7 @@ async function handleProjectExperimentDetail(req, res, context, projectId, exper
 }
 
 const BROWSER_VIEW_PAYLOAD_KEYS = new Set(["columns", "filters", "sort", "groupBy", "selectedExperimentIds"]);
+const PROJECT_BROWSER_CONFIG_PAYLOAD_KEYS = new Set(["columns", "filters", "sort"]);
 const BROWSER_VIEW_FILTER_OPERATORS = new Set(["contains", "eq", "neq", "gt", "gte", "lt", "lte", "is_empty", "not_empty"]);
 
 function browserViewText(value) {
@@ -1085,6 +1089,66 @@ function normalizeBrowserViewPayload(value) {
     groupBy: value.groupBy == null ? null : browserViewText(value.groupBy) || null,
     selectedExperimentIds,
   };
+}
+
+function normalizeProjectBrowserConfigPayload(value) {
+  if (!isObject(value)) invalidBrowserView("Project Browser configuration payload must be an object.");
+  const unknownKeys = Object.keys(value).filter((key) => !PROJECT_BROWSER_CONFIG_PAYLOAD_KEYS.has(key));
+  if (unknownKeys.length) invalidBrowserView("Project Browser configuration contains unsupported keys.", { unknownKeys });
+  const normalized = normalizeBrowserViewPayload({
+    columns: value.columns ?? [],
+    filters: value.filters ?? [],
+    sort: value.sort ?? [],
+    groupBy: null,
+    selectedExperimentIds: [],
+  });
+  return {
+    columns: normalized.columns.map((column, index) => {
+      const source = value.columns?.[index] || {};
+      const labelOverride = String(source.labelOverride ?? "").trim().slice(0, 120);
+      return { ...column, ...(labelOverride ? { labelOverride } : {}) };
+    }),
+    filters: normalized.filters,
+    sort: normalized.sort,
+  };
+}
+
+async function handleProjectBrowserConfig(req, res, context, projectId) {
+  const { auth, project } = await projectAuth(req, context, projectId, req.method === "PATCH" ? "editor" : "viewer");
+  if (req.method === "GET") {
+    const config = await context.store.findProjectBrowserConfig?.({ projectId }) || null;
+    let canEdit = true;
+    try {
+      requireLabRole(auth, project.labId, "editor");
+    } catch {
+      canEdit = false;
+    }
+    sendJson(res, 200, { projectBrowserConfig: config, canEdit });
+    return;
+  }
+  const body = await readJsonBody(req);
+  const expectedVersion = Number(body.expectedVersion);
+  if (!Number.isInteger(expectedVersion) || expectedVersion < 0) {
+    invalidBrowserView("Project Browser configuration requires a non-negative expectedVersion.");
+  }
+  const projectBrowserConfig = await context.store.saveProjectBrowserConfig({
+    labId: project.labId,
+    projectId: project.id,
+    payload: normalizeProjectBrowserConfigPayload(body.payload ?? {}),
+    expectedVersion,
+    updatedBy: auth.user.id,
+  });
+  await context.store.recordAuditEvent({
+    labId: project.labId,
+    projectId: project.id,
+    actorUserId: auth.user.id,
+    action: "project_browser_config.update",
+    targetType: "project_browser_config",
+    targetId: projectBrowserConfig.id,
+    summary: "Updated the shared Experiment Browser configuration.",
+    metadata: { version: projectBrowserConfig.version },
+  });
+  sendJson(res, 200, { projectBrowserConfig, canEdit: true });
 }
 
 function normalizeBrowserViewRequest(body, { partial = false } = {}) {
@@ -2816,6 +2880,10 @@ async function dispatch(req, res, context) {
   const projectExperimentDetailMatch = pathName.match(/^\/api\/projects\/([^/]+)\/experiments\/([^/]+)$/);
   if (projectExperimentDetailMatch && req.method === "GET") {
     return handleProjectExperimentDetail(req, res, context, projectExperimentDetailMatch[1], projectExperimentDetailMatch[2]);
+  }
+  const projectBrowserConfigMatch = pathName.match(/^\/api\/projects\/([^/]+)\/browser-config$/);
+  if (projectBrowserConfigMatch && (req.method === "GET" || req.method === "PATCH")) {
+    return handleProjectBrowserConfig(req, res, context, projectBrowserConfigMatch[1]);
   }
   const projectBrowserViewsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/browser-views$/);
   if (projectBrowserViewsMatch && (req.method === "GET" || req.method === "POST")) {

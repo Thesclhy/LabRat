@@ -33,7 +33,9 @@ Last reviewed: 2026-07-16
 - [ ] Publish is atomic across DataPlan, DataSnapshot, identities, heads, receipt, and audit.
 - [ ] Browser rows derive only from active accepted snapshot heads.
 - [ ] List responses omit large series point arrays; detail is lazy.
-- [ ] BrowserViews store display state only and are owner scoped.
+- [ ] ProjectBrowserConfig stores shared display state only, is version-checked,
+      and never contains authoritative values; historical BrowserViews remain
+      owner-scoped provenance only.
 
 ## Charts And Manuscript
 
