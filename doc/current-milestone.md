@@ -2,7 +2,7 @@
 
 Status: complete
 Read when: checking what the next implementation slice should be.
-Last reviewed: 2026-08-12
+Last reviewed: 2026-08-18
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
 
@@ -46,6 +46,28 @@ to all project users after reentry, and participate in the existing rename,
 hide/show, reorder, resize, sort, filter, search, and match-highlighting paths.
 Only custom headers expose a confirmation-gated Delete column action. This
 documentation layer is separate from immutable accepted DataSnapshots.
+
+Completed the backend DeepSeek provider milestone. An in-process AI gateway now
+keeps LabRat prompts, output schemas, tools, and review workflows independent
+from Anthropic Messages versus DeepSeek Chat Completions wire formats. One
+deployment selects one provider at startup; automatic cross-provider fallback
+is prohibited. DeepSeek V4 Pro disables thinking for intent, region explanation,
+and read-only answers, while analysis planning and Python generation use high
+thinking and transiently replay `reasoning_content` only inside the active tool
+loop. Ajv validates all final structured output and tool arguments, and one
+bounded same-provider repair covers empty, truncated, malformed, or
+schema-invalid output. Every environment now explicitly selects a provider;
+production fails at startup when the selected provider or key is invalid. The
+main deployment takes only that provider name from a required GitHub Repository
+Variable, keeps both keys exclusively on Lightsail, and jointly rolls back the
+environment file and release on restart or health failure. Automated provider,
+deployment, backend, frontend, and build verification passes. The ignored local
+environment now selects a configured DeepSeek V4 Pro adapter, and its
+authenticated capability check passes. After account funding, the real
+DeepSeek smoke also passes: a Browser-surface carbon-chart request resolves to
+`create_analysis_chart / analysis_thread`, and reviewed planning completes one
+read-only tool round, retains one confirmed source selection, and proposes a
+bar chart.
 
 Completed temporary Experiment Browser column-drawer removal: the top-right
 `Choose columns` button and its unreachable drawer wiring are no longer part of

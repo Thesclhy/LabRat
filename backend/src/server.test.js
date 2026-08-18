@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { createServer } from "./server.js";
+import { loadSaasConfig } from "./saas/config.js";
 
 let server;
 let baseUrl;
 
 before(async () => {
-  server = createServer();
+  server = createServer({
+    config: loadSaasConfig({
+      NODE_ENV: "test",
+      LABRAT_AI_PROVIDER: "anthropic",
+    }),
+  });
   await new Promise((resolve) => {
     server.listen(0, "127.0.0.1", () => {
       const address = server.address();

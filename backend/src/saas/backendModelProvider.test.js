@@ -75,6 +75,87 @@ test("validates and returns structured intent metadata", async () => {
   });
 });
 
+test("DeepSeek uses task-specific thinking policies through the backend provider", async () => {
+  const requests = [];
+  const provider = createBackendModelProvider({
+    config: {
+      aiProvider: "deepseek",
+      deepseekApiKey: "deepseek-secret",
+      deepseekModel: "deepseek-v4-pro",
+      deepseekBaseUrl: "https://api.deepseek.com",
+    },
+    fetchImpl: async (_url, request) => {
+      const body = JSON.parse(request.body);
+      requests.push(body);
+      if (requests.length === 1) {
+        return {
+          ok: true,
+          async json() {
+            return {
+              choices: [{
+                finish_reason: "stop",
+                message: {
+                  role: "assistant",
+                  content: JSON.stringify({
+                    intent: "project_overview",
+                    disposition: "direct_answer",
+                    confidence: 0.9,
+                    clarification: null,
+                  }),
+                },
+              }],
+            };
+          },
+        };
+      }
+      return {
+        ok: true,
+        async json() {
+          return {
+            choices: [{
+              finish_reason: "stop",
+              message: {
+                role: "assistant",
+                content: JSON.stringify({
+                  requestSummary: "Create a chart.",
+                  sourceSelections: [],
+                  experimentSelections: [],
+                  reviewPlan: {
+                    processingSteps: ["Use accepted data."],
+                    missingValueHandling: "Exclude missing values.",
+                    chart: {
+                      title: "Accepted data",
+                      chartType: "bar",
+                      xDescription: "Experiment",
+                      yDescription: "Value",
+                      seriesDescription: "One series",
+                    },
+                    invariants: [],
+                  },
+                  displayPlan: ["Create a bar chart."],
+                  warnings: [],
+                }),
+              },
+            }],
+          };
+        },
+      };
+    },
+  });
+
+  const intent = await provider.classifyIntent({ message: "What is this project?" });
+  const plan = await provider.draftAnalysisPlan({ originalRequest: "Create a chart." }, {
+    inspectSourceRange: async () => ({}),
+  });
+
+  assert.equal(intent.ok, true);
+  assert.equal(plan.ok, true);
+  assert.deepEqual(requests[0].thinking, { type: "disabled" });
+  assert.deepEqual(requests[1].thinking, { type: "enabled" });
+  assert.equal(requests[1].reasoning_effort, "high");
+  assert.equal(requests[1].tools[0].function.name, "inspect_source_range");
+});
+
 test("passes request cancellation through to the Anthropic fetch", async () => {
   const controller = new AbortController();
   const provider = createBackendModelProvider({
@@ -92,7 +173,7 @@ test("passes request cancellation through to the Anthropic fetch", async () => {
             content: [{
               type: "text",
               text: JSON.stringify({
-                intent: "project_summary",
+                intent: "project_overview",
                 disposition: "direct_answer",
                 confidence: 0.95,
                 clarification: null,

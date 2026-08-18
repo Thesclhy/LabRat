@@ -1,7 +1,7 @@
 # LabRat Architecture
 
 Status: active reference
-Last reviewed: 2026-07-20
+Last reviewed: 2026-08-18
 
 LabRat is a server-first research workspace that turns workbook evidence into reviewed experiment records, cross-experiment Browser views, evidence-backed charts, and manuscript output while preserving provenance and review history.
 
@@ -201,6 +201,17 @@ service, never through a model tool call.
 The Python policy is defense in depth, not the production isolation boundary. It blocks direct numeric-library I/O, module-chain escapes, private/runtime attributes, and known process/network/filesystem APIs, but local subprocess execution remains an explicitly enabled development adapter and is disabled in production. A production worker must provide OS/container-level network denial, read-only runtime assets, resource limits, per-run isolation, and runId idempotency in addition to the policy and result validator.
 
 The frontend does not hold provider credentials or call provider APIs. AgentPanel submits project-scoped messages and compact selected context to the authenticated backend.
+
+The backend uses an in-process provider gateway. Domain prompts, schemas, and
+review boundaries remain provider-neutral; Anthropic and DeepSeek adapters own
+only wire-format conversion, tool loops, usage normalization, cancellation,
+and sanitized transport errors. Anthropic Messages and DeepSeek Chat
+Completions remain separate adapters because their authentication, structured
+output, thinking, and tool-result formats differ. Every environment explicitly
+selects one provider at startup; there is no automatic failover and no external
+gateway service. Production deployment accepts only the non-secret provider
+name from GitHub and keeps both keys exclusively in the Lightsail environment
+file, with provider and release rollback treated as one transaction.
 
 ## Retired Architecture
 

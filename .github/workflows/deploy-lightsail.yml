@@ -31,11 +31,32 @@ jobs:
 
     env:
       LABRAT_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/labrat_ci
+      LABRAT_AI_PROVIDER: ${{ vars.LABRAT_AI_PROVIDER }}
       RELEASE_ARCHIVE: labrat-release-${{ github.sha }}.tar.gz
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Validate deployment AI provider
+        shell: bash
+        run: |
+          case "$LABRAT_AI_PROVIDER" in
+            anthropic|deepseek) ;;
+            *)
+              echo "Repository variable LABRAT_AI_PROVIDER must be anthropic or deepseek." >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Verify deployment scripts
+        shell: bash
+        run: |
+          bash -n deploy/lightsail/provider-env.sh
+          bash -n deploy/lightsail/deploy-transaction.sh
+          bash -n deploy/lightsail/remote-deploy.sh
+          bash -n deploy/lightsail/deploy-switch.test.sh
+          bash deploy/lightsail/deploy-switch.test.sh
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -64,12 +85,14 @@ jobs:
       - name: Create release archive
         run: |
           rm -rf .release
-          mkdir -p .release/backend
+          mkdir -p .release/backend .release/deploy/lightsail
           cp -R dist .release/dist
           cp -R backend/src .release/backend/src
           cp -R backend/scripts .release/backend/scripts
           cp -R backend/migrations .release/backend/migrations
           cp backend/package.json backend/package-lock.json .release/backend/
+          cp deploy/lightsail/provider-env.sh deploy/lightsail/deploy-transaction.sh \
+            .release/deploy/lightsail/
           tar -czf "$RELEASE_ARCHIVE" -C .release .
 
       - name: Prepare SSH
@@ -101,8 +124,8 @@ jobs:
           LIGHTSAIL_DEPLOY_PATH: ${{ secrets.LIGHTSAIL_DEPLOY_PATH || '/opt/labrat' }}
         run: |
           ssh -p "$LIGHTSAIL_PORT" -i ~/.ssh/labrat_lightsail "$LIGHTSAIL_USER@$LIGHTSAIL_HOST" \
-            "sudo bash -s -- /tmp/$RELEASE_ARCHIVE '${{ github.sha }}' '$LIGHTSAIL_DEPLOY_PATH'" \
+            "sudo bash -s -- /tmp/$RELEASE_ARCHIVE '${{ github.sha }}' '$LIGHTSAIL_DEPLOY_PATH' '$LABRAT_AI_PROVIDER'" \
             < deploy/lightsail/remote-deploy.sh
 
       - name: Report deployed commit
-        run: echo "Deployed ${{ github.sha }} to Lightsail"
+        run: echo "Deployed ${{ github.sha }} to Lightsail with AI provider $LABRAT_AI_PROVIDER"

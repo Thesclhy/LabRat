@@ -1,7 +1,7 @@
 # Backend API Contract
 
 Status: active compatibility note
-Last reviewed: 2026-07-20
+Last reviewed: 2026-08-18
 
 The backend is server-first. The complete implemented project API is defined in `doc/contracts/saas-api-contract-v0.md` and routed by `backend/src/saas/routes/saasRoutes.js`.
 
@@ -11,7 +11,17 @@ The HTTP service exposes:
 
 - `GET /health`
 - authenticated SaaS/project routes under `/api/auth`, `/api/admin`, `/api/labs`, `/api/projects`, `/api/source-documents`, `/api/source-regions`, `/api/workbook-review-sessions`, `/api/agent-runs`, `/api/analysis-threads`, `/api/analysis-plan-revisions`, `/api/analysis-runs`, `/api/chart-specs`, and `/api/manuscripts`
-- backend-only model access configured by `LABRAT_AI_PROVIDER`, `ANTHROPIC_API_KEY`, and `ANTHROPIC_MODEL`
+- backend-only model access selected at startup with `LABRAT_AI_PROVIDER=anthropic|deepseek` and the matching provider-specific key/model variables
+
+The backend AI gateway exposes one provider-neutral structured/tool request
+boundary to LabRat services. It supports Anthropic Messages and DeepSeek Chat
+Completions, never performs automatic cross-provider failover, and reports only
+the selected provider, model, readiness, bounded usage, latency, and sanitized
+diagnostics. `LABRAT_AI_PROVIDER` has no implicit default and must be exactly
+`anthropic` or `deepseek` in every environment. Development may leave the
+selected key empty and reports `configured: false`; production rejects a
+missing selected key during startup. The unselected key is never added to an
+outbound provider request.
 
 Unknown or retired routes return `404`.
 

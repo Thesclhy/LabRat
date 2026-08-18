@@ -1,7 +1,7 @@
 # AI Boundaries
 
 Status: active
-Last reviewed: 2026-07-21
+Last reviewed: 2026-08-18
 
 LabRat uses AI as a proposal and workflow layer. Authorization, bounded evidence reads, schema validation, deterministic execution, hashing, and persistence remain backend responsibilities.
 
@@ -184,6 +184,43 @@ They must not persist hidden reasoning. Deterministic runs record the determinis
 ## Provider Safety
 
 Provider access is backend-only. The frontend contains no provider-key/model settings and never calls a provider endpoint directly. Backend configuration supplies provider secrets, while the browser receives only user-facing replies, visible workflow artifacts, warnings, and bounded provider/model/usage/latency metadata.
+
+`LABRAT_AI_PROVIDER` must explicitly select exactly one supported provider for
+the backend process in every environment; there is no Anthropic fallback
+default. Anthropic and DeepSeek credentials may both exist on the server, but
+the gateway constructs only the selected adapter and never copies the
+unselected key into a request. LabRat never automatically fails over between
+providers. Production refuses to start when the selected key is missing;
+development may run with model capability reported as unavailable.
+
+The adapters intentionally preserve different wire contracts. Anthropic uses
+Messages, `x-api-key`, `tool_use`/`tool_result`, and Anthropic JSON Schema
+output configuration. DeepSeek uses Chat Completions, Bearer authorization,
+OpenAI-style function tools and tool messages, JSON mode, and DeepSeek thinking
+parameters. Only normalized structured results, usage, stop reason, and safe
+diagnostics cross back into the provider-neutral domain layer.
+
+Local selection comes from the ignored `.env` and requires a backend/container
+restart. Production selection comes from the required GitHub Repository
+Variable of the same name at deployment time. Provider keys remain only in the
+root-owned `640` Lightsail environment file. A failed production switch restores
+both that file and the prior release before restarting the prior service.
+
+All structured provider output is parsed and validated against the backend's
+JSON Schema before it reaches workflow services. DeepSeek uses stable JSON
+mode and includes the target schema in its bounded prompt. Empty, truncated,
+malformed, or schema-invalid output may receive one same-provider correction;
+authentication errors, cancellation, and invalid configuration are not
+retried. Tool arguments are validated before any handler executes.
+
+DeepSeek V4 Pro runs intent classification, workbook-region explanation, and
+read-only answers with thinking disabled. Analysis planning and Python program
+generation use high-effort thinking. Tool-loop `reasoning_content` may be
+returned transiently to DeepSeek as required by its protocol, but it is never
+persisted, logged, exposed through AgentRun, or sent to the frontend.
+The default model and request policy follow DeepSeek's official
+[model documentation](https://api-docs.deepseek.com/quick_start/pricing) and
+[Thinking Mode guide](https://api-docs.deepseek.com/guides/thinking_mode).
 
 The frontend reads a backend-owned capability summary before retrying planning
 or accepting a plan. Unknown, loading, or failed capability state is treated as

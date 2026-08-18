@@ -34,8 +34,12 @@ services:
       LABRAT_SEED_DEV_ACCOUNTS: "true"
       PORT: "8787"
       HOST: 0.0.0.0
+      LABRAT_AI_PROVIDER: "${LABRAT_AI_PROVIDER:?Set LABRAT_AI_PROVIDER to anthropic or deepseek}"
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-5}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-v4-pro}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       LABRAT_ANALYSIS_EXECUTOR: local
       LABRAT_ANALYSIS_PYTHON_COMMAND: python3
     ports:

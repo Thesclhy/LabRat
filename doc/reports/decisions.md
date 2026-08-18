@@ -2,9 +2,44 @@
 
 Status: reference
 Read when: checking durable architecture or product decisions.
-Last reviewed: 2026-07-23
+Last reviewed: 2026-08-18
 
 Durable decisions for LabRat architecture, product workflow, and Codex execution belong here. Keep entries newest first. Each entry should explain the decision, the context, the consequences, and any follow-up.
+
+## 2026-08-11 - AI Providers Use A Deployment-Selected In-Process Gateway
+
+Status: Accepted
+
+Decision:
+LabRat keeps provider credentials and calls in the backend behind one
+provider-neutral gateway. A deployment explicitly selects either Anthropic or
+DeepSeek at process startup. There is no automatic failover, per-user provider
+choice, arbitrary OpenAI-compatible endpoint, or external gateway service.
+
+Context:
+Anthropic connectivity is unreliable from the current mainland-China Docker
+environment, while DeepSeek is reachable. DeepSeek's Anthropic compatibility
+endpoint does not support the JSON Schema form used by LabRat, so changing only
+the base URL would weaken the structured-output contract.
+
+Consequences:
+
+- DeepSeek uses its stable Chat Completions endpoint and V4 Pro model.
+- Simple classification/explanation calls disable thinking; planning and code
+  generation enable high thinking and replay reasoning only transiently when a
+  tool loop requires it.
+- Backend JSON Schema validation and one bounded same-provider repair remain
+  authoritative for both adapters.
+- Every environment must explicitly select a supported provider. Development
+  may expose it as unconfigured when its selected key is empty; production
+  starts only with the corresponding key.
+- Local Docker reads ignored `.env` settings; Lightsail reads
+  `/etc/labrat/backend.env`; GitHub Actions never receives provider keys.
+- The required GitHub Repository Variable `LABRAT_AI_PROVIDER` controls the
+  next production deployment without triggering one by itself.
+- Deployment atomically replaces only the provider line after verifying the
+  server-side selected key. Startup or health failure restores the old
+  environment file and old release before restarting the old backend.
 
 ## 2026-07-23 - Experiment Browser Writes Use Reviewed Record Patches
 

@@ -1,7 +1,7 @@
 # Lightsail Deployment
 
 Status: active deployment guide
-Last reviewed: 2026-07-24
+Last reviewed: 2026-08-18
 
 This guide deploys LabRat to one AWS Lightsail Ubuntu server. The production
 site is same-origin: Caddy serves `https://DOMAIN/LabRat/` and proxies
@@ -17,6 +17,8 @@ site is same-origin: Caddy serves `https://DOMAIN/LabRat/` and proxies
   - `LIGHTSAIL_SSH_KEY`
   - optional `LIGHTSAIL_PORT`
   - optional `LIGHTSAIL_DEPLOY_PATH` (defaults to `/opt/labrat`)
+- GitHub Repository Variable `LABRAT_AI_PROVIDER` is configured as exactly
+  `deepseek` or `anthropic`. It is not a secret and does not contain a key.
 
 ## Create AWS Infrastructure
 
@@ -36,6 +38,25 @@ systemd service, and `/etc/labrat/backend.env`. It generates a URL-safe
 database password and session secret unless `LABRAT_DB_PASSWORD` and
 `LABRAT_SESSION_SECRET` are supplied.
 
+Before the first backend start, edit the root-owned environment file and keep
+both provider configurations available for an explicit deployment choice:
+
+```bash
+sudoedit /etc/labrat/backend.env
+sudo chown root:labrat /etc/labrat/backend.env
+sudo chmod 640 /etc/labrat/backend.env
+```
+
+Set non-empty `DEEPSEEK_API_KEY` and `ANTHROPIC_API_KEY` values plus their model
+settings. Keep `DEEPSEEK_BASE_URL=https://api.deepseek.com`; non-HTTPS values
+are rejected. The provider line in this file is the currently deployed value;
+the workflow replaces that one line from the Repository Variable. GitHub
+Actions secrets are only for SSH deployment and do not contain, read, copy, or
+inject model-provider credentials.
+
+Changing the Repository Variable does not deploy by itself. Push to `main` or
+run `workflow_dispatch` after changing it.
+
 ## First Deployment
 
 This repository has local development changes that may be ahead of GitHub
@@ -45,19 +66,25 @@ uncommitted local files and not an older remote `main`.
 
 Push to `main` or run the `Deploy to Lightsail` workflow manually. The workflow
 runs frontend tests, backend tests, configured Postgres integration tests, and
-`npm run build`; then it uploads a clean release archive and executes
+`npm run build`; it first rejects a missing/invalid Repository Variable and
+runs the deployment transaction tests. It then uploads a clean release archive and executes
 `deploy/lightsail/remote-deploy.sh` on the server.
 
 The remote deploy script:
 
 - extracts the release into `/opt/labrat/releases/TIMESTAMP-SHA`
+- validates the requested provider, root-owned `640` environment file, selected
+  server-side key, and HTTPS DeepSeek base URL without printing any value
 - installs backend production dependencies
 - runs `npm --prefix backend run migrate`
+- backs up `/etc/labrat/backend.env` and atomically changes only its unique
+  `LABRAT_AI_PROVIDER` line
 - switches `/opt/labrat/current`
 - restarts `labrat-backend`
 - checks `http://127.0.0.1:8787/health`
 - keeps the newest five releases
-- rolls the symlink back if the restarted backend does not become healthy
+- restores both the old environment file and old release, then restarts the old
+  service, if release switching, startup, or health verification fails
 
 ## Bootstrap Admin
 
@@ -96,6 +123,10 @@ sudo systemctl restart labrat-backend
 Database migrations are forward-only. Restore the database from backup when a
 database-level rollback is required.
 
+For a provider rollback, change the GitHub Repository Variable and run the
+workflow again so the same validation and joint environment/release transaction
+is used. Do not place either API key in GitHub.
+
 ## Acceptance Checks
 
 - `aws sts get-caller-identity --profile labrat` returns account `477611841179`.
@@ -109,8 +140,10 @@ database-level rollback is required.
   Postgres.
 - Restarting `labrat-backend` preserves project state and uploaded workbook
   review state.
+- The analysis capability endpoint reports the intended provider/model as
+  configured, and a production restart fails immediately when its key is absent.
 - A push to `main` deploys the pushed commit SHA, or leaves the previous
-  release active on failure.
+  provider configuration and release active on failure.
 - Daily backups exist and at least one restore drill has been completed.
 - An AWS Budget monthly alert is configured.
 - `LABRAT_ANALYSIS_EXECUTOR=disabled` unless a hardened no-network worker is

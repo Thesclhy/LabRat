@@ -152,6 +152,7 @@ test("Postgres SaaS routes preserve workbook review, source documents, and suppo
       ...loadSaasConfig({
         NODE_ENV: "test",
         SESSION_SECRET: "postgres-test-secret",
+        LABRAT_AI_PROVIDER: "anthropic",
         DATABASE_URL: databaseUrl,
         LABRAT_SEED_DEV_ACCOUNTS: "true",
       }),

@@ -62,6 +62,12 @@ DATABASE_URL=postgres://${LABRAT_DB_USER}:${LABRAT_DB_PASSWORD}@127.0.0.1:5432/$
 SESSION_SECRET=${LABRAT_SESSION_SECRET}
 LABRAT_FILE_STORAGE_ROOT=/var/lib/labrat/files
 LABRAT_SEED_DEV_ACCOUNTS=false
+LABRAT_AI_PROVIDER=deepseek
+DEEPSEEK_API_KEY=
+DEEPSEEK_MODEL=deepseek-v4-pro
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+ANTHROPIC_API_KEY=
+ANTHROPIC_MODEL=claude-sonnet-4-5
 LABRAT_ANALYSIS_EXECUTOR=disabled
 EOF
 chown root:"$LABRAT_APP_USER" /etc/labrat/backend.env
@@ -82,4 +88,5 @@ systemctl enable --now caddy
 
 echo "Lightsail provisioning complete for ${LABRAT_DOMAIN}."
 echo "Database password and session secret are stored in /etc/labrat/backend.env."
+echo "Configure the selected AI provider key in /etc/labrat/backend.env before the first backend start."
 echo "The backend service will start after the first release is deployed."

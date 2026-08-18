@@ -1,7 +1,4 @@
-import {
-  requestAnthropicJson,
-  requestAnthropicJsonWithTools,
-} from "../ai/anthropic.js";
+import { createAiGateway } from "../ai/gateway.js";
 import { SUPPORTED_CHART_TYPES } from "../charts/services/chartSpec.js";
 import { ANALYSIS_SOURCE_RANGE_MAX_CELLS } from "./sourceDocuments.js";
 
@@ -24,6 +21,36 @@ const INTENT_SYSTEM = [
   "Chart and plot requests use create_analysis_chart even when the active surface is Experiment Browser.",
   "Never return hidden reasoning or scientific values.",
 ].join(" ");
+
+const INTENT_OUTPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    intent: {
+      type: "string",
+      enum: [
+        "project_purpose",
+        "project_overview",
+        "experiment_overview",
+        "experiment_compare",
+        "experiment_lookup",
+        "open_or_filter_browser",
+        "upload_workbook",
+        "create_analysis_chart",
+        "publish_experiment_data",
+        "manuscript_action",
+        "clarification",
+      ],
+    },
+    disposition: {
+      type: "string",
+      enum: ["direct_answer", "analysis_thread", "action", "clarification"],
+    },
+    confidence: { type: "number", minimum: 0, maximum: 1 },
+    clarification: { anyOf: [{ type: "string" }, { type: "null" }] },
+  },
+  required: ["intent", "disposition", "confidence", "clarification"],
+  additionalProperties: false,
+};
 
 const READ_ONLY_ANSWER_SYSTEM = [
   "Answer one LabRat project question as JSON only with answer and evidenceIds.",
@@ -437,128 +464,15 @@ function normalizeWorkbookRegionPatch(value) {
   return patch;
 }
 
-function parseJsonObject(value) {
-  const raw = String(value || "").trim();
-  const unfenced = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
-  try {
-    const parsed = JSON.parse(unfenced);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-function unavailableWarning(code = "ai_unavailable", message = "Backend model provider is not configured.") {
-  return { code, message, severity: "warning" };
-}
-
 export function createBackendModelProvider({
   config = {},
   fetchImpl = globalThis.fetch,
   now = Date.now,
 } = {}) {
-  const providerName = config.aiProvider || "anthropic";
-  const model = config.anthropicModel || "claude-sonnet-4-5";
-  const apiKey = config.anthropicApiKey || "";
-
-  const publicConfig = () => ({
-    provider: providerName,
-    model,
-    configured: Boolean(apiKey),
-  });
-
-  const requestStructured = async ({ system, payload, maxTokens = 1200, outputSchema = null, signal = undefined }) => {
-    if (providerName !== "anthropic") {
-      return {
-        ok: false,
-        warning: unavailableWarning("ai_provider_unsupported", `Unsupported backend model provider ${providerName}.`),
-      };
-    }
-    if (!apiKey) return { ok: false, warning: unavailableWarning() };
-    const startedAt = now();
-    const response = await requestAnthropicJson({
-      system,
-      prompt: JSON.stringify(payload),
-      maxTokens,
-      outputSchema,
-      config: { apiKey, model },
-      fetchImpl,
-      signal,
-    });
-    const latencyMs = Math.max(0, now() - startedAt);
-    if (!response.ok) return response;
-    const parsed = parseJsonObject(response.text);
-    if (!parsed) {
-      return {
-        ok: false,
-        warning: unavailableWarning("ai_invalid_response", "Backend model returned invalid structured JSON."),
-      };
-    }
-    return {
-      ok: true,
-      ...parsed,
-      metadata: {
-        provider: providerName,
-        model,
-        latencyMs,
-        usage: response.usage || { inputTokens: 0, outputTokens: 0 },
-        ...(response.stopReason ? { stopReason: response.stopReason } : {}),
-      },
-    };
-  };
-
-  const requestStructuredWithTools = async ({
-    system,
-    payload,
-    maxTokens,
-    outputSchema,
-    tools,
-    toolHandlers,
-    maxToolRounds = 12,
-    signal,
-  }) => {
-    if (providerName !== "anthropic") {
-      return {
-        ok: false,
-        warning: unavailableWarning("ai_provider_unsupported", `Unsupported backend model provider ${providerName}.`),
-      };
-    }
-    if (!apiKey) return { ok: false, warning: unavailableWarning() };
-    const startedAt = now();
-    const response = await requestAnthropicJsonWithTools({
-      system,
-      prompt: JSON.stringify(payload),
-      tools,
-      toolHandlers,
-      maxToolRounds,
-      maxTokens,
-      outputSchema,
-      config: { apiKey, model },
-      fetchImpl,
-      signal,
-    });
-    const latencyMs = Math.max(0, now() - startedAt);
-    if (!response.ok) return response;
-    const parsed = parseJsonObject(response.text);
-    if (!parsed) {
-      return {
-        ok: false,
-        warning: unavailableWarning("ai_invalid_response", "Backend model returned invalid structured JSON."),
-      };
-    }
-    return {
-      ok: true,
-      ...parsed,
-      metadata: {
-        provider: providerName,
-        model,
-        latencyMs,
-        usage: response.usage || { inputTokens: 0, outputTokens: 0 },
-        toolRounds: Number(response.toolRounds) || 0,
-        ...(response.stopReason ? { stopReason: response.stopReason } : {}),
-      },
-    };
-  };
+  const gateway = createAiGateway({ config, fetchImpl, now });
+  const publicConfig = gateway.publicConfig;
+  const requestStructured = gateway.requestStructured;
+  const requestStructuredWithTools = gateway.requestStructuredWithTools;
 
   return {
     publicConfig,
@@ -572,6 +486,8 @@ export function createBackendModelProvider({
           projectContext: input.projectContext || {},
         },
         maxTokens: 300,
+        outputSchema: INTENT_OUTPUT_SCHEMA,
+        thinking: { enabled: false },
         signal: options.signal,
       });
     },
@@ -597,6 +513,7 @@ export function createBackendModelProvider({
         toolHandlers: {
           inspect_source_range: options.inspectSourceRange,
         },
+        thinking: { enabled: true, effort: "high" },
         signal: options.signal,
       });
     },
@@ -641,6 +558,7 @@ export function createBackendModelProvider({
           inspect_run_input: options.inspectRunInput,
           inspect_experiment_input: options.inspectExperimentInput,
         },
+        thinking: { enabled: true, effort: "high" },
         signal: options.signal,
       });
     },
@@ -666,6 +584,7 @@ export function createBackendModelProvider({
         toolHandlers: {
           inspect_source_range: options.inspectSourceRange,
         },
+        thinking: { enabled: true, effort: "high" },
         signal: options.signal,
       });
     },
@@ -710,6 +629,7 @@ export function createBackendModelProvider({
           inspect_run_input: options.inspectRunInput,
           inspect_experiment_input: options.inspectExperimentInput,
         },
+        thinking: { enabled: true, effort: "high" },
         signal: options.signal,
       });
     },
@@ -719,6 +639,7 @@ export function createBackendModelProvider({
         payload: input,
         maxTokens: 3200,
         outputSchema: WORKBOOK_REGION_OUTPUT_SCHEMA,
+        thinking: { enabled: false },
       });
       if (!result.ok) return result;
       return {
@@ -732,6 +653,7 @@ export function createBackendModelProvider({
         payload: input,
         maxTokens: 800,
         outputSchema: READ_ONLY_ANSWER_OUTPUT_SCHEMA,
+        thinking: { enabled: false },
         signal: options.signal,
       });
     },
