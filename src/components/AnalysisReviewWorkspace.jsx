@@ -259,6 +259,41 @@ function previewCellValue(row, column) {
   return cell.formattedValue ?? cell.value;
 }
 
+function typeLabel(value) {
+  const normalized = String(value || "string").trim().toLowerCase();
+  return normalized ? normalized.charAt(0).toUpperCase() + normalized.slice(1) : "Text";
+}
+
+function sourceValue(sourceRef) {
+  if (!sourceRef) return "Not available";
+  const value = sourceRef.rawValue ?? sourceRef.formattedValue;
+  return value == null || value === "" ? "Blank" : String(value);
+}
+
+function sourceLocation(sourceRef) {
+  if (!sourceRef) return "No source reference";
+  const file = sourceRef.fileName || sourceRef.sourceDocumentId || "Workbook";
+  const sheet = sourceRef.sheet || "Sheet";
+  const cell = sourceRef.cell || sourceRef.range || "";
+  return `${file} · ${sheet}${cell ? `!${cell}` : ""}`;
+}
+
+function sourceType(sourceRef) {
+  const value = sourceRef?.rawValue ?? sourceRef?.formattedValue;
+  if (value == null || value === "") return "Blank";
+  if (typeof value === "number") return "Number";
+  if (typeof value === "boolean") return "Boolean";
+  return "Text";
+}
+
+function conversionLabel(cell, column) {
+  const sourceRef = cell?.sourceRefs?.[0];
+  const storedType = typeLabel(cell?.storedType || column?.valueType);
+  const rawType = sourceType(sourceRef);
+  if (!sourceRef || rawType === "Blank" || rawType === storedType) return "None";
+  return `${rawType} → ${storedType}`;
+}
+
 function resultReady(run, result, preview) {
   const validation = resultValidation(run, result, preview);
   return Boolean(
@@ -495,6 +530,7 @@ function BrowserResultStage({
   onIdentityResolutionChange,
 }) {
   const [fullscreen, setFullscreen] = useState(false);
+  const [inspectedCell, setInspectedCell] = useState(null);
   const fullscreenButtonRef = useRef(null);
   const returnFocusRef = useRef(null);
   const shouldRestoreFocusRef = useRef(false);
@@ -594,7 +630,12 @@ function BrowserResultStage({
             <table className="analysis-browser-table">
               <thead>
                 <tr>
-                  {visibleColumns.map((column) => <th key={column.id}>{column.label}</th>)}
+                  {visibleColumns.map((column) => (
+                    <th key={column.id}>
+                      <span>{column.label}</span>
+                      <small className="analysis-browser-type-badge">{typeLabel(column.valueType)}</small>
+                    </th>
+                  ))}
                   <th>Changes</th>
                 </tr>
               </thead>
@@ -605,7 +646,16 @@ function BrowserResultStage({
                     <tr key={row.experimentId}>
                       {visibleColumns.map((column) => (
                         <td key={column.id}>
-                          {previewCellValue(row, column)}
+                          {column.id === "experiment" ? previewCellValue(row, column) : (
+                            <button
+                              type="button"
+                              className="analysis-browser-cell-button"
+                              onClick={() => setInspectedCell({ row, column, cell: row.cells?.[column.id] || null })}
+                              aria-label={`Inspect ${column.label} for ${row.label}`}
+                            >
+                              {previewCellValue(row, column)}
+                            </button>
+                          )}
                         </td>
                       ))}
                       <td>
@@ -626,6 +676,28 @@ function BrowserResultStage({
               </tbody>
             </table>
           </div>
+        )}
+        {ready && inspectedCell && (
+          <aside className="analysis-browser-cell-inspector" aria-label="Stored value details">
+            <header>
+              <div>
+                <strong>{inspectedCell.column.label}</strong>
+                <span>{inspectedCell.row.label}</span>
+              </div>
+              <button type="button" onClick={() => setInspectedCell(null)} aria-label="Close stored value details">×</button>
+            </header>
+            <dl>
+              <div><dt>Stored value</dt><dd>{previewCellValue(inspectedCell.row, inspectedCell.column)}</dd></div>
+              <div><dt>Stored type</dt><dd>{typeLabel(inspectedCell.cell?.storedType || inspectedCell.column.valueType)}</dd></div>
+              <div><dt>Unit</dt><dd>{inspectedCell.cell?.unit || inspectedCell.column.unit || "None"}</dd></div>
+              <div><dt>Numeric scale</dt><dd>{inspectedCell.cell?.numericScale || inspectedCell.column.numericScale || "Not applicable"}</dd></div>
+              <div><dt>Source value</dt><dd>{sourceValue(inspectedCell.cell?.sourceRefs?.[0])}</dd></div>
+              <div><dt>Source type</dt><dd>{sourceType(inspectedCell.cell?.sourceRefs?.[0])}</dd></div>
+              <div><dt>Conversion</dt><dd>{conversionLabel(inspectedCell.cell, inspectedCell.column)}</dd></div>
+              <div><dt>Source</dt><dd>{sourceLocation(inspectedCell.cell?.sourceRefs?.[0])}</dd></div>
+              <div><dt>Status</dt><dd>{inspectedCell.cell?.missingReason ? `Missing · ${inspectedCell.cell.missingReason}` : "Validated"}</dd></div>
+            </dl>
+          </aside>
         )}
       </div>
       {ready && conflicts.length > 0 && (

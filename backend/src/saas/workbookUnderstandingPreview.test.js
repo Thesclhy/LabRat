@@ -289,6 +289,60 @@ test("preserves validated user corrections when regenerating a preview", () => {
   assert.equal(interpretation.decisionSource, "user_patch");
 });
 
+test("backend model patches cannot downgrade deterministic numeric source fields", () => {
+  const fixture = sourceFixture({
+    sheetName: "Runs",
+    rows: [
+      ["Experiment", "Selectivity - Solid (%)", "Impeller Type"],
+      ["Exp1", "76.17", "Rushton"],
+      ["Exp2", "95.54", "Pitched blade"],
+    ],
+  });
+  const preview = buildWorkbookUnderstandingPreview({
+    ...fixture,
+    draftRegions: [draftRegion({ sheetName: "Runs", range: "A1:C3", semanticType: "experiment_table" })],
+    interpretationPatches: [{
+      draftRegionId: "draft_region_1",
+      decisionSource: "backend_model",
+      experimentAxis: "rows",
+      experimentIdColumn: "A",
+      fieldPatches: [{ column: "B", valueType: "string", displayName: "Solid selectivity" }],
+    }],
+  });
+  const fields = preview.regions[0].interpretation.fields;
+  assert.equal(fields.find((field) => field.column === "B").valueType, "number");
+  assert.equal(fields.find((field) => field.column === "B").displayName, "Solid selectivity");
+  assert.equal(fields.find((field) => field.column === "C").valueType, "string");
+});
+
+test("percent columns distinguish percent points from Excel fraction formatting", () => {
+  const textFixture = sourceFixture({
+    sheetName: "Runs",
+    rows: [["Experiment", "Selectivity (%)"], ["Exp1", "76.17"], ["Exp2", "—"]],
+  });
+  const textPreview = buildWorkbookUnderstandingPreview({
+    ...textFixture,
+    draftRegions: [draftRegion({ sheetName: "Runs", range: "A1:B3", semanticType: "experiment_table" })],
+  });
+  const textField = textPreview.regions[0].interpretation.fields[0];
+  assert.equal(textField.valueType, "number");
+  assert.equal(textField.numericScale, "percent_points");
+
+  const fractionFixture = sourceFixture({
+    sheetName: "Runs",
+    rows: [["Experiment", "Selectivity (%)"], ["Exp1", 0.7617], ["Exp2", 0.9554]],
+    cellDetails: {
+      B2: { formattedValue: "76.17%" },
+      B3: { formattedValue: "95.54%" },
+    },
+  });
+  const fractionPreview = buildWorkbookUnderstandingPreview({
+    ...fractionFixture,
+    draftRegions: [draftRegion({ sheetName: "Runs", range: "A1:B3", semanticType: "experiment_table" })],
+  });
+  assert.equal(fractionPreview.regions[0].interpretation.fields[0].numericScale, "fraction");
+});
+
 test("reports blockers when experiment axis or identity binding cannot be resolved", () => {
   const fixture = sourceFixture({
     sheetName: "Mystery",

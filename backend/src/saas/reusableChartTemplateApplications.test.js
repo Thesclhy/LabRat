@@ -43,7 +43,7 @@ function templateVersion(overrides = {}) {
   };
 }
 
-function seedExperiment(store, index, { value = index * 10, unit = "%", columnId = "yield_pct", displayName = "Yield", label = `Exp${index}` } = {}) {
+function seedExperiment(store, index, { value = index * 10, unit = "%", columnId = "yield_pct", displayName = "Yield", label = `Exp${index}`, numericScale = null } = {}) {
   const experimentId = `experiment_${index}`;
   const snapshotId = `snapshot_${index}`;
   const headId = `head_${index}`;
@@ -61,6 +61,7 @@ function seedExperiment(store, index, { value = index * 10, unit = "%", columnId
         displayName,
         valueType: "number",
         unit,
+        numericScale,
         value,
         formattedValue: `${value}${unit}`,
         sourceRefs: [{ sourceDocumentId: "source_1", sheet: "Data", cell: `B${index + 1}` }],
@@ -196,6 +197,38 @@ test("deterministic renderer adapts experiment count while preserving margins an
   assert.equal(rendered.executorResult.result.resolvedGeometry.schemaVersion, "labrat.resolvedChartGeometry.v1");
   assert.equal(rendered.executorResult.result.resolvedGeometry.plotArea.widthRatio >= 0.65, true);
   assert.equal(rendered.sourceRefs.length, 3);
+});
+
+test("deterministic renderer displays accepted fraction-scale percentages as percent points", async () => {
+  const store = new MemorySaasStore();
+  const experimentIds = [
+    seedExperiment(store, 1, { value: 0.7617, unit: "percent", numericScale: "fraction" }),
+    seedExperiment(store, 2, { value: 0.9554, unit: "percent", numericScale: "fraction" }),
+  ];
+  const version = templateVersion({
+    inputSlots: [{
+      ...templateVersion().inputSlots[0],
+      identityContract: {
+        ...templateVersion().inputSlots[0].identityContract,
+        numericScale: "fraction",
+      },
+      unitContract: { allowedUnits: ["percent"], conversionPolicyIds: [] },
+    }],
+  });
+  const compatibility = await prepareReusableChartTemplateApplication({
+    store, projectId: project.id, templateVersion: version, experimentIds,
+  });
+  const artifacts = buildReusableChartTemplateApplicationArtifacts({
+    project, actorUserId, templateVersion: version, compatibility,
+    idempotencyKey: "fraction_scale", requestHash: "fraction_scale_hash",
+  });
+  const experiments = compatibility.experimentSelections.map((selection) => {
+    const head = compatibility.frozenHeadRefs.find((item) => item.experimentId === selection.experimentId);
+    const record = store.dataSnapshots.get(head.dataSnapshotId).experimentRecords[0];
+    return { experimentId: selection.experimentId, label: record.label, activeHead: head, fields: record.fields.map((field, columnIndex) => ({ ...field, columnIndex })) };
+  });
+  const rendered = executeReusableChartTemplate({ templateVersion: version, application: artifacts.application, experiments });
+  assert.deepEqual(rendered.executorResult.result.plotly.data[0].y, [76.17, 95.54]);
 });
 
 test("deterministic renderer preserves grouped, stacked, overlay, and faceted policies", async () => {

@@ -349,6 +349,7 @@ async function materializeSelection({ store, projectId, selection, region }) {
       ),
       valueType: text(acceptedField?.valueType).toLowerCase() || inferredColumnType(columnValues),
       unit: acceptedField?.unit || null,
+      ...(acceptedField?.numericScale ? { numericScale: acceptedField.numericScale } : {}),
       headerSourceRefs: asArray(acceptedField?.sourceRefs),
     };
   });
@@ -380,6 +381,7 @@ async function materializeSelection({ store, projectId, selection, region }) {
           displayName: text(field.displayName) || column.sourceHeader,
           valueType: text(field.valueType).toLowerCase() || column.valueType,
           unit: field.unit || null,
+          numericScale: field.numericScale || null,
           headerSourceRefs: asArray(field.sourceRefs),
         }];
       }),

@@ -27,6 +27,7 @@ import { stableDataHash } from "./dataPlanSchemas.js";
 import { makeId } from "./ids.js";
 import { validatePythonPolicy } from "./pythonPolicy.js";
 import { deterministicExperimentBrowserProgram } from "./deterministicExperimentBrowserProgram.js";
+import { experimentFieldColumnId } from "./experimentProjection.js";
 import {
   CHART_TEMPLATE_EXECUTION_STRATEGY,
   executeReusableChartTemplate,
@@ -1681,6 +1682,26 @@ export async function getAnalysisResultPreview({
     const boundedOffset = Math.max(Number.parseInt(offset, 10) || 0, 0);
     const boundedLimit = Math.min(Math.max(Number.parseInt(limit, 10) || 200, 1), 1_000);
     const rows = asArray(projection.rows).slice(boundedOffset, boundedOffset + boundedLimit);
+    const recordsByExperimentId = new Map(asArray(detail.analysisResult.result?.previewRecords)
+      .map((record) => [record.experimentId, record]));
+    const inspectableRows = rows.map((row) => {
+      const record = recordsByExperimentId.get(row.experimentId);
+      const fieldsByColumnId = new Map(asArray(record?.fields)
+        .map((field) => [experimentFieldColumnId(field), field]));
+      return {
+        ...row,
+        cells: Object.fromEntries(Object.entries(row.cells || {}).map(([columnId, cell]) => {
+          const field = fieldsByColumnId.get(columnId);
+          if (!cell || !field) return [columnId, cell];
+          return [columnId, {
+            ...cell,
+            storedType: field.valueType || "string",
+            unit: field.unit || null,
+            sourceRefs: asArray(field.sourceRefs).slice(0, 8),
+          }];
+        })),
+      };
+    });
     return {
       schemaVersion: "labrat.experimentBrowserResultPreview.v2",
       outputTarget,
@@ -1689,7 +1710,7 @@ export async function getAnalysisResultPreview({
       analysisRunId: detail.analysisRun.id,
       analysisResultId: detail.analysisResult.id,
       columns: projection.columns || [],
-      rows,
+      rows: inspectableRows,
       totalCount: Number(projection.totalCount) || asArray(projection.rows).length,
       rowChanges: asArray(detail.analysisResult.result?.rowChanges)
         .slice(boundedOffset, boundedOffset + boundedLimit),
@@ -1703,7 +1724,7 @@ export async function getAnalysisResultPreview({
       page: {
         offset: boundedOffset,
         limit: boundedLimit,
-        returnedCount: rows.length,
+        returnedCount: inspectableRows.length,
         totalCount: Number(projection.totalCount) || asArray(projection.rows).length,
       },
     };

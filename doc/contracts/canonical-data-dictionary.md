@@ -176,6 +176,7 @@ Typical shape:
       "columnId": "column_c4f810fd-d31d-4ac2-9b5a-38d6a25c7676",
       "displayName": "Temperature",
       "valueType": "number",
+      "numericScale": "percent_points",
       "value": 250,
       "unit": "C",
       "headerSourceRefs": [],
@@ -224,6 +225,18 @@ across every record value in that validated result. Duplicate names, units, and
 types remain separate columns because their ids differ. Historical fields
 without an explicit id retain their legacy derived id only for read
 compatibility.
+
+Numeric percentage fields may additionally carry `numericScale`:
+
+- `percent_points`: stored `76.17` displays as `76.17%`;
+- `fraction`: stored `0.7617` displays as `76.17%` through an explicit
+  deterministic display conversion.
+
+Magnitude alone never selects the scale. Native Excel percent formatting is
+evidence for `fraction`; a percent-labelled column containing plain numeric or
+numeric-text values uses `percent_points`. The accepted scale is preserved in
+later snapshots and reusable-template binding. Changing type or scale creates a
+new reviewed result/snapshot rather than mutating history.
 
 Scalar and series values retain typed values, raw-value context when needed,
 units, and exact source refs. Scalar `headerSourceRefs` may preserve accepted

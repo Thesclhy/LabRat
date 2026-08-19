@@ -9545,6 +9545,94 @@ tbody tr:hover {
   font-weight: 650;
 }
 
+.analysis-browser-table th > span {
+  display: block;
+}
+
+.analysis-browser-type-badge {
+  display: inline-block;
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.analysis-browser-cell-button {
+  width: 100%;
+  overflow: hidden;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.analysis-browser-cell-button:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.analysis-browser-cell-inspector {
+  position: sticky;
+  right: 12px;
+  bottom: 12px;
+  z-index: 3;
+  width: min(420px, calc(100% - 24px));
+  margin: 12px 12px 12px auto;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgb(15 23 42 / 14%);
+}
+
+.analysis-browser-cell-inspector header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.analysis-browser-cell-inspector header div,
+.analysis-browser-cell-inspector dl div {
+  display: grid;
+  gap: 2px;
+}
+
+.analysis-browser-cell-inspector header span,
+.analysis-browser-cell-inspector dt {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.analysis-browser-cell-inspector header button {
+  border: 0;
+  background: transparent;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.analysis-browser-cell-inspector dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 14px;
+}
+
+.analysis-browser-cell-inspector dd {
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: #1e293b;
+  font-size: 12px;
+}
+
 .analysis-browser-change-list {
   display: flex;
   min-width: 180px;

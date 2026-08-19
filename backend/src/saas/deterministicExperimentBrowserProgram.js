@@ -21,7 +21,7 @@ const source = String.raw`def analyze(inputs, labrat):
             if isinstance(raw, (int, float)):
                 value = float(raw) if isinstance(raw, float) else raw
             else:
-                value = float(raw_text.replace(",", ""))
+                value = float(raw_text.replace(",", "").removesuffix("%").strip())
             return value, display_text or str(value), None
         if value_type == "boolean":
             if isinstance(raw, bool):
@@ -53,6 +53,7 @@ const source = String.raw`def analyze(inputs, labrat):
                 "displayName": normalized_text(source_mapping.get("displayName")) or "Column " + str(output_index + 1),
                 "valueType": value_type,
                 "unit": source_mapping.get("unit"),
+                "numericScale": source_mapping.get("numericScale"),
             })
             table_mappings.append((source_mapping.get("sourceColumnIndex"), output_index, value_type))
         if id_column is None:

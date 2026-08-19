@@ -1276,9 +1276,9 @@ describe("AnalysisReviewWorkspace", () => {
       analysisRunId: browserRun.id,
       analysisResultId: browserResult.id,
       columns: [
-        { id: "experiment", label: "Experiment" },
-        { id: "field:temperature:degC:number", label: "Temperature (degC)" },
-        { id: "field:product_yield:percent:number", label: "Product yield (%)" },
+        { id: "experiment", label: "Experiment", valueType: "string" },
+        { id: "field:temperature:degC:number", label: "Temperature (degC)", valueType: "number", unit: "degC" },
+        { id: "field:product_yield:percent:number", label: "Product yield (%)", valueType: "number", unit: "percent" },
       ],
       rows: [{
         experimentId: "experiment_candidate_1",
@@ -1289,6 +1289,16 @@ describe("AnalysisReviewWorkspace", () => {
             value: null,
             formattedValue: null,
             missingReason: "source_placeholder",
+            storedType: "number",
+            unit: "percent",
+            sourceRefs: [{
+              sourceType: "excel_cell",
+              fileName: "MasterTable.xlsx",
+              sheet: "Runs",
+              cell: "C4",
+              rawValue: "—",
+              formattedValue: "—",
+            }],
           },
         },
       }],
@@ -1358,6 +1368,13 @@ describe("AnalysisReviewWorkspace", () => {
     expect(screen.getByText("1 experiments · 3 new · 0 changed · 1 preserved")).toBeTruthy();
     expect(screen.getByText("-")).toBeTruthy();
     expect(screen.getByText("1 missing values across 1 experiments")).toBeTruthy();
+    expect(screen.getAllByText("Number").length > 0).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Inspect Product yield (%) for Exp31" }));
+    expect(screen.getByRole("complementary", { name: "Stored value details" })).toBeTruthy();
+    expect(screen.getByText("Stored type")).toBeTruthy();
+    expect(screen.getByText("MasterTable.xlsx · Runs!C4")).toBeTruthy();
+    expect(screen.getByText("Text → Number")).toBeTruthy();
+    expect(screen.getByText("Missing · source_placeholder")).toBeTruthy();
     expect(screen.getByText(browserRevision.requestSummary)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Publish to Browser" }).hasAttribute("disabled")).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "View full screen" }));

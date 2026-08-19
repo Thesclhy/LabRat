@@ -115,6 +115,20 @@ Milestone 5 is the next implementation slice: expose the deterministic path in
 Chart Review with template choice, experiment selection, compatibility and
 explicit-binding review, data coverage, preview, and normal result acceptance.
 
+## Stored-Type Reliability — Complete
+
+Before Milestone 5, the Browser publication boundary now makes primitive type
+and percentage scale provider-independent. Deterministic source evidence owns
+number/string/date/boolean classification; model field patches cannot downgrade
+an evidenced numeric field. Numeric-looking text, placeholders, native Excel
+percent formatting, percent-point storage, and fraction storage use bounded
+rules. Preview headers show proposed stored types, and clicking a preview cell
+shows stored value/type/unit/scale together with raw source value/type/location.
+Template eligibility now names string-typed blockers, pins numeric scale, and
+renders accepted fraction percentages as percent points. Existing snapshots
+remain immutable and require a newly reviewed publication to gain corrected
+metadata.
+
 ## Completed Milestone
 
 The approved region-level Workbook Understanding cutover documented

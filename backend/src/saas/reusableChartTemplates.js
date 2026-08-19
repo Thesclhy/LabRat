@@ -301,6 +301,7 @@ function validateTemplateDefinition(input = {}) {
         valueType: text(slot?.identityContract?.valueType),
         readableName: text(slot?.identityContract?.readableName),
         sourceSignature: text(slot?.identityContract?.sourceSignature),
+        numericScale: text(slot?.identityContract?.numericScale),
       },
       unitContract: {
         allowedUnits: asArray(slot?.unitContract?.allowedUnits).map(text),
@@ -412,14 +413,26 @@ export async function deriveReusableChartTemplateDefinition({ store, projectId, 
     const displayName = text(first?.displayName || first?.fieldKey);
     const valueType = text(first?.valueType);
     const unit = text(first?.unit);
+    const numericScale = text(first?.numericScale);
+    const incompatibleTypes = fields.filter((field) => text(field?.valueType) !== "number");
+    if (incompatibleTypes.length) {
+      const typeSummary = [...new Set(incompatibleTypes.map((field) => text(field?.valueType) || "unknown"))].join(", ");
+      error(
+        "reusable_chart_template_field_type_incompatible",
+        `${displayName || `Selected field ${slotIndex + 1}`} is stored as ${typeSummary}; reusable scalar templates require accepted Number fields.`,
+        422,
+        { slotIndex, displayName: displayName || null, storedTypes: typeSummary.split(", ") },
+      );
+    }
     if (!columnId || valueType !== "number" || fields.some((field) => (
       text(field?.columnId) !== columnId
       || text(field?.valueType) !== valueType
       || text(field?.unit) !== unit
+      || text(field?.numericScale) !== numericScale
     ))) {
       error("reusable_chart_template_not_eligible", "Selected experiments must share stable numeric column identities and units in the same order.", 422);
     }
-    return { columnId, displayName, valueType, unit };
+    return { columnId, displayName, valueType, unit, numericScale };
   });
   if (new Set(slots.map((slot) => slot.unit)).size > 1) {
     error("reusable_chart_template_not_eligible", "Multiple scalar components must use one compatible shared-axis unit.", 422);
@@ -439,6 +452,7 @@ export async function deriveReusableChartTemplateDefinition({ store, projectId, 
       identityContract: {
         preferredColumnId: slot.columnId,
         valueType: slot.valueType,
+        numericScale: slot.numericScale,
         readableName: slot.displayName,
         sourceSignature: stableDataHash(slot),
       },

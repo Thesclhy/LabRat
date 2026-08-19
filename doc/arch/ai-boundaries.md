@@ -96,6 +96,15 @@ inputs; it does not authorize ChartSpec publication.
 
 ## Experiment Browser Publication Rules
 
+- Primitive stored type is evidence-derived and provider-independent. The
+  deterministic workbook interpretation owns number/string/date/boolean
+  classification; a backend model may suggest scientific names, roles, and
+  units but cannot downgrade a deterministic numeric field through a model
+  patch. User-reviewed corrections remain a separate explicit boundary.
+- Numeric-looking text and accepted placeholders are handled by bounded source
+  rules. Percentage scale is explicit (`percent_points` or `fraction`) and is
+  never inferred only from a value being between zero and one.
+
 - Planning may select exact accepted workbook ranges, active snapshot fields,
   or both; it never embeds final values or Python.
 - Pristine-project onboarding may request `direct_source_mapping` after plan

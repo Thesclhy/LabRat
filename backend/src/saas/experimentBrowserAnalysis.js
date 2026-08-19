@@ -507,12 +507,12 @@ function normalizeOutputColumns(raw, inputs, errors, columnIdFactory) {
       .find((value) => Number(value?.columnIndex) === columnIndex);
     const sourceMetadata = sourceColumnMetadata(sampleValue, inputs);
     const unknownProperties = Object.keys(column || {}).filter(
-      (key) => !["displayName", "valueType", "unit"].includes(key),
+      (key) => !["displayName", "valueType", "unit", "numericScale"].includes(key),
     );
     if (unknownProperties.length) {
       errors.push(error(
         "experiment_output_column_metadata_forbidden",
-        "Output columns may define only displayName, valueType, and unit.",
+        "Output columns may define only displayName, valueType, unit, and numericScale.",
         { columnIndex, properties: unknownProperties },
       ));
     }
@@ -524,6 +524,14 @@ function normalizeOutputColumns(raw, inputs, errors, columnIdFactory) {
         { columnIndex, valueType: valueType || null },
       ));
     }
+    const numericScale = text(column?.numericScale) || null;
+    if (numericScale && (valueType !== "number" || !new Set(["percent_points", "fraction"]).has(numericScale))) {
+      errors.push(error(
+        "experiment_output_numeric_scale_invalid",
+        "numericScale must be percent_points or fraction on a numeric output column.",
+        { columnIndex, numericScale },
+      ));
+    }
     return {
       columnId: columnIdFactory(columnIndex),
       columnIndex,
@@ -532,6 +540,7 @@ function normalizeOutputColumns(raw, inputs, errors, columnIdFactory) {
         || `Column ${columnIndex + 1}`,
       valueType,
       unit: column?.unit || sourceMetadata?.unit || null,
+      numericScale: numericScale || sourceMetadata?.numericScale || null,
       headerSourceRefs: clone(sourceMetadata?.headerSourceRefs) || [],
     };
   });
@@ -573,6 +582,7 @@ function normalizeField(field, inputs, outputColumns, errors, path, diagnostic =
     displayName: definition?.displayName || `Column ${columnIndex + 1}`,
     valueType: definition?.valueType || "",
     unit: definition?.unit || null,
+    numericScale: definition?.numericScale || null,
     headerSourceRefs: clone(definition?.headerSourceRefs) || [],
     value,
     formattedValue: value === null ? null : field?.formattedValue ?? null,

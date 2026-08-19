@@ -110,6 +110,10 @@ Status code guidance:
   generates no Python, creates a normal validated AnalysisResult, and uses the
   same explicit ChartSpec acceptance endpoint. See
   `doc/contracts/reusable-chart-template-contract-v1.md`.
+- Experiment Browser result preview columns expose their proposed stored type,
+  unit, and optional numeric scale. Preview cells include a bounded set of the
+  already-validated exact source refs so the review UI can show raw source
+  value/type/location beside the proposed stored value before publication.
 
 ## Verification
 

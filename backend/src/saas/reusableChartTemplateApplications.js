@@ -35,18 +35,27 @@ function normalizedType(value) {
   return type === "numeric" ? "number" : type;
 }
 
+function displayedNumericValue(field) {
+  const unit = text(field?.unit).toLowerCase();
+  return field?.numericScale === "fraction" && new Set(["percent", "%", "percentage"]).has(unit)
+    ? field.value * 100
+    : field.value;
+}
+
 function fieldSignature(field) {
   return stableDataHash({
     columnId: text(field?.columnId),
     displayName: text(field?.displayName || field?.fieldKey),
     valueType: normalizedType(field?.valueType),
     unit: text(field?.unit),
+    numericScale: text(field?.numericScale),
   });
 }
 
 function contractMatch(field, slot) {
   const allowedUnits = asArray(slot?.unitContract?.allowedUnits).map(text);
   return normalizedType(field?.valueType) === normalizedType(slot?.identityContract?.valueType)
+    && text(field?.numericScale) === text(slot?.identityContract?.numericScale)
     && (!allowedUnits.length || allowedUnits.includes(text(field?.unit)));
 }
 
@@ -528,7 +537,7 @@ export function executeReusableChartTemplate({ templateVersion, application, exp
       }),
       name: slot.label,
       x,
-      y: selectedPoints.map((point) => point.field.value),
+      y: selectedPoints.map((point) => displayedNumericValue(point.field)),
       marker,
       ...(facetRef || {}),
       ...(experimentIndex != null && experimentIndex > 0 ? { showlegend: false } : {}),
@@ -571,7 +580,7 @@ export function executeReusableChartTemplate({ templateVersion, application, exp
           }),
           name: experiment.label,
           x: valuesBySlot.map(({ slot }) => slot.label),
-          y: valuesBySlot.map(({ points }) => points[descriptor.experimentIndex].field.value),
+          y: valuesBySlot.map(({ points }) => displayedNumericValue(points[descriptor.experimentIndex].field)),
           marker: {
             color: traceStyle.color,
             ...(chartType === "bar"

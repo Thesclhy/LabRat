@@ -77,6 +77,12 @@ eligibility; the fast template-picker frontend is next. See
 `doc/plans/reusable-chart-creation-plan.md` and
 `doc/contracts/reusable-chart-template-contract-v1.md`.
 
+The prerequisite stored-type reliability slice is complete: deterministic
+source evidence, not provider preference, owns primitive type; Experiment
+Browser preview exposes cell-level stored/source details; and numeric percentage
+fields preserve explicit percent-point versus fraction scale for reusable
+template binding.
+
 Use this split when deciding what to build:
 
 - Product mainline: Workbook Understanding First, ending in Experiment Browser.

@@ -168,8 +168,9 @@ New chart meaning still uses reviewed planning and result acceptance. The
 versioned style/template persistence, lifecycle APIs, reviewed slot bindings,
 and idempotent applications are implemented. Compatible accepted Browser
 experiments now use the Milestone 3 deterministic no-provider/no-Python path
-and the same immutable ChartSpec boundary. Adaptive geometry and the fast
-template-picker UI remain later milestones. See
+and the same immutable ChartSpec boundary. Adaptive geometry and
+provider-independent stored-type/percentage-scale handling are complete; the
+fast template-picker UI remains the next milestone. See
 `doc/plans/reusable-chart-creation-plan.md`.
 
 Production operationalization of reviewed analysis execution remains an

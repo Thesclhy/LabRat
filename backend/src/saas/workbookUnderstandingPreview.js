@@ -62,8 +62,12 @@ function isBlank(value) {
 function numericValue(value) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (!text(value)) return null;
-  const parsed = Number(text(value).replace(/,/g, ""));
+  const parsed = Number(text(value).replace(/,/g, "").replace(/%$/, "").trim());
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isPlaceholder(value) {
+  return new Set(["-", "--", "—", "n/a", "na"]).has(text(value).toLowerCase());
 }
 
 function boundedInspectionRange(rangeRef, { startRow } = {}) {
@@ -232,11 +236,20 @@ function roleFor(semanticKey) {
 }
 
 function valueTypeFor(cells) {
-  const values = asArray(cells).map(cellValue).filter((value) => !isBlank(value));
+  const values = asArray(cells).map(cellValue).filter((value) => !isBlank(value) && !isPlaceholder(value));
   if (values.length && values.every((value) => typeof value === "boolean" || /^(true|false)$/i.test(text(value)))) return "boolean";
   if (values.length && values.every((value) => numericValue(value) != null)) return "number";
   if (values.length && values.every((value) => /^\d{4}[-/]\d{1,2}[-/]\d{1,2}/.test(text(value)))) return "date";
   return "string";
+}
+
+function numericScaleFor(displayName, cells, valueType) {
+  if (valueType !== "number" || inferUnit(displayName) !== "percent") return null;
+  const present = asArray(cells).filter((cell) => !isBlank(cellValue(cell)) && !isPlaceholder(cellValue(cell)));
+  const excelPercentFormatting = present.some((cell) => (
+    typeof cell.rawValue === "number" && /%\s*$/.test(text(cell.formattedValue))
+  ));
+  return excelPercentFormatting ? "fraction" : "percent_points";
 }
 
 function sourceCellRef({ sourceDocument, sheetName, cell }) {
@@ -273,13 +286,15 @@ function headersFrom({ sourceDocument, rangeResult, header }) {
     const semanticKey = semanticKeyFor(displayName);
     const leafCell = [...pathCells].reverse().find((cell) => columnFromAddress(cell.address) === column)
       || pathCells[pathCells.length - 1];
+    const valueType = valueTypeFor(dataCells);
     fields.push({
       column,
       headerCell: leafCell.address,
       displayName,
       semanticKey,
       role: roleFor(semanticKey),
-      valueType: valueTypeFor(dataCells),
+      valueType,
+      numericScale: numericScaleFor(displayName, dataCells, valueType),
       unit: inferUnit(displayName),
       confidence: semanticKey === slug(displayName) ? 0.68 : 0.9,
       sourceRefs: pathCells.map((cell) => sourceCellRef({
@@ -434,6 +449,7 @@ function fieldFromPatch({ sourceDocument, sheetName, patch, proposedFields, full
     displayName: text(patch.displayName || proposed.displayName || column),
     role,
     valueType,
+    numericScale: valueType === "number" ? proposed.numericScale || null : null,
     unit: patch.unit === null ? null : text(patch.unit ?? proposed.unit) || null,
     confidence: 0.98,
     sourceRefs: asArray(proposed.sourceRefs).length
@@ -517,10 +533,17 @@ function applyPatch({ sourceDocument, region, rangeResult, proposal, patch, full
   for (const fieldPatch of asArray(source.fieldPatches)) {
     const column = text(fieldPatch?.column).toUpperCase();
     const existingIndex = fields.findIndex((field) => field.column === column);
+    const proposedField = proposedFields.find((field) => field.column === column);
+    const providerSafePatch = source.decisionSource === "backend_model"
+      && proposedField?.valueType
+      && text(fieldPatch?.valueType)
+      && text(fieldPatch.valueType) !== proposedField.valueType
+      ? Object.fromEntries(Object.entries(fieldPatch).filter(([key]) => key !== "valueType"))
+      : fieldPatch;
     const nextField = fieldFromPatch({
       sourceDocument,
       sheetName: region.sheetName,
-      patch: { ...(existingIndex >= 0 ? fields[existingIndex] : {}), ...fieldPatch },
+      patch: { ...(existingIndex >= 0 ? fields[existingIndex] : {}), ...providerSafePatch },
       proposedFields,
       fullRange,
       headerRow,

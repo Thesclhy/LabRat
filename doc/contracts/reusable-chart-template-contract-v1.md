@@ -299,6 +299,9 @@ and exclusions. Acceptance preserves that summary and exact source lineage.
 ## Unit, Shape, And Staleness Rules
 
 - Exact compatible units proceed.
+- Numeric percentage slots also pin their accepted storage scale. Fraction
+  inputs are deterministically displayed as percent points; scale mismatch
+  blocks binding rather than relying on value magnitude or provider inference.
 - Conversion occurs only through a pinned accepted conversion policy and
   preserves original and converted values, units, method version, and source
   refs.

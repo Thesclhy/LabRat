@@ -6,6 +6,19 @@ Last reviewed: 2026-08-19
 
 Durable decisions for LabRat architecture, product workflow, and Codex execution belong here. Keep entries newest first. Each entry should explain the decision, the context, the consequences, and any follow-up.
 
+## 2026-08-19 — Primitive Stored Type Is Provider-Independent
+
+- Decision: deterministic source evidence owns primitive Browser type, while
+  AI providers may suggest scientific semantics but cannot override an
+  evidenced numeric type through a model patch.
+- Decision: numeric percentage fields distinguish `percent_points` from
+  `fraction`; magnitude alone never chooses the scale.
+- Decision: type or scale correction publishes a new immutable snapshot rather
+  than rewriting accepted history.
+- Reason: reusable template binding must behave identically across Anthropic,
+  DeepSeek, and later providers, while retaining exact raw source evidence and
+  explicit human review for ambiguous conversions.
+
 ## 2026-08-18 - Reusable Charts Extend The AnalysisResult Path
 
 Status: Accepted

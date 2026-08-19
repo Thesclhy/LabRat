@@ -696,6 +696,11 @@ test("Experiment Browser analysis materializes active fields and returns a patch
   assert.equal(preview.changeSummary.newFieldCount, 1);
   assert.equal(preview.changeSummary.preservedFieldCount, 1);
   assert.equal(preview.identityCandidates[0].suggestedExperimentId, "experiment_31");
+  const normalizedColumn = preview.columns.find((column) => column.displayName === "Normalized temperature");
+  const normalizedCell = preview.rows[0].cells[normalizedColumn.id];
+  assert.equal(normalizedCell.storedType, "number");
+  assert.equal(normalizedCell.unit, "degC");
+  assert.equal(normalizedCell.sourceRefs.length > 0, true);
   assert.equal(browserProgramDraftCount, 2);
   assert.equal(browserExecutionCount, 2);
 });

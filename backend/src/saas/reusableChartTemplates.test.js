@@ -158,3 +158,22 @@ test("template eligibility rejects workbook ranges, series, and mismatched scala
     (error) => error.code === "reusable_chart_template_not_eligible",
   );
 });
+
+test("template eligibility names string-typed fields that require correction", async () => {
+  const fixture = eligibleFixture();
+  fixture.snapshot.experimentRecords.forEach((record) => {
+    record.fields[0].valueType = "string";
+    record.fields[0].value = String(record.fields[0].value);
+  });
+  await assert.rejects(
+    deriveReusableChartTemplateDefinition({
+      store: fixture.store,
+      projectId: fixture.projectId,
+      chartSpec: fixture.chartSpec,
+    }),
+    (error) => (
+      error.code === "reusable_chart_template_field_type_incompatible"
+      && /Yield is stored as string/.test(error.message)
+    ),
+  );
+});

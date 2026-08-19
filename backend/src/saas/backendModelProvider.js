@@ -332,7 +332,7 @@ const EXPERIMENT_BROWSER_PROGRAM_SYSTEM = [
   "Follow the accepted natural-language plan exactly.",
   "Return exactly {'columns': [...], 'recordPatches': [...], 'exclusions': [...]} from analyze.",
   "columns, recordPatches, values, upsertSeries, removeSeries, warnings, and exclusions must be lists, never dictionaries keyed by field or series ID.",
-  "Each top-level scalar column is exactly {'displayName': str, 'valueType': 'number'|'string'|'date'|'boolean', 'unit': str_or_None}.",
+  "Each top-level scalar column is exactly {'displayName': str, 'valueType': 'number'|'string'|'date'|'boolean', 'unit': str_or_None, and optional 'numericScale': 'percent_points'|'fraction'|None copied from accepted input metadata}.",
   "Do not output semanticKey, fieldKey, role, targetFieldId, or columnId. The backend assigns an internal random columnId after validation.",
   "Every columns[] item is an independent new Browser column. Duplicate display names, units, and value types are allowed and must not be merged with prior columns.",
   "Each record patch requires {'label': str, 'values': [...], 'upsertSeries': [...], 'removeSeries': [], 'warnings': [...]}.",

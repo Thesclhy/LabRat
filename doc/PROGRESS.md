@@ -15,6 +15,23 @@ Keep entries concise, newest first, and include:
 
 ## 2026-08-19
 
+- Completed the stored-type reliability prerequisite for reusable templates.
+  Deterministic workbook evidence now owns primitive column type, provider
+  patches cannot downgrade evidenced numeric fields, placeholders no longer
+  turn otherwise numeric columns into text, and numeric percentage fields
+  preserve explicit `percent_points` versus Excel-formatted `fraction` scale.
+  Browser preview headers display proposed stored types; clicking a cell shows
+  stored value/type/unit/scale and bounded raw source value/type/location before
+  publication. Template eligibility reports the incompatible field name/type,
+  pins scale during binding, and displays accepted fraction inputs as percent
+  points. Existing accepted snapshots remain unchanged and must be republished
+  through review. Focused backend type/preview/template tests and the 30-test
+  Analysis Review workspace suite passed. Full verification passed 293/293
+  frontend tests, 260/264 backend tests with four expected skips, the production
+  build with the existing Plotly chunk-size warning, and `git diff --check`.
+  Manual browser QA was not run because the local Docker application stack was
+  not running; automated interaction coverage verifies the inspector flow.
+
 - Completed reusable chart creation Milestone 4. Added deterministic
   selection-order color/marker/dash/bar-pattern allocation; explicit grouped,
   stacked-component, overlay, and faceted rendering; preferred/minimum plot

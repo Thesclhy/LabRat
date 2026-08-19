@@ -149,6 +149,7 @@ function buildColumns(entries, customColumns = []) {
         role: text(field.role) || "other",
         valueType: normalizedType(field.valueType),
         unit: field.unit || null,
+        numericScale: field.numericScale || null,
         seenCount: 0,
         coverageCount: 0,
         confidenceTotal: 0,
@@ -193,6 +194,7 @@ function buildColumns(entries, customColumns = []) {
       role: column.role,
       valueType: column.valueType,
       unit: column.unit,
+      numericScale: column.numericScale,
       coverageCount: column.coverageCount,
       coverageRatio,
       confidenceAverage,
@@ -292,6 +294,9 @@ function buildRows(entries, columns, annotationsByExperimentId = new Map(), cust
         missingReason: field.missingReason || null,
         confidence: field.confidence ?? null,
         warningCount: asArray(field.warnings).length,
+        storedType: normalizedType(field.valueType),
+        unit: field.unit || null,
+        numericScale: field.numericScale || null,
       };
     });
     columns.filter((column) => column.isCustom).forEach((column) => {
