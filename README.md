@@ -70,11 +70,41 @@ npm run dev:postgres
 npm --prefix backend run dev
 ```
 
-For non-Docker local development, copy the required values from
-`.env.example` into the Git-ignored `.env.local`. The backend `dev` command
-loads root `.env` and then `.env.local`; enable
+For local development, copy `.env.example` to the Git-ignored repository-root
+`.env`. The backend `dev` command loads root `.env` and then optional
+`.env.local` overrides; enable
 `LABRAT_SEED_DEV_ACCOUNTS=true` only for local development. Production users
 and passwords belong in the database, not in an environment file.
+
+Docker Compose reads provider settings from the Git-ignored repository-root
+`.env`. LabRat supports one deployment-selected backend provider at a time:
+
+```env
+LABRAT_AI_PROVIDER=deepseek
+DEEPSEEK_API_KEY=replace-with-a-local-key
+DEEPSEEK_MODEL=deepseek-v4-pro
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+```
+
+Set `LABRAT_AI_PROVIDER=anthropic` to use the existing
+`ANTHROPIC_API_KEY`/`ANTHROPIC_MODEL` settings instead. Provider selection is
+required in every environment and is read only at backend startup. A selected
+key may be empty in development, where capability reports `configured: false`;
+production refuses to start without it. LabRat does not automatically fail
+over or send the same scientific context to multiple providers. Recreate the
+backend container after changing Compose environment values:
+
+```bash
+docker compose up -d --force-recreate backend
+```
+
+When a real DeepSeek key is configured, the disposable smoke test verifies an
+authenticated capability read, the Browser-surface chart-intent case, and one
+synthetic reviewed plan with a read-only tool call:
+
+```bash
+npm --prefix backend run smoke:ai
+```
 
 ## Blank Project Behavior
 
@@ -174,6 +204,14 @@ The backend workbook scan/source indexing, accepted snapshot publication, Experi
 The low-cost production path is one AWS Lightsail Ubuntu instance running
 Caddy, the Node backend, Postgres, and durable uploaded-file storage. GitHub
 Actions can deploy every pushed `main` commit after tests and build pass.
+
+Production provider secrets live only in `/etc/labrat/backend.env`. The
+required GitHub Repository Variable `LABRAT_AI_PROVIDER` selects `anthropic` or
+`deepseek` for the next `main`/manual deployment; GitHub Actions does not
+receive or copy either provider key. The deployment updates only the provider
+line atomically and restores both the old environment file and old release if
+startup or health verification fails. An unsupported provider or a missing
+selected key fails before release activation.
 
 See `doc/deployment/lightsail.md` for provisioning, GitHub secrets, first-admin
 bootstrap, backup, rollback, and acceptance checks.

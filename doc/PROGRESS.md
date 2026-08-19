@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-08-18
+Last reviewed: 2026-08-19
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -12,6 +12,22 @@ Keep entries concise, newest first, and include:
 - meaningful changes
 - verification
 - follow-ups or residual risk
+
+## 2026-08-19
+
+- Merged `codex/onboarding-chat` into `codex/chart-creation`. The combined
+  branch retains the completed reusable-chart template milestones and adds the
+  deployment-selected Anthropic/DeepSeek gateway, structured-output validation,
+  provider diagnostics, deployment transaction, and provider smoke tooling.
+  Documentation conflicts in this progress log and the durable decision log
+  were resolved by preserving both independent workstreams. Made the deployment
+  switch regression portable across GNU/Linux and macOS `stat`/`readlink`
+  behavior. Verification passed 293/293 frontend tests, 246/250 backend tests
+  with four expected skips, the production build with the existing Plotly
+  chunk-size warning, the deployment-switch regression, shell syntax checks,
+  and `git diff --check`. Installing the newly locked backend dependencies
+  reported one high-severity transitive audit finding that remains to be
+  assessed separately; no automatic dependency mutation was applied.
 
 ## 2026-08-18
 
@@ -83,6 +99,35 @@ Keep entries concise, newest first, and include:
   Milestone 2 persistence and read APIs. Documentation verification used
   `npm run codex:preflight`, `git diff --check`, targeted terminology/route
   searches, and repository status review.
+- Completed the Anthropic/DeepSeek provider gate and deployment transaction.
+  `LABRAT_AI_PROVIDER` is now explicit in every runtime, the gateway constructs
+  only the selected wire-format adapter, and development can report an empty
+  selected key as unconfigured while production fails fast. Compose no longer
+  supplies an Anthropic default. The `main` workflow validates the required
+  GitHub Repository Variable before installing dependencies, passes only that
+  non-secret name to Lightsail, and includes tested provider configuration
+  helpers in the release. Remote deploy verifies the root-owned `640` env file,
+  selected server-side key, and HTTPS DeepSeek URL; it atomically replaces only
+  the unique provider line and restores both the prior environment and prior
+  release on restart/health failure. Keys remain outside GitHub and logs.
+  Added a disposable real-provider smoke command covering authenticated
+  capability, the Browser-surface carbon-chart intent, and reviewed planning
+  with a synthetic read-only source tool.
+- Verification passed 31 focused provider/config tests, the full backend suite
+  (233 passed, 5 existing skips), all 287 frontend tests, the production build
+  with the existing Plotly chunk warning, shell syntax checks, the deployment
+  switch/rollback/log-redaction test, both Postgres integration tests, Compose
+  and workflow parsing, and `git diff --check`. Recreated only the persistent
+  backend container so it reread the ignored local `.env`; the frontend remains
+  available at `/LabRat/`, backend health passes, and the authenticated
+  capability reports `deepseek / deepseek-v4-pro / configured: true`. After
+  account funding, `npm --prefix backend run smoke:ai` passed the complete real
+  provider flow: the carbon-chart request classified as
+  `create_analysis_chart / analysis_thread`, reviewed planning made one
+  read-only tool call in one round, retained one source selection, and proposed
+  a bar chart. GitHub's Repository Variable and the two Lightsail keys were not
+  changed from this branch; configure/verify them before the first production
+  switch.
 
 ## 2026-08-12
 
@@ -204,6 +249,24 @@ Keep entries concise, newest first, and include:
 
 ## 2026-08-11
 
+- Added a deployment-selected backend AI gateway with separate Anthropic
+  Messages and DeepSeek Chat Completions adapters. DeepSeek V4 Pro now supports
+  provider-normalized JSON/tool requests, task-specific thinking, transient
+  `reasoning_content` replay, validated tool arguments, sanitized diagnostics,
+  normalized usage, cancellation, and one bounded repair for empty, truncated,
+  malformed, or schema-invalid structured output. Ajv is the common final JSON
+  Schema boundary for both providers. Added production fail-fast configuration,
+  Docker and Lightsail environment wiring, server-owned secret documentation,
+  and durable architecture/API decisions; no frontend, database, review, or
+  scientific-data contract changed. Verification passed 223 backend tests with
+  five existing skips, 282 frontend tests, the production build with the
+  existing Plotly chunk warning, and the Postgres harness with its route test
+  skipped because `LABRAT_TEST_DATABASE_URL` was not configured. Dependency
+  audit still reports the pre-existing `xlsx` high-severity advisories with no
+  available npm fix; Ajv introduced no new finding. Real DeepSeek Docker E2E is
+  pending because neither the process nor local `.env` has a configured
+  `DEEPSEEK_API_KEY`.
+
 - Expanded the server-backed Experiment Browser into the complete viewport
   below the top bar. The right workspace and grid now consume all remaining
   height, the virtual row window follows its measured viewport through
@@ -217,7 +280,6 @@ Keep entries concise, newest first, and include:
   shell, a 564 px grid frame, a dynamically measured 514 px row viewport, no
   outer-page scrolling, stable header position after 420 px of row scrolling,
   and no browser console warnings or errors.
-
 ## 2026-08-10
 
 - Stopped Experiment Browser publication and onboarding navigation from

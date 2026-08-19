@@ -2,7 +2,7 @@
 
 Status: active
 Read when: deciding what LabRat should build next.
-Last reviewed: 2026-08-18
+Last reviewed: 2026-08-19
 
 This is the short active plan. Current execution status lives in `doc/current-milestone.md`; detailed implementation plans live under `doc/plans/`.
 
@@ -91,6 +91,20 @@ Use this split when deciding what to build:
 
 ## Recently Completed
 
+- Deployment provider gate: local backend/Compose and production now require an
+  explicit `LABRAT_AI_PROVIDER`. GitHub supplies only the validated provider
+  name; both real keys remain in Lightsail's root-owned environment file. The
+  remote deployment verifies the selected key, atomically updates only the
+  provider line, and jointly rolls back provider configuration and release on
+  restart or health failure.
+- Backend AI provider gateway: LabRat now selects one deployment-wide
+  Anthropic or DeepSeek adapter at startup while domain prompts, tools, review
+  boundaries, and scientific validation remain provider-neutral. DeepSeek V4
+  Pro uses stable Chat Completions JSON mode, task-specific thinking, transient
+  reasoning replay for tool loops, backend JSON Schema/tool-input validation,
+  and one bounded same-provider structured-output repair. Production fails fast
+  for unsupported or unconfigured selected providers and never automatically
+  sends evidence to a fallback provider.
 - Sustainable natural-language Experiment Browser publication: AnalysisThread
   now supports `outputTarget: experiment_browser`, mixed workbook and active
   snapshot selections, ordered list inputs, post-acceptance Python,

@@ -232,6 +232,17 @@ The Python policy is defense in depth, not the production isolation boundary. It
 
 The frontend does not hold provider credentials or call provider APIs. AgentPanel submits project-scoped messages and compact selected context to the authenticated backend.
 
+The backend uses an in-process provider gateway. Domain prompts, schemas, and
+review boundaries remain provider-neutral; Anthropic and DeepSeek adapters own
+only wire-format conversion, tool loops, usage normalization, cancellation,
+and sanitized transport errors. Anthropic Messages and DeepSeek Chat
+Completions remain separate adapters because their authentication, structured
+output, thinking, and tool-result formats differ. Every environment explicitly
+selects one provider at startup; there is no automatic failover and no external
+gateway service. Production deployment accepts only the non-secret provider
+name from GitHub and keeps both keys exclusively in the Lightsail environment
+file, with provider and release rollback treated as one transaction.
+
 ## Retired Architecture
 
 The aggregate dataset commit, generic import/mapping/proposal collections, SourceExtractProposal/ChartProposalSet path, analysis views, observation-series registry, local project persistence, old master/supplement workflow, and unscoped/direct chart endpoints have been removed. Do not recreate compatibility adapters or dual-write logic for them.

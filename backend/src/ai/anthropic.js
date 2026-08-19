@@ -1,3 +1,6 @@
+import { validateJsonSchema } from "./schemaValidation.js";
+import { sanitizeProviderDetail } from "./providerDiagnostics.js";
+
 export function anthropicConfig(env = process.env) {
   return {
     apiKey: env.ANTHROPIC_API_KEY || "",
@@ -8,25 +11,25 @@ export function anthropicConfig(env = process.env) {
 export function aiUnavailableWarning() {
   return {
     code: "ai_unavailable",
-    message: "Server-side Anthropic configuration is not available; deterministic proposals were returned.",
+    message: "Backend model provider is not configured.",
     severity: "warning",
   };
 }
 
-async function responseErrorDetail(response) {
+async function responseErrorDetail(response, apiKey) {
   try {
     const body = await response.json();
-    return String(body?.error?.message || body?.message || "").trim().slice(0, 1000);
+    return sanitizeProviderDetail(body?.error?.message || body?.message || "", [apiKey]);
   } catch {
     return "";
   }
 }
 
-function transportErrorDetail(error) {
+function transportErrorDetail(error, apiKey) {
   const code = String(error?.cause?.code || error?.code || "").trim().slice(0, 80);
   const name = String(error?.name || "Error").trim().slice(0, 80);
   const message = String(error?.message || "").trim().replace(/\s+/g, " ").slice(0, 500);
-  return [name, code, message].filter(Boolean).join(": ");
+  return sanitizeProviderDetail([name, code, message].filter(Boolean).join(": "), [apiKey]);
 }
 
 export async function requestAnthropicJson({
@@ -77,12 +80,12 @@ export async function requestAnthropicJson({
       signal,
     });
     if (!response.ok) {
-      const detail = await responseErrorDetail(response);
+      const detail = await responseErrorDetail(response, config.apiKey);
       return {
         ok: false,
         warning: {
           code: "ai_request_failed",
-          message: `Anthropic request failed with HTTP ${response.status}; deterministic proposals were returned.`,
+          message: `Model provider request failed with HTTP ${response.status}.`,
           severity: "warning",
           ...(detail ? { detail } : {}),
         },
@@ -94,7 +97,7 @@ export async function requestAnthropicJson({
         ok: false,
         warning: {
           code: "ai_output_truncated",
-          message: "Anthropic output reached the token limit; retry with a smaller region or a shorter interpretation.",
+          message: "Model provider output reached the token limit.",
           severity: "warning",
         },
       };
@@ -105,7 +108,7 @@ export async function requestAnthropicJson({
         ok: false,
         warning: {
           code: "ai_empty_response",
-          message: "Anthropic returned no proposal text; deterministic proposals were returned.",
+          message: "Model provider returned no proposal text.",
           severity: "warning",
         },
       };
@@ -121,12 +124,12 @@ export async function requestAnthropicJson({
     };
   } catch (error) {
     if (error?.name === "AbortError") throw error;
-    const detail = transportErrorDetail(error);
+    const detail = transportErrorDetail(error, config?.apiKey);
     return {
       ok: false,
       warning: {
         code: "ai_request_failed",
-        message: "Anthropic request failed; deterministic proposals were returned.",
+        message: "Model provider request failed.",
         severity: "warning",
         ...(detail ? { detail } : {}),
       },
@@ -161,6 +164,7 @@ export async function requestAnthropicJsonWithTools({
   }
   const messages = [{ role: "user", content: prompt }];
   const usage = { inputTokens: 0, outputTokens: 0 };
+  const toolDefinitions = new Map(tools.map((tool) => [tool.name, tool]));
   try {
     for (let round = 0; round <= maxToolRounds; round += 1) {
       const response = await fetchImpl("https://api.anthropic.com/v1/messages", {
@@ -183,12 +187,12 @@ export async function requestAnthropicJsonWithTools({
         signal,
       });
       if (!response.ok) {
-        const detail = await responseErrorDetail(response);
+        const detail = await responseErrorDetail(response, config.apiKey);
         return {
           ok: false,
           warning: {
             code: "ai_request_failed",
-            message: `Anthropic request failed with HTTP ${response.status}; deterministic proposals were returned.`,
+            message: `Model provider request failed with HTTP ${response.status}.`,
             severity: "warning",
             ...(detail ? { detail } : {}),
           },
@@ -202,7 +206,7 @@ export async function requestAnthropicJsonWithTools({
           ok: false,
           warning: {
             code: "ai_output_truncated",
-            message: "Anthropic output reached the token limit.",
+            message: "Model provider output reached the token limit.",
             severity: "warning",
           },
         };
@@ -216,7 +220,7 @@ export async function requestAnthropicJsonWithTools({
             ok: false,
             warning: {
               code: "ai_empty_response",
-              message: "Anthropic returned no proposal text.",
+              message: "Model provider returned no proposal text.",
               severity: "warning",
             },
           };
@@ -234,7 +238,7 @@ export async function requestAnthropicJsonWithTools({
           ok: false,
           warning: {
             code: "ai_tool_round_limit",
-            message: "Anthropic exceeded the allowed number of read-only inspection rounds.",
+            message: "Model provider exceeded the allowed number of read-only inspection rounds.",
             severity: "warning",
           },
         };
@@ -242,14 +246,23 @@ export async function requestAnthropicJsonWithTools({
       messages.push({ role: "assistant", content });
       const toolResults = [];
       for (const toolUse of toolUses) {
+        const definition = toolDefinitions.get(toolUse.name);
         const handler = toolHandlers[toolUse.name];
         let result;
         let isError = false;
         try {
-          if (typeof handler !== "function") {
+          if (!definition || typeof handler !== "function") {
             throw new Error(`Tool ${toolUse.name} is unavailable.`);
           }
-          result = await handler(toolUse.input || {});
+          const input = toolUse.input || {};
+          const validation = validateJsonSchema(definition.input_schema, input);
+          if (!validation.valid) {
+            throw Object.assign(new Error(`Tool ${toolUse.name} arguments did not match the required schema.`), {
+              code: "ai_tool_input_invalid",
+              details: { errors: validation.errors },
+            });
+          }
+          result = await handler(input);
         } catch (error) {
           isError = true;
           result = {
@@ -263,7 +276,7 @@ export async function requestAnthropicJsonWithTools({
         toolResults.push({
           type: "tool_result",
           tool_use_id: toolUse.id,
-          content: JSON.stringify(result),
+          content: JSON.stringify(result ?? null),
           ...(isError ? { is_error: true } : {}),
         });
       }
@@ -273,18 +286,18 @@ export async function requestAnthropicJsonWithTools({
       ok: false,
       warning: {
         code: "ai_tool_round_limit",
-        message: "Anthropic exceeded the allowed number of read-only inspection rounds.",
+        message: "Model provider exceeded the allowed number of read-only inspection rounds.",
         severity: "warning",
       },
     };
   } catch (error) {
     if (error?.name === "AbortError") throw error;
-    const detail = transportErrorDetail(error);
+    const detail = transportErrorDetail(error, config?.apiKey);
     return {
       ok: false,
       warning: {
         code: "ai_request_failed",
-        message: "Anthropic request failed; deterministic proposals were returned.",
+        message: "Model provider request failed.",
         severity: "warning",
         ...(detail ? { detail } : {}),
       },

@@ -9,10 +9,12 @@
     "start": "node src/server.js",
     "migrate": "node src/saas/migrate.js",
     "bootstrap:admin": "node scripts/bootstrap-admin.mjs",
+    "smoke:ai": "node --env-file-if-exists=../.env --env-file-if-exists=../.env.local scripts/smoke-ai-provider.mjs",
     "test": "node --test",
     "test:postgres": "node --test src/saas/routes/saasRoutes.postgres.test.js"
   },
   "dependencies": {
+    "ajv": "^8.20.0",
     "pg": "^8.16.3",
     "xlsx": "^0.18.5"
   }

@@ -539,6 +539,7 @@ before(async () => {
     ...loadSaasConfig({
       NODE_ENV: "test",
       SESSION_SECRET: "test-secret",
+      LABRAT_AI_PROVIDER: "anthropic",
       LABRAT_SEED_DEV_ACCOUNTS: "true",
     }),
     fileStorageRoot: path.join(os.tmpdir(), `labrat-saas-test-${Date.now()}`),
