@@ -567,6 +567,7 @@ before(async () => {
 
 after(async () => {
   if (!server) return;
+  server.closeAllConnections?.();
   await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 });
 
@@ -2301,6 +2302,247 @@ test("manuscripts round trip blocks and pages", async () => {
   assert.equal(list.status, 200);
   const listBody = await list.json();
   assert.equal(listBody.manuscripts.some((item) => item.id === manuscript.id), true);
+});
+
+test("reusable chart style and template APIs support accepted versioned lifecycle", async () => {
+  const project = await createProject("Reusable Chart Template Project");
+  const snapshotId = `snapshot_reusable_${Date.now()}`;
+  const chartSpecId = `chart_spec_reusable_${Date.now()}`;
+  store.dataSnapshots.set(snapshotId, {
+    id: snapshotId,
+    labId: project.labId,
+    projectId: project.id,
+    schemaVersion: "labrat.dataSnapshot.v4",
+    status: "accepted",
+    experimentRecords: ["Exp1", "Exp2"].map((label, recordIndex) => ({
+      experimentId: `experiment_reusable_${recordIndex + 1}`,
+      label,
+      fields: [{
+        columnId: "column_reusable_yield",
+        fieldKey: "yield",
+        displayName: "Yield",
+        valueType: "number",
+        unit: "%",
+        value: 80 + recordIndex,
+      }],
+      series: [],
+    })),
+  });
+  store.chartSpecs.set(chartSpecId, {
+    id: chartSpecId,
+    labId: project.labId,
+    projectId: project.id,
+    analysisResultId: "analysis_result_reusable",
+    title: "Yield comparison",
+    chartType: "bar",
+    spec: {
+      schemaVersion: "labrat.chartSpec.v3",
+      origin: "analysis_result",
+      status: "accepted",
+      chartType: "bar",
+      sourceSelections: [],
+      experimentSelections: [0, 1].map((recordIndex) => ({
+        experimentId: `experiment_reusable_${recordIndex + 1}`,
+        columnIndexes: [0],
+        includeSeries: false,
+        baseHeadRef: { dataSnapshotId: snapshotId, recordIndex },
+      })),
+    },
+    layout: {},
+    warnings: [],
+  });
+
+  const styleCreate = await jsonFetch(`/api/projects/${project.id}/chart-style-profiles`, {
+    method: "POST",
+    body: {
+      name: "Manuscript blue",
+      description: "Approved laboratory chart style.",
+      style: { palette: { colors: ["#123456", "#D97935"] } },
+    },
+  });
+  assert.equal(styleCreate.status, 201);
+  const styleBody = await styleCreate.json();
+  const styleProfile = styleBody.chartStyleProfile;
+  const firstStyleVersion = styleBody.versions[0];
+  assert.equal(firstStyleVersion.status, "accepted");
+  assert.equal(firstStyleVersion.geometry.preferredPlotAreaWidthRatio, 0.76);
+
+  const unknownReference = await jsonFetch(`/api/projects/${project.id}/chart-style-profiles`, {
+    method: "POST",
+    body: {
+      name: "Unknown reference",
+      style: { reference: { fileObjectId: "file_object_outside_project", extractionMethod: "manual" } },
+    },
+  });
+  assert.equal(unknownReference.status, 404);
+  assert.equal((await unknownReference.json()).error.code, "chart_style_reference_not_found");
+
+  const templateCreate = await jsonFetch(`/api/projects/${project.id}/reusable-chart-templates`, {
+    method: "POST",
+    body: {
+      name: "Yield comparison",
+      sourceChartSpecId: chartSpecId,
+      chartStyleProfileVersionId: firstStyleVersion.id,
+    },
+  });
+  assert.equal(templateCreate.status, 201);
+  const templateBody = await templateCreate.json();
+  const template = templateBody.reusableChartTemplate;
+  assert.equal(templateBody.versions[0].inputSlots[0].identityContract.preferredColumnId, "column_reusable_yield");
+  assert.deepEqual(templateBody.versions[0].experimentCardinality, { minimum: 1, recommendedMaximum: 6, hardMaximum: 12 });
+
+  const styleVersionResponse = await jsonFetch(`/api/chart-style-profiles/${styleProfile.id}/versions`, {
+    method: "POST",
+    body: { style: { palette: { colors: ["#654321", "#D97935"] } } },
+  });
+  assert.equal(styleVersionResponse.status, 201);
+  const styleVersionBody = await styleVersionResponse.json();
+  assert.equal(styleVersionBody.versions.length, 2);
+  const secondStyleVersion = styleVersionBody.versions[0];
+
+  const templateVersionResponse = await jsonFetch(`/api/reusable-chart-templates/${template.id}/versions`, {
+    method: "POST",
+    body: { chartStyleProfileVersionId: secondStyleVersion.id },
+  });
+  assert.equal(templateVersionResponse.status, 201);
+  const templateVersionBody = await templateVersionResponse.json();
+  assert.equal(templateVersionBody.versions.length, 2);
+  assert.equal(templateVersionBody.versions[0].version, 2);
+
+  [0, 1].forEach((recordIndex) => {
+    const experimentId = `experiment_reusable_${recordIndex + 1}`;
+    const identity = {
+      id: experimentId,
+      labId: project.labId,
+      projectId: project.id,
+      canonicalLabel: `Exp${recordIndex + 1}`,
+      aliases: [],
+    };
+    const head = {
+      id: `head_reusable_${recordIndex + 1}`,
+      labId: project.labId,
+      projectId: project.id,
+      experimentId,
+      dataSnapshotId: snapshotId,
+      recordIndex,
+    };
+    store.experimentIdentities.set(identity.id, identity);
+    store.experimentSnapshotHeads.set(head.id, head);
+  });
+  const applicationResponse = await jsonFetch(
+    `/api/reusable-chart-template-versions/${templateVersionBody.versions[0].id}/applications`,
+    {
+      method: "POST",
+      headers: { "Idempotency-Key": "route_template_application_1" },
+      body: { experimentIds: ["experiment_reusable_1", "experiment_reusable_2"] },
+    },
+  );
+  assert.equal(applicationResponse.status, 201);
+  const applicationBody = await applicationResponse.json();
+  assert.equal(applicationBody.compatibility.status, "ready");
+  assert.equal(applicationBody.analysisRun.status, "queued");
+  const applicationReplay = await jsonFetch(
+    `/api/reusable-chart-template-versions/${templateVersionBody.versions[0].id}/applications`,
+    {
+      method: "POST",
+      headers: { "Idempotency-Key": "route_template_application_1" },
+      body: { experimentIds: ["experiment_reusable_1", "experiment_reusable_2"] },
+    },
+  );
+  assert.equal(applicationReplay.status, 200);
+  assert.equal((await applicationReplay.json()).replayed, true);
+  const executeApplication = await jsonFetch(`/api/analysis-runs/${applicationBody.analysisRun.id}/execute`, {
+    method: "POST",
+    body: {},
+  });
+  assert.equal(executeApplication.status, 201);
+  const executedApplication = await executeApplication.json();
+  assert.equal(executedApplication.analysisRun.status, "awaiting_result_review");
+  assert.equal(executedApplication.analysisResult.validation.ok, true);
+
+  const stateResponse = await jsonFetch(`/api/projects/${project.id}/state`);
+  assert.equal(stateResponse.status, 200);
+  const stateBody = await stateResponse.json();
+  assert.equal(stateBody.chartStyleProfiles.some((item) => item.id === styleProfile.id), true);
+  assert.equal(stateBody.reusableChartTemplates.some((item) => item.id === template.id), true);
+
+  const otherProject = await createProject("Reusable Chart Isolation Project");
+  const otherSnapshotId = `snapshot_reusable_other_${Date.now()}`;
+  const otherChartSpecId = `chart_spec_reusable_other_${Date.now()}`;
+  store.dataSnapshots.set(otherSnapshotId, {
+    ...store.dataSnapshots.get(snapshotId),
+    id: otherSnapshotId,
+    projectId: otherProject.id,
+    labId: otherProject.labId,
+  });
+  store.chartSpecs.set(otherChartSpecId, {
+    ...store.chartSpecs.get(chartSpecId),
+    id: otherChartSpecId,
+    projectId: otherProject.id,
+    labId: otherProject.labId,
+    spec: {
+      ...store.chartSpecs.get(chartSpecId).spec,
+      experimentSelections: store.chartSpecs.get(chartSpecId).spec.experimentSelections.map((selection) => ({
+        ...selection,
+        baseHeadRef: { ...selection.baseHeadRef, dataSnapshotId: otherSnapshotId },
+      })),
+    },
+  });
+  const crossProjectStyle = await jsonFetch(`/api/projects/${otherProject.id}/reusable-chart-templates`, {
+    method: "POST",
+    body: {
+      name: "Invalid cross-project style",
+      sourceChartSpecId: otherChartSpecId,
+      chartStyleProfileVersionId: secondStyleVersion.id,
+    },
+  });
+  assert.equal(crossProjectStyle.status, 404);
+  assert.equal((await crossProjectStyle.json()).error.code, "chart_style_profile_not_accepted");
+
+  const ownerCookie = cookie;
+  try {
+    const adminLogin = await jsonFetch("/api/auth/login", {
+      method: "POST",
+      body: { username: "admin", password: "LabRatAdmin123!" },
+    });
+    cookie = cookieFrom(adminLogin);
+    const viewerUsername = `chart_template_viewer_${Date.now()}`;
+    const viewerPassword = "ChartTemplateViewer123!";
+    const createViewer = await jsonFetch("/api/admin/users", {
+      method: "POST",
+      body: {
+        username: viewerUsername,
+        displayName: "Chart Template Viewer",
+        temporaryPassword: viewerPassword,
+        labId: project.labId,
+        role: "viewer",
+      },
+    });
+    assert.equal(createViewer.status, 201);
+    const viewerLogin = await jsonFetch("/api/auth/login", {
+      method: "POST",
+      body: { username: viewerUsername, password: viewerPassword },
+    });
+    cookie = cookieFrom(viewerLogin);
+    assert.equal((await jsonFetch(`/api/projects/${project.id}/reusable-chart-templates`)).status, 200);
+    const viewerWrite = await jsonFetch(`/api/projects/${project.id}/chart-style-profiles`, {
+      method: "POST",
+      body: { name: "Viewer cannot create", style: {} },
+    });
+    assert.equal(viewerWrite.status, 403);
+  } finally {
+    cookie = ownerCookie;
+  }
+
+  const archiveTemplate = await jsonFetch(`/api/reusable-chart-templates/${template.id}/archive`, { method: "POST", body: {} });
+  assert.equal(archiveTemplate.status, 200);
+  const activeList = await (await jsonFetch(`/api/projects/${project.id}/reusable-chart-templates`)).json();
+  assert.equal(activeList.reusableChartTemplates.some((item) => item.id === template.id), false);
+  const archivedList = await (await jsonFetch(`/api/projects/${project.id}/reusable-chart-templates?includeArchived=true`)).json();
+  assert.equal(archivedList.reusableChartTemplates.some((item) => item.id === template.id), true);
+
+  const archiveStyle = await jsonFetch(`/api/chart-style-profiles/${styleProfile.id}/archive`, { method: "POST", body: {} });
+  assert.equal(archiveStyle.status, 200);
 });
 
 test("logout revokes the current session", async () => {

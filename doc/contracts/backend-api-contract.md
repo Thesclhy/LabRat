@@ -1,7 +1,7 @@
 # Backend API Contract
 
 Status: active compatibility note
-Last reviewed: 2026-07-20
+Last reviewed: 2026-08-18
 
 The backend is server-first. The complete implemented project API is defined in `doc/contracts/saas-api-contract-v0.md` and routed by `backend/src/saas/routes/saasRoutes.js`.
 
@@ -84,6 +84,15 @@ Status code guidance:
 - AnalysisRun execution is a separate authenticated backend operation. It re-resolves accepted source selections and materializes complete multi-table inputs through bounded SourceDocument reads. General analysis runs generate policy-checked Python from those real inputs. The full-page master-table onboarding flow may instead request the backend-owned `direct_source_mapping` program, which maps the accepted region interpretation without another model generation step. Both strategies pass through the same bounded result, provenance, and declared-invariant validation and persist an immutable awaiting-review AnalysisResult; execution never creates a ChartSpec. `trace_y_sum` checks a complete series, and `x_group_y_sum` checks stacked components at each shared X category.
 - A terminal failed or validation-failed AnalysisRun may be retried through `POST /api/analysis-runs/:analysisRunId/retry` with an idempotency key. Retry preserves the failed run and creates a new queued run against the same accepted plan and execution strategy; it does not revise evidence, accept results, or publish data.
 - Result acceptance is a second idempotent transaction: it checks the exact AnalysisResult id and reviewed curve ids, accepts the existing result, completes the run/thread, and creates exactly one analysis-result ChartSpec v3.
+- Reusable chart style/template lifecycle APIs persist immutable accepted
+  versions, return bounded project summaries, and derive eligible v1 template
+  definitions only from accepted same-project scalar-comparison ChartSpecs.
+  Template application now resolves compatible slots against frozen accepted
+  experiment heads, persists an idempotent application, and creates an
+  accepted plan plus queued run. `chart_template_v1` makes no provider call,
+  generates no Python, creates a normal validated AnalysisResult, and uses the
+  same explicit ChartSpec acceptance endpoint. See
+  `doc/contracts/reusable-chart-template-contract-v1.md`.
 
 ## Verification
 

@@ -248,6 +248,34 @@ test("publishes a chart from reviewed experiment selections and protects frozen 
     }),
     (error) => error.code === "analysis_result_stale",
   );
+
+  const templated = seededStore();
+  useExperimentSelection(templated);
+  templated.planRevision.plan.templateLineage = {
+    reusableChartTemplateId: "template_1",
+    reusableChartTemplateVersionId: "template_version_1",
+    reusableChartTemplateApplicationId: "template_application_1",
+    executionStrategy: "chart_template_v1",
+  };
+  templated.store.analysisPlanRevisions.set(
+    templated.planRevision.id,
+    structuredClone(templated.planRevision),
+  );
+  templated.store.experimentSnapshotHeads.set("head_1", {
+    id: "head_2",
+    projectId: templated.project.id,
+    experimentId: "experiment_1",
+    dataSnapshotId: "snapshot_1",
+    recordIndex: 0,
+  });
+  await assert.rejects(
+    () => publishAcceptedAnalysisChart({
+      ...request,
+      store: templated.store,
+      idempotencyKey: "publish_stale_template_chart",
+    }),
+    (error) => error.code === "chart_template_inputs_stale",
+  );
 });
 
 test("rejects unknown or empty visible curve selections before publication", async () => {

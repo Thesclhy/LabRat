@@ -2,9 +2,51 @@
 
 Status: reference
 Read when: checking durable architecture or product decisions.
-Last reviewed: 2026-07-23
+Last reviewed: 2026-08-18
 
 Durable decisions for LabRat architecture, product workflow, and Codex execution belong here. Keep entries newest first. Each entry should explain the decision, the context, the consequences, and any follow-up.
+
+## 2026-08-18 - Reusable Charts Extend The AnalysisResult Path
+
+Status: Accepted
+
+Decision:
+LabRat keeps reviewed natural-language analysis as the authoring path for new
+scientific intent and adds a deterministic reusable-template path for repeating
+an approved comparison with compatible accepted experiments.
+
+Style, reusable recipe, experiment selection, and immutable chart instance are
+separate. A template is a structured immutable version, not a saved prompt.
+Template reuse records ordinary analysis lineage with
+`executionStrategy: chart_template_v1`, makes no provider call, generates no
+Python, produces a normally validated AnalysisResult, and still requires
+explicit ChartSpec acceptance.
+
+Context:
+The completed chart workflow is auditable but too slow and prompt-sensitive for
+routine cross-experiment comparison. Replaying prompts or allowing fuzzy field
+matching would improve speed at the cost of scientific reliability. Existing
+opaque Browser column identities are reliable within preserved lineage but do
+not prove semantic equivalence across unrelated publications.
+
+Consequences:
+
+- V1 fast reuse accepts active accepted Experiment Browser fields/series only.
+- Exact stable identity or an unchanged prior reviewed binding may auto-bind;
+  unique metadata candidates require first-use confirmation and ambiguity
+  blocks.
+- The bounded recipe language contains no arbitrary code or Plotly arrays.
+- Missing values, units, X alignment, experiment cardinality, comparison mode,
+  palette overflow, margins, plot-area minimums, and legend fallbacks are
+  accepted template policy.
+- Existing ChartSpecs remain `origin: analysis_result`; optional template
+  lineage does not create a second chart origin.
+- Reference-chart extraction creates a draft style only and is implemented
+  after persistence, execution, geometry, fast reuse UI, and authoring.
+- The legacy manuscript-local `chartTemplates` shape is not reused.
+- The implementation source is
+  `doc/plans/reusable-chart-creation-plan.md`; the contract is
+  `doc/contracts/reusable-chart-template-contract-v1.md`.
 
 ## 2026-07-23 - Experiment Browser Writes Use Reviewed Record Patches
 

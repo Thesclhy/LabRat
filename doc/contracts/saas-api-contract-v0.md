@@ -1,7 +1,7 @@
 # SaaS API Contract v0
 
 Status: active
-Last reviewed: 2026-07-20
+Last reviewed: 2026-08-18
 
 This contract describes the server-first API that is implemented by `backend/src/saas/routes/saasRoutes.js`. The authoritative scientific path is:
 
@@ -535,6 +535,55 @@ AnalysisResult awaiting_review -> accepted
 ```
 
 ## Reviewed Analysis Charts
+
+### Reusable Chart Profiles And Templates
+
+Milestone 2 implements the following project-owned lifecycle API surface:
+
+```text
+GET  /api/projects/:projectId/chart-style-profiles
+POST /api/projects/:projectId/chart-style-profiles
+GET  /api/chart-style-profiles/:chartStyleProfileId
+POST /api/chart-style-profiles/:chartStyleProfileId/versions
+POST /api/chart-style-profiles/:chartStyleProfileId/archive
+
+GET  /api/projects/:projectId/reusable-chart-templates
+POST /api/projects/:projectId/reusable-chart-templates
+GET  /api/reusable-chart-templates/:reusableChartTemplateId
+POST /api/reusable-chart-templates/:reusableChartTemplateId/versions
+POST /api/reusable-chart-templates/:reusableChartTemplateId/archive
+```
+
+Milestone 3 implements the application surface:
+
+```text
+POST /api/reusable-chart-template-versions/:templateVersionId/applications
+```
+
+Reads require project viewer; writes require editor. Template creation accepts
+a name, accepted source ChartSpec id, and optional accepted style-profile
+version. The backend derives/validates the input contract and recipe; arbitrary
+browser-authored operations are not trusted.
+
+The implemented project-state response contains bounded active profile and
+template summaries; full immutable version payloads are available only from
+their detail routes. Application creation requires `Idempotency-Key`, exact
+experiment ids, and any explicit reviewed slot bindings. It freezes active
+snapshot heads, returns
+per-experiment/slot compatibility, and only when blockers are resolved creates
+the deterministic accepted PlanRevision plus queued
+`executionStrategy: chart_template_v1` AnalysisRun. Existing run execution,
+result-preview, revise, and accept-and-create-chart routes remain authoritative.
+Preview creates no ChartSpec.
+
+The implemented v1 fast path uses accepted active Experiment Browser scalar
+fields only. It interprets the accepted scalar-selection recipe without a
+model or Python and passes its Plotly result through the normal validator and
+AnalysisResult review boundary.
+Missing, ambiguous, incompatible-unit, unreadable-geometry, and stale-head
+cases use the stable codes defined in
+`doc/contracts/reusable-chart-template-contract-v1.md`. Reference-style
+extraction is deferred and, when added, creates only a draft profile version.
 
 ```text
 GET   /api/projects/:projectId/chart-specs

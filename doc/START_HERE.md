@@ -2,7 +2,7 @@
 
 Status: active
 Read when: starting any non-trivial LabRat coding or documentation task.
-Last reviewed: 2026-06-30
+Last reviewed: 2026-08-18
 
 This file is the routing guide for AI agents. It tells you which docs are current source of truth, which docs are long-term plans, and which docs are historical reports.
 
@@ -28,6 +28,14 @@ Uploading a workbook does not automatically publish a DataSnapshot, create a Cha
 
 LabRat chat has three supported dispositions: workbook upload and region review, read-only project question answering, and reviewed analysis/chart planning. Chart requests select confirmed regions and/or accepted active DataSnapshot records, then pass through plan review, accepted Python execution, result review, and analysis-result ChartSpec publication.
 
+The chart-creation program now includes persisted, versioned chart styles and
+scientific templates. New chart meaning still uses the reviewed analysis path;
+the next milestone makes repetition with compatible accepted Browser
+experiments use a deterministic `chart_template_v1` run and the same
+AnalysisResult and ChartSpec publication boundary. Read
+`doc/plans/reusable-chart-creation-plan.md` and
+`doc/contracts/reusable-chart-template-contract-v1.md` for this work.
+
 ## Minimal Reading Path
 
 Always read:
@@ -52,11 +60,14 @@ For scientific data shape, imports, evidence, ChartSpecs, manuscript semantics, 
 - `doc/contracts/canonical-data-dictionary.md`
 - `doc/arch/architecture.md`
 - `doc/arch/ai-boundaries.md`
+- `doc/contracts/reusable-chart-template-contract-v1.md` for reusable chart
+  style/template, input-slot, deterministic-recipe, and geometry work.
 
 For frontend workflow or review UX, also read:
 
 - `doc/qa/manual-qa-agent-first-workflow.md`
 - `doc/qa/code-review.md`
+- `doc/qa/reusable-chart-template-test-matrix.md` for reusable chart work.
 - `doc/plans/mui-ui-migration-plan.md` when planning or implementing Material UI migration work.
 - `.codex/skills/ui-design/SKILL.md` when UI design or UI verification is involved.
 

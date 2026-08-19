@@ -27,6 +27,10 @@ import { stableDataHash } from "./dataPlanSchemas.js";
 import { makeId } from "./ids.js";
 import { validatePythonPolicy } from "./pythonPolicy.js";
 import { deterministicExperimentBrowserProgram } from "./deterministicExperimentBrowserProgram.js";
+import {
+  CHART_TEMPLATE_EXECUTION_STRATEGY,
+  executeReusableChartTemplate,
+} from "./reusableChartTemplateApplications.js";
 
 const THREAD_LIST_LIMIT = 100;
 const ANALYSIS_RUN_LEASE_MS = 360_000;
@@ -1185,10 +1189,13 @@ export async function executeAnalysisRun({
     || revision.outputTarget
     || revision.plan?.outputTarget
     || ANALYSIS_OUTPUT_TARGETS.CHART;
-  const resolvedExecutionStrategy = outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
-    && executionStrategy === "direct_source_mapping"
-    ? "direct_source_mapping"
-    : "model_generated_python";
+  const requestedExecutionStrategy = run.payload?.executionStrategy || executionStrategy;
+  const resolvedExecutionStrategy = requestedExecutionStrategy === CHART_TEMPLATE_EXECUTION_STRATEGY
+    ? CHART_TEMPLATE_EXECUTION_STRATEGY
+    : outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
+      && requestedExecutionStrategy === "direct_source_mapping"
+      ? "direct_source_mapping"
+      : "model_generated_python";
   const plannedHeadRefs = asArray(revision.plan?.experimentSelections)
     .map((selection) => selection.baseHeadRef)
     .filter(Boolean);
@@ -1197,12 +1204,29 @@ export async function executeAnalysisRun({
     analysisRunId: run.id,
     actorUserId,
     expectedHeadRefs: plannedHeadRefs,
-    staleValidation: {},
+    staleValidation: resolvedExecutionStrategy === CHART_TEMPLATE_EXECUTION_STRATEGY ? {
+      ok: false,
+      errors: [{
+        code: "chart_template_inputs_stale",
+        message: "A selected experiment changed after this reusable chart application was prepared.",
+      }],
+      warnings: [],
+    } : {},
+    staleError: resolvedExecutionStrategy === CHART_TEMPLATE_EXECUTION_STRATEGY ? {
+      code: "chart_template_inputs_stale",
+      message: "A selected experiment changed after this reusable chart application was prepared.",
+    } : null,
     staleAuditEvents: [],
     startedAt,
     staleAfterMs: ANALYSIS_RUN_LEASE_MS,
   });
   if (run.status === "validation_failed") {
+    if (resolvedExecutionStrategy === CHART_TEMPLATE_EXECUTION_STRATEGY) {
+      await store.updateReusableChartTemplateApplication?.(
+        run.payload?.reusableChartTemplateApplicationId,
+        { status: "failed", updatedAt: startedAt, updatedBy: actorUserId },
+      );
+    }
     return {
       analysisThread: await store.findAnalysisThreadById(run.analysisThreadId),
       analysisPlanRevision: revision,
@@ -1217,6 +1241,7 @@ export async function executeAnalysisRun({
   let activeContext;
   let executorResult;
   let checked;
+  let deterministicSourceRefs = null;
   const programAttempts = [];
   try {
     const workbookInputs = await materializeAnalysisInputs({
@@ -1257,11 +1282,75 @@ export async function executeAnalysisRun({
   }
 
   const thread = await store.findAnalysisThreadById(run.analysisThreadId);
-  let repairContext = null;
-  const maxProgramAttempts = resolvedExecutionStrategy === "direct_source_mapping"
-    ? 1
-    : PROGRAM_EXECUTION_REPAIR_LIMIT + 1;
-  for (let programAttempt = 1; programAttempt <= maxProgramAttempts; programAttempt += 1) {
+  if (resolvedExecutionStrategy === CHART_TEMPLATE_EXECUTION_STRATEGY) {
+    try {
+      const application = await store.findReusableChartTemplateApplicationById(
+        run.payload?.reusableChartTemplateApplicationId,
+      );
+      const templateVersion = await store.findReusableChartTemplateVersionById(
+        run.payload?.reusableChartTemplateVersionId,
+      );
+      const template = templateVersion
+        ? await store.findReusableChartTemplateById(templateVersion.reusableChartTemplateId)
+        : null;
+      const styleVersion = templateVersion?.chartStyleProfileVersionId
+        ? await store.findChartStyleProfileVersionById(templateVersion.chartStyleProfileVersionId)
+        : null;
+      if (!application || application.projectId !== project.id || !templateVersion || templateVersion.projectId !== project.id) {
+        throw analysisError("chart_template_application_conflict", "The reusable chart application is unavailable.", 409);
+      }
+      const rendered = executeReusableChartTemplate({
+        templateVersion: { ...templateVersion, templateName: template?.name || "Reusable chart" },
+        application,
+        experiments: inputs.experiments,
+        styleVersion,
+      });
+      executorResult = rendered.executorResult;
+      deterministicSourceRefs = rendered.sourceRefs;
+      runPackage = rendered.hashes;
+      checked = validateAnalysisResult({ run, plan: revision, executorResult });
+      programAttempts.push({
+        attempt: 1,
+        programHash: runPackage.programHash,
+        outcome: checked.ok ? "result_ready" : "validation_failed",
+        errors: checked.ok ? [] : checked.errors.slice(0, 20),
+      });
+    } catch (error) {
+      await store.updateReusableChartTemplateApplication?.(
+        run.payload?.reusableChartTemplateApplicationId,
+        { status: "failed", updatedAt: new Date().toISOString(), updatedBy: actorUserId },
+      );
+      return finalizeFailedRun({
+        store, project, actorUserId, run, revision,
+        status: error?.code?.includes("validation") ? "validation_failed" : "failed",
+        error,
+        payload: { phase: "executing_chart_template", inputManifest: inputManifest(inputs), programAttempts },
+        ipAddress, userAgent,
+      });
+    }
+    if (!checked.ok) {
+      return finalizeFailedRun({
+        store, project, actorUserId, run, revision, status: "validation_failed",
+        error: {
+          code: "analysis_plotly_validation_failed",
+          message: "The reusable chart recipe returned a chart that did not pass backend Plotly validation.",
+          details: { errors: checked.errors, totalErrorCount: checked.errors.length },
+        },
+        payload: {
+          phase: "validating_plotly", inputManifest: inputManifest(inputs),
+          inputHash: runPackage.inputHash, programHash: runPackage.programHash,
+          pythonProgram: null, programAttempts, adapter: executorResult.adapter,
+          runtime: executorResult.runtime,
+        },
+        ipAddress, userAgent,
+      });
+    }
+  } else {
+    let repairContext = null;
+    const maxProgramAttempts = resolvedExecutionStrategy === "direct_source_mapping"
+      ? 1
+      : PROGRAM_EXECUTION_REPAIR_LIMIT + 1;
+    for (let programAttempt = 1; programAttempt <= maxProgramAttempts; programAttempt += 1) {
     try {
       pythonProgram = await draftPythonProgram({
         modelProvider,
@@ -1453,6 +1542,7 @@ export async function executeAnalysisRun({
       ipAddress,
       userAgent,
     });
+    }
   }
   const completedAt = new Date().toISOString();
   const analysisResult = {
@@ -1467,7 +1557,7 @@ export async function executeAnalysisRun({
     contentHash: checked.contentHash,
     resultPreviewHash: checked.resultPreviewHash,
     result: checked.result,
-    sourceRefs: revision.sourceRectangles || [],
+    sourceRefs: deterministicSourceRefs || revision.sourceRectangles || [],
     warnings: checked.warnings,
     validation: checked.validation,
     acceptedAt: null,
@@ -1509,7 +1599,9 @@ export async function executeAnalysisRun({
       action: "analysis_run.execute",
       targetType: "analysis_result",
       targetId: analysisResult.id,
-      summary: outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
+      summary: resolvedExecutionStrategy === CHART_TEMPLATE_EXECUTION_STRATEGY
+        ? "Applied an accepted reusable chart recipe and created a reviewable Plotly result."
+        : outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
         ? "Generated Python from accepted inputs and created a reviewable Experiment Browser result."
         : "Generated Python from accepted source tables and created a reviewable Plotly result.",
       metadata: {
@@ -1526,6 +1618,12 @@ export async function executeAnalysisRun({
       userAgent,
     })],
   });
+  if (resolvedExecutionStrategy === CHART_TEMPLATE_EXECUTION_STRATEGY) {
+    await store.updateReusableChartTemplateApplication?.(
+      run.payload?.reusableChartTemplateApplicationId,
+      { status: "result_ready", updatedAt: completedAt, updatedBy: actorUserId },
+    );
+  }
   return {
     ...finalized,
     analysisPlanRevision: revision,

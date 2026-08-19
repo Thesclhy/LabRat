@@ -621,6 +621,143 @@ function chartSpecFromRow(row) {
   };
 }
 
+function chartStyleProfileFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    schemaVersion: row.schema_version,
+    name: row.name,
+    description: row.description || "",
+    status: row.status,
+    currentVersionId: row.current_version_id || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    createdBy: row.created_by,
+    updatedBy: row.updated_by,
+  };
+}
+
+function chartStyleProfileVersionFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    chartStyleProfileId: row.chart_style_profile_id,
+    ...(row.payload || {}),
+    schemaVersion: row.schema_version,
+    version: Number(row.version),
+    status: row.status,
+    contentHash: row.content_hash,
+    createdAt: row.created_at,
+    createdBy: row.created_by,
+    acceptedAt: row.accepted_at,
+    acceptedBy: row.accepted_by,
+  };
+}
+
+function reusableChartTemplateFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    schemaVersion: row.schema_version,
+    name: row.name,
+    description: row.description || "",
+    status: row.status,
+    currentVersionId: row.current_version_id || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    createdBy: row.created_by,
+    updatedBy: row.updated_by,
+  };
+}
+
+function reusableChartTemplateVersionFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    reusableChartTemplateId: row.reusable_chart_template_id,
+    ...(row.payload || {}),
+    schemaVersion: row.schema_version,
+    version: Number(row.version),
+    status: row.status,
+    sourceChartSpecId: row.source_chart_spec_id,
+    chartStyleProfileVersionId: row.chart_style_profile_version_id || null,
+    contentHash: row.content_hash,
+    createdAt: row.created_at,
+    createdBy: row.created_by,
+    acceptedAt: row.accepted_at,
+    acceptedBy: row.accepted_by,
+  };
+}
+
+function reusableChartTemplateSlotBindingFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    reusableChartTemplateVersionId: row.reusable_chart_template_version_id,
+    schemaVersion: row.schema_version,
+    slotId: row.slot_id,
+    columnId: row.column_id,
+    valueType: row.value_type,
+    unit: row.unit || null,
+    sourceSignature: row.source_signature,
+    status: row.status,
+    createdAt: row.created_at,
+    createdBy: row.created_by,
+  };
+}
+
+function reusableChartTemplateApplicationFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    reusableChartTemplateVersionId: row.reusable_chart_template_version_id,
+    schemaVersion: row.schema_version,
+    status: row.status,
+    idempotencyKey: row.idempotency_key,
+    requestHash: row.request_hash,
+    experimentIds: row.experiment_ids || [],
+    frozenHeadRefs: row.frozen_head_refs || [],
+    bindings: row.bindings || [],
+    compatibility: row.compatibility || {},
+    analysisThreadId: row.analysis_thread_id || null,
+    analysisPlanRevisionId: row.analysis_plan_revision_id || null,
+    analysisRunId: row.analysis_run_id || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    createdBy: row.created_by,
+    updatedBy: row.updated_by,
+  };
+}
+
+function chartStyleProfileVersionPayload(input = {}) {
+  const {
+    id, labId, projectId, chartStyleProfileId, schemaVersion, version, status,
+    contentHash, createdAt, createdBy, acceptedAt, acceptedBy, ...payload
+  } = input;
+  return payload;
+}
+
+function reusableChartTemplateVersionPayload(input = {}) {
+  const {
+    id, labId, projectId, reusableChartTemplateId, schemaVersion, version,
+    status, sourceChartSpecId, chartStyleProfileVersionId, contentHash,
+    createdAt, createdBy, acceptedAt, acceptedBy, ...payload
+  } = input;
+  return payload;
+}
+
 function manuscriptFromRow(row) {
   if (!row) return null;
   return {
@@ -2757,6 +2894,7 @@ export class PostgresSaasStore {
     actorUserId,
     expectedHeadRefs = [],
     staleValidation = {},
+    staleError = null,
     staleAuditEvents = [],
     startedAt = nowIso(),
     staleAfterMs = 360_000,
@@ -2823,7 +2961,7 @@ export class PostgresSaasStore {
         const payload = {
           ...(run.payload || {}),
           completedAt: startedAt,
-          error: {
+          error: staleError || {
             code: "analysis_run_stale",
             message: "Active accepted experiment heads changed before execution claim.",
           },
@@ -3268,9 +3406,9 @@ export class PostgresSaasStore {
         }];
       });
       if (headMismatches.length) {
-        throw Object.assign(new Error("Accepted experiment snapshots changed before chart publication."), {
+        throw Object.assign(new Error(input.staleError?.message || "Accepted experiment snapshots changed before chart publication."), {
           statusCode: 409,
-          code: "analysis_result_stale",
+          code: input.staleError?.code || "analysis_result_stale",
           details: { headMismatches },
         });
       }
@@ -3710,6 +3848,330 @@ export class PostgresSaasStore {
   async listChartSpecs({ projectId }) {
     const result = await this.query("select * from chart_specs where project_id = $1 order by updated_at desc", [projectId]);
     return result.rows.map(chartSpecFromRow);
+  }
+
+  async createChartStyleProfile({ profile, version }) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const profileResult = await client.query(
+        `insert into chart_style_profiles
+         (id, lab_id, project_id, schema_version, name, description, status,
+          current_version_id, created_at, updated_at, created_by, updated_by)
+         values ($1, $2, $3, $4, $5, $6, $7, null, $8, $8, $9, $9)
+         returning *`,
+        [profile.id, profile.labId, profile.projectId, profile.schemaVersion, profile.name, profile.description || "", profile.status || "active", profile.createdAt, profile.createdBy],
+      );
+      const versionResult = await client.query(
+        `insert into chart_style_profile_versions
+         (id, lab_id, project_id, chart_style_profile_id, schema_version, version,
+          status, payload, content_hash, created_at, created_by, accepted_at, accepted_by)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+         returning *`,
+        [version.id, version.labId, version.projectId, version.chartStyleProfileId, version.schemaVersion, version.version, version.status, jsonb(chartStyleProfileVersionPayload(version)), version.contentHash, version.createdAt, version.createdBy, version.acceptedAt, version.acceptedBy],
+      );
+      const updatedResult = await client.query(
+        "update chart_style_profiles set current_version_id = $2 where id = $1 returning *",
+        [profile.id, version.id],
+      );
+      await client.query("commit");
+      return { profile: chartStyleProfileFromRow(updatedResult.rows[0] || profileResult.rows[0]), version: chartStyleProfileVersionFromRow(versionResult.rows[0]) };
+    } catch (error) {
+      await client.query("rollback");
+      if (error?.code === "23505") throw Object.assign(new Error("A chart style profile or version with this name/content already exists."), { code: "chart_style_profile_name_conflict", statusCode: 409 });
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async findChartStyleProfileById(id) {
+    const result = await this.query("select * from chart_style_profiles where id = $1", [id]);
+    return chartStyleProfileFromRow(result.rows[0]);
+  }
+
+  async findChartStyleProfileVersionById(id) {
+    const result = await this.query("select * from chart_style_profile_versions where id = $1", [id]);
+    return chartStyleProfileVersionFromRow(result.rows[0]);
+  }
+
+  async listChartStyleProfiles({ projectId, includeArchived = false }) {
+    const result = await this.query(
+      `select * from chart_style_profiles
+       where project_id = $1 and ($2::boolean or status <> 'archived')
+       order by updated_at desc, id`,
+      [projectId, includeArchived],
+    );
+    return result.rows.map(chartStyleProfileFromRow);
+  }
+
+  async listChartStyleProfileVersions({ chartStyleProfileId }) {
+    const result = await this.query(
+      "select * from chart_style_profile_versions where chart_style_profile_id = $1 order by version desc",
+      [chartStyleProfileId],
+    );
+    return result.rows.map(chartStyleProfileVersionFromRow);
+  }
+
+  async appendChartStyleProfileVersion({ profileId, version, actorUserId, updatedAt }) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const profileResult = await client.query("select * from chart_style_profiles where id = $1 for update", [profileId]);
+      if (!profileResult.rows[0]) {
+        await client.query("rollback");
+        return null;
+      }
+      const versionResult = await client.query(
+        `insert into chart_style_profile_versions
+         (id, lab_id, project_id, chart_style_profile_id, schema_version, version,
+          status, payload, content_hash, created_at, created_by, accepted_at, accepted_by)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+         returning *`,
+        [version.id, version.labId, version.projectId, version.chartStyleProfileId, version.schemaVersion, version.version, version.status, jsonb(chartStyleProfileVersionPayload(version)), version.contentHash, version.createdAt, version.createdBy, version.acceptedAt, version.acceptedBy],
+      );
+      const updatedResult = await client.query(
+        "update chart_style_profiles set current_version_id = $2, updated_at = $3, updated_by = $4 where id = $1 returning *",
+        [profileId, version.id, updatedAt, actorUserId],
+      );
+      await client.query("commit");
+      return { profile: chartStyleProfileFromRow(updatedResult.rows[0]), version: chartStyleProfileVersionFromRow(versionResult.rows[0]) };
+    } catch (error) {
+      await client.query("rollback");
+      if (error?.code === "23505") throw Object.assign(new Error("This chart style version already exists."), { code: "chart_style_profile_version_conflict", statusCode: 409 });
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async archiveChartStyleProfile({ profileId, actorUserId, updatedAt }) {
+    const result = await this.query(
+      "update chart_style_profiles set status = 'archived', updated_at = $2, updated_by = $3 where id = $1 returning *",
+      [profileId, updatedAt, actorUserId],
+    );
+    return chartStyleProfileFromRow(result.rows[0]);
+  }
+
+  async createReusableChartTemplate({ template, version }) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const templateResult = await client.query(
+        `insert into reusable_chart_templates
+         (id, lab_id, project_id, schema_version, name, description, status,
+          current_version_id, created_at, updated_at, created_by, updated_by)
+         values ($1, $2, $3, $4, $5, $6, $7, null, $8, $8, $9, $9)
+         returning *`,
+        [template.id, template.labId, template.projectId, template.schemaVersion, template.name, template.description || "", template.status || "active", template.createdAt, template.createdBy],
+      );
+      const versionResult = await client.query(
+        `insert into reusable_chart_template_versions
+         (id, lab_id, project_id, reusable_chart_template_id, schema_version,
+          version, status, source_chart_spec_id, chart_style_profile_version_id,
+          payload, content_hash, created_at, created_by, accepted_at, accepted_by)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+         returning *`,
+        [version.id, version.labId, version.projectId, version.reusableChartTemplateId, version.schemaVersion, version.version, version.status, version.sourceChartSpecId, version.chartStyleProfileVersionId, jsonb(reusableChartTemplateVersionPayload(version)), version.contentHash, version.createdAt, version.createdBy, version.acceptedAt, version.acceptedBy],
+      );
+      const updatedResult = await client.query(
+        "update reusable_chart_templates set current_version_id = $2 where id = $1 returning *",
+        [template.id, version.id],
+      );
+      await client.query("commit");
+      return { template: reusableChartTemplateFromRow(updatedResult.rows[0] || templateResult.rows[0]), version: reusableChartTemplateVersionFromRow(versionResult.rows[0]) };
+    } catch (error) {
+      await client.query("rollback");
+      if (error?.code === "23505") throw Object.assign(new Error("A reusable chart template or version with this name/content already exists."), { code: "reusable_chart_template_name_conflict", statusCode: 409 });
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async findReusableChartTemplateById(id) {
+    const result = await this.query("select * from reusable_chart_templates where id = $1", [id]);
+    return reusableChartTemplateFromRow(result.rows[0]);
+  }
+
+  async findReusableChartTemplateVersionById(id) {
+    const result = await this.query("select * from reusable_chart_template_versions where id = $1", [id]);
+    return reusableChartTemplateVersionFromRow(result.rows[0]);
+  }
+
+  async listReusableChartTemplates({ projectId, includeArchived = false }) {
+    const result = await this.query(
+      `select * from reusable_chart_templates
+       where project_id = $1 and ($2::boolean or status <> 'archived')
+       order by updated_at desc, id`,
+      [projectId, includeArchived],
+    );
+    return result.rows.map(reusableChartTemplateFromRow);
+  }
+
+  async listReusableChartTemplateVersions({ reusableChartTemplateId }) {
+    const result = await this.query(
+      "select * from reusable_chart_template_versions where reusable_chart_template_id = $1 order by version desc",
+      [reusableChartTemplateId],
+    );
+    return result.rows.map(reusableChartTemplateVersionFromRow);
+  }
+
+  async appendReusableChartTemplateVersion({ templateId, version, actorUserId, updatedAt }) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const templateResult = await client.query("select * from reusable_chart_templates where id = $1 for update", [templateId]);
+      if (!templateResult.rows[0]) {
+        await client.query("rollback");
+        return null;
+      }
+      const versionResult = await client.query(
+        `insert into reusable_chart_template_versions
+         (id, lab_id, project_id, reusable_chart_template_id, schema_version,
+          version, status, source_chart_spec_id, chart_style_profile_version_id,
+          payload, content_hash, created_at, created_by, accepted_at, accepted_by)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+         returning *`,
+        [version.id, version.labId, version.projectId, version.reusableChartTemplateId, version.schemaVersion, version.version, version.status, version.sourceChartSpecId, version.chartStyleProfileVersionId, jsonb(reusableChartTemplateVersionPayload(version)), version.contentHash, version.createdAt, version.createdBy, version.acceptedAt, version.acceptedBy],
+      );
+      const updatedResult = await client.query(
+        "update reusable_chart_templates set current_version_id = $2, updated_at = $3, updated_by = $4 where id = $1 returning *",
+        [templateId, version.id, updatedAt, actorUserId],
+      );
+      await client.query("commit");
+      return { template: reusableChartTemplateFromRow(updatedResult.rows[0]), version: reusableChartTemplateVersionFromRow(versionResult.rows[0]) };
+    } catch (error) {
+      await client.query("rollback");
+      if (error?.code === "23505") throw Object.assign(new Error("This reusable chart template version already exists."), { code: "reusable_chart_template_version_conflict", statusCode: 409 });
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async archiveReusableChartTemplate({ templateId, actorUserId, updatedAt }) {
+    const result = await this.query(
+      "update reusable_chart_templates set status = 'archived', updated_at = $2, updated_by = $3 where id = $1 returning *",
+      [templateId, updatedAt, actorUserId],
+    );
+    return reusableChartTemplateFromRow(result.rows[0]);
+  }
+
+  async listReusableChartTemplateSlotBindings({ reusableChartTemplateVersionId, status = null }) {
+    const result = await this.query(
+      `select * from reusable_chart_template_slot_bindings
+       where reusable_chart_template_version_id = $1 and ($2::text is null or status = $2)
+       order by created_at desc, id`,
+      [reusableChartTemplateVersionId, status],
+    );
+    return result.rows.map(reusableChartTemplateSlotBindingFromRow);
+  }
+
+  async findReusableChartTemplateApplicationById(id) {
+    const result = await this.query("select * from reusable_chart_template_applications where id = $1", [id]);
+    return reusableChartTemplateApplicationFromRow(result.rows[0]);
+  }
+
+  async findReusableChartTemplateApplicationByIdempotencyKey({ projectId, idempotencyKey }) {
+    const result = await this.query(
+      "select * from reusable_chart_template_applications where project_id = $1 and idempotency_key = $2",
+      [projectId, idempotencyKey],
+    );
+    return reusableChartTemplateApplicationFromRow(result.rows[0]);
+  }
+
+  async createReusableChartTemplateApplication(input) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      await client.query("select pg_advisory_xact_lock(hashtext($1), hashtext($2))", [input.application.projectId, input.application.idempotencyKey]);
+      const priorResult = await client.query(
+        "select * from reusable_chart_template_applications where project_id = $1 and idempotency_key = $2",
+        [input.application.projectId, input.application.idempotencyKey],
+      );
+      const prior = reusableChartTemplateApplicationFromRow(priorResult.rows[0]);
+      if (prior) {
+        if (prior.requestHash !== input.application.requestHash) {
+          throw Object.assign(new Error("This idempotency key was already used for different template inputs."), {
+            code: "chart_template_idempotency_conflict",
+            statusCode: 409,
+          });
+        }
+        const [threadResult, revisionResult, runResult] = await Promise.all([
+          prior.analysisThreadId ? client.query("select * from analysis_threads where id = $1", [prior.analysisThreadId]) : { rows: [] },
+          prior.analysisPlanRevisionId ? client.query("select * from analysis_plan_revisions where id = $1", [prior.analysisPlanRevisionId]) : { rows: [] },
+          prior.analysisRunId ? client.query("select * from analysis_runs where id = $1", [prior.analysisRunId]) : { rows: [] },
+        ]);
+        await client.query("commit");
+        return {
+          application: prior,
+          analysisThread: analysisThreadFromRow(threadResult.rows[0]),
+          analysisPlanRevision: analysisPlanRevisionFromRow(revisionResult.rows[0]),
+          analysisRun: analysisRunFromRow(runResult.rows[0]),
+          replayed: true,
+        };
+      }
+      for (const binding of input.slotBindings || []) {
+        await client.query(
+          `update reusable_chart_template_slot_bindings set status = 'superseded'
+           where reusable_chart_template_version_id = $1 and slot_id = $2 and status = 'active'`,
+          [binding.reusableChartTemplateVersionId, binding.slotId],
+        );
+        await client.query(
+          `insert into reusable_chart_template_slot_bindings
+           (id, lab_id, project_id, reusable_chart_template_version_id, schema_version,
+            slot_id, column_id, value_type, unit, source_signature, status, created_at, created_by)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+          [binding.id, binding.labId, binding.projectId, binding.reusableChartTemplateVersionId, binding.schemaVersion, binding.slotId, binding.columnId, binding.valueType, binding.unit, binding.sourceSignature, binding.status, binding.createdAt, binding.createdBy],
+        );
+      }
+      let analysisThread = null;
+      let analysisPlanRevision = null;
+      let analysisRun = null;
+      if (input.analysisThread) {
+        const threadResult = await client.query(
+          `insert into analysis_threads
+           (id, lab_id, project_id, schema_version, status, original_request, messages,
+            plan_revision_ids, analysis_run_ids, accepted_analysis_result_ids, chart_spec_ids,
+            output_target, data_snapshot_ids, browser_view_ids, created_at, updated_at, created_by, updated_by)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+           returning *`,
+          [input.analysisThread.id, input.analysisThread.labId, input.analysisThread.projectId, input.analysisThread.schemaVersion, input.analysisThread.status, input.analysisThread.originalRequest, jsonb(input.analysisThread.messages, []), jsonb(input.analysisThread.planRevisionIds, []), jsonb(input.analysisThread.analysisRunIds, []), jsonb(input.analysisThread.acceptedAnalysisResultIds, []), jsonb(input.analysisThread.chartSpecIds, []), input.analysisThread.outputTarget, jsonb(input.analysisThread.dataSnapshotIds, []), jsonb(input.analysisThread.browserViewIds, []), input.analysisThread.createdAt, input.analysisThread.updatedAt, input.analysisThread.createdBy, input.analysisThread.updatedBy],
+        );
+        analysisThread = analysisThreadFromRow(threadResult.rows[0]);
+        analysisPlanRevision = await insertAnalysisPlanRevisionRow(client, input.analysisPlanRevision);
+        analysisRun = await insertAnalysisRunRow(client, input.analysisRun);
+      }
+      const applicationResult = await client.query(
+        `insert into reusable_chart_template_applications
+         (id, lab_id, project_id, reusable_chart_template_version_id, schema_version,
+          status, idempotency_key, request_hash, experiment_ids, frozen_head_refs,
+          bindings, compatibility, analysis_thread_id, analysis_plan_revision_id,
+          analysis_run_id, created_at, updated_at, created_by, updated_by)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+         returning *`,
+        [input.application.id, input.application.labId, input.application.projectId, input.application.reusableChartTemplateVersionId, input.application.schemaVersion, input.application.status, input.application.idempotencyKey, input.application.requestHash, jsonb(input.application.experimentIds, []), jsonb(input.application.frozenHeadRefs, []), jsonb(input.application.bindings, []), jsonb(input.application.compatibility), input.application.analysisThreadId, input.application.analysisPlanRevisionId, input.application.analysisRunId, input.application.createdAt, input.application.updatedAt, input.application.createdBy, input.application.updatedBy],
+      );
+      await insertAuditEventRows(client, input.auditEvents || []);
+      await client.query("commit");
+      return { application: reusableChartTemplateApplicationFromRow(applicationResult.rows[0]), analysisThread, analysisPlanRevision, analysisRun, replayed: false };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateReusableChartTemplateApplication(id, changes) {
+    const result = await this.query(
+      `update reusable_chart_template_applications
+       set status = coalesce($2, status), updated_at = coalesce($3, updated_at), updated_by = coalesce($4, updated_by)
+       where id = $1 returning *`,
+      [id, changes.status || null, changes.updatedAt || null, changes.updatedBy || null],
+    );
+    return reusableChartTemplateApplicationFromRow(result.rows[0]);
   }
 
   async listManuscripts({ projectId }) {

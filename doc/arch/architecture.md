@@ -1,7 +1,7 @@
 # LabRat Architecture
 
 Status: active reference
-Last reviewed: 2026-07-20
+Last reviewed: 2026-08-18
 
 LabRat is a server-first research workspace that turns workbook evidence into reviewed experiment records, cross-experiment Browser views, evidence-backed charts, and manuscript output while preserving provenance and review history.
 
@@ -39,6 +39,19 @@ natural-language analysis request
 ```
 
 Execution creates no ChartSpec. Only explicit result acceptance crosses the atomic ChartSpec publication boundary.
+
+Reusable chart creation adds a deterministic execution branch without adding
+a second chart model:
+
+```text
+accepted ReusableChartTemplateVersion + compatible active experiments
+  -> strict input-slot binding and frozen snapshot heads
+  -> accepted deterministic plan + queued chart_template_v1 run
+  -> backend recipe/encoding/geometry resolution (no provider, no Python)
+  -> normal validated awaiting-review AnalysisResult
+  -> explicit result acceptance
+  -> ordinary analysis-result ChartSpec with optional template lineage
+```
 
 Experiment Browser data uses the same reviewed workflow with
 `outputTarget: experiment_browser`. Planning may combine exact confirmed
@@ -86,14 +99,21 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 - **Experiment Browser**: accepted-head-only scientific rows, shared custom
   documentation columns, configurable columns, typed filters/sort/search,
   personal annotations, and lazy detail/source evidence.
-- **Chart Review**: reviewed analysis plan/result flow plus accepted ChartSpec management.
+- **Chart Review**: reviewed analysis plan/result flow, accepted ChartSpec
+  management, and inline naming/saving of eligible accepted charts as reusable
+  templates.
+- **Reusable Chart Review (planned)**: template and experiment selection,
+  explicit ambiguous-slot binding, missing-data coverage, deterministic preview,
+  and the shared result/trace acceptance UI.
 - **Manuscript**: page/block canvas, analysis-result ChartSpec insertion, placement-local trace controls, editable chart layers, persistence, and PPTX export.
 - **Ask LabRat**: project-scoped planning and review-gated actions, not a second data store.
 
 ## Backend Components
 
 - **Auth/Admin**: users, sessions, labs, memberships, roles, seed-account safety.
-- **Project State**: bounded summaries for files, evidence, understandings, accepted snapshots, views, analysis-result output, manuscripts, AgentRuns, and AnalysisThreads.
+- **Project State**: bounded summaries for files, evidence, understandings,
+  accepted snapshots, views, analysis-result output, reusable chart styles and
+  templates, manuscripts, AgentRuns, and AnalysisThreads.
 - **Backend Model Provider / Intent Router**: server-secret provider access, structured output validation, deterministic command priority, direct project answers, and reviewed-analysis routing without a Browser fallback.
 - **Workbook Indexer**: conservative workbook scan and SourceDocument/SourceRegion/cell-index persistence.
 - **Workbook Review Engine**: stable regions, bounded backend-model interpretation, immutable revisions, optimistic state changes, and exact accepted revision pointers.
@@ -123,6 +143,11 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 - **Analysis Chart Publisher**: exact-result-id and visible-curve acceptance,
   immutable complete Plotly, idempotent result/run/thread completion, ChartSpec
   v3 creation, artifact links, receipts, and audit.
+- **Reusable Chart Template Service**: immutable style/template versions,
+  accepted-ChartSpec eligibility compilation, reviewed slot bindings,
+  idempotent frozen-head applications, deterministic scalar-recipe execution,
+  lifecycle APIs, ownership, lineage, and audit. Responsive geometry resolution
+  and the fast template-picker frontend remain planned milestones.
 - **Manuscript Store**: pages, blocks, references, ChartSpec snapshots, and canvas state.
 
 ## Domain Ownership
@@ -162,6 +187,11 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 - Incompatible units remain separate unless a reviewed conversion exists.
 - Browser publish does not create chart/manuscript artifacts.
 - Analysis execution does not create charts; explicit result acceptance creates one immutable analysis-result ChartSpec.
+- Template reuse does not replay prompts or arbitrary code. Exact stable input
+  identity and prior reviewed bindings are deterministic; ambiguity returns to
+  the user.
+- The existing manuscript-local `chartTemplates` payload is not the planned
+  server-owned ReusableChartTemplate entity.
 - Manuscript chart blocks keep a complete ChartSpec snapshot and placement-local `visibleTraceIds` for stable historical rendering and independent export.
 
 ## Chart Architecture

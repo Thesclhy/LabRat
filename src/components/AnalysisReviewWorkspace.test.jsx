@@ -970,10 +970,82 @@ describe("AnalysisReviewWorkspace", () => {
       analysisResultId: validatedResult.id,
       defaultVisibleTraceIds: ["trace_exp_1"],
     }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Chart created" })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save as template" })).toBeTruthy());
+    expect(screen.getAllByText("Chart created").length).toBeGreaterThan(0);
     expect(onAccepted).toHaveBeenCalledWith(expect.objectContaining({
       chartSpec: { id: "chart_spec_1" },
     }));
+  });
+
+  it("keeps the created ribbon and saves the accepted chart as a named template", async () => {
+    const saveTemplate = vi.fn().mockResolvedValue({
+      reusableChartTemplate: { id: "reusable_chart_template_1", name: "Approved selectivity" },
+      versions: [{ id: "reusable_chart_template_version_1", sourceChartSpecId: "chart_spec_1" }],
+    });
+    const onTemplateSaved = vi.fn();
+    render(
+      <AnalysisReviewWorkspace
+        projectId="project_1"
+        thread={{ ...thread, chartSpecIds: ["chart_spec_1"] }}
+        revision={{ ...revision2, status: "accepted" }}
+        planRevisions={[{ ...revision2, status: "accepted" }]}
+        selection={selection}
+        run={{ ...validatedRun, status: "completed" }}
+        result={{ ...validatedResult, status: "accepted" }}
+        resultPreview={resultPreview}
+        chartSpecs={[{
+          id: "chart_spec_1",
+          analysisResultId: validatedResult.id,
+          title: "Normalized selectivity by experiment",
+        }]}
+        WorkbookWorkspaceComponent={WorkbookWorkspaceStub}
+        saveTemplate={saveTemplate}
+        onTemplateSaved={onTemplateSaved}
+      />,
+    );
+
+    expect(screen.getAllByText("Chart created").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Save as template" }));
+    const nameInput = screen.getByLabelText("Template name");
+    expect(nameInput.value).toBe("Normalized selectivity by experiment");
+    fireEvent.change(nameInput, { target: { value: "Approved selectivity" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(saveTemplate).toHaveBeenCalledWith("project_1", {
+      name: "Approved selectivity",
+      sourceChartSpecId: "chart_spec_1",
+    }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Template saved" })).toBeTruthy());
+    expect(screen.getByText("Saved as “Approved selectivity”.")).toBeTruthy();
+    expect(onTemplateSaved).toHaveBeenCalled();
+  });
+
+  it("can cancel template naming and surfaces backend eligibility errors", async () => {
+    const saveTemplate = vi.fn().mockRejectedValue(new Error("This approved chart is not eligible for reusable templates."));
+    render(
+      <AnalysisReviewWorkspace
+        projectId="project_1"
+        thread={{ ...thread, chartSpecIds: ["chart_spec_1"] }}
+        revision={{ ...revision2, status: "accepted" }}
+        planRevisions={[{ ...revision2, status: "accepted" }]}
+        selection={selection}
+        run={{ ...validatedRun, status: "completed" }}
+        result={{ ...validatedResult, status: "accepted" }}
+        resultPreview={resultPreview}
+        chartSpecs={[{ id: "chart_spec_1", analysisResultId: validatedResult.id }]}
+        WorkbookWorkspaceComponent={WorkbookWorkspaceStub}
+        saveTemplate={saveTemplate}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save as template" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByLabelText("Template name")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save as template" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.getByText("This approved chart is not eligible for reusable templates.")).toBeTruthy());
+    expect(screen.getByLabelText("Template name")).toBeTruthy();
   });
 
   it("loads the complete validated Plotly trace domain in one result preview", async () => {

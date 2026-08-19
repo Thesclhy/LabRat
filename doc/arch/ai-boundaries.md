@@ -1,7 +1,7 @@
 # AI Boundaries
 
 Status: active
-Last reviewed: 2026-07-21
+Last reviewed: 2026-08-18
 
 LabRat uses AI as a proposal and workflow layer. Authorization, bounded evidence reads, schema validation, deterministic execution, hashing, and persistence remain backend responsibilities.
 
@@ -16,6 +16,10 @@ LabRat uses AI as a proposal and workflow layer. Authorization, bounded evidence
 - explain Experiment Browser fields, comparison choices, source refs, and stale-review errors
 - draft captions or manuscript text from user-approved evidence
 - classify bounded project messages into the supported intent/disposition schema
+- propose a draft ChartStyleProfile from a user-provided presentation reference
+  with explicit property-level uncertainty
+- rank candidate fields for an ambiguous reusable input slot, while leaving the
+  binding decision to deterministic rules or the user
 
 ## AI Must Not
 
@@ -28,6 +32,10 @@ LabRat uses AI as a proposal and workflow layer. Authorization, bounded evidence
 - create a ChartSpec without immutable validated source/data evidence
 - insert manuscript content without the normal reviewed action boundary
 - expose or persist hidden chain-of-thought
+- accept a chart style, reusable template, slot binding, template application,
+  AnalysisResult, or ChartSpec on the user's behalf
+- turn fuzzy label similarity into an accepted scientific input binding
+- replay a saved prompt or generate new Python during `chart_template_v1`
 
 ## Context Rules
 
@@ -58,6 +66,26 @@ RegionUnderstandingRevision confirmation, analysis-plan acceptance,
 AnalysisResult acceptance into ChartSpec or DataSnapshot, and Manuscript save
 are separate boundaries. Confirmation at one stage does not authorize later
 stages.
+
+Template creation, ambiguous-slot binding, template application Preview, and
+AnalysisResult acceptance are distinct actions. Preview authorizes execution
+of the already accepted deterministic template against the displayed frozen
+inputs; it does not authorize ChartSpec publication.
+
+## Reusable Chart Rules
+
+- Reference-chart extraction creates a draft style only and receives no
+  scientific workbook/DataSnapshot values.
+- An accepted template pins a bounded deterministic recipe, not a prompt or
+  executable program.
+- Template reuse uses accepted active Experiment Browser fields/series only in
+  v1 and makes no provider call.
+- AI may rank visible binding candidates but cannot resolve ambiguity or invent
+  a missing measurement, unit, conversion, category, or point.
+- Missing remains missing; zero, interpolation, imputation, conversion, and
+  exclusion require explicit accepted policy.
+- Deterministic execution remains untrusted until normal Plotly validation.
+- Only explicit acceptance of the exact AnalysisResult creates the ChartSpec.
 
 ## Evidence Rules
 

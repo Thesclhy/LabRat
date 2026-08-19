@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   ServerApiError,
+  applyServerReusableChartTemplate,
   cancelServerAgentRun,
   confirmServerWorkbookReviewRegion,
   createServerWorkbookReviewRegion,
   createServerAgentRun,
   createServerManuscript,
   createServerProject,
+  createServerReusableChartTemplate,
   createServerWorkbookReviewSession,
   deleteServerProject,
   deleteServerWorkbookReviewSession,
@@ -326,6 +328,47 @@ describe("serverApi", () => {
     });
     expect(fetchImpl.mock.calls[1][0]).toBe("/api/manuscripts/manuscript_1");
     expect(fetchImpl.mock.calls[1][1].method).toBe("PATCH");
+  });
+
+  it("creates a reusable chart template from an accepted ChartSpec", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({
+      reusableChartTemplate: { id: "reusable_chart_template_1", name: "Yield comparison" },
+      versions: [{ id: "reusable_chart_template_version_1", sourceChartSpecId: "chart_spec_1" }],
+    }, { status: 201 }));
+
+    await createServerReusableChartTemplate("project_1", {
+      name: " Yield comparison ",
+      sourceChartSpecId: "chart_spec_1",
+    }, { fetch: fetchImpl });
+
+    const { url, options } = lastCall(fetchImpl);
+    expect(url).toBe("/api/projects/project_1/reusable-chart-templates");
+    expect(options.method).toBe("POST");
+    expect(JSON.parse(options.body)).toEqual({
+      name: "Yield comparison",
+      description: "",
+      sourceChartSpecId: "chart_spec_1",
+    });
+  });
+
+  it("applies a reusable chart template with frozen experiment inputs", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({
+      application: { id: "application_1", status: "queued" },
+      analysisRun: { id: "analysis_run_1", status: "queued" },
+    }, { status: 201 }));
+
+    await applyServerReusableChartTemplate("template_version_1", {
+      experimentIds: ["experiment_1", "experiment_2"],
+      idempotencyKey: "application_key_1",
+    }, { fetch: fetchImpl });
+
+    const { url, options } = lastCall(fetchImpl);
+    expect(url).toBe("/api/reusable-chart-template-versions/template_version_1/applications");
+    expect(options.headers["Idempotency-Key"]).toBe("application_key_1");
+    expect(JSON.parse(options.body)).toEqual({
+      experimentIds: ["experiment_1", "experiment_2"],
+      bindings: [],
+    });
   });
 
   it("surfaces backend error envelopes", async () => {

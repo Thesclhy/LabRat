@@ -132,7 +132,23 @@ required.
 
 Production must use `LABRAT_ANALYSIS_EXECUTOR=worker` plus an HTTPS `LABRAT_ANALYSIS_WORKER_ENDPOINT` backed by an isolated no-network worker. The local subprocess adapter is rejected in production.
 
-The next major engineering goal is production operationalization of reviewed analysis execution: deploy the hardened no-network worker, configure provider secrets outside the browser, run the Postgres integration suite in CI, and add cost/latency/audit telemetry. The local Compose stack is the development runtime; it is not the production executor architecture. New server-mode work does not need compatibility migrations for old IndexedDB, `.labrat.json`, or previous local project shapes.
+The active chart-creation program adds reusable, versioned chart styles and
+scientific templates beside the existing reviewed natural-language workflow.
+New chart meaning still uses reviewed planning and result acceptance. The
+versioned style/template persistence, lifecycle APIs, reviewed slot bindings,
+and idempotent applications are implemented. Compatible accepted Browser
+experiments now use the Milestone 3 deterministic no-provider/no-Python path
+and the same immutable ChartSpec boundary. Adaptive geometry and the fast
+template-picker UI remain later milestones. See
+`doc/plans/reusable-chart-creation-plan.md`.
+
+Production operationalization of reviewed analysis execution remains an
+engineering priority: deploy the hardened no-network worker, configure provider
+secrets outside the browser, run the Postgres integration suite in CI, and add
+cost/latency/audit telemetry. The local Compose stack is the development
+runtime; it is not the production executor architecture. New server-mode work
+does not need compatibility migrations for old IndexedDB, `.labrat.json`, or
+previous local project shapes.
 
 ## Example Templates
 
@@ -180,6 +196,10 @@ bootstrap, backup, rollback, and acceptance checks.
 - `doc/plans/roadmap.md`: product roadmap led by the Agent-first evidence workflow.
 - `doc/plans/agent-first-evidence-workflow.md`: long-form active workflow plan.
 - `doc/plans/source-understanding-long-term-plan.md`: long-term source-aware workbook/document understanding architecture.
+- `doc/plans/reusable-chart-creation-plan.md`: milestone sequence for reusable
+  styles, templates, deterministic comparison, and fast chart reuse.
+- `doc/contracts/reusable-chart-template-contract-v1.md`: reusable chart style,
+  input-slot, recipe, geometry, API, and lineage contract.
 - `doc/qa/manual-qa-agent-first-workflow.md`: manual QA checklist for the Agent-first evidence workflow branch.
 - `doc/qa/code-review.md`: standing review checklist for scientific workflow changes.
 - `doc/reports/decisions.md`: durable product and architecture decisions.

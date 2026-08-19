@@ -1,8 +1,8 @@
 # Current Milestone
 
-Status: complete
+Status: active
 Read when: checking what the next implementation slice should be.
-Last reviewed: 2026-08-12
+Last reviewed: 2026-08-18
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
 
@@ -15,6 +15,89 @@ This file tracks the active execution state. Keep `doc/plan.md` as the short roa
 - Completed milestone: Backend conversational analysis and chart workflow implementation.
 - Completed milestone: progressive full-sheet workbook loading and
   checkbox-controlled selection highlights.
+- Active chart program: keep natural-language analysis for new scientific
+  intent and add deterministic reusable templates for repeated compatible
+  cross-experiment charts.
+
+## Reusable Chart Creation Milestone 1 — Complete
+
+The contract-and-schema milestone is complete on branch
+`codex/chart-creation`. It defines:
+
+- immutable `ChartStyleProfile` and `ReusableChartTemplate` versions;
+- strict reusable input slots and reviewed binding precedence;
+- the bounded `labrat.chartRecipe.v1` deterministic operation set;
+- one/multiple-experiment encoding, missing-value, unit, alignment, palette,
+  and responsive geometry behavior;
+- `chart_template_v1` lineage through existing AnalysisPlanRevision,
+  AnalysisRun, AnalysisResult, and ChartSpec boundaries;
+- planned project APIs, persistence relationships, authorization, audit,
+  idempotency, stable errors, and QA cases;
+- a hard naming boundary from the legacy manuscript-local `chartTemplates`
+  state.
+
+No migration, route, executor, or frontend behavior is introduced by this
+documentation milestone.
+
+## Reusable Chart Creation Milestone 2 — Complete
+
+Milestone 2 persistence and lifecycle APIs are complete:
+
+1. add profile/template container and immutable version tables;
+2. add in-memory/PostgreSQL store parity;
+3. add create/list/detail/version/archive APIs;
+4. derive eligible template candidates only from accepted ChartSpecs;
+5. add bounded project summaries, authorization, audit, and regressions.
+
+The implementation includes migration 024, memory/PostgreSQL store parity,
+immutable accepted versions with deterministic hashes, project-scoped
+create/list/detail/version/archive routes, backend-derived scalar-template
+eligibility, bounded project-state summaries, viewer/editor authorization,
+logical archive, audit events, and regressions. It does not execute a reusable
+template or add frontend controls.
+
+Binding/execution, adaptive geometry, fast reuse UI, remaining template
+management, and reference-chart style extraction remain later milestones in
+`doc/plans/reusable-chart-creation-plan.md`.
+
+## Approved-Chart Template Save Entry Point — Complete
+
+After chart acceptance, the conversation keeps its `Chart created` status
+ribbon while the former disabled green status control becomes an actionable
+`Save as template` button. It opens bounded inline naming, posts the exact
+accepted ChartSpec id to the Milestone 2 lifecycle API, preserves the accepted
+chart if optional saving fails, and refreshes project summaries after success.
+The backend eligibility compiler now supports one to twelve stable numeric
+scalar components selected in the same order for every experiment, including
+stacked Solid/Liquid/Gas-style comparisons with a shared unit. Direct workbook
+ranges, series inputs, identity/unit mismatch, and ambiguous lineage still
+  fail closed. Template application is supplied by Milestone 3; the rest of the full
+template-management frontend remains Milestones 5-6.
+
+Verification passed with 292/292 frontend tests, 227/231 backend tests with
+four expected skips, focused save-interaction/API/stacked-eligibility coverage,
+and a production build with the existing Plotly chunk-size warning.
+
+## Reusable Chart Creation Milestone 3 — Complete
+
+Milestone 3 implements the deterministic template-application path:
+
+1. resolve reviewed reusable input slots against selected experiments;
+2. report missing, ambiguous, unit-incompatible, and count-incompatible inputs;
+3. freeze active experiment snapshot heads in an idempotent application;
+4. create an accepted plan revision and queued `chart_template_v1` run;
+5. execute the accepted recipe without an AI provider or generated Python;
+6. preserve template, binding, experiment-head, and source-cell lineage through
+   AnalysisResult and ChartSpec review.
+
+Adaptive manuscript geometry remains Milestone 4 and the fast template-picker
+frontend remains Milestone 5.
+
+## Next Reusable Chart Milestone
+
+Milestone 4 is the next implementation slice: responsive plot-area geometry,
+bounded margin and legend fallback, palette overflow, long-label handling, and
+explicit grouped/stacked/faceted growth. It has not started.
 
 ## Completed Milestone
 
@@ -389,9 +472,10 @@ Deployment work not included in this completed milestone:
 
 ## Next Recommended Slice
 
-1. Repeat supplemental publication with a second field batch and one
-   snapshot-only derived scalar calculation.
-2. Add the configured Postgres route suite and repeatable migration smoke to CI.
+1. Execute reusable chart creation Milestone 4 adaptive geometry and
+   multi-experiment rendering.
+2. Retain the configured Postgres route suite and repeatable migration smoke as
+   a parallel operational priority after the coherent chart milestone.
 3. Operationalize the hardened analysis worker, secret management, timeouts,
    audit telemetry, and provider cost/latency monitoring in a production-like
    environment.
@@ -406,6 +490,15 @@ Deployment work not included in this completed milestone:
 - Wrong experiment aliases must return clarification or validation errors, not another experiment's data.
 
 ## Verification Target
+
+Latest reusable-chart evidence: focused schema and deterministic eligibility
+coverage passed 5/5; the full backend passed 227/231 with four
+expected skips, including the environment-gated PostgreSQL integration; the
+focused API lifecycle/authorization/isolation/reference-ownership regression
+passed; frontend passed 292/292; the production build passed with the existing
+Plotly chunk-size warning; JavaScript syntax and `git diff --check` passed.
+Migration structure and PostgreSQL store-method parity are covered without a
+live `LABRAT_TEST_DATABASE_URL`; CI should run the optional integration suite.
 
 Latest full-page onboarding evidence: focused onboarding, region-review,
 analysis-workspace, API, and ProjectDashboard batches passed; full
@@ -456,6 +549,15 @@ QA found and fixed initial active-region sheet mismatch and page-level overflow
 at 390x844; clean-page console verification reported no errors or warnings.
 
 ## Open Risks
+
+- Opaque Browser column ids are deterministic within preserved snapshot
+  lineage but are not universal semantic identities across independently
+  published columns; ambiguous template slots must require a reviewed binding.
+- Existing accepted generated-Python charts may not compile into the bounded
+  recipe language. Eligibility must fail explicitly rather than generalize
+  scientific meaning.
+- The old manuscript-local `chartTemplates` shape must not be reused for the
+  new server-owned scientific template entity.
 
 - The worktree contains substantial existing changes from prior milestones; do not revert or restage unrelated files.
 - Large workbook reads now hydrate and cache the complete current-sheet

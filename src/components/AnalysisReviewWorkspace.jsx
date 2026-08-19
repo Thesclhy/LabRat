@@ -15,6 +15,7 @@ import {
   retryAnalysisRun,
   reviseAnalysisRun,
 } from "../data/analysisApi.js";
+import { createServerReusableChartTemplate } from "../data/serverApi.js";
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -22,6 +23,16 @@ function asArray(value) {
 
 function messageText(message) {
   return message?.content || message?.text || "";
+}
+
+function chartTitle(preview, revision, chartSpec) {
+  const plotlyTitle = preview?.plotly?.layout?.title;
+  return String(
+    chartSpec?.title
+      || (typeof plotlyTitle === "string" ? plotlyTitle : plotlyTitle?.text)
+      || revision?.reviewPlan?.chart?.title
+      || "Reusable chart",
+  ).trim();
 }
 
 function rectangleSheet(rectangle) {
@@ -699,6 +710,9 @@ export function AnalysisReviewWorkspace({
   analysisCapabilities = null,
   loadAnalysisCapabilities = getProjectAnalysisCapabilities,
   onAcceptResult = null,
+  chartSpecs = [],
+  saveTemplate = createServerReusableChartTemplate,
+  onTemplateSaved = null,
   onClose,
   onAccepted,
   embedded = false,
@@ -733,6 +747,10 @@ export function AnalysisReviewWorkspace({
     () => previewTraces(initialResultPreview).map(traceIdentifier),
   );
   const [identityResolutions, setIdentityResolutions] = useState({});
+  const [acceptedChartSpec, setAcceptedChartSpec] = useState(null);
+  const [templateFormOpen, setTemplateFormOpen] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [savedTemplate, setSavedTemplate] = useState(null);
   const [runHistory, setRunHistory] = useState(() => (
     initialRun ? [{ run: initialRun, result: initialResult }] : []
   ));
@@ -761,6 +779,10 @@ export function AnalysisReviewWorkspace({
       previewTraces(initialResultPreview).map(traceIdentifier),
     );
     setIdentityResolutions({});
+    setAcceptedChartSpec(null);
+    setTemplateFormOpen(false);
+    setTemplateName("");
+    setSavedTemplate(null);
     setRunHistory(initialRun ? [{ run: initialRun, result: initialResult }] : []);
     setActiveTab(initialRun || initialResult || initialResultPreview ? "result" : "source");
     setActionError("");
@@ -936,6 +958,10 @@ export function AnalysisReviewWorkspace({
   const chartReady = resultReady(run, result, preview);
   const chartCalculating = ["queued", "running"].includes(run?.status) || pendingAction === "execute";
   const chartFinalized = result?.status === "accepted";
+  const sourceChartSpec = acceptedChartSpec
+    || asArray(chartSpecs).find((item) => item?.analysisResultId === result?.id)
+    || asArray(chartSpecs).find((item) => asArray(thread?.chartSpecIds).includes(item?.id))
+    || null;
   const visibleResultSummary = resultSummary(run, result, preview);
   const browserPreviewUnavailable = browserMode
     && ["failed", "validation_failed"].includes(run?.status);
@@ -1164,7 +1190,37 @@ export function AnalysisReviewWorkspace({
       });
       if (response?.analysisRun) setRun(response.analysisRun);
       if (response?.analysisResult) setResult(response.analysisResult);
+      if (response?.analysisThread) setThread(response.analysisThread);
+      if (response?.chartSpec) setAcceptedChartSpec(response.chartSpec);
       onAccepted?.(response);
+    } catch (error) {
+      setActionError(error);
+    } finally {
+      setPendingAction("");
+    }
+  };
+
+  const openTemplateForm = () => {
+    if (!sourceChartSpec?.id || busy) return;
+    setTemplateName(chartTitle(preview, revision, sourceChartSpec));
+    setTemplateFormOpen(true);
+    setActionError("");
+  };
+
+  const submitTemplate = async (event) => {
+    event?.preventDefault?.();
+    const name = templateName.trim();
+    if (!name || !sourceChartSpec?.id || busy) return;
+    setPendingAction("save_template");
+    setActionError("");
+    try {
+      const response = await saveTemplate(projectId, {
+        name,
+        sourceChartSpecId: sourceChartSpec.id,
+      });
+      setSavedTemplate(response?.reusableChartTemplate || { name });
+      setTemplateFormOpen(false);
+      onTemplateSaved?.(response);
     } catch (error) {
       setActionError(error);
     } finally {
@@ -1530,12 +1586,20 @@ export function AnalysisReviewWorkspace({
             <button
               type="button"
               className="accept-plan"
-              onClick={resultReviewMode ? acceptVisibleResult : acceptVisiblePlan}
-              disabled={resultReviewMode ? (!canAcceptResult || busy) : planAcceptanceDisabled}
+              onClick={resultReviewMode && chartFinalized && !browserMode
+                ? openTemplateForm
+                : resultReviewMode ? acceptVisibleResult : acceptVisiblePlan}
+              disabled={resultReviewMode && chartFinalized && !browserMode
+                ? (!sourceChartSpec?.id || Boolean(savedTemplate) || busy)
+                : resultReviewMode ? (!canAcceptResult || busy) : planAcceptanceDisabled}
             >
               {resultReviewMode
                 ? chartFinalized
-                  ? browserMode ? "Data published" : "Chart created"
+                  ? browserMode
+                    ? "Data published"
+                    : savedTemplate
+                      ? "Template saved"
+                      : pendingAction === "save_template" ? "Saving..." : "Save as template"
                   : chartCalculating
                     ? "Calculating..."
                     : pendingAction === "accept_result"
@@ -1555,35 +1619,69 @@ export function AnalysisReviewWorkspace({
                 Python execution is unavailable. Configure an analysis executor before calculating this chart.
               </p>
             )}
-            <div className="analysis-review-modification">
-              <textarea
-                value={feedback}
-                onChange={(event) => setFeedback(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    if (resultReviewMode) submitResultFeedback();
-                    else submitFeedback();
-                  }
-                }}
-                placeholder={resultReviewMode
-                  ? browserMode ? "Describe a data modification" : "Describe a chart modification"
-                  : "Describe a modification"}
-                disabled={resultReviewMode ? (!run?.id || busy || chartFinalized) : (!awaitingReview || busy)}
-              />
-              <button
-                type="button"
-                aria-label={resultReviewMode
-                  ? browserMode ? "Send data modification" : "Send chart modification"
-                  : "Send modification"}
-                onClick={resultReviewMode ? submitResultFeedback : submitFeedback}
-                disabled={!feedback.trim()
-                  || (resultReviewMode ? (!run?.id || chartFinalized) : !awaitingReview)
-                  || busy}
-              >
-                {["revision", "result_revision"].includes(pendingAction) ? "Sending..." : "Send"}
-              </button>
-            </div>
+            {resultReviewMode && chartFinalized && !browserMode ? (
+              templateFormOpen ? (
+                <form className="analysis-template-save" onSubmit={submitTemplate}>
+                  <label htmlFor={`chart-template-name-${result?.id || "accepted"}`}>Template name</label>
+                  <div>
+                    <input
+                      id={`chart-template-name-${result?.id || "accepted"}`}
+                      value={templateName}
+                      onChange={(event) => setTemplateName(event.target.value)}
+                      maxLength={120}
+                      autoFocus
+                    />
+                    <button type="submit" disabled={!templateName.trim() || busy}>Save</button>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => setTemplateFormOpen(false)}
+                      disabled={busy}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <p className="analysis-template-save-status" role="status">
+                  {savedTemplate
+                    ? `Saved as “${savedTemplate.name || templateName}”.`
+                    : sourceChartSpec?.id
+                      ? "Save this approved chart setup for future experiment comparisons."
+                      : "Reload the approved chart before saving it as a template."}
+                </p>
+              )
+            ) : (
+              <div className="analysis-review-modification">
+                <textarea
+                  value={feedback}
+                  onChange={(event) => setFeedback(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      if (resultReviewMode) submitResultFeedback();
+                      else submitFeedback();
+                    }
+                  }}
+                  placeholder={resultReviewMode
+                    ? browserMode ? "Describe a data modification" : "Describe a chart modification"
+                    : "Describe a modification"}
+                  disabled={resultReviewMode ? (!run?.id || busy || chartFinalized) : (!awaitingReview || busy)}
+                />
+                <button
+                  type="button"
+                  aria-label={resultReviewMode
+                    ? browserMode ? "Send data modification" : "Send chart modification"
+                    : "Send modification"}
+                  onClick={resultReviewMode ? submitResultFeedback : submitFeedback}
+                  disabled={!feedback.trim()
+                    || (resultReviewMode ? (!run?.id || chartFinalized) : !awaitingReview)
+                    || busy}
+                >
+                  {["revision", "result_revision"].includes(pendingAction) ? "Sending..." : "Send"}
+                </button>
+              </div>
+            )}
           </div>
         </aside>
       </div>

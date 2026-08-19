@@ -3591,11 +3591,17 @@ function App() {
           revision={analysisReviewState.revision}
           run={analysisReviewState.run}
           result={analysisReviewState.result}
+          chartSpecs={activeChartSpecsForProject(projectState)}
           WorkbookWorkspaceComponent={WorkbookReviewWorkspace}
           onAcceptResult={acceptAnalysisResult}
           onClose={closeAnalysisReview}
           onAccepted={(response) => {
             if (response?.chartSpec) return;
+            getServerProjectState(activeProjectId)
+              .then(applyProjectWorkspaceRefresh)
+              .catch((error) => setSourceError(error?.message || String(error)));
+          }}
+          onTemplateSaved={() => {
             getServerProjectState(activeProjectId)
               .then(applyProjectWorkspaceRefresh)
               .catch((error) => setSourceError(error?.message || String(error)));

@@ -60,6 +60,21 @@ import {
 } from "../analysisThreads.js";
 import { publishAcceptedAnalysisChart } from "../analysisChartPublisher.js";
 import { publishAcceptedExperimentAnalysis } from "../analysisExperimentPublisher.js";
+import {
+  CHART_STYLE_PROFILE_SCHEMA_VERSION,
+  REUSABLE_CHART_TEMPLATE_SCHEMA_VERSION,
+  buildChartStyleProfileVersion,
+  buildReusableChartTemplateVersion,
+  chartStyleProfileSummary,
+  deriveReusableChartTemplateDefinition,
+  reusableChartDescription,
+  reusableChartName,
+  reusableChartTemplateSummary,
+} from "../reusableChartTemplates.js";
+import {
+  buildReusableChartTemplateApplicationArtifacts,
+  prepareReusableChartTemplateApplication,
+} from "../reusableChartTemplateApplications.js";
 
 const PROJECT_PROFILE_SCHEMA_VERSION = "labrat.projectProfile.v1";
 const ANALYSIS_RETRY_LEASE_MS = 6 * 60 * 1000;
@@ -221,13 +236,17 @@ function projectSummary(project, workflowSummary = null) {
 }
 
 async function projectWorkflowSummaryForStore(store, projectId) {
-  const [experimentSnapshotHeads, chartSpecs] = await Promise.all([
+  const [experimentSnapshotHeads, chartSpecs, chartStyleProfiles, reusableChartTemplates] = await Promise.all([
     store.listExperimentSnapshotHeads({ projectId }),
     store.listChartSpecs({ projectId }),
+    store.listChartStyleProfiles?.({ projectId }) || [],
+    store.listReusableChartTemplates?.({ projectId }) || [],
   ]);
   return {
     publishedExperimentCount: asArray(experimentSnapshotHeads).length,
     chartSpecCount: asArray(chartSpecs).filter(isSupportedChartSpec).length,
+    chartStyleProfileCount: asArray(chartStyleProfiles).length,
+    reusableChartTemplateCount: asArray(reusableChartTemplates).length,
   };
 }
 
@@ -851,6 +870,8 @@ async function handleProjectState(req, res, context, projectId) {
     browserViews,
     projectBrowserConfig,
     sourceDocuments,
+    chartStyleProfiles,
+    reusableChartTemplates,
   ] = await Promise.all([
     context.store.listFileObjects({ projectId }),
     context.store.listImportRuns({ projectId }),
@@ -867,6 +888,8 @@ async function handleProjectState(req, res, context, projectId) {
     context.store.listBrowserViews ? context.store.listBrowserViews({ projectId, ownerUserId: auth.user.id }) : [],
     context.store.findProjectBrowserConfig ? context.store.findProjectBrowserConfig({ projectId }) : null,
     context.store.listSourceDocuments ? context.store.listSourceDocuments({ projectId }) : [],
+    context.store.listChartStyleProfiles ? context.store.listChartStyleProfiles({ projectId }) : [],
+    context.store.listReusableChartTemplates ? context.store.listReusableChartTemplates({ projectId }) : [],
   ]);
   const supportedChartSpecs = chartSpecs.filter(isSupportedChartSpec);
   const activeWorkbookReviewSessionIds = new Set(
@@ -908,6 +931,12 @@ async function handleProjectState(req, res, context, projectId) {
     experimentSnapshotHeads,
     browserViews,
     projectBrowserConfig,
+    chartStyleProfiles: await Promise.all(chartStyleProfiles.map(async (profile) => (
+      chartStyleProfileSummary(profile, await context.store.findChartStyleProfileVersionById(profile.currentVersionId))
+    ))),
+    reusableChartTemplates: await Promise.all(reusableChartTemplates.map(async (template) => (
+      reusableChartTemplateSummary(template, await context.store.findReusableChartTemplateVersionById(template.currentVersionId))
+    ))),
     sourceDocuments: sourceDocuments.map(sourceDocumentSummary),
   });
 }
@@ -2875,6 +2904,388 @@ async function handleWorkbookReviewRegionIgnore(req, res, context, sessionId, re
   sendJson(res, 200, { region: await workbookReviewRegionSummary(context, ignored.region) });
 }
 
+async function styleProfileDetail(context, profile) {
+  const versions = await context.store.listChartStyleProfileVersions({ chartStyleProfileId: profile.id });
+  return { chartStyleProfile: profile, versions };
+}
+
+async function reusableTemplateDetail(context, template) {
+  const versions = await context.store.listReusableChartTemplateVersions({ reusableChartTemplateId: template.id });
+  return { reusableChartTemplate: template, versions };
+}
+
+async function acceptedStyleVersion(context, projectId, styleVersionId) {
+  const id = String(styleVersionId || "").trim();
+  if (!id) return null;
+  const version = await context.store.findChartStyleProfileVersionById(id);
+  if (!version || version.projectId !== projectId || version.status !== "accepted") {
+    throw Object.assign(new Error("Accepted chart style profile version was not found in this project."), {
+      statusCode: 404,
+      code: "chart_style_profile_not_accepted",
+    });
+  }
+  return version;
+}
+
+async function validateStyleReferenceFile(context, projectId, styleVersion) {
+  const fileObjectId = String(styleVersion?.reference?.fileObjectId || "").trim();
+  if (!fileObjectId) return;
+  const fileObject = await context.store.findFileObjectById(fileObjectId);
+  if (!fileObject || fileObject.projectId !== projectId) {
+    throw Object.assign(new Error("Chart style reference file was not found in this project."), {
+      statusCode: 404,
+      code: "chart_style_reference_not_found",
+    });
+  }
+}
+
+async function handleProjectChartStyleProfiles(req, res, context, projectId, url) {
+  const { auth, project } = await projectAuth(req, context, projectId, req.method === "POST" ? "editor" : "viewer");
+  if (req.method === "GET") {
+    const profiles = await context.store.listChartStyleProfiles({
+      projectId,
+      includeArchived: url.searchParams.get("includeArchived") === "true",
+    });
+    const summaries = await Promise.all(profiles.map(async (profile) => (
+      chartStyleProfileSummary(profile, await context.store.findChartStyleProfileVersionById(profile.currentVersionId))
+    )));
+    sendJson(res, 200, { schemaVersion: "labrat.chartStyleProfileList.v1", projectId, chartStyleProfiles: summaries });
+    return;
+  }
+  const body = await readJsonBody(req);
+  const name = reusableChartName(body.name, "name");
+  const description = reusableChartDescription(body.description);
+  const createdAt = new Date().toISOString();
+  const checked = buildChartStyleProfileVersion({ definition: body.style || body.definition || {}, version: 1 });
+  await validateStyleReferenceFile(context, projectId, checked);
+  const profileId = makeId("chart_style_profile");
+  const versionId = makeId("chart_style_profile_version");
+  const stored = await context.store.createChartStyleProfile({
+    profile: {
+      id: profileId,
+      labId: project.labId,
+      projectId,
+      schemaVersion: CHART_STYLE_PROFILE_SCHEMA_VERSION,
+      name,
+      description,
+      status: "active",
+      currentVersionId: null,
+      createdAt,
+      updatedAt: createdAt,
+      createdBy: auth.user.id,
+      updatedBy: auth.user.id,
+    },
+    version: {
+      id: versionId,
+      labId: project.labId,
+      projectId,
+      chartStyleProfileId: profileId,
+      ...checked,
+      createdAt,
+      createdBy: auth.user.id,
+      acceptedAt: createdAt,
+      acceptedBy: auth.user.id,
+    },
+  });
+  await context.store.recordAuditEvent({
+    labId: project.labId,
+    projectId,
+    actorUserId: auth.user.id,
+    action: "chart_style_profile.create",
+    targetType: "chart_style_profile",
+    targetId: profileId,
+    summary: `Created chart style profile ${name}.`,
+    metadata: { chartStyleProfileVersionId: versionId, contentHash: checked.contentHash },
+    ipAddress: clientIp(req),
+    userAgent: userAgent(req),
+  });
+  sendJson(res, 201, await styleProfileDetail(context, stored.profile));
+}
+
+async function handleChartStyleProfile(req, res, context, profileId, action = null) {
+  const profile = await context.store.findChartStyleProfileById(profileId);
+  if (!profile) throw Object.assign(new Error("Chart style profile was not found."), { statusCode: 404, code: "chart_style_profile_not_found" });
+  const role = action ? "editor" : "viewer";
+  const { auth } = await projectAuth(req, context, profile.projectId, role);
+  if (!action && req.method === "GET") {
+    sendJson(res, 200, await styleProfileDetail(context, profile));
+    return;
+  }
+  if (action === "archive") {
+    const updatedAt = new Date().toISOString();
+    const archived = await context.store.archiveChartStyleProfile({ profileId, actorUserId: auth.user.id, updatedAt });
+    await context.store.recordAuditEvent({
+      labId: profile.labId, projectId: profile.projectId, actorUserId: auth.user.id,
+      action: "chart_style_profile.archive", targetType: "chart_style_profile", targetId: profile.id,
+      summary: `Archived chart style profile ${profile.name}.`, ipAddress: clientIp(req), userAgent: userAgent(req),
+    });
+    sendJson(res, 200, { chartStyleProfile: archived });
+    return;
+  }
+  if (action === "versions") {
+    if (profile.status === "archived") throw Object.assign(new Error("Archived chart style profiles cannot be versioned."), { statusCode: 409, code: "chart_style_profile_archived" });
+    const body = await readJsonBody(req);
+    const versions = await context.store.listChartStyleProfileVersions({ chartStyleProfileId: profile.id });
+    const nextVersion = Math.max(0, ...versions.map((item) => Number(item.version) || 0)) + 1;
+    const checked = buildChartStyleProfileVersion({ definition: body.style || body.definition || {}, version: nextVersion });
+    await validateStyleReferenceFile(context, profile.projectId, checked);
+    const createdAt = new Date().toISOString();
+    const version = {
+      id: makeId("chart_style_profile_version"), labId: profile.labId, projectId: profile.projectId,
+      chartStyleProfileId: profile.id, ...checked, createdAt, createdBy: auth.user.id,
+      acceptedAt: createdAt, acceptedBy: auth.user.id,
+    };
+    const stored = await context.store.appendChartStyleProfileVersion({ profileId: profile.id, version, actorUserId: auth.user.id, updatedAt: createdAt });
+    await context.store.recordAuditEvent({
+      labId: profile.labId, projectId: profile.projectId, actorUserId: auth.user.id,
+      action: "chart_style_profile.version", targetType: "chart_style_profile", targetId: profile.id,
+      summary: `Created version ${nextVersion} of chart style profile ${profile.name}.`,
+      metadata: { chartStyleProfileVersionId: version.id, contentHash: version.contentHash },
+      ipAddress: clientIp(req), userAgent: userAgent(req),
+    });
+    sendJson(res, 201, await styleProfileDetail(context, stored.profile));
+  }
+}
+
+async function templateVersionFromChart({ context, projectId, sourceChartSpecId, chartStyleProfileVersionId, version }) {
+  const chartSpec = await context.store.findChartSpecById(String(sourceChartSpecId || "").trim());
+  if (!chartSpec || chartSpec.projectId !== projectId || !isSupportedChartSpec(chartSpec)) {
+    throw Object.assign(new Error("Accepted source ChartSpec was not found in this project."), { statusCode: 404, code: "chart_spec_not_found" });
+  }
+  const styleVersion = await acceptedStyleVersion(context, projectId, chartStyleProfileVersionId);
+  const definition = await deriveReusableChartTemplateDefinition({
+    store: context.store,
+    projectId,
+    chartSpec,
+    chartStyleProfileVersionId: styleVersion?.id || null,
+  });
+  return buildReusableChartTemplateVersion({ definition, version });
+}
+
+async function handleProjectReusableChartTemplates(req, res, context, projectId, url) {
+  const { auth, project } = await projectAuth(req, context, projectId, req.method === "POST" ? "editor" : "viewer");
+  if (req.method === "GET") {
+    const templates = await context.store.listReusableChartTemplates({
+      projectId,
+      includeArchived: url.searchParams.get("includeArchived") === "true",
+    });
+    const summaries = await Promise.all(templates.map(async (template) => (
+      reusableChartTemplateSummary(template, await context.store.findReusableChartTemplateVersionById(template.currentVersionId))
+    )));
+    sendJson(res, 200, { schemaVersion: "labrat.reusableChartTemplateList.v1", projectId, reusableChartTemplates: summaries });
+    return;
+  }
+  const body = await readJsonBody(req);
+  const name = reusableChartName(body.name, "name");
+  const description = reusableChartDescription(body.description);
+  const checked = await templateVersionFromChart({
+    context,
+    projectId,
+    sourceChartSpecId: body.sourceChartSpecId,
+    chartStyleProfileVersionId: body.chartStyleProfileVersionId,
+    version: 1,
+  });
+  const createdAt = new Date().toISOString();
+  const templateId = makeId("reusable_chart_template");
+  const versionId = makeId("reusable_chart_template_version");
+  const stored = await context.store.createReusableChartTemplate({
+    template: {
+      id: templateId, labId: project.labId, projectId, schemaVersion: REUSABLE_CHART_TEMPLATE_SCHEMA_VERSION,
+      name, description, status: "active", currentVersionId: null,
+      createdAt, updatedAt: createdAt, createdBy: auth.user.id, updatedBy: auth.user.id,
+    },
+    version: {
+      id: versionId, labId: project.labId, projectId, reusableChartTemplateId: templateId,
+      ...checked, createdAt, createdBy: auth.user.id, acceptedAt: createdAt, acceptedBy: auth.user.id,
+    },
+  });
+  await context.store.recordAuditEvent({
+    labId: project.labId, projectId, actorUserId: auth.user.id,
+    action: "reusable_chart_template.create", targetType: "reusable_chart_template", targetId: templateId,
+    summary: `Created reusable chart template ${name}.`,
+    metadata: { reusableChartTemplateVersionId: versionId, sourceChartSpecId: checked.sourceChartSpecId, contentHash: checked.contentHash },
+    ipAddress: clientIp(req), userAgent: userAgent(req),
+  });
+  sendJson(res, 201, await reusableTemplateDetail(context, stored.template));
+}
+
+async function handleReusableChartTemplate(req, res, context, templateId, action = null) {
+  const template = await context.store.findReusableChartTemplateById(templateId);
+  if (!template) throw Object.assign(new Error("Reusable chart template was not found."), { statusCode: 404, code: "reusable_chart_template_not_found" });
+  const { auth } = await projectAuth(req, context, template.projectId, action ? "editor" : "viewer");
+  if (!action && req.method === "GET") {
+    sendJson(res, 200, await reusableTemplateDetail(context, template));
+    return;
+  }
+  if (action === "archive") {
+    const updatedAt = new Date().toISOString();
+    const archived = await context.store.archiveReusableChartTemplate({ templateId, actorUserId: auth.user.id, updatedAt });
+    await context.store.recordAuditEvent({
+      labId: template.labId, projectId: template.projectId, actorUserId: auth.user.id,
+      action: "reusable_chart_template.archive", targetType: "reusable_chart_template", targetId: template.id,
+      summary: `Archived reusable chart template ${template.name}.`, ipAddress: clientIp(req), userAgent: userAgent(req),
+    });
+    sendJson(res, 200, { reusableChartTemplate: archived });
+    return;
+  }
+  if (action === "versions") {
+    if (template.status === "archived") throw Object.assign(new Error("Archived reusable chart templates cannot be versioned."), { statusCode: 409, code: "reusable_chart_template_archived" });
+    const body = await readJsonBody(req);
+    const versions = await context.store.listReusableChartTemplateVersions({ reusableChartTemplateId: template.id });
+    const current = versions.find((item) => item.id === template.currentVersionId) || versions[0];
+    const nextVersion = Math.max(0, ...versions.map((item) => Number(item.version) || 0)) + 1;
+    const checked = await templateVersionFromChart({
+      context,
+      projectId: template.projectId,
+      sourceChartSpecId: body.sourceChartSpecId || current?.sourceChartSpecId,
+      chartStyleProfileVersionId: Object.prototype.hasOwnProperty.call(body, "chartStyleProfileVersionId")
+        ? body.chartStyleProfileVersionId
+        : current?.chartStyleProfileVersionId,
+      version: nextVersion,
+    });
+    const createdAt = new Date().toISOString();
+    const version = {
+      id: makeId("reusable_chart_template_version"), labId: template.labId, projectId: template.projectId,
+      reusableChartTemplateId: template.id, ...checked, createdAt, createdBy: auth.user.id,
+      acceptedAt: createdAt, acceptedBy: auth.user.id,
+    };
+    const stored = await context.store.appendReusableChartTemplateVersion({ templateId: template.id, version, actorUserId: auth.user.id, updatedAt: createdAt });
+    await context.store.recordAuditEvent({
+      labId: template.labId, projectId: template.projectId, actorUserId: auth.user.id,
+      action: "reusable_chart_template.version", targetType: "reusable_chart_template", targetId: template.id,
+      summary: `Created version ${nextVersion} of reusable chart template ${template.name}.`,
+      metadata: { reusableChartTemplateVersionId: version.id, sourceChartSpecId: version.sourceChartSpecId, contentHash: version.contentHash },
+      ipAddress: clientIp(req), userAgent: userAgent(req),
+    });
+    sendJson(res, 201, await reusableTemplateDetail(context, stored.template));
+  }
+}
+
+function requiredIdempotencyKey(req, purpose) {
+  const raw = req.headers["idempotency-key"];
+  const value = Array.isArray(raw) ? String(raw[0] || "").trim() : String(raw || "").trim();
+  if (!value) {
+    throw Object.assign(new Error(`A valid Idempotency-Key header is required to ${purpose}.`), {
+      statusCode: 400,
+      code: "idempotency_key_required",
+    });
+  }
+  if (value.length > 200 || !/^[A-Za-z0-9._:-]+$/.test(value)) {
+    throw Object.assign(new Error("Idempotency-Key must use 1-200 letters, numbers, dots, underscores, colons, or hyphens."), {
+      statusCode: 400,
+      code: "invalid_idempotency_key",
+    });
+  }
+  return value;
+}
+
+async function handleReusableChartTemplateApplication(req, res, context, templateVersionId) {
+  const version = await context.store.findReusableChartTemplateVersionById(templateVersionId);
+  if (!version) {
+    throw Object.assign(new Error("Reusable chart template version was not found."), {
+      statusCode: 404,
+      code: "reusable_chart_template_version_not_found",
+    });
+  }
+  const template = await context.store.findReusableChartTemplateById(version.reusableChartTemplateId);
+  if (!template || template.status === "archived") {
+    throw Object.assign(new Error("Reusable chart template is not available."), {
+      statusCode: 409,
+      code: "reusable_chart_template_archived",
+    });
+  }
+  const { auth, project } = await projectAuth(req, context, version.projectId, "editor");
+  const idempotencyKey = requiredIdempotencyKey(req, "apply a reusable chart template");
+  const body = await readJsonBody(req);
+  const experimentIds = asArray(body.experimentIds).map((item) => String(item || "").trim()).filter(Boolean);
+  const explicitBindings = asArray(body.bindings).map((binding) => ({
+    slotId: String(binding?.slotId || "").trim(),
+    columnId: String(binding?.columnId || "").trim(),
+  }));
+  const requestHash = sha256Hex(JSON.stringify({
+    reusableChartTemplateVersionId: version.id,
+    contentHash: version.contentHash,
+    experimentIds,
+    bindings: explicitBindings,
+  }));
+  const priorApplication = await context.store.findReusableChartTemplateApplicationByIdempotencyKey({
+    projectId: project.id,
+    idempotencyKey,
+  });
+  if (priorApplication) {
+    if (priorApplication.requestHash !== requestHash) {
+      throw Object.assign(new Error("This idempotency key was already used for different template inputs."), {
+        statusCode: 409,
+        code: "chart_template_idempotency_conflict",
+      });
+    }
+    const [analysisThread, analysisPlanRevision, analysisRun] = await Promise.all([
+      priorApplication.analysisThreadId
+        ? context.store.findAnalysisThreadById(priorApplication.analysisThreadId)
+        : null,
+      priorApplication.analysisPlanRevisionId
+        ? context.store.findAnalysisPlanRevisionById(priorApplication.analysisPlanRevisionId)
+        : null,
+      priorApplication.analysisRunId
+        ? context.store.findAnalysisRunById(priorApplication.analysisRunId)
+        : null,
+    ]);
+    sendJson(res, 200, {
+      schemaVersion: "labrat.reusableChartTemplateApplicationResponse.v1",
+      replayed: true,
+      application: priorApplication,
+      compatibility: priorApplication.compatibility,
+      analysisThread: analysisThread ? analysisThreadSummary(analysisThread) : null,
+      analysisPlanRevision: analysisPlanRevision ? analysisPlanRevisionSummary(analysisPlanRevision) : null,
+      analysisRun: analysisRun ? analysisRunSummary(analysisRun) : null,
+    });
+    return;
+  }
+  const compatibility = await prepareReusableChartTemplateApplication({
+    store: context.store,
+    projectId: project.id,
+    templateVersion: version,
+    experimentIds,
+    explicitBindings,
+  });
+  const artifacts = buildReusableChartTemplateApplicationArtifacts({
+    project,
+    actorUserId: auth.user.id,
+    templateVersion: { ...version, templateName: template.name },
+    compatibility,
+    idempotencyKey,
+    requestHash,
+  });
+  const stored = await context.store.createReusableChartTemplateApplication({
+    ...artifacts,
+    auditEvents: [{
+      id: makeId("audit"),
+      labId: project.labId,
+      projectId: project.id,
+      actorUserId: auth.user.id,
+      action: "reusable_chart_template.apply",
+      targetType: "reusable_chart_template_application",
+      targetId: artifacts.application.id,
+      summary: compatibility.status === "ready"
+        ? `Queued reusable chart template ${template.name}.`
+        : `Checked reusable chart template ${template.name}; input confirmation is required.`,
+      metadata: { reusableChartTemplateVersionId: version.id, compatibilityStatus: compatibility.status },
+      createdAt: artifacts.application.createdAt,
+      ipAddress: clientIp(req),
+      userAgent: userAgent(req),
+    }],
+  });
+  sendJson(res, stored.replayed ? 200 : 201, {
+    schemaVersion: "labrat.reusableChartTemplateApplicationResponse.v1",
+    replayed: stored.replayed,
+    application: stored.application,
+    compatibility: stored.application.compatibility,
+    analysisThread: stored.analysisThread ? analysisThreadSummary(stored.analysisThread) : null,
+    analysisPlanRevision: stored.analysisPlanRevision ? analysisPlanRevisionSummary(stored.analysisPlanRevision) : null,
+    analysisRun: stored.analysisRun ? analysisRunSummary(stored.analysisRun) : null,
+  });
+}
+
 async function handleChartSpecs(req, res, context, projectId) {
   await projectAuth(req, context, projectId, "viewer");
   const chartSpecs = await context.store.listChartSpecs({ projectId });
@@ -3013,6 +3424,14 @@ async function dispatch(req, res, context) {
   if (projectAnalysisThreadsMatch && (req.method === "GET" || req.method === "POST")) {
     return handleProjectAnalysisThreads(req, res, context, projectAnalysisThreadsMatch[1], url);
   }
+  const projectChartStyleProfilesMatch = pathName.match(/^\/api\/projects\/([^/]+)\/chart-style-profiles$/);
+  if (projectChartStyleProfilesMatch && (req.method === "GET" || req.method === "POST")) {
+    return handleProjectChartStyleProfiles(req, res, context, projectChartStyleProfilesMatch[1], url);
+  }
+  const projectReusableChartTemplatesMatch = pathName.match(/^\/api\/projects\/([^/]+)\/reusable-chart-templates$/);
+  if (projectReusableChartTemplatesMatch && (req.method === "GET" || req.method === "POST")) {
+    return handleProjectReusableChartTemplates(req, res, context, projectReusableChartTemplatesMatch[1], url);
+  }
   const projectMatch = pathName.match(/^\/api\/projects\/([^/]+)$/);
   if (projectMatch && (req.method === "GET" || req.method === "PATCH")) return handleProjectById(req, res, context, projectMatch[1]);
   const fileMatch = pathName.match(/^\/api\/projects\/([^/]+)\/files$/);
@@ -3131,6 +3550,20 @@ async function dispatch(req, res, context) {
   }
   const chartSpecsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/chart-specs$/);
   if (chartSpecsMatch && req.method === "GET") return handleChartSpecs(req, res, context, chartSpecsMatch[1]);
+  const chartStyleProfileMatch = pathName.match(/^\/api\/chart-style-profiles\/([^/]+)(?:\/(versions|archive))?$/);
+  if (chartStyleProfileMatch && (
+    (!chartStyleProfileMatch[2] && req.method === "GET")
+    || (chartStyleProfileMatch[2] && req.method === "POST")
+  )) return handleChartStyleProfile(req, res, context, chartStyleProfileMatch[1], chartStyleProfileMatch[2] || null);
+  const reusableChartTemplateMatch = pathName.match(/^\/api\/reusable-chart-templates\/([^/]+)(?:\/(versions|archive))?$/);
+  if (reusableChartTemplateMatch && (
+    (!reusableChartTemplateMatch[2] && req.method === "GET")
+    || (reusableChartTemplateMatch[2] && req.method === "POST")
+  )) return handleReusableChartTemplate(req, res, context, reusableChartTemplateMatch[1], reusableChartTemplateMatch[2] || null);
+  const reusableChartTemplateApplicationMatch = pathName.match(/^\/api\/reusable-chart-template-versions\/([^/]+)\/applications$/);
+  if (reusableChartTemplateApplicationMatch && req.method === "POST") {
+    return handleReusableChartTemplateApplication(req, res, context, reusableChartTemplateApplicationMatch[1]);
+  }
   const chartSpecMatch = pathName.match(/^\/api\/chart-specs\/([^/]+)$/);
   if (chartSpecMatch && req.method === "GET") return handleChartSpecById(req, res, context, chartSpecMatch[1]);
   const manuscriptsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/manuscripts$/);
@@ -3154,6 +3587,9 @@ export async function handleSaasRoutes(req, res, context) {
     && !req.url?.startsWith("/api/analysis-runs")
     && !req.url?.startsWith("/api/import-runs")
     && !req.url?.startsWith("/api/chart-specs")
+    && !req.url?.startsWith("/api/chart-style-profiles")
+    && !req.url?.startsWith("/api/reusable-chart-templates")
+    && !req.url?.startsWith("/api/reusable-chart-template-versions")
     && !req.url?.startsWith("/api/manuscripts")) {
     return false;
   }

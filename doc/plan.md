@@ -2,7 +2,7 @@
 
 Status: active
 Read when: deciding what LabRat should build next.
-Last reviewed: 2026-08-01
+Last reviewed: 2026-08-18
 
 This is the short active plan. Current execution status lives in `doc/current-milestone.md`; detailed implementation plans live under `doc/plans/`.
 
@@ -49,6 +49,35 @@ future external-file linking retain model-generated Python.
 
 The obsolete aggregate dataset/generic import implementation has been removed. No legacy local-data migration or dual-write path is required.
 
+The active chart-creation program now adds a deterministic reusable-template
+path beside the completed natural-language analysis path:
+
+```text
+first/new chart meaning
+  -> reviewed analysis plan and validated result
+  -> accepted ChartSpec
+  -> optional named reusable template
+
+repeat approved chart meaning
+  -> choose template version and compatible accepted experiments
+  -> deterministic chart_template_v1 result
+  -> explicit ChartSpec acceptance
+```
+
+Style, recipe, selected experiments, and immutable ChartSpec are separate.
+Templates are structured/versioned contracts rather than saved prompts. The v1
+fast path uses stable accepted Experiment Browser fields/series, never silently
+binds ambiguous inputs, makes no provider call, generates no Python, and keeps
+the existing AnalysisResult/ChartSpec publication boundary. Milestones 1-3
+contracts, persistence, validators, eligibility derivation, lifecycle APIs,
+reviewed bindings, idempotent applications, and deterministic scalar execution
+are complete. Accepted chart review now includes the first inline
+`Save as template` authoring action, including multi-scalar stacked-component
+eligibility; adaptive geometry and then the fast template-picker frontend are
+next. See
+`doc/plans/reusable-chart-creation-plan.md` and
+`doc/contracts/reusable-chart-template-contract-v1.md`.
+
 Use this split when deciding what to build:
 
 - Product mainline: Workbook Understanding First, ending in Experiment Browser.
@@ -56,6 +85,9 @@ Use this split when deciding what to build:
   `outputTarget: experiment_browser` -> list-column patches -> DataSnapshot v4 ->
   Browser projection.
 - Completed execution milestone: backend conversational analysis, reviewed calculation, analysis-result ChartSpec publication, and placement-local trace visibility.
+- Active chart program: reusable style/template persistence, deterministic
+  binding/execution, responsive geometry, fast reuse UI, template authoring,
+  then optional reference-chart style onboarding.
 
 ## Recently Completed
 
@@ -198,6 +230,10 @@ npm run codex:preflight
   structured data; Experiment Browser is a read model.
 - Browser publish must not create ChartSpecs, FigurePackages, or manuscript placements.
 - MCP and embedding/RAG adapters are future access layers, not the source of truth.
+- Reusable chart application may auto-bind only exact stable input identity or
+  an unchanged prior reviewed binding. Fuzzy matches are suggestions.
+- Template reuse must create a normal validated AnalysisResult and requires
+  explicit ChartSpec acceptance; it cannot revive retired chart proposals.
 
 ## Details
 
@@ -207,6 +243,8 @@ npm run codex:preflight
 - DataPlan Agent plan: `doc/plans/tool-governed-dataplan-agent-transition-plan.md`
 - Workbook-to-Browser plan: `doc/plans/workbook-review-to-experiment-browser-plan.md`
 - DataSnapshot-to-ChartSpec frontend closure plan: `doc/plans/datasnapshot-to-chartspec-frontend-closure-plan.md`
+- Reusable chart creation plan: `doc/plans/reusable-chart-creation-plan.md`
+- Reusable chart template contract: `doc/contracts/reusable-chart-template-contract-v1.md`
 - Chat workbook file-entry design: `doc/plans/chat-workbook-file-entry-design.md`
 - Roadmap: `doc/plans/roadmap.md`
 - API contracts: `doc/contracts/saas-api-contract-v0.md`

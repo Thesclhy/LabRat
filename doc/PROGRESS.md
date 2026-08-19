@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-08-12
+Last reviewed: 2026-08-18
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -12,6 +12,77 @@ Keep entries concise, newest first, and include:
 - meaningful changes
 - verification
 - follow-ups or residual risk
+
+## 2026-08-18
+
+- Completed reusable chart creation Milestone 3. Added migration 025 plus
+  memory/PostgreSQL parity for append-only reviewed slot bindings and
+  idempotent template applications. The new editor-authorized application API
+  checks experiment count, stable field identity, finite scalar values, units,
+  missing data, ambiguity, and explicit bindings; freezes active snapshot
+  heads; and creates an accepted PlanRevision plus queued
+  `chart_template_v1` AnalysisRun only when compatible. Execution interprets
+  accepted scalar-selection recipes into Plotly, preserves template/binding/
+  head/source lineage, uses the normal result validator and ChartSpec review
+  boundary, and fails closed if heads change at execution or publication. It
+  never calls the model provider or Python executor. Added one/two/three-
+  experiment, missing/unit, binding, idempotency, no-provider/no-Python,
+  stale-head, route, migration, and store-parity coverage. Verification passed:
+  frontend 293/293, backend 233/237 with four expected skips, production build
+  with the existing Plotly chunk-size warning, syntax, and `git diff --check`.
+  The live PostgreSQL integration remained skipped because
+  `LABRAT_TEST_DATABASE_URL` is not configured. Adaptive geometry is Milestone
+  4 and the template-selection frontend is Milestone 5.
+
+- Added the first approved-chart template-authoring entry point. The
+  conversation retains its `Chart created` ribbon; the former disabled green
+  control is now `Save as template`, opens an inline bounded name field, saves
+  the exact accepted ChartSpec through the project API, reports backend errors
+  without changing the accepted chart, and refreshes project summaries after
+  success. Expanded deterministic eligibility from one scalar to 1-12 stable
+  same-order numeric scalar components per experiment, including shared-unit
+  stacked component charts such as Solid/Liquid/Gas. Direct workbook ranges,
+  series inputs, identity/unit mismatch, and cross-project lineage remain
+  blocked. Template application is now supplied by Milestone 3, while the
+  broader selection/management UI remains in Milestones 5-6. Focused UI/API
+  coverage passed 44/44, focused backend template coverage passed 5/5, full
+  frontend passed 292/292, full backend passed 227/231 with four expected
+  skips, and the production build passed with the existing Plotly chunk-size
+  warning. Browser QA was not repeated because no reusable-template-enabled
+  local backend session was running against migration 024.
+
+- Completed reusable chart creation Milestone 2. Added migration 024 and
+  memory/PostgreSQL persistence for project-owned style-profile and reusable-
+  template containers with immutable accepted versions and content hashes.
+  Added viewer-readable/editor-writable create, list, detail, version, and
+  logical-archive APIs; bounded project-state summaries; audit events; strict
+  style/recipe validators; and conservative backend derivation that accepts
+  only same-project accepted ChartSpec v3 scalar comparisons over stable
+  numeric Browser columns. Unsupported workbook-range, series, missing-lineage,
+  mismatched-column, unit, cross-project, and unowned reference-file inputs fail
+  closed. Added focused validator, lifecycle, authorization, isolation,
+  migration, and store-parity regressions. Verification passed: frontend
+  289/289, backend 226 passed with four expected skips, focused reusable API
+  lifecycle and validator coverage, production build with the existing Plotly
+  chunk-size warning, JavaScript syntax, and `git diff --check`. The optional
+  live PostgreSQL integration remained skipped because
+  `LABRAT_TEST_DATABASE_URL` is not configured; migration structure and store
+  method parity passed. Milestone 3 binding/application/execution and all
+  frontend work remain intentionally out of scope.
+
+- Created `codex/chart-creation` from the same commit as `origin/main` for the
+  complete reusable chart program and completed Milestone 1 contracts/schemas.
+  Added the long-form milestone plan, `ChartStyleProfile` and
+  `ReusableChartTemplate` version contracts, strict reusable input slots,
+  bounded deterministic recipe language, multiple-experiment/missing-value/
+  unit/alignment/palette/geometry behavior, planned APIs and persistence,
+  stable errors, authorization/audit rules, and the implementation QA matrix.
+  Updated active plan, milestone, architecture, AI, API, database, canonical
+  terminology, review checklist, and durable decision docs. Milestone 1 adds no
+  routes, migrations, executor, provider call, or frontend behavior. Next is
+  Milestone 2 persistence and read APIs. Documentation verification used
+  `npm run codex:preflight`, `git diff --check`, targeted terminology/route
+  searches, and repository status review.
 
 ## 2026-08-12
 

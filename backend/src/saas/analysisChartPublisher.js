@@ -87,6 +87,9 @@ export function buildAnalysisResultChartSpec({
     analysisResultId: result.id,
     sourceSelections: structuredClone(planRevision.plan?.sourceSelections || []),
     experimentSelections: structuredClone(planRevision.plan?.experimentSelections || []),
+    ...(planRevision.plan?.templateLineage
+      ? { templateLineage: structuredClone(planRevision.plan.templateLineage) }
+      : {}),
     sourceRefs: structuredClone(result.sourceRefs || []),
     plotly,
     traceCatalog: catalog,
@@ -217,11 +220,23 @@ export async function publishAcceptedAnalysisChart({
     });
   }
   if (experimentSelections.length) {
-    await resolveExperimentSelections({
-      store,
-      projectId: project.id,
-      experimentSelections,
-    });
+    try {
+      await resolveExperimentSelections({
+        store,
+        projectId: project.id,
+        experimentSelections,
+      });
+    } catch (error) {
+      if (planRevision.plan?.templateLineage) {
+        throw publicationError(
+          "chart_template_inputs_stale",
+          "A selected experiment changed after this reusable chart result was created.",
+          409,
+          { cause: error?.code || "analysis_experiment_selection_stale" },
+        );
+      }
+      throw error;
+    }
   }
   const expectedHeadRefs = experimentSelections
     .map((selection) => selection.baseHeadRef)
@@ -286,6 +301,10 @@ export async function publishAcceptedAnalysisChart({
     analysisResult: acceptedResult,
     chartSpec,
     expectedHeadRefs,
+    staleError: planRevision.plan?.templateLineage ? {
+      code: "chart_template_inputs_stale",
+      message: "A selected experiment changed after this reusable chart result was created.",
+    } : null,
     response,
     auditEvents: [{
       labId: project.labId,

@@ -56,6 +56,12 @@ export class MemorySaasStore {
     this.analysisPublications = new Map();
     this.analysisExperimentPublications = new Map();
     this.chartSpecs = new Map();
+    this.chartStyleProfiles = new Map();
+    this.chartStyleProfileVersions = new Map();
+    this.reusableChartTemplates = new Map();
+    this.reusableChartTemplateVersions = new Map();
+    this.reusableChartTemplateSlotBindings = new Map();
+    this.reusableChartTemplateApplications = new Map();
     this.manuscripts = new Map();
     this.auditEvents = new Map();
     if (options.seedDevAccounts) this.seedDevAccounts();
@@ -1569,6 +1575,7 @@ export class MemorySaasStore {
     actorUserId,
     expectedHeadRefs = [],
     staleValidation = {},
+    staleError = null,
     staleAuditEvents = [],
     startedAt = nowIso(),
     staleAfterMs = 360_000,
@@ -1619,7 +1626,7 @@ export class MemorySaasStore {
         payload: {
           ...copy(run.payload || {}),
           completedAt: startedAt,
-          error: {
+          error: staleError || {
             code: "analysis_run_stale",
             message: "Active accepted experiment heads changed before execution claim.",
           },
@@ -1980,9 +1987,9 @@ export class MemorySaasStore {
       }];
     });
     if (headMismatches.length) {
-      throw Object.assign(new Error("Accepted experiment snapshots changed before chart publication."), {
+      throw Object.assign(new Error(input.staleError?.message || "Accepted experiment snapshots changed before chart publication."), {
         statusCode: 409,
-        code: "analysis_result_stale",
+        code: input.staleError?.code || "analysis_result_stale",
         details: { headMismatches },
       });
     }
@@ -2253,6 +2260,187 @@ export class MemorySaasStore {
 
   async listChartSpecs({ projectId }) {
     return [...this.chartSpecs.values()].filter((spec) => spec.projectId === projectId).map(copy);
+  }
+
+  async createChartStyleProfile({ profile, version }) {
+    const duplicate = [...this.chartStyleProfiles.values()].find((item) => (
+      item.projectId === profile.projectId && item.name.toLowerCase() === profile.name.toLowerCase()
+    ));
+    if (duplicate) throw Object.assign(new Error("A chart style profile with this name already exists."), { code: "chart_style_profile_name_conflict", statusCode: 409 });
+    const storedVersion = copy(version);
+    const storedProfile = { ...copy(profile), currentVersionId: storedVersion.id };
+    this.chartStyleProfiles.set(storedProfile.id, storedProfile);
+    this.chartStyleProfileVersions.set(storedVersion.id, storedVersion);
+    return { profile: copy(storedProfile), version: copy(storedVersion) };
+  }
+
+  async findChartStyleProfileById(id) {
+    return copy(this.chartStyleProfiles.get(id) || null);
+  }
+
+  async findChartStyleProfileVersionById(id) {
+    return copy(this.chartStyleProfileVersions.get(id) || null);
+  }
+
+  async listChartStyleProfiles({ projectId, includeArchived = false }) {
+    return [...this.chartStyleProfiles.values()]
+      .filter((item) => item.projectId === projectId)
+      .filter((item) => includeArchived || item.status !== "archived")
+      .sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt)))
+      .map(copy);
+  }
+
+  async listChartStyleProfileVersions({ chartStyleProfileId }) {
+    return [...this.chartStyleProfileVersions.values()]
+      .filter((item) => item.chartStyleProfileId === chartStyleProfileId)
+      .sort((left, right) => right.version - left.version)
+      .map(copy);
+  }
+
+  async appendChartStyleProfileVersion({ profileId, version, actorUserId, updatedAt }) {
+    const profile = this.chartStyleProfiles.get(profileId);
+    if (!profile) return null;
+    const versions = [...this.chartStyleProfileVersions.values()].filter((item) => item.chartStyleProfileId === profileId);
+    if (versions.some((item) => item.version === version.version || item.contentHash === version.contentHash)) {
+      throw Object.assign(new Error("This chart style version already exists."), { code: "chart_style_profile_version_conflict", statusCode: 409 });
+    }
+    this.chartStyleProfileVersions.set(version.id, copy(version));
+    const updated = { ...profile, currentVersionId: version.id, updatedAt, updatedBy: actorUserId };
+    this.chartStyleProfiles.set(profileId, updated);
+    return { profile: copy(updated), version: copy(version) };
+  }
+
+  async archiveChartStyleProfile({ profileId, actorUserId, updatedAt }) {
+    const profile = this.chartStyleProfiles.get(profileId);
+    if (!profile) return null;
+    const updated = { ...profile, status: "archived", updatedAt, updatedBy: actorUserId };
+    this.chartStyleProfiles.set(profileId, updated);
+    return copy(updated);
+  }
+
+  async createReusableChartTemplate({ template, version }) {
+    const duplicate = [...this.reusableChartTemplates.values()].find((item) => (
+      item.projectId === template.projectId && item.name.toLowerCase() === template.name.toLowerCase()
+    ));
+    if (duplicate) throw Object.assign(new Error("A reusable chart template with this name already exists."), { code: "reusable_chart_template_name_conflict", statusCode: 409 });
+    const storedVersion = copy(version);
+    const storedTemplate = { ...copy(template), currentVersionId: storedVersion.id };
+    this.reusableChartTemplates.set(storedTemplate.id, storedTemplate);
+    this.reusableChartTemplateVersions.set(storedVersion.id, storedVersion);
+    return { template: copy(storedTemplate), version: copy(storedVersion) };
+  }
+
+  async findReusableChartTemplateById(id) {
+    return copy(this.reusableChartTemplates.get(id) || null);
+  }
+
+  async findReusableChartTemplateVersionById(id) {
+    return copy(this.reusableChartTemplateVersions.get(id) || null);
+  }
+
+  async listReusableChartTemplates({ projectId, includeArchived = false }) {
+    return [...this.reusableChartTemplates.values()]
+      .filter((item) => item.projectId === projectId)
+      .filter((item) => includeArchived || item.status !== "archived")
+      .sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt)))
+      .map(copy);
+  }
+
+  async listReusableChartTemplateVersions({ reusableChartTemplateId }) {
+    return [...this.reusableChartTemplateVersions.values()]
+      .filter((item) => item.reusableChartTemplateId === reusableChartTemplateId)
+      .sort((left, right) => right.version - left.version)
+      .map(copy);
+  }
+
+  async appendReusableChartTemplateVersion({ templateId, version, actorUserId, updatedAt }) {
+    const template = this.reusableChartTemplates.get(templateId);
+    if (!template) return null;
+    const versions = [...this.reusableChartTemplateVersions.values()].filter((item) => item.reusableChartTemplateId === templateId);
+    if (versions.some((item) => item.version === version.version || item.contentHash === version.contentHash)) {
+      throw Object.assign(new Error("This reusable chart template version already exists."), { code: "reusable_chart_template_version_conflict", statusCode: 409 });
+    }
+    this.reusableChartTemplateVersions.set(version.id, copy(version));
+    const updated = { ...template, currentVersionId: version.id, updatedAt, updatedBy: actorUserId };
+    this.reusableChartTemplates.set(templateId, updated);
+    return { template: copy(updated), version: copy(version) };
+  }
+
+  async archiveReusableChartTemplate({ templateId, actorUserId, updatedAt }) {
+    const template = this.reusableChartTemplates.get(templateId);
+    if (!template) return null;
+    const updated = { ...template, status: "archived", updatedAt, updatedBy: actorUserId };
+    this.reusableChartTemplates.set(templateId, updated);
+    return copy(updated);
+  }
+
+  async listReusableChartTemplateSlotBindings({ reusableChartTemplateVersionId, status = null }) {
+    return [...this.reusableChartTemplateSlotBindings.values()]
+      .filter((item) => item.reusableChartTemplateVersionId === reusableChartTemplateVersionId)
+      .filter((item) => !status || item.status === status)
+      .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)))
+      .map(copy);
+  }
+
+  async findReusableChartTemplateApplicationById(id) {
+    return copy(this.reusableChartTemplateApplications.get(id) || null);
+  }
+
+  async findReusableChartTemplateApplicationByIdempotencyKey({ projectId, idempotencyKey }) {
+    return copy([...this.reusableChartTemplateApplications.values()].find((item) => (
+      item.projectId === projectId && item.idempotencyKey === idempotencyKey
+    )) || null);
+  }
+
+  async createReusableChartTemplateApplication(input) {
+    const existing = await this.findReusableChartTemplateApplicationByIdempotencyKey({
+      projectId: input.application.projectId,
+      idempotencyKey: input.application.idempotencyKey,
+    });
+    if (existing) {
+      if (existing.requestHash !== input.application.requestHash) {
+        throw Object.assign(new Error("This idempotency key was already used for different template inputs."), {
+          code: "chart_template_idempotency_conflict",
+          statusCode: 409,
+        });
+      }
+      return {
+        application: existing,
+        analysisThread: existing.analysisThreadId ? copy(this.analysisThreads.get(existing.analysisThreadId)) : null,
+        analysisPlanRevision: existing.analysisPlanRevisionId ? copy(this.analysisPlanRevisions.get(existing.analysisPlanRevisionId)) : null,
+        analysisRun: existing.analysisRunId ? copy(this.analysisRuns.get(existing.analysisRunId)) : null,
+        replayed: true,
+      };
+    }
+    for (const binding of asArray(input.slotBindings)) {
+      for (const [id, prior] of this.reusableChartTemplateSlotBindings.entries()) {
+        if (prior.reusableChartTemplateVersionId === binding.reusableChartTemplateVersionId
+          && prior.slotId === binding.slotId && prior.status === "active") {
+          this.reusableChartTemplateSlotBindings.set(id, { ...prior, status: "superseded" });
+        }
+      }
+      this.reusableChartTemplateSlotBindings.set(binding.id, copy(binding));
+    }
+    this.reusableChartTemplateApplications.set(input.application.id, copy(input.application));
+    if (input.analysisThread) this.analysisThreads.set(input.analysisThread.id, copy(input.analysisThread));
+    if (input.analysisPlanRevision) this.analysisPlanRevisions.set(input.analysisPlanRevision.id, copy(input.analysisPlanRevision));
+    if (input.analysisRun) this.analysisRuns.set(input.analysisRun.id, copy(input.analysisRun));
+    for (const event of asArray(input.auditEvents)) this.auditEvents.set(event.id, copy(event));
+    return {
+      application: copy(input.application),
+      analysisThread: copy(input.analysisThread),
+      analysisPlanRevision: copy(input.analysisPlanRevision),
+      analysisRun: copy(input.analysisRun),
+      replayed: false,
+    };
+  }
+
+  async updateReusableChartTemplateApplication(id, changes) {
+    const application = this.reusableChartTemplateApplications.get(id);
+    if (!application) return null;
+    const updated = { ...application, ...copy(changes) };
+    this.reusableChartTemplateApplications.set(id, updated);
+    return copy(updated);
   }
 
   async listManuscripts({ projectId }) {

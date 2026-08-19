@@ -1,7 +1,7 @@
 # SaaS Database Schema v0
 
 Status: active
-Last reviewed: 2026-07-20
+Last reviewed: 2026-08-18
 
 The executable source of truth is `backend/migrations/`. This document records ownership, invariants, and the scientific lineage between current tables.
 
@@ -155,6 +155,42 @@ There is no proposal or aggregate dataset foreign key.
 
 `agent_runs` stores visible workflow steps, summarized tool observations, review-gated actions, usage metadata, and status. It does not store hidden chain-of-thought.
 
+### Reusable Chart Layer
+
+Migration 024 implements these Milestone 2 tables:
+
+```text
+chart_style_profiles
+chart_style_profile_versions
+reusable_chart_templates
+reusable_chart_template_versions
+```
+
+Migration 025 implements the Milestone 3 binding/application tables:
+
+```text
+reusable_chart_template_slot_bindings
+reusable_chart_template_applications
+```
+
+Profile/template containers own project-scoped names, logical status, and
+current-version pointers. Accepted version payloads are immutable and
+content-hashed. A template version pins one accepted source ChartSpec and
+accepted style version plus input-slot, recipe, encoding, missing-data, and
+geometry contracts. It contains no experiment values, Plotly arrays, prompt,
+or executable code.
+
+Slot bindings are append-only user-reviewed decisions scoped to one project,
+template version, and stable input/source signature. Applications are
+idempotency receipts for exact template version, experiment snapshot heads,
+and bindings; they point to normal analysis artifacts and never duplicate the
+AnalysisResult.
+
+Reference chart files remain presentation assets through FileObject linkage;
+they are not SourceDocuments or scientific evidence. See
+`doc/contracts/reusable-chart-template-contract-v1.md` before changing this
+layer.
+
 ### Reviewed Analysis Layer
 
 ```text
@@ -306,3 +342,9 @@ hash columns from `analysis_plan_revisions`.
   the accepted result/run/thread.
 - Analysis-result ChartSpec list projections must not duplicate full trace arrays into project state; full arrays remain in the immutable stored spec and detail response.
 - Placement-local trace visibility belongs to manuscript block payloads, never to a ChartSpec mutation.
+- Reusable template/profile edits create immutable later versions; historical
+  ChartSpecs pin exact lineage and never restyle or recalculate.
+- Template application may auto-bind only exact stable identity or an unchanged
+  prior reviewed binding. Ambiguous scientific meaning is a blocker.
+- `chart_template_v1` execution creates a normal validated AnalysisResult and
+  cannot directly create a ChartSpec.

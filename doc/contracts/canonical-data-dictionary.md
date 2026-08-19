@@ -1,7 +1,7 @@
 # Canonical Data Dictionary
 
 Status: active
-Last reviewed: 2026-07-20
+Last reviewed: 2026-08-18
 
 This document defines the current scientific and workflow entities used by LabRat. Persisted JSON schema details live beside backend validators; this file defines meaning, ownership, and lineage.
 
@@ -21,6 +21,12 @@ FileObject
 ```
 
 Charts have one reviewed branch. Confirmed region evidence and/or accepted active DataSnapshot records flow through AnalysisSelection, an immutable reviewed AnalysisPlanRevision, a validated AnalysisResult, and explicit result acceptance into an analysis-result ChartSpec.
+
+Reusable chart creation is a deterministic subpath of that same branch. An
+accepted ReusableChartTemplateVersion binds compatible active Experiment
+Browser inputs, creates ordinary analysis artifacts with
+`executionStrategy: chart_template_v1`, and still requires explicit
+AnalysisResult acceptance into a ChartSpec.
 
 ## FileObject
 
@@ -357,6 +363,41 @@ A durable chart definition. Only the analysis-result-backed form is valid:
 - no values outside the validated immutable AnalysisResult
 
 Project/list responses may omit large trace x/y arrays and set `detailRequired: true`; the ChartSpec detail endpoint returns the complete immutable artifact.
+
+Template-derived ChartSpecs retain `origin: analysis_result` and may add exact
+`templateLineage` naming the ReusableChartTemplate, template version, accepted
+ChartStyleProfileVersion, and deterministic execution strategy. Existing
+ChartSpecs without that optional lineage remain valid.
+
+## ChartStyleProfile And ChartStyleProfileVersion
+
+A project-owned named presentation policy and its immutable accepted versions.
+The version stores palette, typography, figure/aspect preferences, preferred
+and minimum plot-area ratios, bounded margins, legend fallbacks, axes, and mark
+styling. Reference-chart extraction can create only a draft. Reference files
+are presentation assets, not SourceDocument evidence.
+
+## ReusableChartTemplate And ReusableChartTemplateVersion
+
+A project-owned named reusable comparison contract and its immutable accepted
+versions. A version pins one source accepted ChartSpec, an accepted style
+version, experiment-count limits, strict reusable input slots, a bounded
+deterministic recipe, encoding/comparison mode, missing-data policy, and
+responsive geometry policy. It stores no selected experiment ids, values,
+Plotly arrays, prompt text, or executable code.
+
+The v1 fast path accepts only active accepted Experiment Browser fields/series.
+Exact identity and unchanged prior reviewed bindings may auto-bind. Unique
+metadata candidates require first-use confirmation; ambiguous or absent inputs
+block. Direct workbook-layout replay is not a v1 reusable input.
+
+## ReusableChartTemplateApplication
+
+An idempotent record of applying one accepted template version to exact frozen
+experiment snapshot heads and reviewed slot bindings. It points to the
+deterministic analysis artifacts and compatibility summary but does not copy
+scientific values or Plotly arrays. Preview creates no ChartSpec; explicit
+result acceptance does.
 
 ## Manuscript
 

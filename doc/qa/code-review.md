@@ -47,6 +47,14 @@ Last reviewed: 2026-07-16
 - [ ] Chart proposals and ChartSpecs preserve exact source refs.
 - [ ] Manuscript chart blocks store ChartSpec snapshots and selected view state.
 - [ ] Selection, drag, resize, keyboard movement, nested chart layers, and PPTX output are regression checked when touched.
+- [ ] Reusable templates are structured/versioned rather than saved prompts or
+      executable code.
+- [ ] Template slots auto-bind only exact identity or unchanged reviewed
+      bindings; ambiguity, incompatible units, and stale heads block.
+- [ ] Missing values never become zero and geometry never crosses declared
+      plot-area/type minimums silently.
+- [ ] `chart_template_v1` reuses AnalysisResult/ChartSpec validation and makes
+      no provider/Python call.
 
 ## Agent And AI
 

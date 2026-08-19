@@ -107,6 +107,31 @@ test("analysis migrations and Postgres store expose retry receipt persistence pa
   assert.match(listColumnResetMigration, /update data_snapshots/);
   assert.match(listColumnResetMigration, /delete from analysis_experiment_publications/);
   assert.match(listColumnResetMigration, /delete from analysis_plan_revisions/);
+  const reusableChartMigration = await fs.readFile(
+    path.resolve(here, "..", "..", "..", "migrations", "024_reusable_chart_templates.sql"),
+    "utf8",
+  );
+  for (const table of [
+    "chart_style_profiles",
+    "chart_style_profile_versions",
+    "reusable_chart_templates",
+    "reusable_chart_template_versions",
+  ]) {
+    assert.match(reusableChartMigration, new RegExp(`create table if not exists ${table}`));
+  }
+  assert.match(reusableChartMigration, /current_version_id text/);
+  assert.match(reusableChartMigration, /source_chart_spec_id text not null references chart_specs/);
+  const reusableChartApplicationMigration = await fs.readFile(
+    path.resolve(here, "..", "..", "..", "migrations", "025_reusable_chart_template_applications.sql"),
+    "utf8",
+  );
+  for (const table of [
+    "reusable_chart_template_slot_bindings",
+    "reusable_chart_template_applications",
+  ]) {
+    assert.match(reusableChartApplicationMigration, new RegExp(`create table if not exists ${table}`));
+  }
+  assert.match(reusableChartApplicationMigration, /unique \(project_id, idempotency_key\)/);
   const store = new PostgresSaasStore({ databaseUrl: "" });
   for (const method of [
     "createAnalysisThread",
@@ -130,6 +155,25 @@ test("analysis migrations and Postgres store expose retry receipt persistence pa
     "publishExperimentAnalysis",
     "acceptAnalysisPlan",
     "findChartSpecById",
+    "createChartStyleProfile",
+    "findChartStyleProfileById",
+    "findChartStyleProfileVersionById",
+    "listChartStyleProfiles",
+    "listChartStyleProfileVersions",
+    "appendChartStyleProfileVersion",
+    "archiveChartStyleProfile",
+    "createReusableChartTemplate",
+    "findReusableChartTemplateById",
+    "findReusableChartTemplateVersionById",
+    "listReusableChartTemplates",
+    "listReusableChartTemplateVersions",
+    "appendReusableChartTemplateVersion",
+    "archiveReusableChartTemplate",
+    "listReusableChartTemplateSlotBindings",
+    "findReusableChartTemplateApplicationById",
+    "findReusableChartTemplateApplicationByIdempotencyKey",
+    "createReusableChartTemplateApplication",
+    "updateReusableChartTemplateApplication",
   ]) {
     assert.equal(typeof store[method], "function", method);
   }

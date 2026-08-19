@@ -293,6 +293,43 @@ export function getServerChartSpec(chartSpecId, options = {}) {
   return serverRequest(`/api/chart-specs/${encodeURIComponent(chartSpecId)}`, options);
 }
 
+export function createServerReusableChartTemplate(projectId, request = {}, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before saving a chart template.");
+  const name = String(request.name || "").trim();
+  const sourceChartSpecId = String(request.sourceChartSpecId || "").trim();
+  if (!name) throw new ServerApiError("Name the chart template before saving it.");
+  if (!sourceChartSpecId) throw new ServerApiError("Create the chart before saving it as a template.");
+  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/reusable-chart-templates`, {
+    name,
+    description: String(request.description || "").trim(),
+    sourceChartSpecId,
+    ...(request.chartStyleProfileVersionId
+      ? { chartStyleProfileVersionId: request.chartStyleProfileVersionId }
+      : {}),
+  }, options);
+}
+
+export function applyServerReusableChartTemplate(templateVersionId, request = {}, options = {}) {
+  if (!templateVersionId) throw new ServerApiError("Select a chart template version before applying it.");
+  const experimentIds = Array.isArray(request.experimentIds)
+    ? request.experimentIds.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+  if (!experimentIds.length) throw new ServerApiError("Select at least one experiment for the chart.");
+  const idempotencyKey = String(request.idempotencyKey || "").trim();
+  if (!idempotencyKey) throw new ServerApiError("A chart-template application key is required.");
+  return serverJson(
+    `/api/reusable-chart-template-versions/${encodeURIComponent(templateVersionId)}/applications`,
+    {
+      experimentIds,
+      bindings: Array.isArray(request.bindings) ? request.bindings : [],
+    },
+    {
+      ...options,
+      headers: { ...(options.headers || {}), "Idempotency-Key": idempotencyKey },
+    },
+  );
+}
+
 export function createServerManuscript(projectId, request = {}, options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before creating a manuscript.");
   return serverJson(`/api/projects/${encodeURIComponent(projectId)}/manuscripts`, request, options);
