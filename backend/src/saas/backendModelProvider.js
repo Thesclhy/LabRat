@@ -584,7 +584,7 @@ export function createBackendModelProvider({
         toolHandlers: {
           inspect_source_range: options.inspectSourceRange,
         },
-        thinking: { enabled: true, effort: "high" },
+        thinking: { enabled: false },
         signal: options.signal,
       });
     },

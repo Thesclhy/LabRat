@@ -432,7 +432,10 @@ export async function draftAnalysisPlanRevision({
         "analysis_plan_draft_unavailable",
         draft?.warning?.message || "The backend model could not draft an analysis plan.",
         503,
-        { warning: draft?.warning || null },
+        {
+          warning: draft?.warning || null,
+          providerMetadata: draft?.metadata || null,
+        },
       );
     }
     try {

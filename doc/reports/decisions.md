@@ -67,9 +67,11 @@ the base URL would weaken the structured-output contract.
 Consequences:
 
 - DeepSeek uses its stable Chat Completions endpoint and V4 Pro model.
-- Simple classification/explanation calls disable thinking; planning and code
-  generation enable high thinking and replay reasoning only transiently when a
-  tool loop requires it.
+- Classification, explanation, read-only answers, and Experiment Browser plan
+  drafting disable thinking. Chart planning and code generation enable high
+  thinking and replay reasoning only transiently when a tool loop requires it.
+- Output-limit truncation gets at most one concise same-provider non-thinking
+  retry. Provider-reported usage remains visible even when both attempts fail.
 - Backend JSON Schema validation and one bounded same-provider repair remain
   authoritative for both adapters.
 - Every environment must explicitly select a supported provider. Development

@@ -15,6 +15,18 @@ Keep entries concise, newest first, and include:
 
 ## 2026-08-19
 
+- Corrected DeepSeek truncation behavior after a live confirmed-workbook
+  onboarding plan consumed two high-reasoning attempts and still returned
+  `finish_reason: length`. Experiment Browser plan drafting now starts with
+  thinking disabled; high thinking remains enabled for chart planning and
+  generated Python. A truncated structured request receives at most one concise
+  same-provider retry with thinking disabled. DeepSeek reasoning-token usage is
+  normalized, and failed planning calls now retain bounded provider/model/
+  latency/input/output/reasoning/repair metadata in AgentRun warnings and usage
+  instead of appearing as deterministic zero-token work. Verification passed
+  293/293 frontend tests, 248/252 backend tests with four expected skips, and
+  the production build with the existing Plotly chunk-size warning.
+
 - Merged `codex/onboarding-chat` into `codex/chart-creation`. The combined
   branch retains the completed reusable-chart template milestones and adds the
   deployment-selected Anthropic/DeepSeek gateway, structured-output validation,

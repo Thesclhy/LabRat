@@ -1921,6 +1921,13 @@ test("analysis planning failures remain inspectable on the durable thread", asyn
       message: "Anthropic request failed.",
       detail: "TypeError: ECONNRESET: fetch failed",
     },
+    metadata: {
+      provider: "deepseek",
+      model: "deepseek-v4-pro",
+      latencyMs: 2200,
+      usage: { inputTokens: 210, outputTokens: 6400, reasoningTokens: 6100 },
+      repairAttempts: 1,
+    },
   });
 
   try {
@@ -1933,6 +1940,11 @@ test("analysis planning failures remain inspectable on the durable thread", asyn
     assert.equal(body.analysisThread.status, "plan_failed");
     assert.equal(body.currentPlanRevision, null);
     assert.equal(body.agentRun.warnings.at(-1).details.provider.code, "ai_request_failed");
+    assert.equal(body.agentRun.warnings.at(-1).details.provider.provider, "deepseek");
+    assert.equal(body.agentRun.usage.provider, "deepseek");
+    assert.equal(body.agentRun.usage.model, "deepseek-v4-pro");
+    assert.equal(body.agentRun.usage.outputTokens, 6400);
+    assert.equal(body.agentRun.usage.reasoningTokens, 6100);
 
     await store.updateAnalysisThread(body.analysisThread.id, { status: "planning" });
 
@@ -1941,6 +1953,7 @@ test("analysis planning failures remain inspectable on the durable thread", asyn
     const detail = await detailResponse.json();
     assert.equal(detail.analysisThread.status, "plan_failed");
     assert.equal(detail.planFailure.details.provider.detail, "TypeError: ECONNRESET: fetch failed");
+    assert.equal(detail.planFailure.details.provider.usage.reasoningTokens, 6100);
   } finally {
     testModelProvider.draftAnalysisPlan = originalDraft;
   }

@@ -135,11 +135,14 @@ keeps LabRat prompts, output schemas, tools, and review workflows independent
 from Anthropic Messages versus DeepSeek Chat Completions wire formats. One
 deployment selects one provider at startup; automatic cross-provider fallback
 is prohibited. DeepSeek V4 Pro disables thinking for intent, region explanation,
-and read-only answers, while analysis planning and Python generation use high
-thinking and transiently replay `reasoning_content` only inside the active tool
-loop. Ajv validates all final structured output and tool arguments, and one
-bounded same-provider repair covers empty, truncated, malformed, or
-schema-invalid output. Every environment now explicitly selects a provider;
+read-only answers, and Experiment Browser plan drafting, while chart planning
+and Python generation use high thinking and transiently replay
+`reasoning_content` only inside the active tool loop. A truncated response gets
+one concise non-thinking retry instead of a repeated high-reasoning request.
+Ajv validates all final structured output and tool arguments, and one bounded
+same-provider repair covers empty, truncated, malformed, or schema-invalid
+output. Failed calls retain provider-reported token usage rather than being
+recorded as deterministic zero-token work. Every environment now explicitly selects a provider;
 production fails at startup when the selected provider or key is invalid. The
 main deployment takes only that provider name from a required GitHub Repository
 Variable, keeps both keys exclusively on Lightsail, and jointly rolls back the

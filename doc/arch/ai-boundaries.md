@@ -241,9 +241,12 @@ malformed, or schema-invalid output may receive one same-provider correction;
 authentication errors, cancellation, and invalid configuration are not
 retried. Tool arguments are validated before any handler executes.
 
-DeepSeek V4 Pro runs intent classification, workbook-region explanation, and
-read-only answers with thinking disabled. Analysis planning and Python program
-generation use high-effort thinking. Tool-loop `reasoning_content` may be
+DeepSeek V4 Pro runs intent classification, workbook-region explanation,
+read-only answers, and Experiment Browser plan drafting with thinking disabled.
+Chart planning and Python program generation use high-effort thinking. If a
+structured response reaches its output-token limit, the gateway makes at most
+one concise same-provider retry with thinking disabled; it does not repeat the
+same high-reasoning request. Tool-loop `reasoning_content` may be
 returned transiently to DeepSeek as required by its protocol, but it is never
 persisted, logged, exposed through AgentRun, or sent to the frontend.
 The default model and request policy follow DeepSeek's official
@@ -262,6 +265,11 @@ removed before applying the patch, and semantic types, axes, field roles, value
 types, columns, and ranges remain subject to deterministic backend validation.
 Token-limit truncation and malformed output remain retryable failures and never
 create a RegionUnderstandingRevision.
+
+Provider usage includes input, output, and provider-reported reasoning tokens
+when available. A failed structured request retains this bounded metadata on
+the visible AgentRun warning/usage record; failure must not be rewritten as a
+deterministic zero-token operation.
 
 For a row-oriented region whose identity column fits the bounded source-read
 limit, the backend reads that complete column and supplies only its exact count,

@@ -23,6 +23,13 @@ selected key empty and reports `configured: false`; production rejects a
 missing selected key during startup. The unselected key is never added to an
 outbound provider request.
 
+DeepSeek Experiment Browser plan drafting uses non-thinking JSON/tool requests.
+Chart planning and generated-program requests retain high thinking. A
+token-limit truncation may trigger only one concise same-provider non-thinking
+retry. Provider-reported input, output, and reasoning-token usage is accumulated
+across attempts and remains on a failed AgentRun rather than being replaced by
+deterministic zero-token metadata.
+
 Unknown or retired routes return `404`.
 
 ## Workbook Processing

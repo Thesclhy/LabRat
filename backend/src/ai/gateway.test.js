@@ -364,6 +364,71 @@ test("empty and truncated DeepSeek responses receive at most one repair request"
   }
 });
 
+test("truncated thinking requests retry concisely without thinking and retain charged usage", async () => {
+  const requests = [];
+  const gateway = createAiGateway({
+    config: DEEPSEEK_CONFIG,
+    now: (() => {
+      let value = 100;
+      return () => value += 25;
+    })(),
+    fetchImpl: async (_url, request) => {
+      const body = JSON.parse(request.body);
+      requests.push(body);
+      if (requests.length === 1) {
+        return jsonResponse({
+          usage: {
+            prompt_tokens: 100,
+            completion_tokens: 6400,
+            completion_tokens_details: { reasoning_tokens: 6100 },
+          },
+          choices: [{
+            finish_reason: "length",
+            message: { role: "assistant", content: "{" },
+          }],
+        });
+      }
+      return jsonResponse({
+        usage: {
+          prompt_tokens: 120,
+          completion_tokens: 80,
+          completion_tokens_details: { reasoning_tokens: 0 },
+        },
+        choices: [{
+          finish_reason: "stop",
+          message: { role: "assistant", content: JSON.stringify({ ok: true }) },
+        }],
+      });
+    },
+  });
+
+  const result = await gateway.requestStructuredWithTools({
+    system: "Return JSON.",
+    payload: { request: "Create a plan." },
+    outputSchema: {
+      type: "object",
+      properties: { ok: { type: "boolean" } },
+      required: ["ok"],
+      additionalProperties: false,
+    },
+    thinking: { enabled: true, effort: "high" },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(requests.length, 2);
+  assert.deepEqual(requests[0].thinking, { type: "enabled" });
+  assert.equal(requests[0].reasoning_effort, "high");
+  assert.deepEqual(requests[1].thinking, { type: "disabled" });
+  assert.equal(Object.hasOwn(requests[1], "reasoning_effort"), false);
+  assert.match(requests[1].messages[1].content, /Be concise/);
+  assert.deepEqual(result.metadata.usage, {
+    inputTokens: 220,
+    outputTokens: 6480,
+    reasoningTokens: 6100,
+  });
+  assert.equal(result.metadata.repairAttempts, 1);
+});
+
 test("DeepSeek authentication failures are not retried and cancellation propagates", async () => {
   let requestCount = 0;
   const failedGateway = createAiGateway({

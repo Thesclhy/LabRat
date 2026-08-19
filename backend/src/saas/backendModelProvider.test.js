@@ -414,6 +414,60 @@ test("draftExperimentBrowserPlan uses an Anthropic-compatible empty invariants s
   assert.equal(result.reviewPlan.invariants.length, 0);
 });
 
+test("DeepSeek drafts Experiment Browser plans without thinking", async () => {
+  let requestBody = null;
+  const provider = createBackendModelProvider({
+    config: {
+      aiProvider: "deepseek",
+      deepseekApiKey: "deepseek-secret",
+      deepseekModel: "deepseek-v4-pro",
+      deepseekBaseUrl: "https://api.deepseek.com",
+    },
+    fetchImpl: async (_url, request) => {
+      requestBody = JSON.parse(request.body);
+      return {
+        ok: true,
+        async json() {
+          return {
+            choices: [{
+              finish_reason: "stop",
+              message: {
+                role: "assistant",
+                content: JSON.stringify({
+                  requestSummary: "Publish Exp1.",
+                  sourceSelections: [],
+                  experimentSelections: [],
+                  reviewPlan: {
+                    processingSteps: ["Read Exp1."],
+                    missingValueHandling: "Keep missing values as null.",
+                    experimentOutput: { summary: "Add Exp1." },
+                    browserView: { summary: "Show Exp1." },
+                    invariants: [],
+                  },
+                  displayPlan: ["Add Exp1."],
+                  warnings: [],
+                }),
+              },
+            }],
+          };
+        },
+      };
+    },
+  });
+
+  const result = await provider.draftExperimentBrowserPlan({
+    originalRequest: "Publish Exp1.",
+    confirmedRegions: [],
+    activeExperiments: [],
+  }, {
+    inspectSourceRange: async () => ({}),
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(requestBody.thinking, { type: "disabled" });
+  assert.equal(Object.hasOwn(requestBody, "reasoning_effort"), false);
+});
+
 test("draftAnalysisProgram sees exact inputs and returns Python only after plan acceptance", async () => {
   const provider = createBackendModelProvider({
     config: {

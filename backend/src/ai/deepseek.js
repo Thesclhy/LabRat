@@ -65,6 +65,7 @@ function usageFrom(body) {
   return {
     inputTokens: Number(body?.usage?.prompt_tokens) || 0,
     outputTokens: Number(body?.usage?.completion_tokens) || 0,
+    reasoningTokens: Number(body?.usage?.completion_tokens_details?.reasoning_tokens) || 0,
   };
 }
 
@@ -177,7 +178,7 @@ export async function requestDeepSeekJsonWithTools({
     { role: "system", content: outputSystem(system, outputSchema) },
     { role: "user", content: prompt },
   ];
-  const usage = { inputTokens: 0, outputTokens: 0 };
+  const usage = { inputTokens: 0, outputTokens: 0, reasoningTokens: 0 };
   const toolDefinitions = new Map(tools.map((tool) => [tool.name, tool]));
   try {
     for (let round = 0; round <= maxToolRounds; round += 1) {
@@ -190,6 +191,7 @@ export async function requestDeepSeekJsonWithTools({
       if (!response.ok) return response;
       usage.inputTokens += response.usage.inputTokens;
       usage.outputTokens += response.usage.outputTokens;
+      usage.reasoningTokens += response.usage.reasoningTokens;
       const { choice } = response;
       if (choice.finish_reason === "length") {
         return {

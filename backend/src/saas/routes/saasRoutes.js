@@ -96,6 +96,7 @@ function planningWarningFromError(error) {
   const errors = asArray(error?.details?.errors).slice(0, 8);
   const first = errors[0] || null;
   const providerWarning = error?.details?.warning || null;
+  const providerMetadata = error?.details?.providerMetadata || null;
   const location = Number.isInteger(Number(first?.line)) ? ` at line ${Number(first.line)}` : "";
   const detailMessage = first?.message
     ? `${first.message}${location}.`
@@ -115,6 +116,17 @@ function planningWarningFromError(error) {
             code: providerWarning.code || null,
             message: providerWarning.message || null,
             detail: providerWarning.detail || null,
+            ...(providerMetadata ? {
+              provider: providerMetadata.provider || null,
+              model: providerMetadata.model || null,
+              latencyMs: Number(providerMetadata.latencyMs) || 0,
+              usage: {
+                inputTokens: Number(providerMetadata.usage?.inputTokens) || 0,
+                outputTokens: Number(providerMetadata.usage?.outputTokens) || 0,
+                reasoningTokens: Number(providerMetadata.usage?.reasoningTokens) || 0,
+              },
+              repairAttempts: Number(providerMetadata.repairAttempts) || 0,
+            } : {}),
           },
         } : {}),
       },
@@ -1422,6 +1434,7 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
       }],
     });
     const planningWarnings = [...asArray(agentRun.warnings)];
+    let failedDraftMetadata = null;
     if (
       acceptedRegionUnderstandings.length
       || (
@@ -1439,6 +1452,7 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
           signal: requestAbortController.signal,
         });
       } catch (error) {
+        failedDraftMetadata = error?.details?.providerMetadata || null;
         const planningWarning = planningWarningFromError(error);
         planningWarnings.push(planningWarning);
         reply = `I created an analysis thread, but the backend could not draft a reviewable plan. ${planningWarning.message}`;
@@ -1455,7 +1469,7 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
         ? "I created an Experiment Browser data thread, but confirmed workbook regions or active experiment data are required before I can draft the reviewed plan."
         : "I created an analysis thread, but user-confirmed workbook regions are required before I can draft the reviewed analysis plan.";
     }
-    const draftMetadata = currentPlanRevision?.draftMetadata || {};
+    const draftMetadata = currentPlanRevision?.draftMetadata || failedDraftMetadata || {};
     const existingUsage = agentRun.usage || {};
     agentRun = await context.store.updateAgentRun(agentRun.id, {
       visibleSteps: [
@@ -1518,6 +1532,8 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
           + (Number(draftMetadata.usage?.inputTokens) || 0),
         outputTokens: (Number(existingUsage.outputTokens) || 0)
           + (Number(draftMetadata.usage?.outputTokens) || 0),
+        reasoningTokens: (Number(existingUsage.reasoningTokens) || 0)
+          + (Number(draftMetadata.usage?.reasoningTokens) || 0),
         latencyMs: (Number(existingUsage.latencyMs) || 0)
           + (Number(draftMetadata.latencyMs) || 0),
       },
