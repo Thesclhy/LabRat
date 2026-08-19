@@ -43,7 +43,7 @@ function templateVersion(overrides = {}) {
   };
 }
 
-function seedExperiment(store, index, { value = index * 10, unit = "%", columnId = "yield_pct", displayName = "Yield" } = {}) {
+function seedExperiment(store, index, { value = index * 10, unit = "%", columnId = "yield_pct", displayName = "Yield", label = `Exp${index}` } = {}) {
   const experimentId = `experiment_${index}`;
   const snapshotId = `snapshot_${index}`;
   const headId = `head_${index}`;
@@ -54,7 +54,7 @@ function seedExperiment(store, index, { value = index * 10, unit = "%", columnId
     status: "accepted",
     experimentRecords: [{
       experimentId,
-      label: `Exp${index}`,
+      label,
       fields: [{
         columnId,
         fieldKey: columnId,
@@ -71,7 +71,7 @@ function seedExperiment(store, index, { value = index * 10, unit = "%", columnId
     id: experimentId,
     labId: project.labId,
     projectId: project.id,
-    canonicalLabel: `Exp${index}`,
+    canonicalLabel: label,
     aliases: [],
   });
   store.experimentSnapshotHeads.set(headId, {
@@ -97,14 +97,18 @@ async function compatibilityFixture(count, options = {}) {
   return { store, experimentIds, compatibility };
 }
 
-test("reusable template compatibility accepts one, two, and three frozen experiments", async () => {
-  for (const count of [1, 2, 3]) {
+test("reusable template compatibility accepts one through the hard maximum and blocks overflow", async () => {
+  for (const count of [1, 2, 3, 6, 12]) {
     const { compatibility } = await compatibilityFixture(count);
     assert.equal(compatibility.status, "ready");
     assert.equal(compatibility.experimentCount, count);
     assert.equal(compatibility.frozenHeadRefs.length, count);
     assert.deepEqual(compatibility.experimentSelections.map((item) => item.columnIndexes), Array.from({ length: count }, () => [0]));
   }
+  await assert.rejects(
+    () => compatibilityFixture(13),
+    (error) => error.code === "chart_template_experiment_count_invalid",
+  );
 });
 
 test("reusable template compatibility blocks missing and unit-incompatible scalars", async () => {
@@ -189,7 +193,53 @@ test("deterministic renderer adapts experiment count while preserving margins an
   });
   assert.equal(rendered.executorResult.result.plotly.data[0].x.length, experimentIds.length);
   assert.deepEqual(rendered.executorResult.result.plotly.layout.margin, { t: 40, r: 20, b: 50, l: 60 });
+  assert.equal(rendered.executorResult.result.resolvedGeometry.schemaVersion, "labrat.resolvedChartGeometry.v1");
+  assert.equal(rendered.executorResult.result.resolvedGeometry.plotArea.widthRatio >= 0.65, true);
   assert.equal(rendered.sourceRefs.length, 3);
+});
+
+test("deterministic renderer preserves grouped, stacked, overlay, and faceted policies", async () => {
+  for (const [comparisonMode, expectedBarMode] of [["grouped", "group"], ["stacked_components", "stack"], ["overlay", "overlay"]]) {
+    const { store, compatibility } = await compatibilityFixture(3);
+    const version = templateVersion({ encoding: { chartType: "bar", comparisonMode, xRole: "experiment", yRole: "value" } });
+    const artifacts = buildReusableChartTemplateApplicationArtifacts({
+      project, actorUserId, templateVersion: version, compatibility,
+      idempotencyKey: `mode_${comparisonMode}`, requestHash: `hash_${comparisonMode}`,
+    });
+    const experiments = compatibility.experimentSelections.map((selection) => {
+      const head = compatibility.frozenHeadRefs.find((item) => item.experimentId === selection.experimentId);
+      const record = store.dataSnapshots.get(head.dataSnapshotId).experimentRecords[0];
+      return { experimentId: selection.experimentId, label: record.label, activeHead: head, fields: record.fields.map((field, columnIndex) => ({ ...field, columnIndex })) };
+    });
+    const rendered = executeReusableChartTemplate({ templateVersion: version, application: artifacts.application, experiments });
+    assert.equal(rendered.executorResult.result.plotly.layout.barmode, expectedBarMode);
+    if (comparisonMode === "overlay") {
+      assert.equal(rendered.executorResult.result.plotly.data.length, 3);
+      assert.deepEqual(rendered.executorResult.result.plotly.data.map((trace) => trace.name), ["Exp1", "Exp2", "Exp3"]);
+    }
+  }
+
+  const { store, compatibility } = await compatibilityFixture(6);
+  const facetedVersion = templateVersion({
+    encoding: { chartType: "bar", comparisonMode: "faceted", xRole: "experiment", yRole: "value" },
+    geometryPolicy: { facet: { maxColumns: 3, panelWidthPx: 400, panelHeightPx: 300 } },
+  });
+  const artifacts = buildReusableChartTemplateApplicationArtifacts({
+    project, actorUserId, templateVersion: facetedVersion, compatibility,
+    idempotencyKey: "mode_faceted", requestHash: "hash_faceted",
+  });
+  const experiments = compatibility.experimentSelections.map((selection) => {
+    const head = compatibility.frozenHeadRefs.find((item) => item.experimentId === selection.experimentId);
+    const record = store.dataSnapshots.get(head.dataSnapshotId).experimentRecords[0];
+    return { experimentId: selection.experimentId, label: record.label, activeHead: head, fields: record.fields.map((field, columnIndex) => ({ ...field, columnIndex })) };
+  });
+  const rendered = executeReusableChartTemplate({ templateVersion: facetedVersion, application: artifacts.application, experiments });
+  assert.equal(rendered.executorResult.result.plotly.data.length, 6);
+  assert.equal(rendered.executorResult.result.plotly.data[1].xaxis, "x2");
+  assert.deepEqual(
+    { rows: rendered.executorResult.result.resolvedGeometry.facets.rows, columns: rendered.executorResult.result.resolvedGeometry.facets.columns },
+    { rows: 2, columns: 3 },
+  );
 });
 
 test("chart_template_v1 execution never calls the model provider or Python executor", async () => {
@@ -220,6 +270,7 @@ test("chart_template_v1 execution never calls the model provider or Python execu
   });
   assert.equal(result.analysisRun.status, "awaiting_result_review", JSON.stringify(result.analysisRun.payload));
   assert.equal(result.analysisResult.result.plotly.data[0].x.length, 2);
+  assert.equal(result.analysisResult.result.resolvedGeometry.schemaVersion, "labrat.resolvedChartGeometry.v1");
   assert.equal((await store.findReusableChartTemplateApplicationById(artifacts.application.id)).status, "result_ready");
 });
 

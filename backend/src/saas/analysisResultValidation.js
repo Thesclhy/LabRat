@@ -1,9 +1,11 @@
 import { ANALYSIS_RUNTIME_VERSION } from "./analysisSchemas.js";
 import { stableDataHash } from "./dataPlanSchemas.js";
+import { RESOLVED_CHART_GEOMETRY_SCHEMA_VERSION } from "./reusableChartGeometry.js";
 
 const MAX_TRACES = 10_000;
 const MAX_TRACE_POINTS = 1_000_000;
 const MAX_RESULT_BYTES = 100 * 1024 * 1024;
+const MAX_RESOLVED_GEOMETRY_BYTES = 64 * 1024;
 const ALLOWED_TRACE_TYPES = new Set(["bar", "scatter"]);
 const UNSAFE_STRING = /(?:<\s*script\b|javascript\s*:|data\s*:\s*text\/html)/i;
 const UNSAFE_KEYS = new Set(["images", "frames"]);
@@ -89,6 +91,75 @@ function plottableX(value) {
 
 function plottableY(value) {
   return value == null || (typeof value === "number" && Number.isFinite(value));
+}
+
+function resolvedGeometry(rawValue, adapter, errors) {
+  if (!isObject(rawValue)) {
+    if (adapter === "chart_template_v1") {
+      errors.push(resultError(
+        "analysis_resolved_geometry_required",
+        "Reusable chart results require a resolved geometry summary.",
+      ));
+    }
+    return null;
+  }
+  const value = structuredClone(rawValue);
+  if (value.schemaVersion !== RESOLVED_CHART_GEOMETRY_SCHEMA_VERSION) {
+    errors.push(resultError(
+      "analysis_resolved_geometry_invalid",
+      `Resolved geometry requires ${RESOLVED_CHART_GEOMETRY_SCHEMA_VERSION}.`,
+    ));
+  }
+  const width = Number(value.figure?.widthPx);
+  const height = Number(value.figure?.heightPx);
+  if (!Number.isFinite(width) || width < 240 || width > 8000 || !Number.isFinite(height) || height < 180 || height > 8000) {
+    errors.push(resultError(
+      "analysis_resolved_geometry_invalid",
+      "Resolved figure dimensions are outside the supported range.",
+    ));
+  }
+  for (const [name, ratio] of Object.entries({
+    widthRatio: value.plotArea?.widthRatio,
+    heightRatio: value.plotArea?.heightRatio,
+    minimumWidthRatio: value.plotArea?.minimumWidthRatio,
+    minimumHeightRatio: value.plotArea?.minimumHeightRatio,
+  })) {
+    const number = Number(ratio);
+    if (!Number.isFinite(number) || number <= 0 || number > 1) {
+      errors.push(resultError(
+        "analysis_resolved_geometry_invalid",
+        `Resolved plot-area ${name} is outside the supported range.`,
+      ));
+    }
+  }
+  if (
+    Number(value.plotArea?.widthRatio) < Number(value.plotArea?.minimumWidthRatio)
+    || Number(value.plotArea?.heightRatio) < Number(value.plotArea?.minimumHeightRatio)
+  ) {
+    errors.push(resultError(
+      "analysis_resolved_geometry_invalid",
+      "Resolved geometry falls below its accepted minimum plot-area ratio.",
+    ));
+  }
+  for (const side of ["top", "right", "bottom", "left"]) {
+    const margin = Number(value.marginsPx?.[side]);
+    if (!Number.isFinite(margin) || margin < 0 || margin > 1000) {
+      errors.push(resultError(
+        "analysis_resolved_geometry_invalid",
+        `Resolved ${side} margin is outside the supported range.`,
+      ));
+    }
+  }
+  errors.push(...finiteAndSafeErrors(value, "resolvedGeometry"));
+  const byteLength = Buffer.byteLength(JSON.stringify(value), "utf8");
+  if (byteLength > MAX_RESOLVED_GEOMETRY_BYTES) {
+    errors.push(resultError(
+      "analysis_resolved_geometry_invalid",
+      "Resolved geometry exceeds the bounded summary size.",
+      { byteLength, maximumBytes: MAX_RESOLVED_GEOMETRY_BYTES },
+    ));
+  }
+  return value;
 }
 
 function invariantValidation(invariants, traces, errors) {
@@ -307,6 +378,7 @@ export function validateAnalysisResult({
     reason: String(item?.reason || "Excluded by the accepted analysis plan."),
   }));
   const checks = invariantValidation(plan?.reviewPlan?.invariants, traces, errors);
+  const geometry = resolvedGeometry(rawResult.resolvedGeometry, executorResult?.adapter, errors);
   const result = {
     plotly: {
       data: traces,
@@ -314,6 +386,7 @@ export function validateAnalysisResult({
     },
     exclusions,
     checks,
+    ...(geometry ? { resolvedGeometry: geometry } : {}),
     summary: {
       pointCount,
       seriesCount: traces.length,
@@ -354,6 +427,7 @@ export function validateAnalysisResult({
     contentHash,
     resultPreviewHash: stableDataHash({
       plotly: result.plotly,
+      resolvedGeometry: geometry,
       exclusions,
       checks,
       validation,

@@ -1,4 +1,5 @@
 import { SUPPORTED_CHART_TYPES } from "../charts/services/chartSpec.js";
+import { RESOLVED_CHART_GEOMETRY_SCHEMA_VERSION } from "./reusableChartGeometry.js";
 
 const ALLOWED_CHART_TYPES = new Set(SUPPORTED_CHART_TYPES);
 const ANALYSIS_CHART_SPEC_VERSION = "labrat.chartSpec.v3";
@@ -140,6 +141,32 @@ function validateAnalysisResultChartSpec(chartSpec) {
       "Default chart view references traces outside the complete Plotly result.",
       { unknownTraceIds: unknown },
     );
+  }
+  if (chartSpec.templateLineage) {
+    if (
+      !isObject(chartSpec.resolvedGeometry)
+      || chartSpec.resolvedGeometry.schemaVersion !== RESOLVED_CHART_GEOMETRY_SCHEMA_VERSION
+    ) {
+      throw validationError(
+        "invalid_analysis_chart_spec",
+        "Template-derived ChartSpecs require the immutable resolved geometry summary.",
+      );
+    }
+    const widthRatio = Number(chartSpec.resolvedGeometry.plotArea?.widthRatio);
+    const heightRatio = Number(chartSpec.resolvedGeometry.plotArea?.heightRatio);
+    const minimumWidthRatio = Number(chartSpec.resolvedGeometry.plotArea?.minimumWidthRatio);
+    const minimumHeightRatio = Number(chartSpec.resolvedGeometry.plotArea?.minimumHeightRatio);
+    if (
+      !Number.isFinite(widthRatio)
+      || !Number.isFinite(heightRatio)
+      || widthRatio < minimumWidthRatio
+      || heightRatio < minimumHeightRatio
+    ) {
+      throw validationError(
+        "invalid_analysis_chart_spec",
+        "Template-derived ChartSpec geometry falls below its accepted plot-area minimum.",
+      );
+    }
   }
 }
 

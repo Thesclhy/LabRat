@@ -15,6 +15,22 @@ Keep entries concise, newest first, and include:
 
 ## 2026-08-19
 
+- Completed reusable chart creation Milestone 4. Added deterministic
+  selection-order color/marker/dash/bar-pattern allocation; explicit grouped,
+  stacked-component, overlay, and faceted rendering; preferred/minimum plot
+  ratios; bounded margin growth; title wrapping; long-label rotation; legend
+  wrapping and fallback; bounded facet grid growth with shared axes; and
+  fail-closed unreadable-geometry handling. Template execution now emits a
+  bounded `labrat.resolvedChartGeometry.v1` summary, result validation requires
+  and hashes it, and ChartSpec publication preserves it immutably for reload
+  and export. Focused geometry, renderer, validation, and publication coverage
+  passed 33/33; full verification passed 293/293 frontend tests, 256/260
+  backend tests with four expected skips, the production build with the
+  existing Plotly chunk-size warning, and `git diff --check`. The first
+  sandboxed full-verification attempt was interrupted because restricted local
+  server binding left route tests waiting; the authorized backend rerun passed.
+  The next reusable-chart slice is Milestone 5 fast reuse frontend.
+
 - Corrected DeepSeek truncation behavior after a live confirmed-workbook
   onboarding plan consumed two high-reasoning attempts and still returned
   `finish_reason: length`. Experiment Browser plan drafting now starts with

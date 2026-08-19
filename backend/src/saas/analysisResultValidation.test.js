@@ -34,6 +34,22 @@ function plotlyResult(overrides = {}) {
   };
 }
 
+function geometry() {
+  return {
+    schemaVersion: "labrat.resolvedChartGeometry.v1",
+    figure: { widthPx: 1200, heightPx: 800, aspectRatio: 1.5 },
+    marginsPx: { top: 60, right: 35, bottom: 75, left: 85 },
+    plotArea: {
+      widthRatio: 0.9,
+      heightRatio: 0.8313,
+      preferredWidthRatio: 0.76,
+      preferredHeightRatio: 0.72,
+      minimumWidthRatio: 0.65,
+      minimumHeightRatio: 0.62,
+    },
+  };
+}
+
 test("accepts authoritative Plotly and deterministically assigns trace ids", () => {
   const validated = validateAnalysisResult({
     run: { id: "run_1" },
@@ -47,6 +63,25 @@ test("accepts authoritative Plotly and deterministically assigns trace ids", () 
   assert.equal(validated.result.plotly.data[0].traceId, "trace_1");
   assert.equal(validated.result.plotly.data[0].meta.labrat.traceId, "trace_1");
   assert.match(validated.contentHash, /^sha256_/);
+});
+
+test("template results require and preserve bounded resolved geometry", () => {
+  const missing = validateAnalysisResult({
+    plan: { reviewPlan: { invariants: [] } },
+    executorResult: { ...executorResult(plotlyResult()), adapter: "chart_template_v1" },
+  });
+  assert.equal(missing.ok, false);
+  assert.equal(missing.errors.some((item) => item.code === "analysis_resolved_geometry_required"), true);
+
+  const accepted = validateAnalysisResult({
+    plan: { reviewPlan: { invariants: [] } },
+    executorResult: {
+      ...executorResult(plotlyResult({ resolvedGeometry: geometry() })),
+      adapter: "chart_template_v1",
+    },
+  });
+  assert.equal(accepted.ok, true);
+  assert.deepEqual(accepted.result.resolvedGeometry, geometry());
 });
 
 test("preserves multiple tables as independent Plotly curves and readable exclusions", () => {

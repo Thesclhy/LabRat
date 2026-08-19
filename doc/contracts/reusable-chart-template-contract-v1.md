@@ -334,6 +334,15 @@ The AnalysisResult/ChartSpec stores resolved Plotly layout and a bounded
 `resolvedGeometry` summary. The template keeps preferences; historical charts
 never recalculate against a newer style or viewport.
 
+Milestone 4 persists that summary as `labrat.resolvedChartGeometry.v1`. It
+records the resolved figure dimensions, margins, actual/preferred/minimum plot
+ratios, legend placement and wrapping, label decisions, optional facet grid and
+panel size, and bounded trace style assignments. Template results without this
+summary, summaries above the payload bound, non-finite geometry, and layouts
+below their accepted minima fail result validation. Publication copies the
+summary into the immutable ChartSpec so reload and export use the accepted
+Plotly geometry rather than recalculating it.
+
 ## Template Application And Analysis Lineage
 
 The user action `Preview` confirms applying one accepted template version to
@@ -409,12 +418,15 @@ blockers are resolved, the deterministic accepted plan plus queued AnalysisRun.
 The existing run execute, preview, revise, and accept-and-create-chart routes
 remain the only result execution/review/publication path.
 
-The first deterministic executor slice accepts the scalar-selection recipes
+The deterministic executor accepts the scalar-selection recipes
 compiled from eligible approved ChartSpecs. Other recipe operations fail with
 `chart_template_recipe_unsupported` until their bounded interpreters are
 implemented; they are never silently ignored. Baseline one/two/three experiment
-rendering is included. Full adaptive geometry, faceting, overflow allocation,
-and long-label policy remain Milestone 4.
+rendering now includes deterministic selection-order style allocation,
+grouped/stacked/overlay/faceted policies, adaptive bounded geometry, facet
+growth, legend fallback, and long-label handling. Accepted project-mapping
+style allocation remains unavailable until a reviewed mapping contract exists;
+it fails closed instead of guessing.
 
 Style extraction from a reference asset is deferred beyond the minimal API.
 When implemented it creates a draft profile version and never accepts it.

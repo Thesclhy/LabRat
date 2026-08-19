@@ -90,6 +90,9 @@ export function buildAnalysisResultChartSpec({
     ...(planRevision.plan?.templateLineage
       ? { templateLineage: structuredClone(planRevision.plan.templateLineage) }
       : {}),
+    ...(result?.result?.resolvedGeometry
+      ? { resolvedGeometry: structuredClone(result.result.resolvedGeometry) }
+      : {}),
     sourceRefs: structuredClone(result.sourceRefs || []),
     plotly,
     traceCatalog: catalog,

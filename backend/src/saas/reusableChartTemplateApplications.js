@@ -1,12 +1,14 @@
 import { ANALYSIS_RUNTIME_VERSION } from "./analysisSchemas.js";
 import { stableDataHash } from "./dataPlanSchemas.js";
 import { makeId } from "./ids.js";
+import {
+  allocateSelectionOrderStyles,
+  resolveReusableChartGeometry,
+} from "./reusableChartGeometry.js";
 
 export const REUSABLE_CHART_TEMPLATE_APPLICATION_SCHEMA_VERSION = "labrat.reusableChartTemplateApplication.v1";
 export const REUSABLE_CHART_TEMPLATE_SLOT_BINDING_SCHEMA_VERSION = "labrat.reusableChartTemplateSlotBinding.v1";
 export const CHART_TEMPLATE_EXECUTION_STRATEGY = "chart_template_v1";
-
-const DEFAULT_COLORS = ["#245B78", "#D97935", "#4D8C57", "#8A5FA8", "#C34F5A", "#5B7DB1"];
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -431,9 +433,6 @@ export function executeReusableChartTemplate({ templateVersion, application, exp
     applicationError("chart_template_recipe_unsupported", "The accepted scalar recipe contains invalid slot references.", 422);
   }
   const bindings = new Map(asArray(application.bindings).map((binding) => [binding.slotId, binding]));
-  const colors = asArray(styleVersion?.palette?.colors).length
-    ? styleVersion.palette.colors
-    : DEFAULT_COLORS;
   const valuesBySlot = selectedSlotIds.map((slotId) => slots.find((slot) => slot.slotId === slotId)).map((slot) => {
     const binding = bindings.get(slot.slotId);
     if (!binding) applicationError("chart_template_input_missing", `Binding ${slot.slotId} is missing.`, 422);
@@ -462,22 +461,83 @@ export function executeReusableChartTemplate({ templateVersion, application, exp
     applicationError("chart_template_recipe_unsupported", `Chart type ${chartType} is not supported by the deterministic scalar renderer.`, 422);
   }
   const comparisonMode = text(templateVersion.encoding?.comparisonMode) || (chartType === "bar" ? "grouped" : "overlay");
-  const traces = valuesBySlot.map(({ slot, binding, points }, index) => {
-    const traceId = `template_${slot.slotId}`;
+  if (comparisonMode === "stacked_components" && chartType !== "bar") {
+    applicationError("chart_template_recipe_unsupported", "Stacked-component templates require bar traces.", 422);
+  }
+  if (comparisonMode === "grouped" && chartType !== "bar") {
+    applicationError("chart_template_recipe_unsupported", "Grouped templates require bar traces.", 422);
+  }
+  const slotStyles = allocateSelectionOrderStyles({ styleVersion, itemCount: valuesBySlot.length });
+  const experimentStyles = comparisonMode === "overlay"
+    ? allocateSelectionOrderStyles({ styleVersion, itemCount: labels.length })
+    : null;
+  const pointStyles = comparisonMode !== "faceted" && valuesBySlot.length === 1 && labels.length > 1
+    ? allocateSelectionOrderStyles({ styleVersion, itemCount: labels.length })
+    : null;
+  const traceDescriptors = comparisonMode === "faceted"
+    ? asArray(experiments).flatMap((experiment, experimentIndex) => valuesBySlot.map(({ slot }, slotIndex) => ({
+      traceId: `template_${slot.slotId}_${experiment.experimentId}`,
+      experimentIndex,
+      slotIndex,
+    })))
+    : comparisonMode === "overlay"
+      ? asArray(experiments).map((experiment, experimentIndex) => ({
+        traceId: `template_${experiment.experimentId}`,
+        experimentIndex,
+      }))
+    : valuesBySlot.map(({ slot }, slotIndex) => ({ traceId: `template_${slot.slotId}`, slotIndex }));
+  const styleAssignments = traceDescriptors.map((descriptor) => ({
+    traceId: descriptor.traceId,
+    ...(comparisonMode === "overlay" ? experimentStyles[descriptor.experimentIndex] : slotStyles[descriptor.slotIndex]),
+  }));
+  const geometry = resolveReusableChartGeometry({
+    styleVersion,
+    templateVersion,
+    comparisonMode,
+    chartType,
+    title: text(templateVersion.templateName) || "Reusable chart",
+    experimentLabels: labels,
+    legendLabels: comparisonMode === "overlay"
+      ? asArray(experiments).map((experiment) => experiment.label)
+      : valuesBySlot.map(({ slot }) => slot.label),
+    showLegend: comparisonMode === "overlay" ? labels.length > 1 : valuesBySlot.length > 1,
+    styleAssignments,
+  });
+  const trace = ({ slot, binding, points, traceId, style, experimentIndex = null, facetRef = null }) => {
+    const selectedPoints = experimentIndex == null ? points : [points[experimentIndex]];
+    const x = selectedPoints.map((point) => point.experiment.label);
+    const marker = pointStyles && experimentIndex == null
+      ? {
+        color: pointStyles.map((item) => item.color),
+        ...(chartType === "bar"
+          ? { pattern: { shape: pointStyles.map((item) => item.barPattern) } }
+          : { symbol: pointStyles.map((item) => item.markerSymbol) }),
+      }
+      : {
+        color: style.color,
+        ...(chartType === "bar"
+          ? { pattern: { shape: style.barPattern } }
+          : { symbol: style.markerSymbol }),
+      };
     return {
       traceId,
       type: chartType === "bar" ? "bar" : "scatter",
-      ...(chartType === "bar" ? {} : { mode: "lines+markers" }),
+      ...(chartType === "bar" ? {} : {
+        mode: "lines+markers",
+        line: { color: style.color, dash: style.lineDash },
+      }),
       name: slot.label,
-      x: labels,
-      y: points.map((point) => point.field.value),
-      marker: { color: colors[index % colors.length] },
+      x,
+      y: selectedPoints.map((point) => point.field.value),
+      marker,
+      ...(facetRef || {}),
+      ...(experimentIndex != null && experimentIndex > 0 ? { showlegend: false } : {}),
       meta: {
         labrat: {
           traceId,
           slotId: slot.slotId,
           columnId: binding.columnId,
-          sourceLineage: points.map((point) => ({
+          sourceLineage: selectedPoints.map((point) => ({
             experimentId: point.experiment.experimentId,
             activeHead: copy(point.experiment.activeHead),
             sourceRefs: copy(point.field.sourceRefs || []),
@@ -486,24 +546,81 @@ export function executeReusableChartTemplate({ templateVersion, application, exp
       },
       hovertemplate: `%{x}<br>${slot.label}: %{y}<extra></extra>`,
     };
-  });
+  };
+  const traces = comparisonMode === "faceted"
+    ? traceDescriptors.map((descriptor, index) => {
+      const value = valuesBySlot[descriptor.slotIndex];
+      return trace({
+        ...value,
+        traceId: descriptor.traceId,
+        style: styleAssignments[index],
+        experimentIndex: descriptor.experimentIndex,
+        facetRef: geometry.facetRefs[descriptor.experimentIndex],
+      });
+    })
+    : comparisonMode === "overlay"
+      ? traceDescriptors.map((descriptor, index) => {
+        const experiment = experiments[descriptor.experimentIndex];
+        const traceStyle = styleAssignments[index];
+        return {
+          traceId: descriptor.traceId,
+          type: chartType === "bar" ? "bar" : "scatter",
+          ...(chartType === "bar" ? {} : {
+            mode: "lines+markers",
+            line: { color: traceStyle.color, dash: traceStyle.lineDash },
+          }),
+          name: experiment.label,
+          x: valuesBySlot.map(({ slot }) => slot.label),
+          y: valuesBySlot.map(({ points }) => points[descriptor.experimentIndex].field.value),
+          marker: {
+            color: traceStyle.color,
+            ...(chartType === "bar"
+              ? { pattern: { shape: traceStyle.barPattern } }
+              : { symbol: traceStyle.markerSymbol }),
+          },
+          meta: {
+            labrat: {
+              traceId: descriptor.traceId,
+              experimentId: experiment.experimentId,
+              sourceLineage: valuesBySlot.map(({ slot, binding, points }) => ({
+                slotId: slot.slotId,
+                columnId: binding.columnId,
+                experimentId: experiment.experimentId,
+                activeHead: copy(experiment.activeHead),
+                sourceRefs: copy(points[descriptor.experimentIndex].field.sourceRefs || []),
+              })),
+            },
+          },
+          hovertemplate: `%{x}<br>${experiment.label}: %{y}<extra></extra>`,
+        };
+      })
+    : valuesBySlot.map((value, index) => trace({
+      ...value,
+      traceId: `template_${value.slot.slotId}`,
+      style: slotStyles[index],
+    }));
   const unit = text(slots[0]?.unitContract?.allowedUnits?.[0]);
   const layout = {
-    title: { text: text(templateVersion.templateName) || "Reusable chart" },
-    xaxis: { title: { text: "Experiment" } },
-    yaxis: { title: { text: unit || slots[0]?.label || "Value" } },
-    showlegend: traces.length > 1,
-    ...(chartType === "bar" ? {
-      barmode: comparisonMode === "stacked_components" ? "stack" : "group",
-    } : {}),
-    ...(styleVersion?.typography?.fontFamily ? { font: { family: styleVersion.typography.fontFamily } } : {}),
-    ...(styleVersion?.geometry?.preferredMarginsPx ? {
-      margin: {
-        t: styleVersion.geometry.preferredMarginsPx.top,
-        r: styleVersion.geometry.preferredMarginsPx.right,
-        b: styleVersion.geometry.preferredMarginsPx.bottom,
-        l: styleVersion.geometry.preferredMarginsPx.left,
+    ...geometry.layout,
+    xaxis: {
+      ...(geometry.layout.xaxis || {}),
+      title: { text: "Experiment", font: { size: geometry.resolvedStyle.typography.axisTitleSizePt } },
+      tickangle: geometry.tickAngle,
+      tickfont: { size: geometry.resolvedStyle.typography.tickSizePt },
+    },
+    yaxis: {
+      ...(geometry.layout.yaxis || {}),
+      title: {
+        text: unit || slots[0]?.label || "Value",
+        font: { size: geometry.resolvedStyle.typography.axisTitleSizePt },
       },
+      tickfont: { size: geometry.resolvedStyle.typography.tickSizePt },
+    },
+    showlegend: comparisonMode === "overlay" ? labels.length > 1 : valuesBySlot.length > 1,
+    ...(chartType === "bar" ? {
+      barmode: comparisonMode === "stacked_components"
+        ? "stack"
+        : comparisonMode === "overlay" ? "overlay" : "group",
     } : {}),
   };
   const sourceRefs = valuesBySlot.flatMap(({ slot, points }) => points.map((point) => ({
@@ -519,6 +636,7 @@ export function executeReusableChartTemplate({ templateVersion, application, exp
       runtime: { version: ANALYSIS_RUNTIME_VERSION, deterministic: true },
       result: {
         plotly: { data: traces, layout },
+        resolvedGeometry: geometry.resolvedGeometry,
         exclusions: [],
         checks: [],
       },

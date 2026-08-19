@@ -2,7 +2,7 @@
 
 Status: active QA plan
 Read when: implementing or reviewing reusable chart creation milestones.
-Last reviewed: 2026-08-18
+Last reviewed: 2026-08-19
 
 ## Contract And Persistence
 
@@ -30,13 +30,13 @@ Last reviewed: 2026-08-18
 
 ## Experiment Count And Encoding
 
-- [ ] One, two, three, recommended-maximum, and hard-maximum experiment cases.
-- [ ] Overlay adds one trace per experiment without changing axis semantics.
-- [ ] Grouped bars narrow within stable category bands.
-- [ ] Stacking follows declared components and never silently stacks experiments.
-- [ ] Facets follow the declared grid and panel-size policy.
-- [ ] The renderer never silently changes comparison mode.
-- [ ] Shared axes remain shared unless independent facets are explicit.
+- [x] One, two, three, recommended-maximum, and hard-maximum experiment cases.
+- [x] Overlay adds one trace per experiment without changing axis semantics.
+- [x] Grouped bars retain grouped mode within stable category bands.
+- [x] Stacking follows declared components and never silently stacks experiments.
+- [x] Facets follow the declared grid and panel-size policy.
+- [x] The renderer never silently changes comparison mode.
+- [x] Shared axes remain shared unless independent facets are explicit.
 
 ## Missing Data, Units, And Alignment
 
@@ -54,13 +54,13 @@ Last reviewed: 2026-08-18
 
 ## Style And Geometry
 
-- [ ] Two and three traces preserve preferred plot geometry when legend fits.
-- [ ] Long names trigger wrapping/fallback before plot-area shrinkage.
-- [ ] Preferred margins never exceed maximums.
-- [ ] Minimum plot-area ratios and minimum type size cannot be crossed.
-- [ ] Palette overflow uses the declared marker/dash policy or blocks.
-- [ ] Facet growth is bounded and preserves minimum panel size.
-- [ ] Resolved Plotly layout and geometry summary reload identically.
+- [x] Two and three traces preserve preferred plot geometry when legend fits.
+- [x] Long names trigger wrapping/fallback before plot-area shrinkage.
+- [x] Preferred margins never exceed maximums.
+- [x] Minimum plot-area ratios and minimum type size cannot be crossed.
+- [x] Palette overflow uses the declared marker/dash policy or blocks.
+- [x] Facet growth is bounded and preserves minimum panel size.
+- [x] Resolved Plotly layout and geometry summary reload identically.
 - [ ] Reference extraction remains draft and reports uncertain properties.
 
 ## Analysis, Publication, And Existing Workflows

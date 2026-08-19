@@ -93,11 +93,27 @@ Milestone 3 implements the deterministic template-application path:
 Adaptive manuscript geometry remains Milestone 4 and the fast template-picker
 frontend remains Milestone 5.
 
+## Reusable Chart Creation Milestone 4 — Complete
+
+Milestone 4 implements deterministic adaptive geometry and multi-experiment
+rendering for the reusable fast path:
+
+1. allocate selection-order colors with marker, dash, and bar-pattern overflow,
+   or block when the accepted palette policy requires it;
+2. preserve explicit overlay, grouped, stacked-component, and faceted modes;
+3. enforce preferred and minimum plot-area ratios while applying bounded
+   margins, title wrapping, long-label rotation, legend wrapping/fallback, and
+   bounded facet growth with shared axes;
+4. block unreadable output with `chart_template_geometry_unreadable` instead of
+   silently shrinking or changing comparison semantics;
+5. validate and persist `labrat.resolvedChartGeometry.v1` through immutable
+   AnalysisResult and ChartSpec records.
+
 ## Next Reusable Chart Milestone
 
-Milestone 4 is the next implementation slice: responsive plot-area geometry,
-bounded margin and legend fallback, palette overflow, long-label handling, and
-explicit grouped/stacked/faceted growth. It has not started.
+Milestone 5 is the next implementation slice: expose the deterministic path in
+Chart Review with template choice, experiment selection, compatibility and
+explicit-binding review, data coverage, preview, and normal result acceptance.
 
 ## Completed Milestone
 
@@ -497,8 +513,7 @@ Deployment work not included in this completed milestone:
 
 ## Next Recommended Slice
 
-1. Execute reusable chart creation Milestone 4 adaptive geometry and
-   multi-experiment rendering.
+1. Execute reusable chart creation Milestone 5 fast reuse frontend.
 2. Retain the configured Postgres route suite and repeatable migration smoke as
    a parallel operational priority after the coherent chart milestone.
 3. Operationalize the hardened analysis worker, secret management, timeouts,

@@ -99,6 +99,34 @@ function positiveInteger(value, field, maximum = 100) {
   return number;
 }
 
+function templateFiniteNumber(value, field, { minimum, maximum }) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < minimum || number > maximum) {
+    error("reusable_chart_template_invalid", `${field} is outside the supported range.`, 400, {
+      field,
+      minimum,
+      maximum,
+    });
+  }
+  return number;
+}
+
+function canonicalGeometryPolicy(value = {}) {
+  const source = isObject(value) ? value : {};
+  const facet = isObject(source.facet) ? source.facet : {};
+  return {
+    inheritStyleProfile: source.inheritStyleProfile !== false,
+    longLabelThreshold: positiveInteger(source.longLabelThreshold ?? 12, "geometryPolicy.longLabelThreshold", 80),
+    facet: {
+      maxColumns: positiveInteger(facet.maxColumns ?? 3, "geometryPolicy.facet.maxColumns", 6),
+      panelWidthPx: templateFiniteNumber(facet.panelWidthPx ?? 420, "geometryPolicy.facet.panelWidthPx", { minimum: 240, maximum: 2000 }),
+      panelHeightPx: templateFiniteNumber(facet.panelHeightPx ?? 320, "geometryPolicy.facet.panelHeightPx", { minimum: 180, maximum: 1600 }),
+      allowFigureGrowth: facet.allowFigureGrowth !== false,
+      sharedAxes: facet.sharedAxes !== false,
+    },
+  };
+}
+
 function margins(value, defaults, field) {
   const source = isObject(value) ? value : {};
   return Object.fromEntries(["top", "right", "bottom", "left"].map((side) => [
@@ -303,7 +331,7 @@ function validateTemplateDefinition(input = {}) {
     recipe: { schemaVersion: CHART_RECIPE_SCHEMA_VERSION, operations: copy(operations) },
     encoding,
     missingDataPolicy: isObject(source.missingDataPolicy) ? copy(source.missingDataPolicy) : {},
-    geometryPolicy: isObject(source.geometryPolicy) ? copy(source.geometryPolicy) : {},
+    geometryPolicy: canonicalGeometryPolicy(source.geometryPolicy),
     validation: isObject(source.validation) ? copy(source.validation) : { ok: true, errors: [] },
   };
 }

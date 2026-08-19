@@ -70,11 +70,10 @@ fast path uses stable accepted Experiment Browser fields/series, never silently
 binds ambiguous inputs, makes no provider call, generates no Python, and keeps
 the existing AnalysisResult/ChartSpec publication boundary. Milestones 1-3
 contracts, persistence, validators, eligibility derivation, lifecycle APIs,
-reviewed bindings, idempotent applications, and deterministic scalar execution
-are complete. Accepted chart review now includes the first inline
+reviewed bindings, idempotent applications, deterministic scalar execution,
+and adaptive multi-experiment geometry are complete. Accepted chart review now includes the first inline
 `Save as template` authoring action, including multi-scalar stacked-component
-eligibility; adaptive geometry and then the fast template-picker frontend are
-next. See
+eligibility; the fast template-picker frontend is next. See
 `doc/plans/reusable-chart-creation-plan.md` and
 `doc/contracts/reusable-chart-template-contract-v1.md`.
 
@@ -86,7 +85,7 @@ Use this split when deciding what to build:
   Browser projection.
 - Completed execution milestone: backend conversational analysis, reviewed calculation, analysis-result ChartSpec publication, and placement-local trace visibility.
 - Active chart program: reusable style/template persistence, deterministic
-  binding/execution, responsive geometry, fast reuse UI, template authoring,
+  binding/execution and responsive geometry, then fast reuse UI, template authoring,
   then optional reference-chart style onboarding.
 
 ## Recently Completed

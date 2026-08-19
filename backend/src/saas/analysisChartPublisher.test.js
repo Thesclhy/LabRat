@@ -192,6 +192,35 @@ test("builds a v3 ChartSpec with authoritative Plotly and a flat trace catalog",
   assert.deepEqual(spec.defaultChartView.visibleTraceIds, ["exp33"]);
 });
 
+test("builds immutable geometry into a template-derived ChartSpec", () => {
+  const value = fixture();
+  value.planRevision.plan.templateLineage = {
+    reusableChartTemplateId: "template_1",
+    reusableChartTemplateVersionId: "template_version_1",
+    reusableChartTemplateApplicationId: "template_application_1",
+    executionStrategy: "chart_template_v1",
+  };
+  value.result.result.resolvedGeometry = {
+    schemaVersion: "labrat.resolvedChartGeometry.v1",
+    figure: { widthPx: 1200, heightPx: 800, aspectRatio: 1.5 },
+    marginsPx: { top: 60, right: 35, bottom: 75, left: 85 },
+    plotArea: {
+      widthRatio: 0.9, heightRatio: 0.8313,
+      preferredWidthRatio: 0.76, preferredHeightRatio: 0.72,
+      minimumWidthRatio: 0.65, minimumHeightRatio: 0.62,
+    },
+  };
+  const spec = buildAnalysisResultChartSpec({
+    ...value,
+    defaultVisibleTraceIds: ["exp33", "exp32"],
+    actorUserId: "user_1",
+    createdAt: "2026-08-19T12:00:00.000Z",
+  });
+  assert.deepEqual(spec.resolvedGeometry, value.result.result.resolvedGeometry);
+  value.result.result.resolvedGeometry.figure.widthPx = 999;
+  assert.equal(spec.resolvedGeometry.figure.widthPx, 1200);
+});
+
 test("publishes a validated result atomically and replays the idempotency key", async () => {
   const value = seededStore();
   const request = {
@@ -257,6 +286,20 @@ test("publishes a chart from reviewed experiment selections and protects frozen 
     reusableChartTemplateApplicationId: "template_application_1",
     executionStrategy: "chart_template_v1",
   };
+  templated.result.result.resolvedGeometry = {
+    schemaVersion: "labrat.resolvedChartGeometry.v1",
+    figure: { widthPx: 1200, heightPx: 800, aspectRatio: 1.5 },
+    marginsPx: { top: 60, right: 35, bottom: 75, left: 85 },
+    plotArea: {
+      widthRatio: 0.7333,
+      heightRatio: 0.8313,
+      preferredWidthRatio: 0.7,
+      preferredHeightRatio: 0.72,
+      minimumWidthRatio: 0.65,
+      minimumHeightRatio: 0.62,
+    },
+  };
+  templated.store.analysisResults.set(templated.result.id, structuredClone(templated.result));
   templated.store.analysisPlanRevisions.set(
     templated.planRevision.id,
     structuredClone(templated.planRevision),

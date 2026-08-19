@@ -238,6 +238,7 @@ export function analysisResultSummary(result) {
     status: result.status,
     outputTarget: result.outputTarget || ANALYSIS_OUTPUT_TARGETS.CHART,
     summary,
+    resolvedGeometry: result.result?.resolvedGeometry || null,
     pointCount: Number(summary.pointCount) || 0,
     traceCount: Number(summary.seriesCount) || 0,
     experimentCount: Number(summary.experimentCount) || 0,
