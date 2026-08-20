@@ -1,7 +1,7 @@
 # SaaS API Contract v0
 
 Status: active
-Last reviewed: 2026-08-18
+Last reviewed: 2026-08-20
 
 This contract describes the server-first API that is implemented by `backend/src/saas/routes/saasRoutes.js`. The authoritative scientific path is:
 
@@ -324,7 +324,7 @@ a durable AnalysisThread, and selects only active confirmed workbook regions.
 Publishing a DataSnapshot is not required for chart planning. Unknown requests
 return clarification.
 
-`POST /api/projects/:projectId/agent/runs` returns user-facing text in the top-level `reply` field plus nullable `analysisThread` and `currentPlanRevision` fields. Provider configuration and credentials are backend-only. AgentRun usage stores provider, model, token, and latency metadata while planning records visible workflow steps rather than hidden chain-of-thought.
+`POST /api/projects/:projectId/agent/runs` returns user-facing text in the top-level `reply` field plus nullable `analysisThread` and `currentPlanRevision` fields. Provider configuration and credentials are backend-only. AgentRun usage stores provider, model, token, and latency metadata while planning records visible workflow steps rather than hidden chain-of-thought. Successful or failed planning may add `usage.planning` with bounded provider/model, initial/final/retry output budgets, attempt/repair/tool-round counts, stop reason, latency, and token counts. This additive JSON metadata never contains provider request bodies, credentials, authorization headers, or reasoning text.
 
 For `analysis_planning`, the backend owns drafting after the AnalysisThread has
 been durably created. Closing, refreshing, timing out, or cancelling the browser
@@ -333,6 +333,8 @@ The completed PlanRevision remains discoverable through the thread list/detail
 routes. A failed draft moves the thread to `plan_failed`; thread detail returns
 the persisted bounded `planFailure` copied from the owning AgentRun warning, so
 the UI can distinguish a provider/validation failure from an in-progress draft.
+When available, `planFailure.details.diagnostics` contains the same whitelisted
+numeric planning diagnostics and bounded provider/model/stop-reason strings.
 
 The planning provider receives bounded catalogs of active confirmed
 RegionUnderstandingRevisions and active experiment fields as ordered readable

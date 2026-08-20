@@ -93,11 +93,46 @@ function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function planningDiagnosticsFromMetadata(metadata) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const diagnostics = {};
+  const boundedString = (value, maxLength = 120) => {
+    const normalized = String(value || "").trim();
+    return normalized ? normalized.slice(0, maxLength) : null;
+  };
+  const copyString = (key, value, maxLength) => {
+    const normalized = boundedString(value, maxLength);
+    if (normalized) diagnostics[key] = normalized;
+  };
+  const copyNumber = (key, value) => {
+    const normalized = Number(value);
+    if (Number.isFinite(normalized) && normalized >= 0) diagnostics[key] = normalized;
+  };
+
+  copyString("provider", metadata.provider, 40);
+  copyString("model", metadata.model, 120);
+  copyString("stopReason", metadata.stopReason, 80);
+  copyNumber("requestedMaxTokens", metadata.requestedMaxTokens);
+  copyNumber("finalRequestedMaxTokens", metadata.finalRequestedMaxTokens);
+  copyNumber("truncationRetryMaxTokens", metadata.truncationRetryMaxTokens);
+  copyNumber("attemptCount", metadata.attemptCount);
+  copyNumber("repairAttempts", metadata.repairAttempts);
+  copyNumber("toolRounds", metadata.toolRounds);
+  copyNumber("latencyMs", metadata.latencyMs);
+  copyNumber("inputTokens", metadata.usage?.inputTokens);
+  copyNumber("outputTokens", metadata.usage?.outputTokens);
+  copyNumber("reasoningTokens", metadata.usage?.reasoningTokens);
+  return Object.keys(diagnostics).length ? diagnostics : null;
+}
+
 function planningWarningFromError(error) {
   const errors = asArray(error?.details?.errors).slice(0, 8);
   const first = errors[0] || null;
   const providerWarning = error?.details?.warning || null;
-  const providerMetadata = error?.details?.providerMetadata || null;
+  const providerMetadata = error?.details?.providerMetadata
+    || error?.details?.metadata
+    || null;
+  const diagnostics = planningDiagnosticsFromMetadata(providerMetadata);
   const location = Number.isInteger(Number(first?.line)) ? ` at line ${Number(first.line)}` : "";
   const detailMessage = first?.message
     ? `${first.message}${location}.`
@@ -109,7 +144,7 @@ function planningWarningFromError(error) {
       detailMessage,
     ].filter(Boolean).join(" "),
     severity: "warning",
-    ...((errors.length || providerWarning) ? {
+    ...((errors.length || providerWarning || diagnostics) ? {
       details: {
         ...(errors.length ? { errors } : {}),
         ...(providerWarning ? {
@@ -130,6 +165,7 @@ function planningWarningFromError(error) {
             } : {}),
           },
         } : {}),
+        ...(diagnostics ? { diagnostics } : {}),
       },
     } : {}),
   };
@@ -1456,7 +1492,9 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
           signal: requestAbortController.signal,
         });
       } catch (error) {
-        failedDraftMetadata = error?.details?.providerMetadata || null;
+        failedDraftMetadata = error?.details?.providerMetadata
+          || error?.details?.metadata
+          || null;
         const planningWarning = planningWarningFromError(error);
         planningWarnings.push(planningWarning);
         reply = `I created an analysis thread, but the backend could not draft a reviewable plan. ${planningWarning.message}`;
@@ -1474,6 +1512,7 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
         : "I created an analysis thread, but user-confirmed workbook regions are required before I can draft the reviewed analysis plan.";
     }
     const draftMetadata = currentPlanRevision?.draftMetadata || failedDraftMetadata || {};
+    const planningDiagnostics = planningDiagnosticsFromMetadata(draftMetadata);
     const existingUsage = agentRun.usage || {};
     agentRun = await context.store.updateAgentRun(agentRun.id, {
       visibleSteps: [
@@ -1536,10 +1575,14 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
           + (Number(draftMetadata.usage?.inputTokens) || 0),
         outputTokens: (Number(existingUsage.outputTokens) || 0)
           + (Number(draftMetadata.usage?.outputTokens) || 0),
-        reasoningTokens: (Number(existingUsage.reasoningTokens) || 0)
-          + (Number(draftMetadata.usage?.reasoningTokens) || 0),
+        ...((Object.hasOwn(existingUsage, "reasoningTokens")
+          || Object.hasOwn(draftMetadata.usage || {}, "reasoningTokens")) ? {
+          reasoningTokens: (Number(existingUsage.reasoningTokens) || 0)
+            + (Number(draftMetadata.usage?.reasoningTokens) || 0),
+        } : {}),
         latencyMs: (Number(existingUsage.latencyMs) || 0)
           + (Number(draftMetadata.latencyMs) || 0),
+        ...(planningDiagnostics ? { planning: planningDiagnostics } : {}),
       },
       warnings: planningWarnings,
       updatedBy: auth.user.id,

@@ -2,7 +2,7 @@
 
 Status: active
 Read when: deciding what LabRat should build next.
-Last reviewed: 2026-08-19
+Last reviewed: 2026-08-20
 
 This is the short active plan. Current execution status lives in `doc/current-milestone.md`; detailed implementation plans live under `doc/plans/`.
 
@@ -97,6 +97,13 @@ Use this split when deciding what to build:
 
 ## Recently Completed
 
+- Experiment Browser planning output hardening: this stage now receives 16,000
+  output tokens and only an explicit provider length stop triggers its single
+  32,000-token same-provider retry. Durable safe diagnostics retain budgets,
+  attempts, token counts, tool rounds, latency, and stop reason without hidden
+  reasoning or credentials. A real DeepSeek synthetic `A1:Y63` smoke completed
+  in the first attempt; source-inspection input compaction remains a separate
+  follow-up.
 - Deployment provider gate: local backend/Compose and production now require an
   explicit `LABRAT_AI_PROVIDER`. GitHub supplies only the validated provider
   name; both real keys remain in Lightsail's root-owned environment file. The

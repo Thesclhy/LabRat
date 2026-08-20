@@ -158,6 +158,18 @@ renders accepted fraction percentages as percent points. Existing snapshots
 remain immutable and require a newly reviewed publication to gain corrected
 metadata.
 
+## Completed Output-Budget Milestone
+
+Experiment Browser plan drafting now starts with a 16,000-token output budget
+and retries once at 32,000 only after an explicit provider length stop. Empty,
+malformed, and schema-invalid output keeps the original budget; all other model
+tasks retain their prior limits. Durable AgentRun and `plan_failed` diagnostics
+record bounded provider/model, budget, attempt, usage, tool-round, latency, and
+stop-reason fields without credentials or reasoning text. A real DeepSeek smoke
+with the current duplicated `cells` plus `rows` representation for synthetic
+`A1:Y63` data completed in one 16,000-token attempt and one tool round. Input
+compaction remains a separate follow-up.
+
 ## Completed Milestone
 
 The approved region-level Workbook Understanding cutover documented

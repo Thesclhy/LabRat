@@ -1,7 +1,7 @@
 # AI Boundaries
 
 Status: active
-Last reviewed: 2026-08-18
+Last reviewed: 2026-08-20
 
 LabRat uses AI as a proposal and workflow layer. Authorization, bounded evidence reads, schema validation, deterministic execution, hashing, and persistence remain backend responsibilities.
 
@@ -250,12 +250,21 @@ malformed, or schema-invalid output may receive one same-provider correction;
 authentication errors, cancellation, and invalid configuration are not
 retried. Tool arguments are validated before any handler executes.
 
-DeepSeek V4 Pro runs intent classification, workbook-region explanation,
+Experiment Browser plan drafting alone starts with a 16,000-token output
+budget. An explicit Anthropic `max_tokens` or DeepSeek `length` stop raises its
+single same-provider retry to 32,000 tokens; empty, malformed, and schema-invalid
+repairs remain at 16,000. Other intent, explanation, planning, and program calls
+retain their task-specific limits. Gateway metadata may expose bounded numeric
+budgets, attempt counts, input/output/reasoning token counts, tool rounds,
+latency, and stop reason. It must never expose or persist `reasoning_content`,
+credentials, authorization headers, or provider request bodies.
+
+DeepSeek V4 Pro runs intent classification, workbook-region explanation, and
 read-only answers, and Experiment Browser plan drafting with thinking disabled.
-Chart planning and Python program generation use high-effort thinking. If a
-structured response reaches its output-token limit, the gateway makes at most
-one concise same-provider retry with thinking disabled; it does not repeat the
-same high-reasoning request. Tool-loop `reasoning_content` may be
+Chart planning and Python program generation use high-effort thinking. A
+truncated structured request receives at most one concise same-provider retry
+with thinking disabled; it does not repeat the same high-reasoning request.
+Tool-loop `reasoning_content` may be
 returned transiently to DeepSeek as required by its protocol, but it is never
 persisted, logged, exposed through AgentRun, or sent to the frontend.
 The default model and request policy follow DeepSeek's official

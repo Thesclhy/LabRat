@@ -568,7 +568,8 @@ export function createBackendModelProvider({
       return requestStructuredWithTools({
         system: EXPERIMENT_BROWSER_PLAN_SYSTEM,
         payload: input,
-        maxTokens: 6400,
+        maxTokens: 16000,
+        truncationRetryMaxTokens: 32000,
         outputSchema: EXPERIMENT_BROWSER_PLAN_OUTPUT_SCHEMA,
         tools: [{
           name: "inspect_source_range",
