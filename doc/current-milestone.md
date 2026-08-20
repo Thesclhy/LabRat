@@ -2,7 +2,7 @@
 
 Status: complete
 Read when: checking what the next implementation slice should be.
-Last reviewed: 2026-08-18
+Last reviewed: 2026-08-20
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
 
@@ -15,6 +15,18 @@ This file tracks the active execution state. Keep `doc/plan.md` as the short roa
 - Completed milestone: Backend conversational analysis and chart workflow implementation.
 - Completed milestone: progressive full-sheet workbook loading and
   checkbox-controlled selection highlights.
+
+## Completed Output-Budget Milestone
+
+Experiment Browser plan drafting now starts with a 16,000-token output budget
+and retries once at 32,000 only after an explicit provider length stop. Empty,
+malformed, and schema-invalid output keeps the original budget; all other model
+tasks retain their prior limits. Durable AgentRun and `plan_failed` diagnostics
+record bounded provider/model, budget, attempt, usage, tool-round, latency, and
+stop-reason fields without credentials or reasoning text. A real DeepSeek smoke
+with the current duplicated `cells` plus `rows` representation for synthetic
+`A1:Y63` data completed in one 16,000-token attempt and one tool round. Input
+compaction remains a separate follow-up.
 
 ## Completed Milestone
 

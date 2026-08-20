@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-08-18
+Last reviewed: 2026-08-20
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -12,6 +12,26 @@ Keep entries concise, newest first, and include:
 - meaningful changes
 - verification
 - follow-ups or residual risk
+
+## 2026-08-20
+
+- Hardened Experiment Browser plan drafting against provider output truncation.
+  Its initial output budget is now 16,000 tokens, with one 32,000-token retry
+  only after an explicit Anthropic/DeepSeek length stop; empty, malformed, and
+  schema-invalid repair stays at 16,000, and every other model task retains its
+  prior limit. Gateway and durable AgentRun/`plan_failed` diagnostics now retain
+  whitelisted budgets, attempt counts, input/output/reasoning token counts,
+  tool rounds, latency, and stop reason without request bodies, credentials, or
+  reasoning text. Added an independent real-provider `A1:Y63` smoke command
+  that intentionally preserves the current `cells` plus `rows` representation.
+- Verification passed 22 focused gateway/provider tests, the durable failure
+  route regression, the complete backend suite (235 passed, 5 existing skips),
+  all 289 frontend tests, production build, and `npm run codex:verify`. The real
+  DeepSeek V4 Pro smoke passed in one 16,000-token attempt and one tool round:
+  145,419 input tokens, 3,471 output tokens, and 2,435 reasoning tokens. The
+  3,150 serialized cell-object occurrences for 1,575 unique cells confirm that
+  source-inspection input deduplication/compaction remains the next optimization
+  if planning cost or latency is addressed.
 
 ## 2026-08-18
 

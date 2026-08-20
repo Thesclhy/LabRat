@@ -1,7 +1,7 @@
 # AI Boundaries
 
 Status: active
-Last reviewed: 2026-08-18
+Last reviewed: 2026-08-20
 
 LabRat uses AI as a proposal and workflow layer. Authorization, bounded evidence reads, schema validation, deterministic execution, hashing, and persistence remain backend responsibilities.
 
@@ -212,6 +212,15 @@ mode and includes the target schema in its bounded prompt. Empty, truncated,
 malformed, or schema-invalid output may receive one same-provider correction;
 authentication errors, cancellation, and invalid configuration are not
 retried. Tool arguments are validated before any handler executes.
+
+Experiment Browser plan drafting alone starts with a 16,000-token output
+budget. An explicit Anthropic `max_tokens` or DeepSeek `length` stop raises its
+single same-provider retry to 32,000 tokens; empty, malformed, and schema-invalid
+repairs remain at 16,000. Other intent, explanation, planning, and program calls
+retain their task-specific limits. Gateway metadata may expose bounded numeric
+budgets, attempt counts, input/output/reasoning token counts, tool rounds,
+latency, and stop reason. It must never expose or persist `reasoning_content`,
+credentials, authorization headers, or provider request bodies.
 
 DeepSeek V4 Pro runs intent classification, workbook-region explanation, and
 read-only answers with thinking disabled. Analysis planning and Python program

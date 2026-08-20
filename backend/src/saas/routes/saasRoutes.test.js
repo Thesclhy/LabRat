@@ -1917,8 +1917,27 @@ test("analysis planning failures remain inspectable on the durable thread", asyn
     ok: false,
     warning: {
       code: "ai_request_failed",
-      message: "Anthropic request failed.",
+      message: "DeepSeek request failed.",
       detail: "TypeError: ECONNRESET: fetch failed",
+    },
+    metadata: {
+      provider: "deepseek",
+      model: "deepseek-v4-pro",
+      latencyMs: 900,
+      usage: {
+        inputTokens: 1200,
+        outputTokens: 32000,
+        reasoningTokens: 30000,
+      },
+      requestedMaxTokens: 16000,
+      finalRequestedMaxTokens: 32000,
+      truncationRetryMaxTokens: 32000,
+      attemptCount: 2,
+      repairAttempts: 1,
+      toolRounds: 1,
+      stopReason: "length",
+      reasoningContent: "private reasoning must not persist",
+      apiKey: "test-secret-must-not-persist",
     },
   });
 
@@ -1932,6 +1951,25 @@ test("analysis planning failures remain inspectable on the durable thread", asyn
     assert.equal(body.analysisThread.status, "plan_failed");
     assert.equal(body.currentPlanRevision, null);
     assert.equal(body.agentRun.warnings.at(-1).details.provider.code, "ai_request_failed");
+    assert.deepEqual(body.agentRun.warnings.at(-1).details.diagnostics, {
+      provider: "deepseek",
+      model: "deepseek-v4-pro",
+      stopReason: "length",
+      requestedMaxTokens: 16000,
+      finalRequestedMaxTokens: 32000,
+      truncationRetryMaxTokens: 32000,
+      attemptCount: 2,
+      repairAttempts: 1,
+      toolRounds: 1,
+      latencyMs: 900,
+      inputTokens: 1200,
+      outputTokens: 32000,
+      reasoningTokens: 30000,
+    });
+    assert.equal(body.agentRun.usage.reasoningTokens, 30000);
+    assert.equal(body.agentRun.usage.planning.finalRequestedMaxTokens, 32000);
+    assert.equal(JSON.stringify(body).includes("private reasoning must not persist"), false);
+    assert.equal(JSON.stringify(body).includes("test-secret-must-not-persist"), false);
 
     await store.updateAnalysisThread(body.analysisThread.id, { status: "planning" });
 
@@ -1940,6 +1978,10 @@ test("analysis planning failures remain inspectable on the durable thread", asyn
     const detail = await detailResponse.json();
     assert.equal(detail.analysisThread.status, "plan_failed");
     assert.equal(detail.planFailure.details.provider.detail, "TypeError: ECONNRESET: fetch failed");
+    assert.equal(detail.planFailure.details.diagnostics.attemptCount, 2);
+    assert.equal(detail.planFailure.details.diagnostics.reasoningTokens, 30000);
+    assert.equal(JSON.stringify(detail).includes("private reasoning must not persist"), false);
+    assert.equal(JSON.stringify(detail).includes("test-secret-must-not-persist"), false);
   } finally {
     testModelProvider.draftAnalysisPlan = originalDraft;
   }

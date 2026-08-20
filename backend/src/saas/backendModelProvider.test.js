@@ -72,6 +72,9 @@ test("validates and returns structured intent metadata", async () => {
     model: "claude-test",
     latencyMs: 7,
     usage: { inputTokens: 31, outputTokens: 12 },
+    requestedMaxTokens: 300,
+    finalRequestedMaxTokens: 300,
+    attemptCount: 1,
   });
 });
 
@@ -151,7 +154,9 @@ test("DeepSeek uses task-specific thinking policies through the backend provider
   assert.equal(intent.ok, true);
   assert.equal(plan.ok, true);
   assert.deepEqual(requests[0].thinking, { type: "disabled" });
+  assert.equal(requests[0].max_tokens, 300);
   assert.deepEqual(requests[1].thinking, { type: "enabled" });
+  assert.equal(requests[1].max_tokens, 6400);
   assert.equal(requests[1].reasoning_effort, "high");
   assert.equal(requests[1].tools[0].function.name, "inspect_source_range");
 });
@@ -191,6 +196,36 @@ test("passes request cancellation through to the Anthropic fetch", async () => {
   );
 
   assert.equal(result.ok, true);
+});
+
+test("read-only answers retain the 800-token budget", async () => {
+  const provider = createBackendModelProvider({
+    config: {
+      aiProvider: "anthropic",
+      anthropicApiKey: "server-secret",
+      anthropicModel: "claude-test",
+    },
+    fetchImpl: async (_url, request) => {
+      const body = JSON.parse(request.body);
+      assert.equal(body.max_tokens, 800);
+      return {
+        ok: true,
+        async json() {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({ answer: "Ready.", evidenceIds: [] }),
+            }],
+          };
+        },
+      };
+    },
+  });
+
+  const result = await provider.answerReadOnly({ question: "Status?" });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.answer, "Ready.");
 });
 
 test("rejects malformed provider JSON as a bounded warning", async () => {
@@ -288,7 +323,7 @@ test("draftAnalysisPlan selects exact confirmed ranges without generating Python
           .experimentSelections.items.properties.columnIndexes.items,
         false,
       );
-      assert.ok(body.max_tokens >= 6000);
+      assert.equal(body.max_tokens, 6400);
       return {
         ok: true,
         async json() {
@@ -367,6 +402,7 @@ test("draftExperimentBrowserPlan uses an Anthropic-compatible empty invariants s
       );
       assert.equal(body.tools[0].name, "inspect_source_range");
       assert.match(body.tools[0].description, /2500 cells/);
+      assert.equal(body.max_tokens, 16000);
       return {
         ok: true,
         async json() {
@@ -412,6 +448,9 @@ test("draftExperimentBrowserPlan uses an Anthropic-compatible empty invariants s
 
   assert.equal(result.ok, true);
   assert.equal(result.reviewPlan.invariants.length, 0);
+  assert.equal(result.metadata.requestedMaxTokens, 16000);
+  assert.equal(result.metadata.finalRequestedMaxTokens, 16000);
+  assert.equal(result.metadata.truncationRetryMaxTokens, 32000);
 });
 
 test("draftAnalysisProgram sees exact inputs and returns Python only after plan acceptance", async () => {
@@ -423,6 +462,7 @@ test("draftAnalysisProgram sees exact inputs and returns Python only after plan 
     },
     fetchImpl: async (_url, request) => {
       const body = JSON.parse(request.body);
+      assert.equal(body.max_tokens, 6400);
       assert.match(body.system, /analyze\(inputs, labrat\)/);
       assert.match(body.system, /inputs\['tables'\]/);
       assert.match(body.system, /Plotly data is authoritative/i);
@@ -470,6 +510,7 @@ test("draftExperimentBrowserProgram describes indexed columns and backend-assign
     },
     fetchImpl: async (_url, request) => {
       const body = JSON.parse(request.body);
+      assert.equal(body.max_tokens, 6400);
       assert.match(body.system, /inputs\['tables'\].*always lists, never dictionaries/i);
       assert.match(body.system, /tables_by_id = \{item\['tableId'\]/);
       assert.match(body.system, /row-major lists of lists/i);
@@ -551,7 +592,7 @@ test("interpretWorkbookRegion requests a concise structured region explanation",
       assert.ok(roleSchema.enum.includes(""));
       assert.ok(roleSchema.enum.includes("outcome"));
       assert.equal(roleSchema.enum.includes("measurement"), false);
-      assert.ok(body.max_tokens >= 3000);
+      assert.equal(body.max_tokens, 3200);
       assert.equal(payload.region.sheetName, "Runs");
       assert.equal(payload.region.inspection.cells.length, 4);
       assert.equal("completeWorkbook" in payload, false);

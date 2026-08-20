@@ -1,7 +1,7 @@
 # Backend API Contract
 
 Status: active compatibility note
-Last reviewed: 2026-08-18
+Last reviewed: 2026-08-20
 
 The backend is server-first. The complete implemented project API is defined in `doc/contracts/saas-api-contract-v0.md` and routed by `backend/src/saas/routes/saasRoutes.js`.
 
@@ -22,6 +22,14 @@ diagnostics. `LABRAT_AI_PROVIDER` has no implicit default and must be exactly
 selected key empty and reports `configured: false`; production rejects a
 missing selected key during startup. The unselected key is never added to an
 outbound provider request.
+
+Structured requests may configure a separate truncation-only retry budget.
+Experiment Browser plan drafting uses 16,000 tokens initially and 32,000 only
+for its one retry after an explicit provider length stop. The gateway retains
+the original budget for empty, malformed, and schema-invalid repairs. Safe
+metadata includes budgets, attempt counts, token counts (including DeepSeek's
+numeric reasoning-token count), tool rounds, latency, and stop reason; hidden
+reasoning content and credentials never cross the gateway boundary.
 
 Unknown or retired routes return `404`.
 

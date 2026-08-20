@@ -92,6 +92,10 @@ export async function requestAnthropicJson({
       };
     }
     const body = await response.json();
+    const usage = {
+      inputTokens: Number(body.usage?.input_tokens) || 0,
+      outputTokens: Number(body.usage?.output_tokens) || 0,
+    };
     if (body.stop_reason === "max_tokens") {
       return {
         ok: false,
@@ -100,6 +104,8 @@ export async function requestAnthropicJson({
           message: "Model provider output reached the token limit.",
           severity: "warning",
         },
+        usage,
+        stopReason: body.stop_reason,
       };
     }
     const text = (body.content || []).map((item) => item?.text || "").join("\n").trim();
@@ -111,15 +117,14 @@ export async function requestAnthropicJson({
           message: "Model provider returned no proposal text.",
           severity: "warning",
         },
+        usage,
+        stopReason: body.stop_reason || null,
       };
     }
     return {
       ok: true,
       text,
-      usage: {
-        inputTokens: Number(body.usage?.input_tokens) || 0,
-        outputTokens: Number(body.usage?.output_tokens) || 0,
-      },
+      usage,
       stopReason: body.stop_reason || null,
     };
   } catch (error) {
@@ -196,6 +201,8 @@ export async function requestAnthropicJsonWithTools({
             severity: "warning",
             ...(detail ? { detail } : {}),
           },
+          usage,
+          toolRounds: round,
         };
       }
       const body = await response.json();
@@ -209,6 +216,9 @@ export async function requestAnthropicJsonWithTools({
             message: "Model provider output reached the token limit.",
             severity: "warning",
           },
+          usage,
+          stopReason: body.stop_reason,
+          toolRounds: round,
         };
       }
       const content = Array.isArray(body.content) ? body.content : [];
@@ -223,6 +233,9 @@ export async function requestAnthropicJsonWithTools({
               message: "Model provider returned no proposal text.",
               severity: "warning",
             },
+            usage,
+            stopReason: body.stop_reason || null,
+            toolRounds: round,
           };
         }
         return {
@@ -241,6 +254,9 @@ export async function requestAnthropicJsonWithTools({
             message: "Model provider exceeded the allowed number of read-only inspection rounds.",
             severity: "warning",
           },
+          usage,
+          stopReason: body.stop_reason || null,
+          toolRounds: round,
         };
       }
       messages.push({ role: "assistant", content });
@@ -289,6 +305,8 @@ export async function requestAnthropicJsonWithTools({
         message: "Model provider exceeded the allowed number of read-only inspection rounds.",
         severity: "warning",
       },
+      usage,
+      toolRounds: maxToolRounds,
     };
   } catch (error) {
     if (error?.name === "AbortError") throw error;

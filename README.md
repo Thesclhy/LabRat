@@ -106,6 +106,14 @@ synthetic reviewed plan with a read-only tool call:
 npm --prefix backend run smoke:ai
 ```
 
+To exercise the larger Experiment Browser planning workload separately, the
+following real-provider smoke sends a synthetic `A1:Y63` table with the same
+current `cells` plus `rows` representation used by source inspection:
+
+```bash
+npm --prefix backend run smoke:ai:browser-plan
+```
+
 ## Blank Project Behavior
 
 - Starts from an empty dataset when no saved blank project exists.
