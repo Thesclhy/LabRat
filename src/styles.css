@@ -5880,6 +5880,24 @@ td button {
   line-height: 1.25;
   overflow-wrap: anywhere;
 }
+.analysis-review-primary-actions {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+.analysis-review-composer .place-in-manuscript {
+  min-width: 0;
+  border: 1px solid #1d4ed8;
+  border-radius: 7px;
+  background: #1d4ed8;
+  color: #fff;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
 .analysis-review-modification {
   min-width: 0;
   max-width: 100%;

@@ -830,14 +830,13 @@ export function ProjectOverview({
       setDeletingWorkbookSessionId("");
     }
   };
-  const chartReviewDetail = summary.pendingAnalysisCount
-    ? `${summary.pendingAnalysisCount} analysis request${summary.pendingAnalysisCount === 1 ? "" : "s"} still need review`
-    : "Describe a chart, review the exact source ranges and processing plan, then run it";
-  const manageChartDetail = summary.staleChartSpecCount
+  const chartLibraryDetail = summary.staleChartSpecCount
     ? `${summary.chartSpecCount} active ChartSpecs. Some older specs are hidden until regenerated.`
-    : summary.chartSpecCount
-      ? `${summary.chartSpecCount} active ChartSpecs are available for Manuscript insertion`
-      : "Accepted analysis results become durable ChartSpecs after review";
+    : summary.pendingAnalysisCount
+      ? `${summary.pendingAnalysisCount} analysis request${summary.pendingAnalysisCount === 1 ? "" : "s"} still need review`
+      : summary.chartSpecCount
+        ? `${summary.chartSpecCount} active ChartSpecs are available for Manuscript insertion`
+        : "Create or reuse charts from the Manuscript, then manage accepted ChartSpecs here";
   const nextAction = !summary.profileComplete
     ? { label: "Edit profile", action: onOpenProfile }
     : pendingWorkbookReviewRegions.length
@@ -850,9 +849,7 @@ export function ProjectOverview({
             ? { label: "View confirmed regions", action: openWorkbookList }
             : workbookReviewSessions.length
               ? { label: "Review workbook", action: openWorkbookList }
-              : !summary.chartSpecCount
-        ? { label: "Create chart", action: onOpenChartReview }
-        : { label: "Build manuscript", action: onGoManuscript };
+              : { label: "Build manuscript", action: onGoManuscript };
   return (
     <main className="project-overview">
       <section className="project-overview-hero">
@@ -902,9 +899,8 @@ export function ProjectOverview({
           actionDisabled={!summary.hasPublishedData}
           actionTitle={summary.hasPublishedData ? "Open accepted experiment records" : "Publish reviewed workbook experiments first"}
         />
-        <ProjectOverviewCard title="Create and review charts" value={`${summary.analysisCount} analyses`} detail={chartReviewDetail} action="Create chart" onClick={onOpenChartReview} />
-        <ProjectOverviewCard title="Manage approved charts" value={`${summary.chartSpecCount} specs`} detail={manageChartDetail} action="Manage approved charts" onClick={() => onOpenChartReview?.({ statusFilter: "active" })} />
-        <ProjectOverviewCard title="Manuscript" value={summary.manuscriptCount ? "Draft" : "Not started"} detail={summary.manuscriptUpdatedAt ? `Updated ${formatShortDate(summary.manuscriptUpdatedAt)}. Insert approved ChartSpecs only.` : "Insert approved ChartSpecs or future FigurePackages into the canvas"} action="Insert approved charts" onClick={onGoManuscript} />
+        <ProjectOverviewCard title="Chart library" value={`${summary.chartSpecCount} approved chart${summary.chartSpecCount === 1 ? "" : "s"}`} detail={chartLibraryDetail} action="Manage charts" onClick={() => onOpenChartReview?.({ statusFilter: "active", initialMode: "edit" })} />
+        <ProjectOverviewCard title="Manuscript" value={summary.manuscriptCount ? "Draft" : "Not started"} detail={summary.manuscriptUpdatedAt ? `Updated ${formatShortDate(summary.manuscriptUpdatedAt)}. Create, reuse, or place approved charts from the canvas.` : "Create a chart, use a saved template, or insert an approved ChartSpec directly from the canvas"} action="Open manuscript" onClick={onGoManuscript} />
       </section>
       <WorkbookReviewSessionDialog
         open={workbookListOpen}
@@ -1809,6 +1805,7 @@ export function ChartReviewModal({
   projectId,
   reusableChartTemplates = [],
   statusFilter,
+  initialMode = "review",
   onInterpretChart,
   onLoadChartSpecDetail,
   onInsertChartSpec,
@@ -1816,10 +1813,13 @@ export function ChartReviewModal({
   onOpenImportReview,
   onClose,
 }) {
-  const [reviewMode, setReviewMode] = useState(statusFilter === "active" ? "edit" : "review");
+  const resolvedInitialMode = statusFilter === "active"
+    ? "edit"
+    : ["review", "template", "edit"].includes(initialMode) ? initialMode : "review";
+  const [reviewMode, setReviewMode] = useState(resolvedInitialMode);
   useEffect(() => {
-    if (open) setReviewMode(statusFilter === "active" ? "edit" : "review");
-  }, [open, statusFilter]);
+    if (open) setReviewMode(resolvedInitialMode);
+  }, [open, resolvedInitialMode]);
   if (!open) return null;
   const canReviewCharts = allowAnalysisPrompt;
   const title = statusFilter === "active" ? "Manage approved charts" : "Create and review charts";
@@ -2619,6 +2619,8 @@ function App() {
   const [profileChatOpen, setProfileChatOpen] = useState(false);
   const [chartReviewOpen, setChartReviewOpen] = useState(false);
   const [chartReviewStatusFilter, setChartReviewStatusFilter] = useState("");
+  const [chartReviewInitialMode, setChartReviewInitialMode] = useState("review");
+  const [chartLaunchContext, setChartLaunchContext] = useState(null);
   const [workbookReviewState, setWorkbookReviewState] = useState({ loading: false, error: "", revisionLoading: false, confirmLoading: false, revisionError: "", clarification: null, session: null, sourceDocument: null, regions: [] });
   const [workbookReviewDraftRegions, setWorkbookReviewDraftRegions] = useState([]);
   const [activeWorkbookReviewDraftRegionId, setActiveWorkbookReviewDraftRegionId] = useState("");
@@ -2627,6 +2629,8 @@ function App() {
   const resetReviewState = () => {
     setBackendChartInterpretState({ loading: false, result: null, error: "" });
     setChartReviewStatusFilter("");
+    setChartReviewInitialMode("review");
+    setChartLaunchContext(null);
     setWorkbookReviewState({ loading: false, error: "", revisionLoading: false, confirmLoading: false, revisionError: "", clarification: null, session: null, sourceDocument: null, regions: [] });
     setWorkbookReviewDraftRegions([]);
     setActiveWorkbookReviewDraftRegionId("");
@@ -2716,9 +2720,9 @@ function App() {
   };
 
 
-  const requestChartSpecManuscriptInsert = (chartSpecId) => {
+  const requestChartSpecManuscriptInsert = (chartSpecId, point = null, { direct = false } = {}) => {
     if (!chartSpecId) return;
-    setChartSpecInsertRequest({ chartSpecId, requestId: uid() });
+    setChartSpecInsertRequest({ chartSpecId, point, insertMode: direct ? "direct" : "configure", requestId: uid() });
     setTab("manuscript");
   };
 
@@ -2899,6 +2903,8 @@ function App() {
     setWorkspaceMode("dashboard");
     setChartReviewOpen(false);
     setChartReviewStatusFilter("");
+    setChartReviewInitialMode("review");
+    setChartLaunchContext(null);
     setProfileChatOpen(false);
     setSelectedProjectId(activeProjectId || selectedProjectId || projectList[0]?.id || "");
   };
@@ -2916,11 +2922,17 @@ function App() {
   const openChartReview = (options = "") => {
     const isOptionsObject = options && typeof options === "object" && !("currentTarget" in options);
     setChartReviewStatusFilter(isOptionsObject && options.statusFilter === "active" ? "active" : "");
+    setChartReviewInitialMode(isOptionsObject && ["review", "template", "edit"].includes(options.initialMode)
+      ? options.initialMode
+      : "review");
+    setChartLaunchContext(isOptionsObject ? options.launchContext || null : null);
     setChartReviewOpen(true);
   };
-  const closeChartReview = () => {
+  const closeChartReview = ({ preserveLaunchContext = false } = {}) => {
     setChartReviewOpen(false);
     setChartReviewStatusFilter("");
+    setChartReviewInitialMode("review");
+    if (!preserveLaunchContext) setChartLaunchContext(null);
   };
   const openWorkbookUpload = () => {
     if (!activeProjectId) {
@@ -3353,12 +3365,13 @@ function App() {
   };
   const openAnalysisReview = ({ thread, revision, run = null, result = null, executionStrategy = "model_generated_python" }) => {
     if (!thread?.id || !revision?.id) return;
-    closeChartReview();
+    closeChartReview({ preserveLaunchContext: true });
     setAnalysisReviewState({ thread, revision, run, result, executionStrategy });
     setAgentOpen(false);
   };
   const closeAnalysisReview = () => {
     setAnalysisReviewState(null);
+    setChartLaunchContext(null);
   };
   const acceptAnalysisResultChart = async ({
     runId,
@@ -3599,7 +3612,7 @@ function App() {
           )}
         />
       )}
-      {tab === "manuscript" && <ManuscriptCanvas blocks={blocks} setBlocks={setBlocks} staged={staged} setStaged={setStaged} references={references} chartTemplates={chartTemplates} setChartTemplates={setChartTemplates} chartSpecs={activeChartSpecsForProject(projectState)} pages={pages} setPages={setPages} canvasHeight={canvasHeight} setCanvasHeight={setCanvasHeight} pageOrientationPreference={pageOrientationPreference} setPageOrientationPreference={setPageOrientationPreference} chartSpecInsertRequest={chartSpecInsertRequest} onChartSpecInsertRequestHandled={clearChartSpecManuscriptInsertRequest} onLoadChartSpecDetail={loadChartSpecDetailForManuscript} onSelectedChartContextChange={setSelectedChartContext} onRequestChartAnalysis={requestChartAnalysis} onSaveProject={save} />}
+      {tab === "manuscript" && <ManuscriptCanvas blocks={blocks} setBlocks={setBlocks} staged={staged} setStaged={setStaged} references={references} chartTemplates={chartTemplates} setChartTemplates={setChartTemplates} chartSpecs={activeChartSpecsForProject(projectState)} pages={pages} setPages={setPages} canvasHeight={canvasHeight} setCanvasHeight={setCanvasHeight} pageOrientationPreference={pageOrientationPreference} setPageOrientationPreference={setPageOrientationPreference} chartSpecInsertRequest={chartSpecInsertRequest} onChartSpecInsertRequestHandled={clearChartSpecManuscriptInsertRequest} onLoadChartSpecDetail={loadChartSpecDetailForManuscript} onSelectedChartContextChange={setSelectedChartContext} onRequestChartAnalysis={requestChartAnalysis} onRequestChartWorkflow={(mode, point) => openChartReview({ initialMode: mode, launchContext: { origin: "manuscript", point } })} onSaveProject={save} />}
       {tab === "reference" && <ReferenceLibrary references={references} setReferences={setReferences} />}
       {analysisReviewState?.thread?.id && (
         <AnalysisReviewWorkspace
@@ -3623,6 +3636,11 @@ function App() {
               .then(applyProjectWorkspaceRefresh)
               .catch((error) => setSourceError(error?.message || String(error)));
           }}
+          onPlaceAcceptedChart={chartLaunchContext?.origin === "manuscript" ? (chartSpec) => {
+            requestChartSpecManuscriptInsert(chartSpec?.id, chartLaunchContext.point || null, { direct: true });
+            setAnalysisReviewState(null);
+            setChartLaunchContext(null);
+          } : null}
           loadTemplateEligibility={getServerChartTemplateEligibility}
           executionStrategy={analysisReviewState.executionStrategy || "model_generated_python"}
         />
@@ -3636,6 +3654,7 @@ function App() {
         projectId={activeProjectId}
         reusableChartTemplates={asArray(projectState?.reusableChartTemplates)}
         statusFilter={chartReviewStatusFilter}
+        initialMode={chartReviewInitialMode}
         onInterpretChart={interpretBackendChart}
         onLoadChartSpecDetail={loadChartSpecDetailForManuscript}
         onInsertChartSpec={(chartSpecId) => {

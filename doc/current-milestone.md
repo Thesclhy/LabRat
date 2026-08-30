@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking what the next implementation slice should be.
-Last reviewed: 2026-08-19
+Last reviewed: 2026-08-30
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
 
@@ -172,6 +172,18 @@ golden workbook-to-Browser workflow. Full automated verification plus desktop
 and 390x844 browser QA now cover the integrated upload/review/publish path.
 
 ## Current Position
+
+Completed Manuscript-first chart creation: the canvas page context menu now
+starts either the existing reviewed natural-language chart workflow or the
+existing deterministic saved-template workflow at the right-click location.
+The launch intent survives plan/result review, but accepting a ChartSpec does
+not silently mutate the manuscript; an explicit `Place in manuscript` action
+places the chart block immediately at the preserved coordinates using the
+trace visibility already accepted on the result preview. The separate
+approved-chart library insertion action retains its trace-configuration dialog,
+and Overview now provides a management-focused Chart library rather than a
+parallel chart creation pathway. No backend, ChartSpec, template, or manuscript
+persistence contract changed.
 
 Completed responsive Projects-dashboard scaling correction: desktop side panels,
 gaps, and padding now shrink fluidly with the available CSS viewport, while the

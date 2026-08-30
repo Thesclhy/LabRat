@@ -43,7 +43,7 @@ const TOOLBAR_TRANSITION = {
   BLOCK_SWITCH: "block-switch",
 };
 
-export function ManuscriptCanvas({ blocks, setBlocks, staged, setStaged, references, chartTemplates, setChartTemplates, chartSpecs, pages, setPages, canvasHeight, setCanvasHeight, pageOrientationPreference, setPageOrientationPreference, chartSpecInsertRequest = null, onChartSpecInsertRequestHandled, onLoadChartSpecDetail, onSelectedChartContextChange, onRequestChartAnalysis, onSaveProject }) {
+export function ManuscriptCanvas({ blocks, setBlocks, staged, setStaged, references, chartTemplates, setChartTemplates, chartSpecs, pages, setPages, canvasHeight, setCanvasHeight, pageOrientationPreference, setPageOrientationPreference, chartSpecInsertRequest = null, onChartSpecInsertRequestHandled, onLoadChartSpecDetail, onSelectedChartContextChange, onRequestChartAnalysis, onRequestChartWorkflow, onSaveProject }) {
   const [selected, setSelected] = useState(null);
   const [editingTextBoxId, setEditingTextBoxId] = useState(null);
   const [textToolbarState, setTextToolbarState] = useState(null);
@@ -443,10 +443,16 @@ export function ManuscriptCanvas({ blocks, setBlocks, staged, setStaged, referen
     if (!safeChartSpecs.some((spec) => spec.id === chartSpecId)) return;
     if (chartInsertRequestRef.current === chartSpecInsertRequest.requestId) return;
     chartInsertRequestRef.current = chartSpecInsertRequest.requestId;
-    openInsertChartModal(null, chartSpecId)
+    const summary = safeChartSpecs.find((spec) => spec.id === chartSpecId);
+    const placement = chartSpecInsertRequest.insertMode === "direct"
+      ? ensureCompleteChartSpec(summary).then((chartSpec) => {
+        createChartBlock(chartSpec, chartSpecInsertRequest.point || null);
+      })
+      : openInsertChartModal(chartSpecInsertRequest.point || null, chartSpecId);
+    placement
       .catch(() => {})
       .finally(() => onChartSpecInsertRequestHandled?.(chartSpecInsertRequest.requestId));
-  }, [chartSpecInsertRequest?.requestId, chartSpecInsertRequest?.chartSpecId, safeChartSpecs, onChartSpecInsertRequestHandled]);
+  }, [chartSpecInsertRequest?.requestId, chartSpecInsertRequest?.chartSpecId, chartSpecInsertRequest?.insertMode, chartSpecInsertRequest?.point, safeChartSpecs, onChartSpecInsertRequestHandled]);
   const insertChartFromDraft = () => {
     if (!chartDraft) return;
     const chartSpec = safeChartSpecs.find((spec) => spec.id === chartDraft.chartSpecId);
@@ -858,6 +864,16 @@ export function ManuscriptCanvas({ blocks, setBlocks, staged, setStaged, referen
       </main>
       {contextMenu?.visible && (
         <div className="canvas-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
+          <button onClick={() => {
+            const point = { x: contextMenu.canvasX, y: contextMenu.canvasY };
+            closeContextMenu();
+            onRequestChartWorkflow?.("review", point);
+          }}>Create chart</button>
+          <button onClick={() => {
+            const point = { x: contextMenu.canvasX, y: contextMenu.canvasY };
+            closeContextMenu();
+            onRequestChartWorkflow?.("template", point);
+          }}>Use saved template</button>
           <button disabled={!safeChartSpecs.length || !!chartDetailState.busyId} onClick={() => openInsertChartModal({ x: contextMenu.canvasX, y: contextMenu.canvasY }).catch(() => {})}>Insert approved chart</button>
           <button onClick={() => insertText({ x: contextMenu.canvasX, y: contextMenu.canvasY })}>Insert text box</button>
           <button onClick={() => openImagePicker({ x: contextMenu.canvasX, y: contextMenu.canvasY })}>Insert image...</button>

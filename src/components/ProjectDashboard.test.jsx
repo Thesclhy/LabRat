@@ -305,15 +305,14 @@ describe("ProjectOverview", () => {
     expect(screen.getByText("Workbook review")).toBeTruthy();
     expect(screen.getAllByText("Experiment Browser").length).toBeGreaterThan(0);
     expect(screen.getByText("2 published experiments")).toBeTruthy();
-    expect(screen.getAllByText("Create and review charts").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Manage approved charts").length).toBeGreaterThan(0);
+    expect(screen.getByText("Chart library")).toBeTruthy();
     expect(screen.getByText("Manuscript")).toBeTruthy();
     expect(screen.queryByText("Master Dataset")).toBeNull();
     expect(screen.queryByText("Supplemental Workbooks")).toBeNull();
     expect(screen.queryByText("Semantic mappings")).toBeNull();
     expect(screen.getByText("1 uploaded workbook")).toBeTruthy();
     expect(screen.getByText(/1 region needs review/)).toBeTruthy();
-    expect(screen.getByText("1 specs")).toBeTruthy();
+    expect(screen.getByText("1 approved chart")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Open Ask LabRat" }));
     fireEvent.click(screen.getByRole("button", { name: "Review regions" }));
@@ -322,15 +321,14 @@ describe("ProjectOverview", () => {
     expect(onUploadWorkbook).not.toHaveBeenCalled();
     fireEvent.click(within(workbookDialog).getByRole("button", { name: "Open Pending.xlsx" }));
     fireEvent.click(screen.getByRole("button", { name: "Open Experiment Browser" }));
-    fireEvent.click(screen.getByRole("button", { name: "Create chart" }));
-    fireEvent.click(screen.getByRole("button", { name: "Manage approved charts" }));
-    fireEvent.click(screen.getByRole("button", { name: "Insert approved charts" }));
+    fireEvent.click(screen.getByRole("button", { name: "Manage charts" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open manuscript" }));
 
     expect(onAskLabRat).toHaveBeenCalledTimes(1);
     expect(onUploadWorkbook).toHaveBeenCalledTimes(1);
     expect(onGoBrowser).toHaveBeenCalledTimes(1);
-    expect(onOpenChartReview).toHaveBeenCalledTimes(2);
-    expect(onOpenChartReview).toHaveBeenLastCalledWith({ statusFilter: "active" });
+    expect(onOpenChartReview).toHaveBeenCalledTimes(1);
+    expect(onOpenChartReview).toHaveBeenLastCalledWith({ statusFilter: "active", initialMode: "edit" });
     expect(onGoManuscript).toHaveBeenCalledTimes(1);
   });
 
@@ -523,7 +521,7 @@ describe("ProjectOverview", () => {
       />,
     );
 
-    expect(screen.getByText("1 specs")).toBeTruthy();
+    expect(screen.getByText("1 approved chart")).toBeTruthy();
     expect(screen.getByText(/older specs are hidden/)).toBeTruthy();
     expect(activeChartSpecsForProject(stateWithStaleSpec).map((chartSpec) => chartSpec.id)).toEqual(["chart_spec_active"]);
   });
@@ -1874,6 +1872,26 @@ describe("ChartReviewModal", () => {
     expect(screen.getByText("Create and review charts")).toBeTruthy();
     expect(screen.getByText("Create a chart")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Prepare plan" })).toBeTruthy();
+  });
+
+  it("opens directly in saved-template mode when requested from Manuscript", () => {
+    render(
+      <ChartReviewModal
+        open
+        initialMode="template"
+        allowAnalysisPrompt
+        chartInterpretState={{}}
+        chartSpecs={[]}
+        reusableChartTemplates={[]}
+        onInterpretChart={() => {}}
+        onOpenImportReview={() => {}}
+        onClose={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("tab", { name: "Use template" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByText("No reusable chart templates are available in this project.")).toBeTruthy();
+    expect(screen.queryByText("Create a chart")).toBeNull();
   });
 
   it("loads and manages approved ChartSpecs independently from proposals", async () => {

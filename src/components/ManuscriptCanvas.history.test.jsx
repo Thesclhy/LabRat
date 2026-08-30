@@ -237,6 +237,7 @@ function Harness({
   onChartSpecInsertRequestHandled = () => {},
   onLoadChartSpecDetail,
   onSelectedChartContextChange = () => {},
+  onRequestChartWorkflow = () => {},
 }) {
   const [blocks, setBlocks] = useState(initialBlocks);
   const [pages, setPages] = useState(initialPages);
@@ -267,6 +268,7 @@ function Harness({
         onLoadChartSpecDetail={onLoadChartSpecDetail}
         onSelectedChartContextChange={onSelectedChartContextChange}
         onRequestChartAnalysis={() => {}}
+        onRequestChartWorkflow={onRequestChartWorkflow}
         onSaveProject={() => {}}
       />
       <pre data-testid="doc-state">{JSON.stringify({ blocks, pages, canvasHeight, pageOrientationPreference })}</pre>
@@ -499,6 +501,27 @@ describe("ManuscriptCanvas chart specs", () => {
       defaultChartView: { visibleTraceIds: ["trace_exp_1", "trace_exp_2"] },
     },
   };
+
+  it("starts chart creation or saved-template reuse from a page right-click point", () => {
+    const onRequestChartWorkflow = vi.fn();
+    render(
+      <Harness
+        initialBlocks={[]}
+        initialPages={[createPage("page-1")]}
+        chartSpecs={[]}
+        onRequestChartWorkflow={onRequestChartWorkflow}
+      />,
+    );
+
+    const canvas = document.querySelector(".canvas");
+    fireEvent.contextMenu(canvas, { clientX: 320, clientY: 240 });
+    fireEvent.click(screen.getByRole("button", { name: "Create chart" }));
+    expect(onRequestChartWorkflow).toHaveBeenCalledWith("review", { x: 320, y: 240 });
+
+    fireEvent.contextMenu(canvas, { clientX: 460, clientY: 360 });
+    fireEvent.click(screen.getByRole("button", { name: "Use saved template" }));
+    expect(onRequestChartWorkflow).toHaveBeenCalledWith("template", { x: 460, y: 360 });
+  });
 
   it("loads complete analysis ChartSpec detail before preview and insertion", async () => {
     const summary = {
@@ -745,7 +768,7 @@ describe("ManuscriptCanvas chart specs", () => {
         initialBlocks={[]}
         initialPages={[createPage("page-1")]}
         chartSpecs={[chartSpecFixture, conversionChartSpecFixture]}
-        chartSpecInsertRequest={{ chartSpecId: "chart_spec_2", requestId: "insert_request_1" }}
+        chartSpecInsertRequest={{ chartSpecId: "chart_spec_2", point: { x: 280, y: 210 }, requestId: "insert_request_1" }}
         onChartSpecInsertRequestHandled={onHandled}
       />,
     );
@@ -755,6 +778,40 @@ describe("ManuscriptCanvas chart specs", () => {
     const conversionChoices = screen.getAllByRole("button", { name: /Conversion vs Temperature/i });
     expect(conversionChoices.some((button) => button.className.includes("active"))).toBe(true);
     expect(screen.getByText("2 of 2 traces visible")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Insert chart" }));
+    await waitFor(() => {
+      const inserted = readDocState().blocks.find((block) => block.chartSpecId === "chart_spec_2");
+      expect(inserted).toMatchObject({ x: 280, y: 210 });
+    });
+  });
+
+  it("places a newly accepted chart directly at the manuscript launch point", async () => {
+    const onHandled = vi.fn();
+    render(
+      <Harness
+        initialBlocks={[]}
+        initialPages={[createPage("page-1")]}
+        chartSpecs={[conversionChartSpecFixture]}
+        chartSpecInsertRequest={{
+          chartSpecId: "chart_spec_2",
+          point: { x: 340, y: 260 },
+          insertMode: "direct",
+          requestId: "direct_insert_request_1",
+        }}
+        onChartSpecInsertRequestHandled={onHandled}
+      />,
+    );
+
+    await waitFor(() => {
+      const inserted = readDocState().blocks.find((block) => block.chartSpecId === "chart_spec_2");
+      expect(inserted).toMatchObject({
+        x: 340,
+        y: 260,
+        chartView: conversionChartSpecFixture.spec.defaultChartView,
+      });
+    });
+    expect(screen.queryByRole("dialog", { name: "Insert chart" })).toBeNull();
+    expect(onHandled).toHaveBeenCalledWith("direct_insert_request_1");
   });
 
   it("waits for chart specs before opening a requested insert modal", async () => {

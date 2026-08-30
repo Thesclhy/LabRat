@@ -15,6 +15,25 @@ Keep entries concise, newest first, and include:
 
 ## 2026-08-30
 
+- Made Manuscript the primary chart-creation entry point. Right-clicking an
+  empty page area now offers `Create chart`, `Use saved template`, and the
+  existing approved-chart insertion path. Both new actions open the existing
+  reviewed Chart Review workflow in the requested mode, retain the original
+  canvas coordinates through natural-language or deterministic-template
+  review, and expose an explicit `Place in manuscript` action after ChartSpec
+  acceptance. That action now places the chart directly at the preserved
+  coordinates using the trace visibility accepted on the result preview; only
+  the separate approved-chart library action opens the insertion configuration
+  dialog. Overview now presents one management-focused Chart library card and
+  directs creation work to Manuscript. Added focused regressions for mode
+  routing, context-menu coordinates, accepted-chart handoff, direct placement,
+  and the retained library dialog. Full verification passed 310/310 frontend
+  tests, 265/269 backend tests with
+  four expected skips, and the production build with the existing Plotly
+  chunk-size warning. The first sandboxed backend verification stalled on
+  temporary HTTP server binding; the authorized rerun completed successfully.
+  Manual browser QA was not run.
+
 - Replaced the reusable-template checkbox cards with a template-aware
   Experiment Browser table. Users can now scan the exact required field values,
   see ready/missing-input status before preview, sort and search experiments,

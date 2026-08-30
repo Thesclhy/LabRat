@@ -814,6 +814,7 @@ export function AnalysisReviewWorkspace({
   saveTemplate = createServerReusableChartTemplate,
   loadTemplateEligibility = null,
   onTemplateSaved = null,
+  onPlaceAcceptedChart = null,
   onClose,
   onAccepted,
   embedded = false,
@@ -1773,32 +1774,44 @@ export function AnalysisReviewWorkspace({
           </div>
 
           <div className="analysis-review-composer">
-            <button
-              type="button"
-              className="accept-plan"
-              onClick={resultReviewMode && chartFinalized && !browserMode
-                ? openTemplateForm
-                : resultReviewMode ? acceptVisibleResult : acceptVisiblePlan}
-              disabled={resultReviewMode && chartFinalized && !browserMode
-                ? (!sourceChartSpec?.id || Boolean(savedTemplate) || busy || templateEligibility.loading || (templateEligibilityRequired && templateEligibilityStatus !== "eligible"))
-                : resultReviewMode ? (!canAcceptResult || busy) : planAcceptanceDisabled}
-            >
-              {resultReviewMode
-                ? chartFinalized
-                  ? browserMode
-                    ? "Data published"
-                    : savedTemplate
-                      ? "Template saved"
-                      : templateEligibility.loading ? "Checking template..."
-                        : ["ineligible", "unavailable"].includes(templateEligibilityStatus) ? "Template unavailable"
-                      : pendingAction === "save_template" ? "Saving..." : "Save as template"
-                  : chartCalculating
-                    ? "Calculating..."
-                    : pendingAction === "accept_result"
-                      ? browserMode ? "Publishing..." : "Creating..."
-                      : browserMode ? "Publish to Browser" : "Accept chart"
-                : pendingAction === "accept" || pendingAction === "execute" ? "Working..." : "Accept plan"}
-            </button>
+            <div className="analysis-review-primary-actions">
+              {resultReviewMode && chartFinalized && !browserMode && typeof onPlaceAcceptedChart === "function" && (
+                <button
+                  type="button"
+                  className="place-in-manuscript"
+                  disabled={!sourceChartSpec?.id || busy}
+                  onClick={() => onPlaceAcceptedChart(sourceChartSpec)}
+                >
+                  Place in manuscript
+                </button>
+              )}
+              <button
+                type="button"
+                className="accept-plan"
+                onClick={resultReviewMode && chartFinalized && !browserMode
+                  ? openTemplateForm
+                  : resultReviewMode ? acceptVisibleResult : acceptVisiblePlan}
+                disabled={resultReviewMode && chartFinalized && !browserMode
+                  ? (!sourceChartSpec?.id || Boolean(savedTemplate) || busy || templateEligibility.loading || (templateEligibilityRequired && templateEligibilityStatus !== "eligible"))
+                  : resultReviewMode ? (!canAcceptResult || busy) : planAcceptanceDisabled}
+              >
+                {resultReviewMode
+                  ? chartFinalized
+                    ? browserMode
+                      ? "Data published"
+                      : savedTemplate
+                        ? "Template saved"
+                        : templateEligibility.loading ? "Checking template..."
+                          : ["ineligible", "unavailable"].includes(templateEligibilityStatus) ? "Template unavailable"
+                        : pendingAction === "save_template" ? "Saving..." : "Save as template"
+                    : chartCalculating
+                      ? "Calculating..."
+                      : pendingAction === "accept_result"
+                        ? browserMode ? "Publishing..." : "Creating..."
+                        : browserMode ? "Publish to Browser" : "Accept chart"
+                  : pendingAction === "accept" || pendingAction === "execute" ? "Working..." : "Accept plan"}
+              </button>
+            </div>
             {!resultReviewMode && executorUnavailable && requiresPythonExecutor && (
               <p className="analysis-review-blocker" role="status">
                 {capabilityState.loading

@@ -1120,6 +1120,7 @@ describe("AnalysisReviewWorkspace", () => {
       chartSpec: { id: "chart_spec_1" },
     });
     const onAccepted = vi.fn();
+    const onPlaceAcceptedChart = vi.fn();
     render(
       <AnalysisReviewWorkspace
         projectId="project_1"
@@ -1134,6 +1135,7 @@ describe("AnalysisReviewWorkspace", () => {
         PlotComponent={({ traces }) => <div>{traces.length}</div>}
         onAcceptResult={onAcceptResult}
         onAccepted={onAccepted}
+        onPlaceAcceptedChart={onPlaceAcceptedChart}
       />,
     );
 
@@ -1147,6 +1149,8 @@ describe("AnalysisReviewWorkspace", () => {
       defaultVisibleTraceIds: ["trace_exp_1"],
     }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Save as template" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Place in manuscript" }));
+    expect(onPlaceAcceptedChart).toHaveBeenCalledWith({ id: "chart_spec_1" });
     expect(screen.getAllByText("Chart created").length).toBeGreaterThan(0);
     expect(onAccepted).toHaveBeenCalledWith(expect.objectContaining({
       chartSpec: { id: "chart_spec_1" },
