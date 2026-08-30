@@ -132,6 +132,90 @@ describe("ReusableChartTemplateReview", () => {
     })));
   });
 
+  it("sorts accepted experiments by their natural numeric labels", async () => {
+    render(
+      <ReusableChartTemplateReview
+        projectId="project_1"
+        templates={[template]}
+        loadTemplate={vi.fn().mockResolvedValue({ reusableChartTemplate: template, versions: [version] })}
+        loadExperiments={vi.fn().mockResolvedValue({
+          ...experiments,
+          rows: [
+            { experimentId: "exp_10", label: "Exp10", cells: {}, warningCount: 0 },
+            { experimentId: "exp_2", label: "Exp2", cells: {}, warningCount: 0 },
+            { experimentId: "exp_1", label: "Exp1", cells: {}, warningCount: 0 },
+          ],
+        })}
+      />,
+    );
+
+    await screen.findByText("Exp1");
+    const experimentTable = screen.getByRole("table", { name: "Template experiment Browser" });
+    expect([...experimentTable.querySelectorAll("tbody .experiment-column strong")].map((label) => label.textContent)).toEqual([
+      "Exp1",
+      "Exp2",
+      "Exp10",
+    ]);
+  });
+
+  it("selects rows without confusing full-record inspection with selection", async () => {
+    const loadExperimentDetail = vi.fn().mockResolvedValue({
+      experiment: { id: "exp_1", canonicalLabel: "Exp1" },
+      record: {
+        fields: [{ displayName: "Temperature", value: 250, unit: "degC" }],
+        series: [],
+        warnings: [],
+        sourceRefs: [],
+      },
+    });
+    render(
+      <ReusableChartTemplateReview
+        projectId="project_1"
+        templates={[template]}
+        loadTemplate={vi.fn().mockResolvedValue({ reusableChartTemplate: template, versions: [version] })}
+        loadExperiments={vi.fn().mockResolvedValue(experiments)}
+        loadExperimentDetail={loadExperimentDetail}
+      />,
+    );
+
+    const exp1Label = await screen.findByText("Exp1");
+    const exp1Checkbox = screen.getByRole("checkbox", { name: "Select Exp1" });
+    expect(exp1Checkbox.checked).toBe(false);
+    fireEvent.click(screen.getAllByRole("button", { name: "View data" })[0]);
+
+    await waitFor(() => expect(loadExperimentDetail).toHaveBeenCalledWith("project_1", "exp_1"));
+    expect(screen.getByRole("heading", { name: "Exp1" })).toBeTruthy();
+    expect(screen.getByText("250 degC")).toBeTruthy();
+    expect(exp1Checkbox.checked).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Close experiment detail" }));
+    fireEvent.click(exp1Label.closest("tr"));
+    expect(exp1Checkbox.checked).toBe(true);
+    expect(screen.getByText("Selection 1")).toBeTruthy();
+  });
+
+  it("preserves row selection order when table sorting changes", async () => {
+    const applyTemplate = vi.fn().mockResolvedValue({ compatibility: { status: "blocked", blockers: [] } });
+    render(
+      <ReusableChartTemplateReview
+        projectId="project_1"
+        templates={[template]}
+        loadTemplate={vi.fn().mockResolvedValue({ reusableChartTemplate: template, versions: [version] })}
+        loadExperiments={vi.fn().mockResolvedValue(experiments)}
+        applyTemplate={applyTemplate}
+      />,
+    );
+
+    fireEvent.click((await screen.findByText("Exp2")).closest("tr"));
+    fireEvent.click(screen.getByText("Exp1").closest("tr"));
+    fireEvent.click(screen.getByRole("button", { name: /Experiment/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview chart" }));
+
+    await waitFor(() => expect(applyTemplate).toHaveBeenCalledWith("version_1", expect.objectContaining({
+      experimentIds: ["exp_2", "exp_1"],
+    })));
+  });
+
   it("shows missing inputs as blockers and requires explicit ambiguous bindings", async () => {
     const applyTemplate = vi.fn()
       .mockResolvedValueOnce({

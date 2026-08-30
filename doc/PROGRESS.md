@@ -15,6 +15,28 @@ Keep entries concise, newest first, and include:
 
 ## 2026-08-30
 
+- Replaced the reusable-template checkbox cards with a template-aware
+  Experiment Browser table. Users can now scan the exact required field values,
+  see ready/missing-input status before preview, sort and search experiments,
+  filter to selected rows, select by clicking a row, and open the existing full
+  source-backed experiment detail drawer without changing the selection. The
+  table keeps experiments in natural numeric order and preserves click order in
+  the submitted comparison. Added focused regressions for natural ordering,
+  inspection versus selection, and selection-order preservation. Authenticated
+  browser QA on Project 16 confirmed field values, missing-input states, and
+  the full experiment-detail inspection flow.
+
+- Refined the chart-creation frontend. The Create chart mode tabs now use
+  equal, left-aligned button space, and the Experiment Browser/Workbook source
+  cards use a stable radio-and-copy grid with consistent padding, line height,
+  and wrapping. The Use template experiment picker now applies natural numeric
+  display ordering (`Exp1`, `Exp2`, ... `Exp10`) while preserving click order
+  for the submitted template selection. Added an ordering regression.
+  Verification passed 305/305 frontend tests, the production build with the
+  existing Plotly chunk-size warning, and authenticated browser QA on Project
+  16 confirmed both the aligned source controls and the ordered experiment
+  list.
+
 - Fixed the reusable-template result screen getting stuck after the backend had
   already finished. Analysis Review now derives template execution mode from
   the persisted AnalysisRun, discovers a missing queued run even when plan

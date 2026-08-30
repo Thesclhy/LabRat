@@ -1,15 +1,99 @@
 import React from "react";
 import { makeChartSpecPreview } from "../charts/chartSpecPreview.js";
 import { Plot } from "../charts/Plot.jsx";
-import { listExperimentBrowserRows } from "../data/experimentBrowserApi.js";
+import {
+  getExperimentBrowserDetail,
+  listExperimentBrowserRows,
+} from "../data/experimentBrowserApi.js";
 import {
   applyServerReusableChartTemplate,
   getServerReusableChartTemplate,
 } from "../data/serverApi.js";
 import { ThinkingIndicator } from "./ThinkingIndicator.jsx";
+import { ExperimentDetailDrawer } from "./ExperimentDetailDrawer.jsx";
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
+}
+
+const experimentLabelCollator = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: "base",
+});
+
+function compareExperimentRows(a, b) {
+  const labelComparison = experimentLabelCollator.compare(
+    String(a?.label || ""),
+    String(b?.label || ""),
+  );
+  if (labelComparison) return labelComparison;
+  return experimentLabelCollator.compare(
+    String(a?.experimentId || ""),
+    String(b?.experimentId || ""),
+  );
+}
+
+function slotColumnId(slot, bindings) {
+  return bindings?.[slot?.slotId] || slot?.identityContract?.preferredColumnId || "";
+}
+
+function templateCellValue(row, columnId) {
+  const cell = row?.cells?.[columnId];
+  if (!cell || cell.value == null || cell.value === "") return "—";
+  return String(cell.formattedValue ?? cell.value);
+}
+
+function templateSlotHeader(slot, column) {
+  const label = String(slot?.label || slot?.slotId || "Input");
+  const unit = String(column?.unit || slot?.unitContract?.allowedUnits?.[0] || "").trim();
+  if (!unit) return label;
+  const normalizedLabel = label.toLowerCase();
+  const normalizedUnit = unit.toLowerCase();
+  const alreadyIncludesUnit = normalizedLabel.includes(`(${normalizedUnit})`)
+    || (["percent", "%"].includes(normalizedUnit)
+      && (normalizedLabel.includes("(%)") || normalizedLabel.includes("percent")));
+  return alreadyIncludesUnit ? label : `${label} (${unit})`;
+}
+
+function compareTemplateValues(left, right) {
+  const leftBlank = left == null || left === "";
+  const rightBlank = right == null || right === "";
+  if (leftBlank || rightBlank) return leftBlank === rightBlank ? 0 : leftBlank ? 1 : -1;
+  const leftNumber = Number(left);
+  const rightNumber = Number(right);
+  if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) return leftNumber - rightNumber;
+  return experimentLabelCollator.compare(String(left), String(right));
+}
+
+function templateRowCompatibility(row, slots, bindings, columnsById) {
+  const unresolved = [];
+  const missing = [];
+  const unitMismatches = [];
+  asArray(slots).forEach((slot) => {
+    const columnId = slotColumnId(slot, bindings);
+    const column = columnsById.get(columnId);
+    if (!columnId || !column) {
+      unresolved.push(slot.label || slot.slotId);
+      return;
+    }
+    const cell = row?.cells?.[columnId];
+    if (!cell || cell.value == null || cell.value === "") missing.push(slot.label || slot.slotId);
+    const allowedUnits = asArray(slot?.unitContract?.allowedUnits).map((unit) => String(unit).trim().toLowerCase());
+    const actualUnit = String(cell?.unit || column?.unit || "").trim().toLowerCase();
+    if (allowedUnits.length && actualUnit && !allowedUnits.includes(actualUnit)) unitMismatches.push(slot.label || slot.slotId);
+  });
+  if (unresolved.length) return { state: "binding", label: "Binding required", detail: unresolved.join(", ") };
+  if (unitMismatches.length) return { state: "incompatible", label: "Unit mismatch", detail: unitMismatches.join(", ") };
+  if (missing.length) return {
+    state: "missing",
+    label: `Missing ${missing.length} input${missing.length === 1 ? "" : "s"}`,
+    detail: missing.join(", "),
+  };
+  return {
+    state: "compatible",
+    label: row?.warningCount ? `Ready · ${row.warningCount} warning${row.warningCount === 1 ? "" : "s"}` : "Ready",
+    detail: "All required template inputs are available.",
+  };
 }
 
 function WorkflowPanelHeader({ title, detail, meta }) {
@@ -218,6 +302,7 @@ export function ReusableChartTemplateReview({
   onApplicationReady,
   loadTemplate = getServerReusableChartTemplate,
   loadExperiments = listExperimentBrowserRows,
+  loadExperimentDetail = getExperimentBrowserDetail,
   applyTemplate = applyServerReusableChartTemplate,
 }) {
   const activeTemplates = asArray(templates).filter((template) => template?.status !== "archived");
@@ -226,8 +311,13 @@ export function ReusableChartTemplateReview({
   const [experimentState, setExperimentState] = React.useState({ loading: false, rows: [], columns: [], error: "", nextCursor: null });
   const [selectedExperimentIds, setSelectedExperimentIds] = React.useState([]);
   const [search, setSearch] = React.useState("");
+  const [selectedOnly, setSelectedOnly] = React.useState(false);
+  const [sortState, setSortState] = React.useState({ columnId: "experiment", direction: "asc" });
   const [bindings, setBindings] = React.useState({});
   const [applicationState, setApplicationState] = React.useState({ loading: false, response: null, error: "" });
+  const [experimentDetailState, setExperimentDetailState] = React.useState({ experimentId: "", loading: false, value: null, error: "" });
+  const experimentDetailCacheRef = React.useRef(new Map());
+  const experimentDetailRequestRef = React.useRef(0);
 
   React.useEffect(() => {
     if (!activeTemplates.some((template) => template.id === selectedTemplateId)) {
@@ -258,8 +348,11 @@ export function ReusableChartTemplateReview({
 
   React.useEffect(() => {
     setSelectedExperimentIds([]);
+    setSelectedOnly(false);
+    setSortState({ columnId: "experiment", direction: "asc" });
     setBindings({});
     setApplicationState({ loading: false, response: null, error: "" });
+    setExperimentDetailState({ experimentId: "", loading: false, value: null, error: "" });
     if (!selectedTemplateId) {
       setDetailState({ loading: false, value: null, error: "" });
       return undefined;
@@ -279,11 +372,35 @@ export function ReusableChartTemplateReview({
   const version = currentTemplateVersion(detailState.value);
   const selectedRows = experimentState.rows.filter((row) => selectedExperimentIds.includes(row.experimentId));
   const normalizedSearch = search.trim().toLowerCase();
-  const visibleRows = experimentState.rows.filter((row) => (
-    !normalizedSearch
-    || String(row.label || "").toLowerCase().includes(normalizedSearch)
-    || asArray(row.aliases).some((alias) => String(alias).toLowerCase().includes(normalizedSearch))
-  ));
+  const columnsById = new Map(experimentState.columns.map((column) => [column.id, column]));
+  const templateSlots = asArray(version?.inputSlots);
+  const rowCompatibility = new Map(experimentState.rows.map((row) => [
+    row.experimentId,
+    templateRowCompatibility(row, templateSlots, bindings, columnsById),
+  ]));
+  const visibleRows = experimentState.rows
+    .filter((row) => (
+      (!selectedOnly || selectedExperimentIds.includes(row.experimentId))
+      && (!normalizedSearch
+        || String(row.label || "").toLowerCase().includes(normalizedSearch)
+        || asArray(row.aliases).some((alias) => String(alias).toLowerCase().includes(normalizedSearch)))
+    ))
+    .toSorted((left, right) => {
+      let comparison = 0;
+      if (sortState.columnId === "experiment") comparison = compareExperimentRows(left, right);
+      else if (sortState.columnId === "status") {
+        comparison = experimentLabelCollator.compare(
+          rowCompatibility.get(left.experimentId)?.label || "",
+          rowCompatibility.get(right.experimentId)?.label || "",
+        );
+      } else {
+        const slot = templateSlots.find((item) => item.slotId === sortState.columnId);
+        const columnId = slotColumnId(slot, bindings);
+        comparison = compareTemplateValues(left?.cells?.[columnId]?.value, right?.cells?.[columnId]?.value);
+      }
+      if (!comparison) comparison = compareExperimentRows(left, right);
+      return sortState.direction === "desc" ? -comparison : comparison;
+    });
   const minimum = Number(version?.experimentCardinality?.minimum || 1);
   const recommendedMaximum = Number(version?.experimentCardinality?.recommendedMaximum || 6);
   const hardMaximum = Number(version?.experimentCardinality?.hardMaximum || 12);
@@ -297,7 +414,32 @@ export function ReusableChartTemplateReview({
     && selectionCountValid
     && !applicationState.loading
     && (!compatibility || compatibility.status === "ready" || (!hardBlockers.length && !unresolvedCandidates.length));
-  const columnsById = new Map(experimentState.columns.map((column) => [column.id, column]));
+
+  const toggleSort = (columnId) => {
+    setSortState((current) => current.columnId === columnId
+      ? { columnId, direction: current.direction === "asc" ? "desc" : "asc" }
+      : { columnId, direction: "asc" });
+  };
+
+  const openExperimentDetail = async (row) => {
+    if (!row?.experimentId) return;
+    const requestToken = ++experimentDetailRequestRef.current;
+    const cached = experimentDetailCacheRef.current.get(row.experimentId);
+    if (cached) {
+      setExperimentDetailState({ experimentId: row.experimentId, loading: false, value: cached, error: "" });
+      return;
+    }
+    setExperimentDetailState({ experimentId: row.experimentId, loading: true, value: null, error: "" });
+    try {
+      const response = await loadExperimentDetail(projectId, row.experimentId);
+      if (requestToken !== experimentDetailRequestRef.current) return;
+      experimentDetailCacheRef.current.set(row.experimentId, response);
+      setExperimentDetailState({ experimentId: row.experimentId, loading: false, value: response, error: "" });
+    } catch (error) {
+      if (requestToken !== experimentDetailRequestRef.current) return;
+      setExperimentDetailState({ experimentId: row.experimentId, loading: false, value: null, error: error?.message || String(error) });
+    }
+  };
 
   const resetCompatibility = () => {
     setBindings({});
@@ -396,10 +538,14 @@ export function ReusableChartTemplateReview({
                 </div>
               </div>
 
-              <div className="reusable-chart-picker-head">
+              <div className="reusable-chart-browser-toolbar">
                 <label>
                   <span>Select experiments</span>
                   <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search experiments" />
+                </label>
+                <label className="reusable-chart-selected-only">
+                  <input type="checkbox" checked={selectedOnly} onChange={(event) => setSelectedOnly(event.target.checked)} />
+                  <span>Selected only</span>
                 </label>
                 <span className={selectedExperimentIds.length > recommendedMaximum ? "warning" : ""}>
                   {selectedExperimentIds.length}/{hardMaximum} selected
@@ -407,19 +553,90 @@ export function ReusableChartTemplateReview({
               </div>
               {experimentState.loading && <ThinkingIndicator text="Loading accepted Experiment Browser records..." />}
               {experimentState.error && <p className="import-review-error">{experimentState.error}</p>}
-              <div className="reusable-chart-experiment-list" role="list" aria-label="Accepted experiments">
-                {visibleRows.map((row) => (
-                  <label key={row.experimentId} className={selectedExperimentIds.includes(row.experimentId) ? "selected" : ""}>
-                    <input
-                      type="checkbox"
-                      checked={selectedExperimentIds.includes(row.experimentId)}
-                      onChange={() => toggleExperiment(row.experimentId)}
-                      disabled={!selectedExperimentIds.includes(row.experimentId) && selectedExperimentIds.length >= hardMaximum}
-                    />
-                    <span>{row.label}</span>
-                    <small>{row.warningCount ? `${row.warningCount} warnings` : "Accepted snapshot"}</small>
-                  </label>
-                ))}
+              <div className="reusable-chart-browser-frame">
+                <table className="reusable-chart-browser-table" aria-label="Template experiment Browser">
+                  <thead>
+                    <tr>
+                      <th className="selection-column" aria-label="Select experiments" />
+                      <th>
+                        <button type="button" onClick={() => toggleSort("experiment")}>
+                          Experiment {sortState.columnId === "experiment" ? sortState.direction === "asc" ? "↑" : "↓" : ""}
+                        </button>
+                      </th>
+                      {templateSlots.map((slot) => {
+                        const column = columnsById.get(slotColumnId(slot, bindings));
+                        return (
+                          <th key={slot.slotId}>
+                            <button type="button" onClick={() => toggleSort(slot.slotId)}>
+                              {templateSlotHeader(slot, column)} {sortState.columnId === slot.slotId ? sortState.direction === "asc" ? "↑" : "↓" : ""}
+                            </button>
+                          </th>
+                        );
+                      })}
+                      <th>
+                        <button type="button" onClick={() => toggleSort("status")}>
+                          Status {sortState.columnId === "status" ? sortState.direction === "asc" ? "↑" : "↓" : ""}
+                        </button>
+                      </th>
+                      <th className="inspect-column">Data</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleRows.map((row) => {
+                      const selectedIndex = selectedExperimentIds.indexOf(row.experimentId);
+                      const isSelected = selectedIndex >= 0;
+                      const compatibilityStatus = rowCompatibility.get(row.experimentId);
+                      return (
+                        <tr
+                          key={row.experimentId}
+                          className={isSelected ? "selected" : ""}
+                          tabIndex={0}
+                          aria-selected={isSelected}
+                          onClick={() => toggleExperiment(row.experimentId)}
+                          onKeyDown={(event) => {
+                            if (["Enter", " "].includes(event.key)) {
+                              event.preventDefault();
+                              toggleExperiment(row.experimentId);
+                            }
+                          }}
+                        >
+                          <td className="selection-column">
+                            <input
+                              type="checkbox"
+                              aria-label={`Select ${row.label}`}
+                              checked={isSelected}
+                              onClick={(event) => event.stopPropagation()}
+                              onChange={() => toggleExperiment(row.experimentId)}
+                              disabled={!isSelected && selectedExperimentIds.length >= hardMaximum}
+                            />
+                          </td>
+                          <td className="experiment-column">
+                            <strong>{row.label}</strong>
+                            {isSelected && <small>Selection {selectedIndex + 1}</small>}
+                          </td>
+                          {templateSlots.map((slot) => {
+                            const columnId = slotColumnId(slot, bindings);
+                            const value = templateCellValue(row, columnId);
+                            return <td key={slot.slotId} className={value === "—" ? "missing" : ""}>{value}</td>;
+                          })}
+                          <td>
+                            <span className={`reusable-chart-row-status ${compatibilityStatus?.state || "binding"}`} title={compatibilityStatus?.detail}>
+                              {compatibilityStatus?.label || "Review required"}
+                            </span>
+                          </td>
+                          <td className="inspect-column">
+                            <button
+                              type="button"
+                              onClick={(event) => { event.stopPropagation(); openExperimentDetail(row); }}
+                            >
+                              View data
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
                 {!visibleRows.length && !experimentState.loading && <div className="import-review-empty">No accepted experiments match this search.</div>}
               </div>
               {experimentState.nextCursor && (
@@ -483,6 +700,24 @@ export function ReusableChartTemplateReview({
           )}
         </div>
       </div>
+      {experimentDetailState.experimentId && (
+        <div className="template-experiment-detail-overlay" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) {
+            experimentDetailRequestRef.current += 1;
+            setExperimentDetailState({ experimentId: "", loading: false, value: null, error: "" });
+          }
+        }}>
+          <ExperimentDetailDrawer
+            detail={experimentDetailState.value}
+            loading={experimentDetailState.loading}
+            error={experimentDetailState.error}
+            onClose={() => {
+              experimentDetailRequestRef.current += 1;
+              setExperimentDetailState({ experimentId: "", loading: false, value: null, error: "" });
+            }}
+          />
+        </div>
+      )}
     </section>
   );
 }
