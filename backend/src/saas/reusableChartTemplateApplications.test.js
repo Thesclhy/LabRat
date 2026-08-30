@@ -166,6 +166,22 @@ test("explicit compatible slot bindings are reviewed and persisted append-only",
   assert.equal(replayed.replayed, true);
 });
 
+test("ready template applications satisfy the persisted analysis-run input hash contract", async () => {
+  const { store, compatibility } = await compatibilityFixture(2);
+  const artifacts = buildReusableChartTemplateApplicationArtifacts({
+    project,
+    actorUserId,
+    templateVersion: { ...templateVersion(), templateName: "Yield comparison" },
+    compatibility,
+    idempotencyKey: "application_input_hash",
+    requestHash: "request_input_hash",
+  });
+
+  assert.equal(artifacts.analysisRun.inputHash, "pending");
+  const created = await store.createReusableChartTemplateApplication(artifacts);
+  assert.equal(created.analysisRun.inputHash, "pending");
+});
+
 test("deterministic renderer adapts experiment count while preserving margins and source lineage", async () => {
   const { store, experimentIds, compatibility } = await compatibilityFixture(3);
   const artifacts = buildReusableChartTemplateApplicationArtifacts({

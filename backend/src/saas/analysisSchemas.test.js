@@ -68,8 +68,19 @@ test("rejects plans without exact source selections or readable chart semantics"
   assert.equal(result.ok, false);
   assert.deepEqual(
     result.errors.map((item) => item.code),
-    ["analysis_input_selection_required", "analysis_chart_plan_required"],
+    ["analysis_input_selection_required", "analysis_input_mode_invalid", "analysis_chart_plan_required"],
   );
+});
+
+test("rejects mixed Browser and workbook inputs for chart plans", () => {
+  const plan = validPlan();
+  plan.inputMode = "experiment_browser";
+  plan.experimentSelections = [{ experimentId: "experiment_1", columnIndexes: [0] }];
+
+  const result = validateAnalysisPlanRevision(plan);
+
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((item) => item.code === "analysis_browser_mode_workbook_selection_forbidden"));
 });
 
 test("rejects Python, result values, and traces inside a reviewable plan", () => {

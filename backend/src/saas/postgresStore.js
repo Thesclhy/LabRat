@@ -448,6 +448,7 @@ function analysisThreadFromRow(row) {
     schemaVersion: row.schema_version || "labrat.analysisThread.v1",
     status: row.status,
     outputTarget: row.output_target || "chart",
+    inputMode: row.input_mode || null,
     originalRequest: row.original_request,
     messages: row.messages || [],
     planRevisionIds: row.plan_revision_ids || [],
@@ -2265,9 +2266,9 @@ export class PostgresSaasStore {
       `insert into analysis_threads
        (id, lab_id, project_id, schema_version, status, original_request, messages,
         plan_revision_ids, analysis_run_ids, accepted_analysis_result_ids,
-        chart_spec_ids, output_target, data_snapshot_ids, browser_view_ids,
+        chart_spec_ids, output_target, input_mode, data_snapshot_ids, browser_view_ids,
         created_at, updated_at, created_by, updated_by)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
        returning *`,
       [
         input.id || makeId("analysis_thread"),
@@ -2282,6 +2283,7 @@ export class PostgresSaasStore {
         jsonb(input.acceptedAnalysisResultIds || [], []),
         jsonb(input.chartSpecIds || [], []),
         input.outputTarget || "chart",
+        input.inputMode || null,
         jsonb(input.dataSnapshotIds || [], []),
         jsonb(input.browserViewIds || [], []),
         input.createdAt || nowIso(),
@@ -2313,21 +2315,23 @@ export class PostgresSaasStore {
       `update analysis_threads
        set status = $2,
            output_target = $3,
-           messages = $4,
-           plan_revision_ids = $5,
-           analysis_run_ids = $6,
-           accepted_analysis_result_ids = $7,
-           chart_spec_ids = $8,
-           data_snapshot_ids = $9,
-           browser_view_ids = $10,
-           updated_at = $11,
-           updated_by = $12
+           input_mode = $4,
+           messages = $5,
+           plan_revision_ids = $6,
+           analysis_run_ids = $7,
+           accepted_analysis_result_ids = $8,
+           chart_spec_ids = $9,
+           data_snapshot_ids = $10,
+           browser_view_ids = $11,
+           updated_at = $12,
+           updated_by = $13
        where id = $1
        returning *`,
       [
         id,
         changes.status ?? current.status,
         changes.outputTarget ?? current.outputTarget ?? "chart",
+        changes.inputMode !== undefined ? changes.inputMode : current.inputMode,
         jsonb(changes.messages ?? current.messages ?? [], []),
         jsonb(changes.planRevisionIds ?? current.planRevisionIds ?? [], []),
         jsonb(changes.analysisRunIds ?? current.analysisRunIds ?? [], []),

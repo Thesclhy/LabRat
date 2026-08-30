@@ -293,6 +293,16 @@ export function getServerChartSpec(chartSpecId, options = {}) {
   return serverRequest(`/api/chart-specs/${encodeURIComponent(chartSpecId)}`, options);
 }
 
+export function getServerChartTemplateEligibility(chartSpecId, options = {}) {
+  if (!chartSpecId) throw new ServerApiError("Select a ChartSpec before checking template eligibility.");
+  return serverRequest(`/api/chart-specs/${encodeURIComponent(chartSpecId)}/template-eligibility`, options);
+}
+
+export function getServerReusableChartTemplate(templateId, options = {}) {
+  if (!templateId) throw new ServerApiError("Select a reusable chart template before loading it.");
+  return serverRequest(`/api/reusable-chart-templates/${encodeURIComponent(templateId)}`, options);
+}
+
 export function createServerReusableChartTemplate(projectId, request = {}, options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before saving a chart template.");
   const name = String(request.name || "").trim();

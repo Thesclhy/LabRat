@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-08-19
+Last reviewed: 2026-08-30
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -12,6 +12,81 @@ Keep entries concise, newest first, and include:
 - meaningful changes
 - verification
 - follow-ups or residual risk
+
+## 2026-08-30
+
+- Fixed the reusable-template result screen getting stuck after the backend had
+  already finished. Analysis Review now derives template execution mode from
+  the persisted AnalysisRun, discovers a missing queued run even when plan
+  revisions were preloaded, executes each queued run through one lifecycle
+  controller, refreshes immediately, retries transient refresh failures, and
+  prevents stale queued/running state from replacing a later result. Accept and
+  Retry no longer maintain competing execution paths. Added regressions for
+  persisted strategy recovery, queued execution, running refresh, transient
+  failure recovery, and stale-prop protection. Verification passed 304/304
+  frontend tests, 265/269 backend tests with four expected skips, the production
+  build with the existing Plotly chunk-size warning, and `git diff --check`.
+  Authenticated browser QA applied the saved Product Selectivity template to
+  two accepted experiments in 281 ms from Preview to Result ready; two
+  additional unaccepted diagnostic previews were created in Project 16, with
+  no ChartSpecs or experiment changes.
+
+- Fixed reusable-template Preview against PostgreSQL. Ready template
+  applications now create their queued AnalysisRun with the same non-null
+  `pending` input-hash placeholder used by ordinary reviewed analysis; the
+  deterministic template executor still calculates the real input hash after
+  materializing the frozen accepted experiments. Added a regression covering
+  the persisted queued-run contract. Focused template tests passed 9/9, the
+  full backend suite passed 265/269 with four expected skips, and the production
+  build passed with the existing Plotly chunk-size warning. The first
+  sandboxed backend run was interrupted after local HTTP test servers could not
+  progress; the authorized rerun completed successfully.
+
+## 2026-08-20
+
+- Diagnosed Project 15's duplicate template blockers without changing its
+  artifacts. The accepted plan had three valid scalar indexes per experiment,
+  but DeepSeek also set `includeSeries: true`; both accepted records had empty
+  series arrays, so the flag was inert. Eligibility now checks materialized
+  series presence and reports one real blocker only when series actually exist.
+  Template derivation also normalizes `stacked_bar`/`grouped_bar` aliases to the
+  deterministic `bar` primitive while preserving stacked/grouped comparison
+  semantics. Full verification passed 300/300 frontend tests and 264/268
+  backend tests with four expected skips, plus the production build. After a
+  backend restart, the read-only compiler check against Project 15's exact
+  ChartSpec returned `eligible`, no blockers, and `bar + stacked_components`.
+
+- Completed the template-save reliability hardening without mutating Project
+  14 or any historical artifact. New chart requests explicitly select
+  Experiment Browser (default/template-compatible) or Workbook (one-off) mode;
+  planning receives only that source catalog and validation rejects mixed
+  inputs. Closed the backend-model full-field typing bypass so deterministic
+  numeric source types remain numeric, added actual published snapshot cell
+  inspection, and changed eligibility to return every actionable blocker.
+  Added migration 026 for nullable historical-safe thread input mode. Full
+  verification passed 300/300 frontend tests, 263/267 backend tests with four
+  expected skips, and the production build with the existing Plotly chunk-size
+  warning. Read-only local UI smoke testing confirmed the Create Chart modal
+  defaults to Experiment Browser, clearly labels Workbook as one-off, and lets
+  the user switch modes without creating an analysis. Migration 026 was applied
+  to the local Codex database, only `labrat-backend-codex` was restarted, and
+  `/health` returned successfully; no project rows were repaired or rewritten.
+
+- Completed reusable chart creation Milestone 5. Chart Review now provides
+  `Create chart | Use template | Approved charts`; the fast path loads immutable
+  template contracts, selects accepted experiments with bounded pagination,
+  shows required slots and exact-field coverage, reports affected experiments
+  for missing/incompatible inputs, supports explicit ambiguous bindings, and
+  hands ready applications to the existing result-review and ChartSpec
+  acceptance workflow. `chart_template_v1` runs no longer depend on a configured
+  Python executor. Added a read-only ChartSpec template-eligibility preflight so
+  `Save as template` fails closed before naming when lineage or types are
+  unsupported. Full verification passed 298/298 frontend tests, 260/264 backend
+  tests with four expected skips, and the production build with the existing
+  Plotly chunk-size warning; the authenticated focused route suite separately
+  passed 26 with three expected skips. Manual browser QA was not run because no
+  local Docker services were active. Next: remaining Milestone 6
+  contract/version/archive and style-only management UI.
 
 ## 2026-08-19
 

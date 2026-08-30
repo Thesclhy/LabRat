@@ -1980,7 +1980,9 @@ describe("ChartReviewModal", () => {
     });
     fireEvent.click(screen.getByText("Prepare plan"));
 
-    expect(onInterpretChart).toHaveBeenCalledWith("draw carbon distribution from P31 to BA32");
+    expect(onInterpretChart).toHaveBeenCalledWith("draw carbon distribution from P31 to BA32", {
+      inputMode: "experiment_browser",
+    });
   });
 });
 

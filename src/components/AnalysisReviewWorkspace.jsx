@@ -126,6 +126,27 @@ function generationRetryKey(run) {
   return `retry_generation_${run.id}_${randomPart}`;
 }
 
+const RUN_PROGRESS = Object.freeze({
+  queued: 0,
+  running: 1,
+  awaiting_result_review: 2,
+  validation_failed: 2,
+  failed: 2,
+  completed: 3,
+});
+
+function preferredRun(current, candidate) {
+  if (!candidate) return current;
+  if (!current || current.id !== candidate.id) return candidate;
+  const currentProgress = RUN_PROGRESS[current.status] ?? -1;
+  const candidateProgress = RUN_PROGRESS[candidate.status] ?? -1;
+  return candidateProgress >= currentProgress ? candidate : current;
+}
+
+function persistedExecutionStrategy(run, fallback = "model_generated_python") {
+  return run?.execution?.executionStrategy || fallback || "model_generated_python";
+}
+
 function runFailureMessage(run) {
   if (!["failed", "validation_failed"].includes(run?.status)) return "";
   const code = run?.execution?.error?.code || run?.validation?.errors?.[0]?.code || "";
@@ -375,6 +396,7 @@ function ChartResultStage({
   preview,
   loading,
   error,
+  deterministicTemplate = false,
   reviewErrors = [],
   defaultVisibleTraceIds,
   onDefaultVisibleTraceIdsChange,
@@ -411,7 +433,9 @@ function ChartResultStage({
           <span>
             {ready
               ? `${summary.pointCount ?? 0} points · ${summary.seriesCount ?? traces.length} series`
-              : calculating ? "Calculating accepted plan" : failed ? "Chart could not be generated" : "Waiting for result"}
+              : calculating
+                ? deterministicTemplate ? "Applying accepted template" : "Calculating accepted plan"
+                : failed ? "Chart could not be generated" : "Waiting for result"}
           </span>
         </div>
         {traces.length > 1 && (
@@ -470,8 +494,12 @@ function ChartResultStage({
       <div className="analysis-chart-preview">
         {calculating && (
           <div className="analysis-result-empty" role="status">
-            <strong>Calculating chart</strong>
-            <span>LabRat is running the accepted Python plan and validating its output.</span>
+            <strong>{deterministicTemplate ? "Applying chart template" : "Calculating chart"}</strong>
+            <span>
+              {deterministicTemplate
+                ? "LabRat is applying the accepted template to the selected experiments and validating its output."
+                : "LabRat is running the accepted Python plan and validating its output."}
+            </span>
           </div>
         )}
         {!calculating && (error || failed) && (
@@ -687,8 +715,8 @@ function BrowserResultStage({
               <button type="button" onClick={() => setInspectedCell(null)} aria-label="Close stored value details">×</button>
             </header>
             <dl>
-              <div><dt>Stored value</dt><dd>{previewCellValue(inspectedCell.row, inspectedCell.column)}</dd></div>
-              <div><dt>Stored type</dt><dd>{typeLabel(inspectedCell.cell?.storedType || inspectedCell.column.valueType)}</dd></div>
+              <div><dt>Proposed stored value</dt><dd>{previewCellValue(inspectedCell.row, inspectedCell.column)}</dd></div>
+              <div><dt>Proposed stored type</dt><dd>{typeLabel(inspectedCell.cell?.storedType || inspectedCell.column.valueType)}</dd></div>
               <div><dt>Unit</dt><dd>{inspectedCell.cell?.unit || inspectedCell.column.unit || "None"}</dd></div>
               <div><dt>Numeric scale</dt><dd>{inspectedCell.cell?.numericScale || inspectedCell.column.numericScale || "Not applicable"}</dd></div>
               <div><dt>Source value</dt><dd>{sourceValue(inspectedCell.cell?.sourceRefs?.[0])}</dd></div>
@@ -784,12 +812,14 @@ export function AnalysisReviewWorkspace({
   onAcceptResult = null,
   chartSpecs = [],
   saveTemplate = createServerReusableChartTemplate,
+  loadTemplateEligibility = null,
   onTemplateSaved = null,
   onClose,
   onAccepted,
   embedded = false,
   onWorkflowStateChange = null,
   executionStrategy = "model_generated_python",
+  runRefreshIntervalMs = 1000,
 }) {
   const [thread, setThread] = useState(initialThread || null);
   const [revisions, setRevisions] = useState(() => (
@@ -823,6 +853,7 @@ export function AnalysisReviewWorkspace({
   const [templateFormOpen, setTemplateFormOpen] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [savedTemplate, setSavedTemplate] = useState(null);
+  const [templateEligibility, setTemplateEligibility] = useState({ loading: false, value: null });
   const [runHistory, setRunHistory] = useState(() => (
     initialRun ? [{ run: initialRun, result: initialResult }] : []
   ));
@@ -830,13 +861,16 @@ export function AnalysisReviewWorkspace({
     loading: !analysisCapabilities,
     value: analysisCapabilities,
   });
+  const automaticExecutionRef = useRef(new Set());
   const executorCapabilityReady = !capabilityState.loading
     && capabilityState.value?.executor?.configured === true;
+  const resolvedExecutionStrategy = persistedExecutionStrategy(run || initialRun, executionStrategy);
+  const requiresPythonExecutor = resolvedExecutionStrategy === "model_generated_python";
   const previewRequestRef = useRef(0);
-  const executeRunForStrategy = (analysisRunId) => (
-    executionStrategy === "model_generated_python"
+  const executeRunForStrategy = (analysisRunId, strategy = resolvedExecutionStrategy) => (
+    strategy === "model_generated_python"
       ? executeRun(analysisRunId)
-      : executeRun(analysisRunId, { executionStrategy })
+      : executeRun(analysisRunId, { executionStrategy: strategy })
   );
 
   useEffect(() => {
@@ -855,9 +889,11 @@ export function AnalysisReviewWorkspace({
     setTemplateFormOpen(false);
     setTemplateName("");
     setSavedTemplate(null);
+    setTemplateEligibility({ loading: false, value: null });
     setRunHistory(initialRun ? [{ run: initialRun, result: initialResult }] : []);
     setActiveTab(initialRun || initialResult || initialResultPreview ? "result" : "source");
     setActionError("");
+    automaticExecutionRef.current.clear();
     setCapabilityState({ loading: !analysisCapabilities, value: analysisCapabilities });
   }, [
     initialResult?.id,
@@ -869,7 +905,7 @@ export function AnalysisReviewWorkspace({
   ]);
 
   useEffect(() => {
-    if (analysisCapabilities || !projectId) return undefined;
+    if (!requiresPythonExecutor || analysisCapabilities || !projectId) return undefined;
     let cancelled = false;
     loadAnalysisCapabilities(projectId)
       .then((value) => {
@@ -881,15 +917,15 @@ export function AnalysisReviewWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [analysisCapabilities, loadAnalysisCapabilities, projectId]);
+  }, [analysisCapabilities, loadAnalysisCapabilities, projectId, requiresPythonExecutor]);
 
   useEffect(() => {
-    if (initialPlanRevisions || !initialThread?.id) return undefined;
+    const needsAcceptedRunDiscovery = !initialRun?.id && initialRevision?.status === "accepted";
+    if (!initialThread?.id || (initialPlanRevisions && !needsAcceptedRunDiscovery)) return undefined;
     let cancelled = false;
-    const requestToken = ++previewRequestRef.current;
     loadThread(initialThread.id)
-      .then(async (body) => {
-        if (cancelled || requestToken !== previewRequestRef.current) return;
+      .then((body) => {
+        if (cancelled) return;
         const loadedRevisions = asArray(body?.planRevisions);
         const loadedRuns = asArray(body?.analysisRuns);
         const activeRevision = loadedRevisions.findLast((item) => (
@@ -906,35 +942,8 @@ export function AnalysisReviewWorkspace({
         )) || null;
         setRunHistory(loadedRuns.map((item) => ({ run: item, result: null })));
         if (!latestRun?.id) return;
-        setRun(latestRun);
+        setRun((current) => preferredRun(current, latestRun));
         setActiveTab("result");
-        if (latestRun.status === "queued" && !executorCapabilityReady) return;
-        const runResponse = latestRun.status === "queued"
-          ? await executeRunForStrategy(latestRun.id)
-          : await loadRun(latestRun.id);
-        if (cancelled || requestToken !== previewRequestRef.current) return;
-        const hydratedRun = runResponse?.analysisRun || latestRun;
-        const hydratedResult = runResponse?.analysisResult || null;
-        setRun(hydratedRun);
-        setResult(hydratedResult);
-        setRunHistory((current) => current.map((item) => (
-          item.run.id === hydratedRun.id
-            ? { run: hydratedRun, result: hydratedResult }
-            : item
-        )));
-        if (hydratedResult?.id) {
-          const loadedPreview = activeRevision?.outputTarget === "experiment_browser"
-            ? await loadCompleteResultPreview(loadResultPreview, hydratedRun.id, {
-              offset: 0,
-              limit: 100,
-            })
-            : await loadCompleteResultPreview(loadResultPreview, hydratedRun.id);
-          if (cancelled || requestToken !== previewRequestRef.current) return;
-          setResultState({ loading: false, error: "", value: loadedPreview });
-          setDefaultVisibleTraceIds(
-            previewTraces(loadedPreview).map(traceIdentifier),
-          );
-        }
       })
       .catch((error) => {
         if (!cancelled) setActionError(error);
@@ -943,15 +952,140 @@ export function AnalysisReviewWorkspace({
       cancelled = true;
     };
   }, [
-    executorCapabilityReady,
-    executeRun,
-    executionStrategy,
     initialPlanRevisions,
     initialRevision?.id,
+    initialRevision?.status,
+    initialRun?.id,
     initialThread?.id,
+    loadThread,
+  ]);
+
+  useEffect(() => {
+    if (!run?.id) return undefined;
+    const needsResultHydration = ["awaiting_result_review", "completed"].includes(run.status)
+      && (!result?.id || !previewIdentityMatches(run, result, resultState.value));
+    if (!["queued", "running"].includes(run.status) && !needsResultHydration) return undefined;
+    if (run.status === "queued" && requiresPythonExecutor && !executorCapabilityReady) return undefined;
+
+    let cancelled = false;
+    let refreshTimer = null;
+    let requestInFlight = false;
+    let consecutiveRefreshFailures = 0;
+    const runId = run.id;
+    const strategy = persistedExecutionStrategy(run, resolvedExecutionStrategy);
+
+    const scheduleRefresh = () => {
+      if (cancelled || refreshTimer) return;
+      refreshTimer = setTimeout(() => {
+        refreshTimer = null;
+        refreshRun();
+      }, runRefreshIntervalMs);
+    };
+
+    const applyRunResponse = async (response, fallbackRun = run) => {
+      const refreshedRun = response?.analysisRun || fallbackRun;
+      const refreshedResult = response?.analysisResult || null;
+      let loadedPreview = null;
+      let previewError = "";
+
+      if (refreshedResult?.id) {
+        try {
+          const refreshedRevision = response?.analysisPlanRevision || revision;
+          loadedPreview = refreshedRevision?.outputTarget === "experiment_browser"
+            ? await loadCompleteResultPreview(loadResultPreview, refreshedRun.id, { offset: 0, limit: 100 })
+            : await loadCompleteResultPreview(loadResultPreview, refreshedRun.id);
+        } catch (error) {
+          previewError = error?.message || String(error);
+        }
+      }
+      if (cancelled) return refreshedRun;
+
+      if (response?.analysisThread) setThread(response.analysisThread);
+      if (response?.analysisPlanRevision) setRevision(response.analysisPlanRevision);
+      setRun((current) => preferredRun(current, refreshedRun));
+      if (refreshedResult?.id) setResult(refreshedResult);
+      setRunHistory((current) => {
+        const existing = current.find((item) => item.run.id === refreshedRun.id);
+        if (!existing) return [...current, { run: refreshedRun, result: refreshedResult }];
+        return current.map((item) => item.run.id === refreshedRun.id
+          ? {
+            run: preferredRun(item.run, refreshedRun),
+            result: refreshedResult || item.result,
+          }
+          : item);
+      });
+      if (loadedPreview) {
+        setResultState({ loading: false, error: "", value: loadedPreview });
+        setDefaultVisibleTraceIds(previewTraces(loadedPreview).map(traceIdentifier));
+      } else if (previewError) {
+        setResultState((current) => ({ ...current, loading: false, error: previewError }));
+      }
+      setActionError(null);
+      return refreshedRun;
+    };
+
+    const refreshRun = async () => {
+      if (cancelled || requestInFlight) return;
+      requestInFlight = true;
+      let attemptedExecution = false;
+      try {
+        let response;
+        if (run.status === "queued" && !automaticExecutionRef.current.has(runId)) {
+          automaticExecutionRef.current.add(runId);
+          attemptedExecution = true;
+          response = await executeRunForStrategy(runId, strategy);
+        } else {
+          response = await loadRun(runId);
+        }
+        const refreshedRun = await applyRunResponse(response);
+        consecutiveRefreshFailures = 0;
+        if (["queued", "running"].includes(refreshedRun?.status)) scheduleRefresh();
+      } catch (error) {
+        if (cancelled) return;
+        consecutiveRefreshFailures += 1;
+        if (attemptedExecution) {
+          try {
+            const recoveryResponse = await loadRun(runId);
+            const recoveredRun = await applyRunResponse(recoveryResponse);
+            if (recoveredRun?.status === "queued") automaticExecutionRef.current.delete(runId);
+            if (["queued", "running"].includes(recoveredRun?.status)) scheduleRefresh();
+            return;
+          } catch {
+            automaticExecutionRef.current.delete(runId);
+          }
+        }
+        if (consecutiveRefreshFailures >= 2) setActionError(error);
+        scheduleRefresh();
+      } finally {
+        requestInFlight = false;
+      }
+    };
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refreshRun();
+    };
+    window.addEventListener("focus", refreshRun);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    refreshRun();
+    return () => {
+      cancelled = true;
+      if (refreshTimer) clearTimeout(refreshTimer);
+      window.removeEventListener("focus", refreshRun);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [
+    executorCapabilityReady,
+    executeRun,
     loadResultPreview,
     loadRun,
-    loadThread,
+    requiresPythonExecutor,
+    resolvedExecutionStrategy,
+    result?.id,
+    resultState.value,
+    revision,
+    run?.id,
+    run?.status,
+    runRefreshIntervalMs,
   ]);
 
   useEffect(() => {
@@ -1005,7 +1139,7 @@ export function AnalysisReviewWorkspace({
   const focusSelection = rectangleFocusSelection;
   const busy = Boolean(pendingAction);
   const awaitingReview = revision?.status === "awaiting_review" && !run;
-  const executorReady = executorCapabilityReady;
+  const executorReady = !requiresPythonExecutor || executorCapabilityReady;
   const executorUnavailable = !executorReady;
   const planAcceptanceDisabled = !awaitingReview || busy || !executorReady;
   const preview = resultState.value;
@@ -1034,6 +1168,8 @@ export function AnalysisReviewWorkspace({
     || asArray(chartSpecs).find((item) => item?.analysisResultId === result?.id)
     || asArray(chartSpecs).find((item) => asArray(thread?.chartSpecIds).includes(item?.id))
     || null;
+  const templateEligibilityRequired = typeof loadTemplateEligibility === "function";
+  const templateEligibilityStatus = templateEligibility.value?.status || (templateEligibilityRequired ? "checking" : "not_checked");
   const visibleResultSummary = resultSummary(run, result, preview);
   const browserPreviewUnavailable = browserMode
     && ["failed", "validation_failed"].includes(run?.status);
@@ -1053,6 +1189,31 @@ export function AnalysisReviewWorkspace({
       : hasChartStage && defaultVisibleTraceIds.length > 0)
     && Boolean(onAcceptResult);
   const resultReviewMode = hasResultStage && revision?.status === "accepted";
+
+  useEffect(() => {
+    if (!chartFinalized || !sourceChartSpec?.id || typeof loadTemplateEligibility !== "function") {
+      setTemplateEligibility({ loading: false, value: null });
+      return undefined;
+    }
+    let active = true;
+    setTemplateEligibility({ loading: true, value: null });
+    loadTemplateEligibility(sourceChartSpec.id)
+      .then((value) => {
+        if (active) setTemplateEligibility({ loading: false, value });
+      })
+      .catch((error) => {
+        if (active) {
+          setTemplateEligibility({
+            loading: false,
+            value: {
+              status: "unavailable",
+              blockers: [{ message: error?.message || String(error) }],
+            },
+          });
+        }
+      });
+    return () => { active = false; };
+  }, [chartFinalized, loadTemplateEligibility, sourceChartSpec?.id]);
 
   useEffect(() => {
     onWorkflowStateChange?.({
@@ -1125,40 +1286,11 @@ export function AnalysisReviewWorkspace({
         item.id === acceptedRevision.id ? acceptedRevision : item
       )));
       const queuedRun = response?.analysisRun || { status: "queued" };
-      const requestToken = ++previewRequestRef.current;
       setRun(queuedRun);
       setIdentityResolutions({});
       setRunHistory((current) => [...current, { run: queuedRun, result: null }]);
       setActiveTab("result");
       onAccepted?.(response);
-      if (!queuedRun.id) return;
-      setPendingAction("execute");
-      const executionResponse = await executeRunForStrategy(queuedRun.id);
-      if (requestToken !== previewRequestRef.current) return;
-      const executedRun = executionResponse?.analysisRun || queuedRun;
-      const executedResult = executionResponse?.analysisResult || null;
-      setRun(executedRun);
-      setResult(executedResult);
-      setRunHistory((current) => current.map((item) => (
-        item.run.id === executedRun.id
-          ? { run: executedRun, result: executedResult }
-          : item
-      )));
-      if (executedResult?.id) {
-        setResultState((current) => ({ ...current, loading: true, error: "" }));
-        const loadedPreview = acceptedRevision?.outputTarget === "experiment_browser"
-          ? await loadCompleteResultPreview(loadResultPreview, executedRun.id, {
-            offset: 0,
-            limit: 100,
-          })
-          : await loadCompleteResultPreview(loadResultPreview, executedRun.id);
-        if (requestToken !== previewRequestRef.current) return;
-        setResultState({ loading: false, error: "", value: loadedPreview });
-        setDefaultVisibleTraceIds(
-          previewTraces(loadedPreview).map(traceIdentifier),
-        );
-      }
-      onAccepted?.(executionResponse);
     } catch (error) {
       setActionError(error);
     } finally {
@@ -1214,29 +1346,9 @@ export function AnalysisReviewWorkspace({
       });
       const queuedRun = retryResponse?.analysisRun;
       if (!queuedRun?.id) throw new Error("The backend did not return a new generation attempt.");
-      const requestToken = ++previewRequestRef.current;
       setThread(retryResponse?.analysisThread || thread);
       setRun(queuedRun);
       setRunHistory((current) => [...current, { run: queuedRun, result: null }]);
-      setPendingAction("execute");
-      const executionResponse = await executeRunForStrategy(queuedRun.id);
-      if (requestToken !== previewRequestRef.current) return;
-      const executedRun = executionResponse?.analysisRun || queuedRun;
-      const executedResult = executionResponse?.analysisResult || null;
-      setRun(executedRun);
-      setResult(executedResult);
-      setRunHistory((current) => current.map((item) => (
-        item.run.id === executedRun.id ? { run: executedRun, result: executedResult } : item
-      )));
-      if (executedResult?.id) {
-        setResultState((current) => ({ ...current, loading: true, error: "" }));
-        const loadedPreview = browserMode
-          ? await loadCompleteResultPreview(loadResultPreview, executedRun.id, { offset: 0, limit: 100 })
-          : await loadCompleteResultPreview(loadResultPreview, executedRun.id);
-        if (requestToken !== previewRequestRef.current) return;
-        setResultState({ loading: false, error: "", value: loadedPreview });
-        setDefaultVisibleTraceIds(previewTraces(loadedPreview).map(traceIdentifier));
-      }
     } catch (error) {
       setActionError(error);
     } finally {
@@ -1470,6 +1582,7 @@ export function AnalysisReviewWorkspace({
                 result={result}
                 preview={preview}
                 loading={resultState.loading}
+                deterministicTemplate={resolvedExecutionStrategy === "chart_template_v1"}
                 error={resultState.error || (
                   run?.status === "queued" && executorUnavailable
                     ? "Python execution is unavailable. Configure an analysis executor before calculating this chart."
@@ -1521,6 +1634,11 @@ export function AnalysisReviewWorkspace({
               <article className="analysis-plan-card">
                 <header>
                   <strong>{browserMode ? "Experiment data plan" : "Chart plan"}</strong>
+                  {!browserMode && revision.inputMode && (
+                    <span className="analysis-input-mode-badge">
+                      {revision.inputMode === "experiment_browser" ? "Experiment Browser data" : "Workbook ranges"}
+                    </span>
+                  )}
                 </header>
                 {revision.requestSummary && <p>{revision.requestSummary}</p>}
                 <section className="analysis-plan-section">
@@ -1662,7 +1780,7 @@ export function AnalysisReviewWorkspace({
                 ? openTemplateForm
                 : resultReviewMode ? acceptVisibleResult : acceptVisiblePlan}
               disabled={resultReviewMode && chartFinalized && !browserMode
-                ? (!sourceChartSpec?.id || Boolean(savedTemplate) || busy)
+                ? (!sourceChartSpec?.id || Boolean(savedTemplate) || busy || templateEligibility.loading || (templateEligibilityRequired && templateEligibilityStatus !== "eligible"))
                 : resultReviewMode ? (!canAcceptResult || busy) : planAcceptanceDisabled}
             >
               {resultReviewMode
@@ -1671,6 +1789,8 @@ export function AnalysisReviewWorkspace({
                     ? "Data published"
                     : savedTemplate
                       ? "Template saved"
+                      : templateEligibility.loading ? "Checking template..."
+                        : ["ineligible", "unavailable"].includes(templateEligibilityStatus) ? "Template unavailable"
                       : pendingAction === "save_template" ? "Saving..." : "Save as template"
                   : chartCalculating
                     ? "Calculating..."
@@ -1679,14 +1799,14 @@ export function AnalysisReviewWorkspace({
                       : browserMode ? "Publish to Browser" : "Accept chart"
                 : pendingAction === "accept" || pendingAction === "execute" ? "Working..." : "Accept plan"}
             </button>
-            {!resultReviewMode && executorUnavailable && (
+            {!resultReviewMode && executorUnavailable && requiresPythonExecutor && (
               <p className="analysis-review-blocker" role="status">
                 {capabilityState.loading
                   ? "Checking Python execution availability before this plan can be accepted."
                   : "Python execution is unavailable. Configure an analysis executor before accepting this plan."}
               </p>
             )}
-            {resultReviewMode && run?.status === "queued" && executorUnavailable && (
+            {resultReviewMode && run?.status === "queued" && executorUnavailable && requiresPythonExecutor && (
               <p className="analysis-review-blocker" role="status">
                 Python execution is unavailable. Configure an analysis executor before calculating this chart.
               </p>
@@ -1752,6 +1872,19 @@ export function AnalysisReviewWorkspace({
                 >
                   {["revision", "result_revision"].includes(pendingAction) ? "Sending..." : "Send"}
                 </button>
+              </div>
+            )}
+            {resultReviewMode && chartFinalized && !browserMode && !templateFormOpen && ["ineligible", "unavailable"].includes(templateEligibilityStatus) && (
+              <div className="analysis-template-save-status" role="status">
+                <strong>Template unavailable</strong>
+                <ul>
+                  {(asArray(templateEligibility.value?.blockers).length
+                    ? asArray(templateEligibility.value?.blockers)
+                    : [{ message: "This chart is not eligible for deterministic template reuse." }]
+                  ).map((blocker, index) => (
+                    <li key={`${blocker.code || "blocker"}-${index}`}>{blocker.message}</li>
+                  ))}
+                </ul>
               </div>
             )}
           </div>

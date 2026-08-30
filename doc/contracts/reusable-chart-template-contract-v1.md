@@ -415,6 +415,25 @@ Template creation accepts a name, accepted `sourceChartSpecId`, and optional
 accepted style-profile version. It does not accept browser-authored recipe
 operations as trusted input.
 
+Approved-chart review may first call:
+
+```text
+GET /api/chart-specs/:chartSpecId/template-eligibility
+```
+
+This read-only preflight runs the same backend derivation used by creation and
+returns either the bounded eligible contract or structured ineligibility
+blockers. Failure or ineligibility disables template saving without changing
+the already accepted ChartSpec.
+
+Scalar eligibility is based on materialized accepted inputs, not an inert
+planning flag. `includeSeries: true` blocks scalar-template compilation only
+when the selected accepted record actually contains series data; an empty
+series collection does not become a false blocker. Accepted `grouped_bar`,
+`stacked_bar`, and `distribution_bar` ChartSpecs compile to the deterministic
+`bar` rendering primitive, with stacking/grouping preserved by the immutable
+comparison mode.
+
 Application creation accepts selected experiment ids, explicit slot bindings,
 and an `Idempotency-Key`. It returns compatibility results and, only when all
 blockers are resolved, the deterministic accepted plan plus queued AnalysisRun.

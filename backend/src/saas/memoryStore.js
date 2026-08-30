@@ -1143,6 +1143,7 @@ export class MemorySaasStore {
       schemaVersion: input.schemaVersion || "labrat.analysisThread.v1",
       status: input.status || "planning",
       outputTarget: input.outputTarget || "chart",
+      inputMode: input.inputMode || null,
       originalRequest: String(input.originalRequest || ""),
       messages: copy(input.messages) || [],
       planRevisionIds: copy(input.planRevisionIds) || [],
@@ -1176,6 +1177,7 @@ export class MemorySaasStore {
     if (!thread) return null;
     if (changes.status != null) thread.status = String(changes.status);
     if (changes.outputTarget != null) thread.outputTarget = String(changes.outputTarget);
+    if (changes.inputMode !== undefined) thread.inputMode = changes.inputMode || null;
     if (changes.messages != null) thread.messages = copy(changes.messages) || [];
     if (changes.planRevisionIds != null) thread.planRevisionIds = copy(changes.planRevisionIds) || [];
     if (changes.analysisRunIds != null) thread.analysisRunIds = copy(changes.analysisRunIds) || [];

@@ -33,6 +33,7 @@ import {
   deleteServerWorkbookReviewSession,
   deleteServerProject,
   getServerChartSpec,
+  getServerChartTemplateEligibility,
   getServerProjectState,
   getServerSession,
   getServerWorkbookReviewSession,
@@ -1805,10 +1806,13 @@ export function ChartReviewModal({
   allowAnalysisPrompt = false,
   chartInterpretState,
   chartSpecs,
+  projectId,
+  reusableChartTemplates = [],
   statusFilter,
   onInterpretChart,
   onLoadChartSpecDetail,
   onInsertChartSpec,
+  onTemplateApplicationReady,
   onOpenImportReview,
   onClose,
 }) {
@@ -1843,6 +1847,15 @@ export function ChartReviewModal({
             <button
               type="button"
               role="tab"
+              aria-selected={reviewMode === "template"}
+              className={reviewMode === "template" ? "active" : ""}
+              onClick={() => setReviewMode("template")}
+            >
+              Use template
+            </button>
+            <button
+              type="button"
+              role="tab"
               aria-selected={reviewMode === "edit"}
               className={reviewMode === "edit" ? "active" : ""}
               onClick={() => setReviewMode("edit")}
@@ -1855,10 +1868,13 @@ export function ChartReviewModal({
               allowAnalysisPrompt={allowAnalysisPrompt}
               chartInterpretState={chartInterpretState}
               chartSpecs={chartSpecs}
+              projectId={projectId}
+              reusableChartTemplates={reusableChartTemplates}
               viewMode={reviewMode}
               onInterpretChart={onInterpretChart}
               onLoadChartSpecDetail={onLoadChartSpecDetail}
               onInsertChartSpec={onInsertChartSpec}
+              onTemplateApplicationReady={onTemplateApplicationReady}
             />
           ) : (
             <div className="import-review-empty chart-review-empty">
@@ -3277,7 +3293,7 @@ function App() {
   const clearChartAnalysisRequest = (nonce) => {
     setPendingChartAnalysis((request) => request?.nonce === nonce ? null : request);
   };
-  const interpretBackendChart = async (prompt) => {
+  const interpretBackendChart = async (prompt, { inputMode = "experiment_browser" } = {}) => {
     if (!activeProjectId) return;
     setBackendChartInterpretState({ loading: true, result: null, error: "" });
     try {
@@ -3287,6 +3303,7 @@ function App() {
         selectedContext: {
           tab: "chart_review",
           requestedWorkflow: "reviewed_analysis_chart",
+          chartInputMode: inputMode,
         },
       });
       const analysisThread = response.analysisThread || null;
@@ -3334,10 +3351,10 @@ function App() {
       setSourceError(err.message || String(err));
     }
   };
-  const openAnalysisReview = ({ thread, revision, run = null, result = null }) => {
+  const openAnalysisReview = ({ thread, revision, run = null, result = null, executionStrategy = "model_generated_python" }) => {
     if (!thread?.id || !revision?.id) return;
     closeChartReview();
-    setAnalysisReviewState({ thread, revision, run, result });
+    setAnalysisReviewState({ thread, revision, run, result, executionStrategy });
     setAgentOpen(false);
   };
   const closeAnalysisReview = () => {
@@ -3606,6 +3623,8 @@ function App() {
               .then(applyProjectWorkspaceRefresh)
               .catch((error) => setSourceError(error?.message || String(error)));
           }}
+          loadTemplateEligibility={getServerChartTemplateEligibility}
+          executionStrategy={analysisReviewState.executionStrategy || "model_generated_python"}
         />
       )}
       <DetailModal exp={selected} onClose={() => setSelected(null)} onStage={stage} />
@@ -3614,12 +3633,22 @@ function App() {
         allowAnalysisPrompt={Boolean(activeProjectId)}
         chartInterpretState={backendChartInterpretState}
         chartSpecs={activeChartSpecsForProject(projectState)}
+        projectId={activeProjectId}
+        reusableChartTemplates={asArray(projectState?.reusableChartTemplates)}
         statusFilter={chartReviewStatusFilter}
         onInterpretChart={interpretBackendChart}
         onLoadChartSpecDetail={loadChartSpecDetailForManuscript}
         onInsertChartSpec={(chartSpecId) => {
           requestChartSpecManuscriptInsert(chartSpecId);
           closeChartReview();
+        }}
+        onTemplateApplicationReady={(response) => {
+          openAnalysisReview({
+            thread: response.analysisThread,
+            revision: response.analysisPlanRevision,
+            run: response.analysisRun || null,
+            executionStrategy: "chart_template_v1",
+          });
         }}
         onOpenImportReview={openWorkbookUpload}
         onClose={closeChartReview}

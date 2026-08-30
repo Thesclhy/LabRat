@@ -5,6 +5,7 @@ import {
   buildChartStyleProfileVersion,
   buildReusableChartTemplateVersion,
   deriveReusableChartTemplateDefinition,
+  inspectReusableChartTemplateEligibility,
   validateChartStyleProfileVersion,
   validateReusableChartTemplateVersion,
 } from "./reusableChartTemplates.js";
@@ -146,6 +147,7 @@ test("template eligibility rejects workbook ranges, series, and mismatched scala
 
   const series = eligibleFixture();
   series.chartSpec.spec.experimentSelections[0].includeSeries = true;
+  series.snapshot.experimentRecords[0].series = [{ seriesKey: "rate", points: [{ x: 0, y: 1 }] }];
   await assert.rejects(
     deriveReusableChartTemplateDefinition({ store: series.store, projectId: series.projectId, chartSpec: series.chartSpec }),
     (error) => error.code === "reusable_chart_template_not_eligible",
@@ -157,6 +159,37 @@ test("template eligibility rejects workbook ranges, series, and mismatched scala
     deriveReusableChartTemplateDefinition({ store: mismatch.store, projectId: mismatch.projectId, chartSpec: mismatch.chartSpec }),
     (error) => error.code === "reusable_chart_template_not_eligible",
   );
+});
+
+test("ignores an inert includeSeries flag and normalizes stacked bar encoding", async () => {
+  const fixture = eligibleFixture({
+    chartSpec: { chartType: "stacked_bar" },
+    spec: {
+      chartType: "stacked_bar",
+      plotly: { layout: { barmode: "stack" } },
+      experimentSelections: [0, 1].map((recordIndex) => ({
+        experimentId: `experiment_${recordIndex + 1}`,
+        columnIndexes: [0],
+        includeSeries: true,
+        baseHeadRef: { dataSnapshotId: "snapshot_1", recordIndex },
+      })),
+    },
+  });
+
+  const eligibility = await inspectReusableChartTemplateEligibility({
+    store: fixture.store,
+    projectId: fixture.projectId,
+    chartSpec: fixture.chartSpec,
+  });
+  const definition = await deriveReusableChartTemplateDefinition({
+    store: fixture.store,
+    projectId: fixture.projectId,
+    chartSpec: fixture.chartSpec,
+  });
+
+  assert.equal(eligibility.status, "eligible");
+  assert.equal(definition.encoding.chartType, "bar");
+  assert.equal(definition.encoding.comparisonMode, "stacked_components");
 });
 
 test("template eligibility names string-typed fields that require correction", async () => {
@@ -176,4 +209,23 @@ test("template eligibility names string-typed fields that require correction", a
       && /Yield is stored as string/.test(error.message)
     ),
   );
+});
+
+test("template eligibility reports every independently actionable blocker", async () => {
+  const fixture = eligibleFixture({ spec: { sourceSelections: [{ range: "A1:B3" }] } });
+  fixture.snapshot.experimentRecords[0].fields[0].valueType = "string";
+  fixture.snapshot.experimentRecords[1].fields[0].columnId = "column_conversion";
+
+  const result = await inspectReusableChartTemplateEligibility({
+    store: fixture.store,
+    projectId: fixture.projectId,
+    chartSpec: fixture.chartSpec,
+  });
+
+  assert.equal(result.status, "ineligible");
+  assert.deepEqual(result.blockers.map((item) => item.code), [
+    "reusable_chart_template_workbook_inputs_unsupported",
+    "reusable_chart_template_field_type_incompatible",
+    "reusable_chart_template_field_contract_mismatch",
+  ]);
 });

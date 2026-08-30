@@ -1,4 +1,5 @@
 import {
+  ANALYSIS_INPUT_MODES,
   ANALYSIS_PLAN_REVISION_VERSION,
   ANALYSIS_RUNTIME_VERSION,
   ANALYSIS_OUTPUT_TARGETS,
@@ -162,6 +163,7 @@ export function analysisThreadSummary(thread) {
     schemaVersion: thread.schemaVersion,
     status: thread.status,
     outputTarget: thread.outputTarget || ANALYSIS_OUTPUT_TARGETS.CHART,
+    inputMode: thread.inputMode || null,
     originalRequest: thread.originalRequest,
     messageCount: asArray(thread.messages).length,
     planRevisionIds: asArray(thread.planRevisionIds),
@@ -188,6 +190,7 @@ export function analysisPlanRevisionSummary(revision) {
     revision: revision.revision,
     status: revision.status,
     outputTarget: revision.outputTarget || plan.outputTarget || ANALYSIS_OUTPUT_TARGETS.CHART,
+    inputMode: plan.inputMode || null,
     requestSummary: revision.requestSummary,
     sourceSelections: revision.sourceSelections || plan.sourceSelections || [],
     experimentSelections: revision.experimentSelections || plan.experimentSelections || [],
@@ -265,6 +268,7 @@ export async function createAnalysisThread({
   originalRequest,
   messages = [],
   outputTarget = ANALYSIS_OUTPUT_TARGETS.CHART,
+  inputMode = null,
 } = {}) {
   const request = text(originalRequest);
   if (!project?.id || !project?.labId || !request) {
@@ -284,6 +288,10 @@ export async function createAnalysisThread({
   const normalizedTarget = Object.values(ANALYSIS_OUTPUT_TARGETS).includes(text(outputTarget))
     ? text(outputTarget)
     : ANALYSIS_OUTPUT_TARGETS.CHART;
+  const normalizedInputMode = normalizedTarget === ANALYSIS_OUTPUT_TARGETS.CHART
+    && Object.values(ANALYSIS_INPUT_MODES).includes(text(inputMode))
+    ? text(inputMode)
+    : null;
   return store.createAnalysisThread({
     id: makeId("analysis_thread"),
     labId: project.labId,
@@ -291,6 +299,7 @@ export async function createAnalysisThread({
     schemaVersion: "labrat.analysisThread.v2",
     status: "planning",
     outputTarget: normalizedTarget,
+    inputMode: normalizedInputMode,
     originalRequest: request,
     messages: asArray(messages).length ? messages : [{
       id: makeId("analysis_message"),
@@ -311,11 +320,12 @@ export async function createAnalysisThread({
   });
 }
 
-function modelPlanCandidate(rawDraft, originalRequest, outputTarget = ANALYSIS_OUTPUT_TARGETS.CHART) {
+function modelPlanCandidate(rawDraft, originalRequest, outputTarget = ANALYSIS_OUTPUT_TARGETS.CHART, inputMode = null) {
   return {
     schemaVersion: ANALYSIS_PLAN_REVISION_VERSION,
     status: "awaiting_review",
     outputTarget,
+    ...(outputTarget === ANALYSIS_OUTPUT_TARGETS.CHART ? { inputMode } : {}),
     requestSummary: text(rawDraft?.requestSummary) || originalRequest,
     sourceSelections: asArray(rawDraft?.sourceSelections),
     experimentSelections: asArray(rawDraft?.experimentSelections),
@@ -361,6 +371,9 @@ export async function draftAnalysisPlanRevision({
     throw analysisError("analysis_thread_not_found", "Analysis thread was not found.", 404);
   }
   const outputTarget = thread.outputTarget || ANALYSIS_OUTPUT_TARGETS.CHART;
+  const inputMode = outputTarget === ANALYSIS_OUTPUT_TARGETS.CHART
+    ? thread.inputMode || ANALYSIS_INPUT_MODES.WORKBOOK
+    : null;
   const draftProvider = outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
     ? modelProvider?.draftExperimentBrowserPlan
     : modelProvider?.draftAnalysisPlan;
@@ -378,10 +391,25 @@ export async function draftAnalysisPlanRevision({
     }),
     experimentInputCatalog({ store, projectId: project.id }),
   ]);
-  if (!confirmedRegions.length && !activeExperiments.length) {
+  if (
+    (outputTarget === ANALYSIS_OUTPUT_TARGETS.CHART
+      && inputMode === ANALYSIS_INPUT_MODES.WORKBOOK
+      && !confirmedRegions.length)
+    || (outputTarget === ANALYSIS_OUTPUT_TARGETS.CHART
+      && inputMode === ANALYSIS_INPUT_MODES.EXPERIMENT_BROWSER
+      && !activeExperiments.length)
+    || (outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
+      && !confirmedRegions.length
+      && !activeExperiments.length)
+  ) {
     throw analysisError(
       "analysis_evidence_required",
-      "Confirm workbook regions or publish experiment data before drafting an analysis plan.",
+      outputTarget === ANALYSIS_OUTPUT_TARGETS.CHART
+        && inputMode === ANALYSIS_INPUT_MODES.EXPERIMENT_BROWSER
+        ? "Publish accepted experiment data before drafting an Experiment Browser chart plan."
+        : outputTarget === ANALYSIS_OUTPUT_TARGETS.CHART
+          ? "Confirm workbook regions before drafting a Workbook chart plan."
+          : "Confirm workbook regions or publish experiment data before drafting an Experiment Browser data plan.",
       409,
     );
   }
@@ -399,6 +427,7 @@ export async function draftAnalysisPlanRevision({
     },
     originalRequest: thread.originalRequest,
     outputTarget,
+    inputMode,
     feedback: text(feedback) || null,
     reviewContext: reviewContext || null,
     priorRevisions: priorRevisions.slice(-5).map((revision) => ({
@@ -410,8 +439,14 @@ export async function draftAnalysisPlanRevision({
       experimentSelections: revision.plan?.experimentSelections || [],
       displayPlan: revision.plan?.displayPlan || [],
     })),
-    confirmedRegions,
-    activeExperimentCatalog,
+    confirmedRegions: outputTarget !== ANALYSIS_OUTPUT_TARGETS.CHART
+      || inputMode === ANALYSIS_INPUT_MODES.WORKBOOK
+      ? confirmedRegions
+      : [],
+    activeExperimentCatalog: outputTarget !== ANALYSIS_OUTPUT_TARGETS.CHART
+      || inputMode === ANALYSIS_INPUT_MODES.EXPERIMENT_BROWSER
+      ? activeExperimentCatalog
+      : { experiments: [], fields: [] },
   };
   let draft = null;
   let plan = null;
@@ -441,7 +476,7 @@ export async function draftAnalysisPlanRevision({
       );
     }
     try {
-      const candidate = modelPlanCandidate(draft, thread.originalRequest, outputTarget);
+      const candidate = modelPlanCandidate(draft, thread.originalRequest, outputTarget, inputMode);
       const sourceSelections = candidate.sourceSelections.length
         ? await resolveAnalysisSourceSelections({
           store,
@@ -546,6 +581,9 @@ export async function createAnalysisPlanRevision({
     );
   }
   const outputTarget = thread.outputTarget || ANALYSIS_OUTPUT_TARGETS.CHART;
+  const inputMode = outputTarget === ANALYSIS_OUTPUT_TARGETS.CHART
+    ? thread.inputMode || text(plan?.inputMode) || ANALYSIS_INPUT_MODES.WORKBOOK
+    : null;
   if (text(plan?.outputTarget) && text(plan.outputTarget) !== outputTarget) {
     throw analysisError(
       "analysis_output_target_mismatch",
@@ -570,6 +608,7 @@ export async function createAnalysisPlanRevision({
     schemaVersion: ANALYSIS_PLAN_REVISION_VERSION,
     status: "awaiting_review",
     outputTarget,
+    ...(outputTarget === ANALYSIS_OUTPUT_TARGETS.CHART ? { inputMode } : {}),
     sourceSelections,
     experimentSelections,
   };

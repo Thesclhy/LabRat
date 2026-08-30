@@ -2391,6 +2391,13 @@ test("reusable chart style and template APIs support accepted versioned lifecycl
   assert.equal(unknownReference.status, 404);
   assert.equal((await unknownReference.json()).error.code, "chart_style_reference_not_found");
 
+  const eligibilityResponse = await jsonFetch(`/api/chart-specs/${chartSpecId}/template-eligibility`);
+  assert.equal(eligibilityResponse.status, 200);
+  const eligibilityBody = await eligibilityResponse.json();
+  assert.equal(eligibilityBody.status, "eligible");
+  assert.equal(eligibilityBody.chartSpecId, chartSpecId);
+  assert.equal(eligibilityBody.inputSlots[0].identityContract.preferredColumnId, "column_reusable_yield");
+
   const templateCreate = await jsonFetch(`/api/projects/${project.id}/reusable-chart-templates`, {
     method: "POST",
     body: {

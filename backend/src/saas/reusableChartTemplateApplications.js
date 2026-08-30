@@ -281,6 +281,7 @@ export function buildReusableChartTemplateApplicationArtifacts({
   const { executionBindings = [], ...publicCompatibility } = compatibility;
   const plan = ready ? {
     outputTarget: "chart",
+    inputMode: "experiment_browser",
     sourceSelections: [],
     experimentSelections: copy(compatibility.experimentSelections),
     reviewPlan: {
@@ -353,6 +354,7 @@ export function buildReusableChartTemplateApplicationArtifacts({
       schemaVersion: "labrat.analysisThread.v1",
       status: "executing",
       outputTarget: "chart",
+      inputMode: "experiment_browser",
       originalRequest: `Apply reusable chart template: ${templateName}`,
       messages: [{
         id: makeId("analysis_message"),
@@ -404,7 +406,7 @@ export function buildReusableChartTemplateApplicationArtifacts({
       outputTarget: "chart",
       idempotencyKey: `template_run:${applicationId}`,
       requestHash,
-      inputHash: null,
+      inputHash: "pending",
       programHash: stableDataHash(templateVersion.recipe),
       runtimeVersion: ANALYSIS_RUNTIME_VERSION,
       resultPreviewHash: null,

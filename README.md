@@ -169,8 +169,9 @@ versioned style/template persistence, lifecycle APIs, reviewed slot bindings,
 and idempotent applications are implemented. Compatible accepted Browser
 experiments now use the Milestone 3 deterministic no-provider/no-Python path
 and the same immutable ChartSpec boundary. Adaptive geometry and
-provider-independent stored-type/percentage-scale handling are complete; the
-fast template-picker UI remains the next milestone. See
+provider-independent stored-type/percentage-scale handling and the fast
+template-picker UI are complete; remaining template management and style-only
+fallback are next. See
 `doc/plans/reusable-chart-creation-plan.md`.
 
 Production operationalization of reviewed analysis execution remains an

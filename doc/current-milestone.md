@@ -71,8 +71,8 @@ The backend eligibility compiler now supports one to twelve stable numeric
 scalar components selected in the same order for every experiment, including
 stacked Solid/Liquid/Gas-style comparisons with a shared unit. Direct workbook
 ranges, series inputs, identity/unit mismatch, and ambiguous lineage still
-  fail closed. Template application is supplied by Milestone 3; the rest of the full
-template-management frontend remains Milestones 5-6.
+  fail closed. Template application is supplied by Milestone 3 and the fast
+reuse frontend by Milestone 5; remaining management stays in Milestone 6.
 
 Verification passed with 292/292 frontend tests, 227/231 backend tests with
 four expected skips, focused save-interaction/API/stacked-eligibility coverage,
@@ -90,8 +90,8 @@ Milestone 3 implements the deterministic template-application path:
 6. preserve template, binding, experiment-head, and source-cell lineage through
    AnalysisResult and ChartSpec review.
 
-Adaptive manuscript geometry remains Milestone 4 and the fast template-picker
-frontend remains Milestone 5.
+Adaptive manuscript geometry was completed in Milestone 4 and the fast
+template-picker frontend in Milestone 5.
 
 ## Reusable Chart Creation Milestone 4 — Complete
 
@@ -109,11 +109,40 @@ rendering for the reusable fast path:
 5. validate and persist `labrat.resolvedChartGeometry.v1` through immutable
    AnalysisResult and ChartSpec records.
 
-## Next Reusable Chart Milestone
+## Reusable Chart Creation Milestone 5 — Complete
 
-Milestone 5 is the next implementation slice: expose the deterministic path in
-Chart Review with template choice, experiment selection, compatibility and
-explicit-binding review, data coverage, preview, and normal result acceptance.
+Chart Review now exposes `Create chart | Use template | Approved charts`. The
+template path loads immutable template contracts, supports cursor-aware accepted
+Experiment Browser selection, shows required slots and exact-field coverage,
+surfaces missing/incompatible/ambiguous inputs with affected experiments,
+persists explicit reviewed bindings, and opens the existing result review for a
+ready `chart_template_v1` application. Deterministic queued runs execute without
+a configured Python executor; preview still creates no ChartSpec and normal
+result acceptance remains mandatory.
+
+Approved-chart review also checks backend-derived eligibility before enabling
+`Save as template`. Direct workbook lineage, unstable fields, string types,
+unit/scale mismatch, and unsupported input shapes are shown before the naming
+form, while eligibility-service failure blocks the optional save action without
+changing the accepted chart.
+
+The 2026-08-20 reliability follow-up makes chart evidence selection explicit:
+Experiment Browser mode is the default and only template-compatible mode, while
+Workbook mode remains an advanced one-off path. The backend persists the mode,
+shows the provider only its selected catalog, rejects mixed chart inputs,
+protects deterministic source types from every model patch shape, exposes the
+actual stored type from active published snapshots, and returns all template
+eligibility blockers together. Historical project data, including Project 14,
+was not rewritten or repaired.
+
+The next reusable-chart slice is the remaining Milestone 6 management UI:
+inspect contracts, create later versions, archive templates, and offer the
+style-only fallback for scientifically unsupported recipes.
+
+Verification passed 300/300 frontend tests, 263/267 backend tests with four
+expected skips, the production build with the existing Plotly chunk-size
+warning, and `git diff --check`. Manual browser QA was unavailable because the
+local Docker stack was not running.
 
 ## Stored-Type Reliability — Complete
 
@@ -527,7 +556,7 @@ Deployment work not included in this completed milestone:
 
 ## Next Recommended Slice
 
-1. Execute reusable chart creation Milestone 5 fast reuse frontend.
+1. Execute the remaining reusable chart creation Milestone 6 authoring and management UI.
 2. Retain the configured Postgres route suite and repeatable migration smoke as
    a parallel operational priority after the coherent chart milestone.
 3. Operationalize the hardened analysis worker, secret management, timeouts,

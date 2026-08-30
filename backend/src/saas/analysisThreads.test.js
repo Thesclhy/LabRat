@@ -766,6 +766,7 @@ test("chart planning selects duplicate Browser columns by ordered index and sour
     actorUserId: "user_1",
     originalRequest: "Chart the Yield column from Second.xlsx for Exp31.",
     outputTarget: "chart",
+    inputMode: "experiment_browser",
   });
   const modelProvider = {
     async draftAnalysisPlan(request) {

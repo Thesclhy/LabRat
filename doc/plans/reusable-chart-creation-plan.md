@@ -112,6 +112,8 @@ shared-scale semantics, and deterministic style across reload and export.
 
 ## Milestone 5 — Fast Reuse Frontend
 
+Status: complete on 2026-08-20
+
 - Extend Chart Review to `Create chart | Use template | Approved charts`.
 - Add template choice, experiment selection, slot compatibility, explicit
   binding, and data-coverage UI.
@@ -126,6 +128,23 @@ shared-scale semantics, and deterministic style across reload and export.
 Done when a user can create a new ChartSpec with no prompt by selecting a
 template and compatible experiments, and all missing-data consequences are
 visible before acceptance.
+
+Implemented through the three-tab Chart Review surface, reusable-template
+contract loading, cursor-aware accepted-experiment selection, exact-field
+coverage, structured blocker and explicit-binding review, deterministic
+application handoff, no-Python execution, and the existing result review and
+ChartSpec acceptance path. Approved-chart review now performs a read-only
+backend eligibility preflight before enabling `Save as template`, so unsupported
+lineage is explained before naming or writing a template.
+
+Reliability follow-up completed on 2026-08-20: new natural-language chart
+requests explicitly choose Experiment Browser or Workbook input mode. Browser
+mode is the default and only template-compatible path; Workbook mode is an
+advanced one-off path. The provider receives only the selected evidence
+catalog, backend validation rejects mixed inputs, deterministic source typing
+cannot be overwritten by model output, published snapshot cells expose their
+actual stored type, and eligibility reports all blockers in one response.
+Historical projects and ChartSpecs are not rewritten.
 
 ## Milestone 6 — Template Authoring From Approved Charts
 

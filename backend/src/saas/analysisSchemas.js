@@ -7,6 +7,10 @@ export const ANALYSIS_OUTPUT_TARGETS = Object.freeze({
   CHART: "chart",
   EXPERIMENT_BROWSER: "experiment_browser",
 });
+export const ANALYSIS_INPUT_MODES = Object.freeze({
+  EXPERIMENT_BROWSER: "experiment_browser",
+  WORKBOOK: "workbook",
+});
 const SUPPORTED_ANALYSIS_CHART_TYPES = new Set(SUPPORTED_CHART_TYPES);
 const FORBIDDEN_PLAN_KEYS = new Set([
   "pythonProgram",
@@ -47,6 +51,7 @@ export function pythonSourceHash(source) {
 export function frozenPlanHash(plan = {}) {
   return stableDataHash({
     outputTarget: plan.outputTarget || ANALYSIS_OUTPUT_TARGETS.CHART,
+    inputMode: plan.inputMode || null,
     sourceSelections: asArray(plan.sourceSelections),
     experimentSelections: asArray(plan.experimentSelections),
     reviewPlan: plan.reviewPlan || {},
@@ -57,6 +62,16 @@ export function frozenPlanHash(plan = {}) {
 export function validateAnalysisPlanRevision(plan = {}) {
   const errors = [];
   const outputTarget = text(plan.outputTarget) || ANALYSIS_OUTPUT_TARGETS.CHART;
+  const sourceSelections = asArray(plan.sourceSelections);
+  const experimentSelections = asArray(plan.experimentSelections);
+  const declaredInputMode = text(plan.inputMode);
+  const inputMode = declaredInputMode || (
+    sourceSelections.length && !experimentSelections.length
+      ? ANALYSIS_INPUT_MODES.WORKBOOK
+      : experimentSelections.length && !sourceSelections.length
+        ? ANALYSIS_INPUT_MODES.EXPERIMENT_BROWSER
+        : ""
+  );
   if (
     Object.prototype.hasOwnProperty.call(plan, "fieldTargets")
     || Object.prototype.hasOwnProperty.call(plan, "targetFields")
@@ -90,11 +105,45 @@ export function validateAnalysisPlanRevision(plan = {}) {
       "A reviewable request summary is required.",
     ));
   }
-  if (!asArray(plan.sourceSelections).length && !asArray(plan.experimentSelections).length) {
+  if (!sourceSelections.length && !experimentSelections.length) {
     errors.push(error(
       "analysis_input_selection_required",
       "An analysis plan must select workbook ranges or active experiment fields.",
     ));
+  }
+  if (outputTarget === ANALYSIS_OUTPUT_TARGETS.CHART) {
+    if (!Object.values(ANALYSIS_INPUT_MODES).includes(inputMode)) {
+      errors.push(error(
+        "analysis_input_mode_invalid",
+        "Chart plans require Experiment Browser or Workbook input mode.",
+      ));
+    } else if (inputMode === ANALYSIS_INPUT_MODES.EXPERIMENT_BROWSER) {
+      if (sourceSelections.length) {
+        errors.push(error(
+          "analysis_browser_mode_workbook_selection_forbidden",
+          "Experiment Browser chart mode cannot include direct workbook ranges.",
+        ));
+      }
+      if (!experimentSelections.length) {
+        errors.push(error(
+          "analysis_browser_mode_experiment_selection_required",
+          "Experiment Browser chart mode requires accepted experiment fields.",
+        ));
+      }
+    } else if (inputMode === ANALYSIS_INPUT_MODES.WORKBOOK) {
+      if (experimentSelections.length) {
+        errors.push(error(
+          "analysis_workbook_mode_experiment_selection_forbidden",
+          "Workbook chart mode cannot include Experiment Browser selections.",
+        ));
+      }
+      if (!sourceSelections.length) {
+        errors.push(error(
+          "analysis_workbook_mode_source_selection_required",
+          "Workbook chart mode requires at least one confirmed workbook range.",
+        ));
+      }
+    }
   }
   asArray(plan.sourceSelections).forEach((selection, index) => {
     if (

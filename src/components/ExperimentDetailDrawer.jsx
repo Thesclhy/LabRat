@@ -37,8 +37,23 @@ function sourceRawValue(source) {
   return String(source.rawValue);
 }
 
+function storedTypeLabel(value) {
+  const normalized = String(value || "string").trim().toLowerCase();
+  return normalized ? normalized[0].toUpperCase() + normalized.slice(1) : "Unknown";
+}
+
+function sourceTypeLabel(source) {
+  const value = source?.rawValue;
+  if (value === null || value === undefined || value === "") return "Blank";
+  if (typeof value === "number") return "Number";
+  if (typeof value === "boolean") return "Boolean";
+  return "String";
+}
+
 export function ExperimentDetailDrawer({ detail = null, loading = false, error = "", onClose, onOpenSourceRange }) {
   const record = detail?.record;
+  const [inspectedField, setInspectedField] = React.useState(null);
+  React.useEffect(() => setInspectedField(null), [detail?.experiment?.id, record?.experimentId]);
   const title = detail?.experiment?.canonicalLabel || record?.label || "Experiment detail";
   return (
     <aside className="experiment-detail-drawer" aria-label="Experiment detail">
@@ -65,6 +80,9 @@ export function ExperimentDetailDrawer({ detail = null, loading = false, error =
                     <span>{field.displayName || field.fieldKey || "Field"}</span>
                     <strong>{fieldValue(field)}</strong>
                     <small>{field.role || "field"} | {confidenceLabel(field.confidence)} confidence</small>
+                    <button type="button" className="experiment-field-inspect" onClick={() => setInspectedField(field)}>
+                      Inspect stored value
+                    </button>
                     {field.value == null && field.missingReason && (
                       <div className="experiment-missing-detail">
                         <strong>Missing in source</strong>
@@ -87,6 +105,26 @@ export function ExperimentDetailDrawer({ detail = null, loading = false, error =
                 ))}
                 {!asArray(record.fields).length && <p className="browser-muted">No scalar fields.</p>}
               </div>
+              {inspectedField && (
+                <aside className="experiment-published-cell-inspector" aria-label="Published stored value details">
+                  <header>
+                    <div>
+                      <strong>{inspectedField.displayName || inspectedField.fieldKey || "Field"}</strong>
+                      <span>Active published snapshot</span>
+                    </div>
+                    <button type="button" aria-label="Close published stored value details" onClick={() => setInspectedField(null)}>x</button>
+                  </header>
+                  <dl>
+                    <div><dt>Stored value</dt><dd>{fieldValue(inspectedField)}</dd></div>
+                    <div><dt>Stored type</dt><dd>{storedTypeLabel(inspectedField.valueType)}</dd></div>
+                    <div><dt>Unit</dt><dd>{inspectedField.unit || "None"}</dd></div>
+                    <div><dt>Numeric scale</dt><dd>{inspectedField.numericScale || "Not applicable"}</dd></div>
+                    <div><dt>Source value</dt><dd>{sourceRawValue(asArray(inspectedField.sourceRefs)[0])}</dd></div>
+                    <div><dt>Source type</dt><dd>{sourceTypeLabel(asArray(inspectedField.sourceRefs)[0])}</dd></div>
+                    <div><dt>Source</dt><dd>{sourceLabel(asArray(inspectedField.sourceRefs)[0])}</dd></div>
+                  </dl>
+                </aside>
+              )}
             </section>
 
             <section className="experiment-detail-section">

@@ -14,7 +14,9 @@ import {
   deleteServerWorkbookReviewSession,
   getServerAgentRun,
   getServerChartSpec,
+  getServerChartTemplateEligibility,
   getServerProjectState,
+  getServerReusableChartTemplate,
   getServerSession,
   getServerWorkbookReviewSession,
   interpretServerWorkbookReviewRegion,
@@ -369,6 +371,18 @@ describe("serverApi", () => {
       experimentIds: ["experiment_1", "experiment_2"],
       bindings: [],
     });
+  });
+
+  it("loads reusable template detail and ChartSpec eligibility", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ reusableChartTemplate: { id: "template_1" }, versions: [] }))
+      .mockResolvedValueOnce(jsonResponse({ status: "eligible", chartSpecId: "chart_spec_1" }));
+
+    await getServerReusableChartTemplate("template_1", { fetch: fetchImpl });
+    await getServerChartTemplateEligibility("chart_spec_1", { fetch: fetchImpl });
+
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/reusable-chart-templates/template_1");
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/chart-specs/chart_spec_1/template-eligibility");
   });
 
   it("surfaces backend error envelopes", async () => {

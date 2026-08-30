@@ -553,6 +553,182 @@ describe("AnalysisReviewWorkspace", () => {
     expect(executeRun).not.toHaveBeenCalled();
   });
 
+  it("executes chart_template_v1 without a configured Python executor", async () => {
+    const queuedRun = { ...validatedRun, status: "queued" };
+    const loadAnalysisCapabilities = vi.fn().mockResolvedValue({
+      executor: { configured: false, adapter: "disabled" },
+    });
+    const executeRun = vi.fn().mockResolvedValue({
+      analysisRun: validatedRun,
+      analysisResult: validatedResult,
+    });
+    const loadResultPreview = vi.fn().mockResolvedValue(resultPreview);
+    render(
+      <AnalysisReviewWorkspace
+        projectId="project_1"
+        thread={thread}
+        revision={{ ...revision2, status: "accepted" }}
+        planRevisions={[{ ...revision2, status: "accepted" }]}
+        selection={selection}
+        loadThread={vi.fn().mockResolvedValue({
+          analysisThread: thread,
+          planRevisions: [{ ...revision2, status: "accepted" }],
+          analysisRuns: [queuedRun],
+        })}
+        loadAnalysisCapabilities={loadAnalysisCapabilities}
+        executeRun={executeRun}
+        loadResultPreview={loadResultPreview}
+        executionStrategy="chart_template_v1"
+        WorkbookWorkspaceComponent={WorkbookWorkspaceStub}
+      />,
+    );
+
+    await waitFor(() => expect(executeRun).toHaveBeenCalledWith(queuedRun.id, {
+      executionStrategy: "chart_template_v1",
+    }));
+    await waitFor(() => expect(loadResultPreview).toHaveBeenCalled());
+    expect(loadAnalysisCapabilities).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Python execution is unavailable/)).toBeNull();
+  });
+
+  it("uses the persisted template strategy when the transient frontend strategy is absent", async () => {
+    const queuedRun = {
+      ...validatedRun,
+      status: "queued",
+      execution: {
+        ...validatedRun.execution,
+        executionStrategy: "chart_template_v1",
+      },
+    };
+    const executeRun = vi.fn().mockResolvedValue({
+      analysisRun: {
+        ...validatedRun,
+        execution: {
+          ...validatedRun.execution,
+          executionStrategy: "chart_template_v1",
+        },
+      },
+      analysisResult: validatedResult,
+    });
+    const loadAnalysisCapabilities = vi.fn();
+
+    render(
+      <AnalysisReviewWorkspace
+        projectId="project_1"
+        thread={thread}
+        revision={{ ...revision2, status: "accepted" }}
+        planRevisions={[{ ...revision2, status: "accepted" }]}
+        selection={selection}
+        run={queuedRun}
+        executeRun={executeRun}
+        loadResultPreview={vi.fn().mockResolvedValue(resultPreview)}
+        loadAnalysisCapabilities={loadAnalysisCapabilities}
+        WorkbookWorkspaceComponent={WorkbookWorkspaceStub}
+      />,
+    );
+
+    await waitFor(() => expect(executeRun).toHaveBeenCalledWith(queuedRun.id, {
+      executionStrategy: "chart_template_v1",
+    }));
+    expect(loadAnalysisCapabilities).not.toHaveBeenCalled();
+    expect(screen.queryByText(/accepted Python plan/)).toBeNull();
+  });
+
+  it("refreshes a running template execution until its completed result is available", async () => {
+    const runningRun = { ...validatedRun, status: "running" };
+    const loadRun = vi.fn()
+      .mockResolvedValueOnce({ analysisRun: runningRun, analysisResult: null })
+      .mockResolvedValueOnce({ analysisRun: validatedRun, analysisResult: validatedResult });
+    const loadResultPreview = vi.fn().mockResolvedValue(resultPreview);
+
+    render(
+      <AnalysisReviewWorkspace
+        projectId="project_1"
+        thread={thread}
+        revision={{ ...revision2, status: "accepted" }}
+        selection={selection}
+        run={runningRun}
+        loadRun={loadRun}
+        loadResultPreview={loadResultPreview}
+        executionStrategy="chart_template_v1"
+        runRefreshIntervalMs={1}
+        WorkbookWorkspaceComponent={WorkbookWorkspaceStub}
+      />,
+    );
+
+    expect(screen.getByText("Applying chart template")).toBeTruthy();
+    expect(screen.queryByText(/accepted Python plan/)).toBeNull();
+    await waitFor(() => expect(loadRun).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(loadResultPreview).toHaveBeenCalledWith(validatedRun.id));
+    expect(screen.getAllByText("Result ready").length).toBeGreaterThan(0);
+  });
+
+  it("recovers when a running-run refresh fails transiently", async () => {
+    const runningRun = {
+      ...validatedRun,
+      status: "running",
+      execution: {
+        ...validatedRun.execution,
+        executionStrategy: "chart_template_v1",
+      },
+    };
+    const loadRun = vi.fn()
+      .mockRejectedValueOnce(new Error("Temporary refresh failure"))
+      .mockResolvedValueOnce({ analysisRun: validatedRun, analysisResult: validatedResult });
+    const loadResultPreview = vi.fn().mockResolvedValue(resultPreview);
+
+    render(
+      <AnalysisReviewWorkspace
+        projectId="project_1"
+        thread={thread}
+        revision={{ ...revision2, status: "accepted" }}
+        selection={selection}
+        run={runningRun}
+        loadRun={loadRun}
+        loadResultPreview={loadResultPreview}
+        runRefreshIntervalMs={1}
+        WorkbookWorkspaceComponent={WorkbookWorkspaceStub}
+      />,
+    );
+
+    await waitFor(() => expect(loadRun).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getAllByText("Result ready").length).toBeGreaterThan(0));
+    expect(screen.queryByText("Temporary refresh failure")).toBeNull();
+  });
+
+  it("does not reset a completed local run when the same stale running prop is rendered again", async () => {
+    const runningRun = {
+      ...validatedRun,
+      status: "running",
+      execution: {
+        ...validatedRun.execution,
+        executionStrategy: "chart_template_v1",
+      },
+    };
+    const loadRun = vi.fn().mockResolvedValue({
+      analysisRun: validatedRun,
+      analysisResult: validatedResult,
+    });
+    const loadResultPreview = vi.fn().mockResolvedValue(resultPreview);
+    const props = {
+      projectId: "project_1",
+      thread,
+      revision: { ...revision2, status: "accepted" },
+      selection,
+      run: runningRun,
+      loadRun,
+      loadResultPreview,
+      WorkbookWorkspaceComponent: WorkbookWorkspaceStub,
+    };
+    const { rerender } = render(<AnalysisReviewWorkspace {...props} />);
+
+    await waitFor(() => expect(screen.getAllByText("Result ready").length).toBeGreaterThan(0));
+    rerender(<AnalysisReviewWorkspace {...props} run={{ ...runningRun }} />);
+
+    expect(screen.getAllByText("Result ready").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Applying chart template")).toBeNull();
+  });
+
   it("shows the validated chart, readable exclusions, and complete series choices before acceptance", () => {
     const PlotStub = ({ traces, layout }) => (
       <div
@@ -1048,6 +1224,39 @@ describe("AnalysisReviewWorkspace", () => {
     expect(screen.getByLabelText("Template name")).toBeTruthy();
   });
 
+  it("checks template eligibility before offering the save form", async () => {
+    const saveTemplate = vi.fn();
+    const loadTemplateEligibility = vi.fn().mockResolvedValue({
+      status: "ineligible",
+      blockers: [{
+        code: "reusable_chart_template_not_eligible",
+        message: "This chart still contains direct workbook ranges.",
+      }],
+    });
+    render(
+      <AnalysisReviewWorkspace
+        projectId="project_1"
+        thread={{ ...thread, chartSpecIds: ["chart_spec_1"] }}
+        revision={{ ...revision2, status: "accepted" }}
+        planRevisions={[{ ...revision2, status: "accepted" }]}
+        selection={selection}
+        run={{ ...validatedRun, status: "completed" }}
+        result={{ ...validatedResult, status: "accepted" }}
+        resultPreview={resultPreview}
+        chartSpecs={[{ id: "chart_spec_1", analysisResultId: validatedResult.id }]}
+        WorkbookWorkspaceComponent={WorkbookWorkspaceStub}
+        saveTemplate={saveTemplate}
+        loadTemplateEligibility={loadTemplateEligibility}
+      />,
+    );
+
+    expect(await screen.findByText("This chart still contains direct workbook ranges.")).toBeTruthy();
+    const unavailable = screen.getByRole("button", { name: "Template unavailable" });
+    expect(unavailable.disabled).toBe(true);
+    fireEvent.click(unavailable);
+    expect(saveTemplate).not.toHaveBeenCalled();
+  });
+
   it("loads the complete validated Plotly trace domain in one result preview", async () => {
     const acceptedRevision = { ...revision2, status: "accepted" };
     const allTraces = Array.from({ length: 1_200 }, (_, index) => ({
@@ -1371,7 +1580,7 @@ describe("AnalysisReviewWorkspace", () => {
     expect(screen.getAllByText("Number").length > 0).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Inspect Product yield (%) for Exp31" }));
     expect(screen.getByRole("complementary", { name: "Stored value details" })).toBeTruthy();
-    expect(screen.getByText("Stored type")).toBeTruthy();
+    expect(screen.getByText("Proposed stored type")).toBeTruthy();
     expect(screen.getByText("MasterTable.xlsx · Runs!C4")).toBeTruthy();
     expect(screen.getByText("Text → Number")).toBeTruthy();
     expect(screen.getByText("Missing · source_placeholder")).toBeTruthy();
@@ -1495,6 +1704,7 @@ describe("AnalysisReviewWorkspace", () => {
         run={failedRun}
         retryRun={retryRun}
         executeRun={executeRun}
+        analysisCapabilities={{ executor: { configured: true, adapter: "test" } }}
       />,
     );
 

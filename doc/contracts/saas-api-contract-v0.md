@@ -388,8 +388,14 @@ Rules:
   or publishes an artifact. A second failure returns a durable planning warning
   with bounded error details so the frontend can name the policy and offending
   line instead of showing only a generic provider/runtime error.
-- Each revision declares `outputTarget: chart | experiment_browser` and stores
-  exact `sourceSelections`, optional active `experimentSelections`, structured
+- Each chart revision declares `inputMode: experiment_browser | workbook` in
+  addition to `outputTarget`. Experiment Browser mode permits only active
+  `experimentSelections`; Workbook mode permits only exact `sourceSelections`.
+  The backend validates the mode and rejects mixed-source chart plans instead
+  of relying on provider wording. Historical single-source plans without the
+  field remain readable and infer their unambiguous mode.
+- Each revision stores exact `sourceSelections`, optional active
+  `experimentSelections`, structured
   `reviewPlan`, readable `displayPlan`, derived non-contiguous source
   rectangles, validation, and visible feedback. It stores no scalar field
   definitions, semantic keys, roles, Browser ids, Python, input values, expected
@@ -403,9 +409,11 @@ Rules:
   head, exact zero-based `columnIndexes` from that experiment's ordered
   model-facing field list, and whether series are included.
   These selections are existing calculation inputs only; a desired new
-  workbook field cannot be represented as an experiment selection. Chart and
-  Experiment Browser plans may combine workbook and snapshot inputs. Internal
-  Browser column ids are never sent to planning or code-generation models.
+  workbook field cannot be represented as an experiment selection. Chart plans
+  cannot combine workbook and snapshot inputs. Experiment Browser publication
+  plans may still use the evidence needed for their reviewed data operation.
+  Internal Browser column ids are never sent to planning or code-generation
+  models.
 - `GET .../selection` returns the exact source selections and derived source
   rectangles for the Source review page; it returns no result records.
 - Plan acceptance requires only an `Idempotency-Key` header. The request body
@@ -560,10 +568,22 @@ Milestone 3 implements the application surface:
 POST /api/reusable-chart-template-versions/:templateVersionId/applications
 ```
 
+Milestone 5 adds the read-only authoring preflight:
+
+```text
+GET  /api/chart-specs/:chartSpecId/template-eligibility
+```
+
 Reads require project viewer; writes require editor. Template creation accepts
 a name, accepted source ChartSpec id, and optional accepted style-profile
 version. The backend derives/validates the input contract and recipe; arbitrary
 browser-authored operations are not trusted.
+
+The ChartSpec eligibility route is a read-only backend-derived preflight. It
+returns `eligible` with the bounded slot/cardinality/encoding contract or
+`ineligible` with every independently actionable structured blocker; it never
+creates a template. Approved
+chart review uses it to fail closed before opening the template naming form.
 
 The implemented project-state response contains bounded active profile and
 template summaries; full immutable version payloads are available only from

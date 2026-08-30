@@ -27,6 +27,29 @@ describe("ExperimentDetailDrawer", () => {
     expect(onOpenSourceRange).toHaveBeenCalledWith(detail.record.sourceRefs[0]);
   });
 
+  it("shows the actual stored type and source lineage from the active published snapshot", () => {
+    const publishedDetail = structuredClone(detail);
+    publishedDetail.record.fields[0] = {
+      ...publishedDetail.record.fields[0],
+      valueType: "number",
+      numericScale: "absolute",
+      sourceRefs: [{
+        fileName: "MasterTable.xlsx",
+        sheet: "Runs",
+        cell: "D33",
+        rawValue: 250,
+      }],
+    };
+    render(<ExperimentDetailDrawer detail={publishedDetail} onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Inspect stored value" }));
+    expect(screen.getByRole("complementary", { name: "Published stored value details" })).toBeTruthy();
+    expect(screen.getByText("Active published snapshot")).toBeTruthy();
+    expect(screen.getByText("Stored type")).toBeTruthy();
+    expect(screen.getAllByText("Number").length).toBeGreaterThan(1);
+    expect(screen.getByText("MasterTable.xlsx · Runs · D33")).toBeTruthy();
+  });
+
   it("renders loading and error states without stale content", () => {
     const { rerender } = render(<ExperimentDetailDrawer loading onClose={vi.fn()} />);
     expect(screen.getByText("Loading experiment detail..." )).toBeTruthy();

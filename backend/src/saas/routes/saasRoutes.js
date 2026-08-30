@@ -67,6 +67,7 @@ import {
   buildReusableChartTemplateVersion,
   chartStyleProfileSummary,
   deriveReusableChartTemplateDefinition,
+  inspectReusableChartTemplateEligibility,
   reusableChartDescription,
   reusableChartName,
   reusableChartTemplateSummary,
@@ -1425,6 +1426,9 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
       actorUserId: auth.user.id,
       originalRequest: body.message || "",
       outputTarget: draft.analysisRequest?.outputTarget || "chart",
+      inputMode: draft.analysisRequest?.outputTarget === "chart"
+        ? body.selectedContext?.chartInputMode || null
+        : null,
       messages: [{
         id: makeId("analysis_message"),
         role: "user",
@@ -1654,6 +1658,7 @@ async function handleProjectAnalysisThreads(req, res, context, projectId, url) {
     actorUserId: auth.user.id,
     originalRequest: body.originalRequest || body.request || body.message,
     outputTarget: body.outputTarget || "chart",
+    inputMode: body.inputMode || null,
   });
   await context.store.recordAuditEvent({
     labId: project.labId,
@@ -3322,6 +3327,41 @@ async function handleChartSpecById(req, res, context, chartSpecId) {
   sendJson(res, 200, { chartSpec });
 }
 
+async function handleChartSpecTemplateEligibility(req, res, context, chartSpecId) {
+  const chartSpec = await context.store.findChartSpecById(chartSpecId);
+  if (!chartSpec || !isSupportedChartSpec(chartSpec)) {
+    throw Object.assign(new Error("ChartSpec was not found."), {
+      statusCode: 404,
+      code: "chart_spec_not_found",
+    });
+  }
+  await projectAuth(req, context, chartSpec.projectId, "viewer");
+  const eligibility = await inspectReusableChartTemplateEligibility({
+    store: context.store,
+    projectId: chartSpec.projectId,
+    chartSpec,
+  });
+  if (eligibility.status === "eligible") {
+    const definition = await deriveReusableChartTemplateDefinition({ store: context.store, projectId: chartSpec.projectId, chartSpec });
+    sendJson(res, 200, {
+      schemaVersion: "labrat.reusableChartTemplateEligibility.v1",
+      status: "eligible",
+      chartSpecId: chartSpec.id,
+      experimentCardinality: definition.experimentCardinality,
+      inputSlots: definition.inputSlots,
+      encoding: definition.encoding,
+      missingDataPolicy: definition.missingDataPolicy,
+    });
+    return;
+  }
+  sendJson(res, 200, {
+    schemaVersion: "labrat.reusableChartTemplateEligibility.v1",
+    status: "ineligible",
+    chartSpecId: chartSpec.id,
+    blockers: eligibility.blockers,
+  });
+}
+
 async function handleManuscripts(req, res, context, projectId) {
   const { auth, project } = await projectAuth(req, context, projectId, req.method === "POST" ? "editor" : "viewer");
   if (req.method === "GET") {
@@ -3579,6 +3619,10 @@ async function dispatch(req, res, context) {
   const reusableChartTemplateApplicationMatch = pathName.match(/^\/api\/reusable-chart-template-versions\/([^/]+)\/applications$/);
   if (reusableChartTemplateApplicationMatch && req.method === "POST") {
     return handleReusableChartTemplateApplication(req, res, context, reusableChartTemplateApplicationMatch[1]);
+  }
+  const chartSpecTemplateEligibilityMatch = pathName.match(/^\/api\/chart-specs\/([^/]+)\/template-eligibility$/);
+  if (chartSpecTemplateEligibilityMatch && req.method === "GET") {
+    return handleChartSpecTemplateEligibility(req, res, context, chartSpecTemplateEligibilityMatch[1]);
   }
   const chartSpecMatch = pathName.match(/^\/api\/chart-specs\/([^/]+)$/);
   if (chartSpecMatch && req.method === "GET") return handleChartSpecById(req, res, context, chartSpecMatch[1]);

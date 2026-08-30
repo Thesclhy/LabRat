@@ -173,6 +173,10 @@ reusable_chart_template_slot_bindings
 reusable_chart_template_applications
 ```
 
+Migration 026 adds nullable `analysis_threads.input_mode`, constrained to
+`experiment_browser | workbook`. New chart workflows persist one explicit
+mode; null remains valid only so historical immutable threads are not rewritten.
+
 Profile/template containers own project-scoped names, logical status, and
 current-version pointers. Accepted version payloads are immutable and
 content-hashed. A template version pins one accepted source ChartSpec and
@@ -203,10 +207,12 @@ analysis_publications
 analysis_experiment_publications
 ```
 
-`analysis_threads` is the durable project-scoped conversation/workflow container. It stores bounded visible messages and ordered artifact ids, not full result arrays in project state.
+`analysis_threads` is the durable project-scoped conversation/workflow
+container. It stores bounded visible messages, ordered artifact ids, and the
+explicit chart input mode, not full result arrays in project state.
 
 `analysis_plan_revisions` is append-only except for workflow status. Each row
-stores one complete reviewed `outputTarget + sourceSelections +
+stores one complete reviewed `outputTarget + inputMode + sourceSelections +
 experimentSelections + reviewPlan + displayPlan`
 payload, derived source rectangles, validation, feedback, and actor timestamps.
 It stores no Python, materialized values, field mapping, expected result table,

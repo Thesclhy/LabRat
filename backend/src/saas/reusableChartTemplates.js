@@ -377,6 +377,127 @@ function acceptedAnalysisChartSpec(chartSpec) {
     : null;
 }
 
+function eligibilityBlocker(code, message, details = undefined) {
+  return { code, message, ...(details === undefined ? {} : { details }) };
+}
+
+function reusableScalarChartType(value) {
+  const chartType = text(value);
+  if (["bar", "grouped_bar", "stacked_bar", "distribution_bar"].includes(chartType)) return "bar";
+  if (chartType === "point") return "scatter";
+  return chartType || "scatter";
+}
+
+export async function inspectReusableChartTemplateEligibility({ store, projectId, chartSpec } = {}) {
+  const spec = acceptedAnalysisChartSpec(chartSpec);
+  if (!spec || chartSpec?.projectId !== projectId) {
+    return {
+      status: "ineligible",
+      blockers: [eligibilityBlocker(
+        "reusable_chart_template_not_eligible",
+        "Templates require an accepted analysis-result ChartSpec in this project.",
+      )],
+    };
+  }
+  const blockers = [];
+  const selections = asArray(spec.experimentSelections);
+  if (asArray(spec.sourceSelections).length) {
+    blockers.push(eligibilityBlocker(
+      "reusable_chart_template_workbook_inputs_unsupported",
+      "This is a one-off workbook chart. Create it with Experiment Browser data to save it as a reusable template.",
+      { sourceSelectionCount: asArray(spec.sourceSelections).length },
+    ));
+  }
+  if (!selections.length) {
+    blockers.push(eligibilityBlocker(
+      "reusable_chart_template_browser_inputs_required",
+      "Reusable templates require accepted Experiment Browser inputs.",
+    ));
+  }
+  selections.forEach((selection, selectionIndex) => {
+    const columnCount = asArray(selection?.columnIndexes).length;
+    if (columnCount < 1 || columnCount > 12) {
+      blockers.push(eligibilityBlocker(
+        "reusable_chart_template_scalar_shape_unsupported",
+        "Reusable scalar templates require 1-12 accepted scalar columns per experiment and no series input.",
+        { selectionIndex, columnCount, includeSeries: selection?.includeSeries === true },
+      ));
+    }
+  });
+  const fieldSets = [];
+  const selectionsWithSeriesData = [];
+  for (let selectionIndex = 0; selectionIndex < selections.length; selectionIndex += 1) {
+    const selection = selections[selectionIndex];
+    const snapshot = await store.findDataSnapshotById(selection?.baseHeadRef?.dataSnapshotId);
+    const record = snapshot?.experimentRecords?.[Number(selection?.baseHeadRef?.recordIndex)];
+    const fields = asArray(selection?.columnIndexes).map((columnIndex) => record?.fields?.[Number(columnIndex)]);
+    if (!snapshot || snapshot.projectId !== projectId || snapshot.status !== "accepted" || fields.some((field) => !field)) {
+      blockers.push(eligibilityBlocker(
+        "reusable_chart_template_lineage_unavailable",
+        "The chart no longer resolves to accepted scalar Experiment Browser lineage.",
+        { selectionIndex, experimentId: selection?.experimentId || null },
+      ));
+      fieldSets.push(null);
+    } else {
+      fieldSets.push(fields);
+      if (selection?.includeSeries === true && asArray(record?.series).length) {
+        selectionsWithSeriesData.push(selectionIndex);
+      }
+    }
+  }
+  if (selectionsWithSeriesData.length) {
+    blockers.push(eligibilityBlocker(
+      "reusable_chart_template_series_input_unsupported",
+      "Reusable scalar templates cannot include actual series inputs.",
+      { selectionIndexes: selectionsWithSeriesData },
+    ));
+  }
+  const resolvedSets = fieldSets.filter(Boolean);
+  if (resolvedSets.length) {
+    const slotCount = resolvedSets[0].length;
+    if (resolvedSets.some((fields) => fields.length !== slotCount)) {
+      blockers.push(eligibilityBlocker(
+        "reusable_chart_template_slot_count_mismatch",
+        "Selected experiments must expose the same number of scalar inputs.",
+      ));
+    } else {
+      const slotUnits = [];
+      for (let slotIndex = 0; slotIndex < slotCount; slotIndex += 1) {
+        const fields = resolvedSets.map((fields) => fields[slotIndex]);
+        const first = fields[0] || {};
+        const displayName = text(first.displayName || first.fieldKey) || `Selected field ${slotIndex + 1}`;
+        const storedTypes = [...new Set(fields.map((field) => text(field?.valueType) || "unknown"))];
+        if (storedTypes.some((valueType) => valueType !== "number")) {
+          blockers.push(eligibilityBlocker(
+            "reusable_chart_template_field_type_incompatible",
+            `${displayName} is stored as ${storedTypes.join(", ")}; reusable scalar templates require accepted Number fields.`,
+            { slotIndex, displayName, storedTypes },
+          ));
+        }
+        const identities = new Set(fields.map((field) => text(field?.columnId)));
+        const units = new Set(fields.map((field) => text(field?.unit)));
+        const scales = new Set(fields.map((field) => text(field?.numericScale)));
+        if ([...identities].some((value) => !value) || identities.size > 1 || units.size > 1 || scales.size > 1) {
+          blockers.push(eligibilityBlocker(
+            "reusable_chart_template_field_contract_mismatch",
+            `${displayName} does not have one stable field identity, unit, and numeric scale across the selected experiments.`,
+            { slotIndex, displayName },
+          ));
+        }
+        slotUnits.push(text(first.unit));
+      }
+      if (new Set(slotUnits).size > 1) {
+        blockers.push(eligibilityBlocker(
+          "reusable_chart_template_shared_axis_unit_mismatch",
+          "Multiple scalar components must use one compatible shared-axis unit.",
+          { units: [...new Set(slotUnits)] },
+        ));
+      }
+    }
+  }
+  return blockers.length ? { status: "ineligible", blockers } : { status: "eligible", blockers: [] };
+}
+
 export async function deriveReusableChartTemplateDefinition({ store, projectId, chartSpec, chartStyleProfileVersionId = null } = {}) {
   const spec = acceptedAnalysisChartSpec(chartSpec);
   if (!spec || chartSpec?.projectId !== projectId) {
@@ -387,8 +508,7 @@ export async function deriveReusableChartTemplateDefinition({ store, projectId, 
     error("reusable_chart_template_not_eligible", "V1 fast templates require accepted Experiment Browser inputs without direct workbook ranges.", 422);
   }
   if (selections.some((selection) => (
-    selection?.includeSeries === true
-    || !asArray(selection?.columnIndexes).length
+    !asArray(selection?.columnIndexes).length
     || asArray(selection?.columnIndexes).length > 12
   ))) {
     error("reusable_chart_template_not_eligible", "Reusable scalar templates require 1-12 accepted scalar columns per experiment and no series input.", 422);
@@ -400,6 +520,9 @@ export async function deriveReusableChartTemplateDefinition({ store, projectId, 
     const fields = asArray(selection.columnIndexes).map((columnIndex) => record?.fields?.[Number(columnIndex)]);
     if (!snapshot || snapshot.projectId !== projectId || snapshot.status !== "accepted" || fields.some((field) => !field)) {
       error("reusable_chart_template_not_eligible", "The source chart no longer resolves to accepted scalar input lineage.", 422);
+    }
+    if (selection?.includeSeries === true && asArray(record?.series).length) {
+      error("reusable_chart_template_not_eligible", "Reusable scalar templates cannot include actual series inputs.", 422);
     }
     fieldSets.push(fields);
   }
@@ -437,8 +560,11 @@ export async function deriveReusableChartTemplateDefinition({ store, projectId, 
   if (new Set(slots.map((slot) => slot.unit)).size > 1) {
     error("reusable_chart_template_not_eligible", "Multiple scalar components must use one compatible shared-axis unit.", 422);
   }
-  const chartType = text(spec.chartType || chartSpec?.chartType || "scatter");
-  const comparisonMode = chartType === "bar" && text(spec.plotly?.layout?.barmode) === "stack"
+  const sourceChartType = text(spec.chartType || chartSpec?.chartType || "scatter");
+  const chartType = reusableScalarChartType(sourceChartType);
+  const comparisonMode = chartType === "bar" && (
+    text(spec.plotly?.layout?.barmode) === "stack" || sourceChartType === "stacked_bar"
+  )
     ? "stacked_components"
     : chartType === "bar" ? "grouped" : "overlay";
   const inputSlots = slots.map((slot, index) => {

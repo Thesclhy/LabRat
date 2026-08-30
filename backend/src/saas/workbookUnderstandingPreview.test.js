@@ -315,6 +315,45 @@ test("backend model patches cannot downgrade deterministic numeric source fields
   assert.equal(fields.find((field) => field.column === "C").valueType, "string");
 });
 
+test("backend model full-field replacements cannot downgrade deterministic numeric source fields", () => {
+  const fixture = sourceFixture({
+    sheetName: "Runs",
+    rows: [
+      ["Experiment", "Catalyst Loading (g)", "Impeller Type"],
+      ["Exp1", 0.8, "Rushton"],
+      ["Exp2", 0.2, "Pitched blade"],
+    ],
+  });
+  const preview = buildWorkbookUnderstandingPreview({
+    ...fixture,
+    draftRegions: [draftRegion({ sheetName: "Runs", range: "A1:C3", semanticType: "experiment_table" })],
+    interpretationPatches: [{
+      draftRegionId: "draft_region_1",
+      decisionSource: "backend_model",
+      experimentAxis: "rows",
+      experimentIdColumn: "A",
+      fields: [{
+        column: "B",
+        semanticKey: "catalyst_loading",
+        displayName: "Catalyst loading",
+        role: "condition",
+        valueType: "string",
+        unit: "g",
+      }, {
+        column: "C",
+        semanticKey: "impeller_type",
+        displayName: "Impeller type",
+        role: "condition",
+        valueType: "string",
+        unit: null,
+      }],
+    }],
+  });
+  const fields = preview.regions[0].interpretation.fields;
+  assert.equal(fields.find((field) => field.column === "B").valueType, "number");
+  assert.equal(fields.find((field) => field.column === "C").valueType, "string");
+});
+
 test("percent columns distinguish percent points from Excel fraction formatting", () => {
   const textFixture = sourceFixture({
     sheetName: "Runs",

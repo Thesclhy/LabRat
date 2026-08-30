@@ -520,11 +520,21 @@ function applyPatch({ sourceDocument, region, rangeResult, proposal, patch, full
       fields: proposedFields,
     }),
   };
+  const providerSafeField = (field) => {
+    if (source.decisionSource !== "backend_model") return field;
+    const proposedField = proposedFields.find((candidate) => candidate.column === text(field?.column).toUpperCase());
+    if (!proposedField?.valueType) return field;
+    return {
+      ...field,
+      valueType: proposedField.valueType,
+      numericScale: proposedField.numericScale || null,
+    };
+  };
   let fields = source.fields
     ? asArray(source.fields).map((field) => fieldFromPatch({
       sourceDocument,
       sheetName: region.sheetName,
-      patch: field,
+      patch: providerSafeField(field),
       proposedFields,
       fullRange,
       headerRow,

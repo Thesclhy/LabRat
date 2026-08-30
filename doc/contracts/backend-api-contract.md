@@ -92,6 +92,10 @@ Status code guidance:
 - LabRat intent routing directly answers resolvable project questions, sends derived analysis/chart requests to reviewed analysis planning, and opens Experiment Browser only for explicit navigation.
 - Internal analysis planning tools page through active confirmed workbook regions and inspect exact subranges; they cannot execute calculations.
 - AnalysisThread/AnalysisPlanRevision routes persist immutable reviewed workbook and/or active-experiment selections plus natural-language plans. Idempotent acceptance creates only a queued AnalysisRun; Python is generated later from its materialized input.
+- New chart requests explicitly choose Experiment Browser (default and
+  template-compatible) or Workbook (advanced one-off) input mode. Planning sees
+  only the selected catalog, and schema validation rejects mixed-source chart
+  plans even if a model proposes one.
 - Once an analysis-planning AgentRun has created its durable AnalysisThread,
   plan drafting is server-owned and is not aborted by a browser disconnect.
   Clients recover or observe the same thread through list/detail reads. Draft
@@ -114,6 +118,10 @@ Status code guidance:
   unit, and optional numeric scale. Preview cells include a bounded set of the
   already-validated exact source refs so the review UI can show raw source
   value/type/location beside the proposed stored value before publication.
+- Active published experiment detail exposes the actual stored value/type,
+  numeric scale, and source lineage from the accepted snapshot. Provider field
+  patches, including full-field replacements, cannot downgrade a deterministic
+  numeric source column to string.
 
 ## Verification
 

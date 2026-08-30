@@ -30,9 +30,9 @@ LabRat chat has three supported dispositions: workbook upload and region review,
 
 The chart-creation program now includes persisted, versioned chart styles and
 scientific templates. New chart meaning still uses the reviewed analysis path;
-the next milestone makes repetition with compatible accepted Browser
-experiments use a deterministic `chart_template_v1` run and the same
-AnalysisResult and ChartSpec publication boundary. Read
+repetition with compatible accepted Browser experiments now uses a deterministic
+`chart_template_v1` run and the same AnalysisResult and ChartSpec publication
+boundary. Read
 `doc/plans/reusable-chart-creation-plan.md` and
 `doc/contracts/reusable-chart-template-contract-v1.md` for this work.
 

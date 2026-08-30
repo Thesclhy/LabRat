@@ -73,7 +73,8 @@ contracts, persistence, validators, eligibility derivation, lifecycle APIs,
 reviewed bindings, idempotent applications, deterministic scalar execution,
 and adaptive multi-experiment geometry are complete. Accepted chart review now includes the first inline
 `Save as template` authoring action, including multi-scalar stacked-component
-eligibility; the fast template-picker frontend is next. See
+eligibility. The fast template-picker frontend is complete; remaining authoring
+management and style-only fallback are next. See
 `doc/plans/reusable-chart-creation-plan.md` and
 `doc/contracts/reusable-chart-template-contract-v1.md`.
 
@@ -91,8 +92,8 @@ Use this split when deciding what to build:
   Browser projection.
 - Completed execution milestone: backend conversational analysis, reviewed calculation, analysis-result ChartSpec publication, and placement-local trace visibility.
 - Active chart program: reusable style/template persistence, deterministic
-  binding/execution and responsive geometry, then fast reuse UI, template authoring,
-  then optional reference-chart style onboarding.
+  binding/execution, responsive geometry, and fast reuse UI, then remaining
+  template authoring/management, then optional reference-chart style onboarding.
 
 ## Recently Completed
 

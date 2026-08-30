@@ -81,6 +81,8 @@ const ANALYSIS_PLAN_SYSTEM = [
   "Each source selection must name one confirmed region revision, its exact sourceDocumentId, sheetName, and a rectangular Excel range inside that confirmed region.",
   "Multiple files, sheets, or non-contiguous ranges must be separate sourceSelections.",
   "Each experimentSelection identifies one existing experimentId and exact zero-based columnIndexes from that experiment's ordered fields list in activeExperimentCatalog.",
+  "For chart requests, inputMode is authoritative: experiment_browser requires experimentSelections and an empty sourceSelections array; workbook requires sourceSelections and an empty experimentSelections array.",
+  "Never mix workbook ranges and Experiment Browser selections in one chart plan.",
   "Use displayName, unit, valueType, and sourceSummary to distinguish duplicate readable column names; never request or return internal Browser column ids.",
   "Choose the smallest ranges that include the labels, headers, and values needed for the requested calculation.",
   "reviewPlan.processingSteps describes data cleanup, reshaping, calculations, sorting, missing-value handling, and chart construction.",
