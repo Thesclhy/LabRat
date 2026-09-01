@@ -1,7 +1,7 @@
 # LabRat Architecture
 
 Status: active reference
-Last reviewed: 2026-08-18
+Last reviewed: 2026-08-23
 
 LabRat is a server-first research workspace that turns workbook evidence into reviewed experiment records, cross-experiment Browser views, evidence-backed charts, and manuscript output while preserving provenance and review history.
 
@@ -15,7 +15,7 @@ Upload workbook
   -> accepted RegionUnderstandingRevisions
   -> reviewed Experiment Browser AnalysisPlanRevision
   -> onboarding direct-source mapping or general post-acceptance Python record patches
-  -> explicit transactional DataSnapshot v3 publish
+  -> explicit transactional DataSnapshot v4 publish
   -> ExperimentIdentity/SnapshotHead projection
   -> Experiment Browser
 ```
@@ -57,7 +57,7 @@ Experiment Browser data uses the same reviewed workflow with
 `outputTarget: experiment_browser`. Planning may combine exact confirmed
 workbook ranges and active snapshot fields. Execution returns source-backed
 record patches; backend merge preview and explicit acceptance create one
-DataSnapshot v3 plus BrowserView without overwriting historical snapshots.
+DataSnapshot v4 plus BrowserView without overwriting historical snapshots.
 
 The pristine-project onboarding surface opts into a backend-owned fixed source
 mapper after plan acceptance. It consumes only accepted row/field semantics
@@ -77,7 +77,7 @@ browser-orchestrated queue, not a durable backend worker.
 ```text
 Docker Compose (default local development runtime)
   -> React/Vite frontend :5173
-      -> Node HTTP API :8787
+      -> NestJS/Fastify `/api/v1` :8787 in production, :8788 when isolated
           -> Postgres :5432 in-network / :5433 on the host
           -> persistent uploaded-file volume
           -> development-only local Python executor
@@ -87,7 +87,10 @@ Postgres/file storage and must replace the local executor with the configured
 hardened HTTPS worker.
 ```
 
-Logged-in server mode treats backend project state as the source of truth. Old IndexedDB/project-file shapes are not migration targets.
+Logged-in server mode treats explicit backend v1 resources as the source of
+truth. React may compose those bounded responses into transient workspace state,
+but no project-state aggregate is part of v1. Old IndexedDB/project-file shapes
+are not migration targets.
 
 ## Frontend Surfaces
 
@@ -111,9 +114,10 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 ## Backend Components
 
 - **Auth/Admin**: users, sessions, labs, memberships, roles, seed-account safety.
-- **Project State**: bounded summaries for files, evidence, understandings,
-  accepted snapshots, views, analysis-result output, reusable chart styles and
-  templates, manuscripts, AgentRuns, and AnalysisThreads.
+- **Workspace API**: authorization-scoped project shells and bounded resource
+  lists for files, evidence, understandings, accepted snapshots, views,
+  analysis-result output, reusable chart styles and templates, manuscripts,
+  AgentRuns, and AnalysisThreads.
 - **Backend Model Provider / Intent Router**: server-secret provider access, structured output validation, deterministic command priority, direct project answers, and reviewed-analysis routing without a Browser fallback.
 - **Workbook Indexer**: conservative workbook scan and SourceDocument/SourceRegion/cell-index persistence.
 - **Workbook Review Engine**: stable regions, bounded backend-model interpretation, immutable revisions, optimistic state changes, and exact accepted revision pointers.
@@ -122,7 +126,7 @@ Logged-in server mode treats backend project state as the source of truth. Old I
   source-backed record-patch validation, complete-record merge, change preview,
   and identity candidates.
 - **Experiment Snapshot Publisher**: stale-head-protected, idempotent atomic
-  AnalysisResult/DataSnapshot v3/identity/head/BrowserView/audit transaction.
+  AnalysisResult/DataSnapshot v4/identity/head/BrowserView/audit transaction.
 - **Experiment Projection**: unit-aware field catalog, cursor rows, filters/sort/search, and lazy detail.
 - **Analysis Source Selection Service**: catalogs active confirmed regions,
   validates exact subranges, derives red rectangles, performs bounded paged

@@ -340,12 +340,19 @@ function staleChartSpecCountForProject(projectState) {
   return asArray(projectState?.chartSpecs).filter((chartSpec) => chartSpec && !isActiveChartSpecForProject(chartSpec, projectState)).length;
 }
 
+function publishedExperimentCountForState(state) {
+  const explicitCount = Number(state?.publishedExperimentCount);
+  return Number.isInteger(explicitCount) && explicitCount >= 0
+    ? explicitCount
+    : asArray(state?.experimentSnapshotHeads).length;
+}
+
 function projectWorkflowSummary(project, state = null) {
   const projectProfile = state?.projectProfile || project?.projectProfile || {};
   const serverSummary = project?.workflowSummary || {};
   const profileCount = completedProfileFields(projectProfile);
   const publishedExperimentCount = state
-    ? asArray(state.experimentSnapshotHeads).length
+    ? publishedExperimentCountForState(state)
     : Number(serverSummary.publishedExperimentCount) || 0;
   const hasPublishedData = publishedExperimentCount > 0;
   const importRuns = asArray(state?.importRuns);
@@ -1969,7 +1976,7 @@ export function AgentPanel({
   });
   const [retryingAnalysisThreadId, setRetryingAnalysisThreadId] = useState("");
   const [openingWorkbookReviewSessionId, setOpeningWorkbookReviewSessionId] = useState("");
-  const acceptedDataStateKey = `${asArray(projectState?.dataSnapshots).length}:${asArray(projectState?.experimentSnapshotHeads).length}:${asArray(projectState?.regionUnderstandings).length}`;
+  const acceptedDataStateKey = `${asArray(projectState?.dataSnapshots).length}:${publishedExperimentCountForState(projectState)}:${asArray(projectState?.regionUnderstandings).length}`;
   const messagesRef = useRef(null);
   const activeProjectIdRef = useRef(activeProjectId);
   const chatScrollInitializedRef = useRef(false);
@@ -2673,7 +2680,7 @@ function App() {
     setProjectList((current) => current.map((project) => project.id === state?.project?.id ? {
       ...project,
       workflowSummary: {
-        publishedExperimentCount: asArray(state?.experimentSnapshotHeads).length,
+        publishedExperimentCount: publishedExperimentCountForState(state),
         chartSpecCount: activeChartSpecsForProject(state).length,
       },
     } : project));
@@ -2687,7 +2694,7 @@ function App() {
     setProjectList((current) => current.map((project) => project.id === state?.project?.id ? {
       ...project,
       workflowSummary: {
-        publishedExperimentCount: asArray(state?.experimentSnapshotHeads).length,
+        publishedExperimentCount: publishedExperimentCountForState(state),
         chartSpecCount: activeChartSpecsForProject(state).length,
       },
     } : project));
@@ -3539,7 +3546,7 @@ function App() {
         onComplete={(destination = "overview") => {
           setOnboardingRenderVersion((value) => value + 1);
           setTab(
-            destination === "browser" && asArray(projectState?.experimentSnapshotHeads).length
+            destination === "browser" && publishedExperimentCountForState(projectState)
               ? "browser"
               : "overview",
           );

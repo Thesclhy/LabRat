@@ -1,0 +1,3888 @@
+openapi: 3.1.0
+info:
+  title: LabRat Backend API
+  version: 1.0.0
+  description: >-
+    Contract-first API for the NestJS modular monolith. All documented
+    operations have closed DTOs and authoritative v1 behavior.
+servers:
+  - url: http://127.0.0.1:8788
+    description: Local v1 development server
+tags:
+  - name: Platform
+  - name: Identity
+  - name: Tenancy
+  - name: Authorization
+  - name: Evidence
+  - name: Experiment
+  - name: Analysis
+  - name: Charts
+  - name: Manuscripts
+security:
+  - cookieAuth: []
+paths:
+  /health:
+    get:
+      tags: [Platform]
+      operationId: getHealth
+      security: []
+      responses:
+        "200":
+          description: Service is ready.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /api/v1/auth/login:
+    post:
+      tags: [Identity]
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Authenticated session.
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/v1/auth/logout:
+    post:
+      tags: [Identity]
+      operationId: logout
+      responses:
+        "200":
+          description: Session revoked and cookie cleared.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/v1/auth/me:
+    get:
+      tags: [Identity]
+      operationId: getCurrentUser
+      responses:
+        "200":
+          description: Current user and accessible Lab summaries.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/v1/admin/labs:
+    get:
+      tags: [Tenancy]
+      operationId: listAdminLabs
+      x-labrat-capability: platform_admin
+      responses:
+        "200": { $ref: "#/components/responses/LabPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Tenancy]
+      operationId: createLab
+      x-labrat-capability: platform_admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLabRequest"
+      responses:
+        "201":
+          description: Lab created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LabResponse"
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/admin/users:
+    get:
+      tags: [Identity]
+      operationId: listAdminUsers
+      x-labrat-capability: platform_admin
+      responses:
+        "200": { $ref: "#/components/responses/UserPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Identity]
+      operationId: createUser
+      x-labrat-capability: platform_admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "201":
+          description: User created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/admin/users/{userId}:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+    patch:
+      tags: [Identity]
+      operationId: updateUser
+      x-labrat-capability: platform_admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserRequest"
+      responses:
+        "200":
+          description: User updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/admin/users/{userId}/reset-password:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+    post:
+      tags: [Identity]
+      operationId: resetUserPassword
+      x-labrat-capability: platform_admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordRequest"
+      responses:
+        "200":
+          description: Password replaced and existing sessions revoked.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/labs:
+    get:
+      tags: [Tenancy]
+      operationId: listMyLabs
+      responses:
+        "200": { $ref: "#/components/responses/LabPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/v1/labs/{labId}/members:
+    parameters:
+      - $ref: "#/components/parameters/LabId"
+    get:
+      tags: [Authorization]
+      operationId: listLabMembers
+      x-labrat-capability: manage_access
+      responses:
+        "200": { $ref: "#/components/responses/LabMemberPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/labs/{labId}/members/{userId}:
+    parameters:
+      - $ref: "#/components/parameters/LabId"
+      - $ref: "#/components/parameters/UserId"
+    put:
+      tags: [Authorization]
+      operationId: upsertLabMember
+      x-labrat-capability: manage_access
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertLabMemberRequest"
+      responses:
+        "200":
+          description: Membership created or reactivated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LabMembershipResponse"
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      tags: [Authorization]
+      operationId: deactivateLabMember
+      x-labrat-capability: manage_access
+      responses:
+        "200":
+          description: Membership deactivated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OkResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/projects:
+    get:
+      tags: [Tenancy]
+      operationId: listProjects
+      x-labrat-capability: read
+      parameters:
+        - $ref: "#/components/parameters/LabIdQuery"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { $ref: "#/components/responses/ProjectPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [Tenancy]
+      operationId: createProject
+      x-labrat-capability: lab_admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequest"
+      responses:
+        "201":
+          description: Project created with rollback-compatible legacy grants.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectResponse"
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/projects/{projectId}:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags: [Tenancy]
+      operationId: getProject
+      x-labrat-capability: read
+      responses:
+        "200":
+          description: Full or minimum authorized Project shell.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectResponse"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Tenancy]
+      operationId: updateProject
+      x-labrat-capability: propose
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProjectRequest"
+      responses:
+        "200":
+          description: Project updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectResponse"
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/projects/{projectId}/profile:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    patch:
+      tags: [Tenancy]
+      operationId: updateProjectProfile
+      x-labrat-capability: propose
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectProfile"
+      responses:
+        "200":
+          description: Project profile updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectResponse"
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/labs/{labId}/groups:
+    parameters:
+      - $ref: "#/components/parameters/LabId"
+    get:
+      tags: [Authorization]
+      operationId: listLabGroups
+      x-labrat-capability: manage_access
+      responses:
+        "200": { $ref: "#/components/responses/GroupPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Authorization]
+      operationId: createLabGroup
+      x-labrat-capability: manage_access
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateGroupRequest"
+      responses:
+        "201":
+          description: Group created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupResponse"
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/labs/{labId}/groups/{groupId}:
+    parameters:
+      - $ref: "#/components/parameters/LabId"
+      - $ref: "#/components/parameters/GroupId"
+    patch:
+      tags: [Authorization]
+      operationId: updateLabGroup
+      x-labrat-capability: manage_access
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateGroupRequest"
+      responses:
+        "200":
+          description: Group updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupResponse"
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Authorization]
+      operationId: deleteLabGroup
+      x-labrat-capability: manage_access
+      responses:
+        "200":
+          description: Group disabled and grants no longer authorize access.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/labs/{labId}/groups/{groupId}/members/{userId}:
+    parameters:
+      - $ref: "#/components/parameters/LabId"
+      - $ref: "#/components/parameters/GroupId"
+      - $ref: "#/components/parameters/UserId"
+    put:
+      tags: [Authorization]
+      operationId: addLabGroupMember
+      x-labrat-capability: manage_access
+      responses:
+        "200":
+          description: Active Lab member added idempotently.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupResponse"
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Authorization]
+      operationId: removeLabGroupMember
+      x-labrat-capability: manage_access
+      responses:
+        "200":
+          description: Group membership removed idempotently.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupResponse"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/projects/{projectId}/access-grants:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags: [Authorization]
+      operationId: listProjectAccessGrants
+      x-labrat-capability: manage_access
+      responses:
+        "200": { $ref: "#/components/responses/AccessGrantPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Authorization]
+      operationId: createProjectAccessGrant
+      x-labrat-capability: manage_access
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAccessGrantRequest"
+      responses:
+        "201":
+          description: Project and optional experiment grants created atomically.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessGrantResponse"
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/projects/{projectId}/access-grants/{grantId}:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - $ref: "#/components/parameters/GrantId"
+    delete:
+      tags: [Authorization]
+      operationId: deleteProjectAccessGrant
+      x-labrat-capability: manage_access
+      responses:
+        "200":
+          description: Grant disabled and no longer authorizes access.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/projects/{projectId}/access:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags: [Authorization]
+      operationId: getEffectiveProjectAccess
+      x-labrat-capability: read
+      responses:
+        "200":
+          description: Current actor's effective capabilities and experiment scope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EffectiveAccessResponse"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/projects/{projectId}/analysis-capabilities:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+    get:
+      tags: [Analysis]
+      operationId: getAnalysisCapabilities
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      responses:
+        "200": { $ref: "#/components/responses/AnalysisCapabilitiesObject" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/projects/{projectId}/evidence/retrieve:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+    post:
+      tags: [Evidence]
+      operationId: retrieveAcceptedEvidence
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RetrieveEvidenceRequest" }
+      responses:
+        "200":
+          description: Bounded retrieval from accepted RegionUnderstandingRevisions.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvidenceRetrievalResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/projects/{projectId}/data-plans:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+    get:
+      tags: [Experiment]
+      operationId: listDataPlans
+      x-labrat-capability: read_full_project
+      responses:
+        "200": { $ref: "#/components/responses/DataPlanPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/projects/{projectId}/data-snapshots:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+    get:
+      tags: [Experiment]
+      operationId: listDataSnapshots
+      x-labrat-capability: read
+      responses:
+        "200": { $ref: "#/components/responses/DataSnapshotPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/projects/{projectId}/experiment-browser:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+    get:
+      tags: [Experiment]
+      operationId: getExperimentBrowser
+      x-labrat-capability: read
+      parameters:
+        - { name: search, in: query, required: false, schema: { type: string, maxLength: 500 } }
+        - { name: filters, in: query, required: false, schema: { type: string, maxLength: 20000 } }
+        - { name: sort, in: query, required: false, schema: { type: string, maxLength: 10000 } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 250 } }
+        - { name: starredOnly, in: query, required: false, schema: { type: string, enum: ["true", "false"] } }
+      responses:
+        "200":
+          description: Authorization-filtered Experiment Browser projection.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExperimentProjection" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/projects/{projectId}/experiments/{experimentId}:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectId" }
+      - { $ref: "#/components/parameters/ExperimentId" }
+    get:
+      tags: [Experiment]
+      operationId: getExperimentDetail
+      x-labrat-capability: read_experiment
+      responses:
+        "200":
+          description: Active accepted record and immutable snapshot provenance for one Experiment.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExperimentDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/projects/{projectId}/experiment-annotations:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+    get:
+      tags: [Experiment]
+      operationId: listExperimentAnnotations
+      x-labrat-capability: read
+      responses:
+        "200": { $ref: "#/components/responses/ExperimentAnnotationPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/projects/{projectId}/experiments/{experimentId}/annotation:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectId" }
+      - { $ref: "#/components/parameters/ExperimentId" }
+    put:
+      tags: [Experiment]
+      operationId: saveExperimentAnnotation
+      x-labrat-capability: read_experiment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SaveExperimentAnnotationRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/ExperimentAnnotationObject" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Experiment]
+      operationId: deleteExperimentAnnotation
+      x-labrat-capability: read_experiment
+      responses:
+        "200": { $ref: "#/components/responses/DeletedResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/projects/{projectId}/experiment-custom-columns:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+    get:
+      tags: [Experiment]
+      operationId: listExperimentCustomColumns
+      x-labrat-capability: read
+      responses:
+        "200": { $ref: "#/components/responses/ExperimentCustomColumnPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Experiment]
+      operationId: createExperimentCustomColumn
+      x-labrat-capability: propose_full_project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateExperimentCustomColumnRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/ExperimentCustomColumnObject" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/projects/{projectId}/experiment-custom-columns/{columnId}:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectId" }
+      - { $ref: "#/components/parameters/ColumnId" }
+    patch:
+      tags: [Experiment]
+      operationId: updateExperimentCustomColumn
+      x-labrat-capability: propose_full_project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateExperimentCustomColumnRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/ExperimentCustomColumnObject" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      tags: [Experiment]
+      operationId: deleteExperimentCustomColumn
+      x-labrat-capability: propose_full_project
+      responses:
+        "200": { $ref: "#/components/responses/DeletedResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/projects/{projectId}/experiment-custom-columns/{columnId}/experiments/{experimentId}:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectId" }
+      - { $ref: "#/components/parameters/ColumnId" }
+      - { $ref: "#/components/parameters/ExperimentId" }
+    put:
+      tags: [Experiment]
+      operationId: saveExperimentCustomValue
+      x-labrat-capability: propose_experiment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SaveExperimentCustomValueRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/ExperimentCustomValueObject" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/projects/{projectId}/browser-config:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+    get:
+      tags: [Experiment]
+      operationId: getProjectBrowserConfig
+      x-labrat-capability: read_full_project
+      responses:
+        "200": { $ref: "#/components/responses/ProjectBrowserConfigObject" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Experiment]
+      operationId: saveProjectBrowserConfig
+      x-labrat-capability: propose_full_project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SaveProjectBrowserConfigRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/ProjectBrowserConfigObject" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/projects/{projectId}/browser-views:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+    get:
+      tags: [Experiment]
+      operationId: listBrowserViews
+      x-labrat-capability: read
+      responses:
+        "200": { $ref: "#/components/responses/BrowserViewPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Experiment]
+      operationId: createBrowserView
+      x-labrat-capability: propose
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateBrowserViewRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/BrowserViewObject" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/projects/{projectId}/browser-views/{viewId}:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectId" }
+      - { $ref: "#/components/parameters/ViewId" }
+    patch:
+      tags: [Experiment]
+      operationId: updateBrowserView
+      x-labrat-capability: propose
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateBrowserViewRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/BrowserViewObject" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Experiment]
+      operationId: deleteBrowserView
+      x-labrat-capability: propose
+      responses:
+        "200": { $ref: "#/components/responses/DeletedResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/projects/{projectId}/files:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+    get:
+      tags: [Evidence]
+      operationId: listFileObjects
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      responses:
+        "200": { $ref: "#/components/responses/FileObjectPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Evidence]
+      operationId: uploadFileObject
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "200": { $ref: "#/components/responses/FileUploadResult" }
+        "201": { $ref: "#/components/responses/FileUploadResult" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/projects/{projectId}/import-runs:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+    get:
+      tags: [Evidence]
+      operationId: listImportRuns
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      responses:
+        "200": { $ref: "#/components/responses/ImportRunPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Evidence]
+      operationId: createImportRun
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateImportRunRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/ImportRunObject" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/projects/{projectId}/source-documents:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+    get:
+      tags: [Evidence]
+      operationId: listSourceDocuments
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      responses:
+        "200": { $ref: "#/components/responses/SourceDocumentPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/projects/{projectId}/workbook-review-sessions:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+    get:
+      tags: [Evidence]
+      operationId: listWorkbookReviewSessions
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      responses:
+        "200": { $ref: "#/components/responses/WorkbookReviewSessionPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Evidence]
+      operationId: createWorkbookReviewSession
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateWorkbookReviewSessionRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/WorkbookReviewSessionCreated" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/projects/{projectId}/region-understandings:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+    get:
+      tags: [Evidence]
+      operationId: listAcceptedRegionUnderstandings
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      responses:
+        "200": { $ref: "#/components/responses/RegionUnderstandingPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/source-documents/{sourceDocumentId}/regions:
+    parameters: [{ $ref: "#/components/parameters/SourceDocumentId" }]
+    get:
+      tags: [Evidence]
+      operationId: listSourceDocumentRegions
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      responses:
+        "200": { $ref: "#/components/responses/SourceRegionPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/source-documents/{sourceDocumentId}/query:
+    parameters: [{ $ref: "#/components/parameters/SourceDocumentId" }]
+    post:
+      tags: [Evidence]
+      operationId: querySourceDocument
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SourceDocumentQueryRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/SourceQueryResult" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/source-documents/{sourceDocumentId}/range:
+    parameters: [{ $ref: "#/components/parameters/SourceDocumentId" }]
+    post:
+      tags: [Evidence]
+      operationId: readSourceDocumentRange
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SourceDocumentRangeRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/SourceRangeResult" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/workbook-review-sessions/{sessionId}:
+    parameters: [{ $ref: "#/components/parameters/SessionId" }]
+    get:
+      tags: [Evidence]
+      operationId: getWorkbookReviewSession
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      responses:
+        "200": { $ref: "#/components/responses/WorkbookReviewSessionDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Evidence]
+      operationId: deleteWorkbookReviewSession
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeleteWorkbookReviewSessionRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/WorkbookReviewSessionDeleted" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/workbook-review-sessions/{sessionId}/regions:
+    parameters: [{ $ref: "#/components/parameters/SessionId" }]
+    get:
+      tags: [Evidence]
+      operationId: listWorkbookReviewRegions
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      responses:
+        "200": { $ref: "#/components/responses/WorkbookReviewRegionPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Evidence]
+      operationId: createWorkbookReviewRegion
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateWorkbookReviewRegionRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/WorkbookReviewRegionMutation" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/workbook-review-sessions/{sessionId}/regions/{regionId}:
+    parameters:
+      - { $ref: "#/components/parameters/SessionId" }
+      - { $ref: "#/components/parameters/RegionId" }
+    get:
+      tags: [Evidence]
+      operationId: getWorkbookReviewRegion
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      responses:
+        "200": { $ref: "#/components/responses/WorkbookReviewRegionObject" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Evidence]
+      operationId: deleteWorkbookReviewRegion
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WorkbookReviewRegionDispositionRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/WorkbookReviewRegionObject" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/workbook-review-sessions/{sessionId}/regions/{regionId}/interpret:
+    parameters:
+      - { $ref: "#/components/parameters/SessionId" }
+      - { $ref: "#/components/parameters/RegionId" }
+    post:
+      tags: [Evidence]
+      operationId: interpretWorkbookReviewRegion
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InterpretWorkbookReviewRegionRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/WorkbookReviewRegionMutation" }
+        "201": { $ref: "#/components/responses/WorkbookReviewRegionMutation" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/workbook-review-sessions/{sessionId}/regions/{regionId}/revisions:
+    parameters:
+      - { $ref: "#/components/parameters/SessionId" }
+      - { $ref: "#/components/parameters/RegionId" }
+    get:
+      tags: [Evidence]
+      operationId: listRegionUnderstandingRevisions
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      responses:
+        "200": { $ref: "#/components/responses/RegionUnderstandingRevisionPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Evidence]
+      operationId: reviseWorkbookReviewRegion
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReviseWorkbookReviewRegionRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/WorkbookReviewRegionMutation" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/workbook-review-sessions/{sessionId}/regions/{regionId}/confirm:
+    parameters:
+      - { $ref: "#/components/parameters/SessionId" }
+      - { $ref: "#/components/parameters/RegionId" }
+    post:
+      tags: [Evidence]
+      operationId: confirmWorkbookReviewRegion
+      x-labrat-capability: approve
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfirmWorkbookReviewRegionRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/WorkbookReviewRegionConfirmed" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/workbook-review-sessions/{sessionId}/regions/{regionId}/ignore:
+    parameters:
+      - { $ref: "#/components/parameters/SessionId" }
+      - { $ref: "#/components/parameters/RegionId" }
+    post:
+      tags: [Evidence]
+      operationId: ignoreWorkbookReviewRegion
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WorkbookReviewRegionDispositionRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/WorkbookReviewRegionObject" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/projects/{projectId}/agent/runs:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+    get:
+      tags: [Analysis]
+      operationId: listAgentRuns
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/PageLimit" }
+      responses:
+        "200": { $ref: "#/components/responses/AgentRunPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Analysis]
+      operationId: createAgentRun
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateAgentRunRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/CreateAgentRunResult" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/agent-runs/{agentRunId}:
+    parameters: [{ $ref: "#/components/parameters/AgentRunId" }]
+    get:
+      tags: [Analysis]
+      operationId: getAgentRun
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      responses:
+        "200": { $ref: "#/components/responses/AgentRunObject" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/agent-runs/{agentRunId}/cancel:
+    parameters: [{ $ref: "#/components/parameters/AgentRunId" }]
+    post:
+      tags: [Analysis]
+      operationId: cancelAgentRun
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      responses:
+        "200": { $ref: "#/components/responses/AgentRunObject" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/projects/{projectId}/analysis-threads:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+    get:
+      tags: [Analysis]
+      operationId: listAnalysisThreads
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/PageLimit" }
+      responses:
+        "200": { $ref: "#/components/responses/AnalysisThreadPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Analysis]
+      operationId: createAnalysisThread
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateAnalysisThreadRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/AnalysisThreadObject" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/analysis-threads/{threadId}:
+    parameters: [{ $ref: "#/components/parameters/ThreadId" }]
+    get:
+      tags: [Analysis]
+      operationId: getAnalysisThread
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      responses:
+        "200": { $ref: "#/components/responses/AnalysisThreadDetailObject" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/analysis-threads/{threadId}/plan-revisions:
+    parameters: [{ $ref: "#/components/parameters/ThreadId" }]
+    post:
+      tags: [Analysis]
+      operationId: createAnalysisPlanRevision
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateAnalysisPlanRevisionRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/AnalysisPlanRevisionObject" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/ValidationError" }
+  /api/v1/analysis-threads/{threadId}/retry:
+    parameters: [{ $ref: "#/components/parameters/ThreadId" }]
+    post:
+      tags: [Analysis]
+      operationId: retryAnalysisThread
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "200": { $ref: "#/components/responses/AnalysisThreadRetryObject" }
+        "201": { $ref: "#/components/responses/AnalysisThreadRetryObject" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/analysis-plan-revisions/{revisionId}/selection:
+    parameters: [{ $ref: "#/components/parameters/RevisionId" }]
+    get:
+      tags: [Analysis]
+      operationId: getAnalysisPlanSelection
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/PageLimit" }
+      responses:
+        "200": { $ref: "#/components/responses/AnalysisSelectionObject" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/analysis-plan-revisions/{revisionId}/accept:
+    parameters: [{ $ref: "#/components/parameters/RevisionId" }]
+    post:
+      tags: [Analysis]
+      operationId: acceptAnalysisPlan
+      x-labrat-capability: approve
+      x-labrat-scope: all_experiments
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "200": { $ref: "#/components/responses/AnalysisWorkflowObject" }
+        "201": { $ref: "#/components/responses/AnalysisWorkflowObject" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/analysis-runs/{runId}:
+    parameters: [{ $ref: "#/components/parameters/RunId" }]
+    get:
+      tags: [Analysis]
+      operationId: getAnalysisRun
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      responses:
+        "200": { $ref: "#/components/responses/AnalysisRunDetailObject" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/analysis-runs/{runId}/execute:
+    parameters: [{ $ref: "#/components/parameters/RunId" }]
+    post:
+      tags: [Analysis]
+      operationId: executeAnalysisRun
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExecuteAnalysisRunRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/AnalysisWorkflowWithResultObject" }
+        "201": { $ref: "#/components/responses/AnalysisWorkflowWithResultObject" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/analysis-runs/{runId}/retry:
+    parameters: [{ $ref: "#/components/parameters/RunId" }]
+    post:
+      tags: [Analysis]
+      operationId: retryAnalysisRun
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "200": { $ref: "#/components/responses/AnalysisWorkflowObject" }
+        "201": { $ref: "#/components/responses/AnalysisWorkflowObject" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/analysis-runs/{runId}/revise:
+    parameters: [{ $ref: "#/components/parameters/RunId" }]
+    post:
+      tags: [Analysis]
+      operationId: reviseAnalysisRun
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReviseAnalysisRunRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/AnalysisRevisionObject" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/analysis-runs/{runId}/result-preview:
+    parameters: [{ $ref: "#/components/parameters/RunId" }]
+    get:
+      tags: [Analysis]
+      operationId: getAnalysisResultPreview
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/PageLimit" }
+        - { name: traceCursor, in: query, required: false, schema: { type: string, maxLength: 500 } }
+        - { name: sourceCursor, in: query, required: false, schema: { type: string, maxLength: 500 } }
+      responses:
+        "200": { $ref: "#/components/responses/AnalysisResultPreviewObject" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/analysis-runs/{runId}/accept-and-create-chart:
+    parameters: [{ $ref: "#/components/parameters/RunId" }]
+    post:
+      tags: [Analysis, Charts]
+      operationId: publishAnalysisChart
+      x-labrat-capability: approve
+      x-labrat-scope: all_experiments
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PublishAnalysisChartRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/AnalysisChartPublicationObject" }
+        "201": { $ref: "#/components/responses/AnalysisChartPublicationObject" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/analysis-runs/{runId}/accept-and-publish-experiments:
+    parameters: [{ $ref: "#/components/parameters/RunId" }]
+    post:
+      tags: [Analysis, Experiment]
+      operationId: publishExperimentAnalysis
+      x-labrat-capability: approve
+      x-labrat-scope: all_experiments
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PublishExperimentAnalysisRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/ExperimentAnalysisPublicationObject" }
+        "201": { $ref: "#/components/responses/ExperimentAnalysisPublicationObject" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/projects/{projectId}/chart-specs:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+    get:
+      tags: [Charts]
+      operationId: listChartSpecs
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/PageLimit" }
+      responses:
+        "200": { $ref: "#/components/responses/ChartSpecPage" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/chart-specs/{chartSpecId}:
+    parameters: [{ $ref: "#/components/parameters/ChartSpecId" }]
+    get:
+      tags: [Charts]
+      operationId: getChartSpec
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      responses:
+        "200": { $ref: "#/components/responses/ChartSpecObject" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/projects/{projectId}/manuscripts:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+    get:
+      tags: [Manuscripts]
+      operationId: listManuscripts
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/PageLimit" }
+      responses:
+        "200": { $ref: "#/components/responses/ManuscriptPage" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Manuscripts]
+      operationId: createManuscript
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateManuscriptRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/ManuscriptObject" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/manuscripts/{manuscriptId}:
+    parameters: [{ $ref: "#/components/parameters/ManuscriptId" }]
+    patch:
+      tags: [Manuscripts]
+      operationId: updateManuscript
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateManuscriptRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/ManuscriptObject" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: labrat_session
+  parameters:
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/OpaqueId" }
+    LabId:
+      name: labId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/OpaqueId" }
+    LabIdQuery:
+      name: labId
+      in: query
+      required: false
+      schema: { $ref: "#/components/schemas/OpaqueId" }
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/OpaqueId" }
+    GroupId:
+      name: groupId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/OpaqueId" }
+    GrantId:
+      name: grantId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/OpaqueId" }
+    ExperimentId:
+      name: experimentId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/OpaqueId" }
+    ColumnId:
+      name: columnId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/OpaqueId" }
+    ViewId:
+      name: viewId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/OpaqueId" }
+    SourceDocumentId:
+      name: sourceDocumentId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/OpaqueId" }
+    SessionId:
+      name: sessionId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/OpaqueId" }
+    RegionId:
+      name: regionId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/OpaqueId" }
+    AgentRunId:
+      name: agentRunId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/OpaqueId" }
+    ThreadId:
+      name: threadId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/OpaqueId" }
+    RevisionId:
+      name: revisionId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/OpaqueId" }
+    RunId:
+      name: runId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/OpaqueId" }
+    ChartSpecId:
+      name: chartSpecId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/OpaqueId" }
+    ManuscriptId:
+      name: manuscriptId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/OpaqueId" }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 200, pattern: "^[A-Za-z0-9._:-]+$" }
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema: { type: string, maxLength: 500 }
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+    PageLimit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+  responses:
+    Unauthorized:
+      description: Authentication is missing or expired.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Forbidden:
+      description: The actor lacks the required capability.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    NotFound:
+      description: Resource not found in the authorized scope.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Conflict:
+      description: Version, state, stale-head or idempotency conflict.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    ValidationError:
+      description: Request failed bounded validation.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    AnalysisCapabilitiesObject:
+      description: Public model/executor readiness and bounded accepted-data counts.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/AnalysisCapabilities" }
+    AgentRunPage:
+      description: Bounded AgentRun summaries.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/AgentRunPage" }
+    AgentRunObject:
+      description: One public AgentRun summary.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/AgentRunResponse" }
+    CreateAgentRunResult:
+      description: Routed reply plus optional durable reviewed-analysis artifacts.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/CreateAgentRunResponse" }
+    AnalysisThreadPage:
+      description: Bounded analysis-thread summaries.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/AnalysisThreadPage" }
+    AnalysisThreadObject:
+      description: One analysis-thread summary.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/AnalysisThreadResponse" }
+    AnalysisThreadDetailObject:
+      description: Thread detail with bounded visible messages, plan revisions and runs.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/AnalysisThreadDetail" }
+    AnalysisPlanRevisionObject:
+      description: One immutable reviewable analysis-plan revision.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/AnalysisPlanRevisionResponse" }
+    AnalysisThreadRetryObject:
+      description: Evidence-recovery retry result.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/AnalysisThreadRetryResponse" }
+    AnalysisSelectionObject:
+      description: Reviewed source/snapshot selections without result values or Python.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/AnalysisSelection" }
+    AnalysisWorkflowObject:
+      description: Accepted plan or immutable run-retry workflow state.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/AnalysisWorkflowResponse" }
+    AnalysisWorkflowWithResultObject:
+      description: Execution state and optional immutable validated result summary.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/AnalysisWorkflowWithResultResponse" }
+    AnalysisRunDetailObject:
+      description: One run with its accepted plan, thread and optional result summary.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/AnalysisRunDetail" }
+    AnalysisResultPreviewObject:
+      description: Target-specific bounded review payload; never generated Python or run inputs.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/AnalysisResultPreview" }
+    AnalysisRevisionObject:
+      description: Later immutable plan revision linked to the prior run/result.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/AnalysisRevisionResponse" }
+    AnalysisChartPublicationObject:
+      description: Atomic exact-result ChartSpec publication.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/AnalysisChartPublicationResponse" }
+    ExperimentAnalysisPublicationObject:
+      description: Atomic exact-result DataSnapshot/Experiment Browser publication.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ExperimentAnalysisPublicationResponse" }
+    ChartSpecPage:
+      description: Bounded ChartSpec summaries without Plotly point arrays.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ChartSpecPage" }
+    ChartSpecObject:
+      description: One complete immutable ChartSpec.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ChartSpecResponse" }
+    ManuscriptPage:
+      description: Bounded editable manuscript page.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ManuscriptPage" }
+    ManuscriptObject:
+      description: One editable manuscript.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ManuscriptResponse" }
+    UserPage:
+      description: Cursor page of users.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/CursorPage"
+              - type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/User" }
+    LabPage:
+      description: Cursor page of Labs.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/CursorPage"
+              - type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Lab" }
+    ProjectPage:
+      description: Authorization-filtered cursor page of Projects.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/CursorPage"
+              - type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Project" }
+    GroupPage:
+      description: Cursor page of Lab groups.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/CursorPage"
+              - type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/LabGroup" }
+    AccessGrantPage:
+      description: Cursor page of project and experiment grants.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/CursorPage"
+              - type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/AccessGrant" }
+    LabMemberPage:
+      description: Cursor page of active Lab memberships.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/CursorPage"
+              - type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/LabMember" }
+    DataPlanPage:
+      description: Accepted historical DataPlan summaries for a fully authorized Project.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/CursorPage"
+              - type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/DataPlanSummary" } }
+    DataSnapshotPage:
+      description: Accepted DataSnapshot summaries restricted to the actor's experiment scope.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/CursorPage"
+              - type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/DataSnapshotSummary" } }
+    ExperimentAnnotationPage:
+      description: Current actor's annotations in the authorized experiment scope.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/CursorPage"
+              - type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/ExperimentAnnotation" } }
+    ExperimentAnnotationObject:
+      description: Saved personal Experiment annotation.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [annotation]
+            properties:
+              annotation: { $ref: "#/components/schemas/ExperimentAnnotation" }
+    ExperimentCustomColumnPage:
+      description: Custom Browser columns visible in the authorized experiment scope.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/CursorPage"
+              - type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/ExperimentCustomColumn" } }
+    ExperimentCustomColumnObject:
+      description: Experiment Browser custom column.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [customColumn]
+            properties:
+              customColumn: { $ref: "#/components/schemas/ExperimentCustomColumn" }
+    ExperimentCustomValueObject:
+      description: Versioned custom value for one Experiment and custom column.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [customValue]
+            properties:
+              customValue: { $ref: "#/components/schemas/ExperimentCustomValue" }
+    ProjectBrowserConfigObject:
+      description: Shared Browser configuration and edit capability.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ProjectBrowserConfigResponse" }
+    BrowserViewPage:
+      description: Current actor's personal Browser views.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/CursorPage"
+              - type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/BrowserView" } }
+    BrowserViewObject:
+      description: Current actor's personal Browser view.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [browserView]
+            properties:
+              browserView: { $ref: "#/components/schemas/BrowserView" }
+    DeletedResponse:
+      description: Deletion result.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [deleted]
+            properties:
+              deleted: { type: boolean }
+    FileObjectPage:
+      description: Project file evidence.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/FileObjectPage" }
+    FileUploadResult:
+      description: A newly stored file or an idempotently reused file.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/FileUploadResponse" }
+    ImportRunPage:
+      description: Project import scans.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ImportRunPage" }
+    ImportRunObject:
+      description: Import scan created.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ImportRunResponse" }
+    SourceDocumentPage:
+      description: Immutable source-document indexes for the project.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/SourceDocumentPage" }
+    WorkbookReviewSessionPage:
+      description: Active workbook review sessions.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/WorkbookReviewSessionPage" }
+    WorkbookReviewSessionCreated:
+      description: Workbook review session and its deterministic candidate regions.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/WorkbookReviewSessionCreateResponse" }
+    RegionUnderstandingPage:
+      description: Accepted region-understanding decisions.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/RegionUnderstandingPage" }
+    SourceRegionPage:
+      description: Indexed regions in one SourceDocument.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/SourceRegionPage" }
+    SourceQueryResult:
+      description: Bounded SourceDocument search results.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/SourceQueryResponse" }
+    SourceRangeResult:
+      description: Bounded source cells with both flat cells and row-major compatibility views.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/SourceRangeResponse" }
+    WorkbookReviewSessionDetail:
+      description: Review session with source and region context.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/WorkbookReviewSessionDetailResponse" }
+    WorkbookReviewSessionDeleted:
+      description: Soft-deleted review session and cascaded active-region count.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/WorkbookReviewSessionDeleteResponse" }
+    WorkbookReviewRegionPage:
+      description: Review regions for one workbook review session.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/WorkbookReviewRegionPage" }
+    WorkbookReviewRegionObject:
+      description: One workbook review region.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/WorkbookReviewRegionResponse" }
+    WorkbookReviewRegionMutation:
+      description: Region interpretation or revision result.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/WorkbookReviewRegionMutationResponse" }
+    RegionUnderstandingRevisionPage:
+      description: Immutable interpretation revisions for one review region.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/RegionUnderstandingRevisionPage" }
+    WorkbookReviewRegionConfirmed:
+      description: Region whose current revision was accepted by a reviewer.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/WorkbookReviewRegionConfirmResponse" }
+  schemas:
+    OpaqueId:
+      type: string
+      minLength: 1
+      maxLength: 200
+    Timestamp:
+      type: string
+      format: date-time
+    Capability:
+      type: string
+      enum: [read, propose, approve, export, manage_access]
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, requestId]
+          properties:
+            code: { type: string, minLength: 1, maxLength: 100 }
+            message: { type: string, minLength: 1, maxLength: 1000 }
+            requestId: { type: string, minLength: 1, maxLength: 200 }
+            details:
+              type: object
+              additionalProperties: true
+    OkResponse:
+      type: object
+      additionalProperties: false
+      required: [ok]
+      properties:
+        ok: { type: boolean, const: true }
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required: [ok, service, apiVersion]
+      properties:
+        ok: { type: boolean, const: true }
+        service: { type: string, const: labrat-backend }
+        apiVersion: { type: string, const: v1 }
+    CursorPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: {} }
+        nextCursor:
+          oneOf:
+            - type: string
+            - type: "null"
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username: { type: string, minLength: 1, maxLength: 200 }
+        password: { type: string, minLength: 1, maxLength: 1000 }
+    User:
+      type: object
+      additionalProperties: false
+      required: [id, username, displayName, isActive, isSuperAdmin]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        username: { type: string }
+        displayName: { type: string }
+        isActive: { type: boolean }
+        isSuperAdmin: { type: boolean }
+    LabMembership:
+      type: object
+      additionalProperties: false
+      required: [labId, role, status]
+      properties:
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        role: { type: string, enum: [lab_owner, lab_admin, lab_member] }
+        status: { type: string, enum: [active, inactive] }
+    LabMember:
+      type: object
+      additionalProperties: false
+      required: [user, role, status]
+      properties:
+        user: { $ref: "#/components/schemas/User" }
+        role: { type: string, enum: [lab_owner, lab_admin, lab_member] }
+        status: { type: string, enum: [active, inactive] }
+    UpsertLabMemberRequest:
+      type: object
+      additionalProperties: false
+      required: [role]
+      properties:
+        role: { type: string, enum: [lab_admin, lab_member] }
+    LabMembershipResponse:
+      type: object
+      additionalProperties: false
+      required: [membership]
+      properties:
+        membership:
+          type: object
+          additionalProperties: false
+          required: [userId, role, status]
+          properties:
+            userId: { $ref: "#/components/schemas/OpaqueId" }
+            role: { type: string, enum: [lab_admin, lab_member] }
+            status: { type: string, enum: [active] }
+    AuthResponse:
+      type: object
+      additionalProperties: false
+      required: [user, memberships]
+      properties:
+        user: { $ref: "#/components/schemas/User" }
+        memberships:
+          type: array
+          items: { $ref: "#/components/schemas/LabMembership" }
+    CreateUserRequest:
+      type: object
+      additionalProperties: false
+      required: [username, displayName, password]
+      properties:
+        username: { type: string, minLength: 1, maxLength: 200 }
+        displayName: { type: string, minLength: 1, maxLength: 300 }
+        password: { type: string, minLength: 12, maxLength: 1000 }
+        isSuperAdmin: { type: boolean, default: false }
+    UpdateUserRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 300 }
+        isActive: { type: boolean }
+        isSuperAdmin: { type: boolean }
+    ResetPasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [password]
+      properties:
+        password: { type: string, minLength: 12, maxLength: 1000 }
+    UserResponse:
+      type: object
+      additionalProperties: false
+      required: [user]
+      properties:
+        user: { $ref: "#/components/schemas/User" }
+    Lab:
+      type: object
+      additionalProperties: false
+      required: [id, name, slug, status]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        name: { type: string }
+        slug: { type: string }
+        status: { type: string, enum: [active, inactive] }
+        role: { type: string, enum: [lab_owner, lab_admin, lab_member] }
+    CreateLabRequest:
+      type: object
+      additionalProperties: false
+      required: [name, slug, ownerUserId]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 300 }
+        slug: { type: string, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$" }
+        ownerUserId: { $ref: "#/components/schemas/OpaqueId" }
+    LabResponse:
+      type: object
+      additionalProperties: false
+      required: [lab]
+      properties:
+        lab: { $ref: "#/components/schemas/Lab" }
+    ProjectProfile:
+      type: object
+      additionalProperties: false
+      properties:
+        schemaVersion: { type: string, const: labrat.projectProfile.v1 }
+        researchGoal: { type: string, maxLength: 20000 }
+        experimentBackground: { type: string, maxLength: 20000 }
+        materials: { type: string, maxLength: 20000 }
+        methods: { type: string, maxLength: 20000 }
+        instruments: { type: string, maxLength: 20000 }
+        analysisNotes: { type: string, maxLength: 20000 }
+        tags:
+          type: array
+          maxItems: 100
+          items: { type: string, maxLength: 200 }
+    Project:
+      type: object
+      additionalProperties: false
+      required: [id, labId, name, description, status]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        name: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [active, archived] }
+        projectProfile: { $ref: "#/components/schemas/ProjectProfile" }
+        shellOnly: { type: boolean, default: false }
+        capabilities:
+          type: array
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/Capability" }
+    CreateProjectRequest:
+      type: object
+      additionalProperties: false
+      required: [labId, name]
+      properties:
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        name: { type: string, minLength: 1, maxLength: 300 }
+        description: { type: string, maxLength: 5000, default: "" }
+        projectProfile: { $ref: "#/components/schemas/ProjectProfile" }
+    UpdateProjectRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 300 }
+        description: { type: string, maxLength: 5000 }
+        status: { type: string, enum: [active, archived] }
+    ProjectResponse:
+      type: object
+      additionalProperties: false
+      required: [project]
+      properties:
+        project: { $ref: "#/components/schemas/Project" }
+    LabGroup:
+      type: object
+      additionalProperties: false
+      required: [id, labId, name, description, status, memberUserIds]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        name: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [active, inactive] }
+        memberUserIds:
+          type: array
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/OpaqueId" }
+    CreateGroupRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 300 }
+        description: { type: string, maxLength: 2000, default: "" }
+    UpdateGroupRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 300 }
+        description: { type: string, maxLength: 2000 }
+        status: { type: string, enum: [active, inactive] }
+    GroupResponse:
+      type: object
+      additionalProperties: false
+      required: [group]
+      properties:
+        group: { $ref: "#/components/schemas/LabGroup" }
+    AccessSubject:
+      type: object
+      additionalProperties: false
+      required: [type, id]
+      properties:
+        type: { type: string, enum: [user, group] }
+        id: { $ref: "#/components/schemas/OpaqueId" }
+    AccessGrant:
+      type: object
+      additionalProperties: false
+      required: [id, labId, projectId, subject, scope, capabilities, experimentIds, status]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        subject: { $ref: "#/components/schemas/AccessSubject" }
+        scope: { type: string, enum: [all_experiments, selected_experiments] }
+        capabilities:
+          type: array
+          uniqueItems: true
+          minItems: 1
+          items: { $ref: "#/components/schemas/Capability" }
+        experimentIds:
+          type: array
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/OpaqueId" }
+        status: { type: string, enum: [active, inactive] }
+    CreateAccessGrantRequest:
+      type: object
+      additionalProperties: false
+      required: [subject, scope, capabilities]
+      properties:
+        subject: { $ref: "#/components/schemas/AccessSubject" }
+        scope: { type: string, enum: [all_experiments, selected_experiments] }
+        capabilities:
+          type: array
+          uniqueItems: true
+          minItems: 1
+          items: { $ref: "#/components/schemas/Capability" }
+        experimentIds:
+          type: array
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/OpaqueId" }
+    AccessGrantResponse:
+      type: object
+      additionalProperties: false
+      required: [grant]
+      properties:
+        grant: { $ref: "#/components/schemas/AccessGrant" }
+    EffectiveAccess:
+      type: object
+      additionalProperties: false
+      required: [projectId, shellOnly, capabilities, allExperiments, experimentIds]
+      properties:
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        shellOnly: { type: boolean }
+        capabilities:
+          type: array
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/Capability" }
+        allExperiments: { type: boolean }
+        experimentIds:
+          type: array
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/OpaqueId" }
+    EffectiveAccessResponse:
+      type: object
+      additionalProperties: false
+      required: [access]
+      properties:
+        access: { $ref: "#/components/schemas/EffectiveAccess" }
+    NullableString:
+      oneOf:
+        - type: string
+        - type: "null"
+    NullableTimestamp:
+      oneOf:
+        - { $ref: "#/components/schemas/Timestamp" }
+        - type: "null"
+    NullableOpaqueId:
+      oneOf:
+        - { $ref: "#/components/schemas/OpaqueId" }
+        - type: "null"
+    JsonValue:
+      oneOf:
+        - type: "null"
+        - type: boolean
+        - type: number
+        - type: string
+        - type: array
+          items: { $ref: "#/components/schemas/JsonValue" }
+        - type: object
+          additionalProperties: { $ref: "#/components/schemas/JsonValue" }
+    JsonObject:
+      type: object
+      additionalProperties: { $ref: "#/components/schemas/JsonValue" }
+    SourceRef:
+      type: object
+      additionalProperties: false
+      required: [sourceType]
+      properties:
+        sourceType: { type: string }
+        sourceDocumentId: { $ref: "#/components/schemas/NullableOpaqueId" }
+        fileObjectId: { $ref: "#/components/schemas/NullableOpaqueId" }
+        importRunId: { $ref: "#/components/schemas/NullableOpaqueId" }
+        fileName: { $ref: "#/components/schemas/NullableString" }
+        sheet: { $ref: "#/components/schemas/NullableString" }
+        cell: { $ref: "#/components/schemas/NullableString" }
+        range: { $ref: "#/components/schemas/NullableString" }
+    DataPlanSummary:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, schemaVersion, status, task, outputShape, dependencyHash, warningCount, acceptedAt, acceptedBy, createdAt]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        schemaVersion: { type: string }
+        status: { type: string }
+        task: { type: string }
+        outputShape: { type: string }
+        dependencyHash: { type: string }
+        warningCount: { type: integer, minimum: 0 }
+        acceptedAt: { $ref: "#/components/schemas/NullableTimestamp" }
+        acceptedBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+    DataSnapshotSummary:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, dataPlanId, analysisPlanRevisionId, analysisRunId, analysisResultId, schemaVersion, status, outputShape, contentHash, dependencyHash, acceptedAt, acceptedBy, createdAt, authorizedExperimentCount, scope]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        dataPlanId: { $ref: "#/components/schemas/NullableOpaqueId" }
+        analysisPlanRevisionId: { $ref: "#/components/schemas/NullableOpaqueId" }
+        analysisRunId: { $ref: "#/components/schemas/NullableOpaqueId" }
+        analysisResultId: { $ref: "#/components/schemas/NullableOpaqueId" }
+        schemaVersion: { type: string }
+        status: { type: string }
+        outputShape: { type: string }
+        contentHash: { type: string }
+        dependencyHash: { type: string }
+        acceptedAt: { $ref: "#/components/schemas/Timestamp" }
+        acceptedBy: { $ref: "#/components/schemas/OpaqueId" }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        authorizedExperimentCount: { type: integer, minimum: 0 }
+        scope: { type: string, enum: [all_experiments, selected_experiments] }
+        summary: { $ref: "#/components/schemas/JsonObject" }
+        warningCount: { type: integer, minimum: 0 }
+    ExperimentColumn:
+      type: object
+      additionalProperties: false
+      required: [id, fieldKey, displayName, label, role, valueType, unit, coverageCount, coverageRatio, confidenceAverage, warningCount, sourceSummary, recommendationScore, recommended, pinned]
+      properties:
+        id: { type: string }
+        customColumnId: { $ref: "#/components/schemas/OpaqueId" }
+        fieldKey: { $ref: "#/components/schemas/NullableString" }
+        displayName: { type: string }
+        label: { type: string }
+        role: { type: string }
+        valueType: { type: string }
+        unit: { $ref: "#/components/schemas/NullableString" }
+        coverageCount: { type: integer, minimum: 0 }
+        coverageRatio: { type: number, minimum: 0, maximum: 1 }
+        confidenceAverage: { type: number }
+        warningCount: { type: integer, minimum: 0 }
+        sourceSummary: { $ref: "#/components/schemas/NullableString" }
+        recommendationScore: { type: number }
+        recommended: { type: boolean }
+        pinned: { type: boolean }
+        isCustom: { type: boolean }
+        version: { type: integer, minimum: 1 }
+    ExperimentCell:
+      type: object
+      additionalProperties: false
+      required: [value, formattedValue]
+      properties:
+        value: { $ref: "#/components/schemas/JsonValue" }
+        formattedValue: { $ref: "#/components/schemas/JsonValue" }
+        missingReason: { $ref: "#/components/schemas/NullableString" }
+        confidence:
+          oneOf:
+            - type: number
+            - type: "null"
+        warningCount: { type: integer, minimum: 0 }
+        version: { type: integer, minimum: 0 }
+        isCustom: { type: boolean }
+    SeriesInventoryItem:
+      type: object
+      additionalProperties: false
+      required: [seriesKey, label, xField, yField, xUnit, yUnit, pointCount, warningCount]
+      properties:
+        seriesKey: { type: string }
+        label: { type: string }
+        xField: { $ref: "#/components/schemas/NullableString" }
+        yField: { $ref: "#/components/schemas/NullableString" }
+        xUnit: { $ref: "#/components/schemas/NullableString" }
+        yUnit: { $ref: "#/components/schemas/NullableString" }
+        pointCount: { type: integer, minimum: 0 }
+        warningCount: { type: integer, minimum: 0 }
+    SourceRangeSummary:
+      type: object
+      additionalProperties: false
+      required: [sourceType, sourceDocumentId, sheet, range]
+      properties:
+        sourceType: { type: string }
+        sourceDocumentId: { $ref: "#/components/schemas/NullableOpaqueId" }
+        sheet: { $ref: "#/components/schemas/NullableString" }
+        range: { $ref: "#/components/schemas/NullableString" }
+    ExperimentRowAnnotation:
+      type: object
+      additionalProperties: false
+      required: [note, color, updatedAt]
+      properties:
+        note: { type: string }
+        color: { type: string, enum: [amber, red, green, blue, purple, pink] }
+        updatedAt: { $ref: "#/components/schemas/NullableTimestamp" }
+    ExperimentProjectionRow:
+      type: object
+      additionalProperties: false
+      required: [experimentId, label, sourceLabel, aliases, dataSnapshotId, acceptedAt, cells, seriesInventory, warningCount, sourceRanges, headId, annotation]
+      properties:
+        experimentId: { $ref: "#/components/schemas/OpaqueId" }
+        label: { type: string }
+        sourceLabel: { type: string }
+        aliases: { type: array, items: { type: string }, uniqueItems: true }
+        dataSnapshotId: { $ref: "#/components/schemas/OpaqueId" }
+        acceptedAt: { $ref: "#/components/schemas/Timestamp" }
+        cells:
+          type: object
+          additionalProperties:
+            oneOf:
+              - { $ref: "#/components/schemas/ExperimentCell" }
+              - type: "null"
+        seriesInventory: { type: array, items: { $ref: "#/components/schemas/SeriesInventoryItem" } }
+        warningCount: { type: integer, minimum: 0 }
+        sourceRanges: { type: array, items: { $ref: "#/components/schemas/SourceRangeSummary" } }
+        headId: { $ref: "#/components/schemas/OpaqueId" }
+        annotation:
+          oneOf:
+            - { $ref: "#/components/schemas/ExperimentRowAnnotation" }
+            - type: "null"
+    ExperimentProjection:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, projectId, columns, rows, nextCursor, totalCount, page]
+      properties:
+        schemaVersion: { type: string, const: labrat.experimentProjection.v1 }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        columns: { type: array, items: { $ref: "#/components/schemas/ExperimentColumn" } }
+        rows: { type: array, items: { $ref: "#/components/schemas/ExperimentProjectionRow" } }
+        nextCursor:
+          oneOf:
+            - type: string
+            - type: "null"
+        totalCount: { type: integer, minimum: 0 }
+        page:
+          type: object
+          additionalProperties: false
+          required: [offset, limit, returnedCount]
+          properties:
+            offset: { type: integer, minimum: 0 }
+            limit: { type: integer, minimum: 1, maximum: 250 }
+            returnedCount: { type: integer, minimum: 0 }
+    ExperimentField:
+      type: object
+      additionalProperties: false
+      required: [fieldKey, displayName, role, value, formattedValue, valueType, unit, confidence, warnings, sourceRefs]
+      properties:
+        columnId: { type: string }
+        fieldKey: { type: string }
+        displayName: { type: string }
+        role: { type: string }
+        value: { $ref: "#/components/schemas/JsonValue" }
+        formattedValue: { $ref: "#/components/schemas/JsonValue" }
+        valueType: { type: string }
+        unit: { $ref: "#/components/schemas/NullableString" }
+        missingReason: { $ref: "#/components/schemas/NullableString" }
+        confidence:
+          oneOf:
+            - type: number
+            - type: "null"
+        warnings: { type: array, items: { $ref: "#/components/schemas/JsonObject" } }
+        sourceRefs: { type: array, items: { $ref: "#/components/schemas/SourceRef" } }
+    ExperimentSeries:
+      type: object
+      additionalProperties: false
+      required: [seriesKey, label, xField, yField, xUnit, yUnit, points, warnings, sourceRefs]
+      properties:
+        seriesKey: { type: string }
+        label: { type: string }
+        xField: { $ref: "#/components/schemas/NullableString" }
+        yField: { $ref: "#/components/schemas/NullableString" }
+        xUnit: { $ref: "#/components/schemas/NullableString" }
+        yUnit: { $ref: "#/components/schemas/NullableString" }
+        points: { type: array, items: { $ref: "#/components/schemas/JsonObject" } }
+        warnings: { type: array, items: { $ref: "#/components/schemas/JsonObject" } }
+        sourceRefs: { type: array, items: { $ref: "#/components/schemas/SourceRef" } }
+    ExperimentRecord:
+      type: object
+      additionalProperties: false
+      required: [experimentId, label, aliases, fields, series, warnings, sourceRefs]
+      properties:
+        experimentId: { $ref: "#/components/schemas/OpaqueId" }
+        label: { type: string }
+        aliases: { type: array, items: { type: string } }
+        fields: { type: array, items: { $ref: "#/components/schemas/ExperimentField" } }
+        series: { type: array, items: { $ref: "#/components/schemas/ExperimentSeries" } }
+        warnings: { type: array, items: { $ref: "#/components/schemas/JsonObject" } }
+        sourceRefs: { type: array, items: { $ref: "#/components/schemas/SourceRef" } }
+        baseSnapshotRef: { $ref: "#/components/schemas/JsonObject" }
+    ExperimentSnapshotHead:
+      type: object
+      additionalProperties: false
+      required: [id, labId, projectId, experimentId, dataSnapshotId, recordIndex, updatedAt, updatedBy]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        experimentId: { $ref: "#/components/schemas/OpaqueId" }
+        dataSnapshotId: { $ref: "#/components/schemas/OpaqueId" }
+        recordIndex: { type: integer, minimum: 0 }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedBy: { $ref: "#/components/schemas/OpaqueId" }
+    ExperimentDetail:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, projectId, experiment, activeHead, dataSnapshot, record]
+      properties:
+        schemaVersion: { type: string, const: labrat.experimentDetail.v1 }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        experiment:
+          type: object
+          additionalProperties: false
+          required: [id, canonicalLabel, aliases]
+          properties:
+            id: { $ref: "#/components/schemas/OpaqueId" }
+            canonicalLabel: { type: string }
+            aliases: { type: array, items: { type: string } }
+        activeHead: { $ref: "#/components/schemas/ExperimentSnapshotHead" }
+        dataSnapshot:
+          type: object
+          additionalProperties: false
+          required: [id, dataPlanId, contentHash, dependencyHash, acceptedAt, acceptedBy]
+          properties:
+            id: { $ref: "#/components/schemas/OpaqueId" }
+            dataPlanId: { $ref: "#/components/schemas/NullableOpaqueId" }
+            contentHash: { type: string }
+            dependencyHash: { type: string }
+            acceptedAt: { $ref: "#/components/schemas/Timestamp" }
+            acceptedBy: { $ref: "#/components/schemas/OpaqueId" }
+        record: { $ref: "#/components/schemas/ExperimentRecord" }
+    ExperimentAnnotation:
+      type: object
+      additionalProperties: false
+      required: [id, labId, projectId, userId, experimentId, schemaVersion, note, color, createdAt, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        userId: { $ref: "#/components/schemas/OpaqueId" }
+        experimentId: { $ref: "#/components/schemas/OpaqueId" }
+        schemaVersion: { type: string, const: labrat.experimentAnnotation.v1 }
+        note: { type: string, maxLength: 1000 }
+        color: { type: string, enum: [amber, red, green, blue, purple, pink] }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    SaveExperimentAnnotationRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        note: { type: string, maxLength: 1000 }
+        color: { type: string, enum: [amber, red, green, blue, purple, pink] }
+    ExperimentCustomColumn:
+      type: object
+      additionalProperties: false
+      required: [id, labId, projectId, schemaVersion, label, version, createdAt, updatedAt, createdBy, updatedBy]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        schemaVersion: { type: string, const: labrat.experimentCustomColumn.v1 }
+        label: { type: string, minLength: 1, maxLength: 120 }
+        version: { type: integer, minimum: 1 }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+        createdBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+        updatedBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+    CreateExperimentCustomColumnRequest:
+      type: object
+      additionalProperties: false
+      required: [label]
+      properties:
+        label: { type: string, minLength: 1, maxLength: 120 }
+    UpdateExperimentCustomColumnRequest:
+      type: object
+      additionalProperties: false
+      required: [label, expectedVersion]
+      properties:
+        label: { type: string, minLength: 1, maxLength: 120 }
+        expectedVersion: { type: integer, minimum: 1 }
+    ExperimentCustomValue:
+      type: object
+      additionalProperties: false
+      required: [id, labId, projectId, customColumnId, experimentId, schemaVersion, value, version, createdAt, updatedAt, createdBy, updatedBy]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        customColumnId: { $ref: "#/components/schemas/OpaqueId" }
+        experimentId: { $ref: "#/components/schemas/OpaqueId" }
+        schemaVersion: { type: string, const: labrat.experimentCustomValue.v1 }
+        value: { type: string, maxLength: 2000 }
+        version: { type: integer, minimum: 1 }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+        createdBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+        updatedBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+    SaveExperimentCustomValueRequest:
+      type: object
+      additionalProperties: false
+      required: [value]
+      properties:
+        value: { type: string, maxLength: 2000 }
+        expectedVersion: { type: integer, minimum: 0 }
+    BrowserColumnState:
+      type: object
+      additionalProperties: false
+      required: [columnId, order, width, hidden]
+      properties:
+        columnId: { type: string, minLength: 1 }
+        order: { type: integer, minimum: 0 }
+        width:
+          oneOf:
+            - type: number
+              minimum: 60
+              maximum: 800
+            - type: "null"
+        hidden: { type: boolean }
+        labelOverride: { type: string, maxLength: 120 }
+    BrowserFilter:
+      type: object
+      additionalProperties: false
+      required: [columnId, operator, value]
+      properties:
+        columnId: { type: string, minLength: 1 }
+        operator: { type: string, enum: [contains, eq, neq, gt, gte, lt, lte, is_empty, not_empty] }
+        value: { $ref: "#/components/schemas/JsonValue" }
+    BrowserSort:
+      type: object
+      additionalProperties: false
+      required: [columnId, direction]
+      properties:
+        columnId: { type: string, minLength: 1 }
+        direction: { type: string, enum: [asc, desc] }
+    BrowserViewPayload:
+      type: object
+      additionalProperties: false
+      required: [columns, filters, sort, groupBy, selectedExperimentIds]
+      properties:
+        columns: { type: array, maxItems: 100, items: { $ref: "#/components/schemas/BrowserColumnState" } }
+        filters: { type: array, maxItems: 20, items: { $ref: "#/components/schemas/BrowserFilter" } }
+        sort: { type: array, maxItems: 3, items: { $ref: "#/components/schemas/BrowserSort" } }
+        groupBy: { $ref: "#/components/schemas/NullableString" }
+        selectedExperimentIds: { type: array, maxItems: 500, uniqueItems: true, items: { $ref: "#/components/schemas/OpaqueId" } }
+    ProjectBrowserConfigPayload:
+      type: object
+      additionalProperties: false
+      required: [columns, filters, sort]
+      properties:
+        columns: { type: array, maxItems: 100, items: { $ref: "#/components/schemas/BrowserColumnState" } }
+        filters: { type: array, maxItems: 20, items: { $ref: "#/components/schemas/BrowserFilter" } }
+        sort: { type: array, maxItems: 3, items: { $ref: "#/components/schemas/BrowserSort" } }
+    BrowserView:
+      type: object
+      additionalProperties: false
+      required: [id, labId, projectId, ownerUserId, schemaVersion, name, payload, isDefault, createdAt, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        ownerUserId: { $ref: "#/components/schemas/OpaqueId" }
+        schemaVersion: { type: string, const: labrat.browserView.v1 }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        payload: { $ref: "#/components/schemas/BrowserViewPayload" }
+        isDefault: { type: boolean }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    CreateBrowserViewRequest:
+      type: object
+      additionalProperties: false
+      required: [name, payload]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        payload: { $ref: "#/components/schemas/BrowserViewPayload" }
+        isDefault: { type: boolean }
+    UpdateBrowserViewRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        payload: { $ref: "#/components/schemas/BrowserViewPayload" }
+        isDefault: { type: boolean }
+    ProjectBrowserConfig:
+      type: object
+      additionalProperties: false
+      required: [id, labId, projectId, schemaVersion, payload, version, createdAt, updatedAt, updatedBy]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        schemaVersion: { type: string, const: labrat.projectBrowserConfig.v1 }
+        payload: { $ref: "#/components/schemas/ProjectBrowserConfigPayload" }
+        version: { type: integer, minimum: 1 }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+    ProjectBrowserConfigResponse:
+      type: object
+      additionalProperties: false
+      required: [projectBrowserConfig, canEdit]
+      properties:
+        projectBrowserConfig:
+          oneOf:
+            - { $ref: "#/components/schemas/ProjectBrowserConfig" }
+            - type: "null"
+        canEdit: { type: boolean }
+    SaveProjectBrowserConfigRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, payload]
+      properties:
+        expectedVersion: { type: integer, minimum: 0 }
+        payload: { $ref: "#/components/schemas/ProjectBrowserConfigPayload" }
+    RetrieveEvidenceRequest:
+      type: object
+      additionalProperties: false
+      required: [query]
+      properties:
+        query: { type: string, minLength: 1, maxLength: 2000 }
+        includePreview: { type: boolean, default: true }
+        includeUnconfirmedSuggestions: { type: boolean, default: false }
+    EvidenceRetrievalResponse:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, projectId, query, mode, planner, toolTrace, results, suggestions, clarification]
+      properties:
+        schemaVersion: { type: string, const: labrat.evidenceRetrieval.toolAgent.v1 }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        query: { type: string }
+        mode: { type: string, const: tool_agent }
+        planner:
+          type: object
+          additionalProperties: false
+          required: [provider, fallbackUsed]
+          properties:
+            provider: { type: string }
+            fallbackUsed: { type: boolean }
+        toolTrace: { type: array, items: { $ref: "#/components/schemas/JsonObject" } }
+        results: { type: array, items: { $ref: "#/components/schemas/JsonObject" } }
+        suggestions: { type: array, items: { $ref: "#/components/schemas/JsonObject" } }
+        clarification:
+          oneOf:
+            - { $ref: "#/components/schemas/JsonObject" }
+            - type: "null"
+    FileObject:
+      type: object
+      additionalProperties: false
+      required: [id, labId, projectId, originalName, mimeType, extension, sizeBytes, checksumSha256, storageProvider, createdAt, createdBy]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        originalName: { type: string, minLength: 1, maxLength: 1000 }
+        mimeType: { $ref: "#/components/schemas/NullableString" }
+        extension: { $ref: "#/components/schemas/NullableString" }
+        sizeBytes: { type: integer, minimum: 0 }
+        checksumSha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+        storageProvider: { type: string, enum: [local] }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        createdBy: { $ref: "#/components/schemas/OpaqueId" }
+    FileObjectPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/FileObject" } }
+        nextCursor: { type: "null" }
+    FileUploadResponse:
+      type: object
+      additionalProperties: false
+      required: [fileObject, reused]
+      properties:
+        fileObject: { $ref: "#/components/schemas/FileObject" }
+        reused: { type: boolean }
+    CreateImportRunRequest:
+      type: object
+      additionalProperties: false
+      required: [fileObjectId]
+      properties:
+        fileObjectId: { $ref: "#/components/schemas/OpaqueId" }
+    ImportRun:
+      type: object
+      additionalProperties: false
+      required: [id, labId, projectId, fileObjectId, status, scanResult, normalizePreview, reviewDecisions, warnings, error, createdAt, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        fileObjectId: { $ref: "#/components/schemas/NullableOpaqueId" }
+        status: { type: string }
+        scanResult:
+          oneOf:
+            - { $ref: "#/components/schemas/JsonObject" }
+            - type: "null"
+        normalizePreview:
+          oneOf:
+            - { $ref: "#/components/schemas/JsonObject" }
+            - type: "null"
+        reviewDecisions: { $ref: "#/components/schemas/JsonObject" }
+        warnings: { type: array, items: { $ref: "#/components/schemas/JsonValue" } }
+        error:
+          oneOf:
+            - { $ref: "#/components/schemas/JsonObject" }
+            - type: "null"
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    ImportRunPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/ImportRun" } }
+        nextCursor: { type: "null" }
+    ImportRunResponse:
+      type: object
+      additionalProperties: false
+      required: [importRun]
+      properties:
+        importRun: { $ref: "#/components/schemas/ImportRun" }
+    SourceDocument:
+      type: object
+      additionalProperties: false
+      required: [id, labId, projectId, fileObjectId, importRunId, documentType, indexVersion, status, metadata, summary, warnings, createdAt, updatedAt, createdBy, updatedBy]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        fileObjectId: { $ref: "#/components/schemas/NullableOpaqueId" }
+        importRunId: { $ref: "#/components/schemas/NullableOpaqueId" }
+        documentType: { type: string }
+        indexVersion: { type: string }
+        status: { type: string }
+        metadata: { $ref: "#/components/schemas/JsonObject" }
+        summary: { $ref: "#/components/schemas/JsonObject" }
+        warnings: { type: array, items: { $ref: "#/components/schemas/JsonValue" } }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+        createdBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+        updatedBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+    SourceDocumentPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/SourceDocument" } }
+        nextCursor: { type: "null" }
+    SourceRegion:
+      type: object
+      additionalProperties: false
+      required: [id, labId, projectId, sourceDocumentId, importRunId, regionKey, kind, label, sheetName, rangeRef, startRow, endRow, startCol, endCol, confidence, signals, candidateFields, sourceRefs, warnings, status, createdAt, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        sourceDocumentId: { $ref: "#/components/schemas/OpaqueId" }
+        importRunId: { $ref: "#/components/schemas/NullableOpaqueId" }
+        regionKey: { $ref: "#/components/schemas/NullableString" }
+        kind: { type: string }
+        label: { type: string }
+        sheetName: { $ref: "#/components/schemas/NullableString" }
+        rangeRef: { $ref: "#/components/schemas/NullableString" }
+        startRow: { oneOf: [{ type: integer }, { type: "null" }] }
+        endRow: { oneOf: [{ type: integer }, { type: "null" }] }
+        startCol: { oneOf: [{ type: integer }, { type: "null" }] }
+        endCol: { oneOf: [{ type: integer }, { type: "null" }] }
+        confidence: { oneOf: [{ type: number }, { type: "null" }] }
+        signals: { $ref: "#/components/schemas/JsonObject" }
+        candidateFields: { type: array, items: { $ref: "#/components/schemas/JsonValue" } }
+        sourceRefs: { type: array, items: { $ref: "#/components/schemas/JsonValue" } }
+        warnings: { type: array, items: { $ref: "#/components/schemas/JsonValue" } }
+        status: { type: string }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    SourceRegionPage:
+      type: object
+      additionalProperties: false
+      required: [sourceDocument, items, nextCursor]
+      properties:
+        sourceDocument: { $ref: "#/components/schemas/SourceDocument" }
+        items: { type: array, items: { $ref: "#/components/schemas/SourceRegion" } }
+        nextCursor: { type: "null" }
+    SourceDocumentQueryRequest:
+      type: object
+      additionalProperties: false
+      required: [query]
+      properties:
+        query: { type: string, minLength: 1, maxLength: 500 }
+        limit: { type: integer, minimum: 1, maximum: 200 }
+    SourceQueryResponse:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, sourceDocumentId, query, matches, summary, warnings]
+      properties:
+        schemaVersion: { type: string, const: labrat.sourceQuery.v1 }
+        sourceDocumentId: { $ref: "#/components/schemas/OpaqueId" }
+        query: { type: string }
+        matches: { type: array, maxItems: 200, items: { $ref: "#/components/schemas/JsonObject" } }
+        summary: { $ref: "#/components/schemas/JsonObject" }
+        warnings: { type: array, items: { $ref: "#/components/schemas/JsonValue" } }
+    SourceDocumentRangeRequest:
+      type: object
+      additionalProperties: false
+      required: [sheetName, range]
+      properties:
+        sheetName: { type: string, minLength: 1, maxLength: 200 }
+        range: { type: string, minLength: 2, maxLength: 80 }
+        maxCells: { type: integer, minimum: 1, maximum: 10000 }
+    SourceCell:
+      type: object
+      additionalProperties: false
+      required: [address, row, col, rawValue, formattedValue, type, formula, merged, mergedRange]
+      properties:
+        address: { type: string }
+        row: { type: integer, minimum: 0 }
+        col: { type: integer, minimum: 0 }
+        rawValue: { $ref: "#/components/schemas/JsonValue" }
+        formattedValue: { $ref: "#/components/schemas/JsonValue" }
+        type: { $ref: "#/components/schemas/NullableString" }
+        formula: { $ref: "#/components/schemas/NullableString" }
+        merged: { type: boolean }
+        mergedRange: { $ref: "#/components/schemas/NullableString" }
+    SourceRangeResponse:
+      type: object
+      additionalProperties: false
+      description: >-
+        `cells` is the flat canonical compatibility view and `rows` is the
+        row-major compatibility view. Their duplication is a known v0 carryover
+        and is not a normative requirement for later compact tool payloads.
+      required: [schemaVersion, sourceDocumentId, sheetName, range, rowCount, columnCount, cellCount, cells, rows, sourceRef, warnings]
+      properties:
+        schemaVersion: { type: string, const: labrat.sourceRange.v1 }
+        sourceDocumentId: { $ref: "#/components/schemas/OpaqueId" }
+        sheetName: { type: string }
+        range: { type: string }
+        rowCount: { type: integer, minimum: 1 }
+        columnCount: { type: integer, minimum: 1 }
+        cellCount: { type: integer, minimum: 1, maximum: 10000 }
+        cells: { type: array, maxItems: 10000, items: { $ref: "#/components/schemas/SourceCell" } }
+        rows:
+          type: array
+          maxItems: 10000
+          items:
+            type: array
+            maxItems: 10000
+            items: { $ref: "#/components/schemas/SourceCell" }
+        sourceRef: { $ref: "#/components/schemas/SourceRef" }
+        warnings: { type: array, items: { $ref: "#/components/schemas/JsonValue" } }
+    CreateWorkbookReviewSessionRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        fileObjectId: { $ref: "#/components/schemas/OpaqueId" }
+        sourceDocumentId: { $ref: "#/components/schemas/OpaqueId" }
+      oneOf:
+        - required: [fileObjectId]
+          not: { required: [sourceDocumentId] }
+        - required: [sourceDocumentId]
+          not: { required: [fileObjectId] }
+    WorkbookReviewSession:
+      type: object
+      additionalProperties: false
+      required: [id, labId, projectId, sourceDocumentId, schemaVersion, status, version, workbookSummary, messages, warnings, createdAt, updatedAt, createdBy, updatedBy]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        sourceDocumentId: { $ref: "#/components/schemas/OpaqueId" }
+        schemaVersion: { type: string, const: labrat.workbookReviewSession.v1 }
+        status: { type: string, enum: [needs_user_review, deleted] }
+        version: { type: integer, minimum: 1 }
+        workbookSummary: { $ref: "#/components/schemas/JsonObject" }
+        messages: { type: array, items: { $ref: "#/components/schemas/JsonValue" } }
+        warnings: { type: array, items: { $ref: "#/components/schemas/JsonValue" } }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+        createdBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+        updatedBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+    WorkbookReviewSessionPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/WorkbookReviewSession" } }
+        nextCursor: { type: "null" }
+    DeleteWorkbookReviewSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      properties:
+        expectedVersion: { type: integer, minimum: 1 }
+        reason: { type: string, maxLength: 2000 }
+    RegionUnderstandingRevision:
+      type: object
+      additionalProperties: false
+      required: [id, regionId, revisionNumber, trigger, userFeedback, summary, interpretation, sourceRefs, sourceContentHash, dependencyHash, validation, provider, warnings, confidence, createdAt, createdBy]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        regionId: { $ref: "#/components/schemas/OpaqueId" }
+        revisionNumber: { type: integer, minimum: 1 }
+        trigger: { type: string }
+        userFeedback: { type: string }
+        summary: { type: array, minItems: 2, maxItems: 4, items: { type: string } }
+        interpretation: { $ref: "#/components/schemas/JsonObject" }
+        sourceRefs: { type: array, items: { $ref: "#/components/schemas/JsonValue" } }
+        sourceContentHash: { type: string, minLength: 1 }
+        dependencyHash: { type: string, minLength: 1 }
+        validation: { $ref: "#/components/schemas/JsonObject" }
+        provider: { $ref: "#/components/schemas/JsonObject" }
+        warnings: { type: array, items: { $ref: "#/components/schemas/JsonValue" } }
+        confidence: { oneOf: [{ type: number }, { type: "null" }] }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        createdBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+    WorkbookReviewRegion:
+      type: object
+      additionalProperties: false
+      required: [id, labId, projectId, workbookReviewSessionId, sourceDocumentId, sourceRegionId, sheetName, rangeRef, selectionMethod, interpretationHint, disposition, reviewStatus, currentRevisionId, acceptedRevisionId, version, warnings, acceptedAt, acceptedBy, ignoredAt, ignoredBy, ignoredReason, deletedAt, deletedBy, deletedReason, currentRevision, acceptedRevision, createdAt, updatedAt, createdBy, updatedBy]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        workbookReviewSessionId: { $ref: "#/components/schemas/OpaqueId" }
+        sourceDocumentId: { $ref: "#/components/schemas/OpaqueId" }
+        sourceRegionId: { $ref: "#/components/schemas/NullableOpaqueId" }
+        sheetName: { type: string }
+        rangeRef: { type: string }
+        selectionMethod: { type: string }
+        interpretationHint: { $ref: "#/components/schemas/JsonObject" }
+        disposition: { type: string, enum: [active, ignored, deleted] }
+        reviewStatus: { type: string, enum: [interpreting, interpretation_failed, awaiting_review, accepted] }
+        currentRevisionId: { $ref: "#/components/schemas/NullableOpaqueId" }
+        acceptedRevisionId: { $ref: "#/components/schemas/NullableOpaqueId" }
+        version: { type: integer, minimum: 1 }
+        warnings: { type: array, items: { $ref: "#/components/schemas/JsonValue" } }
+        acceptedAt: { $ref: "#/components/schemas/NullableTimestamp" }
+        acceptedBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+        ignoredAt: { $ref: "#/components/schemas/NullableTimestamp" }
+        ignoredBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+        ignoredReason: { type: string }
+        deletedAt: { $ref: "#/components/schemas/NullableTimestamp" }
+        deletedBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+        deletedReason: { type: string }
+        currentRevision:
+          oneOf:
+            - { $ref: "#/components/schemas/RegionUnderstandingRevision" }
+            - type: "null"
+        acceptedRevision:
+          oneOf:
+            - { $ref: "#/components/schemas/RegionUnderstandingRevision" }
+            - type: "null"
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+        createdBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+        updatedBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+    CreateWorkbookReviewRegionRequest:
+      type: object
+      additionalProperties: false
+      required: [sheetName, range]
+      properties:
+        sourceDocumentId: { $ref: "#/components/schemas/OpaqueId" }
+        sourceRegionId: { $ref: "#/components/schemas/OpaqueId" }
+        sheetName: { type: string, minLength: 1, maxLength: 200 }
+        range: { type: string, minLength: 2, maxLength: 80 }
+        selectionMethod: { type: string, maxLength: 80 }
+        semanticType:
+          type: string
+          enum: [experiment_table, reaction_rate_time_series, component_distribution, calculation_table, metadata_notes, generic_table, ignored_region, unknown_region]
+        description: { type: string, maxLength: 2000 }
+        deferInterpretation: { type: boolean, default: false }
+    InterpretWorkbookReviewRegionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedRegionVersion]
+      properties:
+        expectedRegionVersion: { type: integer, minimum: 1 }
+        description: { type: string, maxLength: 2000 }
+        semanticType:
+          type: string
+          enum: [experiment_table, reaction_rate_time_series, component_distribution, calculation_table, metadata_notes, generic_table, ignored_region, unknown_region]
+    ReviseWorkbookReviewRegionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedRegionVersion]
+      properties:
+        expectedRegionVersion: { type: integer, minimum: 1 }
+        previousRevisionId: { $ref: "#/components/schemas/OpaqueId" }
+        feedback: { type: string, maxLength: 4000 }
+    ConfirmWorkbookReviewRegionRequest:
+      type: object
+      additionalProperties: false
+      required: [revisionId, expectedRegionVersion]
+      properties:
+        revisionId: { $ref: "#/components/schemas/OpaqueId" }
+        expectedRegionVersion: { type: integer, minimum: 1 }
+    WorkbookReviewRegionDispositionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedRegionVersion]
+      properties:
+        expectedRegionVersion: { type: integer, minimum: 1 }
+        reason: { type: string, maxLength: 2000 }
+    WorkbookReviewSessionCreateResponse:
+      type: object
+      additionalProperties: false
+      required: [workbookReviewSession, sourceDocument, sourceRegions, reviewRegions, interpretationDeferred, importRun]
+      properties:
+        workbookReviewSession: { $ref: "#/components/schemas/WorkbookReviewSession" }
+        sourceDocument: { $ref: "#/components/schemas/SourceDocument" }
+        sourceRegions: { type: array, items: { $ref: "#/components/schemas/SourceRegion" } }
+        reviewRegions: { type: array, items: { $ref: "#/components/schemas/WorkbookReviewRegion" } }
+        interpretationDeferred: { type: boolean, const: true }
+        importRun:
+          oneOf:
+            - { $ref: "#/components/schemas/ImportRun" }
+            - type: "null"
+    RegionUnderstanding:
+      type: object
+      additionalProperties: false
+      required: [region, revision]
+      properties:
+        region: { $ref: "#/components/schemas/WorkbookReviewRegion" }
+        revision: { $ref: "#/components/schemas/RegionUnderstandingRevision" }
+    RegionUnderstandingPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/RegionUnderstanding" } }
+        nextCursor: { type: "null" }
+    WorkbookReviewSessionDetailResponse:
+      type: object
+      additionalProperties: false
+      required: [workbookReviewSession, sourceDocument, sourceRegions, reviewRegions]
+      properties:
+        workbookReviewSession: { $ref: "#/components/schemas/WorkbookReviewSession" }
+        sourceDocument:
+          oneOf:
+            - { $ref: "#/components/schemas/SourceDocument" }
+            - type: "null"
+        sourceRegions: { type: array, items: { $ref: "#/components/schemas/SourceRegion" } }
+        reviewRegions: { type: array, items: { $ref: "#/components/schemas/WorkbookReviewRegion" } }
+    WorkbookReviewSessionDeleteResponse:
+      type: object
+      additionalProperties: false
+      required: [workbookReviewSession, deletedRegionCount]
+      properties:
+        workbookReviewSession: { $ref: "#/components/schemas/WorkbookReviewSession" }
+        deletedRegionCount: { type: integer, minimum: 0 }
+    WorkbookReviewRegionPage:
+      type: object
+      additionalProperties: false
+      required: [workbookReviewSessionId, items]
+      properties:
+        workbookReviewSessionId: { $ref: "#/components/schemas/OpaqueId" }
+        items: { type: array, items: { $ref: "#/components/schemas/WorkbookReviewRegion" } }
+    WorkbookReviewRegionResponse:
+      type: object
+      additionalProperties: false
+      required: [region]
+      properties:
+        region: { $ref: "#/components/schemas/WorkbookReviewRegion" }
+    WorkbookReviewRegionMutationResponse:
+      type: object
+      additionalProperties: false
+      required: [region, currentRevision, warning]
+      properties:
+        region: { $ref: "#/components/schemas/WorkbookReviewRegion" }
+        currentRevision:
+          oneOf:
+            - { $ref: "#/components/schemas/RegionUnderstandingRevision" }
+            - type: "null"
+        warning: { $ref: "#/components/schemas/JsonValue" }
+        interpretationDeferred: { type: boolean }
+        cancelled: { type: boolean }
+    RegionUnderstandingRevisionPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/RegionUnderstandingRevision" } }
+        nextCursor: { type: "null" }
+    WorkbookReviewRegionConfirmResponse:
+      type: object
+      additionalProperties: false
+      required: [region, acceptedRevision]
+      properties:
+        region: { $ref: "#/components/schemas/WorkbookReviewRegion" }
+        acceptedRevision: { $ref: "#/components/schemas/RegionUnderstandingRevision" }
+    AnalysisCapabilities:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, projectId, model, executor, acceptedData]
+      properties:
+        schemaVersion: { type: string, const: labrat.analysisCapabilities.v1 }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        model:
+          type: object
+          additionalProperties: false
+          required: [provider, model, configured]
+          properties:
+            provider: { $ref: "#/components/schemas/NullableString" }
+            model: { $ref: "#/components/schemas/NullableString" }
+            configured: { type: boolean }
+        executor:
+          type: object
+          additionalProperties: false
+          required: [mode, adapter, configured, productionSafe]
+          properties:
+            mode: { type: string }
+            adapter: { type: string }
+            configured: { type: boolean }
+            productionSafe: { type: boolean }
+        acceptedData:
+          type: object
+          additionalProperties: false
+          required: [acceptedSnapshotCount, activeExperimentHeadCount, confirmedRegionCount]
+          properties:
+            acceptedSnapshotCount: { type: integer, minimum: 0 }
+            activeExperimentHeadCount: { type: integer, minimum: 0 }
+            confirmedRegionCount: { type: integer, minimum: 0 }
+    CreateAgentRunRequest:
+      type: object
+      additionalProperties: false
+      required: [message]
+      properties:
+        message: { type: string, minLength: 1, maxLength: 4000 }
+        conversation:
+          type: array
+          maxItems: 100
+          items: { $ref: "#/components/schemas/JsonObject" }
+        selectedContext: { $ref: "#/components/schemas/JsonObject" }
+    AgentRun:
+      type: object
+      additionalProperties: false
+      required: [id, labId, projectId, schemaVersion, status, mode, userMessage, selectedContext, visibleSteps, toolTrace, proposalRefs, actions, usage, warnings, error, createdAt, updatedAt, createdBy, updatedBy]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        schemaVersion: { type: string, const: labrat.agentRun.v1 }
+        status: { type: string }
+        mode: { $ref: "#/components/schemas/NullableString" }
+        userMessage: { type: string }
+        selectedContext: { $ref: "#/components/schemas/JsonObject" }
+        visibleSteps: { type: array, maxItems: 500, items: { $ref: "#/components/schemas/JsonObject" } }
+        toolTrace: { type: array, maxItems: 500, items: { $ref: "#/components/schemas/JsonObject" } }
+        proposalRefs: { type: array, maxItems: 500, items: { $ref: "#/components/schemas/JsonObject" } }
+        actions: { type: array, maxItems: 500, items: { $ref: "#/components/schemas/JsonObject" } }
+        usage: { $ref: "#/components/schemas/JsonObject" }
+        warnings: { type: array, maxItems: 500, items: { $ref: "#/components/schemas/JsonObject" } }
+        error: { $ref: "#/components/schemas/JsonValue" }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+        createdBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+        updatedBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+    AgentRunPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/AgentRun" } }
+        nextCursor: { $ref: "#/components/schemas/NullableString" }
+    AgentRunResponse:
+      type: object
+      additionalProperties: false
+      required: [agentRun]
+      properties:
+        agentRun: { $ref: "#/components/schemas/AgentRun" }
+    CreateAgentRunResponse:
+      type: object
+      additionalProperties: false
+      required: [agentRun, reply, analysisThread, currentPlanRevision]
+      properties:
+        agentRun: { $ref: "#/components/schemas/AgentRun" }
+        reply: { type: string }
+        analysisThread:
+          oneOf:
+            - { $ref: "#/components/schemas/AnalysisThread" }
+            - type: "null"
+        currentPlanRevision:
+          oneOf:
+            - { $ref: "#/components/schemas/AnalysisPlanRevision" }
+            - type: "null"
+    CreateAnalysisThreadRequest:
+      type: object
+      additionalProperties: false
+      required: [originalRequest]
+      properties:
+        originalRequest: { type: string, minLength: 1, maxLength: 4000 }
+        outputTarget: { type: string, enum: [chart, experiment_browser], default: chart }
+    AnalysisThread:
+      type: object
+      additionalProperties: false
+      required: [id, labId, projectId, schemaVersion, status, outputTarget, originalRequest, messageCount, planRevisionIds, analysisRunIds, acceptedAnalysisResultIds, chartSpecIds, dataSnapshotIds, browserViewIds, createdAt, updatedAt, createdBy, updatedBy]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        schemaVersion: { type: string }
+        status: { type: string }
+        outputTarget: { type: string, enum: [chart, experiment_browser] }
+        originalRequest: { type: string }
+        messageCount: { type: integer, minimum: 0 }
+        messages: { type: array, maxItems: 200, items: { $ref: "#/components/schemas/JsonObject" } }
+        planRevisionIds: { type: array, maxItems: 1000, items: { $ref: "#/components/schemas/OpaqueId" } }
+        analysisRunIds: { type: array, maxItems: 1000, items: { $ref: "#/components/schemas/OpaqueId" } }
+        acceptedAnalysisResultIds: { type: array, maxItems: 1000, items: { $ref: "#/components/schemas/OpaqueId" } }
+        chartSpecIds: { type: array, maxItems: 1000, items: { $ref: "#/components/schemas/OpaqueId" } }
+        dataSnapshotIds: { type: array, maxItems: 1000, items: { $ref: "#/components/schemas/OpaqueId" } }
+        browserViewIds: { type: array, maxItems: 1000, items: { $ref: "#/components/schemas/OpaqueId" } }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+        createdBy: { $ref: "#/components/schemas/OpaqueId" }
+        updatedBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+    AnalysisThreadPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/AnalysisThread" } }
+        nextCursor: { $ref: "#/components/schemas/NullableString" }
+    AnalysisThreadResponse:
+      type: object
+      additionalProperties: false
+      required: [analysisThread]
+      properties:
+        analysisThread: { $ref: "#/components/schemas/AnalysisThread" }
+    CreateAnalysisPlanRevisionRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        feedback: { type: string, maxLength: 4000 }
+        plan: { $ref: "#/components/schemas/JsonObject" }
+    AnalysisPlanRevision:
+      type: object
+      additionalProperties: false
+      required: [id, labId, projectId, analysisThreadId, schemaVersion, revision, status, outputTarget, requestSummary, sourceSelections, experimentSelections, reviewPlan, displayPlan, sourceRectangles, feedback, warnings, validation, acceptedAt, acceptedBy, createdAt, updatedAt, createdBy, updatedBy]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        analysisThreadId: { $ref: "#/components/schemas/OpaqueId" }
+        schemaVersion: { type: string }
+        revision: { type: integer, minimum: 1 }
+        status: { type: string }
+        outputTarget: { type: string, enum: [chart, experiment_browser] }
+        requestSummary: { type: string }
+        sourceSelections: { type: array, maxItems: 500, items: { $ref: "#/components/schemas/JsonObject" } }
+        experimentSelections: { type: array, maxItems: 1000, items: { $ref: "#/components/schemas/JsonObject" } }
+        reviewPlan: { $ref: "#/components/schemas/JsonObject" }
+        displayPlan: { type: array, maxItems: 500, items: { type: string } }
+        sourceRectangles: { type: array, maxItems: 500, items: { $ref: "#/components/schemas/JsonObject" } }
+        feedback: { $ref: "#/components/schemas/NullableString" }
+        warnings: { type: array, maxItems: 500, items: { $ref: "#/components/schemas/JsonObject" } }
+        validation: { $ref: "#/components/schemas/JsonObject" }
+        acceptedAt: { $ref: "#/components/schemas/NullableTimestamp" }
+        acceptedBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+        createdBy: { $ref: "#/components/schemas/OpaqueId" }
+        updatedBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+    AnalysisPlanRevisionResponse:
+      type: object
+      additionalProperties: false
+      required: [analysisPlanRevision]
+      properties:
+        analysisPlanRevision: { $ref: "#/components/schemas/AnalysisPlanRevision" }
+    AnalysisRun:
+      type: object
+      additionalProperties: false
+      required: [id, labId, projectId, analysisThreadId, acceptedPlanRevisionId, schemaVersion, status, outputTarget, execution, warnings, validation, createdAt, updatedAt, createdBy, updatedBy]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        analysisThreadId: { $ref: "#/components/schemas/OpaqueId" }
+        acceptedPlanRevisionId: { $ref: "#/components/schemas/OpaqueId" }
+        schemaVersion: { type: string }
+        status: { type: string }
+        outputTarget: { type: string, enum: [chart, experiment_browser] }
+        execution: { $ref: "#/components/schemas/JsonObject" }
+        warnings: { type: array, maxItems: 500, items: { $ref: "#/components/schemas/JsonObject" } }
+        validation: { $ref: "#/components/schemas/JsonObject" }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+        createdBy: { $ref: "#/components/schemas/OpaqueId" }
+        updatedBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+    AnalysisResult:
+      type: object
+      additionalProperties: false
+      required: [id, labId, projectId, analysisThreadId, analysisRunId, schemaVersion, status, outputTarget, summary, pointCount, traceCount, experimentCount, newExperimentCount, changedFieldCount, conflictCount, exclusionCount, warnings, validation, acceptedAt, acceptedBy, createdAt, updatedAt, createdBy, updatedBy]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        analysisThreadId: { $ref: "#/components/schemas/OpaqueId" }
+        analysisRunId: { $ref: "#/components/schemas/OpaqueId" }
+        schemaVersion: { type: string }
+        status: { type: string }
+        outputTarget: { type: string, enum: [chart, experiment_browser] }
+        summary: { $ref: "#/components/schemas/JsonObject" }
+        pointCount: { type: integer, minimum: 0 }
+        traceCount: { type: integer, minimum: 0 }
+        experimentCount: { type: integer, minimum: 0 }
+        newExperimentCount: { type: integer, minimum: 0 }
+        changedFieldCount: { type: integer, minimum: 0 }
+        conflictCount: { type: integer, minimum: 0 }
+        exclusionCount: { type: integer, minimum: 0 }
+        warnings: { type: array, maxItems: 500, items: { $ref: "#/components/schemas/JsonObject" } }
+        validation: { $ref: "#/components/schemas/JsonObject" }
+        acceptedAt: { $ref: "#/components/schemas/NullableTimestamp" }
+        acceptedBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+        createdBy: { $ref: "#/components/schemas/OpaqueId" }
+        updatedBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+    AnalysisThreadDetail:
+      type: object
+      additionalProperties: false
+      required: [analysisThread, planRevisions, analysisRuns, planFailure]
+      properties:
+        analysisThread: { $ref: "#/components/schemas/AnalysisThread" }
+        planRevisions: { type: array, maxItems: 200, items: { $ref: "#/components/schemas/AnalysisPlanRevision" } }
+        analysisRuns: { type: array, maxItems: 200, items: { $ref: "#/components/schemas/AnalysisRun" } }
+        planFailure: { $ref: "#/components/schemas/JsonValue" }
+    AnalysisThreadRetryResponse:
+      type: object
+      additionalProperties: false
+      required: [analysisThread, analysisPlanRevision, idempotentReplay]
+      properties:
+        analysisThread: { $ref: "#/components/schemas/AnalysisThread" }
+        analysisPlanRevision: { $ref: "#/components/schemas/AnalysisPlanRevision" }
+        idempotentReplay: { type: boolean }
+    AnalysisPageInfo:
+      type: object
+      additionalProperties: false
+      required: [offset, limit, totalCount]
+      properties:
+        offset: { type: integer, minimum: 0 }
+        limit: { type: integer, minimum: 1, maximum: 1000 }
+        returnedCount: { type: integer, minimum: 0 }
+        totalCount: { type: integer, minimum: 0 }
+    AnalysisSelection:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, projectId, analysisThreadId, planRevisionId, sourceSelections, experimentSelections, sourceRectangles, records, warnings, page]
+      properties:
+        schemaVersion: { type: string, const: labrat.analysisSourceSelectionPage.v3 }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        analysisThreadId: { $ref: "#/components/schemas/OpaqueId" }
+        planRevisionId: { $ref: "#/components/schemas/OpaqueId" }
+        sourceSelections: { type: array, maxItems: 500, items: { $ref: "#/components/schemas/JsonObject" } }
+        experimentSelections: { type: array, maxItems: 1000, items: { $ref: "#/components/schemas/JsonObject" } }
+        sourceRectangles: { type: array, maxItems: 500, items: { $ref: "#/components/schemas/JsonObject" } }
+        records: { type: array, maxItems: 0, items: { $ref: "#/components/schemas/JsonObject" } }
+        warnings: { type: array, maxItems: 500, items: { $ref: "#/components/schemas/JsonObject" } }
+        page: { $ref: "#/components/schemas/AnalysisPageInfo" }
+    AnalysisWorkflowResponse:
+      type: object
+      additionalProperties: false
+      required: [analysisThread, analysisPlanRevision, analysisRun, idempotentReplay]
+      properties:
+        analysisThread: { $ref: "#/components/schemas/AnalysisThread" }
+        analysisPlanRevision: { $ref: "#/components/schemas/AnalysisPlanRevision" }
+        analysisRun: { $ref: "#/components/schemas/AnalysisRun" }
+        idempotentReplay: { type: boolean }
+    AnalysisWorkflowWithResultResponse:
+      type: object
+      additionalProperties: false
+      required: [analysisThread, analysisPlanRevision, analysisRun, analysisResult, idempotentReplay]
+      properties:
+        analysisThread: { $ref: "#/components/schemas/AnalysisThread" }
+        analysisPlanRevision: { $ref: "#/components/schemas/AnalysisPlanRevision" }
+        analysisRun: { $ref: "#/components/schemas/AnalysisRun" }
+        analysisResult:
+          oneOf:
+            - { $ref: "#/components/schemas/AnalysisResult" }
+            - type: "null"
+        idempotentReplay: { type: boolean }
+    AnalysisRunDetail:
+      type: object
+      additionalProperties: false
+      required: [analysisThread, analysisPlanRevision, analysisRun, analysisResult]
+      properties:
+        analysisThread: { $ref: "#/components/schemas/AnalysisThread" }
+        analysisPlanRevision: { $ref: "#/components/schemas/AnalysisPlanRevision" }
+        analysisRun: { $ref: "#/components/schemas/AnalysisRun" }
+        analysisResult:
+          oneOf:
+            - { $ref: "#/components/schemas/AnalysisResult" }
+            - type: "null"
+    ExecuteAnalysisRunRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        executionStrategy: { type: string, enum: [model_generated_python, direct_source_mapping] }
+    ReviseAnalysisRunRequest:
+      type: object
+      additionalProperties: false
+      required: [feedback]
+      properties:
+        feedback: { type: string, minLength: 1, maxLength: 4000 }
+    AnalysisRevisionResponse:
+      type: object
+      additionalProperties: false
+      required: [analysisPlanRevision, priorAnalysisRun, priorAnalysisResult]
+      properties:
+        analysisPlanRevision: { $ref: "#/components/schemas/AnalysisPlanRevision" }
+        priorAnalysisRun: { $ref: "#/components/schemas/AnalysisRun" }
+        priorAnalysisResult:
+          oneOf:
+            - { $ref: "#/components/schemas/AnalysisResult" }
+            - type: "null"
+    AnalysisChartResultPreview:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, outputTarget, projectId, analysisThreadId, analysisRunId, analysisResultId, plotly, traces, summary, exclusions, checks, validation, warnings, sourceRefs, tracePage]
+      properties:
+        schemaVersion: { type: string, const: labrat.analysisResultPreview.v2 }
+        outputTarget: { type: string, const: chart }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        analysisThreadId: { $ref: "#/components/schemas/OpaqueId" }
+        analysisRunId: { $ref: "#/components/schemas/OpaqueId" }
+        analysisResultId: { $ref: "#/components/schemas/OpaqueId" }
+        plotly: { $ref: "#/components/schemas/JsonObject" }
+        traces: { type: array, maxItems: 500, items: { $ref: "#/components/schemas/JsonObject" } }
+        summary: { $ref: "#/components/schemas/JsonObject" }
+        exclusions: { type: array, maxItems: 5000, items: { $ref: "#/components/schemas/JsonValue" } }
+        checks: { type: array, maxItems: 500, items: { $ref: "#/components/schemas/JsonObject" } }
+        validation: { $ref: "#/components/schemas/JsonObject" }
+        warnings: { type: array, maxItems: 500, items: { $ref: "#/components/schemas/JsonObject" } }
+        sourceRefs: { type: array, maxItems: 10000, items: { $ref: "#/components/schemas/JsonObject" } }
+        tracePage: { $ref: "#/components/schemas/AnalysisPageInfo" }
+    ExperimentBrowserResultPreview:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, outputTarget, projectId, analysisThreadId, analysisRunId, analysisResultId, columns, rows, totalCount, rowChanges, identityCandidates, changeSummary, exclusions, browserView, validation, warnings, sourceRefs, page]
+      properties:
+        schemaVersion: { type: string, const: labrat.experimentBrowserResultPreview.v2 }
+        outputTarget: { type: string, const: experiment_browser }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        analysisThreadId: { $ref: "#/components/schemas/OpaqueId" }
+        analysisRunId: { $ref: "#/components/schemas/OpaqueId" }
+        analysisResultId: { $ref: "#/components/schemas/OpaqueId" }
+        columns: { type: array, maxItems: 1000, items: { $ref: "#/components/schemas/JsonObject" } }
+        rows: { type: array, maxItems: 1000, items: { $ref: "#/components/schemas/JsonObject" } }
+        totalCount: { type: integer, minimum: 0 }
+        rowChanges: { type: array, maxItems: 1000, items: { $ref: "#/components/schemas/JsonObject" } }
+        identityCandidates: { type: array, maxItems: 1000, items: { $ref: "#/components/schemas/JsonObject" } }
+        changeSummary: { $ref: "#/components/schemas/JsonObject" }
+        exclusions: { type: array, maxItems: 5000, items: { $ref: "#/components/schemas/JsonValue" } }
+        browserView: { $ref: "#/components/schemas/JsonValue" }
+        validation: { $ref: "#/components/schemas/JsonObject" }
+        warnings: { type: array, maxItems: 500, items: { $ref: "#/components/schemas/JsonObject" } }
+        sourceRefs: { type: array, maxItems: 10000, items: { $ref: "#/components/schemas/JsonObject" } }
+        page: { $ref: "#/components/schemas/AnalysisPageInfo" }
+    AnalysisResultPreview:
+      oneOf:
+        - { $ref: "#/components/schemas/AnalysisChartResultPreview" }
+        - { $ref: "#/components/schemas/ExperimentBrowserResultPreview" }
+    PublishAnalysisChartRequest:
+      type: object
+      additionalProperties: false
+      required: [analysisResultId, defaultVisibleTraceIds]
+      properties:
+        analysisResultId: { $ref: "#/components/schemas/OpaqueId" }
+        defaultVisibleTraceIds:
+          type: array
+          minItems: 1
+          maxItems: 500
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/OpaqueId" }
+    PublishExperimentAnalysisRequest:
+      type: object
+      additionalProperties: false
+      required: [analysisResultId, identityResolutions]
+      properties:
+        analysisResultId: { $ref: "#/components/schemas/OpaqueId" }
+        identityResolutions:
+          type: array
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/JsonObject" }
+    AnalysisChartPublicationResponse:
+      type: object
+      additionalProperties: false
+      required: [analysisThread, analysisPlanRevision, analysisRun, analysisResult, chartSpec, idempotentReplay]
+      properties:
+        analysisThread: { $ref: "#/components/schemas/AnalysisThread" }
+        analysisPlanRevision: { $ref: "#/components/schemas/AnalysisPlanRevision" }
+        analysisRun: { $ref: "#/components/schemas/AnalysisRun" }
+        analysisResult: { $ref: "#/components/schemas/AnalysisResult" }
+        chartSpec: { $ref: "#/components/schemas/JsonObject" }
+        idempotentReplay: { type: boolean }
+    ExperimentAnalysisPublicationResponse:
+      type: object
+      additionalProperties: false
+      required: [analysisThread, analysisPlanRevision, analysisRun, analysisResult, dataSnapshot, browserView, experimentIdentities, experimentSnapshotHeads, changeSummary, idempotentReplay]
+      properties:
+        analysisThread: { $ref: "#/components/schemas/AnalysisThread" }
+        analysisPlanRevision: { $ref: "#/components/schemas/AnalysisPlanRevision" }
+        analysisRun: { $ref: "#/components/schemas/AnalysisRun" }
+        analysisResult: { $ref: "#/components/schemas/AnalysisResult" }
+        dataSnapshot: { $ref: "#/components/schemas/JsonObject" }
+        browserView: { $ref: "#/components/schemas/JsonObject" }
+        experimentIdentities: { type: array, maxItems: 1000, items: { $ref: "#/components/schemas/JsonObject" } }
+        experimentSnapshotHeads: { type: array, maxItems: 1000, items: { $ref: "#/components/schemas/JsonObject" } }
+        changeSummary: { $ref: "#/components/schemas/JsonObject" }
+        idempotentReplay: { type: boolean }
+    ChartTraceSummary:
+      type: object
+      additionalProperties: false
+      required: [traceId, name, type, pointCount]
+      properties:
+        traceId: { $ref: "#/components/schemas/NullableString" }
+        name: { $ref: "#/components/schemas/NullableString" }
+        type: { $ref: "#/components/schemas/NullableString" }
+        pointCount: { type: integer, minimum: 0 }
+    ChartDefaultView:
+      type: object
+      additionalProperties: false
+      required: [visibleTraceIds]
+      properties:
+        visibleTraceIds:
+          type: array
+          minItems: 1
+          maxItems: 10000
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/OpaqueId" }
+    ChartSpecSummaryPayload:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, origin, status, chartType, title, analysisThreadId, analysisPlanRevisionId, analysisRunId, analysisResultId, experimentSelections, traceCatalog, defaultChartView, warnings, createdAt, createdBy, sourceSelectionCount, sourceRefCount, plotlyTraceCount, detailRequired]
+      properties:
+        schemaVersion: { type: string, const: labrat.chartSpec.v3 }
+        origin: { type: string, const: analysis_result }
+        status: { type: string, const: accepted }
+        chartType: { type: string }
+        title: { type: string }
+        analysisThreadId: { $ref: "#/components/schemas/OpaqueId" }
+        analysisPlanRevisionId: { $ref: "#/components/schemas/OpaqueId" }
+        analysisRunId: { $ref: "#/components/schemas/OpaqueId" }
+        analysisResultId: { $ref: "#/components/schemas/OpaqueId" }
+        experimentSelections: { type: array, maxItems: 1000, items: { $ref: "#/components/schemas/JsonObject" } }
+        traceCatalog: { type: array, maxItems: 10000, items: { $ref: "#/components/schemas/ChartTraceSummary" } }
+        defaultChartView: { $ref: "#/components/schemas/ChartDefaultView" }
+        warnings: { type: array, maxItems: 5000, items: { $ref: "#/components/schemas/JsonValue" } }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        createdBy: { $ref: "#/components/schemas/OpaqueId" }
+        sourceSelectionCount: { type: integer, minimum: 0 }
+        sourceRefCount: { type: integer, minimum: 0 }
+        plotlyTraceCount: { type: integer, minimum: 0 }
+        detailRequired: { type: boolean, const: true }
+    AcceptedChartSpecPayload:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, origin, status, chartType, title, analysisThreadId, analysisPlanRevisionId, analysisRunId, analysisResultId, sourceSelections, experimentSelections, sourceRefs, plotly, traceCatalog, defaultChartView, warnings, createdAt, createdBy]
+      properties:
+        schemaVersion: { type: string, const: labrat.chartSpec.v3 }
+        origin: { type: string, const: analysis_result }
+        status: { type: string, const: accepted }
+        chartType: { type: string }
+        title: { type: string }
+        analysisThreadId: { $ref: "#/components/schemas/OpaqueId" }
+        analysisPlanRevisionId: { $ref: "#/components/schemas/OpaqueId" }
+        analysisRunId: { $ref: "#/components/schemas/OpaqueId" }
+        analysisResultId: { $ref: "#/components/schemas/OpaqueId" }
+        sourceSelections: { type: array, maxItems: 500, items: { $ref: "#/components/schemas/JsonObject" } }
+        experimentSelections: { type: array, maxItems: 1000, items: { $ref: "#/components/schemas/JsonObject" } }
+        sourceRefs: { type: array, maxItems: 100000, items: { $ref: "#/components/schemas/JsonValue" } }
+        plotly: { $ref: "#/components/schemas/JsonObject" }
+        traceCatalog: { type: array, maxItems: 10000, items: { $ref: "#/components/schemas/ChartTraceSummary" } }
+        defaultChartView: { $ref: "#/components/schemas/ChartDefaultView" }
+        warnings: { type: array, maxItems: 5000, items: { $ref: "#/components/schemas/JsonValue" } }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        createdBy: { $ref: "#/components/schemas/OpaqueId" }
+    ChartSpecSummary:
+      type: object
+      additionalProperties: false
+      required: [id, labId, projectId, analysisResultId, title, chartType, spec, layout, warnings, createdAt, updatedAt, createdBy, updatedBy]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        analysisResultId: { $ref: "#/components/schemas/NullableOpaqueId" }
+        title: { $ref: "#/components/schemas/NullableString" }
+        chartType: { type: string }
+        spec: { $ref: "#/components/schemas/ChartSpecSummaryPayload" }
+        layout: { $ref: "#/components/schemas/JsonObject" }
+        warnings: { type: array, maxItems: 5000, items: { $ref: "#/components/schemas/JsonValue" } }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+        createdBy: { $ref: "#/components/schemas/OpaqueId" }
+        updatedBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+    ChartSpec:
+      type: object
+      additionalProperties: false
+      required: [id, labId, projectId, analysisResultId, title, chartType, spec, layout, warnings, createdAt, updatedAt, createdBy, updatedBy]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        analysisResultId: { $ref: "#/components/schemas/NullableOpaqueId" }
+        title: { $ref: "#/components/schemas/NullableString" }
+        chartType: { type: string }
+        spec: { $ref: "#/components/schemas/AcceptedChartSpecPayload" }
+        layout: { $ref: "#/components/schemas/JsonObject" }
+        warnings: { type: array, maxItems: 5000, items: { $ref: "#/components/schemas/JsonValue" } }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+        createdBy: { $ref: "#/components/schemas/OpaqueId" }
+        updatedBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+    ChartSpecPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/ChartSpecSummary" } }
+        nextCursor: { $ref: "#/components/schemas/NullableString" }
+    ChartSpecResponse:
+      type: object
+      additionalProperties: false
+      required: [chartSpec]
+      properties:
+        chartSpec: { $ref: "#/components/schemas/ChartSpec" }
+    CreateManuscriptRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        title: { type: string, minLength: 1, maxLength: 300 }
+        blocks: { type: array, maxItems: 5000, items: { $ref: "#/components/schemas/JsonValue" } }
+        pages: { type: array, maxItems: 1000, items: { $ref: "#/components/schemas/JsonValue" } }
+        canvasState: { $ref: "#/components/schemas/JsonObject" }
+        references: { type: array, maxItems: 5000, items: { $ref: "#/components/schemas/JsonValue" } }
+    UpdateManuscriptRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title: { type: string, minLength: 1, maxLength: 300 }
+        blocks: { type: array, maxItems: 5000, items: { $ref: "#/components/schemas/JsonValue" } }
+        pages: { type: array, maxItems: 1000, items: { $ref: "#/components/schemas/JsonValue" } }
+        canvasState: { $ref: "#/components/schemas/JsonObject" }
+        references: { type: array, maxItems: 5000, items: { $ref: "#/components/schemas/JsonValue" } }
+    Manuscript:
+      type: object
+      additionalProperties: false
+      required: [id, labId, projectId, title, status, blocks, pages, canvasState, references, createdAt, updatedAt, createdBy, updatedBy]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        title: { type: string, minLength: 1, maxLength: 300 }
+        status: { type: string, const: draft }
+        blocks: { type: array, maxItems: 5000, items: { $ref: "#/components/schemas/JsonValue" } }
+        pages: { type: array, maxItems: 1000, items: { $ref: "#/components/schemas/JsonValue" } }
+        canvasState: { $ref: "#/components/schemas/JsonObject" }
+        references: { type: array, maxItems: 5000, items: { $ref: "#/components/schemas/JsonValue" } }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+        createdBy: { $ref: "#/components/schemas/OpaqueId" }
+        updatedBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+    ManuscriptPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Manuscript" } }
+        nextCursor: { $ref: "#/components/schemas/NullableString" }
+    ManuscriptResponse:
+      type: object
+      additionalProperties: false
+      required: [manuscript]
+      properties:
+        manuscript: { $ref: "#/components/schemas/Manuscript" }

@@ -1,9 +1,15 @@
 # SaaS API Contract v0
 
-Status: active
-Last reviewed: 2026-08-20
+Status: rollback-only legacy reference
+Last reviewed: 2026-08-23
 
-This contract describes the server-first API that is implemented by `backend/src/saas/routes/saasRoutes.js`. The authoritative scientific path is:
+This contract describes the unversioned JavaScript backend retained for one
+stable release rollback window. New code and the current React client must use
+`doc/contracts/backend-api-v1.openapi.yaml`; do not add features or callers to
+this surface.
+
+The legacy API is implemented by `backend/src/saas/routes/saasRoutes.js`. Its
+scientific path is:
 
 ```text
 FileObject -> SourceDocument -> WorkbookReviewSession

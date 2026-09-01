@@ -70,6 +70,9 @@ jobs:
       - name: Install backend dependencies
         run: npm --prefix backend ci
 
+      - name: Check generated API v1 client types
+        run: npm run check:api:v1
+
       - name: Run frontend tests
         run: npm test
 
@@ -78,6 +81,12 @@ jobs:
 
       - name: Run Postgres integration tests
         run: npm --prefix backend run test:postgres
+
+      - name: Build NestJS backend
+        run: npm --prefix backend run build:v1
+
+      - name: Smoke production NestJS entry
+        run: npm --prefix backend run smoke:v1-entry
 
       - name: Build frontend
         run: npm run build
@@ -88,6 +97,7 @@ jobs:
           mkdir -p .release/backend .release/deploy/lightsail
           cp -R dist .release/dist
           cp -R backend/src .release/backend/src
+          cp -R backend/dist-v1 .release/backend/dist-v1
           cp -R backend/scripts .release/backend/scripts
           cp -R backend/migrations .release/backend/migrations
           cp backend/package.json backend/package-lock.json .release/backend/

@@ -82,6 +82,121 @@ Keep entries concise, newest first, and include:
   build passed with the existing Plotly chunk-size warning. The first
   sandboxed backend run was interrupted after local HTTP test servers could not
   progress; the authorized rerun completed successfully.
+## 2026-08-23
+
+- Completed the contract-first `/api/v1` migration implementation across all
+  NestJS/Fastify/TypeScript modules and the React caller. Added generated
+  OpenAPI path types plus a typed `openapi-fetch` boundary; rewired project,
+  evidence, Workbook Review, Experiment Browser, analysis, ChartSpec, and
+  Manuscript helpers to v1; and added a guard that rejects any return to
+  unversioned first-party request literals. React now composes a transient
+  workspace from explicit scoped resources instead of calling the legacy
+  project-state aggregate. Shell-only access avoids project-wide enumeration,
+  published counts come from the authorized Browser projection, and all
+  ChartSpec/Manuscript cursor pages are retained.
+- Finalized atomic cutover wiring: Compose starts Nest v1, production's existing
+  service entry imports the compiled Nest backend on port 8787, deployment
+  archives include `dist-v1`, and release/provider rollback stays one
+  transaction. Added a production-mode entry smoke that proves `/health` is
+  served by v1, corrected login/logout status codes and project archival after
+  active-list removal, removed the final planned `/api/v1/.../state` contract
+  placeholder, and aligned active/rollback architecture contracts.
+- Verification: generated API type check passed; frontend passed 291/291;
+  legacy backend passed 238 with 5 intentional skips; v1 passed 41/41; strict
+  TypeScript, Nest build, production entry smoke, frontend production build,
+  deployment shell syntax, provider/release rollback tests, and
+  `git diff --check` passed. Docker-backed PostgreSQL then passed 2/2 legacy
+  checks and 6/6 v1 scenarios. The real database run exposed a missing `$16`
+  optimistic-version predicate in the WorkbookReviewRegion update; adding the
+  exact version condition fixed the parameter mismatch and made the intended
+  stale-write protection effective. One Evidence test was also corrected to
+  assert the complete 2x2 range instead of requiring a one-element array.
+  `.env.example` and `backend/README.md` now document the Compose database URL
+  and repeatable local PostgreSQL test command.
+  Dependency installation reports six high-severity npm audit findings; they
+  were not auto-fixed during this architecture migration.
+
+- Completed the Nest-owned ChartSpec and Manuscript slice. `/api/v1` now lists
+  only accepted analysis-result ChartSpec v3 artifacts, removes Plotly point
+  arrays and source payloads from cursor list summaries, and returns the exact
+  immutable artifact from the direct detail endpoint. Manuscript cursor reads,
+  creation, partial JSONB updates, and audit writes preserve blocks, pages,
+  canvas state, and references under closed DTOs. Both artifact families
+  require full-project scope, and direct ids are concealed from
+  selected-experiment shells.
+- Added nine focused artifact tests and a disposable PostgreSQL scenario for
+  permission separation, bounded ChartSpec reads, complete detail hydration,
+  manuscript JSONB round-trip, partial-update preservation, and audit events.
+  Backend verification passed 238 legacy tests plus 40 v1 tests with 5
+  intentional legacy skips, strict TypeScript, OpenAPI 3.1 validation, and the
+  v1 build. Six PostgreSQL scenarios are now authored but remain skipped
+  locally because `LABRAT_TEST_DATABASE_URL` is unavailable.
+
+- Completed the Nest-owned Analysis/AI/Worker slice. `/api/v1` now owns safe
+  provider/executor capabilities, AgentRun creation/list/detail/cancel,
+  AnalysisThread and immutable PlanRevision review, approval-gated AnalysisRun
+  creation, execution/retry/revision, bounded result preview, and atomic
+  ChartSpec or Experiment Browser publication. Ordinary reads and simple
+  writes use the Drizzle repository; existing explicit PostgreSQL advisory
+  locks, row locks, retry receipts, run leases, idempotency checks, and
+  publication transactions remain behind the Nest application service without
+  a legacy HTTP bridge. Analysis artifacts require full-project access, direct
+  ids are concealed from experiment-only shells, and public diagnostics omit
+  credentials, hidden prompts, programs, materialized inputs, and claim tokens.
+- Replaced every Analysis migration placeholder in OpenAPI with closed DTOs
+  and authoritative operations. Added six service boundary tests plus a
+  disposable PostgreSQL scenario for propose-versus-approve authorization,
+  hidden direct ids, atomic plan acceptance, immutable status advancement, and
+  idempotent replay. Strict TypeScript and OpenAPI validation passed; backend
+  passed 238 legacy tests plus 31 v1 tests with 5 intentional legacy skips,
+  and both backend v1 and production frontend builds passed. The new database
+  scenario is discovered but skipped locally with the other four PostgreSQL
+  scenarios because `LABRAT_TEST_DATABASE_URL` is unavailable; CI remains the
+  database-verification gate.
+
+- Completed the Nest-owned Evidence/Workbook Review slice. `/api/v1` now owns
+  project FileObject upload/reuse, import scanning, SourceDocument indexing and
+  bounded query/range access, accepted-evidence retrieval, review-session
+  lifecycle, review-region interpretation/revision/ignore/delete, and
+  approval-gated RegionUnderstandingRevision confirmation. Public FileObject
+  DTOs omit storage keys; shell-only experiment access cannot enumerate direct
+  SourceDocument or review-session ids; immutable revision history is retained
+  when review containers are deleted.
+- Added optimistic concurrency to every shared workbook-review region mutation,
+  including late provider responses, so ignore/delete/revise/confirm races
+  cannot silently overwrite a newer decision. Added focused service,
+  repository, legacy-store, OpenAPI, and disposable-PostgreSQL coverage. Strict
+  v1 TypeScript checking passed; backend passed 238 legacy tests plus 25 v1
+  tests with 5 intentional legacy skips; frontend passed 289 tests; both builds
+  and `git diff --check` passed. Four v1 PostgreSQL scenarios are authored but
+  skipped locally because `LABRAT_TEST_DATABASE_URL` is unavailable; CI remains
+  the database-verification gate before cutover.
+
+- Started the contract-first backend migration in parallel with the rollback
+  server. Added the OpenAPI 3.1 `/api/v1` contract, authorization and scientific
+  invariant contracts, the route migration inventory, NestJS/Fastify/TypeScript
+  shell, Drizzle declarations, bounded request-id errors, session-cookie auth,
+  platform/Lab/User administration, Lab groups, explicit Project/Experiment
+  grants, and SQL-filtered Project shells. Migration 027 is additive, preserves
+  legacy membership roles, and backfills equivalent viewer/editor grants; the
+  pre-ledger migration baseline now stops at migration 019 instead of silently
+  marking future migrations applied.
+- Completed the first scientific v1 slice: DataPlan and scoped DataSnapshot
+  summaries, active Experiment detail and Browser projection, personal
+  annotations/views, shared Browser configuration, and versioned custom
+  documentation columns/values. Selected-experiment access reads only the
+  authorized snapshot record via PostgreSQL JSON extraction and cannot modify
+  Project-wide metadata/configuration. The OpenAPI contract now treats this
+  slice as closed rather than planned, and passes a standard OpenAPI parser.
+- Verification passed 237 legacy backend tests with 5 intentional skips, 18 v1
+  tests, all 289 frontend tests, the TypeScript v1 build, and the production
+  frontend build with the existing Plotly chunk warning. Three disposable real
+  PostgreSQL tests cover migration backfill/idempotency, exact full-schema
+  Drizzle drift, and permission/revocation plus hidden-record non-disclosure;
+  they are skipped locally because Docker Desktop/PostgreSQL is unavailable and
+  must run in CI before database verification is complete. React remains on
+  legacy `/api`; Evidence, Analysis, ChartSpec, Manuscript, deployment cutover,
+  and frontend-generated v1 client work remain pending.
 
 ## 2026-08-20
 

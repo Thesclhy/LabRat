@@ -35,7 +35,7 @@ describe("experimentBrowserApi", () => {
 
     const [endpoint, options] = fetch.mock.calls[0];
     const url = new URL(endpoint, "http://localhost");
-    expect(url.pathname).toBe("/api/projects/project%20%2F%201/experiment-browser");
+    expect(url.pathname).toBe("/api/v1/projects/project%20%2F%201/experiment-browser");
     expect(url.searchParams.get("search")).toBe("high yield");
     expect(JSON.parse(url.searchParams.get("filters"))).toEqual([
       { columnId: "field:yield:percent:number", operator: "gte", value: 40 },
@@ -54,9 +54,9 @@ describe("experimentBrowserApi", () => {
     await listExperimentAnnotations("project / 1", { fetch });
 
     expect(fetch.mock.calls.map(([endpoint]) => endpoint)).toEqual([
-      "/api/projects/project%20%2F%201/experiments/experiment%20%2F%201/annotation",
-      "/api/projects/project%20%2F%201/experiments/experiment%20%2F%201/annotation",
-      "/api/projects/project%20%2F%201/experiment-annotations",
+      "/api/v1/projects/project%20%2F%201/experiments/experiment%20%2F%201/annotation",
+      "/api/v1/projects/project%20%2F%201/experiments/experiment%20%2F%201/annotation",
+      "/api/v1/projects/project%20%2F%201/experiment-annotations",
     ]);
     expect(fetch.mock.calls.map(([, options]) => options.method || "GET")).toEqual(["PUT", "DELETE", "GET"]);
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ note: "Important", color: "blue" });
@@ -66,7 +66,7 @@ describe("experimentBrowserApi", () => {
     const fetch = vi.fn(async () => ok({ experiment: { id: "experiment / 1" } }));
     await getExperimentBrowserDetail("project / 1", "experiment / 1", { fetch });
 
-    expect(fetch.mock.calls[0][0]).toBe("/api/projects/project%20%2F%201/experiments/experiment%20%2F%201");
+    expect(fetch.mock.calls[0][0]).toBe("/api/v1/projects/project%20%2F%201/experiments/experiment%20%2F%201");
   });
 
   it("creates, renames, edits, and deletes shared custom documentation columns", async () => {
@@ -77,10 +77,10 @@ describe("experimentBrowserApi", () => {
     await deleteExperimentCustomColumn("project / 1", "column / 1", { fetch });
 
     expect(fetch.mock.calls.map(([endpoint]) => endpoint)).toEqual([
-      "/api/projects/project%20%2F%201/experiment-custom-columns",
-      "/api/projects/project%20%2F%201/experiment-custom-columns/column%20%2F%201",
-      "/api/projects/project%20%2F%201/experiment-custom-columns/column%20%2F%201/experiments/experiment%20%2F%201",
-      "/api/projects/project%20%2F%201/experiment-custom-columns/column%20%2F%201",
+      "/api/v1/projects/project%20%2F%201/experiment-custom-columns",
+      "/api/v1/projects/project%20%2F%201/experiment-custom-columns/column%20%2F%201",
+      "/api/v1/projects/project%20%2F%201/experiment-custom-columns/column%20%2F%201/experiments/experiment%20%2F%201",
+      "/api/v1/projects/project%20%2F%201/experiment-custom-columns/column%20%2F%201",
     ]);
     expect(fetch.mock.calls.map(([, options]) => options.method || "GET")).toEqual(["POST", "PATCH", "PUT", "DELETE"]);
   });
@@ -100,10 +100,10 @@ describe("experimentBrowserApi", () => {
     await deleteExperimentBrowserView("project_1", "view / 1", { fetch });
 
     expect(fetch.mock.calls.map(([endpoint]) => endpoint)).toEqual([
-      "/api/projects/project_1/browser-views",
-      "/api/projects/project_1/browser-views",
-      "/api/projects/project_1/browser-views/view%20%2F%201",
-      "/api/projects/project_1/browser-views/view%20%2F%201",
+      "/api/v1/projects/project_1/browser-views",
+      "/api/v1/projects/project_1/browser-views",
+      "/api/v1/projects/project_1/browser-views/view%20%2F%201",
+      "/api/v1/projects/project_1/browser-views/view%20%2F%201",
     ]);
     expect(fetch.mock.calls.map(([, options]) => options.method || "GET")).toEqual(["GET", "POST", "PATCH", "DELETE"]);
     expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({ name: "My view", payload, isDefault: true });
@@ -117,8 +117,8 @@ describe("experimentBrowserApi", () => {
     await updateProjectBrowserConfig("project / 1", { expectedVersion: 0, payload }, { fetch });
 
     expect(fetch.mock.calls.map(([endpoint]) => endpoint)).toEqual([
-      "/api/projects/project%20%2F%201/browser-config",
-      "/api/projects/project%20%2F%201/browser-config",
+      "/api/v1/projects/project%20%2F%201/browser-config",
+      "/api/v1/projects/project%20%2F%201/browser-config",
     ]);
     expect(fetch.mock.calls[1][1].method).toBe("PATCH");
     expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({ expectedVersion: 0, payload });

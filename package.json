@@ -18,6 +18,8 @@
         "codex:preflight": "node scripts/codex-preflight.mjs",
         "codex:checkpoint": "node scripts/codex-checkpoint.mjs",
         "codex:verify": "node scripts/codex-verify.mjs",
+        "generate:api:v1": "openapi-typescript doc/contracts/backend-api-v1.openapi.yaml --output src/data/generated/backendApiV1.d.ts --immutable --root-types",
+        "check:api:v1": "npm run generate:api:v1 -- --check",
         "build": "vite build --mode blank",
         "build:blank": "vite build --mode blank",
         "test": "vitest run --config vitest.config.js --configLoader runner",
@@ -28,6 +30,7 @@
     "dependencies": {
         "@vitejs/plugin-react": "^5.0.0",
         "jszip": "^3.10.1",
+        "openapi-fetch": "^0.17.0",
         "plotly.js-dist-min": "^3.6.0",
         "pptxgenjs": "^4.0.1",
         "react": "^19.0.0",
@@ -41,6 +44,7 @@
         "@testing-library/user-event": "^14.6.1",
         "gh-pages": "^6.3.0",
         "jsdom": "^29.1.1",
+        "openapi-typescript": "^7.13.0",
         "vitest": "^4.1.8"
     }
 }

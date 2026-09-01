@@ -143,7 +143,10 @@ export function ProjectOnboarding({
   const planAbortReasonRef = useRef("");
   const planRecoveryAttemptedRef = useRef(false);
   const analysisHydrationTimerRef = useRef(null);
-  const publishedCount = asArray(projectState?.experimentSnapshotHeads).length;
+  const explicitPublishedCount = Number(projectState?.publishedExperimentCount);
+  const publishedCount = Number.isInteger(explicitPublishedCount) && explicitPublishedCount >= 0
+    ? explicitPublishedCount
+    : asArray(projectState?.experimentSnapshotHeads).length;
   const activeRegions = asArray(reviewRegions.length ? reviewRegions : projectState?.workbookReviewRegions)
     .filter((region) => !region?.disposition || region.disposition === "active");
   const acceptedRegionCount = activeRegions

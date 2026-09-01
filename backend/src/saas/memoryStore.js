@@ -672,6 +672,17 @@ export class MemorySaasStore {
   async updateWorkbookReviewRegion(id, patch = {}) {
     const existing = this.workbookReviewRegions.get(id);
     if (!existing) return null;
+    if (patch.expectedVersion !== undefined
+      && Number(patch.expectedVersion) !== Number(existing.version)) {
+      throw Object.assign(new Error("Workbook review region changed; reload before submitting this action."), {
+        statusCode: 409,
+        code: "stale_workbook_review_region",
+        details: {
+          expectedRegionVersion: Number(patch.expectedVersion),
+          currentRegionVersion: Number(existing.version) || null,
+        },
+      });
+    }
     const updated = {
       ...existing,
       disposition: patch.disposition ?? existing.disposition,
