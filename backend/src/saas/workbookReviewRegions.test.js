@@ -215,6 +215,24 @@ test("region updates increment versions without changing source ownership", asyn
   assert.equal(updated.reviewStatus, "awaiting_review");
 });
 
+test("region updates reject stale expected versions", async () => {
+  const store = new MemorySaasStore();
+  const created = await store.createWorkbookReviewRegion(regionInput());
+  await store.updateWorkbookReviewRegion(created.id, {
+    expectedVersion: 1,
+    reviewStatus: "awaiting_review",
+  });
+
+  await assert.rejects(
+    store.updateWorkbookReviewRegion(created.id, {
+      expectedVersion: 1,
+      reviewStatus: "accepted",
+    }),
+    (error) => error?.code === "stale_workbook_review_region"
+      && error?.details?.currentRegionVersion === 2,
+  );
+});
+
 test("accepted region listing excludes ignored, deleted, and unconfirmed regions", async () => {
   const store = new MemorySaasStore();
   const accepted = await store.createWorkbookReviewRegion(regionInput({

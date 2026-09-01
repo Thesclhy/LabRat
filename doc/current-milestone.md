@@ -1,10 +1,108 @@
 # Current Milestone
 
-Status: complete
+Status: active
 Read when: checking what the next implementation slice should be.
-Last reviewed: 2026-08-20
+Last reviewed: 2026-08-23
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
+
+## Active Backend v1 Architecture Migration
+
+LabRat is migrating from the single JavaScript HTTP route dispatcher to a
+NestJS + Fastify + TypeScript modular monolith under `/api/v1`. The migration is
+contract-first: approved scientific, authorization, transaction, and
+idempotency behavior is written down and tested before an endpoint moves.
+
+Locked decisions:
+
+- `/api/v1` is the new first-party API; the current unversioned `/api` surface
+  is a migration reference and rollback implementation only.
+- Drizzle provides typed PostgreSQL access. Existing numbered SQL migrations
+  remain authoritative; Drizzle must not push production schema changes.
+- Development may run legacy port 8787 and v1 port 8788 independently. There
+  is no request fan-out, shared-database dual write, cross-provider fallback,
+  or long-lived production dual-backend topology.
+- Server sessions and HTTP-only cookies remain. Authorization evolves from a
+  Lab-role rank to explicit Lab/Project/Experiment capabilities and groups.
+- SourceDocument, accepted RegionUnderstandingRevision, immutable
+  DataSnapshot, ExperimentSnapshotHead, AnalysisResult, and ChartSpec semantics
+  remain stable through the migration.
+- The duplicated `cells` plus `rows` model context is a known legacy behavior,
+  not a compatibility requirement. Its compaction remains a separate change.
+
+Current slice:
+
+1. Completed the active/retired route inventory, OpenAPI 3.1 contract,
+   authorization contract, and scientific-invariant contract.
+2. Established the parallel Nest/Fastify/TypeScript service, bounded errors,
+   session-cookie authentication, Drizzle schema, and disposable-PostgreSQL
+   test harness.
+3. Completed Nest ownership for Identity/Tenancy, Lab/Project/Experiment
+   authorization, Project shell, DataSnapshot summaries, active Experiment
+   projection, Browser configuration, personal annotations/views, and custom
+   documentation columns/values.
+4. Completed Nest ownership for FileObject upload/reuse, import scanning,
+   SourceDocument indexing/query/range reads, Evidence retrieval,
+   WorkbookReviewSession lifecycle, independently versioned review regions,
+   immutable RegionUnderstandingRevisions, and approval-gated confirmation.
+   Direct evidence ids are non-disclosing for shell-only access, and every
+   region mutation now uses optimistic version checks.
+5. Completed Nest ownership for AgentRun, AnalysisThread,
+   AnalysisPlanRevision, AnalysisRun and AnalysisResult workflows, including
+   the selected provider and Python executor boundaries. Plan approval and
+   result publication require `approve`; direct artifact ids are concealed
+   from experiment-only shells; high-risk run, retry and publication writes
+   retain their existing PostgreSQL lock/idempotency transactions behind the
+   typed application service.
+6. Completed Nest ownership for immutable accepted ChartSpec list/detail and
+   mutable Manuscript list/create/update. Project lists are cursor-bounded,
+   ChartSpec summaries omit Plotly point arrays, full details are loaded by id,
+   JSONB manuscript content round-trips without exposing storage column names,
+   and both artifact families require full-project access.
+7. Completed the React cutover to a generated OpenAPI path map and typed v1
+   request boundary. All first-party helpers now call `/api/v1`; a guard test
+   rejects unversioned request literals. The old project-state aggregate is
+   replaced by explicit authorization-scoped reads, shell-only users receive
+   no project-wide lists, ChartSpec/Manuscript cursor pages are collected, and
+   published experiment counts come from the scoped Browser projection rather
+   than fabricated snapshot-head ids.
+8. Completed the atomic release wiring. Development Compose starts Nest v1;
+   production's existing port-8787 service wrapper imports the compiled Nest
+   entry, the release archive carries `dist-v1`, and a failed restart/health
+   check restores both the prior release symlink and provider environment.
+   The previous JavaScript release remains rollback-only for one stable window.
+9. Completed local Docker-backed PostgreSQL verification: both legacy checks
+   and all six v1 scenarios pass against PostgreSQL 16, including migration
+   backfill/idempotency, full-schema Drizzle drift, authorization/revocation,
+   Evidence, Analysis publication, and ChartSpec/Manuscript persistence.
+10. Next: repeat the full suite in GitHub CI, then perform production activation
+    and canary checks. Do not remove the rollback implementation before that
+    stable release window completes.
+
+Verification target for this slice:
+
+```bash
+npm --prefix backend test
+npm --prefix backend run test:v1
+npm --prefix backend run build:v1
+npm --prefix backend run test:postgres
+npm test
+npm run build
+npm run codex:verify
+git diff --check
+```
+
+Latest local checkpoint: `npm run codex:verify` passed with 291 frontend tests,
+238 legacy backend tests plus 5 intentional skips, and 41 v1 tests. Generated
+OpenAPI types are current; strict v1 TypeScript, the compiled Nest backend,
+production Nest entry smoke, and production frontend build all passed. Shell
+syntax plus provider/release rollback tests passed under Git Bash, and
+`git diff --check` passed. After Docker access was enabled, the PostgreSQL suite
+also passed with 2/2 legacy checks and 6/6 v1 scenarios. That run exposed and
+fixed a missing `$16` optimistic-version predicate in the
+WorkbookReviewRegion SQL update; it also corrected one test that treated a
+complete 2x2 range response as an array-length mismatch. GitHub CI remains the
+independent release gate rather than the first database execution.
 
 ## Strategic Split
 

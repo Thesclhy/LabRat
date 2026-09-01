@@ -3,20 +3,52 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "LabRat backend import pipeline and SaaS Auth v0 foundation",
+  "description": "LabRat contract-first NestJS/Fastify backend migration with legacy rollback support",
   "scripts": {
-    "dev": "node --env-file-if-exists=../.env --env-file-if-exists=../.env.local src/server.js",
+    "dev": "node --env-file-if-exists=../.env --env-file-if-exists=../.env.local --import tsx src/v1/main.ts",
+    "dev:legacy": "node --env-file-if-exists=../.env --env-file-if-exists=../.env.local src/server.js",
+    "dev:v1": "node --env-file-if-exists=../.env --env-file-if-exists=../.env.local --import tsx src/v1/main.ts",
     "start": "node src/server.js",
+    "start:v1": "node dist-v1/v1/main.js",
+    "start:legacy": "node -e \"import('./src/server.js').then(({ startServer }) => startServer())\"",
+    "build:v1": "tsc -p tsconfig.v1.build.json",
     "migrate": "node src/saas/migrate.js",
     "bootstrap:admin": "node scripts/bootstrap-admin.mjs",
     "smoke:ai": "node --env-file-if-exists=../.env --env-file-if-exists=../.env.local scripts/smoke-ai-provider.mjs",
     "smoke:ai:browser-plan": "node --env-file-if-exists=../.env --env-file-if-exists=../.env.local scripts/smoke-ai-browser-plan.mjs",
-    "test": "node --test",
-    "test:postgres": "node --test src/saas/routes/saasRoutes.postgres.test.js"
+    "smoke:v1-entry": "node scripts/smoke-v1-production-entry.mjs",
+    "test": "npm run test:legacy && npm run test:v1",
+    "test:legacy": "node --test \"src/**/*.test.js\"",
+    "test:v1": "vitest run --config vitest.v1.config.ts",
+    "test:postgres": "npm run test:postgres:legacy && npm run test:postgres:v1",
+    "test:postgres:legacy": "node --test src/saas/routes/saasRoutes.postgres.test.js",
+    "test:postgres:v1": "vitest run --config vitest.v1.postgres.config.ts"
   },
   "dependencies": {
+    "@fastify/cookie": "^11.1.2",
+    "@nestjs/common": "^11.2.1",
+    "@nestjs/core": "^11.2.1",
+    "@nestjs/platform-fastify": "^11.2.1",
+    "@nestjs/swagger": "^11.4.7",
     "ajv": "^8.20.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "drizzle-orm": "^0.45.2",
+    "fastify": "^5.11.3",
     "pg": "^8.16.3",
-    "xlsx": "^0.18.5"
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "xlsx": "^0.18.5",
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@apidevtools/swagger-parser": "^12.1.0",
+    "@nestjs/testing": "^11.2.1",
+    "@types/node": "^26.2.0",
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
   }
 }

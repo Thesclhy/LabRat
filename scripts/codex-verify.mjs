@@ -3,6 +3,11 @@ import process from "node:process";
 
 const commands = [
   {
+    label: "Generated API v1 client types",
+    command: "npm",
+    args: ["run", "check:api:v1"],
+  },
+  {
     label: "Frontend Vitest suite",
     command: "npm",
     args: ["test"],
@@ -11,6 +16,16 @@ const commands = [
     label: "Backend Node test suite",
     command: "npm",
     args: ["--prefix", "backend", "test"],
+  },
+  {
+    label: "NestJS backend build",
+    command: "npm",
+    args: ["--prefix", "backend", "run", "build:v1"],
+  },
+  {
+    label: "Production NestJS entry smoke",
+    command: "npm",
+    args: ["--prefix", "backend", "run", "smoke:v1-entry"],
   },
   {
     label: "Production build",

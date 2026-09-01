@@ -53,7 +53,7 @@ services:
       npm --prefix backend install;
       fi
       && npm --prefix backend run migrate
-      && npm --prefix backend run dev"
+      && npm --prefix backend run dev:v1"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8787/health >/dev/null || exit 1"]
       interval: 5s

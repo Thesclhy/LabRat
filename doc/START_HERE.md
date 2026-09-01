@@ -2,7 +2,7 @@
 
 Status: active
 Read when: starting any non-trivial LabRat coding or documentation task.
-Last reviewed: 2026-06-30
+Last reviewed: 2026-08-23
 
 This file is the routing guide for AI agents. It tells you which docs are current source of truth, which docs are long-term plans, and which docs are historical reports.
 
@@ -19,8 +19,8 @@ Upload workbook
   -> backend-LLM-drafted + backend-validated region revisions
   -> user independently confirms/corrects/ignores/deletes each region
   -> accepted RegionUnderstandingRevisions
-  -> later DataPlan / DataSnapshot
-  -> reviewed ChartSpec
+  -> reviewed AnalysisPlanRevision and accepted AnalysisRun/AnalysisResult
+  -> explicit DataSnapshot or ChartSpec publication
   -> manuscript figure placement
 ```
 
@@ -42,7 +42,12 @@ Always read:
 
 For backend routes, auth, persistence, project state, migrations, or frontend API helpers, also read:
 
-- `doc/contracts/saas-api-contract-v0.md`
+- `doc/plans/backend-v1-contract-first-migration.md` while the `/api/v1` migration is active
+- `doc/contracts/backend-api-v1.openapi.yaml`
+- `doc/contracts/authorization-v1.md`
+- `doc/contracts/scientific-invariants-v1.md`
+- `doc/reports/backend-api-v1-migration-inventory.md`
+- `doc/contracts/saas-api-contract-v0.md` only when checking rollback parity
 - `doc/contracts/saas-database-schema-v0.md`
 - `doc/contracts/server-project-state-plan.md`
 - `doc/contracts/backend-api-contract.md`

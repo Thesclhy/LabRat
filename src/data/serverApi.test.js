@@ -54,7 +54,7 @@ describe("serverApi", () => {
 
     expect(body.user.id).toBe("user_1");
     const { url, options } = lastCall(fetchImpl);
-    expect(url).toBe("/api/auth/login");
+    expect(url).toBe("/api/v1/auth/login");
     expect(options.credentials).toBe("include");
     expect(options.method).toBe("POST");
     expect(JSON.parse(options.body)).toEqual({ username: "labuser", password: "pw" });
@@ -63,65 +63,109 @@ describe("serverApi", () => {
   it("restores a server session and lists projects for a lab", async () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ user: { id: "user_1" }, labs: [] }))
-      .mockResolvedValueOnce(jsonResponse({ projects: [{ id: "project_1" }] }));
+      .mockResolvedValueOnce(jsonResponse({ items: [{ id: "project_1" }], nextCursor: null }));
 
     await getServerSession({ fetch: fetchImpl });
     await listServerProjects({ labId: "lab_1", fetch: fetchImpl });
 
-    expect(fetchImpl.mock.calls[0][0]).toBe("/api/auth/me");
-    expect(fetchImpl.mock.calls[1][0]).toBe("/api/projects?labId=lab_1");
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/v1/auth/me");
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/v1/projects?labId=lab_1&limit=100");
     expect(fetchImpl.mock.calls[1][1].credentials).toBe("include");
   });
 
   it("creates projects and saves project profile updates", async () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ project: { id: "project_1" } }, { status: 201 }))
-      .mockResolvedValueOnce(jsonResponse({ projectProfile: { researchGoal: "Goal" } }))
-      .mockResolvedValueOnce(jsonResponse({ project: { id: "project_1", status: "deleted" } }));
+      .mockResolvedValueOnce(jsonResponse({ project: { id: "project_1", projectProfile: { researchGoal: "Goal" } } }))
+      .mockResolvedValueOnce(jsonResponse({ project: { id: "project_1", status: "archived" } }));
 
     await createServerProject({ labId: "lab_1", name: "Project A", projectProfile: { researchGoal: "Goal" }, fetch: fetchImpl });
     await patchServerProjectProfile("project_1", { materials: "Ru/TiO2" }, { fetch: fetchImpl });
     await deleteServerProject("project_1", { fetch: fetchImpl });
 
-    expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects");
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/v1/projects");
     expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
       labId: "lab_1",
       name: "Project A",
       description: "",
       projectProfile: { researchGoal: "Goal" },
     });
-    expect(fetchImpl.mock.calls[1][0]).toBe("/api/projects/project_1/profile");
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/v1/projects/project_1/profile");
     expect(fetchImpl.mock.calls[1][1].method).toBe("PATCH");
-    expect(fetchImpl.mock.calls[2][0]).toBe("/api/projects/project_1");
+    expect(fetchImpl.mock.calls[2][0]).toBe("/api/v1/projects/project_1");
     expect(fetchImpl.mock.calls[2][1].method).toBe("PATCH");
-    expect(JSON.parse(fetchImpl.mock.calls[2][1].body)).toEqual({ status: "deleted" });
+    expect(JSON.parse(fetchImpl.mock.calls[2][1].body)).toEqual({ status: "archived" });
   });
 
   it("loads project state, uploads files, and routes workbook review sessions", async () => {
-    const fetchImpl = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({ project: { id: "project_1" } }))
-      .mockResolvedValueOnce(jsonResponse({ fileObject: { id: "file_1" } }, { status: 201 }))
-      .mockResolvedValueOnce(jsonResponse({ workbookReviewSession: { id: "session_1" }, sourceDocument: { id: "source_doc_1" }, regions: [] }, { status: 201 }))
-      .mockResolvedValueOnce(jsonResponse({ workbookReviewSessions: [{ id: "session_1" }] }))
-      .mockResolvedValueOnce(jsonResponse({ workbookReviewSession: { id: "session_1" }, sourceDocument: { id: "source_doc_1" }, regions: [] }));
+    const fetchImpl = vi.fn(async (url, options = {}) => {
+      if (url === "/api/v1/projects/project_1") {
+        return jsonResponse({ project: { id: "project_1", projectProfile: {} } });
+      }
+      if (url === "/api/v1/projects/project_1/experiment-browser?limit=1") {
+        return jsonResponse({ columns: [], rows: [], totalCount: 2, nextCursor: null });
+      }
+      if (url === "/api/v1/projects/project_1/files" && options.method === "POST") {
+        return jsonResponse({ fileObject: { id: "file_1" } }, { status: 201 });
+      }
+      if (url === "/api/v1/projects/project_1/workbook-review-sessions" && options.method === "POST") {
+        return jsonResponse({
+          workbookReviewSession: { id: "session_1" },
+          sourceDocument: { id: "source_doc_1" },
+          reviewRegions: [],
+        }, { status: 201 });
+      }
+      if (url === "/api/v1/projects/project_1/workbook-review-sessions") {
+        return jsonResponse({ items: [{ id: "session_1" }], nextCursor: null });
+      }
+      if (url === "/api/v1/workbook-review-sessions/session_1/regions") {
+        return jsonResponse({ items: [], nextCursor: null });
+      }
+      if (url === "/api/v1/workbook-review-sessions/session_1") {
+        return jsonResponse({
+          workbookReviewSession: { id: "session_1" },
+          sourceDocument: { id: "source_doc_1" },
+          reviewRegions: [],
+        });
+      }
+      if (url === "/api/v1/projects/project_1/browser-config") {
+        return jsonResponse({ projectBrowserConfig: null, canEdit: true });
+      }
+      if (url === "/api/v1/projects/project_1/chart-specs?limit=100") {
+        return jsonResponse({ items: [{ id: "chart_1" }], nextCursor: "chart_page_2" });
+      }
+      if (url === "/api/v1/projects/project_1/chart-specs?limit=100&cursor=chart_page_2") {
+        return jsonResponse({ items: [{ id: "chart_2" }], nextCursor: null });
+      }
+      if (url.startsWith("/api/v1/projects/project_1/")) {
+        return jsonResponse({ items: [], nextCursor: null });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
 
-    await getServerProjectState("project_1", { fetch: fetchImpl });
+    const state = await getServerProjectState("project_1", { fetch: fetchImpl });
     await uploadServerProjectFile("project_1", new File(["x"], "runs.xlsx"), { fetch: fetchImpl });
     await createServerWorkbookReviewSession("project_1", { fileObjectId: "file_1" }, { fetch: fetchImpl });
     await listServerWorkbookReviewSessions("project_1", { fetch: fetchImpl });
     await getServerWorkbookReviewSession("session_1", { fetch: fetchImpl });
 
-    expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects/project_1/state");
-    expect(fetchImpl.mock.calls[1][0]).toBe("/api/projects/project_1/files");
-    expect(fetchImpl.mock.calls[1][1].body).toBeInstanceOf(FormData);
-    expect(fetchImpl.mock.calls[2][0]).toBe("/api/projects/project_1/workbook-review-sessions");
-    expect(JSON.parse(fetchImpl.mock.calls[2][1].body)).toEqual({
-      fileObjectId: "file_1",
-      sourceDocumentId: null,
+    expect(state).toMatchObject({
+      project: { id: "project_1" },
+      publishedExperimentCount: 2,
+      experimentSnapshotHeads: [],
+      chartSpecs: [{ id: "chart_1" }, { id: "chart_2" }],
     });
-    expect(fetchImpl.mock.calls[3][0]).toBe("/api/projects/project_1/workbook-review-sessions");
-    expect(fetchImpl.mock.calls[3][1].method).toBe("GET");
-    expect(fetchImpl.mock.calls[4][0]).toBe("/api/workbook-review-sessions/session_1");
+    const uploadCall = fetchImpl.mock.calls.find(([url, request]) => (
+      url === "/api/v1/projects/project_1/files" && request.method === "POST"
+    ));
+    expect(uploadCall[1].body).toBeInstanceOf(FormData);
+    const createSessionCall = fetchImpl.mock.calls.find(([url, request]) => (
+      url === "/api/v1/projects/project_1/workbook-review-sessions" && request.method === "POST"
+    ));
+    expect(JSON.parse(createSessionCall[1].body)).toEqual({ fileObjectId: "file_1" });
+    expect(fetchImpl.mock.calls.some(([url]) => (
+      url === "/api/v1/workbook-review-sessions/session_1"
+    ))).toBe(true);
   });
 
   it("routes independent workbook region lifecycle helpers", async () => {
@@ -164,13 +208,13 @@ describe("serverApi", () => {
       idempotencyKey: "interpret_region_1",
     }, { fetch: fetchImpl });
 
-    expect(fetchImpl.mock.calls[0][0]).toBe("/api/workbook-review-sessions/session_1/regions");
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/v1/workbook-review-sessions/session_1/regions");
     expect(fetchImpl.mock.calls[0][1].method).toBe("GET");
-    expect(fetchImpl.mock.calls[1][0]).toBe("/api/workbook-review-sessions/session_1/regions");
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/v1/workbook-review-sessions/session_1/regions");
     expect(fetchImpl.mock.calls[1][1].method).toBe("POST");
-    expect(fetchImpl.mock.calls[2][0]).toBe("/api/workbook-review-sessions/session_1/regions/region_1/revisions");
+    expect(fetchImpl.mock.calls[2][0]).toBe("/api/v1/workbook-review-sessions/session_1/regions/region_1/revisions");
     expect(fetchImpl.mock.calls[2][1].method).toBe("GET");
-    expect(fetchImpl.mock.calls[3][0]).toBe("/api/workbook-review-sessions/session_1/regions/region_1/revisions");
+    expect(fetchImpl.mock.calls[3][0]).toBe("/api/v1/workbook-review-sessions/session_1/regions/region_1/revisions");
     expect(JSON.parse(fetchImpl.mock.calls[1][1].body)).toEqual({
       sourceDocumentId: "source_doc_1",
       sheetName: "Runs",
@@ -178,24 +222,21 @@ describe("serverApi", () => {
       selectionMethod: "drag_select",
       description: "",
       semanticType: "generic_table",
-      idempotencyKey: "create_region_1",
       deferInterpretation: true,
     });
     expect(JSON.parse(fetchImpl.mock.calls[3][1].body)).toEqual({
       feedback: "Temperature and selectivity are separate fields.",
       previousRevisionId: "revision_1",
       expectedRegionVersion: 2,
-      idempotencyKey: "revise_region_1",
     });
-    expect(fetchImpl.mock.calls[4][0]).toBe("/api/workbook-review-sessions/session_1/regions/region_1/confirm");
-    expect(fetchImpl.mock.calls[5][0]).toBe("/api/workbook-review-sessions/session_1/regions/region_1/ignore");
+    expect(fetchImpl.mock.calls[4][0]).toBe("/api/v1/workbook-review-sessions/session_1/regions/region_1/confirm");
+    expect(fetchImpl.mock.calls[5][0]).toBe("/api/v1/workbook-review-sessions/session_1/regions/region_1/ignore");
     expect(fetchImpl.mock.calls[6][1].method).toBe("DELETE");
-    expect(fetchImpl.mock.calls[7][0]).toBe("/api/projects/project_1/region-understandings?status=accepted");
-    expect(fetchImpl.mock.calls[8][0]).toBe("/api/workbook-review-sessions/session_1/regions/region_1/interpret");
+    expect(fetchImpl.mock.calls[7][0]).toBe("/api/v1/projects/project_1/region-understandings");
+    expect(fetchImpl.mock.calls[8][0]).toBe("/api/v1/workbook-review-sessions/session_1/regions/region_1/interpret");
     expect(JSON.parse(fetchImpl.mock.calls[8][1].body)).toEqual({
       expectedRegionVersion: 1,
       semanticType: "experiment_table",
-      idempotencyKey: "interpret_region_1",
     });
   });
 
@@ -211,7 +252,7 @@ describe("serverApi", () => {
     }, { fetch: fetchImpl });
 
     const { url, options } = lastCall(fetchImpl);
-    expect(url).toBe("/api/workbook-review-sessions/session_1");
+    expect(url).toBe("/api/v1/workbook-review-sessions/session_1");
     expect(options.method).toBe("DELETE");
     expect(JSON.parse(options.body)).toEqual({
       expectedVersion: 3,
@@ -234,14 +275,12 @@ describe("serverApi", () => {
       maxResults: 5,
     }, { fetch: fetchImpl });
 
-    expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects/project_1/evidence/retrieve");
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/v1/projects/project_1/evidence/retrieve");
     expect(fetchImpl.mock.calls[0][1].method).toBe("POST");
     expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
       query: "experiment 33 reaction rate",
-      mode: "tool_agent",
       includePreview: true,
       includeUnconfirmedSuggestions: true,
-      maxResults: 5,
     });
     expect(() => retrieveProjectEvidence("", { query: "x" }, { fetch: fetchImpl }))
       .toThrow(/project/i);
@@ -261,15 +300,14 @@ describe("serverApi", () => {
     await getServerAgentRun("agent_run_1", { fetch: fetchImpl });
     await cancelServerAgentRun("agent_run_2", { fetch: fetchImpl });
 
-    expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects/project_1/agent/runs");
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/v1/projects/project_1/agent/runs");
     expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
       message: "compare reaction rate for Exp1 and Exp2",
       conversation: [{ role: "user", text: "hello" }],
       selectedContext: { tab: "overview" },
-      modeHint: "auto",
     });
-    expect(fetchImpl.mock.calls[1][0]).toBe("/api/agent-runs/agent_run_1");
-    expect(fetchImpl.mock.calls[2][0]).toBe("/api/agent-runs/agent_run_2/cancel");
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/v1/agent-runs/agent_run_1");
+    expect(fetchImpl.mock.calls[2][0]).toBe("/api/v1/agent-runs/agent_run_2/cancel");
   });
 
   it("routes read-only source document inspection helpers", async () => {
@@ -282,10 +320,10 @@ describe("serverApi", () => {
     await listServerSourceDocumentRegions("source_doc_1", { fetch: fetchImpl });
     await readServerSourceDocumentRange("source_doc_1", { sheetName: "Runs", range: "A1:B2" }, { fetch: fetchImpl });
 
-    expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects/project_1/source-documents");
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/v1/projects/project_1/source-documents");
     expect(fetchImpl.mock.calls[0][1].method).toBe("GET");
-    expect(fetchImpl.mock.calls[1][0]).toBe("/api/source-documents/source_doc_1/regions");
-    expect(fetchImpl.mock.calls[2][0]).toBe("/api/source-documents/source_doc_1/range");
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/v1/source-documents/source_doc_1/regions");
+    expect(fetchImpl.mock.calls[2][0]).toBe("/api/v1/source-documents/source_doc_1/range");
     expect(JSON.parse(fetchImpl.mock.calls[2][1].body)).toEqual({ sheetName: "Runs", range: "A1:B2" });
   });
 
@@ -317,14 +355,14 @@ describe("serverApi", () => {
     }, { fetch: fetchImpl });
     await patchServerManuscript("manuscript_1", { title: "Updated", blocks: [] }, { fetch: fetchImpl });
 
-    expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects/project_1/manuscripts");
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/v1/projects/project_1/manuscripts");
     expect(fetchImpl.mock.calls[0][1].credentials).toBe("include");
     expect(JSON.parse(fetchImpl.mock.calls[0][1].body).blocks[0]).toEqual({
       id: "block_1",
       kind: "chart",
       chartSpecId: "chart_spec_1",
     });
-    expect(fetchImpl.mock.calls[1][0]).toBe("/api/manuscripts/manuscript_1");
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/v1/manuscripts/manuscript_1");
     expect(fetchImpl.mock.calls[1][1].method).toBe("PATCH");
   });
 

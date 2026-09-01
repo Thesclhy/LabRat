@@ -2,11 +2,25 @@
 
 Status: active
 Read when: deciding what LabRat should build next.
-Last reviewed: 2026-08-20
+Last reviewed: 2026-08-23
 
 This is the short active plan. Current execution status lives in `doc/current-milestone.md`; detailed implementation plans live under `doc/plans/`.
 
 ## Current Focus
+
+The active engineering milestone is a contract-first backend migration to a
+NestJS + Fastify + TypeScript modular monolith. New first-party endpoints live
+under `/api/v1`, use Drizzle for typed PostgreSQL access, and preserve the
+scientific evidence/review/publication boundaries below. Existing numbered SQL
+migrations remain the database-history source of truth. See
+`doc/plans/backend-v1-contract-first-migration.md` and
+`doc/current-milestone.md`.
+
+All backend slices, the generated React `/api/v1` client, explicit workspace
+resource composition, atomic production entry wiring, and Docker-backed
+PostgreSQL scenarios are implemented and locally verified. GitHub CI will
+repeat the complete suite before production canary validation; the old
+JavaScript release is rollback-only during that window.
 
 LabRat's product direction remains Workbook Understanding First:
 
@@ -59,6 +73,15 @@ Use this split when deciding what to build:
 
 ## Recently Completed
 
+- Contract-first backend v1 migration: NestJS/Fastify/TypeScript now owns every
+  documented route with closed OpenAPI DTOs and Drizzle-backed repositories,
+  while explicit SQL transactions retain lock/idempotency/publication
+  guarantees. React uses generated v1 path types and no longer calls the legacy
+  project-state aggregate. Compose starts v1, production switches the matching
+  frontend and compiled Nest backend as one release, and production health plus
+  release/provider rollback have automated smoke coverage. Local verification
+  includes PostgreSQL 16; CI repetition and production canary checks remain the
+  release gate.
 - Experiment Browser planning output hardening: this stage now receives 16,000
   output tokens and only an explicit provider length stop triggers its single
   32,000-token same-provider retry. Durable safe diagnostics retain budgets,

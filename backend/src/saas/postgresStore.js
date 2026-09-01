@@ -1475,6 +1475,7 @@ export class PostgresSaasStore {
            updated_at = now(),
            updated_by = coalesce($15, updated_by)
        where id = $1
+         and ($16::integer is null or version = $16)
        returning *`,
       [
         id,
@@ -1492,8 +1493,22 @@ export class PostgresSaasStore {
         patch.deletedBy ?? null,
         patch.deletedReason ?? null,
         patch.updatedBy ?? null,
+        patch.expectedVersion === undefined ? null : Number(patch.expectedVersion),
       ],
     );
+    if (!result.rows[0] && patch.expectedVersion !== undefined) {
+      const current = await this.findWorkbookReviewRegionById(id);
+      if (current) {
+        throw Object.assign(new Error("Workbook review region changed; reload before submitting this action."), {
+          statusCode: 409,
+          code: "stale_workbook_review_region",
+          details: {
+            expectedRegionVersion: Number(patch.expectedVersion),
+            currentRegionVersion: Number(current.version) || null,
+          },
+        });
+      }
+    }
     return workbookReviewRegionFromRow(result.rows[0]);
   }
 

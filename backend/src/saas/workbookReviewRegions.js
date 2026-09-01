@@ -245,6 +245,7 @@ async function draftRevision({
   if (!modelResult?.ok) {
     const warning = modelResult?.warning || { code: "ai_unavailable", message: "Backend workbook-region model provider is unavailable." };
     const failedRegion = await store.updateWorkbookReviewRegion(region.id, {
+      expectedVersion: region.version,
       reviewStatus: "interpretation_failed",
       warnings: [warning],
       updatedBy: actorUserId,
@@ -277,6 +278,7 @@ async function draftRevision({
       message: error?.message || "Backend model returned an invalid workbook-region interpretation.",
     };
     const failedRegion = await store.updateWorkbookReviewRegion(region.id, {
+      expectedVersion: region.version,
       reviewStatus: "interpretation_failed",
       warnings: [warning],
       updatedBy: actorUserId,
@@ -339,6 +341,7 @@ async function draftRevision({
     createdBy: actorUserId,
   });
   const updatedRegion = await store.updateWorkbookReviewRegion(region.id, {
+    expectedVersion: region.version,
     reviewStatus: "awaiting_review",
     currentRevisionId: revision.id,
     warnings: finalPreview.warnings,
@@ -514,6 +517,7 @@ export async function confirmWorkbookReviewRegion({
   }
   const acceptedAt = new Date().toISOString();
   const updated = await store.updateWorkbookReviewRegion(loaded.id, {
+    expectedVersion: loaded.version,
     reviewStatus: "accepted",
     acceptedRevisionId: revision.id,
     acceptedAt,
@@ -533,6 +537,7 @@ export async function ignoreWorkbookReviewRegion({
   const loaded = await currentRegion(store, region);
   assertRegionVersion(loaded, expectedRegionVersion);
   const updated = await store.updateWorkbookReviewRegion(loaded.id, {
+    expectedVersion: loaded.version,
     disposition: "ignored",
     ignoredAt: new Date().toISOString(),
     ignoredBy: actorUserId,
@@ -552,6 +557,7 @@ export async function deleteWorkbookReviewRegion({
   const loaded = await currentRegion(store, region);
   assertRegionVersion(loaded, expectedRegionVersion);
   const updated = await store.updateWorkbookReviewRegion(loaded.id, {
+    expectedVersion: loaded.version,
     disposition: "deleted",
     deletedAt: new Date().toISOString(),
     deletedBy: actorUserId,

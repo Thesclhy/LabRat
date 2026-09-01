@@ -1,16 +1,20 @@
 # Backend API Contract
 
-Status: active compatibility note
-Last reviewed: 2026-08-20
+Status: active v1 service boundary
+Last reviewed: 2026-08-23
 
-The backend is server-first. The complete implemented project API is defined in `doc/contracts/saas-api-contract-v0.md` and routed by `backend/src/saas/routes/saasRoutes.js`.
+The backend is server-first. The authoritative HTTP surface is the OpenAPI 3.1
+contract in `doc/contracts/backend-api-v1.openapi.yaml` and is implemented by
+the NestJS/Fastify modules under `backend/src/v1`. The unversioned JavaScript
+dispatcher and `doc/contracts/saas-api-contract-v0.md` are rollback references,
+not valid targets for new frontend calls.
 
 ## Service Boundary
 
 The HTTP service exposes:
 
 - `GET /health`
-- authenticated SaaS/project routes under `/api/auth`, `/api/admin`, `/api/labs`, `/api/projects`, `/api/source-documents`, `/api/source-regions`, `/api/workbook-review-sessions`, `/api/agent-runs`, `/api/analysis-threads`, `/api/analysis-plan-revisions`, `/api/analysis-runs`, `/api/chart-specs`, and `/api/manuscripts`
+- authenticated SaaS/project routes under `/api/v1`
 - backend-only model access selected at startup with `LABRAT_AI_PROVIDER=anthropic|deepseek` and the matching provider-specific key/model variables
 
 The backend AI gateway exposes one provider-neutral structured/tool request
@@ -68,7 +72,8 @@ Project routes return JSON errors with a stable code and message:
   "error": {
       "code": "analysis_result_mismatch",
       "message": "The accepted result does not match this analysis run.",
-    "details": {}
+      "details": {},
+      "requestId": "request_opaque"
   }
 }
 ```
@@ -77,7 +82,7 @@ Status code guidance:
 
 - `400`: invalid request or schema
 - `401`: unauthenticated
-- `403`: insufficient lab role
+- `403`: insufficient effective capability
 - `404`: resource/route absent or outside project scope
 - `409`: stale review, idempotency conflict, or intentionally unsupported transition
 - `413`: bounded read/upload limit exceeded
@@ -88,7 +93,7 @@ Status code guidance:
 - Accepted workbook data is produced only by reviewed DataPlan publish into immutable DataSnapshots.
 - Experiment Browser rows are derived only from active experiment snapshot heads.
 - Durable charts have one supported origin: analysis-result ChartSpecs contain exact accepted-analysis hashes, confirmed-region and/or input-snapshot refs, validated trace arrays, and source-record lineage.
-- Analysis-result ChartSpec creation occurs only through acceptance of the exact AnalysisResult id and a non-empty reviewed curve set after execution and validation. Project/list payloads contain bounded trace metadata; `GET /api/chart-specs/:chartSpecId` returns the complete immutable artifact.
+- Analysis-result ChartSpec creation occurs only through acceptance of the exact AnalysisResult id and a non-empty reviewed curve set after execution and validation. Project/list payloads contain bounded trace metadata; `GET /api/v1/chart-specs/:chartSpecId` returns the complete immutable artifact.
 - Manuscript blocks store a complete ChartSpec snapshot, editable layout, and placement-local `chartView.visibleTraceIds`; they do not recalculate scientific values or modify the shared ChartSpec.
 - LabRat intent routing directly answers resolvable project questions, sends derived analysis/chart requests to reviewed analysis planning, and opens Experiment Browser only for explicit navigation.
 - Internal analysis planning tools page through active confirmed workbook regions and inspect exact subranges; they cannot execute calculations.
@@ -100,7 +105,7 @@ Status code guidance:
   thread detail; provider credentials and request headers are never returned.
 - Project analysis capabilities expose only public model/executor readiness plus confirmed-region and accepted snapshot/head counts. Evidence-blocked AnalysisThreads may be retried when confirmed evidence is available through an editor-authorized, claim-guarded operation that cannot execute or publish.
 - AnalysisRun execution is a separate authenticated backend operation. It re-resolves accepted source selections and materializes complete multi-table inputs through bounded SourceDocument reads. General analysis runs generate policy-checked Python from those real inputs. The full-page master-table onboarding flow may instead request the backend-owned `direct_source_mapping` program, which maps the accepted region interpretation without another model generation step. Both strategies pass through the same bounded result, provenance, and declared-invariant validation and persist an immutable awaiting-review AnalysisResult; execution never creates a ChartSpec. `trace_y_sum` checks a complete series, and `x_group_y_sum` checks stacked components at each shared X category.
-- A terminal failed or validation-failed AnalysisRun may be retried through `POST /api/analysis-runs/:analysisRunId/retry` with an idempotency key. Retry preserves the failed run and creates a new queued run against the same accepted plan and execution strategy; it does not revise evidence, accept results, or publish data.
+- A terminal failed or validation-failed AnalysisRun may be retried through `POST /api/v1/analysis-runs/:analysisRunId/retry` with an idempotency key. Retry preserves the failed run and creates a new queued run against the same accepted plan and execution strategy; it does not revise evidence, accept results, or publish data.
 - Result acceptance is a second idempotent transaction: it checks the exact AnalysisResult id and reviewed curve ids, accepts the existing result, completes the run/thread, and creates exactly one analysis-result ChartSpec v3.
 
 ## Verification

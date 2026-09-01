@@ -1,105 +1,224 @@
-export class ServerApiError extends Error {
-  constructor(message, details = {}) {
-    super(message);
-    this.name = "ServerApiError";
-    this.status = details.status || null;
-    this.code = details.code || details.error?.code || null;
-    this.error = details.error || null;
-    this.details = details.details || details.error?.details || null;
-    this.body = details.body || null;
-  }
+import { ServerApiError, apiV1Request } from "./backendApiV1Client.ts";
+
+export { ServerApiError } from "./backendApiV1Client.ts";
+
+function transport(options = {}) {
+  return {
+    ...(options.fetch ? { fetch: options.fetch } : {}),
+    ...(options.signal ? { signal: options.signal } : {}),
+    ...(options.headers ? { headers: options.headers } : {}),
+  };
 }
 
-async function readJsonResponse(response) {
-  try {
-    return await response.json();
-  } catch {
-    return null;
-  }
+function uiAuthResponse(response) {
+  const memberships = Array.isArray(response?.memberships) ? response.memberships : [];
+  const labs = Array.isArray(response?.labs)
+    ? response.labs
+    : memberships.map((membership) => ({
+      labId: membership.labId,
+      id: membership.labId,
+      role: membership.role,
+      status: membership.status,
+    }));
+  return {
+    ...response,
+    labs,
+  };
 }
 
-function fetchImplFrom(options) {
-  const fetchImpl = options.fetch || globalThis.fetch;
-  if (typeof fetchImpl !== "function") {
-    throw new ServerApiError("LabRat server API is unavailable in this environment.");
-  }
-  return fetchImpl;
+function namedPage(response, key) {
+  return {
+    [key]: Array.isArray(response?.items) ? response.items : [],
+    nextCursor: response?.nextCursor || null,
+  };
 }
 
-export async function serverRequest(endpoint, options = {}) {
-  const fetchImpl = fetchImplFrom(options);
-  const response = await fetchImpl(endpoint, {
-    method: options.method || "GET",
-    headers: options.headers,
-    body: options.body,
-    signal: options.signal,
-    credentials: "include",
-  });
-  const body = await readJsonResponse(response);
-
-  if (!response.ok) {
-    throw new ServerApiError(
-      body?.error?.message || `LabRat server request failed with HTTP ${response.status}.`,
-      { status: response.status, error: body?.error || null, body },
-    );
-  }
-
-  return body;
-}
-
-export function serverJson(endpoint, body, options = {}) {
-  return serverRequest(endpoint, {
-    ...options,
-    method: options.method || "POST",
-    headers: { "content-type": "application/json", ...(options.headers || {}) },
-    body: JSON.stringify(body || {}),
+async function projectList(path, projectId, options = {}, query = undefined) {
+  return apiV1Request("get", path, {
+    pathParams: { projectId },
+    ...(query ? { query } : {}),
+    ...transport(options),
   });
 }
 
-export function loginToServer({ username, password, ...options } = {}) {
-  return serverJson("/api/auth/login", { username, password }, options);
+async function collectProjectPages(path, projectId, options = {}, query = {}) {
+  const items = [];
+  const seenCursors = new Set();
+  let cursor = null;
+
+  do {
+    const response = await projectList(path, projectId, options, {
+      ...query,
+      ...(cursor ? { cursor } : {}),
+    });
+    items.push(...(Array.isArray(response?.items) ? response.items : []));
+    cursor = response?.nextCursor || null;
+    if (cursor && seenCursors.has(cursor)) {
+      throw new ServerApiError("LabRat server returned a repeated pagination cursor.", {
+        code: "invalid_pagination_cursor",
+      });
+    }
+    if (cursor) seenCursors.add(cursor);
+  } while (cursor);
+
+  return { items, nextCursor: null };
+}
+
+export async function loginToServer({ username, password, ...options } = {}) {
+  return uiAuthResponse(await apiV1Request("post", "/api/v1/auth/login", {
+    body: { username, password },
+    ...transport(options),
+  }));
 }
 
 export function logoutFromServer(options = {}) {
-  return serverJson("/api/auth/logout", {}, options);
+  return apiV1Request("post", "/api/v1/auth/logout", transport(options));
 }
 
-export function getServerSession(options = {}) {
-  return serverRequest("/api/auth/me", options);
+export async function getServerSession(options = {}) {
+  return uiAuthResponse(await apiV1Request("get", "/api/v1/auth/me", transport(options)));
 }
 
-export function listServerLabs(options = {}) {
-  return serverRequest("/api/labs", options);
+export async function listServerLabs(options = {}) {
+  return namedPage(await apiV1Request("get", "/api/v1/labs", transport(options)), "labs");
 }
 
-export function listServerProjects({ labId, ...options } = {}) {
-  const query = labId ? `?labId=${encodeURIComponent(labId)}` : "";
-  return serverRequest(`/api/projects${query}`, options);
+export async function listServerProjects({ labId, ...options } = {}) {
+  const response = await apiV1Request("get", "/api/v1/projects", {
+    query: { ...(labId ? { labId } : {}), limit: 100 },
+    ...transport(options),
+  });
+  return namedPage(response, "projects");
 }
 
 export function createServerProject({ labId, name, description = "", projectProfile = {}, ...options } = {}) {
-  return serverJson("/api/projects", { labId, name, description, projectProfile }, options);
+  return apiV1Request("post", "/api/v1/projects", {
+    body: { labId, name, description, projectProfile },
+    ...transport(options),
+  });
 }
 
 export function deleteServerProject(projectId, options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before deleting it.");
-  return serverJson(`/api/projects/${encodeURIComponent(projectId)}`, { status: "deleted" }, {
-    ...options,
-    method: "PATCH",
+  return apiV1Request("patch", "/api/v1/projects/{projectId}", {
+    pathParams: { projectId },
+    body: { status: "archived" },
+    ...transport(options),
   });
 }
 
 export function getServerProjectState(projectId, options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before loading server state.");
-  return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/state`, options);
+  return loadServerProjectState(projectId, options);
 }
 
-export function patchServerProjectProfile(projectId, projectProfile, options = {}) {
-  if (!projectId) throw new ServerApiError("Select a project before saving its profile.");
-  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/profile`, projectProfile || {}, {
-    ...options,
-    method: "PATCH",
+async function loadServerProjectState(projectId, options) {
+  const requestTransport = transport(options);
+  const projectResponse = await apiV1Request("get", "/api/v1/projects/{projectId}", {
+    pathParams: { projectId },
+    ...requestTransport,
   });
+  const project = projectResponse?.project || null;
+  const browserCountPromise = projectList(
+    "/api/v1/projects/{projectId}/experiment-browser",
+    projectId,
+    options,
+    { limit: 1 },
+  );
+
+  if (project?.shellOnly) {
+    const browser = await browserCountPromise;
+    return {
+      project,
+      projectProfile: {},
+      publishedExperimentCount: Number(browser?.totalCount) || 0,
+      fileObjects: [],
+      importRuns: [],
+      chartSpecs: [],
+      manuscripts: [],
+      workbookReviewSessions: [],
+      workbookReviewRegions: [],
+      regionUnderstandings: [],
+      agentRuns: [],
+      analysisThreads: [],
+      dataPlans: [],
+      dataSnapshots: [],
+      experimentSnapshotHeads: [],
+      browserViews: [],
+      projectBrowserConfig: null,
+      sourceDocuments: [],
+    };
+  }
+
+  const [
+    browser,
+    files,
+    importRuns,
+    sourceDocuments,
+    sessions,
+    regionUnderstandings,
+    dataPlans,
+    dataSnapshots,
+    agentRuns,
+    analysisThreads,
+    chartSpecs,
+    manuscripts,
+    browserViews,
+    browserConfig,
+  ] = await Promise.all([
+    browserCountPromise,
+    projectList("/api/v1/projects/{projectId}/files", projectId, options),
+    projectList("/api/v1/projects/{projectId}/import-runs", projectId, options),
+    projectList("/api/v1/projects/{projectId}/source-documents", projectId, options),
+    projectList("/api/v1/projects/{projectId}/workbook-review-sessions", projectId, options),
+    projectList("/api/v1/projects/{projectId}/region-understandings", projectId, options),
+    projectList("/api/v1/projects/{projectId}/data-plans", projectId, options),
+    projectList("/api/v1/projects/{projectId}/data-snapshots", projectId, options),
+    projectList("/api/v1/projects/{projectId}/agent/runs", projectId, options, { limit: 100 }),
+    projectList("/api/v1/projects/{projectId}/analysis-threads", projectId, options, { limit: 100 }),
+    collectProjectPages("/api/v1/projects/{projectId}/chart-specs", projectId, options, { limit: 100 }),
+    collectProjectPages("/api/v1/projects/{projectId}/manuscripts", projectId, options, { limit: 100 }),
+    projectList("/api/v1/projects/{projectId}/browser-views", projectId, options),
+    projectList("/api/v1/projects/{projectId}/browser-config", projectId, options),
+  ]);
+  const sessionItems = Array.isArray(sessions?.items) ? sessions.items : [];
+  const regionPages = await Promise.all(sessionItems.map((session) => (
+    apiV1Request("get", "/api/v1/workbook-review-sessions/{sessionId}/regions", {
+      pathParams: { sessionId: session.id },
+      ...requestTransport,
+    })
+  )));
+
+  return {
+    project,
+    projectProfile: project?.projectProfile || {},
+    publishedExperimentCount: Number(browser?.totalCount) || 0,
+    fileObjects: files?.items || [],
+    importRuns: importRuns?.items || [],
+    chartSpecs: chartSpecs?.items || [],
+    manuscripts: manuscripts?.items || [],
+    workbookReviewSessions: sessionItems,
+    workbookReviewRegions: regionPages.flatMap((page) => page?.items || []),
+    regionUnderstandings: regionUnderstandings?.items || [],
+    agentRuns: agentRuns?.items || [],
+    analysisThreads: analysisThreads?.items || [],
+    dataPlans: dataPlans?.items || [],
+    dataSnapshots: dataSnapshots?.items || [],
+    experimentSnapshotHeads: [],
+    browserViews: browserViews?.items || [],
+    projectBrowserConfig: browserConfig?.projectBrowserConfig || null,
+    sourceDocuments: sourceDocuments?.items || [],
+  };
+}
+
+export async function patchServerProjectProfile(projectId, projectProfile, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before saving its profile.");
+  const response = await apiV1Request("patch", "/api/v1/projects/{projectId}/profile", {
+    pathParams: { projectId },
+    body: projectProfile || {},
+    ...transport(options),
+  });
+  return { ...response, projectProfile: response?.project?.projectProfile || projectProfile || {} };
 }
 
 export async function uploadServerProjectFile(projectId, file, options = {}) {
@@ -107,10 +226,10 @@ export async function uploadServerProjectFile(projectId, file, options = {}) {
   if (!file) throw new ServerApiError("Select a file before uploading.");
   const formData = new FormData();
   formData.set("file", file);
-  return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/files`, {
-    ...options,
-    method: "POST",
+  return apiV1Request("post", "/api/v1/projects/{projectId}/files", {
+    pathParams: { projectId },
     body: formData,
+    ...transport(options),
   });
 }
 
@@ -119,33 +238,48 @@ export function createServerWorkbookReviewSession(projectId, request = {}, optio
   if (!request.fileObjectId && !request.sourceDocumentId) {
     throw new ServerApiError("Upload a workbook or select a source document before starting review.");
   }
-  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/workbook-review-sessions`, {
-    fileObjectId: request.fileObjectId || null,
-    sourceDocumentId: request.sourceDocumentId || null,
-  }, options);
+  return apiV1Request("post", "/api/v1/projects/{projectId}/workbook-review-sessions", {
+    pathParams: { projectId },
+    body: {
+      ...(request.fileObjectId ? { fileObjectId: request.fileObjectId } : {}),
+      ...(request.sourceDocumentId ? { sourceDocumentId: request.sourceDocumentId } : {}),
+    },
+    ...transport(options),
+  });
 }
 
-export function listServerWorkbookReviewSessions(projectId, options = {}) {
+export async function listServerWorkbookReviewSessions(projectId, options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before listing workbook review sessions.");
-  return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/workbook-review-sessions`, options);
+  return namedPage(
+    await projectList("/api/v1/projects/{projectId}/workbook-review-sessions", projectId, options),
+    "workbookReviewSessions",
+  );
 }
 
 export function getServerWorkbookReviewSession(sessionId, options = {}) {
   if (!sessionId) throw new ServerApiError("Select a workbook review session before loading it.");
-  return serverRequest(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}`, options);
+  return apiV1Request("get", "/api/v1/workbook-review-sessions/{sessionId}", {
+    pathParams: { sessionId },
+    ...transport(options),
+  });
 }
 
 export function deleteServerWorkbookReviewSession(sessionId, request = {}, options = {}) {
   if (!sessionId) throw new ServerApiError("Select a workbook review session before deleting it.");
-  return serverJson(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}`, {
-    expectedVersion: request.expectedVersion,
-    reason: request.reason || "",
-  }, { ...options, method: "DELETE" });
+  return apiV1Request("delete", "/api/v1/workbook-review-sessions/{sessionId}", {
+    pathParams: { sessionId },
+    body: { expectedVersion: request.expectedVersion, reason: request.reason || "" },
+    ...transport(options),
+  });
 }
 
-export function listServerWorkbookReviewRegions(sessionId, options = {}) {
+export async function listServerWorkbookReviewRegions(sessionId, options = {}) {
   if (!sessionId) throw new ServerApiError("Select a workbook review session before listing regions.");
-  return serverRequest(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}/regions`, options);
+  const response = await apiV1Request("get", "/api/v1/workbook-review-sessions/{sessionId}/regions", {
+    pathParams: { sessionId },
+    ...transport(options),
+  });
+  return { ...response, reviewRegions: response?.items || [], regions: response?.items || [] };
 }
 
 export function createServerWorkbookReviewRegion(sessionId, request = {}, options = {}) {
@@ -153,155 +287,199 @@ export function createServerWorkbookReviewRegion(sessionId, request = {}, option
   if (!request.sourceDocumentId || !request.sheetName || !request.range) {
     throw new ServerApiError("Select a source workbook range before creating a region.");
   }
-  return serverJson(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}/regions`, {
-    sourceDocumentId: request.sourceDocumentId,
-    sheetName: request.sheetName,
-    range: request.range,
-    selectionMethod: request.selectionMethod || "manual",
-    description: request.description || "",
-    semanticType: request.semanticType || "generic_table",
-    idempotencyKey: request.idempotencyKey || null,
-    ...(request.deferInterpretation === true ? { deferInterpretation: true } : {}),
-  }, options);
+  return apiV1Request("post", "/api/v1/workbook-review-sessions/{sessionId}/regions", {
+    pathParams: { sessionId },
+    body: {
+      sourceDocumentId: request.sourceDocumentId,
+      sheetName: request.sheetName,
+      range: request.range,
+      selectionMethod: request.selectionMethod || "manual",
+      description: request.description || "",
+      semanticType: request.semanticType || "generic_table",
+      ...(request.deferInterpretation === true ? { deferInterpretation: true } : {}),
+    },
+    ...transport(options),
+  });
 }
 
 export function interpretServerWorkbookReviewRegion(sessionId, regionId, request = {}, options = {}) {
   if (!sessionId || !regionId) throw new ServerApiError("Select a workbook review region before interpreting it.");
-  return serverJson(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}/regions/${encodeURIComponent(regionId)}/interpret`, {
-    expectedRegionVersion: request.expectedRegionVersion,
-    ...(request.description ? { description: request.description } : {}),
-    ...(request.semanticType ? { semanticType: request.semanticType } : {}),
-    idempotencyKey: request.idempotencyKey || null,
-  }, options);
+  return apiV1Request("post", "/api/v1/workbook-review-sessions/{sessionId}/regions/{regionId}/interpret", {
+    pathParams: { sessionId, regionId },
+    body: {
+      expectedRegionVersion: request.expectedRegionVersion,
+      ...(request.description ? { description: request.description } : {}),
+      ...(request.semanticType ? { semanticType: request.semanticType } : {}),
+    },
+    ...transport(options),
+  });
 }
 
-export function listServerWorkbookReviewRegionRevisions(sessionId, regionId, options = {}) {
+export async function listServerWorkbookReviewRegionRevisions(sessionId, regionId, options = {}) {
   if (!sessionId || !regionId) throw new ServerApiError("Select a workbook review region before listing revisions.");
-  return serverRequest(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}/regions/${encodeURIComponent(regionId)}/revisions`, options);
+  const response = await apiV1Request("get", "/api/v1/workbook-review-sessions/{sessionId}/regions/{regionId}/revisions", {
+    pathParams: { sessionId, regionId },
+    ...transport(options),
+  });
+  return { ...response, revisions: response?.items || [] };
 }
 
 export function reviseServerWorkbookReviewRegion(sessionId, regionId, request = {}, options = {}) {
   if (!sessionId || !regionId) throw new ServerApiError("Select a workbook review region before submitting feedback.");
   if (!String(request.feedback || "").trim()) throw new ServerApiError("Enter feedback before submitting a region revision.");
-  return serverJson(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}/regions/${encodeURIComponent(regionId)}/revisions`, {
-    feedback: request.feedback,
-    previousRevisionId: request.previousRevisionId || null,
-    expectedRegionVersion: request.expectedRegionVersion,
-    idempotencyKey: request.idempotencyKey || null,
-  }, options);
+  return apiV1Request("post", "/api/v1/workbook-review-sessions/{sessionId}/regions/{regionId}/revisions", {
+    pathParams: { sessionId, regionId },
+    body: {
+      feedback: request.feedback,
+      ...(request.previousRevisionId ? { previousRevisionId: request.previousRevisionId } : {}),
+      expectedRegionVersion: request.expectedRegionVersion,
+    },
+    ...transport(options),
+  });
 }
 
 export function confirmServerWorkbookReviewRegion(sessionId, regionId, request = {}, options = {}) {
   if (!sessionId || !regionId || !request.revisionId) {
     throw new ServerApiError("Select an exact region revision before confirming it.");
   }
-  return serverJson(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}/regions/${encodeURIComponent(regionId)}/confirm`, {
-    revisionId: request.revisionId,
-    expectedRegionVersion: request.expectedRegionVersion,
-    idempotencyKey: request.idempotencyKey || null,
-  }, options);
+  return apiV1Request("post", "/api/v1/workbook-review-sessions/{sessionId}/regions/{regionId}/confirm", {
+    pathParams: { sessionId, regionId },
+    body: { revisionId: request.revisionId, expectedRegionVersion: request.expectedRegionVersion },
+    ...transport(options),
+  });
 }
 
 export function ignoreServerWorkbookReviewRegion(sessionId, regionId, request = {}, options = {}) {
   if (!sessionId || !regionId) throw new ServerApiError("Select a workbook review region before ignoring it.");
-  return serverJson(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}/regions/${encodeURIComponent(regionId)}/ignore`, {
-    expectedRegionVersion: request.expectedRegionVersion,
-    reason: request.reason || "",
-  }, options);
+  return apiV1Request("post", "/api/v1/workbook-review-sessions/{sessionId}/regions/{regionId}/ignore", {
+    pathParams: { sessionId, regionId },
+    body: { expectedRegionVersion: request.expectedRegionVersion, reason: request.reason || "" },
+    ...transport(options),
+  });
 }
 
 export function deleteServerWorkbookReviewRegion(sessionId, regionId, request = {}, options = {}) {
   if (!sessionId || !regionId) throw new ServerApiError("Select a workbook review region before deleting it.");
-  return serverJson(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}/regions/${encodeURIComponent(regionId)}`, {
-    expectedRegionVersion: request.expectedRegionVersion,
-    reason: request.reason || "",
-  }, { ...options, method: "DELETE" });
+  return apiV1Request("delete", "/api/v1/workbook-review-sessions/{sessionId}/regions/{regionId}", {
+    pathParams: { sessionId, regionId },
+    body: { expectedRegionVersion: request.expectedRegionVersion, reason: request.reason || "" },
+    ...transport(options),
+  });
 }
 
-export function listServerRegionUnderstandings(projectId, { status = "accepted", ...options } = {}) {
+export async function listServerRegionUnderstandings(projectId, options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before listing region understandings.");
-  const query = status ? `?status=${encodeURIComponent(status)}` : "";
-  return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/region-understandings${query}`, options);
+  return namedPage(
+    await projectList("/api/v1/projects/{projectId}/region-understandings", projectId, options),
+    "regionUnderstandings",
+  );
 }
 
 export function retrieveProjectEvidence(projectId, request = {}, options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before retrieving project evidence.");
-  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/evidence/retrieve`, {
-    query: request.query || "",
-    mode: request.mode || "tool_agent",
-    includePreview: request.includePreview !== false,
-    includeUnconfirmedSuggestions: request.includeUnconfirmedSuggestions === true,
-    maxResults: request.maxResults || 5,
-  }, options);
+  return apiV1Request("post", "/api/v1/projects/{projectId}/evidence/retrieve", {
+    pathParams: { projectId },
+    body: {
+      query: request.query || "",
+      includePreview: request.includePreview !== false,
+      includeUnconfirmedSuggestions: request.includeUnconfirmedSuggestions === true,
+    },
+    ...transport(options),
+  });
 }
 
-export function listServerProjectDataPlans(projectId, options = {}) {
+export async function listServerProjectDataPlans(projectId, options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before listing data plans.");
-  return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/data-plans`, options);
+  return namedPage(await projectList("/api/v1/projects/{projectId}/data-plans", projectId, options), "dataPlans");
 }
 
-export function listServerProjectDataSnapshots(projectId, options = {}) {
+export async function listServerProjectDataSnapshots(projectId, options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before listing data snapshots.");
-  return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/data-snapshots`, options);
+  return namedPage(await projectList("/api/v1/projects/{projectId}/data-snapshots", projectId, options), "dataSnapshots");
 }
 
-export function listServerSourceDocuments(projectId, options = {}) {
+export async function listServerSourceDocuments(projectId, options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before listing source documents.");
-  return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/source-documents`, options);
+  return namedPage(await projectList("/api/v1/projects/{projectId}/source-documents", projectId, options), "sourceDocuments");
 }
 
-export function listServerSourceDocumentRegions(sourceDocumentId, options = {}) {
+export async function listServerSourceDocumentRegions(sourceDocumentId, options = {}) {
   if (!sourceDocumentId) throw new ServerApiError("Select a source document before listing source regions.");
-  return serverRequest(`/api/source-documents/${encodeURIComponent(sourceDocumentId)}/regions`, options);
+  const response = await apiV1Request("get", "/api/v1/source-documents/{sourceDocumentId}/regions", {
+    pathParams: { sourceDocumentId },
+    ...transport(options),
+  });
+  return { ...response, regions: response?.items || [] };
 }
 
 export function readServerSourceDocumentRange(sourceDocumentId, request = {}, options = {}) {
   if (!sourceDocumentId) throw new ServerApiError("Select a source document before reading a source range.");
-  return serverJson(`/api/source-documents/${encodeURIComponent(sourceDocumentId)}/range`, {
-    sheetName: request.sheetName || "",
-    range: request.range || "",
-  }, options);
+  return apiV1Request("post", "/api/v1/source-documents/{sourceDocumentId}/range", {
+    pathParams: { sourceDocumentId },
+    body: { sheetName: request.sheetName || "", range: request.range || "" },
+    ...transport(options),
+  });
 }
 
 export function createServerAgentRun(projectId, request = {}, options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before asking LabRat to run a project workflow.");
-  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/agent/runs`, {
-    message: request.message || "",
-    conversation: request.conversation || [],
-    selectedContext: request.selectedContext || {},
-    modeHint: request.modeHint || "auto",
-  }, options);
+  return apiV1Request("post", "/api/v1/projects/{projectId}/agent/runs", {
+    pathParams: { projectId },
+    body: {
+      message: request.message || "",
+      conversation: request.conversation || [],
+      selectedContext: request.selectedContext || {},
+    },
+    ...transport(options),
+  });
 }
 
 export function getServerAgentRun(agentRunId, options = {}) {
   if (!agentRunId) throw new ServerApiError("Select an AgentRun before loading it.");
-  return serverRequest(`/api/agent-runs/${encodeURIComponent(agentRunId)}`, options);
+  return apiV1Request("get", "/api/v1/agent-runs/{agentRunId}", {
+    pathParams: { agentRunId },
+    ...transport(options),
+  });
 }
 
 export function cancelServerAgentRun(agentRunId, options = {}) {
   if (!agentRunId) throw new ServerApiError("Select an AgentRun before cancelling it.");
-  return serverJson(`/api/agent-runs/${encodeURIComponent(agentRunId)}/cancel`, {}, options);
+  return apiV1Request("post", "/api/v1/agent-runs/{agentRunId}/cancel", {
+    pathParams: { agentRunId },
+    ...transport(options),
+  });
 }
 
-export function listServerChartSpecs(projectId, options = {}) {
+export async function listServerChartSpecs(projectId, options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before listing chart specs.");
-  return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/chart-specs`, options);
+  return namedPage(
+    await projectList("/api/v1/projects/{projectId}/chart-specs", projectId, options, { limit: 100 }),
+    "chartSpecs",
+  );
 }
 
 export function getServerChartSpec(chartSpecId, options = {}) {
   if (!chartSpecId) throw new ServerApiError("Select a ChartSpec before loading it.");
-  return serverRequest(`/api/chart-specs/${encodeURIComponent(chartSpecId)}`, options);
+  return apiV1Request("get", "/api/v1/chart-specs/{chartSpecId}", {
+    pathParams: { chartSpecId },
+    ...transport(options),
+  });
 }
 
 export function createServerManuscript(projectId, request = {}, options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before creating a manuscript.");
-  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/manuscripts`, request, options);
+  return apiV1Request("post", "/api/v1/projects/{projectId}/manuscripts", {
+    pathParams: { projectId },
+    body: request,
+    ...transport(options),
+  });
 }
 
 export function patchServerManuscript(manuscriptId, request = {}, options = {}) {
   if (!manuscriptId) throw new ServerApiError("Select a manuscript before saving changes.");
-  return serverJson(`/api/manuscripts/${encodeURIComponent(manuscriptId)}`, request, {
-    ...options,
-    method: "PATCH",
+  return apiV1Request("patch", "/api/v1/manuscripts/{manuscriptId}", {
+    pathParams: { manuscriptId },
+    body: request,
+    ...transport(options),
   });
 }
