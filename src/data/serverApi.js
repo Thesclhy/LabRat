@@ -263,6 +263,15 @@ export function readServerSourceDocumentRange(sourceDocumentId, request = {}, op
   }, options);
 }
 
+export function readServerSourceDocumentCellClasses(sourceDocumentId, request = {}, options = {}) {
+  if (!sourceDocumentId) throw new ServerApiError("Select a source document before reading cell classes.");
+  const params = new URLSearchParams({
+    sheetName: request.sheetName || "",
+    range: request.range || "",
+  });
+  return serverRequest(`/api/source-documents/${encodeURIComponent(sourceDocumentId)}/cell-classes?${params.toString()}`, options);
+}
+
 export function createServerAgentRun(projectId, request = {}, options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before asking LabRat to run a project workflow.");
   return serverJson(`/api/projects/${encodeURIComponent(projectId)}/agent/runs`, {

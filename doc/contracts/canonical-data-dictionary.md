@@ -122,6 +122,21 @@ The backend model receives only the selected bounded range, limited neighboring
 context, and workbook manifest. Feedback creates a later revision. Confirmation
 moves the region's accepted pointer to one exact revision.
 
+Since the formula-aware milestone, `interpretation` also carries:
+
+- `provenance` (`labrat.regionProvenance.v1`), computed deterministically from
+  the workbook's stored formula text: `cellClassSummary` (terminal,
+  intermediate, input, constant, blank counts), `numericCellCount`, a bounded
+  one-level `derivation` sentence for the first terminal cell, up to two
+  `sharedInputs` reached by at least 80% of the region's formulas, up to
+  twenty `brokenCells` where a typed number sits inside an otherwise formula
+  run up to four steps upstream, and `warnings`. Values are never recomputed;
+  cached formula results are the numbers.
+- `series[]` entries may use `orientation: "header_row_categories"` with
+  `xHeaderRange`, `yValueRange`, `xValueType`, `yNumericScale`, and
+  `pointCount` in addition to the historical column-pair shape. Both shapes
+  keep exact range or cell source refs.
+
 ## DataPlan v2 (Historical)
 
 A retired deterministic extraction recipe retained only as provenance for

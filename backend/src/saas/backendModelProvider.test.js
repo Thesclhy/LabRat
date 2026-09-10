@@ -644,6 +644,13 @@ test("interpretWorkbookRegion requests a concise structured region explanation",
         interpretationSchema.properties.fieldPatches.items.required,
         Object.keys(interpretationSchema.properties.fieldPatches.items.properties),
       );
+      assert.deepEqual(
+        interpretationSchema.properties.seriesPatches.items.required,
+        Object.keys(interpretationSchema.properties.seriesPatches.items.properties),
+      );
+      assert.ok(interpretationSchema.properties.seriesPatches.items.properties.orientation.enum.includes("header_row_categories"));
+      assert.match(body.system, /terminal cells are calculated results/i);
+      assert.match(body.system, /seriesPatches with orientation header_row_categories/i);
       const roleSchema = interpretationSchema.properties.fieldPatches.items.properties.role;
       assert.ok(roleSchema.enum.includes(""));
       assert.ok(roleSchema.enum.includes("outcome"));
@@ -678,6 +685,31 @@ test("interpretWorkbookRegion requests a concise structured region explanation",
                     valueType: "number",
                     unit: "",
                   }],
+                  seriesPatches: [{
+                    seriesKey: "carbon_distribution",
+                    label: "Overall carbon distribution",
+                    orientation: "header_row_categories",
+                    xHeaderRange: "B1:D1",
+                    yValueRange: "B2:D2",
+                    xColumn: "",
+                    yColumn: "",
+                    xMeaning: "carbon_number",
+                    xValueType: "number",
+                    yUnit: "% of feed carbon",
+                    yNumericScale: "percent_points",
+                  }, {
+                    seriesKey: "",
+                    label: "",
+                    orientation: "",
+                    xHeaderRange: "",
+                    yValueRange: "",
+                    xColumn: "",
+                    yColumn: "",
+                    xMeaning: "",
+                    xValueType: "",
+                    yUnit: "",
+                    yNumericScale: "",
+                  }],
                   confidence: 0.9,
                 },
               }),
@@ -701,6 +733,17 @@ test("interpretWorkbookRegion requests a concise structured region explanation",
   assert.equal(result.summary.length, 2);
   assert.equal(result.interpretation.experimentAxis, "rows");
   assert.equal("experimentLabel" in result.interpretation, false);
+  assert.deepEqual(result.interpretation.seriesPatches, [{
+    seriesKey: "carbon_distribution",
+    label: "Overall carbon distribution",
+    orientation: "header_row_categories",
+    xHeaderRange: "B1:D1",
+    yValueRange: "B2:D2",
+    xMeaning: "carbon_number",
+    xValueType: "number",
+    yUnit: "% of feed carbon",
+    yNumericScale: "percent_points",
+  }], "empty series patch rows are dropped and blank properties omitted");
   assert.deepEqual(result.interpretation.fieldPatches, [{
     column: "B",
     semanticKey: "temperature",

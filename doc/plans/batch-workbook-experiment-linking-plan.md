@@ -1,6 +1,6 @@
 # Batch Workbook Upload And Experiment Linking Plan
 
-Status: active (Milestone 1 complete, Milestones 2-6 proposed)
+Status: active (Milestones 1-2 complete, Milestones 3-6 proposed)
 Read when: implementing multi-file upload, reusable region extraction
 templates, formula-aware region understanding, or batch series publication.
 Created: 2026-09-09
@@ -270,6 +270,15 @@ Done when ten files upload from one picker, each gets a session and chat
 link, and their regions interpret in the background.
 
 ### Milestone 2 — Formula-aware region understanding (backend + frontend)
+
+Status: complete on 2026-09-09 (branch `claude/batch-workbook-linking`).
+Implementation notes: provenance is stored as `interpretation.provenance`
+rather than a separate revision column, so no migration was needed and the
+dependency hash covers it. `normalizationCell` became `sharedInputs` (the
+nearest cells reached by at least 80% of the region's formulas), because the
+graph proves sharing, not division. Header-row series live in
+`interpretation.series` with `orientation: "header_row_categories"`; the
+model output patch is `seriesPatches`.
 
 Backend:
 

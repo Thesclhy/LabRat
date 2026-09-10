@@ -2,6 +2,7 @@ import path from "node:path";
 import { sendJson } from "../../http/json.js";
 import { readRequestBody } from "../../http/body.js";
 import { parseMultipartFormData } from "../../http/multipart.js";
+import { sourceCellClasses } from "../formulaGraph.js";
 import { runImportScan } from "../../import/services/importPipeline.js";
 import { getAuthContext, publicUser, requireAuth, requireLabRole, requireSuperAdmin } from "../authz.js";
 import { clearSessionCookie, setSessionCookie } from "../cookies.js";
@@ -23,6 +24,7 @@ import {
   readSourceDocumentRange,
   sourceDocumentSummary,
   sourceRegionSummary,
+  SOURCE_RANGE_MAX_CELLS,
 } from "../sourceDocuments.js";
 import {
   buildWorkbookReviewSessionDraft,
@@ -2249,6 +2251,21 @@ async function handleSourceDocumentQuery(req, res, context, sourceDocumentId) {
   sendJson(res, 200, result);
 }
 
+async function handleSourceDocumentCellClasses(req, res, context, sourceDocumentId, url) {
+  const { sourceDocument } = await sourceDocumentAuth(req, context, sourceDocumentId, "viewer");
+  const indexBlobs = context.store.listSourceIndexBlobs
+    ? await context.store.listSourceIndexBlobs({ sourceDocumentId: sourceDocument.id })
+    : [];
+  const result = sourceCellClasses({
+    sourceDocument,
+    indexBlobs,
+    sheetName: url.searchParams.get("sheetName") || "",
+    range: url.searchParams.get("range") || "",
+    maxCells: SOURCE_RANGE_MAX_CELLS,
+  });
+  sendJson(res, 200, result);
+}
+
 async function handleSourceDocumentRange(req, res, context, sourceDocumentId) {
   const { sourceDocument } = await sourceDocumentAuth(req, context, sourceDocumentId, "viewer");
   const body = await readJsonBody(req);
@@ -3510,6 +3527,8 @@ async function dispatch(req, res, context) {
   if (sourceDocumentQueryMatch && req.method === "POST") return handleSourceDocumentQuery(req, res, context, sourceDocumentQueryMatch[1]);
   const sourceDocumentRangeMatch = pathName.match(/^\/api\/source-documents\/([^/]+)\/range$/);
   if (sourceDocumentRangeMatch && req.method === "POST") return handleSourceDocumentRange(req, res, context, sourceDocumentRangeMatch[1]);
+  const sourceDocumentCellClassesMatch = pathName.match(/^\/api\/source-documents\/([^/]+)\/cell-classes$/);
+  if (sourceDocumentCellClassesMatch && req.method === "GET") return handleSourceDocumentCellClasses(req, res, context, sourceDocumentCellClassesMatch[1], url);
   const workbookReviewRegionInterpretMatch = pathName.match(/^\/api\/workbook-review-sessions\/([^/]+)\/regions\/([^/]+)\/interpret$/);
   if (workbookReviewRegionInterpretMatch && req.method === "POST") {
     return handleWorkbookReviewRegionInterpret(req, res, context, workbookReviewRegionInterpretMatch[1], workbookReviewRegionInterpretMatch[2]);

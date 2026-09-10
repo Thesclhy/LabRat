@@ -1788,6 +1788,59 @@ test("source documents expose bounded ranges, cell search, and extract previews"
   assert.equal(oversizedBody.error.details.maxCells, 500);
 });
 
+function makeFormulaCalculationWorkbookBlob() {
+  const workbook = XLSX.utils.book_new();
+  const worksheet = XLSX.utils.aoa_to_sheet([
+    ["Total C atoms", 1.5711],
+    ["Yield", 0.5237, 0.1374, 0.07],
+    ["Label", "C1", "C2", "C3"],
+    ["Overall tots", 0.5237, 0.1374, 0.07],
+    ["Gas", 0.0082, 0.0022, 0.0011],
+  ]);
+  worksheet.B2 = { t: "n", f: "B5/B1*100", v: 0.5237 };
+  worksheet.C2 = { t: "n", f: "C5/B1*100", v: 0.1374 };
+  worksheet.D2 = { t: "n", f: "D5/B1*100", v: 0.07 };
+  worksheet.B4 = { t: "n", f: "B2", v: 0.5237 };
+  worksheet.C4 = { t: "n", f: "C2", v: 0.1374 };
+  worksheet.D4 = { t: "n", f: "D2", v: 0.07 };
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
+  return new Blob([XLSX.write(workbook, { type: "buffer", bookType: "xlsx" })], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+}
+
+test("source documents expose deterministic formula cell classes for a bounded range", async () => {
+  const project = await createProject("Formula Provenance Project");
+  await uploadAndCreateImportRun(project.id, makeFormulaCalculationWorkbookBlob(), "Calculation Exp31.xlsx");
+  const documents = await (await jsonFetch(`/api/projects/${project.id}/source-documents`)).json();
+  const sourceDocument = documents.sourceDocuments[0];
+
+  const response = await jsonFetch(`/api/source-documents/${sourceDocument.id}/cell-classes?sheetName=Sheet1&range=A3:D4`);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.schemaVersion, "labrat.sourceCellClasses.v1");
+  assert.equal(body.range, "A3:D4");
+  assert.deepEqual(Object.fromEntries(body.cells.map((cell) => [cell.address, cell.cellClass])), {
+    A3: "constant", B3: "constant", C3: "constant", D3: "constant", A4: "constant", B4: "terminal", C4: "terminal", D4: "terminal",
+  });
+  assert.equal(body.cells.find((cell) => cell.address === "B4").formula, "B2");
+  assert.equal(body.summary.terminal, 3);
+  assert.deepEqual(body.provenance.warnings, []);
+  assert.match(body.provenance.derivation, /^B4 = B2 where B2 = 0\.5237 \(Yield\)/);
+  assert.deepEqual(body.provenance.sharedInputs.map((input) => input.address), ["B1"]);
+
+  const intermediate = await (await jsonFetch(`/api/source-documents/${sourceDocument.id}/cell-classes?sheetName=Sheet1&range=A2:D2`)).json();
+  assert.deepEqual(intermediate.provenance.warnings.map((warning) => warning.code), ["region_mostly_intermediate_cells"]);
+  assert.equal(intermediate.cells.find((cell) => cell.address === "B2").cellClass, "intermediate");
+
+  const badRange = await jsonFetch(`/api/source-documents/${sourceDocument.id}/cell-classes?sheetName=Sheet1&range=nope`);
+  assert.equal(badRange.status, 400);
+  assert.equal((await badRange.json()).error.code, "invalid_source_range");
+  const badSheet = await jsonFetch(`/api/source-documents/${sourceDocument.id}/cell-classes?sheetName=Missing&range=A1:B2`);
+  assert.equal(badSheet.status, 404);
+  assert.equal((await badSheet.json()).error.code, "source_sheet_not_found");
+});
+
 test("legacy dataset, source-extract, chart-proposal, and planner routes are retired", async () => {
   const project = await createProject("Snapshot Browser Project");
   for (const request of [

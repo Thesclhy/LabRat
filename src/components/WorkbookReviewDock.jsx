@@ -17,15 +17,44 @@ function statusLabel(region) {
   return "Review";
 }
 
+const CELL_CLASS_LABELS = [
+  ["terminal", "result", "results"],
+  ["intermediate", "intermediate", "intermediate"],
+  ["input", "input", "inputs"],
+  ["constant", "label or unused value", "labels or unused values"],
+];
+
+export function cellClassSummaryChips(summary) {
+  if (!summary || typeof summary !== "object") return [];
+  return CELL_CLASS_LABELS
+    .map(([key, singular, plural]) => {
+      const count = Number(summary[key]) || 0;
+      if (!count) return null;
+      return { key, count, text: `${count} ${count === 1 ? singular : plural}` };
+    })
+    .filter(Boolean);
+}
+
+function seriesPreviewText(series) {
+  const points = Number(series?.pointCount);
+  const pointText = Number.isFinite(points) && points > 0 ? `${points} points` : "points from the header row";
+  const x = series?.xSemanticKey ? series.xSemanticKey.replace(/_/g, " ") : "categories";
+  const y = series?.yUnit ? `in ${series.yUnit}` : "unit not set";
+  return `${series?.label || series?.seriesKey || "Series"}: ${pointText}, x = ${x} (${series?.xHeaderRange || "header row"}), y ${y} (${series?.yValueRange || "value row"})`;
+}
+
 function RegionReviewCard({
   region,
   active,
+  calculationOverlayActive = false,
+  calculationOverlayState = null,
   onActivate,
   onRevise,
   onConfirm,
   onRetry,
   onIgnore,
   onDelete,
+  onToggleCalculationOverlay,
 }) {
   const revision = region.currentRevision || null;
   const label = regionLabel(region);
@@ -33,12 +62,18 @@ function RegionReviewCard({
   const [pendingAction, setPendingAction] = useState("");
   const [actionError, setActionError] = useState("");
   const blockers = asArray(revision?.validation?.blockers);
-  const warnings = [...asArray(region.warnings), ...asArray(revision?.warnings)];
+  const warnings = [...asArray(region.warnings), ...asArray(revision?.warnings)]
+    .filter((notice, index, all) => all.findIndex((candidate) => (candidate?.code || candidate?.message) === (notice?.code || notice?.message)) === index);
   const hasAcceptedRevision = Boolean(region.acceptedRevisionId);
   const confirmed = Boolean(hasAcceptedRevision && region.acceptedRevisionId === revision?.id);
   const activeDisposition = region.disposition === "active";
   const interpreting = region.reviewStatus === "interpreting";
   const busy = Boolean(pendingAction);
+  const provenance = revision?.interpretation?.provenance || null;
+  const classChips = cellClassSummaryChips(provenance?.cellClassSummary);
+  const headerRowSeries = asArray(revision?.interpretation?.series)
+    .filter((series) => series?.orientation === "header_row_categories");
+  const brokenCells = asArray(provenance?.brokenCells);
 
   useEffect(() => {
     setActionError("");
@@ -96,6 +131,47 @@ function RegionReviewCard({
           <p>{region.reviewStatus === "interpretation_failed" ? "The backend model could not interpret this region." : "Interpretation is pending."}</p>
         )}
       </div>
+
+      {!!headerRowSeries.length && (
+        <div className="workbook-region-series" aria-label={`Series in ${label}`}>
+          {headerRowSeries.map((series, index) => (
+            <p key={`${series.seriesKey || "series"}-${index}`}>{seriesPreviewText(series)}</p>
+          ))}
+        </div>
+      )}
+
+      {provenance?.cellClassSummary && (
+        <section className="workbook-region-calculation" aria-label={`Calculation provenance for ${label}`}>
+          <div className="workbook-region-class-summary">
+            {classChips.map((chip) => (
+              <span key={chip.key} className={`workbook-region-class-chip is-${chip.key}`}>{chip.text}</span>
+            ))}
+            {onToggleCalculationOverlay && (
+              <button
+                type="button"
+                className="workbook-region-calculation-toggle"
+                aria-pressed={calculationOverlayActive}
+                aria-label={`${calculationOverlayActive ? "Hide" : "Show"} calculation for ${label}`}
+                disabled={Boolean(calculationOverlayActive && calculationOverlayState?.loading)}
+                onClick={() => onToggleCalculationOverlay(region)}
+              >
+                {calculationOverlayActive
+                  ? (calculationOverlayState?.loading ? "Loading calculation" : "Hide calculation")
+                  : "Show calculation"}
+              </button>
+            )}
+          </div>
+          {provenance.derivation && <p className="workbook-region-derivation">{provenance.derivation}</p>}
+          {!!brokenCells.length && (
+            <p className="workbook-region-broken-cells">
+              Typed over formulas: {brokenCells.slice(0, 6).map((item) => item.address).join(", ")}{brokenCells.length > 6 ? ` and ${brokenCells.length - 6} more` : ""}
+            </p>
+          )}
+          {calculationOverlayActive && calculationOverlayState?.error && (
+            <p className="workbook-region-error" role="alert">{calculationOverlayState.error}</p>
+          )}
+        </section>
+      )}
 
       <div className="workbook-region-meta">
         {revision?.confidence != null && <span>{Math.round(Number(revision.confidence) * 100)}% structure confidence</span>}
@@ -188,12 +264,15 @@ export function WorkbookReviewDock({
   reviewState = {},
   reviewRegions = [],
   activeRegionId = "",
+  calculationOverlayRegionId = "",
+  calculationOverlayState = null,
   onActiveRegionChange,
   onReviseRegion,
   onConfirmRegion,
   onRetryRegion,
   onIgnoreRegion,
   onDeleteRegion,
+  onToggleCalculationOverlay,
   onReviewExtractedExperiments,
 }) {
   const session = reviewState.session || reviewState.workbookReviewSession || null;
@@ -231,12 +310,15 @@ export function WorkbookReviewDock({
             key={region.id}
             region={region}
             active={region.id === resolvedActiveId}
+            calculationOverlayActive={Boolean(calculationOverlayRegionId) && calculationOverlayRegionId === region.id}
+            calculationOverlayState={calculationOverlayRegionId === region.id ? calculationOverlayState : null}
             onActivate={onActiveRegionChange}
             onRevise={onReviseRegion}
             onConfirm={onConfirmRegion}
             onRetry={onRetryRegion}
             onIgnore={onIgnoreRegion}
             onDelete={onDeleteRegion}
+            onToggleCalculationOverlay={onToggleCalculationOverlay}
           />
         ))}
         {!regions.length && <p className="workbook-region-empty">No source regions are available.</p>}

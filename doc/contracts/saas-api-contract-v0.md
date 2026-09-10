@@ -102,6 +102,7 @@ Upload creates a project-owned `FileObject`. Starting an import run scans the wo
 GET  /api/source-documents/:sourceDocumentId/regions
 POST /api/source-documents/:sourceDocumentId/query
 POST /api/source-documents/:sourceDocumentId/range
+GET  /api/source-documents/:sourceDocumentId/cell-classes?sheetName=&range=
 ```
 
 Rules:
@@ -110,6 +111,29 @@ Rules:
 - Range responses preserve sheet, A1 range, row/column coordinates, values, formulas, merged-cell membership/ranges, and source refs when available.
 - Query and range endpoints are read-only and cannot create accepted data.
 - Oversized requests return an explicit validation error instead of silently truncating scientific evidence.
+
+Cell classes are derived deterministically from the stored formula text of the
+whole workbook without evaluating any formula. The response is
+`labrat.sourceCellClasses.v1`:
+
+```json
+{
+  "sheetName": "Sheet1",
+  "range": "P31:BA32",
+  "cells": [
+    { "address": "Q32", "row": 32, "col": 17, "cellClass": "terminal", "formula": "F14", "formattedValue": "0.5237", "precedentCount": 1, "dependentCount": 0 }
+  ],
+  "summary": { "terminal": 37, "intermediate": 0, "input": 0, "constant": 38, "blank": 1 },
+  "provenance": { "schemaVersion": "labrat.regionProvenance.v1" }
+}
+```
+
+Class meanings: `terminal` is a formula cell nothing else references (a final
+result), `intermediate` is a formula cell that feeds other formulas, `input`
+is a typed value used by formulas, `constant` is a typed value or label used by
+nothing, and `blank` is empty. The range is limited to the same 500-cell bound
+as `/range`. Workbooks above 250,000 indexed cells skip the graph and return
+`graphTruncated: true` with a `formula_graph_skipped` warning.
 
 ## Workbook Region Review And Understanding
 
@@ -184,6 +208,20 @@ Rules:
   its initial semantic type and description so pending work can resume after a
   refresh without relying on browser memory.
 - Creating or revising one region sends the backend model only that bounded range, limited neighboring cells, and a workbook manifest. The complete workbook is never model context.
+- Each inspection cell sent to the model carries its deterministic
+  `cellClass`, and the request carries a bounded `region.provenance` (class
+  summary, one-level derivation text, shared upstream inputs, typed-over
+  cells, warning codes). The model may return `seriesPatches` beside
+  `fieldPatches`; the backend validates each patch against the selected
+  range and merges it into `interpretation.series` with `orientation:
+  "header_row_categories"` (one header row of categories above one value row,
+  `xHeaderRange`/`yValueRange`, `pointCount`) or `"column_pair"`.
+- Every stored revision carries `interpretation.provenance`
+  (`labrat.regionProvenance.v1`) computed by the backend, and its warnings
+  (`region_mostly_intermediate_cells`, `region_mostly_input_cells`,
+  `formula_chain_broken`, `formula_graph_skipped`) are appended to the
+  revision and region warnings. Provenance never blocks confirmation; the
+  values are the cached formula results as stored in the workbook.
 - Deferred creation makes the exact sheet/range and version available before the model call so the UI can show an immediate pending card and permit version-checked Ignore/Delete. A late interpretation is discarded when the region changed or became inactive while the model was running.
 - Workbook Review schedules active pending regions with at most three
   concurrent model requests. The active region is first, individual failures

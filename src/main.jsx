@@ -45,6 +45,7 @@ import {
   patchServerManuscript,
   patchServerProjectProfile,
   reviseServerWorkbookReviewRegion,
+  readServerSourceDocumentCellClasses,
   readServerSourceDocumentRange,
   confirmServerWorkbookReviewRegion,
   createServerWorkbookReviewRegion,
@@ -1115,6 +1116,7 @@ export function WorkbookReviewWorkspace({
   onActiveDraftRegionChange,
   onCreateRegion,
   focusSelection = null,
+  cellClassOverlay = null,
   reviewDock = null,
 }) {
   const session = reviewState?.session || reviewState?.workbookReviewSession || null;
@@ -1662,6 +1664,11 @@ export function WorkbookReviewWorkspace({
     && visibleTileBounds.some((bounds) => boundsContainCell(bounds, row, col))
     && !loadedTileBounds.some((bounds) => boundsContainCell(bounds, row, col))
   );
+  const overlayClasses = cellClassOverlay
+    && cellClassOverlay.classes
+    && String(cellClassOverlay.sheetName || "").toLowerCase() === String(activeSheetName || "").toLowerCase()
+    ? cellClassOverlay.classes
+    : null;
   const gridRows = useMemo(() => rowIndexes.map((row) => {
     const item = { __rowIndex: row, __rowNumber: row + 1 };
     colIndexes.forEach((col) => {
@@ -1690,6 +1697,10 @@ export function WorkbookReviewWorkspace({
       resizable: true,
       cellClass: (row) => {
         const classes = [];
+        if (overlayClasses) {
+          const overlayClass = overlayClasses[`${excelIndexToColumnLabel(col)}${row.__rowIndex + 1}`];
+          if (overlayClass) classes.push(`is-cell-${overlayClass}`);
+        }
         if (cellInAnyWorkbookRegion(row.__rowIndex, col, regionsForSheet)) classes.push("is-detected");
         if (cellInAnyWorkbookRegion(row.__rowIndex, col, reviewedAnalysisInputs)) classes.push("is-analysis-input");
         if (cellInAnyWorkbookRegion(row.__rowIndex, col, highlightedEditableDrafts)) classes.push("is-draft");
@@ -1730,6 +1741,7 @@ export function WorkbookReviewWorkspace({
     dragSelection,
     highlightedEditableDrafts,
     loadedTileBounds,
+    overlayClasses,
     rangeState.loading,
     regionsForSheet,
     reviewedAnalysisInputs,
@@ -1756,6 +1768,15 @@ export function WorkbookReviewWorkspace({
     <main className="workbook-review-workspace">
       <section className="workbook-excel-toolbar" aria-label="Workbook controls">
         <strong>{workbookName}</strong>
+        {overlayClasses && (
+          <div className="workbook-cell-class-legend" aria-label="Calculation overlay legend">
+            <span className="is-terminal">result</span>
+            <span className="is-intermediate">intermediate</span>
+            <span className="is-input">input</span>
+            <span className="is-constant">label or unused</span>
+            {cellClassOverlay?.loading && <em>loading</em>}
+          </div>
+        )}
         <div className="workbook-sheet-tabs" aria-label="Workbook sheets">
           {sheets.map((sheet) => (
             <button
@@ -2933,6 +2954,7 @@ function App() {
   const [workbookReviewDraftRegions, setWorkbookReviewDraftRegions] = useState([]);
   const [activeWorkbookReviewDraftRegionId, setActiveWorkbookReviewDraftRegionId] = useState("");
   const [backgroundWorkbookSessions, setBackgroundWorkbookSessions] = useState([]);
+  const [calculationOverlay, setCalculationOverlay] = useState(null);
   useEffect(() => {
     setBackgroundWorkbookSessions([]);
   }, [activeProjectId]);
@@ -3547,6 +3569,32 @@ function App() {
   const workbookReviewSessionId = workbookReviewState.session?.id
     || workbookReviewState.workbookReviewSession?.id
     || "";
+  useEffect(() => {
+    setCalculationOverlay(null);
+  }, [workbookReviewSessionId]);
+  const toggleWorkbookCalculationOverlay = async (region) => {
+    if (!region?.id) return;
+    if (calculationOverlay?.regionId === region.id) {
+      setCalculationOverlay(null);
+      return;
+    }
+    const sourceDocumentId = region.sourceDocumentId || workbookReviewState.sourceDocument?.id || "";
+    const range = region.rangeRef || region.range || "";
+    setCalculationOverlay({ regionId: region.id, sheetName: region.sheetName, range, classes: null, loading: true, error: "" });
+    try {
+      const response = await readServerSourceDocumentCellClasses(sourceDocumentId, { sheetName: region.sheetName, range });
+      const classes = Object.fromEntries(asArray(response?.cells).map((cell) => [cell.address, cell.cellClass]));
+      setCalculationOverlay((current) => (
+        current?.regionId === region.id ? { ...current, classes, loading: false, error: "" } : current
+      ));
+    } catch (error) {
+      setCalculationOverlay((current) => (
+        current?.regionId === region.id
+          ? { ...current, classes: null, loading: false, error: error?.message || String(error) }
+          : current
+      ));
+    }
+  };
   const applyBackgroundWorkbookRegionResult = (response, context = {}) => {
     const nextRegion = response?.region || null;
     if (!nextRegion?.id) return;
@@ -3998,6 +4046,7 @@ function App() {
           onActiveDraftRegionChange={setActiveWorkbookReviewDraftRegionId}
           onCreateRegion={createWorkbookReviewRegion}
           focusSelection={workbookReviewFocusSelection}
+          cellClassOverlay={calculationOverlay}
           reviewDock={(
             <WorkbookReviewDock
               reviewState={workbookReviewState}
@@ -4009,6 +4058,9 @@ function App() {
               onRetryRegion={retryWorkbookReviewRegion}
               onIgnoreRegion={ignoreWorkbookReviewRegion}
               onDeleteRegion={deleteWorkbookReviewRegion}
+              calculationOverlayRegionId={calculationOverlay?.regionId || ""}
+              calculationOverlayState={calculationOverlay}
+              onToggleCalculationOverlay={toggleWorkbookCalculationOverlay}
               onReviewExtractedExperiments={openExperimentBrowserDataRequest}
             />
           )}

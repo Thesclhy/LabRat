@@ -2,6 +2,40 @@ import { decodeRange, encodeRange } from "../import/utils/excelAddress.js";
 import { sha256Hex } from "./ids.js";
 import { readSourceDocumentRange, SOURCE_RANGE_MAX_CELLS } from "./sourceDocuments.js";
 import { buildWorkbookUnderstandingPreview } from "./workbookUnderstandingPreview.js";
+import { buildFormulaGraph, cellClassAt, regionProvenance } from "./formulaGraph.js";
+
+function regionFormulaContext({ indexBlobs, region, inspection }) {
+  try {
+    const graph = buildFormulaGraph(indexBlobs);
+    const provenance = regionProvenance({ graph, sheetName: region.sheetName, range: region.rangeRef });
+    const withClass = (cell) => (
+      cell && cell.address && !graph.truncated
+        ? { ...cell, cellClass: cellClassAt(graph, region.sheetName, cell.address) }
+        : cell
+    );
+    const inspectionWithClasses = inspection
+      ? {
+        ...inspection,
+        cells: asArray(inspection.cells).map(withClass),
+        rows: asArray(inspection.rows).map((row) => asArray(row).map(withClass)),
+      }
+      : inspection;
+    return {
+      provenance,
+      inspection: inspectionWithClasses,
+      modelProvenance: {
+        cellClassSummary: provenance.cellClassSummary,
+        numericCellCount: provenance.numericCellCount,
+        derivation: provenance.derivation,
+        sharedInputs: provenance.sharedInputs,
+        brokenCells: provenance.brokenCells.map((item) => item.address),
+        warnings: provenance.warnings.map((warning) => warning.code),
+      },
+    };
+  } catch {
+    return { provenance: null, inspection, modelProvenance: null };
+  }
+}
 
 const SUPPORTED_SEMANTIC_TYPES = new Set([
   "experiment_table",
@@ -219,6 +253,7 @@ async function draftRevision({
     reviewStatus: candidate.reviewStatus,
     disposition: candidate.disposition,
   }));
+  const formulaContext = regionFormulaContext({ indexBlobs, region, inspection: baselineRegion.inspection });
   const modelResult = typeof modelProvider?.interpretWorkbookRegion === "function"
     ? await modelProvider.interpretWorkbookRegion({
       workbook: workbookManifest(sourceDocument),
@@ -226,9 +261,10 @@ async function draftRevision({
         id: region.id,
         sheetName: region.sheetName,
         range: region.rangeRef,
-        inspection: baselineRegion.inspection,
+        inspection: formulaContext.inspection,
         deterministicCandidate: baselineRegion.interpretation,
         ...(baselineIdentityEvidence ? { identityEvidence: baselineIdentityEvidence } : {}),
+        ...(formulaContext.modelProvenance ? { provenance: formulaContext.modelProvenance } : {}),
       },
       otherRegions,
       priorInterpretation: priorRevision?.interpretation || null,
@@ -308,11 +344,20 @@ async function draftRevision({
     inspection: previewRegion.inspection,
     identityEvidence,
   }));
+  const storedInterpretation = {
+    semanticType: finalSemanticType,
+    ...previewRegion.interpretation,
+    ...(formulaContext.provenance ? { provenance: formulaContext.provenance } : {}),
+  };
+  const revisionWarnings = [
+    ...asArray(finalPreview.warnings),
+    ...asArray(formulaContext.provenance?.warnings),
+  ];
   const dependencyHash = sha256Hex(JSON.stringify({
     regionId: region.id,
     revisionNumber,
     sourceContentHash,
-    interpretation: { semanticType: finalSemanticType, ...previewRegion.interpretation },
+    interpretation: storedInterpretation,
   }));
   const validation = {
     status: finalPreview.blockers.length ? "blocked" : "ready",
@@ -328,20 +373,20 @@ async function draftRevision({
     trigger,
     userFeedback: text(userFeedback),
     summary,
-    interpretation: { semanticType: finalSemanticType, ...previewRegion.interpretation },
+    interpretation: storedInterpretation,
     sourceRefs,
     sourceContentHash,
     dependencyHash,
     validation,
     provider: modelResult.metadata || {},
-    warnings: finalPreview.warnings,
+    warnings: revisionWarnings,
     confidence: Number(previewRegion.interpretation?.confidence) || null,
     createdBy: actorUserId,
   });
   const updatedRegion = await store.updateWorkbookReviewRegion(region.id, {
     reviewStatus: "awaiting_review",
     currentRevisionId: revision.id,
-    warnings: finalPreview.warnings,
+    warnings: revisionWarnings,
     updatedBy: actorUserId,
   });
   return { region: updatedRegion, revision, warning: null };

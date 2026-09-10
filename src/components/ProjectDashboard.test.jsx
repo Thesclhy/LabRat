@@ -838,6 +838,33 @@ describe("WorkbookReviewWorkspace", () => {
     }
   });
 
+  it("overlays formula cell classes only on the matching sheet when a calculation overlay is supplied", async () => {
+    const fetchMock = makeWorkbookReviewFetch();
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    try {
+      render(
+        <WorkbookReviewWorkspace
+          projectId="project_1"
+          reviewState={reviewState}
+          draftRegions={[]}
+          activeDraftRegionId=""
+          onDraftRegionsChange={() => {}}
+          cellClassOverlay={{ regionId: "region_1", sheetName: "sheet1", classes: { A1: "constant", B1: "terminal" }, loading: false, error: "" }}
+        />,
+      );
+
+      const a1 = await screen.findByLabelText("Cell A1");
+      await waitFor(() => {
+        expect(a1.closest(".rdg-cell")?.classList.contains("is-cell-constant")).toBe(true);
+        expect(screen.getByLabelText("Cell B1").closest(".rdg-cell")?.classList.contains("is-cell-terminal")).toBe(true);
+      });
+      expect(screen.getByLabelText("Calculation overlay legend")).toBeTruthy();
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   it("renders blue cells only for the active server region id", async () => {
     const fetchMock = makeWorkbookReviewFetch();
     const originalFetch = global.fetch;

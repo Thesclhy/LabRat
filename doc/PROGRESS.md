@@ -15,6 +15,28 @@ Keep entries concise, newest first, and include:
 
 ## 2026-09-09
 
+- Formula-aware region understanding (Milestone 2 of
+  `doc/plans/batch-workbook-experiment-linking-plan.md`). New
+  `backend/src/saas/formulaGraph.js` builds a workbook-wide precedent graph
+  from stored formula text without evaluating anything and classifies every
+  cell as terminal, intermediate, input, constant, or blank. Region
+  interpretation now sends each inspection cell's class plus a bounded
+  provenance block to the model, stores `interpretation.provenance` on every
+  revision (class summary, one-level derivation, shared upstream inputs,
+  typed-over cells), and appends deterministic warnings:
+  `region_mostly_intermediate_cells`, `region_mostly_input_cells`, and
+  `formula_chain_broken`. The model may return `seriesPatches`; the backend
+  validates them against the selected range and merges header-row category
+  series (for example C1...C37 over one value row) into
+  `interpretation.series`. New read-only route
+  `GET /api/source-documents/:id/cell-classes`. The region card shows class
+  chips, the derivation, typed-over cells, a header-row series preview, and a
+  `Show calculation` toggle that overlays classes on the sheet grid with a
+  legend. No migration: provenance lives inside the existing interpretation
+  JSON. Verification: backend suite, frontend suite, production build.
+  Follow-ups: Milestone 3 (extraction templates) builds on the stored formula
+  shapes; the two-block ambiguity in Exp31 remains a template-level concern.
+
 - Batch workbook upload (Milestone 1 of
   `doc/plans/batch-workbook-experiment-linking-plan.md`, frontend only). The
   LabRat chat attach input now accepts several `.xlsx/.xls` files. One file
