@@ -1134,10 +1134,6 @@ textarea {
   gap: 8px;
   align-items: center;
 }
-.project-overview-card-actions .secondary {
-  background: #fff;
-  color: var(--muted);
-}
 .project-overview-card-actions button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
@@ -10896,4 +10892,140 @@ tbody tr:hover {
   .analysis-review-workspace.is-onboarding.has-result-stage .analysis-review-split {
     grid-template-rows: minmax(320px, auto) minmax(380px, auto);
   }
+}
+
+/* Batch workbook upload card in LabRat chat */
+.agent-pending-attachments {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.agent-pending-attachment-count {
+  font-size: 12px;
+  color: #64748b;
+}
+.agent-workbook-batch {
+  margin-top: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+.agent-workbook-batch-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+  font-size: 13px;
+  color: #334155;
+}
+.agent-workbook-batch-head button {
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #fff;
+  color: #334155;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.agent-workbook-batch-head button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.agent-workbook-batch-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.agent-workbook-batch-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 12.5px;
+  color: #334155;
+}
+.agent-workbook-batch-item:last-child {
+  border-bottom: 0;
+}
+.agent-workbook-batch-file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.agent-workbook-batch-file > button,
+.agent-workbook-batch-file > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.agent-workbook-batch-file > button {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: #0f172a;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: #cbd5e1;
+  text-underline-offset: 3px;
+}
+.agent-workbook-batch-file > button:hover {
+  text-decoration-color: #dc2626;
+}
+.agent-workbook-batch-status {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: #f1f5f9;
+  color: #475569;
+}
+.agent-workbook-batch-status.is-uploading {
+  background: #fef3c7;
+  color: #92400e;
+}
+.agent-workbook-batch-status.is-uploaded {
+  background: #dcfce7;
+  color: #166534;
+}
+.agent-workbook-batch-status.is-failed {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.agent-workbook-batch-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: #64748b;
+  font-size: 12px;
+}
+.agent-workbook-batch-suggestion.is-matched {
+  color: #166534;
+}
+.agent-workbook-batch-suggestion.is-ambiguous,
+.agent-workbook-batch-suggestion.is-unmatched {
+  color: #92400e;
+}
+.agent-workbook-batch-error {
+  color: #991b1b;
+}
+.agent-workbook-batch-note {
+  display: block;
+  padding: 8px 12px;
+  color: #64748b;
+  font-size: 12px;
+  border-top: 1px solid #f1f5f9;
 }

@@ -68,6 +68,14 @@ import {
 } from "./data/workbookRangeTiles.js";
 import { useWorkbookRegionInterpretationQueue } from "./hooks/useWorkbookRegionInterpretationQueue.js";
 import { shouldShowProjectOnboarding } from "./data/projectOnboardingState.js";
+import { listExperimentBrowserRows } from "./data/experimentBrowserApi.js";
+import {
+  createWorkbookBatchItems,
+  runWorkbookBatchUpload,
+  suggestExperimentForFile,
+  summarizeWorkbookBatch,
+  workbookBatchItemForStorage,
+} from "./data/workbookBatchUpload.js";
 import "./styles.css";
 
 const BLANK_MODE = isBlankDataMode();
@@ -792,6 +800,7 @@ export function ProjectOverview({
   onAskLabRat,
   onOpenProfile,
   onUploadWorkbook,
+  onUploadWorkbookFiles,
   onDeleteWorkbook,
   onGoBrowser,
   onOpenChartReview,
@@ -800,6 +809,21 @@ export function ProjectOverview({
   const [workbookListOpen, setWorkbookListOpen] = useState(false);
   const [deletingWorkbookSessionId, setDeletingWorkbookSessionId] = useState("");
   const [deleteWorkbookError, setDeleteWorkbookError] = useState("");
+  const workbookFileInputRef = useRef(null);
+  const canPickWorkbookFiles = typeof onUploadWorkbookFiles === "function";
+  const chooseWorkbookFiles = () => {
+    if (!canPickWorkbookFiles) {
+      onAskLabRat?.();
+      return;
+    }
+    workbookFileInputRef.current?.click();
+  };
+  const onWorkbookFilesSelected = (event) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    if (!files.length) return;
+    onUploadWorkbookFiles?.(files);
+  };
   const summary = projectWorkflowSummary(projectState?.project, projectState);
   const workbookReviewSessions = asArray(projectState?.workbookReviewSessions)
     .filter((session) => session?.status !== "deleted");
@@ -842,7 +866,7 @@ export function ProjectOverview({
     : pendingWorkbookReviewRegions.length
       ? { label: "Review workbook regions", action: openWorkbookList }
       : !workbookReviewSessions.length
-        ? { label: "Upload workbook", action: onAskLabRat }
+        ? { label: "Upload workbooks", action: chooseWorkbookFiles }
         : summary.hasPublishedData
           ? { label: "Open Experiment Browser", action: onGoBrowser }
           : confirmedWorkbookReviewRegions.length
@@ -884,12 +908,27 @@ export function ProjectOverview({
               ? "View confirmed regions"
               : workbookReviewSessions.length
                 ? "Review workbook"
-                : "Upload workbook"}
-          onClick={workbookReviewSessions.length ? openWorkbookList : onAskLabRat}
+                : "Upload workbooks"}
+          onClick={workbookReviewSessions.length ? openWorkbookList : chooseWorkbookFiles}
           actionTitle={workbookReviewSessions.length
             ? "Choose an uploaded workbook and review its regions"
-            : "Open Ask LabRat, then use the + button to attach a spreadsheet"}
-        />
+            : "Choose one or more Excel workbooks to index for review"}
+          secondaryAction={workbookReviewSessions.length ? "Upload workbooks" : undefined}
+          onSecondaryClick={chooseWorkbookFiles}
+          secondaryTitle="Choose one or more Excel workbooks to index for review"
+        >
+          {canPickWorkbookFiles && (
+            <input
+              ref={workbookFileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              multiple
+              hidden
+              aria-label="Choose workbooks to upload"
+              onChange={onWorkbookFilesSelected}
+            />
+          )}
+        </ProjectOverviewCard>
         <ProjectOverviewCard
           title="Experiment Browser"
           value={`${summary.publishedExperimentCount} published experiments`}
@@ -1916,6 +1955,95 @@ function readAgentChatHistory(key) {
   return sanitizeStoredChatHistory(ls.get(key, []));
 }
 
+const WORKBOOK_BATCH_STATUS_LABELS = {
+  pending: "Waiting",
+  uploading: "Uploading",
+  uploaded: "Indexed",
+  failed: "Failed",
+};
+
+function workbookBatchSuggestionLabel(suggestion) {
+  if (!suggestion) return "";
+  switch (suggestion.status) {
+    case "matched":
+      return `Suggested: ${suggestion.match?.label || suggestion.label}`;
+    case "unmatched":
+      return `${suggestion.label} is not in Experiment Browser yet`;
+    case "ambiguous":
+      return `${suggestion.label} matches several experiments`;
+    default:
+      return "No experiment number in the file name";
+  }
+}
+
+function workbookBatchInterpretationLabel(progress) {
+  if (!progress || !progress.total) return "";
+  const done = Math.max(0, progress.total - progress.pending);
+  if (progress.pending) return `Understanding regions ${done}/${progress.total}`;
+  if (progress.failed) return `${progress.failed} region${progress.failed === 1 ? "" : "s"} need${progress.failed === 1 ? "s" : ""} retry`;
+  return "Regions understood";
+}
+
+export function WorkbookBatchCard({
+  batch,
+  interpretation = {},
+  openingSessionId = "",
+  canRetry = false,
+  retrying = false,
+  onOpen,
+  onRetry,
+}) {
+  const items = asArray(batch?.items);
+  const summary = summarizeWorkbookBatch(items);
+  const running = summary.pending > 0 || summary.uploading > 0;
+  return (
+    <div className="agent-workbook-batch" aria-label="Workbook batch upload">
+      <div className="agent-workbook-batch-head">
+        <strong>{summary.uploaded}/{summary.total} workbooks indexed</strong>
+        {summary.failed > 0 && canRetry && !running && (
+          <button type="button" onClick={onRetry} disabled={retrying}>
+            {retrying ? "Retrying failed files" : `Retry ${summary.failed} failed`}
+          </button>
+        )}
+      </div>
+      <ul className="agent-workbook-batch-list">
+        {items.map((item) => {
+          const link = item.workbookReviewLink;
+          const sessionId = link?.workbookReviewSessionId || "";
+          const progressLabel = workbookBatchInterpretationLabel(interpretation?.[sessionId]);
+          return (
+            <li className={`agent-workbook-batch-item is-${item.status}`} key={`${item.index}-${item.fileName}`}>
+              <div className="agent-workbook-batch-file">
+                {link ? (
+                  <button type="button" disabled={openingSessionId === sessionId} onClick={() => onOpen?.(link)}>
+                    {item.fileName}
+                  </button>
+                ) : <span>{item.fileName}</span>}
+                <span className={`agent-workbook-batch-status is-${item.status}`}>{WORKBOOK_BATCH_STATUS_LABELS[item.status] || item.status}</span>
+              </div>
+              <div className="agent-workbook-batch-meta">
+                {item.status === "uploaded" && (
+                  <span>{link?.regionCount || 0} {link?.regionCount === 1 ? "region" : "regions"}</span>
+                )}
+                {progressLabel && <span>{progressLabel}</span>}
+                {item.suggestedExperiment && (
+                  <span className={`agent-workbook-batch-suggestion is-${item.suggestedExperiment.status}`}>
+                    {workbookBatchSuggestionLabel(item.suggestedExperiment)}
+                  </span>
+                )}
+              </div>
+              {item.error && <small className="agent-workbook-batch-error">{item.error}</small>}
+            </li>
+          );
+        })}
+      </ul>
+      {summary.failed > 0 && !canRetry && (
+        <small className="agent-workbook-batch-note">Re-attach the failed files to upload them again.</small>
+      )}
+    </div>
+  );
+}
+
 export function AgentPanel({
   open,
   setOpen,
@@ -1931,6 +2059,10 @@ export function AgentPanel({
   onProjectStateLoaded,
   onWorkbookReviewReady,
   onWorkbookReviewLinkOpen,
+  onWorkbookBatchUploaded,
+  workbookBatchInterpretation = {},
+  requestedWorkbookFiles = null,
+  onRequestedWorkbookFilesHandled,
   onOpenAnalysisReview,
   activeSurface = "project",
   requestedAnalysisOutputTarget = "",
@@ -1961,7 +2093,9 @@ export function AgentPanel({
   const [busyOperation, setBusyOperation] = useState(null);
   const [expanded, setExpanded] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [pendingSpreadsheetFile, setPendingSpreadsheetFile] = useState(null);
+  const [pendingSpreadsheetFiles, setPendingSpreadsheetFiles] = useState([]);
+  const [retryingBatchId, setRetryingBatchId] = useState("");
+  const batchFilesRef = useRef(new Map());
   const [analysisCapabilitiesState, setAnalysisCapabilitiesState] = useState({
     loading: false,
     error: "",
@@ -2066,7 +2200,7 @@ export function AgentPanel({
   };
   const resetChat = () => {
     setHistory([]);
-    setPendingSpreadsheetFile(null);
+    setPendingSpreadsheetFiles([]);
     chatScrollInitializedRef.current = false;
     lastChatScrollTopRef.current = 0;
     if (messagesRef.current) messagesRef.current.scrollTop = 0;
@@ -2143,7 +2277,7 @@ export function AgentPanel({
       setRetryingAnalysisThreadId("");
     }
   };
-  const createWorkbookReviewSessionFromChatAttachment = async (file) => {
+  const createWorkbookReviewSessionFromChatAttachment = async (file, { notify = true, reload = true } = {}) => {
     if (!activeProjectId) throw new Error("Select a server project first.");
     if (!file) throw new Error("Choose a workbook file first.");
     const uploaded = await uploadServerProjectFile(activeProjectId, file);
@@ -2163,20 +2297,102 @@ export function AgentPanel({
       workbookName,
       regionCount: asArray(response.reviewRegions).length || asArray(response.regions).length,
     };
-    onWorkbookReviewReady?.({
-      response,
-      session,
-      sourceDocument,
-      regions: asArray(response.regions),
-      file,
-    });
-    await reloadProjectAfterAgentAction();
+    if (notify) {
+      onWorkbookReviewReady?.({
+        response,
+        session,
+        sourceDocument,
+        regions: asArray(response.regions),
+        file,
+      });
+    }
+    if (reload) await reloadProjectAfterAgentAction();
     return {
       response,
       session,
       sourceDocument,
       workbookReviewLink,
     };
+  };
+  const updateWorkbookBatchMessage = (batchId, updater) => {
+    setHistory((current) => current.map((message) => (
+      message?.workbookBatch?.batchId === batchId
+        ? { ...message, ...updater(message) }
+        : message
+    )));
+  };
+  const loadExperimentSuggestionsForBatch = async () => {
+    if (!activeProjectId) return [];
+    try {
+      const response = await listExperimentBrowserRows(activeProjectId, { limit: 200 });
+      return asArray(response?.rows)
+        .map((row) => ({ experimentId: row?.experimentId || "", label: row?.label || "" }))
+        .filter((row) => row.experimentId && row.label);
+    } catch {
+      return [];
+    }
+  };
+  const batchSummaryText = (items) => {
+    const summary = summarizeWorkbookBatch(items);
+    if (summary.uploading || summary.pending) {
+      return `Uploading ${summary.total} workbooks: ${summary.uploaded} indexed, ${summary.failed} failed so far.`;
+    }
+    if (!summary.failed) {
+      return `I indexed ${summary.uploaded} workbooks. AI is understanding their regions in the background; open any file to review it.`;
+    }
+    if (!summary.uploaded) {
+      return `None of the ${summary.total} workbooks could be uploaded. Fix the errors below and retry.`;
+    }
+    return `I indexed ${summary.uploaded} of ${summary.total} workbooks. ${summary.failed} failed; retry them below or re-attach the files.`;
+  };
+  const runWorkbookBatch = async (batchId, files, { items = null, onlyIndexes = null } = {}) => {
+    const experiments = await loadExperimentSuggestionsForBatch();
+    const seededItems = (asArray(items).length ? asArray(items) : createWorkbookBatchItems(files)).map((item) => ({
+      ...item,
+      suggestedExperiment: suggestExperimentForFile(item.fileName, experiments),
+    }));
+    const finalItems = await runWorkbookBatchUpload({
+      files,
+      items: seededItems,
+      onlyIndexes,
+      uploadFile: (file) => createWorkbookReviewSessionFromChatAttachment(file, { notify: false, reload: false }),
+      onUpdate: (nextItems) => updateWorkbookBatchMessage(batchId, (message) => ({
+        text: batchSummaryText(nextItems),
+        workbookBatch: { ...message.workbookBatch, items: nextItems.map(workbookBatchItemForStorage) },
+      })),
+    });
+    const uploadedSessions = finalItems
+      .filter((item) => item.status === "uploaded" && item.result?.session?.id)
+      .map((item) => ({
+        sessionId: item.result.session.id,
+        sourceDocumentId: item.result.sourceDocument?.id || item.result.session.sourceDocumentId || "",
+        workbookName: item.workbookReviewLink?.workbookName || item.fileName,
+        regions: asArray(item.result.response?.reviewRegions),
+      }));
+    updateWorkbookBatchMessage(batchId, (message) => ({
+      text: batchSummaryText(finalItems),
+      workbookBatch: { ...message.workbookBatch, items: finalItems.map(workbookBatchItemForStorage) },
+    }));
+    if (uploadedSessions.length) onWorkbookBatchUploaded?.(uploadedSessions);
+    try {
+      await reloadProjectAfterAgentAction();
+    } catch {
+      // The next explicit project refresh reloads state; batch results are already shown.
+    }
+    return finalItems;
+  };
+  const retryWorkbookBatch = async (batch) => {
+    const batchId = batch?.batchId;
+    const files = batchFilesRef.current.get(batchId);
+    if (!batchId || !files || retryingBatchId) return;
+    const failedIndexes = asArray(batch.items).filter((item) => item.status === "failed").map((item) => item.index);
+    if (!failedIndexes.length) return;
+    setRetryingBatchId(batchId);
+    try {
+      await runWorkbookBatch(batchId, files, { items: batch.items, onlyIndexes: failedIndexes });
+    } finally {
+      setRetryingBatchId("");
+    }
   };
   const openWorkbookReviewLink = async (link) => {
     const sessionId = String(link?.workbookReviewSessionId || "").trim();
@@ -2211,44 +2427,102 @@ export function AgentPanel({
     fileActionInputRef.current?.click();
   };
   const onAgentFileSelected = async (event) => {
-    const file = event.target.files?.[0];
+    const selectedFiles = Array.from(event.target.files || []);
     event.target.value = "";
-    if (!file) return;
-    setPendingSpreadsheetFile(file);
+    if (!selectedFiles.length) return;
+    setPendingSpreadsheetFiles((current) => {
+      const known = new Set(current.map((file) => `${file.name}:${file.size}`));
+      return [...current, ...selectedFiles.filter((file) => !known.has(`${file.name}:${file.size}`))];
+    });
   };
+  const removePendingSpreadsheetFile = (index) => {
+    setPendingSpreadsheetFiles((current) => current.filter((_, position) => position !== index));
+  };
+  const uploadWorkbookAttachments = async (files, next) => {
+    const spreadsheetAttachments = asArray(files);
+    if (!spreadsheetAttachments.length) return;
+    if (spreadsheetAttachments.length > 1) {
+      const batchId = `workbook_batch_${uid()}`;
+      batchFilesRef.current.set(batchId, spreadsheetAttachments);
+      const items = createWorkbookBatchItems(spreadsheetAttachments);
+      setHistory([...next, {
+        role: "assistant",
+        text: batchSummaryText(items),
+        workbookBatch: { batchId, items },
+      }]);
+      setBusy(true);
+      try {
+        await runWorkbookBatch(batchId, spreadsheetAttachments);
+      } catch (err) {
+        setHistory((current) => [...current, { role: "assistant", text: `Workbook batch upload failed: ${err.message || String(err)}` }]);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    const spreadsheetAttachment = spreadsheetAttachments[0];
+    setBusy(true);
+    try {
+      const result = await createWorkbookReviewSessionFromChatAttachment(spreadsheetAttachment);
+      const workbookReviewLink = result.workbookReviewLink;
+      const workbookName = workbookReviewLink.workbookName;
+      const regionCount = workbookReviewLink.regionCount;
+      setHistory([...next, {
+        role: "assistant",
+        text: regionCount
+          ? `I indexed ${workbookName} and created ${regionCount} potentially useful ${regionCount === 1 ? "region" : "regions"}. AI is understanding them in Workbook Review.`
+          : `I indexed ${workbookName}. You can inspect the workbook in the preview; select a range and describe it if you want LabRat to revise its understanding.`,
+        workbookReviewLink,
+      }]);
+    } catch (err) {
+      setPendingSpreadsheetFiles([spreadsheetAttachment]);
+      setHistory([...next, { role: "assistant", text: `Workbook upload failed: ${err.message || String(err)}` }]);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const handledWorkbookFileRequestRef = useRef("");
+  useEffect(() => {
+    const requestId = String(requestedWorkbookFiles?.requestId || "");
+    const files = asArray(requestedWorkbookFiles?.files);
+    if (!open || !requestId || !files.length || busy) return;
+    if (handledWorkbookFileRequestRef.current === requestId) return;
+    handledWorkbookFileRequestRef.current = requestId;
+    onRequestedWorkbookFilesHandled?.();
+    if (!serverAgentEnabled) {
+      setHistory((current) => [...current, {
+        role: "assistant",
+        text: "Select a server project before uploading workbooks.",
+      }]);
+      return;
+    }
+    const next = [...history.map(({ streaming, streamId, ...message }) => message), {
+      role: "user",
+      text: files.length === 1
+        ? `Upload ${files[0].name} from Overview for workbook review.`
+        : `Upload ${files.length} workbooks from Overview for workbook review.`,
+      meta: { source: "overview_upload" },
+      attachments: files.map((file) => ({ name: file.name, kind: "spreadsheet" })),
+    }];
+    setHistory(next);
+    uploadWorkbookAttachments(files, next);
+  }, [busy, open, requestedWorkbookFiles]);
   const send = async (prefill, meta = null) => {
     const text = (prefill ?? input).trim();
     if (!text || busy) return;
-    const spreadsheetAttachment = pendingSpreadsheetFile;
+    const spreadsheetAttachments = pendingSpreadsheetFiles;
+    const spreadsheetAttachment = spreadsheetAttachments.length === 1 ? spreadsheetAttachments[0] : null;
     setInput("");
-    if (spreadsheetAttachment) setPendingSpreadsheetFile(null);
+    if (spreadsheetAttachments.length) setPendingSpreadsheetFiles([]);
     const next = [...history.map(({ streaming, streamId, ...message }) => message), {
       role: "user",
       text,
       meta,
-      attachments: spreadsheetAttachment ? [{ name: spreadsheetAttachment.name, kind: "spreadsheet" }] : [],
+      attachments: spreadsheetAttachments.map((file) => ({ name: file.name, kind: "spreadsheet" })),
     }];
     setHistory(next);
-    if (serverAgentEnabled && spreadsheetAttachment && !meta?.source) {
-      setBusy(true);
-      try {
-        const result = await createWorkbookReviewSessionFromChatAttachment(spreadsheetAttachment);
-        const workbookReviewLink = result.workbookReviewLink;
-        const workbookName = workbookReviewLink.workbookName;
-        const regionCount = workbookReviewLink.regionCount;
-        setHistory([...next, {
-          role: "assistant",
-          text: regionCount
-            ? `I indexed ${workbookName} and created ${regionCount} potentially useful ${regionCount === 1 ? "region" : "regions"}. AI is understanding them in Workbook Review.`
-            : `I indexed ${workbookName}. You can inspect the workbook in the preview; select a range and describe it if you want LabRat to revise its understanding.`,
-          workbookReviewLink,
-        }]);
-      } catch (err) {
-        setPendingSpreadsheetFile(spreadsheetAttachment);
-        setHistory([...next, { role: "assistant", text: `Workbook upload failed: ${err.message || String(err)}` }]);
-      } finally {
-        setBusy(false);
-      }
+    if (serverAgentEnabled && spreadsheetAttachments.length && !meta?.source) {
+      await uploadWorkbookAttachments(spreadsheetAttachments, next);
       return;
     }
     if (serverAgentEnabled) {
@@ -2302,6 +2576,7 @@ export function AgentPanel({
           agentRun,
           analysisThread,
           currentPlanRevision,
+          ...(meta ? { meta } : {}),
         }]);
         if (analysisThread?.id && currentPlanRevision?.id) {
           onOpenAnalysisReview?.({
@@ -2479,6 +2754,17 @@ export function AgentPanel({
               </button>
             </div>
           )}
+          {m.workbookBatch && (
+            <WorkbookBatchCard
+              batch={m.workbookBatch}
+              interpretation={workbookBatchInterpretation}
+              openingSessionId={openingWorkbookReviewSessionId}
+              canRetry={batchFilesRef.current.has(m.workbookBatch.batchId)}
+              retrying={retryingBatchId === m.workbookBatch.batchId}
+              onOpen={openWorkbookReviewLink}
+              onRetry={() => retryWorkbookBatch(m.workbookBatch)}
+            />
+          )}
           {m.agentRun?.visibleSteps?.length > 0 && (
             <div className="backend-workflow-steps agent-run-steps">
               {m.agentRun.visibleSteps.map((step, stepIndex) => (
@@ -2526,18 +2812,29 @@ export function AgentPanel({
       )}
     </div>
     <div className="agent-foot">
-      {pendingSpreadsheetFile && (
-        <div className="agent-pending-attachment">
-          <span>{pendingSpreadsheetFile.name}</span>
-          <button type="button" aria-label="Remove attached spreadsheet" onClick={() => setPendingSpreadsheetFile(null)}>
-            x
-          </button>
+      {pendingSpreadsheetFiles.length > 0 && (
+        <div className="agent-pending-attachments" aria-label="Attached spreadsheets">
+          {pendingSpreadsheetFiles.length > 1 && (
+            <span className="agent-pending-attachment-count">{pendingSpreadsheetFiles.length} workbooks attached. Send to upload them as one batch.</span>
+          )}
+          {pendingSpreadsheetFiles.map((file, index) => (
+            <div className="agent-pending-attachment" key={`${file.name}:${file.size}:${index}`}>
+              <span>{file.name}</span>
+              <button
+                type="button"
+                aria-label={pendingSpreadsheetFiles.length > 1 ? `Remove attached spreadsheet ${file.name}` : "Remove attached spreadsheet"}
+                onClick={() => removePendingSpreadsheetFile(index)}
+              >
+                x
+              </button>
+            </div>
+          ))}
         </div>
       )}
-      <button type="button" className="agent-tool" aria-label="Attach spreadsheet" title="Attach spreadsheet" onClick={chooseSpreadsheetAttachment}>+</button>
+      <button type="button" className="agent-tool" aria-label="Attach spreadsheet" title="Attach one or more spreadsheets" onClick={chooseSpreadsheetAttachment}>+</button>
       <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="Ask the rat about your data, charts, or manuscript..." />
       <button type="button" className="agent-send" onClick={() => send()}>&#8593;</button>
-      <input ref={fileActionInputRef} className="agent-file-input" type="file" accept=".xlsx,.xls" onChange={onAgentFileSelected} />
+      <input ref={fileActionInputRef} className="agent-file-input" type="file" accept=".xlsx,.xls" multiple onChange={onAgentFileSelected} />
     </div>
   </aside>
   {settingsOpen && (
@@ -2624,6 +2921,43 @@ function App() {
   const [workbookReviewState, setWorkbookReviewState] = useState({ loading: false, error: "", revisionLoading: false, confirmLoading: false, revisionError: "", clarification: null, session: null, sourceDocument: null, regions: [] });
   const [workbookReviewDraftRegions, setWorkbookReviewDraftRegions] = useState([]);
   const [activeWorkbookReviewDraftRegionId, setActiveWorkbookReviewDraftRegionId] = useState("");
+  const [backgroundWorkbookSessions, setBackgroundWorkbookSessions] = useState([]);
+  useEffect(() => {
+    setBackgroundWorkbookSessions([]);
+  }, [activeProjectId]);
+  const patchBackgroundWorkbookRegion = (sessionId, regionId, patch) => {
+    if (!sessionId || !regionId) return;
+    setBackgroundWorkbookSessions((current) => current.map((entry) => (
+      entry.sessionId !== sessionId
+        ? entry
+        : {
+          ...entry,
+          regions: asArray(entry.regions).map((region) => (
+            region.id === regionId
+              ? (typeof patch === "function" ? patch(region) : { ...region, ...patch })
+              : region
+          )),
+        }
+    )));
+  };
+  const handleWorkbookBatchUploaded = (entries) => {
+    const incoming = asArray(entries).filter((entry) => entry?.sessionId);
+    if (!incoming.length) return;
+    setBackgroundWorkbookSessions((current) => {
+      const incomingIds = new Set(incoming.map((entry) => entry.sessionId));
+      return [...current.filter((entry) => !incomingIds.has(entry.sessionId)), ...incoming];
+    });
+  };
+  const workbookBatchInterpretation = useMemo(() => Object.fromEntries(
+    backgroundWorkbookSessions.map((entry) => {
+      const active = asArray(entry.regions).filter((region) => region.disposition === "active");
+      return [entry.sessionId, {
+        total: active.length,
+        pending: active.filter((region) => region.reviewStatus === "interpreting").length,
+        failed: active.filter((region) => region.reviewStatus === "interpretation_failed").length,
+      }];
+    }),
+  ), [backgroundWorkbookSessions]);
   const [workbookReviewFocusSelection, setWorkbookReviewFocusSelection] = useState(null);
   const [backendChartInterpretState, setBackendChartInterpretState] = useState({ loading: false, result: null, error: "" });
   const resetReviewState = () => {
@@ -2941,6 +3275,17 @@ function App() {
     }
     setAgentOpen(true);
   };
+  const [requestedWorkbookFiles, setRequestedWorkbookFiles] = useState(null);
+  const uploadWorkbookFilesFromOverview = (files) => {
+    const selected = asArray(files).filter(Boolean);
+    if (!selected.length) return;
+    if (!activeProjectId) {
+      setSourceError("Select or create a server project before uploading a workbook.");
+      return;
+    }
+    setRequestedWorkbookFiles({ requestId: `workbook_files_${uid()}`, files: selected });
+    setAgentOpen(true);
+  };
   const uploadOnboardingWorkbook = async (file) => {
     if (!activeProjectId) throw new Error("Select or create a server project before uploading a workbook.");
     const uploaded = await uploadServerProjectFile(activeProjectId, file);
@@ -3109,6 +3454,9 @@ function App() {
       ).filter((region) => region.disposition !== "deleted");
       return { ...current, workbookReviewRegions: nextRegions };
     });
+    if (nextRegion.workbookReviewSessionId) {
+      patchBackgroundWorkbookRegion(nextRegion.workbookReviewSessionId, nextRegion.id, nextRegion);
+    }
     setWorkbookReviewDraftRegions((currentRegions) => {
       const existingRegions = asArray(currentRegions);
       const nextRegions = (
@@ -3188,10 +3536,52 @@ function App() {
   const workbookReviewSessionId = workbookReviewState.session?.id
     || workbookReviewState.workbookReviewSession?.id
     || "";
+  const applyBackgroundWorkbookRegionResult = (response, context = {}) => {
+    const nextRegion = response?.region || null;
+    if (!nextRegion?.id) return;
+    patchBackgroundWorkbookRegion(context.sessionId, nextRegion.id, nextRegion);
+    setProjectState((current) => {
+      if (!current) return current;
+      const existing = asArray(current.workbookReviewRegions);
+      const nextRegions = (
+        existing.some((region) => region.id === nextRegion.id)
+          ? existing.map((region) => region.id === nextRegion.id ? nextRegion : region)
+          : [...existing, nextRegion]
+      ).filter((region) => region.disposition !== "deleted");
+      return { ...current, workbookReviewRegions: nextRegions };
+    });
+  };
+  const markBackgroundWorkbookRegionFailed = (region, error, context = {}) => {
+    if (!region?.id) return;
+    const alreadyHandledOnServer = [
+      "stale_workbook_review_region",
+      "workbook_review_region_not_pending",
+    ].includes(error?.code);
+    const superseded = [
+      "workbook_review_region_inactive",
+      "workbook_review_region_not_found",
+      "workbook_review_session_not_found",
+    ].includes(error?.code);
+    patchBackgroundWorkbookRegion(context.sessionId, region.id, (current) => (
+      current.reviewStatus !== "interpreting"
+        ? current
+        : {
+          ...current,
+          reviewStatus: alreadyHandledOnServer || superseded ? "needs_user_review" : "interpretation_failed",
+          warnings: alreadyHandledOnServer || superseded ? asArray(current.warnings) : [{
+            code: error?.code || "region_interpretation_request_failed",
+            message: error?.message || String(error),
+          }],
+        }
+    ));
+  };
   const { retryRegion: queueWorkbookReviewRegionRetry } = useWorkbookRegionInterpretationQueue({
     sessionId: workbookReviewSessionId,
     regions: workbookReviewDraftRegions,
     activeRegionId: activeWorkbookReviewDraftRegionId,
+    backgroundSessions: backgroundWorkbookSessions,
+    onBackgroundRegionResult: applyBackgroundWorkbookRegionResult,
+    onBackgroundRegionError: markBackgroundWorkbookRegionFailed,
     interpretRegion: ({ sessionId, region, signal }) => interpretServerWorkbookReviewRegion(
       sessionId,
       region.id,
@@ -3575,6 +3965,7 @@ function App() {
         onAskLabRat={() => setAgentOpen(true)}
         onOpenProfile={() => setProfileChatOpen(true)}
         onUploadWorkbook={continueWorkbookReview}
+        onUploadWorkbookFiles={uploadWorkbookFilesFromOverview}
         onDeleteWorkbook={deleteWorkbookReviewSessionFromProject}
         onGoBrowser={() => setTab("browser")}
         onOpenChartReview={openChartReview}
@@ -3701,6 +4092,10 @@ function App() {
         onProjectStateLoaded={applyProjectWorkspaceRefresh}
         onWorkbookReviewReady={handleWorkbookReviewReadyFromAgent}
         onWorkbookReviewLinkOpen={handleWorkbookReviewLinkOpen}
+        onWorkbookBatchUploaded={handleWorkbookBatchUploaded}
+        workbookBatchInterpretation={workbookBatchInterpretation}
+        requestedWorkbookFiles={requestedWorkbookFiles}
+        onRequestedWorkbookFilesHandled={() => setRequestedWorkbookFiles(null)}
         onOpenAnalysisReview={openAnalysisReview}
         activeSurface={tab}
         requestedAnalysisOutputTarget={requestedAnalysisOutputTarget}

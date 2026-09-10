@@ -332,6 +332,56 @@ describe("ProjectOverview", () => {
     expect(onGoManuscript).toHaveBeenCalledTimes(1);
   });
 
+  it("offers a direct multi-file workbook upload entrance on the Workbook review card", () => {
+    const onUploadWorkbookFiles = vi.fn();
+    const onAskLabRat = vi.fn();
+    const withSessions = {
+      ...projectState,
+      sourceDocuments: [{ id: "source_doc_1", fileName: "Pending.xlsx" }],
+      workbookReviewSessions: [{ id: "session_1", sourceDocumentId: "source_doc_1" }],
+      workbookReviewRegions: [],
+    };
+
+    const { container, rerender } = render(
+      <ProjectOverview
+        projectState={withSessions}
+        onAskLabRat={onAskLabRat}
+        onOpenProfile={() => {}}
+        onUploadWorkbook={() => {}}
+        onUploadWorkbookFiles={onUploadWorkbookFiles}
+        onGoBrowser={() => {}}
+        onOpenChartReview={() => {}}
+        onGoManuscript={() => {}}
+      />,
+    );
+
+    const fileInput = screen.getByLabelText("Choose workbooks to upload");
+    expect(fileInput.multiple).toBe(true);
+    expect(screen.getByRole("button", { name: "Review workbook" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Upload workbooks" })).toBeTruthy();
+    const exp31 = new File(["a"], "Calculation Exp31.xlsx");
+    const exp32 = new File(["b"], "Calculation Exp32.xlsx");
+    fireEvent.change(fileInput, { target: { files: [exp31, exp32] } });
+    expect(onUploadWorkbookFiles).toHaveBeenCalledWith([exp31, exp32]);
+    expect(onAskLabRat).not.toHaveBeenCalled();
+
+    rerender(
+      <ProjectOverview
+        projectState={{ ...withSessions, workbookReviewSessions: [], sourceDocuments: [] }}
+        onAskLabRat={onAskLabRat}
+        onOpenProfile={() => {}}
+        onUploadWorkbook={() => {}}
+        onUploadWorkbookFiles={onUploadWorkbookFiles}
+        onGoBrowser={() => {}}
+        onOpenChartReview={() => {}}
+        onGoManuscript={() => {}}
+      />,
+    );
+    expect(screen.getAllByRole("button", { name: "Upload workbooks" })).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "Review workbook" })).toBeNull();
+    expect(container.querySelectorAll('input[type="file"]')).toHaveLength(1);
+  });
+
   it("lists every uploaded workbook before opening confirmed regions", () => {
     const onUploadWorkbook = vi.fn();
     const onDeleteWorkbook = vi.fn().mockResolvedValue({});
@@ -3282,6 +3332,203 @@ describe("AgentPanel", () => {
         workbookName: "Master.xlsx",
         regionCount: 1,
       }));
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("uploads several attached workbooks as one batch, isolates failures, suggests experiments, and retries failed files", async () => {
+    localStorage.removeItem("labrat_blank_chat_history_v1_react");
+    const onWorkbookReviewReady = vi.fn();
+    const onWorkbookReviewLinkOpen = vi.fn().mockResolvedValue(undefined);
+    const onWorkbookBatchUploaded = vi.fn();
+    const onProjectStateLoaded = vi.fn();
+    let exp32SessionAttempts = 0;
+    const sessionResponse = (name, fileId) => ({
+      workbookReviewSession: {
+        id: `session_${fileId}`,
+        sourceDocumentId: `source_${fileId}`,
+        status: "needs_user_review",
+        workbookSummary: { workbookName: name, sheetCount: 1, regionCount: 1, nonEmptyCellCount: 12 },
+      },
+      sourceDocument: { id: `source_${fileId}`, metadata: { workbookName: name, sheets: [{ name: "Sheet1", usedRange: "A1:D5" }] } },
+      regions: [],
+      reviewRegions: [{
+        id: `region_${fileId}`,
+        workbookReviewSessionId: `session_${fileId}`,
+        sourceDocumentId: `source_${fileId}`,
+        sheetName: "Sheet1",
+        rangeRef: "P31:BA32",
+        disposition: "active",
+        reviewStatus: "interpreting",
+        version: 1,
+      }],
+      interpretationDeferred: true,
+    });
+    const fetchMock = vi.fn(async (url, init = {}) => {
+      if (url === "/api/projects/project_1/analysis-capabilities") {
+        return jsonResponse({ model: { configured: true }, executor: { configured: true, adapter: "local" }, acceptedData: {} });
+      }
+      if (url.startsWith("/api/projects/project_1/experiment-browser")) {
+        return jsonResponse({ rows: [{ experimentId: "identity_31", label: "Exp31" }], columns: [] });
+      }
+      if (url === "/api/projects/project_1/files") {
+        const uploaded = init.body.get("file");
+        const fileId = uploaded.name.includes("Exp31") ? "exp31" : "exp32";
+        return jsonResponse({ fileObject: { id: `file_${fileId}`, originalName: uploaded.name } }, { status: 201 });
+      }
+      if (url === "/api/projects/project_1/workbook-review-sessions") {
+        const { fileObjectId } = JSON.parse(init.body);
+        if (fileObjectId === "file_exp31") return jsonResponse(sessionResponse("Calculation Exp31.xlsx", "exp31"), { status: 201 });
+        exp32SessionAttempts += 1;
+        if (exp32SessionAttempts === 1) {
+          return jsonResponse({ error: { code: "workbook_index_failed", message: "Workbook could not be indexed." } }, { status: 422 });
+        }
+        return jsonResponse(sessionResponse("Calculation Exp32.xlsx", "exp32"), { status: 201 });
+      }
+      if (url === "/api/projects/project_1/state") {
+        return jsonResponse({ project: { id: "project_1" }, sourceDocuments: [], workbookReviewSessions: [] });
+      }
+      return jsonResponse({});
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+
+    try {
+      const { container } = render(
+        <AgentPanel
+          open
+          setOpen={() => {}}
+          blocks={[]}
+          setBlocks={() => {}}
+          references={[]}
+          selected={null}
+          selectedChartContext={null}
+          pendingChartAnalysis={null}
+          activeProjectId="project_1"
+          projectState={{ project: { id: "project_1", name: "Catalyst Screening" }, fileObjects: [] }}
+          onProjectStateLoaded={onProjectStateLoaded}
+          onWorkbookReviewReady={onWorkbookReviewReady}
+          onWorkbookReviewLinkOpen={onWorkbookReviewLinkOpen}
+          onWorkbookBatchUploaded={onWorkbookBatchUploaded}
+          workbookBatchInterpretation={{ session_exp31: { total: 1, pending: 1, failed: 0 } }}
+        />,
+      );
+
+      const fileInput = container.querySelector('input[type="file"]');
+      expect(fileInput.multiple).toBe(true);
+      const exp31 = new File(["a"], "Calculation Exp31.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const exp32 = new File(["b"], "Calculation Exp32.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      fireEvent.change(fileInput, { target: { files: [exp31, exp32] } });
+
+      expect(screen.getByText("2 workbooks attached. Send to upload them as one batch.")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Remove attached spreadsheet Calculation Exp32.xlsx" })).toBeTruthy();
+      expect(fetchMock.mock.calls.some(([url]) => url === "/api/projects/project_1/files")).toBe(false);
+
+      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
+      fireEvent.change(promptInput, { target: { value: "Upload these calculation workbooks" } });
+      fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
+
+      expect(await screen.findByText("1/2 workbooks indexed")).toBeTruthy();
+      expect(await screen.findByRole("button", { name: "Retry 1 failed" })).toBeTruthy();
+      expect(screen.getByText("Suggested: Exp31")).toBeTruthy();
+      expect(screen.getByText("Exp32 is not in Experiment Browser yet")).toBeTruthy();
+      expect(screen.getByText("Workbook could not be indexed.")).toBeTruthy();
+      expect(screen.getByText("Understanding regions 0/1")).toBeTruthy();
+      expect(screen.getByText(/I indexed 1 of 2 workbooks/)).toBeTruthy();
+      expect(onWorkbookReviewReady).not.toHaveBeenCalled();
+      expect(onWorkbookBatchUploaded).toHaveBeenCalledTimes(1);
+      expect(onWorkbookBatchUploaded.mock.calls[0][0]).toEqual([
+        expect.objectContaining({
+          sessionId: "session_exp31",
+          sourceDocumentId: "source_exp31",
+          workbookName: "Calculation Exp31.xlsx",
+          regions: [expect.objectContaining({ id: "region_exp31", reviewStatus: "interpreting" })],
+        }),
+      ]);
+      expect(fetchMock.mock.calls.filter(([url]) => url === "/api/projects/project_1/state")).toHaveLength(1);
+      await waitFor(() => expect(onProjectStateLoaded).toHaveBeenCalledTimes(1));
+
+      fireEvent.click(screen.getByRole("button", { name: "Retry 1 failed" }));
+      expect(await screen.findByText("2/2 workbooks indexed")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: /Retry/ })).toBeNull();
+      expect(fetchMock.mock.calls.filter(([url]) => url === "/api/projects/project_1/files")).toHaveLength(3);
+      expect(onWorkbookBatchUploaded).toHaveBeenCalledTimes(2);
+      expect(onWorkbookBatchUploaded.mock.calls[1][0].map((entry) => entry.sessionId)).toEqual(["session_exp32"]);
+
+      fireEvent.click(screen.getByRole("button", { name: "Calculation Exp32.xlsx" }));
+      await waitFor(() => expect(onWorkbookReviewLinkOpen).toHaveBeenCalledWith(expect.objectContaining({
+        workbookReviewSessionId: "session_exp32",
+        workbookName: "Calculation Exp32.xlsx",
+        regionCount: 1,
+      })));
+
+      const stored = JSON.parse(localStorage.getItem("labrat_blank_chat_history_v2_project_project_1") || "[]");
+      const storedBatch = stored.find((message) => message.workbookBatch)?.workbookBatch;
+      expect(storedBatch?.items.every((item) => !("result" in item) && !("file" in item))).toBe(true);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("starts a batch upload from files requested by the Overview without a typed message", async () => {
+    localStorage.removeItem("labrat_blank_chat_history_v2_project_project_1");
+    const onRequestedWorkbookFilesHandled = vi.fn();
+    const onWorkbookBatchUploaded = vi.fn();
+    const fetchMock = vi.fn(async (url, init = {}) => {
+      if (url === "/api/projects/project_1/analysis-capabilities") {
+        return jsonResponse({ model: { configured: true }, executor: { configured: true }, acceptedData: {} });
+      }
+      if (url.startsWith("/api/projects/project_1/experiment-browser")) return jsonResponse({ rows: [] });
+      if (url === "/api/projects/project_1/files") {
+        const uploaded = init.body.get("file");
+        return jsonResponse({ fileObject: { id: `file_${uploaded.name}`, originalName: uploaded.name } }, { status: 201 });
+      }
+      if (url === "/api/projects/project_1/workbook-review-sessions") {
+        const { fileObjectId } = JSON.parse(init.body);
+        const name = fileObjectId.replace(/^file_/, "");
+        return jsonResponse({
+          workbookReviewSession: { id: `session_${name}`, sourceDocumentId: `source_${name}`, status: "needs_user_review", workbookSummary: { workbookName: name } },
+          sourceDocument: { id: `source_${name}`, metadata: { workbookName: name } },
+          regions: [],
+          reviewRegions: [],
+        }, { status: 201 });
+      }
+      if (url === "/api/projects/project_1/state") return jsonResponse({ project: { id: "project_1" } });
+      return jsonResponse({});
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    try {
+      const files = [new File(["a"], "Calculation Exp31.xlsx"), new File(["b"], "Calculation Exp32.xlsx")];
+      render(
+        <AgentPanel
+          open
+          setOpen={() => {}}
+          blocks={[]}
+          setBlocks={() => {}}
+          references={[]}
+          selected={null}
+          selectedChartContext={null}
+          pendingChartAnalysis={null}
+          activeProjectId="project_1"
+          projectState={{ project: { id: "project_1", name: "Catalyst Screening" }, fileObjects: [] }}
+          onProjectStateLoaded={() => {}}
+          onWorkbookBatchUploaded={onWorkbookBatchUploaded}
+          requestedWorkbookFiles={{ requestId: "request_1", files }}
+          onRequestedWorkbookFilesHandled={onRequestedWorkbookFilesHandled}
+        />,
+      );
+
+      expect(onRequestedWorkbookFilesHandled).toHaveBeenCalledTimes(1);
+      expect(screen.getByText("Upload 2 workbooks from Overview for workbook review.")).toBeTruthy();
+      expect(await screen.findByText("2/2 workbooks indexed")).toBeTruthy();
+      expect(onWorkbookBatchUploaded).toHaveBeenCalledTimes(1);
+      expect(onWorkbookBatchUploaded.mock.calls[0][0].map((entry) => entry.sessionId)).toEqual([
+        "session_Calculation Exp31.xlsx",
+        "session_Calculation Exp32.xlsx",
+      ]);
+      expect(fetchMock.mock.calls.filter(([url]) => url === "/api/projects/project_1/files")).toHaveLength(2);
     } finally {
       global.fetch = originalFetch;
     }

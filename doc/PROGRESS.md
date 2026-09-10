@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-08-30
+Last reviewed: 2026-09-09
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -12,6 +12,29 @@ Keep entries concise, newest first, and include:
 - meaningful changes
 - verification
 - follow-ups or residual risk
+
+## 2026-09-09
+
+- Batch workbook upload (Milestone 1 of
+  `doc/plans/batch-workbook-experiment-linking-plan.md`, frontend only). The
+  LabRat chat attach input now accepts several `.xlsx/.xls` files. One file
+  uploads exactly as before; two or more upload as a batch with concurrency
+  2 over the unchanged upload and session-create routes, per-file status,
+  isolated failures, and retry of only the failed files. The assistant posts
+  one batch card listing each workbook, its region count, an opener for its
+  Workbook Review session, and a display-only experiment suggestion parsed
+  from the filename and matched against Experiment Browser labels. The
+  region interpretation queue now accepts background sessions so every
+  uploaded workbook's pending regions are interpreted without opening each
+  file, sharing the existing three-request limit with the active session.
+  The Overview `Workbook review` card gained a direct `Upload workbooks`
+  entrance that opens the same multi-file picker and hands the files to chat.
+  Uploading still publishes nothing and never leaves chat. No backend files
+  changed. Verification: new helper, hook, and AgentPanel regressions; full
+  frontend suite; production build with the existing Plotly chunk warning.
+  Follow-ups: Milestones 2-6 need backend routes and schema fields first;
+  the onboarding upload stays single-file until a batch has a next step
+  there.
 
 ## 2026-08-30
 
