@@ -52,6 +52,24 @@ Keep entries concise, newest first, and include:
   frontend tests, 268/272 backend tests with four expected skips, and the
   production build with the existing Plotly chunk-size warning.
 
+## 2026-09-02
+
+- Added a welcome page before sign-in. `WelcomeScreen` now renders the real
+  LabRat logo with a gentle idle float, a small bubbling Erlenmeyer flask tucked
+  beside the head, the slogan `Hi, I'm LabRat, your scientific research pet` in
+  a speech bubble, and a `Log in` button. The background drifts detailed lab
+  motifs (flasks, test tubes, beakers, benzene rings, atoms, DNA, molecules)
+  upward in pure CSS with no new dependencies. Pressing `Log in` swaps the
+  hero for the existing sign-in panel on the same page with the background
+  still animating and a `Back` link; `ServerLogin` gained an `embedded` mode
+  for this and is otherwise unchanged. Logging out returns to the welcome page.
+  All welcome animations stop under `prefers-reduced-motion`. Added four
+  `WelcomeScreen` regressions covering the hero, embedded sign-in submission,
+  back navigation, and error display. Verification passed 314/314 frontend
+  tests and the production build with the existing Plotly chunk-size warning;
+  local browser QA against the Docker backend confirmed the desktop and mobile
+  layouts and the sign-in handoff.
+
 ## 2026-08-30
 
 - Made Manuscript the primary chart-creation entry point. Right-clicking an

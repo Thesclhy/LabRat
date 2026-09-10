@@ -10894,6 +10894,183 @@ tbody tr:hover {
   }
 }
 
+/* Welcome screen (shown before sign-in) */
+.welcome-screen {
+  position: relative;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  overflow: hidden;
+  background: var(--bg);
+  isolation: isolate;
+}
+.welcome-background {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+.welcome-motif {
+  position: absolute;
+  bottom: -140px;
+  color: var(--color-blue-600);
+  opacity: 0;
+  animation-name: welcome-drift;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+.welcome-motif-ring {
+  color: var(--color-blue-200);
+}
+@keyframes welcome-drift {
+  0% { transform: translateY(0) rotate(0deg); opacity: 0; }
+  8% { opacity: 0.3; }
+  85% { opacity: 0.3; }
+  100% { transform: translateY(calc(-100vh - 300px)) rotate(var(--welcome-spin, 0deg)); opacity: 0; }
+}
+.welcome-hero {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+  text-align: center;
+}
+.welcome-character {
+  position: relative;
+  width: min(220px, 52vw);
+  animation: welcome-float 3s ease-in-out infinite;
+  transform-origin: 50% 90%;
+}
+.welcome-logo {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+@keyframes welcome-float {
+  0%, 100% { transform: translateY(0) rotate(-1.5deg); }
+  50% { transform: translateY(-10px) rotate(1.5deg); }
+}
+.welcome-flask {
+  position: absolute;
+  right: -3%;
+  bottom: 15%;
+  width: 24%;
+  height: auto;
+  overflow: visible;
+}
+.welcome-flask-glass {
+  fill: none;
+  stroke: #4a5160;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.welcome-flask-liquid {
+  fill: var(--accent);
+  animation: welcome-slosh 3.2s ease-in-out infinite;
+}
+@keyframes welcome-slosh {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(-16px); }
+}
+.welcome-flask-bubble {
+  fill: rgba(255, 255, 255, 0.85);
+  animation: welcome-bubble 2.2s ease-in infinite;
+}
+@keyframes welcome-bubble {
+  0% { transform: translateY(0); opacity: 0; }
+  15% { opacity: 1; }
+  100% { transform: translateY(-30px); opacity: 0; }
+}
+.welcome-slogan {
+  position: relative;
+  margin: 0;
+  max-width: 560px;
+  padding: 12px 22px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font-size: clamp(18px, 2.4vw, 24px);
+  line-height: 1.35;
+  animation: welcome-pop 0.6s ease-out both 0.35s;
+}
+.welcome-slogan::before,
+.welcome-slogan::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -9px;
+  width: 16px;
+  height: 16px;
+  transform: translateX(-50%) rotate(45deg);
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+}
+.welcome-slogan::after {
+  top: -8px;
+  border: 0;
+}
+.welcome-login-button {
+  min-width: 180px;
+  padding: 11px 32px;
+  font-size: 16px;
+  animation: welcome-pop 0.6s ease-out both 0.7s;
+}
+@keyframes welcome-pop {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.welcome-login-card {
+  position: relative;
+  z-index: 1;
+  width: min(420px, 100%);
+  animation: welcome-pop 0.4s ease-out both;
+}
+.welcome-login-card .server-login-panel {
+  width: 100%;
+}
+.server-login-back {
+  justify-self: start;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 4px 0;
+  font-size: 13px;
+  cursor: pointer;
+}
+.server-login-back:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+@media (prefers-reduced-motion: reduce) {
+  .welcome-motif,
+  .welcome-character,
+  .welcome-flask-liquid,
+  .welcome-flask-bubble,
+  .welcome-slogan,
+  .welcome-login-button,
+  .welcome-login-card {
+    animation: none;
+  }
+  .welcome-motif {
+    opacity: 0.18;
+    bottom: auto;
+    top: calc(10% + var(--welcome-rest, 0%));
+  }
+  .welcome-flask-bubble {
+    opacity: 0.8;
+  }
+}
+
 /* Batch workbook upload card in LabRat chat */
 .agent-pending-attachments {
   grid-column: 1 / -1;

@@ -7,7 +7,7 @@ import { makePlot } from "./charts/makePlot";
 import { ChartReviewPanel } from "./components/BackendScanPanel";
 import { ProjectOnboarding } from "./components/ProjectOnboarding.jsx";
 import { ProjectProfileChat } from "./components/ProjectProfileChat.jsx";
-import { ServerLogin } from "./components/ServerLogin.jsx";
+import { WelcomeScreen } from "./components/WelcomeScreen.jsx";
 import { ThinkingIndicator } from "./components/ThinkingIndicator.jsx";
 import { WorkbookReviewDock } from "./components/WorkbookReviewDock.jsx";
 import { ExperimentBrowser } from "./components/ExperimentBrowser.jsx";
@@ -3844,7 +3844,7 @@ function App() {
     );
   }
   if (!authState.user) {
-    return <ServerLogin loading={authState.loading} error={authState.error} onLogin={login} />;
+    return <WelcomeScreen loading={authState.loading} error={authState.error} onLogin={login} />;
   }
   if (workspaceMode === "dashboard" || !activeProjectId) {
     return (
