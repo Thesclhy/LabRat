@@ -36,6 +36,22 @@ Keep entries concise, newest first, and include:
   the onboarding upload stays single-file until a batch has a next step
   there.
 
+## 2026-09-03
+
+- Fixed manuscript chart assistance creating another reviewed chart plan instead
+  of prose. The chart bubble and LabRat Analysis/Trend/Caption controls now send
+  an explicit read-only `chart_commentary` AgentRun request. The backend
+  resolves the project-owned accepted ChartSpec, honors placement-local visible
+  traces, sends bounded plotted values to the selected backend provider, and
+  returns plain text without creating an AnalysisThread, AnalysisRun,
+  AnalysisResult, or ChartSpec. Commentary remains insertable through the
+  existing explicit `Insert as text box` action; missing charts, stale traces,
+  and zero-visible-trace views fail closed. Added frontend handoff/insertion,
+  backend route/no-artifact, fail-closed, and provider-schema regressions.
+  Verification passed the complete `npm run codex:verify` suite: 315/315
+  frontend tests, 268/272 backend tests with four expected skips, and the
+  production build with the existing Plotly chunk-size warning.
+
 ## 2026-08-30
 
 - Made Manuscript the primary chart-creation entry point. Right-clicking an
