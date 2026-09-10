@@ -62,6 +62,8 @@ export class MemorySaasStore {
     this.reusableChartTemplateVersions = new Map();
     this.reusableChartTemplateSlotBindings = new Map();
     this.reusableChartTemplateApplications = new Map();
+    this.regionExtractionTemplates = new Map();
+    this.regionExtractionTemplateVersions = new Map();
     this.manuscripts = new Map();
     this.auditEvents = new Map();
     if (options.seedDevAccounts) this.seedDevAccounts();
@@ -2366,6 +2368,62 @@ export class MemorySaasStore {
     const updated = { ...template, currentVersionId: version.id, updatedAt, updatedBy: actorUserId };
     this.reusableChartTemplates.set(templateId, updated);
     return { template: copy(updated), version: copy(version) };
+  }
+
+  async createRegionExtractionTemplate({ template, version }) {
+    const duplicate = [...this.regionExtractionTemplates.values()].find((item) => (
+      item.projectId === template.projectId && item.name.toLowerCase() === template.name.toLowerCase()
+    ));
+    if (duplicate) throw Object.assign(new Error("A region extraction template with this name already exists."), { code: "region_extraction_template_name_conflict", statusCode: 409 });
+    const storedVersion = copy(version);
+    const storedTemplate = { ...copy(template), currentVersionId: storedVersion.id };
+    this.regionExtractionTemplates.set(storedTemplate.id, storedTemplate);
+    this.regionExtractionTemplateVersions.set(storedVersion.id, storedVersion);
+    return { template: copy(storedTemplate), version: copy(storedVersion) };
+  }
+
+  async findRegionExtractionTemplateById(id) {
+    return copy(this.regionExtractionTemplates.get(id) || null);
+  }
+
+  async findRegionExtractionTemplateVersionById(id) {
+    return copy(this.regionExtractionTemplateVersions.get(id) || null);
+  }
+
+  async listRegionExtractionTemplates({ projectId, includeArchived = false }) {
+    return [...this.regionExtractionTemplates.values()]
+      .filter((item) => item.projectId === projectId)
+      .filter((item) => includeArchived || item.status !== "archived")
+      .sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt)))
+      .map(copy);
+  }
+
+  async listRegionExtractionTemplateVersions({ regionExtractionTemplateId }) {
+    return [...this.regionExtractionTemplateVersions.values()]
+      .filter((item) => item.regionExtractionTemplateId === regionExtractionTemplateId)
+      .sort((left, right) => right.version - left.version)
+      .map(copy);
+  }
+
+  async appendRegionExtractionTemplateVersion({ templateId, version, actorUserId, updatedAt }) {
+    const template = this.regionExtractionTemplates.get(templateId);
+    if (!template) return null;
+    const versions = [...this.regionExtractionTemplateVersions.values()].filter((item) => item.regionExtractionTemplateId === templateId);
+    if (versions.some((item) => item.version === version.version || item.contentHash === version.contentHash)) {
+      throw Object.assign(new Error("This region extraction template version already exists."), { code: "region_extraction_template_version_conflict", statusCode: 409 });
+    }
+    this.regionExtractionTemplateVersions.set(version.id, copy(version));
+    const updated = { ...template, currentVersionId: version.id, updatedAt, updatedBy: actorUserId };
+    this.regionExtractionTemplates.set(templateId, updated);
+    return { template: copy(updated), version: copy(version) };
+  }
+
+  async archiveRegionExtractionTemplate({ templateId, actorUserId, updatedAt }) {
+    const template = this.regionExtractionTemplates.get(templateId);
+    if (!template) return null;
+    const updated = { ...template, status: "archived", updatedAt, updatedBy: actorUserId };
+    this.regionExtractionTemplates.set(templateId, updated);
+    return copy(updated);
   }
 
   async archiveReusableChartTemplate({ templateId, actorUserId, updatedAt }) {

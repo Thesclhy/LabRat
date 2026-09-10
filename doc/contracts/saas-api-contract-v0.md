@@ -236,6 +236,53 @@ Rules:
 - The retired aggregate session revision/confirm and project `workbook-understandings` routes return `404`.
 - Region confirmation does not publish Browser rows or create output artifacts.
 
+## Region Extraction Templates
+
+```text
+GET  /api/projects/:projectId/region-extraction-templates?includeArchived=
+POST /api/projects/:projectId/region-extraction-templates
+GET  /api/region-extraction-templates/:templateId
+POST /api/region-extraction-templates/:templateId/versions
+POST /api/region-extraction-templates/:templateId/archive
+POST /api/region-extraction-template-versions/:versionId/matches
+```
+
+A RegionExtractionTemplate is a project-owned container with immutable
+accepted versions. Each version is compiled from one confirmed
+WorkbookReviewRegion and its accepted RegionUnderstandingRevision:
+
+```json
+{ "name": "Carbon distribution from LDPE sheet", "description": "", "regionId": "workbook_review_region_1" }
+```
+
+The version stores `labrat.layoutSignature.v1` (sheet name, companion sheet
+names, anchor range, range shape, header runs such as `C1..C37`, text anchors
+inside the region, label anchors within three cells around it, one relative
+R1C1 formula shape per formula cell, and an experiment-label rule that reads a
+fixed cell such as `A2` and falls back to the filename) plus relative
+`semantics` copied from the accepted interpretation (axis, fields, series with
+relative ranges, inclusion). Content is hashed; duplicate names or identical
+content return `409`.
+
+Matching is read-only and side-effect free. The request lists up to 100
+project source documents; the response has one `labrat.regionTemplateMatchReport.v1`
+per document with `status` in `exact`, `shifted`, `ambiguous`,
+`label_missing`, `formula_mismatch`, `header_mismatch`, or `no_match`, plus
+`matchedRange`, `offset`, `experimentLabel` and `labelSource`, header-run
+counts, typed-over `formulaMismatches`, upstream `brokenCells`, alternative
+blocks, and `eligibleForBatchConfirm` (true only for `exact` and `shifted`).
+The template's original position wins when it still matches; other matching
+blocks are listed as alternatives. Only shifted candidates in two places is
+`ambiguous`. Rules:
+
+- Creating a version requires an active region whose accepted revision is
+  current; unconfirmed regions return `409`.
+- Editors create, version, and archive; viewers read and match.
+- Matching creates no regions, revisions, or sessions. Applying a template is
+  a later milestone.
+- Bounded: template regions have at most 600 cells; sheets above 50,000
+  indexed cells are skipped with a warning.
+
 ## Evidence Retrieval And Historical Data
 
 ```text

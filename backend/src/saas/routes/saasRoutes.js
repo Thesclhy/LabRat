@@ -3,6 +3,14 @@ import { sendJson } from "../../http/json.js";
 import { readRequestBody } from "../../http/body.js";
 import { parseMultipartFormData } from "../../http/multipart.js";
 import { sourceCellClasses } from "../formulaGraph.js";
+import {
+  REGION_EXTRACTION_TEMPLATE_SCHEMA_VERSION,
+  buildRegionExtractionTemplateVersion,
+  matchTemplateVersionToDocument,
+  regionExtractionTemplateDescription,
+  regionExtractionTemplateName,
+  regionExtractionTemplateSummary,
+} from "../regionExtractionTemplates.js";
 import { runImportScan } from "../../import/services/importPipeline.js";
 import { getAuthContext, publicUser, requireAuth, requireLabRole, requireSuperAdmin } from "../authz.js";
 import { clearSessionCookie, setSessionCookie } from "../cookies.js";
@@ -887,6 +895,7 @@ async function handleProjectState(req, res, context, projectId) {
     sourceDocuments,
     chartStyleProfiles,
     reusableChartTemplates,
+    regionExtractionTemplates,
   ] = await Promise.all([
     context.store.listFileObjects({ projectId }),
     context.store.listImportRuns({ projectId }),
@@ -905,6 +914,7 @@ async function handleProjectState(req, res, context, projectId) {
     context.store.listSourceDocuments ? context.store.listSourceDocuments({ projectId }) : [],
     context.store.listChartStyleProfiles ? context.store.listChartStyleProfiles({ projectId }) : [],
     context.store.listReusableChartTemplates ? context.store.listReusableChartTemplates({ projectId }) : [],
+    context.store.listRegionExtractionTemplates ? context.store.listRegionExtractionTemplates({ projectId }) : [],
   ]);
   const supportedChartSpecs = chartSpecs.filter(isSupportedChartSpec);
   const activeWorkbookReviewSessionIds = new Set(
@@ -948,6 +958,9 @@ async function handleProjectState(req, res, context, projectId) {
     projectBrowserConfig,
     chartStyleProfiles: await Promise.all(chartStyleProfiles.map(async (profile) => (
       chartStyleProfileSummary(profile, await context.store.findChartStyleProfileVersionById(profile.currentVersionId))
+    ))),
+    regionExtractionTemplates: await Promise.all(regionExtractionTemplates.map(async (template) => (
+      regionExtractionTemplateSummary(template, await context.store.findRegionExtractionTemplateVersionById(template.currentVersionId))
     ))),
     reusableChartTemplates: await Promise.all(reusableChartTemplates.map(async (template) => (
       reusableChartTemplateSummary(template, await context.store.findReusableChartTemplateVersionById(template.currentVersionId))
@@ -3100,6 +3113,159 @@ async function templateVersionFromChart({ context, projectId, sourceChartSpecId,
   return buildReusableChartTemplateVersion({ definition, version });
 }
 
+async function extractionTemplateVersionFromRegion({ context, projectId, regionId, version }) {
+  const region = await context.store.findWorkbookReviewRegionById(String(regionId || "").trim());
+  if (!region || region.projectId !== projectId) {
+    throw Object.assign(new Error("Workbook review region was not found in this project."), { statusCode: 404, code: "workbook_review_region_not_found" });
+  }
+  if (region.disposition !== "active" || !region.acceptedRevisionId) {
+    throw Object.assign(new Error("Confirm the region before saving it as an extraction template."), { statusCode: 409, code: "region_extraction_template_requires_confirmed_region" });
+  }
+  const revision = await context.store.findRegionUnderstandingRevisionById(region.acceptedRevisionId);
+  const sourceDocument = await context.store.findSourceDocumentById?.(region.sourceDocumentId);
+  if (!revision || !sourceDocument) {
+    throw Object.assign(new Error("The accepted revision or source document for this region is missing."), { statusCode: 409, code: "region_extraction_template_source_missing" });
+  }
+  const indexBlobs = context.store.listSourceIndexBlobs
+    ? await context.store.listSourceIndexBlobs({ sourceDocumentId: sourceDocument.id })
+    : [];
+  return buildRegionExtractionTemplateVersion({ sourceDocument, indexBlobs, region, revision, version });
+}
+
+async function extractionTemplateDetail(context, template) {
+  const versions = await context.store.listRegionExtractionTemplateVersions({ regionExtractionTemplateId: template.id });
+  return { regionExtractionTemplate: template, versions };
+}
+
+async function handleProjectRegionExtractionTemplates(req, res, context, projectId, url) {
+  const { auth, project } = await projectAuth(req, context, projectId, req.method === "POST" ? "editor" : "viewer");
+  if (req.method === "GET") {
+    const templates = await context.store.listRegionExtractionTemplates({
+      projectId,
+      includeArchived: url.searchParams.get("includeArchived") === "true",
+    });
+    const summaries = await Promise.all(templates.map(async (template) => (
+      regionExtractionTemplateSummary(template, await context.store.findRegionExtractionTemplateVersionById(template.currentVersionId))
+    )));
+    sendJson(res, 200, { schemaVersion: "labrat.regionExtractionTemplateList.v1", projectId, regionExtractionTemplates: summaries });
+    return;
+  }
+  const body = await readJsonBody(req);
+  const name = regionExtractionTemplateName(body.name);
+  const description = regionExtractionTemplateDescription(body.description);
+  const checked = await extractionTemplateVersionFromRegion({ context, projectId, regionId: body.regionId, version: 1 });
+  const createdAt = new Date().toISOString();
+  const templateId = makeId("region_extraction_template");
+  const versionId = makeId("region_extraction_template_version");
+  const stored = await context.store.createRegionExtractionTemplate({
+    template: {
+      id: templateId, labId: project.labId, projectId, schemaVersion: REGION_EXTRACTION_TEMPLATE_SCHEMA_VERSION,
+      name, description, status: "active", currentVersionId: null,
+      createdAt, updatedAt: createdAt, createdBy: auth.user.id, updatedBy: auth.user.id,
+    },
+    version: {
+      id: versionId, labId: project.labId, projectId, regionExtractionTemplateId: templateId,
+      ...checked, createdAt, createdBy: auth.user.id,
+    },
+  });
+  await context.store.recordAuditEvent({
+    labId: project.labId, projectId, actorUserId: auth.user.id,
+    action: "region_extraction_template.create", targetType: "region_extraction_template", targetId: templateId,
+    summary: `Created region extraction template ${name}.`,
+    metadata: { regionExtractionTemplateVersionId: versionId, sourceRegionId: checked.sourceRegionId, sourceRevisionId: checked.sourceRevisionId, contentHash: checked.contentHash },
+    ipAddress: clientIp(req), userAgent: userAgent(req),
+  });
+  sendJson(res, 201, await extractionTemplateDetail(context, stored.template));
+}
+
+async function handleRegionExtractionTemplate(req, res, context, templateId, action = null) {
+  const template = await context.store.findRegionExtractionTemplateById(templateId);
+  if (!template) throw Object.assign(new Error("Region extraction template was not found."), { statusCode: 404, code: "region_extraction_template_not_found" });
+  const { auth } = await projectAuth(req, context, template.projectId, action ? "editor" : "viewer");
+  if (!action && req.method === "GET") {
+    sendJson(res, 200, await extractionTemplateDetail(context, template));
+    return;
+  }
+  if (action === "archive") {
+    const updatedAt = new Date().toISOString();
+    const archived = await context.store.archiveRegionExtractionTemplate({ templateId, actorUserId: auth.user.id, updatedAt });
+    await context.store.recordAuditEvent({
+      labId: template.labId, projectId: template.projectId, actorUserId: auth.user.id,
+      action: "region_extraction_template.archive", targetType: "region_extraction_template", targetId: template.id,
+      summary: `Archived region extraction template ${template.name}.`, ipAddress: clientIp(req), userAgent: userAgent(req),
+    });
+    sendJson(res, 200, { regionExtractionTemplate: archived });
+    return;
+  }
+  if (action === "versions") {
+    if (template.status === "archived") throw Object.assign(new Error("Archived region extraction templates cannot be versioned."), { statusCode: 409, code: "region_extraction_template_archived" });
+    const body = await readJsonBody(req);
+    const versions = await context.store.listRegionExtractionTemplateVersions({ regionExtractionTemplateId: template.id });
+    const nextVersion = Math.max(0, ...versions.map((item) => Number(item.version) || 0)) + 1;
+    const checked = await extractionTemplateVersionFromRegion({ context, projectId: template.projectId, regionId: body.regionId, version: nextVersion });
+    const createdAt = new Date().toISOString();
+    const version = {
+      id: makeId("region_extraction_template_version"), labId: template.labId, projectId: template.projectId,
+      regionExtractionTemplateId: template.id, ...checked, createdAt, createdBy: auth.user.id,
+    };
+    const stored = await context.store.appendRegionExtractionTemplateVersion({ templateId: template.id, version, actorUserId: auth.user.id, updatedAt: createdAt });
+    await context.store.recordAuditEvent({
+      labId: template.labId, projectId: template.projectId, actorUserId: auth.user.id,
+      action: "region_extraction_template.version", targetType: "region_extraction_template", targetId: template.id,
+      summary: `Created version ${nextVersion} of region extraction template ${template.name}.`,
+      metadata: { regionExtractionTemplateVersionId: version.id, sourceRegionId: version.sourceRegionId, contentHash: version.contentHash },
+      ipAddress: clientIp(req), userAgent: userAgent(req),
+    });
+    sendJson(res, 201, await extractionTemplateDetail(context, stored.template));
+  }
+}
+
+const MAX_TEMPLATE_MATCH_DOCUMENTS = 100;
+
+async function handleRegionExtractionTemplateMatches(req, res, context, templateVersionId) {
+  const version = await context.store.findRegionExtractionTemplateVersionById(templateVersionId);
+  if (!version) throw Object.assign(new Error("Region extraction template version was not found."), { statusCode: 404, code: "region_extraction_template_version_not_found" });
+  const template = await context.store.findRegionExtractionTemplateById(version.regionExtractionTemplateId);
+  await projectAuth(req, context, version.projectId, "viewer");
+  const body = await readJsonBody(req);
+  const requestedIds = [...new Set(asArray(body.sourceDocumentIds).map((id) => String(id || "").trim()).filter(Boolean))];
+  if (!requestedIds.length) {
+    throw Object.assign(new Error("Provide at least one sourceDocumentId to match."), { statusCode: 400, code: "source_document_ids_required" });
+  }
+  if (requestedIds.length > MAX_TEMPLATE_MATCH_DOCUMENTS) {
+    throw Object.assign(new Error(`Match at most ${MAX_TEMPLATE_MATCH_DOCUMENTS} source documents per request.`), { statusCode: 400, code: "too_many_source_documents" });
+  }
+  const matches = [];
+  for (const sourceDocumentId of requestedIds) {
+    const sourceDocument = await context.store.findSourceDocumentById?.(sourceDocumentId);
+    if (!sourceDocument || sourceDocument.projectId !== version.projectId) {
+      matches.push({
+        schemaVersion: "labrat.regionTemplateMatchReport.v1",
+        templateVersionId: version.id,
+        sourceDocumentId,
+        workbookName: null,
+        status: "no_match",
+        eligibleForBatchConfirm: false,
+        warnings: [{ code: "source_document_not_found", message: "Source document was not found in this project." }],
+      });
+      continue;
+    }
+    const indexBlobs = context.store.listSourceIndexBlobs
+      ? await context.store.listSourceIndexBlobs({ sourceDocumentId: sourceDocument.id })
+      : [];
+    matches.push(matchTemplateVersionToDocument({ templateVersion: version, sourceDocument, indexBlobs }));
+  }
+  sendJson(res, 200, {
+    schemaVersion: "labrat.regionTemplateMatchList.v1",
+    regionExtractionTemplateId: template?.id || version.regionExtractionTemplateId,
+    templateName: template?.name || null,
+    templateVersionId: version.id,
+    templateVersion: version.version,
+    matches,
+    summary: matches.reduce((summary, match) => ({ ...summary, [match.status]: (summary[match.status] || 0) + 1 }), {}),
+  });
+}
+
 async function handleProjectReusableChartTemplates(req, res, context, projectId, url) {
   const { auth, project } = await projectAuth(req, context, projectId, req.method === "POST" ? "editor" : "viewer");
   if (req.method === "GET") {
@@ -3639,6 +3805,19 @@ async function dispatch(req, res, context) {
   if (reusableChartTemplateApplicationMatch && req.method === "POST") {
     return handleReusableChartTemplateApplication(req, res, context, reusableChartTemplateApplicationMatch[1]);
   }
+  const projectRegionExtractionTemplatesMatch = pathName.match(/^\/api\/projects\/([^/]+)\/region-extraction-templates$/);
+  if (projectRegionExtractionTemplatesMatch && (req.method === "GET" || req.method === "POST")) {
+    return handleProjectRegionExtractionTemplates(req, res, context, projectRegionExtractionTemplatesMatch[1], url);
+  }
+  const regionExtractionTemplateMatch = pathName.match(/^\/api\/region-extraction-templates\/([^/]+)(?:\/(versions|archive))?$/);
+  if (regionExtractionTemplateMatch && (
+    (!regionExtractionTemplateMatch[2] && req.method === "GET")
+    || (regionExtractionTemplateMatch[2] && req.method === "POST")
+  )) return handleRegionExtractionTemplate(req, res, context, regionExtractionTemplateMatch[1], regionExtractionTemplateMatch[2] || null);
+  const regionExtractionTemplateMatchesMatch = pathName.match(/^\/api\/region-extraction-template-versions\/([^/]+)\/matches$/);
+  if (regionExtractionTemplateMatchesMatch && req.method === "POST") {
+    return handleRegionExtractionTemplateMatches(req, res, context, regionExtractionTemplateMatchesMatch[1]);
+  }
   const chartSpecTemplateEligibilityMatch = pathName.match(/^\/api\/chart-specs\/([^/]+)\/template-eligibility$/);
   if (chartSpecTemplateEligibilityMatch && req.method === "GET") {
     return handleChartSpecTemplateEligibility(req, res, context, chartSpecTemplateEligibilityMatch[1]);
@@ -3669,6 +3848,8 @@ export async function handleSaasRoutes(req, res, context) {
     && !req.url?.startsWith("/api/chart-style-profiles")
     && !req.url?.startsWith("/api/reusable-chart-templates")
     && !req.url?.startsWith("/api/reusable-chart-template-versions")
+    && !req.url?.startsWith("/api/region-extraction-templates")
+    && !req.url?.startsWith("/api/region-extraction-template-versions")
     && !req.url?.startsWith("/api/manuscripts")) {
     return false;
   }

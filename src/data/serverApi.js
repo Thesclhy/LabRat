@@ -349,6 +349,50 @@ export function applyServerReusableChartTemplate(templateVersionId, request = {}
   );
 }
 
+export function listServerRegionExtractionTemplates(projectId, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before listing extraction templates.");
+  return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/region-extraction-templates`, options);
+}
+
+export function getServerRegionExtractionTemplate(templateId, options = {}) {
+  if (!templateId) throw new ServerApiError("Select an extraction template before loading it.");
+  return serverRequest(`/api/region-extraction-templates/${encodeURIComponent(templateId)}`, options);
+}
+
+export function createServerRegionExtractionTemplate(projectId, request = {}, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before saving an extraction template.");
+  const name = String(request.name || "").trim();
+  const regionId = String(request.regionId || "").trim();
+  if (!name) throw new ServerApiError("Name the extraction template before saving it.");
+  if (!regionId) throw new ServerApiError("Confirm a region before saving it as an extraction template.");
+  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/region-extraction-templates`, {
+    name,
+    description: String(request.description || "").trim(),
+    regionId,
+  }, options);
+}
+
+export function createServerRegionExtractionTemplateVersion(templateId, request = {}, options = {}) {
+  if (!templateId) throw new ServerApiError("Select an extraction template before adding a version.");
+  const regionId = String(request.regionId || "").trim();
+  if (!regionId) throw new ServerApiError("Confirm a region before updating the extraction template.");
+  return serverJson(`/api/region-extraction-templates/${encodeURIComponent(templateId)}/versions`, { regionId }, options);
+}
+
+export function archiveServerRegionExtractionTemplate(templateId, options = {}) {
+  if (!templateId) throw new ServerApiError("Select an extraction template before archiving it.");
+  return serverJson(`/api/region-extraction-templates/${encodeURIComponent(templateId)}/archive`, {}, options);
+}
+
+export function matchServerRegionExtractionTemplate(templateVersionId, request = {}, options = {}) {
+  if (!templateVersionId) throw new ServerApiError("Select an extraction template version before matching workbooks.");
+  const sourceDocumentIds = Array.isArray(request.sourceDocumentIds)
+    ? request.sourceDocumentIds.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+  if (!sourceDocumentIds.length) throw new ServerApiError("Select at least one uploaded workbook to match.");
+  return serverJson(`/api/region-extraction-template-versions/${encodeURIComponent(templateVersionId)}/matches`, { sourceDocumentIds }, options);
+}
+
 export function createServerManuscript(projectId, request = {}, options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before creating a manuscript.");
   return serverJson(`/api/projects/${encodeURIComponent(projectId)}/manuscripts`, request, options);

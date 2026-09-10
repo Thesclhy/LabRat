@@ -137,6 +137,19 @@ Since the formula-aware milestone, `interpretation` also carries:
   `pointCount` in addition to the historical column-pair shape. Both shapes
   keep exact range or cell source refs.
 
+## RegionExtractionTemplate
+
+A project-owned, named, versioned description of where one wanted result sits
+inside a workbook layout family, compiled from one confirmed
+WorkbookReviewRegion. Versions are immutable and content-hashed. A version
+carries a `labrat.layoutSignature.v1` (structure and relative formula shapes,
+never cell values) and relative `semantics` (the accepted interpretation with
+ranges expressed as offsets). It is the ingest-side twin of
+ReusableChartTemplate: define once, match deterministically, and return
+ambiguity to the user. Matching a template against another SourceDocument
+produces a transient `labrat.regionTemplateMatchReport.v1` and creates no
+evidence or accepted data.
+
 ## DataPlan v2 (Historical)
 
 A retired deterministic extraction recipe retained only as provenance for

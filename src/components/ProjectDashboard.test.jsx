@@ -3658,6 +3658,89 @@ describe("AgentPanel", () => {
     }
   });
 
+  it("matches an extraction template against a batch and shows per-file results", async () => {
+    const historyKey = "labrat_blank_chat_history_v2_project_project_1";
+    localStorage.setItem(historyKey, JSON.stringify([{
+      role: "assistant",
+      text: "I indexed 3 workbooks.",
+      workbookBatch: {
+        batchId: "workbook_batch_seed",
+        items: [
+          { index: 0, fileName: "Calculation Exp31.xlsx", status: "uploaded", error: "", workbookReviewLink: { workbookReviewSessionId: "session_31", sourceDocumentId: "doc_31", workbookName: "Calculation Exp31.xlsx", regionCount: 2 } },
+          { index: 1, fileName: "Calculation Exp32.xlsx", status: "uploaded", error: "", workbookReviewLink: { workbookReviewSessionId: "session_32", sourceDocumentId: "doc_32", workbookName: "Calculation Exp32.xlsx", regionCount: 2 } },
+          { index: 2, fileName: "Calculation Exp33.xlsx", status: "uploaded", error: "", workbookReviewLink: { workbookReviewSessionId: "session_33", sourceDocumentId: "doc_33", workbookName: "Calculation Exp33.xlsx", regionCount: 2 } },
+        ],
+      },
+    }]));
+    const fetchMock = vi.fn(async (url, init = {}) => {
+      if (url === "/api/projects/project_1/analysis-capabilities") {
+        return jsonResponse({ model: { configured: true }, executor: { configured: true }, acceptedData: {} });
+      }
+      if (url === "/api/region-extraction-template-versions/template_version_1/matches") {
+        expect(JSON.parse(init.body)).toEqual({ sourceDocumentIds: ["doc_31", "doc_32", "doc_33"] });
+        return jsonResponse({
+          templateName: "Carbon distribution",
+          templateVersionId: "template_version_1",
+          templateVersion: 1,
+          summary: { exact: 2, formula_mismatch: 1 },
+          matches: [
+            { sourceDocumentId: "doc_31", status: "exact", sheetName: "Sheet1", matchedRange: "P31:BA32", offset: { rows: 0, cols: 0 }, experimentLabel: "Exp31", labelSource: "cell", isTemplateSource: true, eligibleForBatchConfirm: true },
+            { sourceDocumentId: "doc_32", status: "exact", sheetName: "Sheet1", matchedRange: "P31:BA32", offset: { rows: 0, cols: 0 }, experimentLabel: "Exp32", labelSource: "cell", isTemplateSource: false, eligibleForBatchConfirm: true },
+            { sourceDocumentId: "doc_33", status: "formula_mismatch", sheetName: "Sheet1", matchedRange: "P31:BA32", offset: { rows: 0, cols: 0 }, experimentLabel: null, brokenCells: [{ address: "F43" }, { address: "G43" }], formulaMismatches: [], eligibleForBatchConfirm: false },
+          ],
+        });
+      }
+      return jsonResponse({});
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    try {
+      render(
+        <AgentPanel
+          open
+          setOpen={() => {}}
+          blocks={[]}
+          setBlocks={() => {}}
+          references={[]}
+          selected={null}
+          selectedChartContext={null}
+          pendingChartAnalysis={null}
+          activeProjectId="project_1"
+          projectState={{
+            project: { id: "project_1", name: "Catalyst Screening" },
+            fileObjects: [],
+            regionExtractionTemplates: [
+              { id: "template_1", name: "Carbon distribution", status: "active", currentVersionId: "template_version_1", currentVersion: 1, sheetName: "Sheet1", anchorRange: "P31:BA32" },
+              { id: "template_old", name: "Retired", status: "archived", currentVersionId: "template_version_old" },
+            ],
+          }}
+          onProjectStateLoaded={() => {}}
+        />,
+      );
+
+      const select = screen.getByLabelText("Extraction template");
+      expect(within(select).getAllByRole("option").map((option) => option.textContent)).toEqual(["Carbon distribution (Sheet1!P31:BA32)"]);
+      fireEvent.click(screen.getByRole("button", { name: "Match workbooks" }));
+
+      expect(await screen.findByText("Carbon distribution v1: 2 exact match, 1 formula mismatch")).toBeTruthy();
+      const exp32 = screen.getByLabelText("Template match for Calculation Exp32.xlsx");
+      expect(within(exp32).getByText("Exact match")).toBeTruthy();
+      expect(within(exp32).getByText("Sheet1!P31:BA32 · Exp32")).toBeTruthy();
+      const exp31 = screen.getByLabelText("Template match for Calculation Exp31.xlsx");
+      expect(within(exp31).getByText("template source")).toBeTruthy();
+      const exp33 = screen.getByLabelText("Template match for Calculation Exp33.xlsx");
+      expect(within(exp33).getByText("Formula mismatch")).toBeTruthy();
+      expect(within(exp33).getByText("Sheet1!P31:BA32 · typed over upstream: F43, G43")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Match again" })).toBeTruthy();
+
+      const stored = JSON.parse(localStorage.getItem(historyKey) || "[]");
+      expect(stored[0].workbookBatch.match.results.map((result) => result.status)).toEqual(["exact", "exact", "formula_mismatch"]);
+    } finally {
+      global.fetch = originalFetch;
+      localStorage.removeItem(historyKey);
+    }
+  });
+
   it("keeps workbook review controls out of the global Agent composer", () => {
     localStorage.removeItem("labrat_blank_chat_history_v1_react");
 

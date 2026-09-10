@@ -1,6 +1,6 @@
 # Batch Workbook Upload And Experiment Linking Plan
 
-Status: active (Milestones 1-2 complete, Milestones 3-6 proposed)
+Status: active (Milestones 1-3 complete, Milestones 4-6 proposed)
 Read when: implementing multi-file upload, reusable region extraction
 templates, formula-aware region understanding, or batch series publication.
 Created: 2026-09-09
@@ -23,9 +23,9 @@ select many files
   -> deterministic template match across the other files
   -> exact matches: prefilled regions, confirmed in one click
   -> non-matches: short per-file review list
-  -> one Experiment Browser analysis publish across all matched regions
-  -> one series per experiment on its existing identity
-  -> cross-experiment chart (natural-language or series template)
+  -> each confirmed region linked to its experiment and data kind
+  -> Experiment Browser shows a "linked workbook data" chip per experiment
+  -> cross-experiment chart reads the confirmed workbook regions directly
 ```
 
 This is roadmap item 7, "Relationship And Series Understanding", made
@@ -303,6 +303,16 @@ selecting row 26 instead yields an intermediate warning.
 
 ### Milestone 3 — Extraction template save and match (backend + frontend)
 
+Status: complete on 2026-09-09 (branch `claude/batch-workbook-linking`).
+Implementation notes: migration 027 adds `region_extraction_templates` and
+`region_extraction_template_versions`. The signature uses header runs, text
+and border anchors with fuzzy matching (edit distance plus an ordered
+subsequence rule for pasted-in corruption), relative R1C1 formula shapes, and
+a fixed-cell experiment-label rule with a filename fallback. The original
+template position wins when it still matches, other matching blocks are
+listed as alternatives, and an upstream `formula_chain_broken` at the matched
+range is reported as `formula_mismatch`.
+
 Backend:
 
 - Template container/version tables, memory/Postgres parity, lifecycle
@@ -325,55 +335,83 @@ or `ambiguous` for a file whose first block was overwritten by constants.
 
 Backend:
 
-- Idempotent apply route creating prefilled regions and revisions.
+- Idempotent apply route creating prefilled regions and revisions at the
+  matched range, marked `selectionMethod: "template_match"`.
+- Each applied region records `linkedExperimentId` (resolved when the
+  experiment label matches exactly one identity, otherwise left for the
+  user) and `dataKind` (the template name, for example "Reaction rate
+  data"), so later surfaces can show which workbook belongs to which
+  experiment without publishing anything.
 - Batch confirm route with per-region validation, version checks, and audit.
+  It accepts only template-match regions whose report was `exact` or
+  `shifted`.
 
 Frontend:
 
 - Apply from the report; checklist of `exact`/`shifted` regions with
-  select-all; one "Confirm selected" action; per-row result and retry.
-- Non-matching files link into the existing Workbook Review for individual
-  work; "Update template" creates a new version from a corrected region.
+  select-all; one "Confirm selected" action; per-row result and retry;
+  unresolved experiment links get a picker before confirmation.
+- Non-matching files link into the existing Workbook Review at the matched
+  range for individual work; "Update template" creates a new version from a
+  corrected region and offers to re-match the batch.
 
 Done when thirty matched files are confirmed in one action and each region
-shows its own accepted revision and actor.
+shows its own accepted revision, actor, and linked experiment.
 
-### Milestone 5 — Batch publish to Experiment Browser (backend + frontend)
+### Milestone 5 — Linked workbook data in Experiment Browser (backend + frontend)
+
+Decision 2026-09-09: supplementary workbook data is not published into
+DataSnapshots. Experiment Browser shows *that* linked data exists and where it
+is; charts read the confirmed workbook regions directly through the existing
+workbook chart input mode. The master-table scalars keep using snapshots.
 
 Backend:
 
-- Planner accepts header-row category series from `seriesPatches`.
-- Identity decisions prefilled from resolved experiment labels; the planner
-  may draft one plan over up to 64 template-matched regions.
-- Optional deterministic `template_series_attach` strategy (no Python, no
-  provider) when every selected region carries the same template version,
-  mirroring `direct_source_mapping`.
+- Project-level read of confirmed regions with `linkedExperimentId` and
+  `dataKind`, grouped by experiment.
+- Experiment projection adds one shared column per data kind (`linked_data:
+  <dataKind>`), whose cell lists the linked regions (workbook name, sheet,
+  range, template version). Empty cells mean no linked workbook. No snapshot
+  or head changes.
+- Experiment detail lists linked regions with provenance.
+- The analysis source catalogue sent to the chart planner carries
+  `linkedExperimentId`, experiment label, and `dataKind` per confirmed region,
+  so "reaction rate for Exp10-Exp40" selects exactly those regions.
 
 Frontend:
 
-- "Publish matched series to Browser" action on the batch card, opening the
-  existing analysis review with selections and identity decisions prefilled;
-  bulk "accept exact matches" already exists in
-  `src/data/identityDecisionBatch.js`.
+- Browser cells render the linked regions as chips; clicking one opens
+  Workbook Review at that region. Column visibility, order, and filtering
+  use the existing shared configuration.
+- Detail drawer section "Linked workbook data".
 
-Done when one publish adds a `carbon_distribution` series to Exp31...Exp40,
-advancing only those heads, with each point carrying its source cell.
+Done when Exp31 shows a "Reaction rate data" chip pointing at the confirmed
+region in `Calculation Exp31.xlsx`, no DataSnapshot was written, and a
+natural-language chart request over linked regions plans without asking
+which files belong to which experiment.
 
-### Milestone 6 — Cross-experiment charts from series (backend + frontend)
+### Milestone 6 — Cross-experiment charts from linked workbook data (backend + frontend)
 
 Backend:
 
+- Deterministic selection builder: given a `dataKind` and a set of
+  experiments, produce the exact `sourceSelections` for the existing analysis
+  plan from the linked regions' stored series ranges, then hand off to the
+  normal reviewed chart path. No provider call for the selection step.
 - Lift the fail-closed rule in `reusableChartTemplates.js` for a single
-  series slot so an accepted carbon-distribution chart can be saved as a
-  template.
+  series slot so an accepted cross-experiment chart can be saved as a
+  template, with the slot bound to a `dataKind` rather than a snapshot
+  column.
 
 Frontend:
 
-- Template picker already supports slots; verify series slot coverage
-  display and missing-experiment reporting.
+- Chart Review "Compare linked data": pick a data kind and experiments, see
+  which experiments lack linked data, preview the selections, then continue
+  into the existing plan/result review.
 
-Done when "compare carbon distribution for Exp10-Exp40" is a template pick
-plus experiment selection with no provider call.
+Done when "compare reaction rate for Exp10-Exp40" is a data-kind pick plus
+experiment selection, reads only confirmed workbook regions, and can be saved
+as a template.
 
 ## Verification Matrix
 
@@ -407,6 +445,10 @@ plus experiment selection with no provider call.
 - **Review rule.** Batch confirm is limited to template-verified exact or
   shifted matches, keeping the per-region accepted-revision pointer and audit
   trail intact.
+- **Charts read live evidence.** Linked-data charts are built from confirmed
+  workbook regions, not snapshots. Deleting a workbook session retains the
+  immutable file and accepted ChartSpecs but prevents rebuilding that chart
+  from the deleted session; the Browser chip disappears with it.
 
 ## Out Of Scope
 

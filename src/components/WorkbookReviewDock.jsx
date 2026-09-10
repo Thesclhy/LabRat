@@ -55,12 +55,17 @@ function RegionReviewCard({
   onIgnore,
   onDelete,
   onToggleCalculationOverlay,
+  onSaveExtractionTemplate,
+  existingTemplate = null,
 }) {
   const revision = region.currentRevision || null;
   const label = regionLabel(region);
   const [feedback, setFeedback] = useState("");
   const [pendingAction, setPendingAction] = useState("");
   const [actionError, setActionError] = useState("");
+  const [templateNaming, setTemplateNaming] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [savedTemplateName, setSavedTemplateName] = useState("");
   const blockers = asArray(revision?.validation?.blockers);
   const warnings = [...asArray(region.warnings), ...asArray(revision?.warnings)]
     .filter((notice, index, all) => all.findIndex((candidate) => (candidate?.code || candidate?.message) === (notice?.code || notice?.message)) === index);
@@ -101,6 +106,17 @@ function RegionReviewCard({
       expectedRegionVersion: region.version,
       reason: "Deleted during workbook review.",
     }));
+  };
+
+  const saveExtractionTemplate = () => {
+    const name = templateName.trim();
+    if (!name) return;
+    run("save_template", async () => {
+      const saved = await onSaveExtractionTemplate?.(region, { name });
+      setSavedTemplateName(saved?.regionExtractionTemplate?.name || saved?.name || name);
+      setTemplateNaming(false);
+      setTemplateName("");
+    });
   };
 
   return (
@@ -226,6 +242,49 @@ function RegionReviewCard({
               </div>
             </>
           )}
+          {confirmed && onSaveExtractionTemplate && (
+            <div className="workbook-region-template" aria-label={`Extraction template for ${label}`}>
+              {existingTemplate || savedTemplateName ? (
+                <p className="workbook-region-template-note">
+                  Extraction template: <strong>{existingTemplate?.name || savedTemplateName}</strong>
+                  {existingTemplate?.currentVersion ? ` (v${existingTemplate.currentVersion})` : ""}
+                </p>
+              ) : templateNaming ? (
+                <div className="workbook-region-template-form">
+                  <label htmlFor={`extraction-template-name-${region.id}`}>Template name</label>
+                  <input
+                    id={`extraction-template-name-${region.id}`}
+                    type="text"
+                    value={templateName}
+                    maxLength={120}
+                    placeholder="Carbon distribution from calculation sheet"
+                    onChange={(event) => setTemplateName(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        saveExtractionTemplate();
+                      }
+                    }}
+                  />
+                  <div className="workbook-region-template-form-actions">
+                    <button type="button" className="primary" disabled={busy || !templateName.trim()} onClick={saveExtractionTemplate}>
+                      {pendingAction === "save_template" ? "Saving..." : "Save template"}
+                    </button>
+                    <button type="button" disabled={busy} onClick={() => { setTemplateNaming(false); setTemplateName(""); }}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  aria-label={`Save ${label} as extraction template`}
+                  disabled={busy}
+                  onClick={() => setTemplateNaming(true)}
+                >
+                  Save as extraction template
+                </button>
+              )}
+            </div>
+          )}
           <div className="workbook-region-secondary-actions">
             {region.reviewStatus === "interpretation_failed" && (
               <button
@@ -273,6 +332,8 @@ export function WorkbookReviewDock({
   onIgnoreRegion,
   onDeleteRegion,
   onToggleCalculationOverlay,
+  onSaveExtractionTemplate,
+  extractionTemplates = [],
   onReviewExtractedExperiments,
 }) {
   const session = reviewState.session || reviewState.workbookReviewSession || null;
@@ -319,6 +380,10 @@ export function WorkbookReviewDock({
             onIgnore={onIgnoreRegion}
             onDelete={onDeleteRegion}
             onToggleCalculationOverlay={onToggleCalculationOverlay}
+            onSaveExtractionTemplate={onSaveExtractionTemplate}
+            existingTemplate={asArray(extractionTemplates).find((template) => (
+              template?.status !== "archived" && template?.sourceRegionId === region.id
+            )) || null}
           />
         ))}
         {!regions.length && <p className="workbook-region-empty">No source regions are available.</p>}

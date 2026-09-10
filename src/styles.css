@@ -11310,3 +11310,123 @@ tbody tr:hover {
 .workbook-cell-class-legend .is-intermediate { background: rgba(217, 164, 65, 0.22); color: #7a5410; }
 .workbook-cell-class-legend .is-input { background: rgba(99, 102, 241, 0.16); color: #3b4288; }
 .workbook-cell-class-legend .is-constant { background: rgba(148, 163, 184, 0.16); color: #475569; }
+
+/* Extraction templates: region card save control and batch match report */
+.workbook-region-template {
+  display: grid;
+  gap: 6px;
+}
+.workbook-region-template > button {
+  width: fit-content;
+  border: 1px solid #0f6b6b;
+  border-radius: 999px;
+  background: #eef6f5;
+  color: #0f4c4c;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.workbook-region-template-note {
+  margin: 0;
+  font-size: 12px;
+  color: #0f4c4c;
+}
+.workbook-region-template-form {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  background: #fbfcfc;
+}
+.workbook-region-template-form label {
+  font-size: 11px;
+  color: var(--muted);
+}
+.workbook-region-template-form input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+.workbook-region-template-form-actions {
+  display: flex;
+  gap: 8px;
+}
+.agent-workbook-batch-template {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 12.5px;
+  color: #334155;
+}
+.agent-workbook-batch-template label {
+  font-size: 12px;
+  color: #64748b;
+}
+.agent-workbook-batch-template select {
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  padding: 4px 6px;
+  font-size: 12.5px;
+  background: #fff;
+}
+.agent-workbook-batch-template button {
+  border: 1px solid #0f6b6b;
+  border-radius: 999px;
+  background: #eef6f5;
+  color: #0f4c4c;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.agent-workbook-batch-template button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.agent-workbook-batch-template-summary {
+  flex-basis: 100%;
+  color: #64748b;
+}
+.agent-workbook-batch-match {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 12px;
+  color: #475569;
+}
+.agent-workbook-batch-match-status {
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: #475569;
+}
+.agent-workbook-batch-match-status.is-exact,
+.agent-workbook-batch-match-status.is-shifted {
+  background: #d6ebe8;
+  color: #0f4c4c;
+}
+.agent-workbook-batch-match-status.is-ambiguous,
+.agent-workbook-batch-match-status.is-label_missing {
+  background: #fef3c7;
+  color: #92400e;
+}
+.agent-workbook-batch-match-status.is-formula_mismatch,
+.agent-workbook-batch-match-status.is-header_mismatch {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.agent-workbook-batch-match-source {
+  font-size: 11px;
+  color: #64748b;
+  font-style: italic;
+}

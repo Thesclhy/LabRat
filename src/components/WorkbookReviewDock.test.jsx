@@ -325,4 +325,44 @@ describe("WorkbookReviewDock", () => {
     expect(screen.queryByRole("button", { name: /calculation for/ })).toBeNull();
     expect(screen.queryByLabelText(/Calculation provenance/)).toBeNull();
   });
+
+  it("saves a confirmed region as an extraction template and shows an existing template name", async () => {
+    const onSaveExtractionTemplate = vi.fn().mockResolvedValue({ regionExtractionTemplate: { id: "template_1", name: "Carbon distribution" } });
+    const { rerender } = render(
+      <WorkbookReviewDock
+        reviewState={reviewState()}
+        reviewRegions={reviewRegions}
+        activeRegionId="region_2"
+        onSaveExtractionTemplate={onSaveExtractionTemplate}
+      />,
+    );
+
+    const unconfirmed = screen.getByRole("article", { name: "Region Runs!A1:D3" });
+    expect(within(unconfirmed).queryByRole("button", { name: /as extraction template/ })).toBeNull();
+
+    const confirmedCard = screen.getByRole("article", { name: "Region Runs!F1:H5" });
+    fireEvent.click(within(confirmedCard).getByRole("button", { name: "Save Runs!F1:H5 as extraction template" }));
+    const input = within(confirmedCard).getByLabelText("Template name");
+    expect(within(confirmedCard).getByRole("button", { name: "Save template" }).disabled).toBe(true);
+    fireEvent.change(input, { target: { value: "Carbon distribution" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => expect(onSaveExtractionTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "region_2" }),
+      { name: "Carbon distribution" },
+    ));
+    expect(await within(confirmedCard).findByText("Carbon distribution")).toBeTruthy();
+    expect(within(confirmedCard).queryByRole("button", { name: /as extraction template/ })).toBeNull();
+
+    rerender(
+      <WorkbookReviewDock
+        reviewState={reviewState()}
+        reviewRegions={reviewRegions}
+        activeRegionId="region_2"
+        onSaveExtractionTemplate={onSaveExtractionTemplate}
+        extractionTemplates={[{ id: "template_1", name: "Carbon distribution", status: "active", sourceRegionId: "region_2", currentVersion: 2 }]}
+      />,
+    );
+    expect(within(confirmedCard).getByText(/\(v2\)/)).toBeTruthy();
+  });
 });

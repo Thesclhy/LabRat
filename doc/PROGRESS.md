@@ -15,6 +15,29 @@ Keep entries concise, newest first, and include:
 
 ## 2026-09-09
 
+- Region extraction templates (Milestone 3 of
+  `doc/plans/batch-workbook-experiment-linking-plan.md`). A confirmed region
+  can be saved as a named, versioned `RegionExtractionTemplate` (migration
+  027, memory/Postgres parity, create/list/detail/version/archive routes,
+  audit). `backend/src/saas/regionExtractionTemplates.js` compiles a
+  `labrat.layoutSignature.v1` from the region: header runs, text and border
+  anchors, relative R1C1 formula shapes (`formulaShape` in `formulaGraph.js`),
+  and an experiment-label rule. `POST
+  /api/region-extraction-template-versions/:id/matches` deterministically
+  matches the template against uploaded workbooks with no side effects and
+  reports `exact`, `shifted`, `ambiguous`, `label_missing`,
+  `formula_mismatch`, `header_mismatch`, or `no_match` with offsets,
+  typed-over cells, upstream broken cells, alternative blocks, and the
+  resolved experiment label. Frontend: `Save as extraction template` on
+  confirmed region cards, and a template picker plus per-file match report on
+  the batch upload card. No provider call anywhere in this path.
+  Verification: backend suite, frontend suite, production build.
+  Follow-ups: Milestone 4 applies matches (prefilled regions linked to an
+  experiment and data kind, one-click confirm); Milestone 5 surfaces linked
+  workbook data as Experiment Browser chips without publishing snapshots;
+  Milestone 6 builds cross-experiment charts directly from the linked
+  regions.
+
 - Formula-aware region understanding (Milestone 2 of
   `doc/plans/batch-workbook-experiment-linking-plan.md`). New
   `backend/src/saas/formulaGraph.js` builds a workbook-wide precedent graph

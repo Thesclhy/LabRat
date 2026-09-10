@@ -698,6 +698,53 @@ function reusableChartTemplateVersionFromRow(row) {
   };
 }
 
+function regionExtractionTemplateFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    schemaVersion: row.schema_version,
+    name: row.name,
+    description: row.description || "",
+    status: row.status,
+    currentVersionId: row.current_version_id || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    createdBy: row.created_by,
+    updatedBy: row.updated_by,
+  };
+}
+
+function regionExtractionTemplateVersionFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    labId: row.lab_id,
+    projectId: row.project_id,
+    regionExtractionTemplateId: row.region_extraction_template_id,
+    ...(row.payload || {}),
+    schemaVersion: row.schema_version,
+    version: Number(row.version),
+    status: row.status,
+    sourceRegionId: row.source_region_id,
+    sourceRevisionId: row.source_revision_id,
+    sourceDocumentId: row.source_document_id || null,
+    contentHash: row.content_hash,
+    createdAt: row.created_at,
+    createdBy: row.created_by,
+  };
+}
+
+function regionExtractionTemplateVersionPayload(input = {}) {
+  const {
+    id, labId, projectId, regionExtractionTemplateId, schemaVersion, version,
+    status, sourceRegionId, sourceRevisionId, sourceDocumentId, contentHash,
+    createdAt, createdBy, ...payload
+  } = input;
+  return payload;
+}
+
 function reusableChartTemplateSlotBindingFromRow(row) {
   if (!row) return null;
   return {
@@ -4052,6 +4099,111 @@ export class PostgresSaasStore {
     } finally {
       client.release();
     }
+  }
+
+  async createRegionExtractionTemplate({ template, version }) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const templateResult = await client.query(
+        `insert into region_extraction_templates
+         (id, lab_id, project_id, schema_version, name, description, status,
+          current_version_id, created_at, updated_at, created_by, updated_by)
+         values ($1, $2, $3, $4, $5, $6, $7, null, $8, $8, $9, $9)
+         returning *`,
+        [template.id, template.labId, template.projectId, template.schemaVersion, template.name, template.description || "", template.status || "active", template.createdAt, template.createdBy],
+      );
+      const versionResult = await client.query(
+        `insert into region_extraction_template_versions
+         (id, lab_id, project_id, region_extraction_template_id, schema_version,
+          version, status, source_region_id, source_revision_id, source_document_id,
+          payload, content_hash, created_at, created_by)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+         returning *`,
+        [version.id, version.labId, version.projectId, version.regionExtractionTemplateId, version.schemaVersion, version.version, version.status, version.sourceRegionId, version.sourceRevisionId, version.sourceDocumentId || null, jsonb(regionExtractionTemplateVersionPayload(version)), version.contentHash, version.createdAt, version.createdBy],
+      );
+      const updatedResult = await client.query(
+        "update region_extraction_templates set current_version_id = $2 where id = $1 returning *",
+        [template.id, version.id],
+      );
+      await client.query("commit");
+      return { template: regionExtractionTemplateFromRow(updatedResult.rows[0] || templateResult.rows[0]), version: regionExtractionTemplateVersionFromRow(versionResult.rows[0]) };
+    } catch (error) {
+      await client.query("rollback");
+      if (error?.code === "23505") throw Object.assign(new Error("A region extraction template or version with this name/content already exists."), { code: "region_extraction_template_name_conflict", statusCode: 409 });
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async findRegionExtractionTemplateById(id) {
+    const result = await this.query("select * from region_extraction_templates where id = $1", [id]);
+    return regionExtractionTemplateFromRow(result.rows[0]);
+  }
+
+  async findRegionExtractionTemplateVersionById(id) {
+    const result = await this.query("select * from region_extraction_template_versions where id = $1", [id]);
+    return regionExtractionTemplateVersionFromRow(result.rows[0]);
+  }
+
+  async listRegionExtractionTemplates({ projectId, includeArchived = false }) {
+    const result = await this.query(
+      `select * from region_extraction_templates
+       where project_id = $1 and ($2::boolean or status <> 'archived')
+       order by updated_at desc, id`,
+      [projectId, includeArchived],
+    );
+    return result.rows.map(regionExtractionTemplateFromRow);
+  }
+
+  async listRegionExtractionTemplateVersions({ regionExtractionTemplateId }) {
+    const result = await this.query(
+      "select * from region_extraction_template_versions where region_extraction_template_id = $1 order by version desc",
+      [regionExtractionTemplateId],
+    );
+    return result.rows.map(regionExtractionTemplateVersionFromRow);
+  }
+
+  async appendRegionExtractionTemplateVersion({ templateId, version, actorUserId, updatedAt }) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const templateResult = await client.query("select * from region_extraction_templates where id = $1 for update", [templateId]);
+      if (!templateResult.rows[0]) {
+        await client.query("rollback");
+        return null;
+      }
+      const versionResult = await client.query(
+        `insert into region_extraction_template_versions
+         (id, lab_id, project_id, region_extraction_template_id, schema_version,
+          version, status, source_region_id, source_revision_id, source_document_id,
+          payload, content_hash, created_at, created_by)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+         returning *`,
+        [version.id, version.labId, version.projectId, version.regionExtractionTemplateId, version.schemaVersion, version.version, version.status, version.sourceRegionId, version.sourceRevisionId, version.sourceDocumentId || null, jsonb(regionExtractionTemplateVersionPayload(version)), version.contentHash, version.createdAt, version.createdBy],
+      );
+      const updatedResult = await client.query(
+        "update region_extraction_templates set current_version_id = $2, updated_at = $3, updated_by = $4 where id = $1 returning *",
+        [templateId, version.id, updatedAt, actorUserId],
+      );
+      await client.query("commit");
+      return { template: regionExtractionTemplateFromRow(updatedResult.rows[0]), version: regionExtractionTemplateVersionFromRow(versionResult.rows[0]) };
+    } catch (error) {
+      await client.query("rollback");
+      if (error?.code === "23505") throw Object.assign(new Error("This region extraction template version already exists."), { code: "region_extraction_template_version_conflict", statusCode: 409 });
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async archiveRegionExtractionTemplate({ templateId, actorUserId, updatedAt }) {
+    const result = await this.query(
+      "update region_extraction_templates set status = 'archived', updated_at = $2, updated_by = $3 where id = $1 returning *",
+      [templateId, updatedAt, actorUserId],
+    );
+    return regionExtractionTemplateFromRow(result.rows[0]);
   }
 
   async archiveReusableChartTemplate({ templateId, actorUserId, updatedAt }) {

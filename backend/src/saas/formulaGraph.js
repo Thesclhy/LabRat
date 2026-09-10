@@ -81,6 +81,31 @@ export function parseFormulaReferences(formula, defaultSheet = "") {
   return refs;
 }
 
+function r1c1Token(ref, origin) {
+  const match = /^(\$?)([A-Z]{1,3})(\$?)(\d{1,7})$/.exec(ref);
+  if (!match) return ref;
+  const [, colAbs, colLetters, rowAbs, rowDigits] = match;
+  const decoded = XLSX.utils.decode_cell(`${colLetters}${rowDigits}`);
+  const rowPart = rowAbs ? `R${decoded.r + 1}` : (decoded.r === origin.r ? "R" : `R[${decoded.r - origin.r}]`);
+  const colPart = colAbs ? `C${decoded.c + 1}` : (decoded.c === origin.c ? "C" : `C[${decoded.c - origin.c}]`);
+  return `${rowPart}${colPart}`;
+}
+
+/**
+ * Converts an A1 formula into a relative R1C1 shape anchored on `address`,
+ * so the same calculation at another position produces the same string.
+ * String literals are blanked and sheet prefixes are preserved.
+ */
+export function formulaShape(formula, address) {
+  const origin = XLSX.utils.decode_cell(cleanAddress(address));
+  const source = stripStringLiterals(formula).toUpperCase();
+  return source.replace(REFERENCE_PATTERN, (full, quotedSheet, plainSheet, start, end) => {
+    const prefix = quotedSheet ? `'${quotedSheet}'!` : plainSheet ? `${plainSheet}!` : "";
+    const startToken = r1c1Token(start, origin);
+    return end ? `${prefix}${startToken}:${r1c1Token(end, origin)}` : `${prefix}${startToken}`;
+  });
+}
+
 function blobSheets(indexBlobs) {
   return asArray(indexBlobs).flatMap((blob) => asArray(blob?.payload?.sheets));
 }

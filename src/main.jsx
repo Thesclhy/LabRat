@@ -46,6 +46,8 @@ import {
   patchServerProjectProfile,
   reviseServerWorkbookReviewRegion,
   readServerSourceDocumentCellClasses,
+  createServerRegionExtractionTemplate,
+  matchServerRegionExtractionTemplate,
   readServerSourceDocumentRange,
   confirmServerWorkbookReviewRegion,
   createServerWorkbookReviewRegion,
@@ -1997,6 +1999,43 @@ function workbookBatchSuggestionLabel(suggestion) {
   }
 }
 
+const TEMPLATE_MATCH_LABELS = {
+  exact: "Exact match",
+  shifted: "Shifted match",
+  ambiguous: "Ambiguous",
+  label_missing: "Label missing",
+  formula_mismatch: "Formula mismatch",
+  header_mismatch: "Header mismatch",
+  no_match: "No match",
+};
+
+export function templateMatchDetail(result) {
+  if (!result) return "";
+  const parts = [];
+  if (result.matchedRange) parts.push(`${result.sheetName ? `${result.sheetName}!` : ""}${result.matchedRange}`);
+  if (result.status === "shifted" && result.offset) {
+    const rows = result.offset.rows ? `${Math.abs(result.offset.rows)} row${Math.abs(result.offset.rows) === 1 ? "" : "s"} ${result.offset.rows > 0 ? "down" : "up"}` : "";
+    const cols = result.offset.cols ? `${Math.abs(result.offset.cols)} column${Math.abs(result.offset.cols) === 1 ? "" : "s"} ${result.offset.cols > 0 ? "right" : "left"}` : "";
+    parts.push(`moved ${[rows, cols].filter(Boolean).join(" and ")}`);
+  }
+  if (result.experimentLabel) parts.push(result.labelSource === "filename" ? `${result.experimentLabel} from file name` : result.experimentLabel);
+  if (result.status === "ambiguous" && asArray(result.alternatives).length) {
+    parts.push(`${result.alternatives.length} candidate blocks: ${result.alternatives.map((item) => item.matchedRange).join(", ")}`);
+  }
+  if (result.status === "formula_mismatch") {
+    const typed = asArray(result.formulaMismatches).map((item) => item.address);
+    const broken = asArray(result.brokenCells).map((item) => item.address);
+    if (typed.length) parts.push(`typed values at ${typed.slice(0, 6).join(", ")}`);
+    if (broken.length) parts.push(`typed over upstream: ${broken.slice(0, 6).join(", ")}`);
+  }
+  if (result.status === "header_mismatch") {
+    const run = asArray(result.headerRuns).find((item) => !item.ok);
+    if (run) parts.push(`${run.foundCount} of ${run.expectedCount} header cells found`);
+  }
+  if (result.status === "label_missing") parts.push("no experiment label in the sheet or file name");
+  return parts.join(" · ");
+}
+
 function workbookBatchInterpretationLabel(progress) {
   if (!progress || !progress.total) return "";
   const done = Math.max(0, progress.total - progress.pending);
@@ -2011,12 +2050,21 @@ export function WorkbookBatchCard({
   openingSessionId = "",
   canRetry = false,
   retrying = false,
+  templates = [],
+  matching = false,
   onOpen,
   onRetry,
+  onMatchTemplate,
 }) {
   const items = asArray(batch?.items);
   const summary = summarizeWorkbookBatch(items);
   const running = summary.pending > 0 || summary.uploading > 0;
+  const match = batch?.match || null;
+  const activeTemplates = asArray(templates).filter((template) => template?.status !== "archived" && template?.currentVersionId);
+  const [selectedTemplateId, setSelectedTemplateId] = useState(match?.templateId || activeTemplates[0]?.id || "");
+  const matchable = items.some((item) => item.status === "uploaded" && item.workbookReviewLink?.sourceDocumentId);
+  const resultsByDocument = new Map(asArray(match?.results).map((result) => [result.sourceDocumentId, result]));
+  const matchSummary = match?.summary || {};
   return (
     <div className="agent-workbook-batch" aria-label="Workbook batch upload">
       <div className="agent-workbook-batch-head">
@@ -2027,6 +2075,42 @@ export function WorkbookBatchCard({
           </button>
         )}
       </div>
+      {matchable && !running && onMatchTemplate && (
+        <div className="agent-workbook-batch-template" aria-label="Match an extraction template">
+          {activeTemplates.length ? (
+            <>
+              <label htmlFor={`batch-template-${batch.batchId}`}>Extraction template</label>
+              <select
+                id={`batch-template-${batch.batchId}`}
+                value={activeTemplates.some((template) => template.id === selectedTemplateId) ? selectedTemplateId : activeTemplates[0].id}
+                onChange={(event) => setSelectedTemplateId(event.target.value)}
+                disabled={matching}
+              >
+                {activeTemplates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name}{template.anchorRange ? ` (${template.sheetName ? `${template.sheetName}!` : ""}${template.anchorRange})` : ""}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                disabled={matching}
+                onClick={() => onMatchTemplate(batch, activeTemplates.find((template) => template.id === selectedTemplateId) || activeTemplates[0])}
+              >
+                {matching ? "Matching workbooks" : match ? "Match again" : "Match workbooks"}
+              </button>
+            </>
+          ) : (
+            <small>Confirm a region in one workbook and save it as an extraction template to match the others.</small>
+          )}
+          {match && (
+            <small className="agent-workbook-batch-template-summary">
+              {match.templateName} v{match.templateVersion}: {Object.entries(matchSummary).map(([status, count]) => `${count} ${(TEMPLATE_MATCH_LABELS[status] || status).toLowerCase()}`).join(", ")}
+            </small>
+          )}
+          {match?.error && <small className="agent-workbook-batch-error">{match.error}</small>}
+        </div>
+      )}
       <ul className="agent-workbook-batch-list">
         {items.map((item) => {
           const link = item.workbookReviewLink;
@@ -2053,6 +2137,17 @@ export function WorkbookBatchCard({
                   </span>
                 )}
               </div>
+              {(() => {
+                const result = link?.sourceDocumentId ? resultsByDocument.get(link.sourceDocumentId) : null;
+                if (!result) return null;
+                return (
+                  <div className="agent-workbook-batch-match" aria-label={`Template match for ${item.fileName}`}>
+                    <span className={`agent-workbook-batch-match-status is-${result.status}`}>{TEMPLATE_MATCH_LABELS[result.status] || result.status}</span>
+                    {result.isTemplateSource && <span className="agent-workbook-batch-match-source">template source</span>}
+                    <span>{templateMatchDetail(result)}</span>
+                  </div>
+                );
+              })()}
               {item.error && <small className="agent-workbook-batch-error">{item.error}</small>}
             </li>
           );
@@ -2116,6 +2211,7 @@ export function AgentPanel({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pendingSpreadsheetFiles, setPendingSpreadsheetFiles] = useState([]);
   const [retryingBatchId, setRetryingBatchId] = useState("");
+  const [matchingBatchId, setMatchingBatchId] = useState("");
   const batchFilesRef = useRef(new Map());
   const [analysisCapabilitiesState, setAnalysisCapabilitiesState] = useState({
     loading: false,
@@ -2401,6 +2497,65 @@ export function AgentPanel({
       // The next explicit project refresh reloads state; batch results are already shown.
     }
     return finalItems;
+  };
+  const compactTemplateMatch = (result) => ({
+    sourceDocumentId: result?.sourceDocumentId || "",
+    workbookName: result?.workbookName || "",
+    status: result?.status || "no_match",
+    sheetName: result?.sheetName || "",
+    matchedRange: result?.matchedRange || null,
+    offset: result?.offset || null,
+    experimentLabel: result?.experimentLabel || null,
+    labelSource: result?.labelSource || null,
+    isTemplateSource: Boolean(result?.isTemplateSource),
+    eligibleForBatchConfirm: Boolean(result?.eligibleForBatchConfirm),
+    headerRuns: asArray(result?.headerRuns).slice(0, 4),
+    formulaMismatches: asArray(result?.formulaMismatches).slice(0, 8).map((item) => ({ address: item.address, found: item.found })),
+    brokenCells: asArray(result?.brokenCells).slice(0, 8).map((item) => ({ address: item.address })),
+    alternatives: asArray(result?.alternatives).slice(0, 4).map((item) => ({ matchedRange: item.matchedRange, offset: item.offset })),
+  });
+  const matchWorkbookBatchTemplate = async (batch, template) => {
+    const batchId = batch?.batchId;
+    if (!batchId || !template?.currentVersionId || matchingBatchId) return;
+    const sourceDocumentIds = asArray(batch.items)
+      .filter((item) => item.status === "uploaded" && item.workbookReviewLink?.sourceDocumentId)
+      .map((item) => item.workbookReviewLink.sourceDocumentId);
+    if (!sourceDocumentIds.length) return;
+    setMatchingBatchId(batchId);
+    try {
+      const response = await matchServerRegionExtractionTemplate(template.currentVersionId, { sourceDocumentIds });
+      updateWorkbookBatchMessage(batchId, (message) => ({
+        workbookBatch: {
+          ...message.workbookBatch,
+          match: {
+            templateId: template.id,
+            templateName: response?.templateName || template.name,
+            templateVersionId: response?.templateVersionId || template.currentVersionId,
+            templateVersion: response?.templateVersion || template.currentVersion || 1,
+            summary: response?.summary || {},
+            results: asArray(response?.matches).map(compactTemplateMatch),
+            error: "",
+          },
+        },
+      }));
+    } catch (error) {
+      updateWorkbookBatchMessage(batchId, (message) => ({
+        workbookBatch: {
+          ...message.workbookBatch,
+          match: {
+            ...(message.workbookBatch?.match || {}),
+            templateId: template.id,
+            templateName: template.name,
+            templateVersion: template.currentVersion || 1,
+            results: asArray(message.workbookBatch?.match?.results),
+            summary: message.workbookBatch?.match?.summary || {},
+            error: `Template match failed: ${error?.message || String(error)}`,
+          },
+        },
+      }));
+    } finally {
+      setMatchingBatchId("");
+    }
   };
   const retryWorkbookBatch = async (batch) => {
     const batchId = batch?.batchId;
@@ -2793,8 +2948,11 @@ export function AgentPanel({
               openingSessionId={openingWorkbookReviewSessionId}
               canRetry={batchFilesRef.current.has(m.workbookBatch.batchId)}
               retrying={retryingBatchId === m.workbookBatch.batchId}
+              templates={asArray(projectState?.regionExtractionTemplates)}
+              matching={matchingBatchId === m.workbookBatch.batchId}
               onOpen={openWorkbookReviewLink}
               onRetry={() => retryWorkbookBatch(m.workbookBatch)}
+              onMatchTemplate={matchWorkbookBatchTemplate}
             />
           )}
           {m.agentRun?.visibleSteps?.length > 0 && (
@@ -3572,6 +3730,16 @@ function App() {
   useEffect(() => {
     setCalculationOverlay(null);
   }, [workbookReviewSessionId]);
+  const saveRegionExtractionTemplate = async (region, { name } = {}) => {
+    if (!activeProjectId) throw new Error("Select a project before saving an extraction template.");
+    const response = await createServerRegionExtractionTemplate(activeProjectId, { name, regionId: region?.id });
+    try {
+      await refreshProjectWorkspace();
+    } catch {
+      // The template is saved; the next project refresh lists it.
+    }
+    return response;
+  };
   const toggleWorkbookCalculationOverlay = async (region) => {
     if (!region?.id) return;
     if (calculationOverlay?.regionId === region.id) {
@@ -4061,6 +4229,8 @@ function App() {
               calculationOverlayRegionId={calculationOverlay?.regionId || ""}
               calculationOverlayState={calculationOverlay}
               onToggleCalculationOverlay={toggleWorkbookCalculationOverlay}
+              onSaveExtractionTemplate={saveRegionExtractionTemplate}
+              extractionTemplates={asArray(projectState?.regionExtractionTemplates)}
               onReviewExtractedExperiments={openExperimentBrowserDataRequest}
             />
           )}

@@ -1841,6 +1841,126 @@ test("source documents expose deterministic formula cell classes for a bounded r
   assert.equal((await badSheet.json()).error.code, "source_sheet_not_found");
 });
 
+test("region extraction templates are saved from confirmed regions and matched read-only across workbooks", async () => {
+  const project = await createProject("Extraction Template Project");
+  const firstUpload = await uploadProjectFile(project.id, makeFormulaCalculationWorkbookBlob(), "Calculation Exp31.xlsx");
+  assert.equal(firstUpload.response.status, 201);
+  const firstSession = await (await jsonFetch(`/api/projects/${project.id}/workbook-review-sessions`, {
+    method: "POST",
+    body: { fileObjectId: firstUpload.body.fileObject.id },
+  })).json();
+  const sessionId = firstSession.workbookReviewSession.id;
+  const sourceDocumentId = firstSession.sourceDocument.id;
+  const createdRegion = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/regions`, {
+    method: "POST",
+    body: { sourceDocumentId, sheetName: "Sheet1", range: "A3:D4", selectionMethod: "manual", deferInterpretation: true, idempotencyKey: "template_region_1" },
+  });
+  assert.equal(createdRegion.status, 201);
+  const region = (await createdRegion.json()).region;
+  const unconfirmedRegion = (await (await jsonFetch(`/api/workbook-review-sessions/${sessionId}/regions`, {
+    method: "POST",
+    body: { sourceDocumentId, sheetName: "Sheet1", range: "A1:B2", selectionMethod: "manual", deferInterpretation: true, idempotencyKey: "template_region_2" },
+  })).json()).region;
+
+  const tooEarly = await jsonFetch(`/api/projects/${project.id}/region-extraction-templates`, {
+    method: "POST",
+    body: { name: "Too early", regionId: unconfirmedRegion.id },
+  });
+  assert.equal(tooEarly.status, 409);
+  assert.equal((await tooEarly.json()).error.code, "region_extraction_template_requires_confirmed_region");
+
+  await confirmReviewRegion(sessionId, region);
+
+  const created = await jsonFetch(`/api/projects/${project.id}/region-extraction-templates`, {
+    method: "POST",
+    body: { name: "Carbon distribution", description: "Overall tots row", regionId: region.id },
+  });
+  assert.equal(created.status, 201);
+  const createdBody = await created.json();
+  const template = createdBody.regionExtractionTemplate;
+  assert.equal(template.name, "Carbon distribution");
+  assert.equal(template.status, "active");
+  assert.equal(createdBody.versions.length, 1);
+  const version = createdBody.versions[0];
+  assert.equal(version.version, 1);
+  assert.equal(version.sourceRegionId, region.id);
+  assert.equal(version.sourceDocumentId, sourceDocumentId);
+  assert.equal(version.signature.schemaVersion, "labrat.layoutSignature.v1");
+  assert.equal(version.signature.anchorRange, "A3:D4");
+  assert.equal(version.signature.cellExpectations.filter((item) => item.kind === "formula").length, 3);
+  assert.equal(version.signature.experimentLabelRule.kind, "filename");
+  assert.match(version.contentHash, /^[0-9a-f]{64}$/);
+
+  const duplicateName = await jsonFetch(`/api/projects/${project.id}/region-extraction-templates`, {
+    method: "POST",
+    body: { name: "carbon DISTRIBUTION", regionId: region.id },
+  });
+  assert.equal(duplicateName.status, 409);
+
+  const listed = await (await jsonFetch(`/api/projects/${project.id}/region-extraction-templates`)).json();
+  assert.equal(listed.regionExtractionTemplates.length, 1);
+  assert.equal(listed.regionExtractionTemplates[0].anchorRange, "A3:D4");
+  assert.equal(listed.regionExtractionTemplates[0].currentVersionId, version.id);
+  const detail = await (await jsonFetch(`/api/region-extraction-templates/${template.id}`)).json();
+  assert.equal(detail.versions[0].id, version.id);
+  const state = await (await jsonFetch(`/api/projects/${project.id}/state`)).json();
+  assert.equal(state.regionExtractionTemplates.length, 1);
+  assert.equal(state.regionExtractionTemplates[0].name, "Carbon distribution");
+
+  const secondUpload = await uploadProjectFile(project.id, makeFormulaCalculationWorkbookBlob(), "Calculation Exp32.xlsx");
+  const secondSession = await (await jsonFetch(`/api/projects/${project.id}/workbook-review-sessions`, {
+    method: "POST",
+    body: { fileObjectId: secondUpload.body.fileObject.id },
+  })).json();
+  const secondDocumentId = secondSession.sourceDocument.id;
+  assert.notEqual(secondDocumentId, sourceDocumentId);
+
+  const emptyMatch = await jsonFetch(`/api/region-extraction-template-versions/${version.id}/matches`, { method: "POST", body: { sourceDocumentIds: [] } });
+  assert.equal(emptyMatch.status, 400);
+
+  const matched = await jsonFetch(`/api/region-extraction-template-versions/${version.id}/matches`, {
+    method: "POST",
+    body: { sourceDocumentIds: [sourceDocumentId, secondDocumentId, "source_document_missing"] },
+  });
+  assert.equal(matched.status, 200);
+  const matchBody = await matched.json();
+  assert.equal(matchBody.templateName, "Carbon distribution");
+  assert.equal(matchBody.templateVersion, 1);
+  assert.deepEqual(matchBody.summary, { exact: 2, no_match: 1 });
+  const [own, other, missing] = matchBody.matches;
+  assert.equal(own.status, "exact");
+  assert.equal(own.isTemplateSource, true);
+  assert.equal(own.matchedRange, "A3:D4");
+  assert.equal(other.status, "exact");
+  assert.equal(other.isTemplateSource, false);
+  assert.equal(other.experimentLabel, "Exp32");
+  assert.equal(other.labelSource, "filename");
+  assert.equal(other.eligibleForBatchConfirm, true);
+  assert.equal(missing.status, "no_match");
+  assert.equal(missing.warnings[0].code, "source_document_not_found");
+  const regionsAfterMatch = await (await jsonFetch(`/api/workbook-review-sessions/${secondSession.workbookReviewSession.id}/regions`)).json();
+  assert.equal(
+    (regionsAfterMatch.regions || regionsAfterMatch.reviewRegions || []).some((item) => item.selectionMethod === "template_match"),
+    false,
+    "matching creates no regions",
+  );
+
+  const sameContentVersion = await jsonFetch(`/api/region-extraction-templates/${template.id}/versions`, { method: "POST", body: { regionId: region.id } });
+  assert.equal(sameContentVersion.status, 409);
+  assert.equal((await sameContentVersion.json()).error.code, "region_extraction_template_version_conflict");
+
+  const archived = await jsonFetch(`/api/region-extraction-templates/${template.id}/archive`, { method: "POST", body: {} });
+  assert.equal(archived.status, 200);
+  assert.equal((await archived.json()).regionExtractionTemplate.status, "archived");
+  const afterArchive = await jsonFetch(`/api/region-extraction-templates/${template.id}/versions`, { method: "POST", body: { regionId: region.id } });
+  assert.equal(afterArchive.status, 409);
+  assert.equal((await afterArchive.json()).error.code, "region_extraction_template_archived");
+  const activeOnly = await (await jsonFetch(`/api/projects/${project.id}/region-extraction-templates`)).json();
+  assert.equal(activeOnly.regionExtractionTemplates.length, 0);
+  const withArchived = await (await jsonFetch(`/api/projects/${project.id}/region-extraction-templates?includeArchived=true`)).json();
+  assert.equal(withArchived.regionExtractionTemplates.length, 1);
+});
+
 test("legacy dataset, source-extract, chart-proposal, and planner routes are retired", async () => {
   const project = await createProject("Snapshot Browser Project");
   for (const request of [
