@@ -277,11 +277,44 @@ blocks are listed as alternatives. Only shifted candidates in two places is
 
 - Creating a version requires an active region whose accepted revision is
   current; unconfirmed regions return `409`.
-- Editors create, version, and archive; viewers read and match.
-- Matching creates no regions, revisions, or sessions. Applying a template is
-  a later milestone.
+- Editors create, version, archive, and apply; viewers read and match.
+- Matching creates no regions, revisions, or sessions.
 - Bounded: template regions have at most 600 cells; sheets above 50,000
   indexed cells are skipped with a warning.
+
+Applying and batch confirmation:
+
+```text
+POST /api/region-extraction-template-versions/:versionId/apply        (Idempotency-Key)
+POST /api/projects/:projectId/workbook-review-regions/confirm-batch
+```
+
+`apply` re-matches each listed source document and, for `exact` and `shifted`
+results (or the subset in `onlyStatuses`), reuses or creates the workbook's
+WorkbookReviewSession, creates one region at the matched range with
+`selectionMethod: "template_match"`, `reviewStatus: "awaiting_review"`,
+`dataKind` (the template name), `regionExtractionTemplateVersionId`,
+`templateMatch` (status, offset, experiment label, link status and candidates),
+and `linkedExperimentId` when the label matches exactly one ExperimentIdentity.
+It writes revision 1 with `trigger: "template_match"` by rebasing the
+template's stored semantics onto the matched range and running it through the
+same interpretation validation as a model or user patch, plus backend
+provenance. No provider call. The response lists `applied` and `skipped`
+entries; a document whose range already holds a template-match region returns
+that region with `reason: "already_applied"`, and a manual or confirmed region
+at the same range is skipped, so replays are safe.
+
+`confirm-batch` takes `items: [{ regionId, revisionId, expectedRegionVersion,
+linkedExperimentId? }]`. Each item is validated on its own: the region must be
+a `template_match` region whose report was `exact` or `shifted`, otherwise it
+is rejected with `batch_confirm_requires_individual_review`; a supplied
+`linkedExperimentId` must belong to the project and is written before the
+version-checked confirmation. Each confirmed region gets its own accepted
+revision pointer, actor, and audit event, plus one batch audit event.
+Failures are reported per item and do not stop the rest.
+
+Region summaries expose `linkedExperimentId`, `dataKind`,
+`regionExtractionTemplateVersionId`, and `templateMatch`.
 
 ## Evidence Retrieval And Historical Data
 

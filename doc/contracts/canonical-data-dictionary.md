@@ -106,6 +106,14 @@ Contains:
 Ignoring or deleting a region never erases its immutable revision history or
 already-created downstream artifacts.
 
+A region created by applying a RegionExtractionTemplate carries
+`selectionMethod: "template_match"`, `regionExtractionTemplateVersionId`,
+`dataKind` (the template name, for example "Reaction rate data"), a bounded
+`templateMatch` record (status, offset, resolved experiment label, link status
+and candidates), and `linkedExperimentId` once the label resolves to exactly
+one ExperimentIdentity or the user chooses one. The link is metadata about the
+evidence; it publishes nothing.
+
 Automatically detected and manually selected regions are persisted before any
 model call. While `reviewStatus` is `interpreting`, Workbook Review can display
 the exact source rectangle immediately and asynchronously request the first

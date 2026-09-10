@@ -648,6 +648,10 @@ export class MemorySaasStore {
       deletedAt: input.deletedAt || null,
       deletedBy: input.deletedBy || null,
       deletedReason: input.deletedReason || "",
+      linkedExperimentId: input.linkedExperimentId || null,
+      dataKind: input.dataKind || null,
+      regionExtractionTemplateVersionId: input.regionExtractionTemplateVersionId || null,
+      templateMatch: copy(input.templateMatch) || null,
       createdAt,
       updatedAt: createdAt,
       createdBy: input.createdBy || null,
@@ -689,6 +693,12 @@ export class MemorySaasStore {
       deletedAt: patch.deletedAt ?? existing.deletedAt,
       deletedBy: patch.deletedBy ?? existing.deletedBy,
       deletedReason: patch.deletedReason ?? existing.deletedReason,
+      linkedExperimentId: patch.linkedExperimentId === undefined ? existing.linkedExperimentId ?? null : patch.linkedExperimentId,
+      dataKind: patch.dataKind === undefined ? existing.dataKind ?? null : patch.dataKind,
+      regionExtractionTemplateVersionId: patch.regionExtractionTemplateVersionId === undefined
+        ? existing.regionExtractionTemplateVersionId ?? null
+        : patch.regionExtractionTemplateVersionId,
+      templateMatch: patch.templateMatch === undefined ? existing.templateMatch ?? null : copy(patch.templateMatch),
       version: (Number(existing.version) || 1) + 1,
       updatedAt: nowIso(),
       updatedBy: patch.updatedBy || existing.updatedBy,

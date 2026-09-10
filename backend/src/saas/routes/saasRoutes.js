@@ -11,6 +11,11 @@ import {
   regionExtractionTemplateName,
   regionExtractionTemplateSummary,
 } from "../regionExtractionTemplates.js";
+import {
+  APPLY_ELIGIBLE_STATUSES,
+  applyTemplateMatch,
+  confirmTemplateRegionsBatch,
+} from "../regionTemplateApplications.js";
 import { runImportScan } from "../../import/services/importPipeline.js";
 import { getAuthContext, publicUser, requireAuth, requireLabRole, requireSuperAdmin } from "../authz.js";
 import { clearSessionCookie, setSessionCookie } from "../cookies.js";
@@ -2565,6 +2570,10 @@ async function workbookReviewRegionSummary(context, region) {
     deletedAt: region.deletedAt || null,
     deletedBy: region.deletedBy || null,
     deletedReason: region.deletedReason || "",
+    linkedExperimentId: region.linkedExperimentId || null,
+    dataKind: region.dataKind || null,
+    regionExtractionTemplateVersionId: region.regionExtractionTemplateVersionId || null,
+    templateMatch: region.templateMatch || null,
     currentRevision: regionUnderstandingRevisionSummary(currentRevision),
     acceptedRevision: regionUnderstandingRevisionSummary(
       acceptedRevision || (region.acceptedRevisionId === region.currentRevisionId ? currentRevision : null),
@@ -3266,6 +3275,130 @@ async function handleRegionExtractionTemplateMatches(req, res, context, template
   });
 }
 
+const MAX_TEMPLATE_APPLY_DOCUMENTS = 100;
+
+async function handleRegionExtractionTemplateApply(req, res, context, templateVersionId) {
+  const version = await context.store.findRegionExtractionTemplateVersionById(templateVersionId);
+  if (!version) throw Object.assign(new Error("Region extraction template version was not found."), { statusCode: 404, code: "region_extraction_template_version_not_found" });
+  const template = await context.store.findRegionExtractionTemplateById(version.regionExtractionTemplateId);
+  if (!template || template.status === "archived") {
+    throw Object.assign(new Error("Archived region extraction templates cannot be applied."), { statusCode: 409, code: "region_extraction_template_archived" });
+  }
+  const { auth, project } = await projectAuth(req, context, version.projectId, "editor");
+  const idempotencyKey = requiredIdempotencyKey(req, "apply an extraction template");
+  const body = await readJsonBody(req);
+  const requestedIds = [...new Set(asArray(body.sourceDocumentIds).map((id) => String(id || "").trim()).filter(Boolean))];
+  if (!requestedIds.length) {
+    throw Object.assign(new Error("Provide at least one sourceDocumentId to apply the template to."), { statusCode: 400, code: "source_document_ids_required" });
+  }
+  if (requestedIds.length > MAX_TEMPLATE_APPLY_DOCUMENTS) {
+    throw Object.assign(new Error(`Apply to at most ${MAX_TEMPLATE_APPLY_DOCUMENTS} source documents per request.`), { statusCode: 400, code: "too_many_source_documents" });
+  }
+  const onlyStatuses = asArray(body.onlyStatuses).map((status) => String(status || "").trim()).filter((status) => APPLY_ELIGIBLE_STATUSES.includes(status));
+  const allowedStatuses = onlyStatuses.length ? onlyStatuses : [...APPLY_ELIGIBLE_STATUSES];
+  const identities = context.store.listExperimentIdentities ? await context.store.listExperimentIdentities({ projectId: project.id }) : [];
+  const applied = [];
+  const skipped = [];
+  for (const sourceDocumentId of requestedIds) {
+    const sourceDocument = await context.store.findSourceDocumentById?.(sourceDocumentId);
+    if (!sourceDocument || sourceDocument.projectId !== project.id) {
+      skipped.push({ sourceDocumentId, status: "no_match", reason: "source_document_not_found" });
+      continue;
+    }
+    const indexBlobs = context.store.listSourceIndexBlobs ? await context.store.listSourceIndexBlobs({ sourceDocumentId: sourceDocument.id }) : [];
+    const report = matchTemplateVersionToDocument({ templateVersion: version, sourceDocument, indexBlobs });
+    if (!allowedStatuses.includes(report.status)) {
+      skipped.push({ sourceDocumentId, workbookName: report.workbookName, status: report.status, reason: "not_eligible", matchedRange: report.matchedRange, sheetName: report.sheetName });
+      continue;
+    }
+    const outcome = await applyTemplateMatch({
+      store: context.store,
+      project,
+      actorUserId: auth.user.id,
+      template,
+      templateVersion: version,
+      sourceDocument,
+      indexBlobs,
+      report,
+      identities,
+      idempotencyKey,
+    });
+    const entry = {
+      sourceDocumentId,
+      workbookName: report.workbookName,
+      status: report.status,
+      reason: outcome.reason,
+      workbookReviewSessionId: outcome.session?.id || null,
+      region: outcome.region ? await workbookReviewRegionSummary(context, outcome.region) : null,
+      revision: regionUnderstandingRevisionSummary(outcome.revision),
+      ...(outcome.warning ? { warning: outcome.warning } : {}),
+    };
+    if (outcome.skipped) skipped.push(entry);
+    else applied.push({ ...entry, created: outcome.created });
+    if (outcome.created) {
+      await context.store.recordAuditEvent({
+        labId: project.labId, projectId: project.id, actorUserId: auth.user.id,
+        action: "workbook_review_region.template_apply", targetType: "workbook_review_region", targetId: outcome.region.id,
+        summary: `Prefilled ${report.sheetName}!${report.matchedRange} in ${report.workbookName || sourceDocumentId} from extraction template ${template.name}.`,
+        metadata: { regionExtractionTemplateVersionId: version.id, sourceDocumentId, matchStatus: report.status, idempotencyKey },
+        ipAddress: clientIp(req), userAgent: userAgent(req),
+      });
+    }
+  }
+  sendJson(res, 200, {
+    schemaVersion: "labrat.regionTemplateApplyResult.v1",
+    regionExtractionTemplateId: template.id,
+    templateName: template.name,
+    templateVersionId: version.id,
+    templateVersion: version.version,
+    applied,
+    skipped,
+  });
+}
+
+async function handleWorkbookReviewRegionConfirmBatch(req, res, context, projectId) {
+  const { auth, project } = await projectAuth(req, context, projectId, "editor");
+  const body = await readJsonBody(req);
+  const items = asArray(body.items);
+  if (!items.length) throw Object.assign(new Error("Provide at least one region to confirm."), { statusCode: 400, code: "batch_confirm_items_required" });
+  if (items.length > 200) throw Object.assign(new Error("Confirm at most 200 regions per request."), { statusCode: 400, code: "too_many_regions" });
+  const identities = context.store.listExperimentIdentities ? await context.store.listExperimentIdentities({ projectId: project.id }) : [];
+  const outcome = await confirmTemplateRegionsBatch({ store: context.store, project, actorUserId: auth.user.id, items, identities });
+  const results = [];
+  for (const result of outcome.results) {
+    if (result.ok) {
+      await context.store.recordAuditEvent({
+        labId: project.labId, projectId: project.id, actorUserId: auth.user.id,
+        action: "workbook_review_region.confirm", targetType: "region_understanding_revision", targetId: result.revision.id,
+        summary: `Confirmed workbook review region ${result.region.sheetName}!${result.region.rangeRef} in a template batch.`,
+        metadata: { regionId: result.region.id, batch: true },
+      });
+    }
+    results.push({
+      regionId: result.regionId,
+      ok: result.ok,
+      code: result.code,
+      message: result.message,
+      region: result.region ? await workbookReviewRegionSummary(context, result.region) : null,
+      acceptedRevision: regionUnderstandingRevisionSummary(result.revision),
+    });
+  }
+  await context.store.recordAuditEvent({
+    labId: project.labId, projectId: project.id, actorUserId: auth.user.id,
+    action: "workbook_review_region.confirm_batch", targetType: "project", targetId: project.id,
+    summary: `Batch-confirmed ${outcome.confirmedCount} template-matched region${outcome.confirmedCount === 1 ? "" : "s"} (${outcome.rejectedCount} rejected).`,
+    metadata: { confirmedCount: outcome.confirmedCount, rejectedCount: outcome.rejectedCount },
+    ipAddress: clientIp(req), userAgent: userAgent(req),
+  });
+  sendJson(res, 200, {
+    schemaVersion: "labrat.regionBatchConfirmResult.v1",
+    projectId: project.id,
+    confirmedCount: outcome.confirmedCount,
+    rejectedCount: outcome.rejectedCount,
+    results,
+  });
+}
+
 async function handleProjectReusableChartTemplates(req, res, context, projectId, url) {
   const { auth, project } = await projectAuth(req, context, projectId, req.method === "POST" ? "editor" : "viewer");
   if (req.method === "GET") {
@@ -3817,6 +3950,14 @@ async function dispatch(req, res, context) {
   const regionExtractionTemplateMatchesMatch = pathName.match(/^\/api\/region-extraction-template-versions\/([^/]+)\/matches$/);
   if (regionExtractionTemplateMatchesMatch && req.method === "POST") {
     return handleRegionExtractionTemplateMatches(req, res, context, regionExtractionTemplateMatchesMatch[1]);
+  }
+  const regionExtractionTemplateApplyMatch = pathName.match(/^\/api\/region-extraction-template-versions\/([^/]+)\/apply$/);
+  if (regionExtractionTemplateApplyMatch && req.method === "POST") {
+    return handleRegionExtractionTemplateApply(req, res, context, regionExtractionTemplateApplyMatch[1]);
+  }
+  const regionConfirmBatchMatch = pathName.match(/^\/api\/projects\/([^/]+)\/workbook-review-regions\/confirm-batch$/);
+  if (regionConfirmBatchMatch && req.method === "POST") {
+    return handleWorkbookReviewRegionConfirmBatch(req, res, context, regionConfirmBatchMatch[1]);
   }
   const chartSpecTemplateEligibilityMatch = pathName.match(/^\/api\/chart-specs\/([^/]+)\/template-eligibility$/);
   if (chartSpecTemplateEligibilityMatch && req.method === "GET") {

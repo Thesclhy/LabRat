@@ -365,4 +365,33 @@ describe("WorkbookReviewDock", () => {
     );
     expect(within(confirmedCard).getByText(/\(v2\)/)).toBeTruthy();
   });
+
+  it("saves a confirmed region as a new version of an existing template", async () => {
+    const onUpdateExtractionTemplate = vi.fn().mockResolvedValue({ regionExtractionTemplate: { id: "template_1" }, versions: [{ id: "v2", version: 2 }] });
+    render(
+      <WorkbookReviewDock
+        reviewState={reviewState()}
+        reviewRegions={reviewRegions}
+        activeRegionId="region_2"
+        onSaveExtractionTemplate={vi.fn()}
+        onUpdateExtractionTemplate={onUpdateExtractionTemplate}
+        extractionTemplates={[
+          { id: "template_1", name: "Carbon distribution", status: "active", sourceRegionId: "region_other", currentVersion: 1 },
+          { id: "template_archived", name: "Old", status: "archived", sourceRegionId: "region_x" },
+        ]}
+      />,
+    );
+    const card = screen.getByRole("article", { name: "Region Runs!F1:H5" });
+    const select = within(card).getByLabelText("Update an existing template from this region");
+    expect(within(select).getAllByRole("option").map((option) => option.textContent)).toEqual(["Choose template", "Carbon distribution (v1)"]);
+    const button = within(card).getByRole("button", { name: "Save Runs!F1:H5 as a new template version" });
+    expect(button.disabled).toBe(true);
+    fireEvent.change(select, { target: { value: "template_1" } });
+    fireEvent.click(button);
+    await waitFor(() => expect(onUpdateExtractionTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "region_2" }),
+      expect.objectContaining({ id: "template_1" }),
+    ));
+    expect(await within(card).findByText("Carbon distribution updated to v2")).toBeTruthy();
+  });
 });

@@ -48,6 +48,9 @@ import {
   readServerSourceDocumentCellClasses,
   createServerRegionExtractionTemplate,
   matchServerRegionExtractionTemplate,
+  applyServerRegionExtractionTemplate,
+  confirmServerWorkbookReviewRegionsBatch,
+  createServerRegionExtractionTemplateVersion,
   readServerSourceDocumentRange,
   confirmServerWorkbookReviewRegion,
   createServerWorkbookReviewRegion,
@@ -2052,14 +2055,48 @@ export function WorkbookBatchCard({
   retrying = false,
   templates = [],
   matching = false,
+  applying = false,
+  confirming = false,
+  experiments = [],
   onOpen,
   onRetry,
   onMatchTemplate,
+  onApplyTemplate,
+  onConfirmApplied,
 }) {
   const items = asArray(batch?.items);
   const summary = summarizeWorkbookBatch(items);
   const running = summary.pending > 0 || summary.uploading > 0;
   const match = batch?.match || null;
+  const apply = batch?.apply || null;
+  const appliedRows = asArray(apply?.items);
+  const [selectionOverrides, setSelectionOverrides] = useState({});
+  const [chosenLinks, setChosenLinks] = useState({});
+  const eligibleMatches = asArray(match?.results).filter((result) => result.eligibleForBatchConfirm && !result.isTemplateSource);
+  const confirmableRows = appliedRows.filter((row) => !row.confirmed && row.regionId);
+  const rowLink = (row) => (chosenLinks[row.regionId] !== undefined ? chosenLinks[row.regionId] : row.linkedExperimentId || "");
+  // Rows that arrived already linked are selected by default; the user can
+  // untick them, and rows that needed a manual link are ticked explicitly.
+  const isRowSelected = (row) => (
+    !row.confirmed
+    && Boolean(rowLink(row))
+    && (selectionOverrides[row.regionId] !== undefined ? selectionOverrides[row.regionId] : Boolean(row.linkedExperimentId))
+  );
+  const toggleRow = (regionId, checked) => {
+    setSelectionOverrides((current) => ({ ...current, [regionId]: checked }));
+  };
+  const selectAll = () => setSelectionOverrides(Object.fromEntries(confirmableRows.filter((row) => rowLink(row)).map((row) => [row.regionId, true])));
+  const selectedRows = confirmableRows.filter(isRowSelected);
+  const confirmSelected = () => {
+    const selection = selectedRows
+      .map((row) => ({
+        regionId: row.regionId,
+        revisionId: row.revisionId,
+        expectedRegionVersion: row.regionVersion,
+        ...(rowLink(row) !== (row.linkedExperimentId || "") ? { linkedExperimentId: rowLink(row) } : {}),
+      }));
+    if (selection.length) onConfirmApplied?.(batch, selection);
+  };
   const activeTemplates = asArray(templates).filter((template) => template?.status !== "archived" && template?.currentVersionId);
   const [selectedTemplateId, setSelectedTemplateId] = useState(match?.templateId || activeTemplates[0]?.id || "");
   const matchable = items.some((item) => item.status === "uploaded" && item.workbookReviewLink?.sourceDocumentId);
@@ -2109,6 +2146,89 @@ export function WorkbookBatchCard({
             </small>
           )}
           {match?.error && <small className="agent-workbook-batch-error">{match.error}</small>}
+          {match && eligibleMatches.length > 0 && onApplyTemplate && (
+            <button
+              type="button"
+              className="agent-workbook-batch-apply"
+              disabled={applying || matching}
+              onClick={() => onApplyTemplate(batch, eligibleMatches.map((result) => result.sourceDocumentId))}
+            >
+              {applying ? "Applying template" : `Apply to ${eligibleMatches.length} matched file${eligibleMatches.length === 1 ? "" : "s"}`}
+            </button>
+          )}
+          {apply?.error && <small className="agent-workbook-batch-error">{apply.error}</small>}
+        </div>
+      )}
+      {appliedRows.length > 0 && (
+        <div className="agent-workbook-batch-confirm" aria-label="Confirm prefilled regions">
+          <div className="agent-workbook-batch-confirm-head">
+            <strong>{appliedRows.filter((row) => row.confirmed).length}/{appliedRows.length} prefilled regions confirmed</strong>
+            {confirmableRows.length > 0 && (
+              <>
+                <button type="button" disabled={confirming} onClick={selectAll}>Select all linked</button>
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={confirming || !selectedRows.length}
+                  onClick={confirmSelected}
+                >
+                  {confirming ? "Confirming" : `Confirm selected (${selectedRows.length})`}
+                </button>
+              </>
+            )}
+          </div>
+          <ul className="agent-workbook-batch-confirm-list">
+            {appliedRows.map((row) => {
+              const link = rowLink(row);
+              const checkboxId = `confirm-${batch.batchId}-${row.regionId}`;
+              return (
+                <li key={row.regionId || row.sourceDocumentId} className={`agent-workbook-batch-confirm-item${row.confirmed ? " is-confirmed" : ""}${row.error ? " is-failed" : ""}`}>
+                  <input
+                    id={checkboxId}
+                    type="checkbox"
+                    aria-label={`Select ${row.fileName} for confirmation`}
+                    checked={isRowSelected(row)}
+                    disabled={row.confirmed || confirming || !link}
+                    onChange={(event) => toggleRow(row.regionId, event.target.checked)}
+                  />
+                  <label htmlFor={checkboxId} className="agent-workbook-batch-confirm-file">
+                    <button
+                      type="button"
+                      className="agent-workbook-batch-confirm-open"
+                      onClick={() => onOpen?.({
+                        workbookReviewSessionId: row.workbookReviewSessionId,
+                        sourceDocumentId: row.sourceDocumentId,
+                        workbookName: row.fileName,
+                        regionCount: 0,
+                        focusRange: { sheetName: row.sheetName, range: row.range },
+                      })}
+                    >
+                      {row.fileName}
+                    </button>
+                    <span>{row.sheetName ? `${row.sheetName}!` : ""}{row.range}</span>
+                  </label>
+                  {row.confirmed ? (
+                    <span className="agent-workbook-batch-confirm-status is-confirmed">Confirmed{row.experimentLabel ? ` · ${row.experimentLabel}` : ""}</span>
+                  ) : row.linkStatus === "resolved" && row.linkedExperimentId && chosenLinks[row.regionId] === undefined ? (
+                    <span className="agent-workbook-batch-confirm-status">{row.experimentLabel || "linked"}</span>
+                  ) : (
+                    <select
+                      aria-label={`Experiment for ${row.fileName}`}
+                      value={link}
+                      disabled={confirming}
+                      onChange={(event) => setChosenLinks((current) => ({ ...current, [row.regionId]: event.target.value }))}
+                    >
+                      <option value="">Choose experiment{row.experimentLabel ? ` for ${row.experimentLabel}` : ""}</option>
+                      {asArray(experiments).map((experiment) => (
+                        <option key={experiment.experimentId} value={experiment.experimentId}>{experiment.label}</option>
+                      ))}
+                    </select>
+                  )}
+                  {row.error && <small className="agent-workbook-batch-error">{row.error}</small>}
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
       <ul className="agent-workbook-batch-list">
@@ -2145,6 +2265,15 @@ export function WorkbookBatchCard({
                     <span className={`agent-workbook-batch-match-status is-${result.status}`}>{TEMPLATE_MATCH_LABELS[result.status] || result.status}</span>
                     {result.isTemplateSource && <span className="agent-workbook-batch-match-source">template source</span>}
                     <span>{templateMatchDetail(result)}</span>
+                    {!result.eligibleForBatchConfirm && result.matchedRange && link && (
+                      <button
+                        type="button"
+                        className="agent-workbook-batch-match-open"
+                        onClick={() => onOpen?.({ ...link, focusRange: { sheetName: result.sheetName, range: result.matchedRange } })}
+                      >
+                        Review in workbook
+                      </button>
+                    )}
                   </div>
                 );
               })()}
@@ -2212,6 +2341,9 @@ export function AgentPanel({
   const [pendingSpreadsheetFiles, setPendingSpreadsheetFiles] = useState([]);
   const [retryingBatchId, setRetryingBatchId] = useState("");
   const [matchingBatchId, setMatchingBatchId] = useState("");
+  const [applyingBatchId, setApplyingBatchId] = useState("");
+  const [confirmingBatchId, setConfirmingBatchId] = useState("");
+  const [batchExperiments, setBatchExperiments] = useState([]);
   const batchFilesRef = useRef(new Map());
   const [analysisCapabilitiesState, setAnalysisCapabilitiesState] = useState({
     loading: false,
@@ -2555,6 +2687,111 @@ export function AgentPanel({
       }));
     } finally {
       setMatchingBatchId("");
+    }
+  };
+  const appliedRowFromEntry = (entry, batch) => {
+    const item = asArray(batch?.items).find((candidate) => candidate.workbookReviewLink?.sourceDocumentId === entry.sourceDocumentId);
+    const region = entry.region || {};
+    return {
+      sourceDocumentId: entry.sourceDocumentId,
+      fileName: item?.fileName || entry.workbookName || entry.sourceDocumentId,
+      workbookReviewSessionId: entry.workbookReviewSessionId || region.workbookReviewSessionId || item?.workbookReviewLink?.workbookReviewSessionId || "",
+      regionId: region.id || "",
+      revisionId: entry.revision?.id || region.currentRevisionId || "",
+      regionVersion: region.version,
+      sheetName: region.sheetName || "",
+      range: region.rangeRef || "",
+      status: entry.status,
+      reason: entry.reason,
+      experimentLabel: region.templateMatch?.experimentLabel || null,
+      linkStatus: region.templateMatch?.linkStatus || "none",
+      linkedExperimentId: region.linkedExperimentId || null,
+      confirmed: region.reviewStatus === "accepted",
+      error: entry.warning?.message || "",
+    };
+  };
+  const applyWorkbookBatchTemplate = async (batch, sourceDocumentIds) => {
+    const batchId = batch?.batchId;
+    const templateVersionId = batch?.match?.templateVersionId;
+    if (!batchId || !templateVersionId || applyingBatchId || !asArray(sourceDocumentIds).length) return;
+    setApplyingBatchId(batchId);
+    try {
+      const [response, experiments] = await Promise.all([
+        applyServerRegionExtractionTemplate(templateVersionId, { sourceDocumentIds, idempotencyKey: `apply_template_${uid()}` }),
+        loadExperimentSuggestionsForBatch(),
+      ]);
+      setBatchExperiments(experiments);
+      const rows = [
+        ...asArray(response?.applied).map((entry) => appliedRowFromEntry(entry, batch)),
+        ...asArray(response?.skipped).filter((entry) => entry.region?.id).map((entry) => appliedRowFromEntry(entry, batch)),
+      ];
+      updateWorkbookBatchMessage(batchId, (message) => ({
+        workbookBatch: {
+          ...message.workbookBatch,
+          apply: { templateVersionId, templateName: response?.templateName || batch.match?.templateName || "", items: rows, error: "" },
+        },
+      }));
+      try {
+        await reloadProjectAfterAgentAction();
+      } catch {
+        // Prefilled regions are already created; the next refresh lists them.
+      }
+    } catch (error) {
+      updateWorkbookBatchMessage(batchId, (message) => ({
+        workbookBatch: {
+          ...message.workbookBatch,
+          apply: { ...(message.workbookBatch?.apply || { items: [] }), templateVersionId, error: `Template apply failed: ${error?.message || String(error)}` },
+        },
+      }));
+    } finally {
+      setApplyingBatchId("");
+    }
+  };
+  const confirmWorkbookBatchRegions = async (batch, selection) => {
+    const batchId = batch?.batchId;
+    if (!batchId || !activeProjectId || confirmingBatchId || !asArray(selection).length) return;
+    setConfirmingBatchId(batchId);
+    try {
+      const response = await confirmServerWorkbookReviewRegionsBatch(activeProjectId, { items: selection });
+      const resultsByRegion = new Map(asArray(response?.results).map((result) => [result.regionId, result]));
+      updateWorkbookBatchMessage(batchId, (message) => ({
+        workbookBatch: {
+          ...message.workbookBatch,
+          apply: {
+            ...(message.workbookBatch?.apply || {}),
+            items: asArray(message.workbookBatch?.apply?.items).map((row) => {
+              const result = resultsByRegion.get(row.regionId);
+              if (!result) return row;
+              return result.ok
+                ? {
+                  ...row,
+                  confirmed: true,
+                  error: "",
+                  regionVersion: result.region?.version ?? row.regionVersion,
+                  linkedExperimentId: result.region?.linkedExperimentId ?? row.linkedExperimentId,
+                  linkStatus: result.region?.templateMatch?.linkStatus || row.linkStatus,
+                  experimentLabel: result.region?.templateMatch?.experimentLabel || row.experimentLabel,
+                }
+                : { ...row, error: result.message || result.code || "Confirmation failed." };
+            }),
+            error: "",
+          },
+        },
+      }));
+      try {
+        await reloadProjectAfterAgentAction();
+      } catch {
+        // Confirmed regions are already saved; the next refresh lists them.
+      }
+    } catch (error) {
+      updateWorkbookBatchMessage(batchId, (message) => ({
+        workbookBatch: {
+          ...message.workbookBatch,
+          apply: { ...(message.workbookBatch?.apply || { items: [] }), error: `Batch confirmation failed: ${error?.message || String(error)}` },
+        },
+      }));
+    } finally {
+      setConfirmingBatchId("");
     }
   };
   const retryWorkbookBatch = async (batch) => {
@@ -2950,9 +3187,14 @@ export function AgentPanel({
               retrying={retryingBatchId === m.workbookBatch.batchId}
               templates={asArray(projectState?.regionExtractionTemplates)}
               matching={matchingBatchId === m.workbookBatch.batchId}
+              applying={applyingBatchId === m.workbookBatch.batchId}
+              confirming={confirmingBatchId === m.workbookBatch.batchId}
+              experiments={batchExperiments}
               onOpen={openWorkbookReviewLink}
               onRetry={() => retryWorkbookBatch(m.workbookBatch)}
               onMatchTemplate={matchWorkbookBatchTemplate}
+              onApplyTemplate={applyWorkbookBatchTemplate}
+              onConfirmApplied={confirmWorkbookBatchRegions}
             />
           )}
           {m.agentRun?.visibleSteps?.length > 0 && (
@@ -3613,6 +3855,23 @@ function App() {
     try {
       const response = await getServerWorkbookReviewSession(sessionId);
       handleWorkbookReviewReadyFromAgent({ response });
+      const focusRange = link?.focusRange;
+      if (focusRange?.sheetName && focusRange?.range) {
+        const sourceDocumentId = response?.sourceDocument?.id || link.sourceDocumentId || "";
+        const matchingRegion = asArray(response?.reviewRegions).find((region) => (
+          region.disposition === "active"
+          && String(region.sheetName || "").toLowerCase() === String(focusRange.sheetName).toLowerCase()
+          && String(region.rangeRef || "").toUpperCase() === String(focusRange.range).toUpperCase()
+        ));
+        if (matchingRegion) setActiveWorkbookReviewDraftRegionId(matchingRegion.id);
+        setWorkbookReviewFocusSelection({
+          sourceDocumentId,
+          sheetName: focusRange.sheetName,
+          range: focusRange.range,
+          requestId: uid(),
+          selectionMethod: "red_box_click",
+        });
+      }
     } catch (error) {
       setWorkbookReviewState((current) => ({
         ...current,
@@ -3621,6 +3880,16 @@ function App() {
       }));
       throw error;
     }
+  };
+  const updateRegionExtractionTemplate = async (region, template) => {
+    if (!template?.id) throw new Error("Choose an extraction template to update.");
+    const response = await createServerRegionExtractionTemplateVersion(template.id, { regionId: region?.id });
+    try {
+      await refreshProjectWorkspace();
+    } catch {
+      // The version is saved; the next project refresh lists it.
+    }
+    return response;
   };
   const handleWorkbookReviewRegionActivate = (regionId) => {
     setActiveWorkbookReviewDraftRegionId(regionId);
@@ -4230,6 +4499,7 @@ function App() {
               calculationOverlayState={calculationOverlay}
               onToggleCalculationOverlay={toggleWorkbookCalculationOverlay}
               onSaveExtractionTemplate={saveRegionExtractionTemplate}
+              onUpdateExtractionTemplate={updateRegionExtractionTemplate}
               extractionTemplates={asArray(projectState?.regionExtractionTemplates)}
               onReviewExtractedExperiments={openExperimentBrowserDataRequest}
             />

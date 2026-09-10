@@ -1961,6 +1961,119 @@ test("region extraction templates are saved from confirmed regions and matched r
   assert.equal(withArchived.regionExtractionTemplates.length, 1);
 });
 
+test("extraction templates apply as prefilled linked regions and confirm in one batch", async () => {
+  const project = await createProject("Template Apply Project");
+  const firstUpload = await uploadProjectFile(project.id, makeFormulaCalculationWorkbookBlob(), "Calculation Exp31.xlsx");
+  const firstSession = await (await jsonFetch(`/api/projects/${project.id}/workbook-review-sessions`, {
+    method: "POST",
+    body: { fileObjectId: firstUpload.body.fileObject.id },
+  })).json();
+  const sessionId = firstSession.workbookReviewSession.id;
+  const sourceDocumentId = firstSession.sourceDocument.id;
+  const region = (await (await jsonFetch(`/api/workbook-review-sessions/${sessionId}/regions`, {
+    method: "POST",
+    body: { sourceDocumentId, sheetName: "Sheet1", range: "A3:D4", selectionMethod: "manual", deferInterpretation: true, idempotencyKey: "apply_region_1" },
+  })).json()).region;
+  await confirmReviewRegion(sessionId, region);
+  const templateBody = await (await jsonFetch(`/api/projects/${project.id}/region-extraction-templates`, {
+    method: "POST",
+    body: { name: "Overall tots", regionId: region.id },
+  })).json();
+  const versionId = templateBody.versions[0].id;
+
+  store.experimentIdentities.set(`identity_${project.id}_32`, {
+    id: `identity_${project.id}_32`, labId: project.labId, projectId: project.id, canonicalLabel: "Exp32", aliases: ["Exp32"],
+  });
+  const secondUpload = await uploadProjectFile(project.id, makeFormulaCalculationWorkbookBlob(), "Calculation Exp32.xlsx");
+  const secondSession = await (await jsonFetch(`/api/projects/${project.id}/workbook-review-sessions`, {
+    method: "POST",
+    body: { fileObjectId: secondUpload.body.fileObject.id },
+  })).json();
+  const secondDocumentId = secondSession.sourceDocument.id;
+  const thirdUpload = await uploadProjectFile(project.id, makeFormulaCalculationWorkbookBlob(), "Calculation Exp33.xlsx");
+  const thirdDocumentId = (await (await jsonFetch(`/api/projects/${project.id}/source-documents`)).json()).sourceDocuments
+    .find((document) => document.fileObjectId === thirdUpload.body.fileObject.id)?.id
+    || (await (await jsonFetch(`/api/projects/${project.id}/workbook-review-sessions`, { method: "POST", body: { fileObjectId: thirdUpload.body.fileObject.id } })).json()).sourceDocument.id;
+
+  const missingKey = await jsonFetch(`/api/region-extraction-template-versions/${versionId}/apply`, {
+    method: "POST",
+    body: { sourceDocumentIds: [secondDocumentId] },
+  });
+  assert.equal(missingKey.status, 400);
+  assert.equal((await missingKey.json()).error.code, "idempotency_key_required");
+
+  const applied = await jsonFetch(`/api/region-extraction-template-versions/${versionId}/apply`, {
+    method: "POST",
+    headers: { "Idempotency-Key": "apply_batch_1" },
+    body: { sourceDocumentIds: [sourceDocumentId, secondDocumentId, thirdDocumentId] },
+  });
+  assert.equal(applied.status, 200);
+  const appliedBody = await applied.json();
+  assert.equal(appliedBody.templateName, "Overall tots");
+  assert.equal(appliedBody.applied.length, 2, "the template source itself is skipped because its region is already confirmed");
+  assert.equal(appliedBody.skipped.length, 1);
+  assert.equal(appliedBody.skipped[0].reason, "region_already_confirmed");
+  const second = appliedBody.applied.find((entry) => entry.sourceDocumentId === secondDocumentId);
+  const third = appliedBody.applied.find((entry) => entry.sourceDocumentId === thirdDocumentId);
+  assert.equal(second.created, true);
+  assert.equal(second.region.selectionMethod, "template_match");
+  assert.equal(second.region.reviewStatus, "awaiting_review");
+  assert.equal(second.region.rangeRef, "A3:D4");
+  assert.equal(second.region.linkedExperimentId, `identity_${project.id}_32`);
+  assert.equal(second.region.dataKind, "Overall tots");
+  assert.equal(second.region.templateMatch.linkStatus, "resolved");
+  assert.equal(second.revision.trigger, "template_match");
+  assert.equal(second.workbookReviewSessionId, secondSession.workbookReviewSession.id, "the existing session is reused");
+  assert.equal(third.region.linkedExperimentId, null);
+  assert.equal(third.region.templateMatch.linkStatus, "unresolved");
+  assert.ok(third.workbookReviewSessionId, "a session is created when the workbook had none");
+
+  const replay = await (await jsonFetch(`/api/region-extraction-template-versions/${versionId}/apply`, {
+    method: "POST",
+    headers: { "Idempotency-Key": "apply_batch_2" },
+    body: { sourceDocumentIds: [secondDocumentId] },
+  })).json();
+  assert.equal(replay.applied[0].created, false);
+  assert.equal(replay.applied[0].reason, "already_applied");
+  assert.equal(replay.applied[0].region.id, second.region.id);
+
+  const regionsInSecond = await (await jsonFetch(`/api/workbook-review-sessions/${secondSession.workbookReviewSession.id}/regions`)).json();
+  const listedRegions = regionsInSecond.regions || regionsInSecond.reviewRegions || [];
+  assert.equal(listedRegions.filter((item) => item.selectionMethod === "template_match").length, 1);
+
+  const manualRegion = (await (await jsonFetch(`/api/workbook-review-sessions/${secondSession.workbookReviewSession.id}/regions`, {
+    method: "POST",
+    body: { sourceDocumentId: secondDocumentId, sheetName: "Sheet1", range: "A1:B1", selectionMethod: "manual", deferInterpretation: true, idempotencyKey: "apply_region_manual" },
+  })).json()).region;
+
+  const confirmed = await jsonFetch(`/api/projects/${project.id}/workbook-review-regions/confirm-batch`, {
+    method: "POST",
+    body: {
+      items: [
+        { regionId: second.region.id, revisionId: second.revision.id, expectedRegionVersion: second.region.version },
+        { regionId: third.region.id, revisionId: third.revision.id, expectedRegionVersion: third.region.version, linkedExperimentId: `identity_${project.id}_32` },
+        { regionId: manualRegion.id, revisionId: null, expectedRegionVersion: manualRegion.version },
+      ],
+    },
+  });
+  assert.equal(confirmed.status, 200);
+  const confirmedBody = await confirmed.json();
+  assert.equal(confirmedBody.confirmedCount, 2);
+  assert.equal(confirmedBody.rejectedCount, 1);
+  assert.equal(confirmedBody.results[0].ok, true);
+  assert.equal(confirmedBody.results[0].region.reviewStatus, "accepted");
+  assert.equal(confirmedBody.results[0].region.acceptedRevisionId, second.revision.id);
+  assert.equal(confirmedBody.results[1].ok, true);
+  assert.equal(confirmedBody.results[1].region.linkedExperimentId, `identity_${project.id}_32`);
+  assert.equal(confirmedBody.results[2].ok, false);
+  assert.equal(confirmedBody.results[2].code, "batch_confirm_requires_individual_review");
+
+  const accepted = await (await jsonFetch(`/api/projects/${project.id}/region-understandings?status=accepted`)).json();
+  assert.equal(accepted.regionUnderstandings.filter((item) => item.region?.selectionMethod === "template_match").length, 2);
+  const empty = await jsonFetch(`/api/projects/${project.id}/workbook-review-regions/confirm-batch`, { method: "POST", body: { items: [] } });
+  assert.equal(empty.status, 400);
+});
+
 test("legacy dataset, source-extract, chart-proposal, and planner routes are retired", async () => {
   const project = await createProject("Snapshot Browser Project");
   for (const request of [

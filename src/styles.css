@@ -11430,3 +11430,130 @@ tbody tr:hover {
   color: #64748b;
   font-style: italic;
 }
+
+/* Template apply and batch confirmation */
+.workbook-region-template-update {
+  display: grid;
+  gap: 4px;
+}
+.workbook-region-template-update label {
+  font-size: 11px;
+  color: var(--muted);
+}
+.workbook-region-template-update select {
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 12px;
+  background: #fff;
+}
+.agent-workbook-batch-apply {
+  flex-basis: 100%;
+  width: fit-content;
+  border: 1px solid #0f6b6b !important;
+  background: #0f6b6b !important;
+  color: #fff !important;
+}
+.agent-workbook-batch-match-open {
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #fff;
+  color: #334155;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.agent-workbook-batch-confirm {
+  border-top: 1px solid #e2e8f0;
+  background: #fbfcfc;
+}
+.agent-workbook-batch-confirm-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  color: #334155;
+}
+.agent-workbook-batch-confirm-head button {
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #fff;
+  color: #334155;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.agent-workbook-batch-confirm-head button.primary {
+  border-color: #0f6b6b;
+  background: #0f6b6b;
+  color: #fff;
+}
+.agent-workbook-batch-confirm-head button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.agent-workbook-batch-confirm-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 12px 8px;
+  display: grid;
+  gap: 6px;
+}
+.agent-workbook-batch-confirm-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: 12px;
+  color: #334155;
+}
+.agent-workbook-batch-confirm-item.is-confirmed {
+  color: #166534;
+}
+.agent-workbook-batch-confirm-item small {
+  grid-column: 2 / -1;
+}
+.agent-workbook-batch-confirm-file {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-width: 0;
+}
+.agent-workbook-batch-confirm-file span {
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+.agent-workbook-batch-confirm-open {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: #0f172a;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: #cbd5e1;
+  text-underline-offset: 3px;
+}
+.agent-workbook-batch-confirm-status {
+  font-size: 11.5px;
+  color: #475569;
+}
+.agent-workbook-batch-confirm-status.is-confirmed {
+  color: #166534;
+  font-weight: 600;
+}
+.agent-workbook-batch-confirm-item select {
+  max-width: 220px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  padding: 3px 6px;
+  font-size: 12px;
+  background: #fff;
+}

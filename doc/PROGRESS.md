@@ -15,6 +15,29 @@ Keep entries concise, newest first, and include:
 
 ## 2026-09-09
 
+- Template apply and one-click batch confirmation (Milestone 4 of
+  `doc/plans/batch-workbook-experiment-linking-plan.md`). New
+  `backend/src/saas/regionTemplateApplications.js` and migration 028. `POST
+  /api/region-extraction-template-versions/:id/apply` re-matches each listed
+  workbook and, for exact or shifted matches, reuses or creates its review
+  session and creates a `template_match` region at the matched range with a
+  prefilled `template_match` revision built by rebasing the template's stored
+  semantics and validating them through the ordinary interpretation path
+  plus provenance. Each region records `dataKind` (template name),
+  `regionExtractionTemplateVersionId`, a bounded `templateMatch`, and
+  `linkedExperimentId` when the experiment label resolves to exactly one
+  identity. `POST /api/projects/:id/workbook-review-regions/confirm-batch`
+  confirms template-matched exact/shifted regions individually in one
+  request, applying user-chosen experiment links first and rejecting anything
+  else with `batch_confirm_requires_individual_review`. Frontend: the batch
+  card gains `Apply to N matched files`, a confirmation checklist with
+  select-all, experiment pickers for unresolved links, per-row results, and
+  `Review in workbook` links that open the matched range; confirmed region
+  cards can save a new version of an existing template. No provider call
+  anywhere in this path. Verification: backend suite, frontend suite,
+  production build. Follow-ups: Milestone 5 shows linked workbook data in
+  Experiment Browser; Milestone 6 charts from linked regions.
+
 - Region extraction templates (Milestone 3 of
   `doc/plans/batch-workbook-experiment-linking-plan.md`). A confirmed region
   can be saved as a named, versioned `RegionExtractionTemplate` (migration

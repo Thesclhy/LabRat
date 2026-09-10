@@ -56,7 +56,9 @@ function RegionReviewCard({
   onDelete,
   onToggleCalculationOverlay,
   onSaveExtractionTemplate,
+  onUpdateExtractionTemplate,
   existingTemplate = null,
+  updatableTemplates = [],
 }) {
   const revision = region.currentRevision || null;
   const label = regionLabel(region);
@@ -66,6 +68,8 @@ function RegionReviewCard({
   const [templateNaming, setTemplateNaming] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [savedTemplateName, setSavedTemplateName] = useState("");
+  const [updateTemplateId, setUpdateTemplateId] = useState("");
+  const [updatedTemplateNote, setUpdatedTemplateNote] = useState("");
   const blockers = asArray(revision?.validation?.blockers);
   const warnings = [...asArray(region.warnings), ...asArray(revision?.warnings)]
     .filter((notice, index, all) => all.findIndex((candidate) => (candidate?.code || candidate?.message) === (notice?.code || notice?.message)) === index);
@@ -116,6 +120,17 @@ function RegionReviewCard({
       setSavedTemplateName(saved?.regionExtractionTemplate?.name || saved?.name || name);
       setTemplateNaming(false);
       setTemplateName("");
+    });
+  };
+
+  const updateTemplate = () => {
+    const template = asArray(updatableTemplates).find((candidate) => candidate.id === updateTemplateId);
+    if (!template) return;
+    run("update_template", async () => {
+      const saved = await onUpdateExtractionTemplate?.(region, template);
+      const versionNumber = asArray(saved?.versions)[0]?.version;
+      setUpdatedTemplateNote(`${template.name} updated${versionNumber ? ` to v${versionNumber}` : ""}`);
+      setUpdateTemplateId("");
     });
   };
 
@@ -283,6 +298,33 @@ function RegionReviewCard({
                   Save as extraction template
                 </button>
               )}
+              {onUpdateExtractionTemplate && asArray(updatableTemplates).length > 0 && !existingTemplate && (
+                <div className="workbook-region-template-update">
+                  <label htmlFor={`update-template-${region.id}`}>Update an existing template from this region</label>
+                  <div className="workbook-region-template-form-actions">
+                    <select
+                      id={`update-template-${region.id}`}
+                      value={updateTemplateId}
+                      disabled={busy}
+                      onChange={(event) => setUpdateTemplateId(event.target.value)}
+                    >
+                      <option value="">Choose template</option>
+                      {asArray(updatableTemplates).map((template) => (
+                        <option key={template.id} value={template.id}>{template.name}{template.currentVersion ? ` (v${template.currentVersion})` : ""}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      aria-label={`Save ${label} as a new template version`}
+                      disabled={busy || !updateTemplateId}
+                      onClick={updateTemplate}
+                    >
+                      {pendingAction === "update_template" ? "Saving..." : "Save new version"}
+                    </button>
+                  </div>
+                  {updatedTemplateNote && <p className="workbook-region-template-note">{updatedTemplateNote}</p>}
+                </div>
+              )}
             </div>
           )}
           <div className="workbook-region-secondary-actions">
@@ -333,10 +375,12 @@ export function WorkbookReviewDock({
   onDeleteRegion,
   onToggleCalculationOverlay,
   onSaveExtractionTemplate,
+  onUpdateExtractionTemplate,
   extractionTemplates = [],
   onReviewExtractedExperiments,
 }) {
   const session = reviewState.session || reviewState.workbookReviewSession || null;
+  const activeTemplates = asArray(extractionTemplates).filter((template) => template?.status !== "archived");
   const regions = asArray(reviewRegions).filter((region) => region?.disposition !== "deleted");
   const fallbackActiveId = regions.find((region) => region.disposition === "active")?.id || regions[0]?.id || "";
   const resolvedActiveId = regions.some((region) => region.id === activeRegionId) ? activeRegionId : fallbackActiveId;
@@ -381,9 +425,9 @@ export function WorkbookReviewDock({
             onDelete={onDeleteRegion}
             onToggleCalculationOverlay={onToggleCalculationOverlay}
             onSaveExtractionTemplate={onSaveExtractionTemplate}
-            existingTemplate={asArray(extractionTemplates).find((template) => (
-              template?.status !== "archived" && template?.sourceRegionId === region.id
-            )) || null}
+            onUpdateExtractionTemplate={onUpdateExtractionTemplate}
+            existingTemplate={activeTemplates.find((template) => template?.sourceRegionId === region.id) || null}
+            updatableTemplates={activeTemplates}
           />
         ))}
         {!regions.length && <p className="workbook-region-empty">No source regions are available.</p>}

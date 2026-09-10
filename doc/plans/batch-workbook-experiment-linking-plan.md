@@ -1,6 +1,6 @@
 # Batch Workbook Upload And Experiment Linking Plan
 
-Status: active (Milestones 1-3 complete, Milestones 4-6 proposed)
+Status: active (Milestones 1-4 complete, Milestones 5-6 proposed)
 Read when: implementing multi-file upload, reusable region extraction
 templates, formula-aware region understanding, or batch series publication.
 Created: 2026-09-09
@@ -332,6 +332,14 @@ Done when the Exp31 template reports `exact` for Exp32 and `formula_mismatch`
 or `ambiguous` for a file whose first block was overwritten by constants.
 
 ### Milestone 4 — Apply and one-click confirm (backend + frontend)
+
+Status: complete on 2026-09-09 (branch `claude/batch-workbook-linking`).
+Implementation notes: migration 028 adds link, data kind, template version,
+and `template_match` columns to regions and allows the `template_match`
+revision trigger. Apply dedupes structurally (an existing template-match
+region at the same range is returned, a manual or confirmed one is skipped),
+so the required idempotency key is recorded rather than relied upon. The
+prefilled revision reuses the ordinary interpretation validation.
 
 Backend:
 

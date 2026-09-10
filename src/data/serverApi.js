@@ -393,6 +393,37 @@ export function matchServerRegionExtractionTemplate(templateVersionId, request =
   return serverJson(`/api/region-extraction-template-versions/${encodeURIComponent(templateVersionId)}/matches`, { sourceDocumentIds }, options);
 }
 
+export function applyServerRegionExtractionTemplate(templateVersionId, request = {}, options = {}) {
+  if (!templateVersionId) throw new ServerApiError("Select an extraction template version before applying it.");
+  const sourceDocumentIds = Array.isArray(request.sourceDocumentIds)
+    ? request.sourceDocumentIds.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+  if (!sourceDocumentIds.length) throw new ServerApiError("Select at least one matched workbook to apply the template to.");
+  const idempotencyKey = String(request.idempotencyKey || "").trim();
+  if (!idempotencyKey) throw new ServerApiError("A template application key is required.");
+  return serverJson(`/api/region-extraction-template-versions/${encodeURIComponent(templateVersionId)}/apply`, {
+    sourceDocumentIds,
+    ...(Array.isArray(request.onlyStatuses) ? { onlyStatuses: request.onlyStatuses } : {}),
+  }, {
+    ...options,
+    headers: { ...(options.headers || {}), "Idempotency-Key": idempotencyKey },
+  });
+}
+
+export function confirmServerWorkbookReviewRegionsBatch(projectId, request = {}, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before confirming regions.");
+  const items = Array.isArray(request.items) ? request.items.filter((item) => item && item.regionId) : [];
+  if (!items.length) throw new ServerApiError("Select at least one region to confirm.");
+  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/workbook-review-regions/confirm-batch`, {
+    items: items.map((item) => ({
+      regionId: item.regionId,
+      revisionId: item.revisionId || null,
+      expectedRegionVersion: item.expectedRegionVersion,
+      ...(item.linkedExperimentId !== undefined ? { linkedExperimentId: item.linkedExperimentId } : {}),
+    })),
+  }, options);
+}
+
 export function createServerManuscript(projectId, request = {}, options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before creating a manuscript.");
   return serverJson(`/api/projects/${encodeURIComponent(projectId)}/manuscripts`, request, options);

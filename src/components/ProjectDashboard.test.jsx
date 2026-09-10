@@ -3741,6 +3741,125 @@ describe("AgentPanel", () => {
     }
   });
 
+  it("applies a matched template as prefilled regions and confirms the linked ones in one batch", async () => {
+    const historyKey = "labrat_blank_chat_history_v2_project_project_1";
+    localStorage.setItem(historyKey, JSON.stringify([{
+      role: "assistant",
+      text: "I indexed 2 workbooks.",
+      workbookBatch: {
+        batchId: "workbook_batch_apply",
+        items: [
+          { index: 0, fileName: "Calculation Exp32.xlsx", status: "uploaded", error: "", workbookReviewLink: { workbookReviewSessionId: "session_32", sourceDocumentId: "doc_32", workbookName: "Calculation Exp32.xlsx", regionCount: 2 } },
+          { index: 1, fileName: "Calculation Exp99.xlsx", status: "uploaded", error: "", workbookReviewLink: { workbookReviewSessionId: "session_99", sourceDocumentId: "doc_99", workbookName: "Calculation Exp99.xlsx", regionCount: 2 } },
+        ],
+        match: {
+          templateId: "template_1",
+          templateName: "Carbon distribution",
+          templateVersionId: "template_version_1",
+          templateVersion: 1,
+          summary: { exact: 2 },
+          results: [
+            { sourceDocumentId: "doc_32", status: "exact", sheetName: "Sheet1", matchedRange: "P31:BA32", offset: { rows: 0, cols: 0 }, experimentLabel: "Exp32", labelSource: "cell", isTemplateSource: false, eligibleForBatchConfirm: true },
+            { sourceDocumentId: "doc_99", status: "exact", sheetName: "Sheet1", matchedRange: "P31:BA32", offset: { rows: 0, cols: 0 }, experimentLabel: "Exp99", labelSource: "cell", isTemplateSource: false, eligibleForBatchConfirm: true },
+          ],
+        },
+      },
+    }]));
+    const onWorkbookReviewLinkOpen = vi.fn().mockResolvedValue(undefined);
+    const fetchMock = vi.fn(async (url, init = {}) => {
+      if (url === "/api/projects/project_1/analysis-capabilities") {
+        return jsonResponse({ model: { configured: true }, executor: { configured: true }, acceptedData: {} });
+      }
+      if (url.startsWith("/api/projects/project_1/experiment-browser")) {
+        return jsonResponse({ rows: [{ experimentId: "identity_32", label: "Exp32" }, { experimentId: "identity_99", label: "Exp99" }] });
+      }
+      if (url === "/api/region-extraction-template-versions/template_version_1/apply") {
+        expect(init.headers["Idempotency-Key"]).toBeTruthy();
+        expect(JSON.parse(init.body)).toEqual({ sourceDocumentIds: ["doc_32", "doc_99"] });
+        return jsonResponse({
+          templateName: "Carbon distribution",
+          applied: [
+            { sourceDocumentId: "doc_32", status: "exact", reason: "applied", created: true, workbookReviewSessionId: "session_32", region: { id: "region_32", version: 2, sheetName: "Sheet1", rangeRef: "P31:BA32", reviewStatus: "awaiting_review", linkedExperimentId: "identity_32", templateMatch: { linkStatus: "resolved", experimentLabel: "Exp32" } }, revision: { id: "revision_32" } },
+            { sourceDocumentId: "doc_99", status: "exact", reason: "applied", created: true, workbookReviewSessionId: "session_99", region: { id: "region_99", version: 2, sheetName: "Sheet1", rangeRef: "P31:BA32", reviewStatus: "awaiting_review", linkedExperimentId: null, templateMatch: { linkStatus: "unresolved", experimentLabel: "Exp99" } }, revision: { id: "revision_99" } },
+          ],
+          skipped: [],
+        });
+      }
+      if (url === "/api/projects/project_1/workbook-review-regions/confirm-batch") {
+        const body = JSON.parse(init.body);
+        expect(body.items).toEqual([
+          { regionId: "region_32", revisionId: "revision_32", expectedRegionVersion: 2 },
+          { regionId: "region_99", revisionId: "revision_99", expectedRegionVersion: 2, linkedExperimentId: "identity_99" },
+        ]);
+        return jsonResponse({
+          confirmedCount: 1,
+          rejectedCount: 1,
+          results: [
+            { regionId: "region_32", ok: true, code: "confirmed", region: { id: "region_32", version: 3, reviewStatus: "accepted", linkedExperimentId: "identity_32", templateMatch: { linkStatus: "resolved", experimentLabel: "Exp32" } } },
+            { regionId: "region_99", ok: false, code: "stale_workbook_review_region", message: "Workbook review region changed; reload before confirming." },
+          ],
+        });
+      }
+      if (url === "/api/projects/project_1/state") return jsonResponse({ project: { id: "project_1" } });
+      return jsonResponse({});
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    try {
+      render(
+        <AgentPanel
+          open
+          setOpen={() => {}}
+          blocks={[]}
+          setBlocks={() => {}}
+          references={[]}
+          selected={null}
+          selectedChartContext={null}
+          pendingChartAnalysis={null}
+          activeProjectId="project_1"
+          projectState={{
+            project: { id: "project_1", name: "Catalyst Screening" },
+            fileObjects: [],
+            regionExtractionTemplates: [{ id: "template_1", name: "Carbon distribution", status: "active", currentVersionId: "template_version_1", currentVersion: 1 }],
+          }}
+          onProjectStateLoaded={() => {}}
+          onWorkbookReviewLinkOpen={onWorkbookReviewLinkOpen}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Apply to 2 matched files" }));
+      expect(await screen.findByText("0/2 prefilled regions confirmed")).toBeTruthy();
+      const exp32Checkbox = screen.getByLabelText("Select Calculation Exp32.xlsx for confirmation");
+      expect(exp32Checkbox.checked).toBe(true);
+      const exp99Checkbox = screen.getByLabelText("Select Calculation Exp99.xlsx for confirmation");
+      expect(exp99Checkbox.disabled).toBe(true);
+      expect(screen.getByRole("button", { name: "Confirm selected (1)" })).toBeTruthy();
+
+      fireEvent.change(screen.getByLabelText("Experiment for Calculation Exp99.xlsx"), { target: { value: "identity_99" } });
+      expect(exp99Checkbox.disabled).toBe(false);
+      fireEvent.click(exp99Checkbox);
+      expect(screen.getByRole("button", { name: "Confirm selected (2)" })).toBeTruthy();
+
+      fireEvent.click(screen.getByRole("button", { name: "Confirm selected (2)" }));
+      expect(await screen.findByText("1/2 prefilled regions confirmed")).toBeTruthy();
+      expect(screen.getByText("Confirmed · Exp32")).toBeTruthy();
+      expect(screen.getByText("Workbook review region changed; reload before confirming.")).toBeTruthy();
+
+      const checklist = screen.getByLabelText("Confirm prefilled regions");
+      fireEvent.click(within(checklist).getByRole("button", { name: "Calculation Exp99.xlsx" }));
+      await waitFor(() => expect(onWorkbookReviewLinkOpen).toHaveBeenCalledWith(expect.objectContaining({
+        workbookReviewSessionId: "session_99",
+        focusRange: { sheetName: "Sheet1", range: "P31:BA32" },
+      })));
+
+      const stored = JSON.parse(localStorage.getItem(historyKey) || "[]");
+      expect(stored[0].workbookBatch.apply.items.map((row) => [row.regionId, row.confirmed])).toEqual([["region_32", true], ["region_99", false]]);
+    } finally {
+      global.fetch = originalFetch;
+      localStorage.removeItem(historyKey);
+    }
+  });
+
   it("keeps workbook review controls out of the global Agent composer", () => {
     localStorage.removeItem("labrat_blank_chat_history_v1_react");
 

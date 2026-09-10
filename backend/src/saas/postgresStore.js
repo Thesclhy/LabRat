@@ -227,6 +227,10 @@ function workbookReviewRegionFromRow(row) {
     deletedAt: row.deleted_at,
     deletedBy: row.deleted_by,
     deletedReason: row.deleted_reason || "",
+    linkedExperimentId: row.linked_experiment_id || null,
+    dataKind: row.data_kind || null,
+    regionExtractionTemplateVersionId: row.region_extraction_template_version_id || null,
+    templateMatch: row.template_match || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     createdBy: row.created_by,
@@ -1587,9 +1591,10 @@ export class PostgresSaasStore {
         sheet_name, range_ref, selection_method, interpretation_hint, disposition, review_status,
         current_revision_id, accepted_revision_id, version, warnings, accepted_at, accepted_by,
         ignored_at, ignored_by, ignored_reason, deleted_at, deleted_by, deleted_reason,
+        linked_experiment_id, data_kind, region_extraction_template_version_id, template_match,
         created_at, updated_at, created_by, updated_by)
        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-               $16, $17, $18, $19, $20, $21, $22, $23, $24, now(), now(), $25, $25)
+               $16, $17, $18, $19, $20, $21, $22, $23, $24, $26, $27, $28, $29, now(), now(), $25, $25)
        returning *`,
       [
         input.id || makeId("workbook_review_region"),
@@ -1617,6 +1622,10 @@ export class PostgresSaasStore {
         input.deletedBy || null,
         input.deletedReason || "",
         input.createdBy || null,
+        input.linkedExperimentId || null,
+        input.dataKind || null,
+        input.regionExtractionTemplateVersionId || null,
+        input.templateMatch ? jsonb(input.templateMatch) : null,
       ],
     );
     return workbookReviewRegionFromRow(result.rows[0]);
@@ -1656,6 +1665,10 @@ export class PostgresSaasStore {
            deleted_at = coalesce($12, deleted_at),
            deleted_by = coalesce($13, deleted_by),
            deleted_reason = coalesce($14, deleted_reason),
+           linked_experiment_id = case when $16::boolean then $17 else linked_experiment_id end,
+           data_kind = case when $18::boolean then $19 else data_kind end,
+           region_extraction_template_version_id = case when $20::boolean then $21 else region_extraction_template_version_id end,
+           template_match = case when $22::boolean then $23::jsonb else template_match end,
            version = version + 1,
            updated_at = now(),
            updated_by = coalesce($15, updated_by)
@@ -1677,6 +1690,14 @@ export class PostgresSaasStore {
         patch.deletedBy ?? null,
         patch.deletedReason ?? null,
         patch.updatedBy ?? null,
+        patch.linkedExperimentId !== undefined,
+        patch.linkedExperimentId ?? null,
+        patch.dataKind !== undefined,
+        patch.dataKind ?? null,
+        patch.regionExtractionTemplateVersionId !== undefined,
+        patch.regionExtractionTemplateVersionId ?? null,
+        patch.templateMatch !== undefined,
+        patch.templateMatch === undefined || patch.templateMatch === null ? null : jsonb(patch.templateMatch),
       ],
     );
     return workbookReviewRegionFromRow(result.rows[0]);
