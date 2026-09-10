@@ -42,6 +42,38 @@ function displayCell(row, column) {
   return `${value}${column.unit ? ` ${column.unit}` : ""}`;
 }
 
+function LinkedDataCell({ row, column, onOpenSourceRange }) {
+  const linked = Array.isArray(row.cells?.[column.id]?.linkedRegions) ? row.cells[column.id].linkedRegions : [];
+  if (!linked.length) return <span className="experiment-grid-cell-value browser-muted">-</span>;
+  return (
+    <span className="experiment-linked-data-cell">
+      {linked.map((item) => (
+        <button
+          type="button"
+          key={item.regionId}
+          className="experiment-linked-data-chip"
+          title={`${item.workbookName} · ${item.sheetName}!${item.range}${item.seriesLabels?.length ? ` · ${item.seriesLabels.join(", ")}` : ""}`}
+          aria-label={`Open ${column.label} for ${row.label} in ${item.workbookName}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onOpenSourceRange?.({
+              sourceType: "excel_range",
+              sourceDocumentId: item.sourceDocumentId,
+              sheet: item.sheetName,
+              range: item.range,
+              workbookReviewSessionId: item.workbookReviewSessionId,
+              regionId: item.regionId,
+            });
+          }}
+        >
+          <strong>{item.workbookName}</strong>
+          <span>{item.sheetName}!{item.range}</span>
+        </button>
+      ))}
+    </span>
+  );
+}
+
 function HighlightedSearchText({ value, search }) {
   const displayValue = String(value ?? "");
   const normalizedSearch = String(search ?? "").trim().toLowerCase();
@@ -723,6 +755,8 @@ export function ExperimentBrowser({
                             <button type="button" className="experiment-row-link" aria-label={`Open ${row.label}`} onClick={(event) => { event.stopPropagation(); setDetailId(row.experimentId); }}><HighlightedSearchText value={row.label} search={search} /></button>
                           ) : column.isCustom ? (
                             <EditableCustomCell row={row} column={column} search={search} editable={canEditSharedConfig} onSave={(value) => saveCustomCell(row, column, value)} />
+                          ) : column.isLinkedData ? (
+                            <LinkedDataCell row={row} column={column} onOpenSourceRange={onOpenSourceRange} />
                           ) : <span className="experiment-grid-cell-value"><HighlightedSearchText value={displayCell(row, column)} search={search} /></span>}
                         </div>
                       ))}

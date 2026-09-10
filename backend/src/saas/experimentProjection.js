@@ -136,7 +136,47 @@ export function resolveActiveExperimentRecords({ projectId, dataSnapshots, exper
     });
 }
 
-function buildColumns(entries, customColumns = []) {
+export function linkedDataColumnId(dataKind) {
+  return `linked:${text(dataKind).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "data"}`;
+}
+
+/**
+ * Normalizes accepted, experiment-linked workbook regions into the bounded
+ * shape Experiment Browser shows. Nothing here reads cell values.
+ */
+export function linkedRegionSummaries({ acceptedRegionUnderstandings = [], sourceDocuments = [] } = {}) {
+  const sourceById = new Map(asArray(sourceDocuments).map((document) => [document.id, document]));
+  return asArray(acceptedRegionUnderstandings)
+    .filter(({ region }) => region?.disposition === "active" && region.acceptedRevisionId && region.linkedExperimentId)
+    .map(({ region, revision }) => {
+      const source = sourceById.get(region.sourceDocumentId);
+      const interpretation = revision?.interpretation || {};
+      return {
+        regionId: region.id,
+        revisionId: revision?.id || region.acceptedRevisionId,
+        workbookReviewSessionId: region.workbookReviewSessionId,
+        sourceDocumentId: region.sourceDocumentId,
+        workbookName: text(source?.metadata?.workbookName || source?.metadata?.fileName || source?.fileName) || region.sourceDocumentId,
+        sheetName: region.sheetName,
+        range: region.rangeRef,
+        dataKind: text(region.dataKind) || "Linked workbook data",
+        linkedExperimentId: region.linkedExperimentId,
+        templateVersionId: region.regionExtractionTemplateVersionId || null,
+        templateVersion: region.templateMatch?.templateVersion || null,
+        matchStatus: region.templateMatch?.status || null,
+        semanticType: interpretation.semanticType || null,
+        seriesLabels: asArray(interpretation.series).map((series) => text(series?.label || series?.seriesKey)).filter(Boolean).slice(0, 6),
+        acceptedAt: region.acceptedAt || null,
+      };
+    })
+    .sort((a, b) => a.dataKind.localeCompare(b.dataKind) || a.workbookName.localeCompare(b.workbookName) || a.regionId.localeCompare(b.regionId));
+}
+
+function linkedRegionCellText(linked) {
+  return `${linked.workbookName} · ${linked.sheetName}!${linked.range}`;
+}
+
+function buildColumns(entries, customColumns = [], linkedRegions = []) {
   const stats = new Map();
   entries.forEach(({ record }) => {
     asArray(record.fields).forEach((field) => {
@@ -236,7 +276,28 @@ function buildColumns(entries, customColumns = []) {
     recommendationScore: 100,
     recommended: true,
     pinned: false,
-  }, ...fieldColumns, ...asArray(customColumns).map((column) => ({
+  }, ...fieldColumns, ...[...new Set(asArray(linkedRegions).map((linked) => linked.dataKind))].sort().map((dataKind) => {
+    const experimentIds = new Set(asArray(linkedRegions).filter((linked) => linked.dataKind === dataKind).map((linked) => linked.linkedExperimentId));
+    return {
+      id: linkedDataColumnId(dataKind),
+      fieldKey: null,
+      displayName: dataKind,
+      label: dataKind,
+      role: "linked_data",
+      valueType: "string",
+      unit: null,
+      coverageCount: experimentIds.size,
+      coverageRatio: rowCount ? Math.min(1, experimentIds.size / rowCount) : 0,
+      confidenceAverage: 1,
+      warningCount: 0,
+      sourceSummary: null,
+      recommendationScore: 0,
+      recommended: true,
+      pinned: false,
+      isLinkedData: true,
+      dataKind,
+    };
+  }), ...asArray(customColumns).map((column) => ({
     id: `custom:${column.id}`,
     customColumnId: column.id,
     fieldKey: null,
@@ -280,9 +341,15 @@ function summarizedRange(sourceRef) {
   };
 }
 
-function buildRows(entries, columns, annotationsByExperimentId = new Map(), customValues = []) {
+function buildRows(entries, columns, annotationsByExperimentId = new Map(), customValues = [], linkedRegions = []) {
   const fieldColumnIds = new Set(columns.slice(1).map((column) => column.id));
   const customValuesByCell = new Map(asArray(customValues).map((value) => [`${value.experimentId}:${value.customColumnId}`, value]));
+  const linkedByExperimentAndColumn = new Map();
+  asArray(linkedRegions).forEach((linked) => {
+    const key = `${linked.linkedExperimentId}:${linkedDataColumnId(linked.dataKind)}`;
+    if (!linkedByExperimentAndColumn.has(key)) linkedByExperimentAndColumn.set(key, []);
+    linkedByExperimentAndColumn.get(key).push(linked);
+  });
   return entries.map(({ head, snapshot, identity, record }) => {
     const cells = Object.fromEntries([...fieldColumnIds].map((columnId) => [columnId, null]));
     asArray(record.fields).forEach((field) => {
@@ -298,6 +365,15 @@ function buildRows(entries, columns, annotationsByExperimentId = new Map(), cust
         unit: field.unit || null,
         numericScale: field.numericScale || null,
       };
+    });
+    columns.filter((column) => column.isLinkedData).forEach((column) => {
+      const linked = linkedByExperimentAndColumn.get(`${identity.id}:${column.id}`) || [];
+      cells[column.id] = linked.length ? {
+        value: linked.map(linkedRegionCellText).join("; "),
+        formattedValue: linked.map(linkedRegionCellText).join("; "),
+        isLinkedData: true,
+        linkedRegions: linked.map((item) => clone(item)),
+      } : null;
     });
     columns.filter((column) => column.isCustom).forEach((column) => {
       const customValue = customValuesByCell.get(`${identity.id}:${column.customColumnId}`);
@@ -318,6 +394,7 @@ function buildRows(entries, columns, annotationsByExperimentId = new Map(), cust
       acceptedAt: snapshot.acceptedAt,
       cells,
       seriesInventory: asArray(record.series).map(summarizedSeries),
+      linkedRegionCount: asArray(linkedRegions).filter((linked) => linked.linkedExperimentId === identity.id).length,
       warningCount: asArray(record.warnings).length
         + asArray(record.fields).reduce((total, field) => total + asArray(field.warnings).length, 0)
         + asArray(record.series).reduce((total, series) => total + asArray(series.warnings).length, 0),
@@ -390,14 +467,15 @@ export function buildExperimentProjection({
   experimentAnnotations = [],
   experimentCustomColumns = [],
   experimentCustomValues = [],
+  experimentLinkedRegions = [],
   starredOnly = false,
   cursor = null,
   limit = DEFAULT_LIMIT,
 } = {}) {
   const entries = resolveActiveExperimentRecords({ projectId, dataSnapshots, experimentIdentities, experimentSnapshotHeads });
-  const columns = buildColumns(entries, experimentCustomColumns);
+  const columns = buildColumns(entries, experimentCustomColumns, experimentLinkedRegions);
   const annotationsByExperimentId = new Map(asArray(experimentAnnotations).map((annotation) => [annotation.experimentId, annotation]));
-  const allRows = buildRows(entries, columns, annotationsByExperimentId, experimentCustomValues);
+  const allRows = buildRows(entries, columns, annotationsByExperimentId, experimentCustomValues, experimentLinkedRegions);
   const normalizedSearch = text(search).toLowerCase();
   const normalizedFilters = asArray(filters).map(canonicalFilter).filter((filter) => filter.columnId);
   const normalizedSort = asArray(sort).map(canonicalSort).slice(0, 3);
@@ -449,6 +527,7 @@ export function getExperimentProjectionDetail({
   dataSnapshots = [],
   experimentIdentities = [],
   experimentSnapshotHeads = [],
+  experimentLinkedRegions = [],
 } = {}) {
   const entry = resolveActiveExperimentRecords({ projectId, dataSnapshots, experimentIdentities, experimentSnapshotHeads })
     .find(({ identity }) => identity.id === experimentId);
@@ -471,5 +550,6 @@ export function getExperimentProjectionDetail({
       acceptedBy: entry.snapshot.acceptedBy,
     },
     record: entry.record,
+    linkedRegions: asArray(experimentLinkedRegions).filter((linked) => linked.linkedExperimentId === entry.identity.id),
   });
 }

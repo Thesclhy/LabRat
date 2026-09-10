@@ -11557,3 +11557,49 @@ tbody tr:hover {
   font-size: 12px;
   background: #fff;
 }
+
+/* Linked workbook data in Experiment Browser */
+.experiment-linked-data-cell {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+}
+.experiment-linked-data-chip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid #9fcac5;
+  border-radius: 8px;
+  background: #eef6f5;
+  color: #0f4c4c;
+  padding: 2px 8px;
+  font-size: 11px;
+  line-height: 1.25;
+  text-align: left;
+  cursor: pointer;
+}
+.experiment-linked-data-chip strong {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.experiment-linked-data-chip span {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  color: #2c6b68;
+}
+.experiment-linked-data-chip:hover {
+  border-color: #0f6b6b;
+  background: #d6ebe8;
+}
+.experiment-source-button small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}

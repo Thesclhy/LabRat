@@ -112,7 +112,10 @@ A region created by applying a RegionExtractionTemplate carries
 `templateMatch` record (status, offset, resolved experiment label, link status
 and candidates), and `linkedExperimentId` once the label resolves to exactly
 one ExperimentIdentity or the user chooses one. The link is metadata about the
-evidence; it publishes nothing.
+evidence; it publishes nothing. Experiment Browser projects linked regions as
+one shared `linked:<data-kind>` column per data kind and lists them in
+experiment detail; the values stay in the workbook and charts read the
+confirmed regions directly.
 
 Automatically detected and manually selected regions are persisted before any
 model call. While `reviewStatus` is `interpreting`, Workbook Review can display

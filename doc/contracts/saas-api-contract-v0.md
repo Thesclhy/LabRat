@@ -357,6 +357,22 @@ starredOnly (boolean; current user's annotations only)
 
 The list response contains one bounded row per active experiment snapshot head, a stable field catalog, recommended columns, and an opaque next cursor. Series point arrays are excluded.
 
+Linked workbook data: every accepted, active WorkbookReviewRegion with a
+`linkedExperimentId` and `dataKind` contributes to one shared column per data
+kind, `linked:<data-kind-slug>` (`role: "linked_data"`, `isLinkedData: true`,
+`valueType: "string"`). The cell value is a readable
+`"<workbook> · <sheet>!<range>"` list, so search, `contains`, `is_empty`,
+`not_empty`, and sort work unchanged, and the cell carries `linkedRegions`
+(region id, session id, source document id, workbook name, sheet, range,
+template version, series labels). Rows also carry `linkedRegionCount`.
+Experiment detail adds `linkedRegions` for that experiment. No DataSnapshot or
+head changes: linked data is evidence metadata, and charts read the confirmed
+regions directly through the workbook chart input mode. The analysis source
+catalogue given to the chart planner carries `linkedExperimentId`,
+`linkedExperimentLabel`, `dataKind`, and header-row series
+(`orientation`, `xHeaderRange`, `yValueRange`, `pointCount`) per confirmed
+region.
+
 The detail endpoint lazily returns the complete active experiment record, scalar values, series inventory/points, warnings, and exact source refs. Cross-project and inactive identities return not found.
 
 Custom columns are shared project documentation metadata. Editors create,

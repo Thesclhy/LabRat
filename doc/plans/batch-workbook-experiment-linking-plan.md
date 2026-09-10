@@ -1,6 +1,6 @@
 # Batch Workbook Upload And Experiment Linking Plan
 
-Status: active (Milestones 1-4 complete, Milestones 5-6 proposed)
+Status: active (Milestones 1-5 complete, Milestone 6 proposed)
 Read when: implementing multi-file upload, reusable region extraction
 templates, formula-aware region understanding, or batch series publication.
 Created: 2026-09-09
@@ -367,6 +367,13 @@ Done when thirty matched files are confirmed in one action and each region
 shows its own accepted revision, actor, and linked experiment.
 
 ### Milestone 5 — Linked workbook data in Experiment Browser (backend + frontend)
+
+Status: complete on 2026-09-09 (branch `claude/batch-workbook-linking`).
+Implementation notes: the projection state loader reads accepted
+understandings plus source documents and derives `experimentLinkedRegions`;
+no new store method or migration was needed. Linked columns sit between field
+columns and custom columns, are recommended by default, and reuse the string
+filter/sort/search path through their readable cell value.
 
 Decision 2026-09-09: supplementary workbook data is not published into
 DataSnapshots. Experiment Browser shows *that* linked data exists and where it

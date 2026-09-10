@@ -266,6 +266,8 @@ function acceptedRegionContext(acceptedRegionUnderstandings, sourceDocuments) {
     sheetName: region.sheetName,
     range: region.rangeRef,
     semanticType: revision.interpretation?.semanticType || "unknown_region",
+    linkedExperimentId: region.linkedExperimentId || null,
+    dataKind: region.dataKind || null,
     summary: asArray(revision.summary).map(text).filter(Boolean),
     fields: asArray(revision.interpretation?.fields).slice(0, MAX_QUESTION_FIELDS).map((field) => ({
       fieldKey: field.semanticKey,

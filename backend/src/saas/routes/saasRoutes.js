@@ -27,6 +27,7 @@ import { runEvidenceRetrievalAgent } from "../evidenceAgentRetrieval.js";
 import {
   buildExperimentProjection,
   getExperimentProjectionDetail,
+  linkedRegionSummaries,
 } from "../experimentProjection.js";
 import {
   SOURCE_DOCUMENT_LIST_SCHEMA_VERSION,
@@ -1057,12 +1058,19 @@ function parseBrowserQueryList(url, name) {
 }
 
 async function loadExperimentProjectionState(context, projectId) {
-  const [dataSnapshots, experimentIdentities, experimentSnapshotHeads] = await Promise.all([
+  const [dataSnapshots, experimentIdentities, experimentSnapshotHeads, acceptedRegionUnderstandings, sourceDocuments] = await Promise.all([
     context.store.listDataSnapshots ? context.store.listDataSnapshots({ projectId }) : [],
     context.store.listExperimentIdentities ? context.store.listExperimentIdentities({ projectId }) : [],
     context.store.listExperimentSnapshotHeads ? context.store.listExperimentSnapshotHeads({ projectId }) : [],
+    context.store.listAcceptedRegionUnderstandings ? context.store.listAcceptedRegionUnderstandings({ projectId }) : [],
+    context.store.listSourceDocuments ? context.store.listSourceDocuments({ projectId }) : [],
   ]);
-  return { dataSnapshots, experimentIdentities, experimentSnapshotHeads };
+  return {
+    dataSnapshots,
+    experimentIdentities,
+    experimentSnapshotHeads,
+    experimentLinkedRegions: linkedRegionSummaries({ acceptedRegionUnderstandings, sourceDocuments }),
+  };
 }
 
 async function handleProjectExperimentBrowser(req, res, context, projectId, url) {

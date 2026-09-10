@@ -15,6 +15,20 @@ Keep entries concise, newest first, and include:
 
 ## 2026-09-09
 
+- Linked workbook data in Experiment Browser (Milestone 5 of
+  `doc/plans/batch-workbook-experiment-linking-plan.md`). Accepted regions
+  linked to an experiment now project as one shared Browser column per data
+  kind (`linked:<data-kind>`), with a readable cell value for search, filter,
+  and sort and a `linkedRegions` payload for the UI; experiment detail lists
+  them. Cells render as chips that open Workbook Review on the right session
+  and region. The chart planner's source catalogue now carries
+  `linkedExperimentId`, `linkedExperimentLabel`, `dataKind`, and header-row
+  series ranges, so "reaction rate for Exp10-Exp40" can select the linked
+  regions directly. No DataSnapshot writes, no migration, no provider call.
+  Verification: backend suite, frontend suite, production build.
+  Follow-ups: Milestone 6 builds the data-kind chart picker and lifts the
+  series-slot template restriction.
+
 - Template apply and one-click batch confirmation (Milestone 4 of
   `doc/plans/batch-workbook-experiment-linking-plan.md`). New
   `backend/src/saas/regionTemplateApplications.js` and migration 028. `POST

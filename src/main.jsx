@@ -4163,7 +4163,10 @@ function App() {
       selectionMethod: "experiment_browser_source_link",
       focusOnly: true,
     };
-    const session = latestItem(projectState?.workbookReviewSessions);
+    const sessions = asArray(projectState?.workbookReviewSessions).filter((item) => item?.status !== "deleted");
+    const session = (source.workbookReviewSessionId && sessions.find((item) => item.id === source.workbookReviewSessionId))
+      || sessions.find((item) => item.sourceDocumentId === source.sourceDocumentId)
+      || latestItem(sessions);
     if (!session?.id) {
       setWorkbookReviewFocusSelection(focusSelection);
       setTab("workbook_review");
@@ -4173,6 +4176,13 @@ function App() {
     try {
       const response = await getServerWorkbookReviewSession(session.id);
       handleWorkbookReviewReadyFromAgent({ response });
+      const targetRegion = asArray(response?.reviewRegions).find((region) => (
+        region.disposition === "active"
+        && (region.id === source.regionId
+          || (String(region.sheetName || "").toLowerCase() === String(focusSelection.sheetName).toLowerCase()
+            && String(region.rangeRef || "").toUpperCase() === String(focusSelection.range).toUpperCase()))
+      ));
+      if (targetRegion) setActiveWorkbookReviewDraftRegionId(targetRegion.id);
       setWorkbookReviewFocusSelection(focusSelection);
     } catch (error) {
       setWorkbookReviewState((current) => ({

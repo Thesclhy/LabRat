@@ -144,6 +144,36 @@ export function ExperimentDetailDrawer({ detail = null, loading = false, error =
               </div>
             </section>
 
+            <section className="experiment-detail-section" aria-label="Linked workbook data">
+              <div className="experiment-detail-section-head">
+                <h3>Linked workbook data</h3>
+                <span>{asArray(detail.linkedRegions).length}</span>
+              </div>
+              <div className="experiment-source-list">
+                {asArray(detail.linkedRegions).map((linked) => (
+                  <button
+                    type="button"
+                    className="experiment-source-button"
+                    key={linked.regionId}
+                    aria-label={`Open ${linked.dataKind} in ${linked.workbookName}`}
+                    onClick={() => onOpenSourceRange?.({
+                      sourceType: "excel_range",
+                      sourceDocumentId: linked.sourceDocumentId,
+                      sheet: linked.sheetName,
+                      range: linked.range,
+                      workbookReviewSessionId: linked.workbookReviewSessionId,
+                      regionId: linked.regionId,
+                    })}
+                  >
+                    <strong>{linked.dataKind}</strong>
+                    <span>{linked.workbookName} · {linked.sheetName}!{linked.range}{linked.templateVersion ? ` · template v${linked.templateVersion}` : ""}</span>
+                    {!!asArray(linked.seriesLabels).length && <small>{linked.seriesLabels.join(", ")}</small>}
+                  </button>
+                ))}
+                {!asArray(detail.linkedRegions).length && <p className="browser-muted">No linked workbooks. Confirm a region linked to this experiment to see it here.</p>}
+              </div>
+            </section>
+
             <section className="experiment-detail-section">
               <div className="experiment-detail-section-head">
                 <h3>Warnings</h3>
