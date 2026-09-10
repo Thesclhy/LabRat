@@ -2077,6 +2077,103 @@ describe("AgentPanel", () => {
     clearAgentChatHistoryStorage();
   });
 
+  it("writes prose for the selected manuscript chart without opening analysis review", async () => {
+    const onOpenAnalysisReview = vi.fn();
+    const onChartAnalysisHandled = vi.fn();
+    const setBlocks = vi.fn();
+    const selectedChartContext = {
+      blockId: "chart_block_1",
+      chartSpecId: "chart_spec_1",
+      title: "Conversion by time",
+      block: { x: 120, y: 160, w: 580, h: 380 },
+      chartView: { visibleTraceIds: ["catalyst_a"] },
+      plottedData: { traces: [{ name: "Catalyst A", x: [1, 2, 3], y: [35, 61, 78] }] },
+    };
+    const fetchMock = vi.fn(async (url, request = {}) => {
+      if (url === "/api/projects/project_1/analysis-capabilities") {
+        return jsonResponse({
+          model: { provider: "anthropic", model: "claude-test", configured: true },
+          executor: { configured: true, adapter: "local" },
+          acceptedData: { acceptedSnapshotCount: 1, activeExperimentHeadCount: 1 },
+        });
+      }
+      if (url === "/api/projects/project_1/agent/runs") {
+        const body = JSON.parse(request.body);
+        expect(body.message).toBe("Write a manuscript-ready analysis of the selected chart.");
+        expect(body.selectedContext).toMatchObject({
+          requestedWorkflow: "chart_commentary",
+          chartCommentaryMode: "analysis",
+          selectedChartSpecId: "chart_spec_1",
+          selectedChartBlockId: "chart_block_1",
+          selectedChartView: { visibleTraceIds: ["catalyst_a"] },
+        });
+        expect(body.selectedContext.plottedData).toBeUndefined();
+        return jsonResponse({
+          reply: "Conversion rises with reaction time for Catalyst A, with the largest increase occurring early in the observed interval.",
+          analysisThread: null,
+          currentPlanRevision: null,
+          agentRun: {
+            id: "agent_run_chart_commentary_1",
+            status: "completed",
+            mode: "chart_commentary",
+            visibleSteps: [],
+            actions: [],
+            warnings: [],
+          },
+        }, { status: 201 });
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+
+    function Harness() {
+      const [pending, setPending] = useState({ blockId: "chart_block_1", nonce: 1 });
+      return (
+        <AgentPanel
+          open
+          setOpen={() => {}}
+          blocks={[]}
+          setBlocks={setBlocks}
+          references={[]}
+          selected={null}
+          selectedChartContext={selectedChartContext}
+          pendingChartAnalysis={pending}
+          onChartAnalysisHandled={(nonce) => {
+            onChartAnalysisHandled(nonce);
+            setPending(null);
+          }}
+          activeProjectId="project_1"
+          projectState={{ project: { id: "project_1", name: "Catalyst Screening" } }}
+          onProjectStateLoaded={() => {}}
+          onOpenAnalysisReview={onOpenAnalysisReview}
+        />
+      );
+    }
+
+    try {
+      render(<Harness />);
+
+      expect(await screen.findByText(/Conversion rises with reaction time/)).toBeTruthy();
+      expect(onChartAnalysisHandled).toHaveBeenCalledWith(1);
+      expect(onOpenAnalysisReview).not.toHaveBeenCalled();
+      expect(screen.queryByRole("button", { name: "Review analysis plan" })).toBeNull();
+      const insert = screen.getByRole("button", { name: "Insert as text box" });
+      fireEvent.click(insert);
+      expect(setBlocks).toHaveBeenCalledTimes(1);
+      const updater = setBlocks.mock.calls[0][0];
+      const nextBlocks = updater([]);
+      expect(nextBlocks[0]).toMatchObject({
+        kind: "text",
+        x: 120,
+        y: 564,
+        html: "Conversion rises with reaction time for Catalyst A, with the largest increase occurring early in the observed interval.",
+      });
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   it("sends the active Browser surface with ordinary LabRat chat requests", async () => {
     const fetchMock = vi.fn(async (url) => {
       if (url === "/api/projects/project_1/analysis-capabilities") {

@@ -75,6 +75,49 @@ test("validates and returns structured intent metadata", async () => {
   });
 });
 
+test("generates structured prose for an existing chart without invoking chart planning", async () => {
+  const provider = createBackendModelProvider({
+    config: {
+      aiProvider: "anthropic",
+      anthropicApiKey: "server-secret",
+      anthropicModel: "claude-test",
+    },
+    fetchImpl: async (_url, request) => {
+      const body = JSON.parse(request.body);
+      assert.match(body.system, /existing accepted LabRat chart/);
+      assert.match(body.system, /Never propose, plan, or create another chart/);
+      return {
+        ok: true,
+        async json() {
+          return {
+            usage: { input_tokens: 42, output_tokens: 28 },
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                answer: "Conversion increases across the displayed reaction-time range for Catalyst A.",
+              }),
+            }],
+          };
+        },
+      };
+    },
+  });
+
+  const result = await provider.answerChartCommentary({
+    mode: "analysis",
+    chart: {
+      chartSpecId: "chart_spec_1",
+      title: "Conversion by time",
+      visibleTraceIds: ["catalyst_a"],
+      traces: [{ traceId: "catalyst_a", name: "Catalyst A", x: [1, 2], y: [35, 61] }],
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.answer, "Conversion increases across the displayed reaction-time range for Catalyst A.");
+  assert.deepEqual(result.metadata.usage, { inputTokens: 42, outputTokens: 28 });
+});
+
 test("DeepSeek uses task-specific thinking policies through the backend provider", async () => {
   const requests = [];
   const provider = createBackendModelProvider({

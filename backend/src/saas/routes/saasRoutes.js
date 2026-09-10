@@ -1389,7 +1389,7 @@ async function handleProjectAgentRuns(req, res, context, projectId) {
     context,
     project,
     projectProfile: projectProfileFor(project),
-    chartSpecs: chartSpecs.filter(isSupportedChartSpec).map(chartSpecListItem),
+    chartSpecs: chartSpecs.filter(isSupportedChartSpec),
     manuscripts,
     experimentSnapshotHeads,
     sourceDocuments: sourceDocuments.map(sourceDocumentSummary),

@@ -322,6 +322,17 @@ const testModelProvider = {
       },
     };
   },
+  async answerChartCommentary(input) {
+    return {
+      ok: true,
+      answer: `Visible chart series: ${input.chart?.traces?.map((trace) => trace.name).join(", ")}.`,
+      metadata: {
+        provider: "anthropic",
+        model: "test-analysis-model",
+        usage: { inputTokens: 12, outputTokens: 7 },
+      },
+    };
+  },
   async draftAnalysisPlan(input) {
     const region = input.confirmedRegions?.[0];
     if (!region) return { ok: false, warning: { code: "analysis_evidence_required" } };
@@ -1816,6 +1827,120 @@ test("project-content AgentRun returns a direct read-only answer without confirm
   assert.equal(body.agentRun.status, "completed");
   assert.deepEqual(body.agentRun.actions, []);
   assert.match(body.reply, /Agent Project Summary/);
+});
+
+test("selected manuscript chart commentary returns prose without creating analysis artifacts", async () => {
+  const project = await createProject("Chart Commentary Project");
+  const chartSpecId = `chart_spec_commentary_${Date.now()}`;
+  store.chartSpecs.set(chartSpecId, {
+    id: chartSpecId,
+    labId: project.labId,
+    projectId: project.id,
+    title: "Conversion by time",
+    chartType: "scatter",
+    spec: {
+      schemaVersion: "labrat.chartSpec.v3",
+      origin: "analysis_result",
+      status: "accepted",
+      title: "Conversion by time",
+      chartType: "scatter",
+      plotly: {
+        data: [{
+          traceId: "catalyst_a",
+          name: "Catalyst A",
+          type: "scatter",
+          mode: "lines+markers",
+          x: [1, 2, 3],
+          y: [35, 61, 78],
+        }, {
+          traceId: "catalyst_b",
+          name: "Catalyst B",
+          type: "scatter",
+          mode: "lines+markers",
+          x: [1, 2, 3],
+          y: [31, 48, 52],
+        }],
+        layout: {
+          xaxis: { title: { text: "Reaction time (h)" } },
+          yaxis: { title: { text: "Conversion (%)" } },
+        },
+      },
+      traceCatalog: [
+        { traceId: "catalyst_a", name: "Catalyst A" },
+        { traceId: "catalyst_b", name: "Catalyst B" },
+      ],
+      defaultChartView: { visibleTraceIds: ["catalyst_a", "catalyst_b"] },
+    },
+  });
+
+  const response = await jsonFetch(`/api/projects/${project.id}/agent/runs`, {
+    method: "POST",
+    body: {
+      message: "Write a manuscript-ready analysis of the selected chart.",
+      selectedContext: {
+        tab: "manuscript_chart",
+        activeSurface: "manuscript_chart",
+        requestedWorkflow: "chart_commentary",
+        chartCommentaryMode: "analysis",
+        selectedChartSpecId: chartSpecId,
+        selectedChartTitle: "Conversion by time",
+        selectedChartBlockId: "chart_block_1",
+        selectedChartView: { visibleTraceIds: ["catalyst_a"] },
+      },
+    },
+  });
+
+  assert.equal(response.status, 201);
+  const body = await response.json();
+  assert.equal(body.agentRun.mode, "chart_commentary");
+  assert.equal(body.agentRun.status, "completed");
+  assert.equal(body.reply, "Visible chart series: Catalyst A.");
+  assert.equal(body.analysisThread, null);
+  assert.equal(body.currentPlanRevision, null);
+  assert.deepEqual(body.agentRun.actions, []);
+  assert.deepEqual(body.agentRun.proposalRefs, [{ type: "chart_spec", id: chartSpecId }]);
+  assert.deepEqual(body.agentRun.toolTrace[0].observation.visibleTraceIds, ["catalyst_a"]);
+  assert.equal(store.analysisThreads.size, 0);
+  assert.equal(store.analysisPlanRevisions.size, 0);
+  assert.equal(store.analysisRuns.size, 0);
+});
+
+test("selected chart commentary fails closed when no manuscript traces are visible", async () => {
+  const project = await createProject("Empty Chart Commentary Project");
+  const chartSpecId = `chart_spec_empty_commentary_${Date.now()}`;
+  store.chartSpecs.set(chartSpecId, {
+    id: chartSpecId,
+    labId: project.labId,
+    projectId: project.id,
+    spec: {
+      schemaVersion: "labrat.chartSpec.v3",
+      origin: "analysis_result",
+      status: "accepted",
+      chartType: "bar",
+      plotly: { data: [{ traceId: "yield", name: "Yield", x: ["Exp1"], y: [82] }], layout: {} },
+      traceCatalog: [{ traceId: "yield", name: "Yield" }],
+      defaultChartView: { visibleTraceIds: ["yield"] },
+    },
+  });
+
+  const response = await jsonFetch(`/api/projects/${project.id}/agent/runs`, {
+    method: "POST",
+    body: {
+      message: "Analyze the selected chart.",
+      selectedContext: {
+        requestedWorkflow: "chart_commentary",
+        selectedChartSpecId: chartSpecId,
+        selectedChartView: { visibleTraceIds: [] },
+      },
+    },
+  });
+
+  assert.equal(response.status, 201);
+  const body = await response.json();
+  assert.equal(body.agentRun.mode, "chart_commentary");
+  assert.equal(body.agentRun.warnings[0].code, "chart_commentary_visible_trace_required");
+  assert.match(body.reply, /Show at least one chart series/);
+  assert.equal(body.analysisThread, null);
 });
 
 test("experiment trend AgentRun enters reviewed analysis instead of opening Browser", async () => {

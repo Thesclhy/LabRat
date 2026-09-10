@@ -73,6 +73,28 @@ const READ_ONLY_ANSWER_OUTPUT_SCHEMA = {
   additionalProperties: false,
 };
 
+const CHART_COMMENTARY_SYSTEM = [
+  "Write text about one existing accepted LabRat chart.",
+  "Return JSON only with answer.",
+  "Use only the supplied visible traces, plotted values, chart labels, and project context.",
+  "Never propose, plan, or create another chart and never request a calculation.",
+  "Do not invent mechanisms, methods, statistical significance, values, or conclusions that are not supported by the supplied chart.",
+  "Mention only supplied visible traces. If a trace was sampled or visible traces were omitted by a stated backend limit, qualify conclusions accordingly.",
+  "For mode analysis, write one polished manuscript-ready paragraph of 80-130 words describing what is plotted, the main trend, and visible caveats.",
+  "For mode trend, write 2-3 concise sentences about the main visible trend.",
+  "For mode caption, write a neutral manuscript-style caption of 1-2 concise sentences.",
+  "Return plain prose without Markdown headings, lists, tables, or hidden reasoning.",
+].join(" ");
+
+const CHART_COMMENTARY_OUTPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    answer: { type: "string" },
+  },
+  required: ["answer"],
+  additionalProperties: false,
+};
+
 const ANALYSIS_PLAN_SYSTEM = [
   "Draft one reviewable LabRat analysis plan as JSON only.",
   "Return exactly {requestSummary, sourceSelections, experimentSelections, reviewPlan, displayPlan, warnings}.",
@@ -655,6 +677,16 @@ export function createBackendModelProvider({
         payload: input,
         maxTokens: 800,
         outputSchema: READ_ONLY_ANSWER_OUTPUT_SCHEMA,
+        thinking: { enabled: false },
+        signal: options.signal,
+      });
+    },
+    answerChartCommentary(input = {}, options = {}) {
+      return requestStructured({
+        system: CHART_COMMENTARY_SYSTEM,
+        payload: input,
+        maxTokens: 700,
+        outputSchema: CHART_COMMENTARY_OUTPUT_SCHEMA,
         thinking: { enabled: false },
         signal: options.signal,
       });

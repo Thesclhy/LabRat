@@ -237,7 +237,7 @@ prefill identity decisions from the region's resolved experiment label.
 
 ### Milestone 1 — Batch upload (frontend only)
 
-Status: complete on 2026-09-09 (branch `codex/batch-workbook-linking`)
+Status: complete on 2026-09-09 (branch `claude/batch-workbook-linking`)
 
 - `multiple` on the LabRat chat attach input in `src/main.jsx`. The guided
   onboarding upload in `src/components/ProjectOnboarding.jsx` stays

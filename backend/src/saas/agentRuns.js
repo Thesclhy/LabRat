@@ -7,6 +7,9 @@ export const AGENT_RUN_SCHEMA_VERSION = "labrat.agentRun.v1";
 const MAX_QUESTION_REGIONS = 100;
 const MAX_QUESTION_EXPERIMENTS = 25;
 const MAX_QUESTION_FIELDS = 40;
+const MAX_COMMENTARY_TRACES = 12;
+const MAX_COMMENTARY_POINTS = 160;
+const CHART_COMMENTARY_MODES = new Set(["analysis", "trend", "caption"]);
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -61,6 +64,176 @@ function mergedUsage(route, answerMetadata = {}) {
     inputTokens: routed.inputTokens + (Number(answerMetadata.usage?.inputTokens) || 0),
     outputTokens: routed.outputTokens + (Number(answerMetadata.usage?.outputTokens) || 0),
     latencyMs: routed.latencyMs + (Number(answerMetadata.latencyMs) || 0),
+  };
+}
+
+function chartSpecValue(chartSpec = {}) {
+  return chartSpec?.spec && typeof chartSpec.spec === "object" && !Array.isArray(chartSpec.spec)
+    ? chartSpec.spec
+    : chartSpec;
+}
+
+function chartTraceId(trace, index) {
+  return text(trace?.traceId || trace?.meta?.labrat?.traceId || `trace_${index + 1}`);
+}
+
+function boundedChartValue(value) {
+  if (value == null || typeof value === "number" || typeof value === "boolean") return value;
+  return text(value).slice(0, 160);
+}
+
+function sampledIndexes(length) {
+  if (length <= MAX_COMMENTARY_POINTS) return Array.from({ length }, (_value, index) => index);
+  return Array.from({ length: MAX_COMMENTARY_POINTS }, (_value, index) => (
+    Math.round((index * (length - 1)) / (MAX_COMMENTARY_POINTS - 1))
+  ));
+}
+
+function commentaryTrace(trace, index) {
+  const x = asArray(trace?.x);
+  const y = asArray(trace?.y);
+  const pointCount = Math.max(x.length, y.length);
+  const indexes = sampledIndexes(pointCount);
+  return {
+    traceId: chartTraceId(trace, index),
+    name: text(trace?.name) || `Series ${index + 1}`,
+    type: text(trace?.type) || "scatter",
+    mode: text(trace?.mode) || null,
+    pointCount,
+    sampled: pointCount > MAX_COMMENTARY_POINTS,
+    x: indexes.map((pointIndex) => boundedChartValue(x[pointIndex])),
+    y: indexes.map((pointIndex) => boundedChartValue(y[pointIndex])),
+  };
+}
+
+function chartAxisTitle(axis = {}) {
+  return text(typeof axis?.title === "object" ? axis.title?.text : axis?.title);
+}
+
+function commentaryFailure(message, code, metadata = {}) {
+  return {
+    mode: "chart_commentary",
+    status: "completed",
+    reply: message,
+    visibleSteps: [visibleStep("Could not analyze selected chart", metadata)],
+    toolTrace: [],
+    proposalRefs: [],
+    actions: [],
+    usage: mergedUsage(null),
+    warnings: [{ code, message, severity: "warning" }],
+  };
+}
+
+async function answerChartCommentary({
+  context,
+  project,
+  projectProfile,
+  chartSpecs,
+  message,
+  selectedContext,
+  signal,
+}) {
+  const chartSpecId = text(selectedContext?.selectedChartSpecId);
+  const chartSpec = asArray(chartSpecs).find((candidate) => (
+    candidate?.id === chartSpecId
+    && candidate?.projectId === project?.id
+    && chartSpecValue(candidate)?.status === "accepted"
+  ));
+  if (!chartSpec) {
+    return commentaryFailure(
+      "The selected accepted chart is no longer available in this project.",
+      "chart_commentary_chart_not_found",
+      { chartSpecId: chartSpecId || null },
+    );
+  }
+
+  const spec = chartSpecValue(chartSpec);
+  const plotly = spec?.plotly || {};
+  const traces = asArray(plotly.data);
+  const availableTraceIds = traces.map(chartTraceId);
+  const requestedView = selectedContext?.selectedChartView;
+  const hasExplicitView = requestedView
+    && typeof requestedView === "object"
+    && !Array.isArray(requestedView)
+    && Object.hasOwn(requestedView, "visibleTraceIds");
+  const requestedTraceIds = hasExplicitView
+    ? [...new Set(asArray(requestedView.visibleTraceIds).map(text).filter(Boolean))]
+    : asArray(spec?.defaultChartView?.visibleTraceIds).map(text).filter(Boolean);
+  const visibleTraceIds = requestedTraceIds.length ? requestedTraceIds : (hasExplicitView ? [] : availableTraceIds);
+  const unknownTraceIds = visibleTraceIds.filter((traceId) => !availableTraceIds.includes(traceId));
+  if (unknownTraceIds.length) {
+    return commentaryFailure(
+      "The selected manuscript chart references series that are no longer available.",
+      "chart_commentary_trace_unknown",
+      { chartSpecId, unknownTraceIds },
+    );
+  }
+  if (!visibleTraceIds.length) {
+    return commentaryFailure(
+      "Show at least one chart series before asking LabRat to write an analysis.",
+      "chart_commentary_visible_trace_required",
+      { chartSpecId },
+    );
+  }
+  const visible = traces
+    .map((trace, index) => ({ trace, index, traceId: availableTraceIds[index] }))
+    .filter(({ traceId }) => visibleTraceIds.includes(traceId))
+    .slice(0, MAX_COMMENTARY_TRACES)
+    .map(({ trace, index }) => commentaryTrace(trace, index));
+  const mode = CHART_COMMENTARY_MODES.has(text(selectedContext?.chartCommentaryMode))
+    ? text(selectedContext.chartCommentaryMode)
+    : "analysis";
+  const response = await context.modelProvider?.answerChartCommentary?.({
+    schemaVersion: "labrat.chartCommentaryRequest.v1",
+    mode,
+    request: text(message),
+    project: {
+      id: project.id,
+      name: project.name,
+      profile: projectProfileFacts(projectProfile),
+    },
+    chart: {
+      chartSpecId,
+      title: text(selectedContext?.selectedChartTitle || spec?.title || chartSpec?.title) || "Chart",
+      chartType: text(spec?.chartType || chartSpec?.chartType) || "chart",
+      axisTitles: {
+        x: chartAxisTitle(plotly?.layout?.xaxis),
+        y: chartAxisTitle(plotly?.layout?.yaxis),
+      },
+      visibleTraceIds: visible.map((trace) => trace.traceId),
+      visibleTraceCount: visibleTraceIds.length,
+      omittedVisibleTraceCount: Math.max(0, visibleTraceIds.length - visible.length),
+      totalTraceCount: traces.length,
+      traces: visible,
+    },
+  }, { signal });
+  if (!response?.ok || !text(response.answer)) {
+    return {
+      ...commentaryFailure(
+        response?.warning?.message || "LabRat could not write an analysis for the selected chart.",
+        response?.warning?.code || "chart_commentary_model_unavailable",
+        { chartSpecId, mode },
+      ),
+      usage: mergedUsage(null, response?.metadata || {}),
+    };
+  }
+  return {
+    mode: "chart_commentary",
+    status: "completed",
+    reply: text(response.answer),
+    visibleSteps: [visibleStep("Analyzed selected chart as text", {
+      chartSpecId,
+      mode,
+      visibleTraceCount: visible.length,
+    })],
+    toolTrace: [{
+      tool: "chart_spec.read",
+      observation: { chartSpecId, visibleTraceIds },
+    }],
+    proposalRefs: [{ type: "chart_spec", id: chartSpecId }],
+    actions: [],
+    usage: mergedUsage(null, response.metadata || {}),
+    warnings: [],
   };
 }
 
@@ -278,6 +451,17 @@ export async function buildAgentRunDraft({
   signal = undefined,
 } = {}) {
   const request = text(message);
+  if (selectedContext?.requestedWorkflow === "chart_commentary") {
+    return answerChartCommentary({
+      context,
+      project,
+      projectProfile,
+      chartSpecs,
+      message: request,
+      selectedContext,
+      signal,
+    });
+  }
   const route = await routeAnalysisIntent({
     message: request,
     selectedContext,

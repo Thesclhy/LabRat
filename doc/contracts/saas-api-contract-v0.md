@@ -307,22 +307,35 @@ GET  /api/agent-runs/:agentRunId
 POST /api/agent-runs/:agentRunId/cancel
 ```
 
-Agent requests pass through the backend intent router and have three product
+Agent requests pass through the backend intent router and have four product
 dispositions: workbook upload/region review, read-only project question
-answering, and reviewed analysis planning for charts or Experiment Browser data
-publication. `selectedContext.tab` and `selectedContext.activeSurface` may carry
+answering, read-only commentary on an already accepted chart, and reviewed
+analysis planning for new charts or Experiment Browser data publication.
+`selectedContext.tab` and `selectedContext.activeSurface` may carry
 the current workspace surface, while `selectedContext.analysisOutputTarget`
 marks an explicit workflow entry. Surface context alone never authorizes a
 write: Browser publication requires a data-change intent and still creates a
 reviewed `AnalysisThread` with `outputTarget: experiment_browser`. Explicit
 Browser navigation may return a deterministic navigation reply, but it is not
-a fallback for project questions. Chart requests remain chart analysis even
-when sent from Browser, and display-only show/hide/filter/sort requests do not
-create a DataSnapshot. Every chart, trend, comparison, derived calculation, and
-explicit Excel-range chart request returns `mode: "analysis_planning"`, creates
-a durable AnalysisThread, and selects only active confirmed workbook regions.
+a fallback for project questions. Requests to create charts remain chart
+analysis even when sent from Browser, and display-only show/hide/filter/sort
+requests do not create a DataSnapshot. Except for the explicit existing-chart
+commentary workflow below, every new chart, trend calculation, comparison,
+derived calculation, and explicit Excel-range chart request returns
+`mode: "analysis_planning"`, creates a durable AnalysisThread, and selects only
+active confirmed workbook regions.
 Publishing a DataSnapshot is not required for chart planning. Unknown requests
 return clarification.
+
+The manuscript chart-assist controls send
+`selectedContext.requestedWorkflow: "chart_commentary"` with an accepted
+`selectedChartSpecId`, a bounded commentary mode (`analysis`, `trend`, or
+`caption`), and the placement-local `selectedChartView`. The backend resolves
+the project-owned accepted ChartSpec, supplies only its visible plotted traces
+to the selected provider, and returns `mode: "chart_commentary"` prose. This
+read-only path creates no AnalysisThread, AnalysisRun, AnalysisResult, or new
+ChartSpec. Missing, cross-project, stale, or zero-visible-trace selections fail
+closed with a bounded AgentRun warning.
 
 `POST /api/projects/:projectId/agent/runs` returns user-facing text in the top-level `reply` field plus nullable `analysisThread` and `currentPlanRevision` fields. Provider configuration and credentials are backend-only. AgentRun usage stores provider, model, token, and latency metadata while planning records visible workflow steps rather than hidden chain-of-thought.
 

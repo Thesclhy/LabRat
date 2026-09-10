@@ -2529,7 +2529,9 @@ export function AgentPanel({
       const requestAbortController = new AbortController();
       agentRequestAbortRef.current = requestAbortController;
       setBusyOperation({
-        stage: "Routing request and drafting a reviewable plan",
+        stage: meta?.source === "chart"
+          ? "Writing about the selected chart"
+          : "Routing request and drafting a reviewable plan",
         startedAt: Date.now(),
         elapsedSeconds: 0,
         cancelling: false,
@@ -2554,6 +2556,11 @@ export function AgentPanel({
               ? { analysisOutputTarget: requestedAnalysisOutputTarget }
               : {}),
             selectedExperimentLabel: selected?.label || "",
+            ...(meta?.source === "chart" ? {
+              requestedWorkflow: "chart_commentary",
+              chartCommentaryMode: meta.chartCommentaryMode || "analysis",
+              selectedChartSpecId: selectedChartContext?.chartSpecId || "",
+            } : {}),
             selectedChartTitle: selectedChartContext?.title || "",
             selectedChartBlockId: selectedChartContext?.blockId || "",
             selectedChartView: selectedChartContext?.chartView || null,
@@ -2567,7 +2574,9 @@ export function AgentPanel({
         onRequestedAnalysisTargetHandled?.();
         const agentRun = response.agentRun || {};
         const warningText = asArray(agentRun.warnings).map((warning) => warning.message || warning.code).filter(Boolean).join(" ");
-        const reply = response.reply || warningText || "I need more detail before I can answer or prepare an analysis plan.";
+        const reply = response.reply || warningText || (meta?.source === "chart"
+          ? "I could not write an analysis for the selected chart."
+          : "I need more detail before I can answer or prepare an analysis plan.");
         const analysisThread = response.analysisThread || null;
         const currentPlanRevision = response.currentPlanRevision || null;
         setHistory([...next, {
@@ -2591,7 +2600,9 @@ export function AgentPanel({
         }
         setHistory([...next, {
           role: "assistant",
-          text: `LabRat could not create a reviewable plan or action: ${err.message || String(err)} No plan or chart was created.`,
+          text: meta?.source === "chart"
+            ? `LabRat could not write about the selected chart: ${err.message || String(err)} No manuscript text was created.`
+            : `LabRat could not create a reviewable plan or action: ${err.message || String(err)} No plan or chart was created.`,
         }]);
       } finally {
         if (agentRequestAbortRef.current === requestAbortController) {
@@ -2607,19 +2618,19 @@ export function AgentPanel({
       text: "Select a server project before asking LabRat. Model access is configured on the backend.",
     }]);
   };
-  const selectedChartMeta = selectedChartContext
-    ? { source: "chart", chartBlockId: selectedChartContext.blockId, chartBox: selectedChartContext.block }
-    : null;
   const chartPrompt = (task) => {
     if (!selectedChartContext) return;
-    const chartJson = JSON.stringify(selectedChartContext);
-    const plainTextRule = "Return plain text only. Do not use Markdown headings, bold text, bullet points, numbered lists, tables, labels, or section headers.";
     const prompts = {
-      describe: `Describe the selected chart for insertion into a manuscript text box. Write one polished paragraph of 80-130 words. Focus on what is plotted, the major trend, and any caveats visible from the data. Avoid inventing mechanisms. ${plainTextRule} Selected chart JSON:\n${chartJson}`,
-      trend: `Summarize the key trend in the selected chart for insertion into a manuscript text box. Write 2-3 concise plain sentences. Mention experiment labels and values when useful. Avoid overclaiming. ${plainTextRule} Selected chart JSON:\n${chartJson}`,
-      caption: `Draft a manuscript-style figure caption for insertion into a manuscript text box. Write 1-2 concise plain sentences. Include chart type, compared experiments, plotted quantities, and a neutral takeaway. ${plainTextRule} Selected chart JSON:\n${chartJson}`,
+      describe: "Write a manuscript-ready analysis of the selected chart.",
+      trend: "Summarize the key trend in the selected chart.",
+      caption: "Draft a manuscript-style caption for the selected chart.",
     };
-    send(prompts[task], selectedChartMeta);
+    send(prompts[task], {
+      source: "chart",
+      chartCommentaryMode: task === "describe" ? "analysis" : task,
+      chartBlockId: selectedChartContext.blockId,
+      chartBox: selectedChartContext.block,
+    });
   };
   useEffect(() => {
     if (!pendingChartAnalysis || busy) return;
