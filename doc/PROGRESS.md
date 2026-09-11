@@ -33,6 +33,12 @@ Keep entries concise, newest first, and include:
   or explicit manual dispatch. This dedicated-branch upload does not trigger
   deployment or that CI pipeline. Independent remote CI and separately
   authorized production canary/rollback validation remain pending.
+- Publication authorization: the initial push was blocked before execution
+  pending confirmation of the concrete remote destination. The user then
+  explicitly approved uploading implementation commit `66cc02c` and its
+  architecture documentation to `git@github.com:Thesclhy/LabRat.git`, branch
+  `codex/backend-v1-architecture`. This confirmation changes documentation only;
+  the implementation and recorded verification results are unchanged.
 
 ## 2026-09-10
 
