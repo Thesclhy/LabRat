@@ -424,6 +424,27 @@ export function confirmServerWorkbookReviewRegionsBatch(projectId, request = {},
   }, options);
 }
 
+export function listServerLinkedDataKinds(projectId, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before listing linked workbook data.");
+  return serverRequest(`/api/projects/${encodeURIComponent(projectId)}/linked-data-kinds`, options);
+}
+
+export function createServerLinkedDataComparison(projectId, request = {}, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before comparing linked data.");
+  const dataKind = String(request.dataKind || "").trim();
+  const experimentIds = Array.isArray(request.experimentIds)
+    ? request.experimentIds.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+  if (!dataKind) throw new ServerApiError("Choose a data kind to compare.");
+  if (!experimentIds.length) throw new ServerApiError("Choose at least one experiment to compare.");
+  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/linked-data-comparisons`, {
+    dataKind,
+    experimentIds,
+    ...(request.chartType ? { chartType: request.chartType } : {}),
+    ...(request.dryRun ? { dryRun: true } : {}),
+  }, options);
+}
+
 export function createServerManuscript(projectId, request = {}, options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before creating a manuscript.");
   return serverJson(`/api/projects/${encodeURIComponent(projectId)}/manuscripts`, request, options);

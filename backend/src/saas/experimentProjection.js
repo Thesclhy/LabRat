@@ -167,6 +167,7 @@ export function linkedRegionSummaries({ acceptedRegionUnderstandings = [], sourc
         semanticType: interpretation.semanticType || null,
         seriesLabels: asArray(interpretation.series).map((series) => text(series?.label || series?.seriesKey)).filter(Boolean).slice(0, 6),
         acceptedAt: region.acceptedAt || null,
+        createdAt: region.createdAt || null,
       };
     })
     .sort((a, b) => a.dataKind.localeCompare(b.dataKind) || a.workbookName.localeCompare(b.workbookName) || a.regionId.localeCompare(b.regionId));

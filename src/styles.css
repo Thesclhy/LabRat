@@ -11603,3 +11603,108 @@ tbody tr:hover {
   color: var(--muted);
   font-size: 11px;
 }
+
+/* Compare linked data */
+.linked-data-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px 14px;
+  margin: 10px 0;
+}
+.linked-data-controls label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.linked-data-controls select {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 5px 8px;
+  font-size: 13px;
+  background: #fff;
+  max-width: 360px;
+}
+.linked-data-controls button,
+.linked-data-actions button {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  padding: 5px 12px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.linked-data-actions button.primary {
+  border-color: #0f6b6b;
+  background: #0f6b6b;
+  color: #fff;
+}
+.linked-data-controls button:disabled,
+.linked-data-actions button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.linked-data-experiments {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.linked-data-experiments li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 12.5px;
+}
+.linked-data-experiments li:last-child {
+  border-bottom: 0;
+}
+.linked-data-experiments li.is-missing {
+  color: var(--muted);
+}
+.linked-data-experiments label {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: baseline;
+  min-width: 0;
+}
+.linked-data-experiments label span {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: #2c6b68;
+}
+.linked-data-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.linked-data-preview {
+  margin-top: 10px;
+  border-left: 3px solid #0f6b6b;
+  padding: 8px 12px;
+  background: #eef6f5;
+  font-size: 12.5px;
+}
+.linked-data-preview p {
+  margin: 0 0 6px;
+}
+.linked-data-preview ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.linked-data-preview li span {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: #2c6b68;
+}

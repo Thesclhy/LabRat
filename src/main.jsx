@@ -1875,6 +1875,7 @@ export function ChartReviewModal({
   onLoadChartSpecDetail,
   onInsertChartSpec,
   onTemplateApplicationReady,
+  onLinkedComparisonReady,
   onOpenImportReview,
   onClose,
 }) {
@@ -1921,6 +1922,15 @@ export function ChartReviewModal({
             <button
               type="button"
               role="tab"
+              aria-selected={reviewMode === "linked"}
+              className={reviewMode === "linked" ? "active" : ""}
+              onClick={() => setReviewMode("linked")}
+            >
+              Compare linked data
+            </button>
+            <button
+              type="button"
+              role="tab"
               aria-selected={reviewMode === "edit"}
               className={reviewMode === "edit" ? "active" : ""}
               onClick={() => setReviewMode("edit")}
@@ -1940,6 +1950,7 @@ export function ChartReviewModal({
               onLoadChartSpecDetail={onLoadChartSpecDetail}
               onInsertChartSpec={onInsertChartSpec}
               onTemplateApplicationReady={onTemplateApplicationReady}
+              onLinkedComparisonReady={onLinkedComparisonReady}
             />
           ) : (
             <div className="import-review-empty chart-review-empty">
@@ -3689,7 +3700,7 @@ function App() {
   const openChartReview = (options = "") => {
     const isOptionsObject = options && typeof options === "object" && !("currentTarget" in options);
     setChartReviewStatusFilter(isOptionsObject && options.statusFilter === "active" ? "active" : "");
-    setChartReviewInitialMode(isOptionsObject && ["review", "template", "edit"].includes(options.initialMode)
+    setChartReviewInitialMode(isOptionsObject && ["review", "template", "linked", "edit"].includes(options.initialMode)
       ? options.initialMode
       : "review");
     setChartLaunchContext(isOptionsObject ? options.launchContext || null : null);
@@ -4571,6 +4582,12 @@ function App() {
             revision: response.analysisPlanRevision,
             run: response.analysisRun || null,
             executionStrategy: "chart_template_v1",
+          });
+        }}
+        onLinkedComparisonReady={(response) => {
+          openAnalysisReview({
+            thread: response.analysisThread,
+            revision: response.analysisPlanRevision,
           });
         }}
         onOpenImportReview={openWorkbookUpload}

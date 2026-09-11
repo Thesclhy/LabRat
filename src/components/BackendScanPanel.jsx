@@ -8,6 +8,8 @@ import {
 import {
   applyServerReusableChartTemplate,
   getServerReusableChartTemplate,
+  listServerLinkedDataKinds,
+  createServerLinkedDataComparison,
 } from "../data/serverApi.js";
 import { ThinkingIndicator } from "./ThinkingIndicator.jsx";
 import { ExperimentDetailDrawer } from "./ExperimentDetailDrawer.jsx";
@@ -722,6 +724,186 @@ export function ReusableChartTemplateReview({
   );
 }
 
+const LINKED_CHART_TYPE_OPTIONS = [
+  { value: "grouped_bar", label: "Grouped bars (one bar per experiment per category)" },
+  { value: "scatter", label: "Lines / points" },
+  { value: "bar", label: "Bars" },
+  { value: "stacked_bar", label: "Stacked bars" },
+];
+
+export function LinkedDataComparisonReview({
+  projectId,
+  onComparisonReady,
+  loadDataKinds = listServerLinkedDataKinds,
+  createComparison = createServerLinkedDataComparison,
+}) {
+  const [kindsState, setKindsState] = React.useState({ loading: false, value: null, error: "" });
+  const [selectedKind, setSelectedKind] = React.useState("");
+  const [chartType, setChartType] = React.useState("grouped_bar");
+  const [selectedExperimentIds, setSelectedExperimentIds] = React.useState([]);
+  const [previewState, setPreviewState] = React.useState({ loading: false, value: null, error: "" });
+  const [creating, setCreating] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!projectId) return undefined;
+    let active = true;
+    setKindsState({ loading: true, value: null, error: "" });
+    loadDataKinds(projectId)
+      .then((value) => {
+        if (!active) return;
+        setKindsState({ loading: false, value, error: "" });
+        const firstKind = asArray(value?.dataKinds)[0]?.dataKind || "";
+        setSelectedKind((current) => current || firstKind);
+      })
+      .catch((error) => {
+        if (active) setKindsState({ loading: false, value: null, error: error?.message || String(error) });
+      });
+    return () => {
+      active = false;
+    };
+  }, [projectId, loadDataKinds]);
+
+  const dataKinds = asArray(kindsState.value?.dataKinds);
+  const kind = dataKinds.find((item) => item.dataKind === selectedKind) || dataKinds[0] || null;
+  const allExperiments = asArray(kindsState.value?.experiments);
+  const linkedIds = new Set(asArray(kind?.experiments).map((item) => item.experimentId));
+  const linkedById = new Map(asArray(kind?.experiments).map((item) => [item.experimentId, item]));
+  const experimentRows = allExperiments.length
+    ? allExperiments
+    : asArray(kind?.experiments).map((item) => ({ experimentId: item.experimentId, label: item.label }));
+  const selectedLinked = selectedExperimentIds.filter((id) => linkedIds.has(id));
+
+  const changeKind = (nextKind) => {
+    setSelectedKind(nextKind);
+    setSelectedExperimentIds([]);
+    setPreviewState({ loading: false, value: null, error: "" });
+  };
+  const toggleExperiment = (experimentId) => {
+    setSelectedExperimentIds((current) => (current.includes(experimentId) ? current.filter((id) => id !== experimentId) : [...current, experimentId]));
+    setPreviewState({ loading: false, value: null, error: "" });
+  };
+  const selectAllLinked = () => {
+    setSelectedExperimentIds(asArray(kind?.experiments).map((item) => item.experimentId));
+    setPreviewState({ loading: false, value: null, error: "" });
+  };
+  const preview = async () => {
+    if (!kind || !selectedLinked.length) return;
+    setPreviewState({ loading: true, value: null, error: "" });
+    try {
+      const response = await createComparison(projectId, { dataKind: kind.dataKind, experimentIds: selectedExperimentIds, chartType, dryRun: true });
+      setPreviewState({ loading: false, value: response?.comparison || null, error: "" });
+    } catch (error) {
+      setPreviewState({ loading: false, value: null, error: error?.message || String(error) });
+    }
+  };
+  const create = async () => {
+    if (!kind || !selectedLinked.length || creating) return;
+    setCreating(true);
+    setPreviewState((current) => ({ ...current, error: "" }));
+    try {
+      const response = await createComparison(projectId, { dataKind: kind.dataKind, experimentIds: selectedExperimentIds, chartType });
+      setPreviewState({ loading: false, value: response?.comparison || null, error: "" });
+      if (response?.analysisThread?.id && response?.analysisPlanRevision?.id) onComparisonReady?.(response);
+    } catch (error) {
+      setPreviewState((current) => ({ ...current, loading: false, error: error?.message || String(error) }));
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  if (kindsState.loading) {
+    return <section className="backend-proposal-section"><WorkflowPanelHeader title="Compare linked data" detail="Loading linked workbook data..." /></section>;
+  }
+  if (kindsState.error) {
+    return <section className="backend-proposal-section"><WorkflowPanelHeader title="Compare linked data" detail={kindsState.error} /></section>;
+  }
+  if (!dataKinds.length) {
+    return (
+      <section className="backend-proposal-section reusable-chart-empty">
+        <WorkflowPanelHeader
+          title="Compare linked data"
+          detail="Confirm workbook regions linked to experiments (for example from an extraction template batch) before comparing them here."
+        />
+        <div className="import-review-empty">No linked workbook data is available in this project yet.</div>
+      </section>
+    );
+  }
+  const comparison = previewState.value;
+  return (
+    <section className="backend-proposal-section linked-data-comparison" aria-label="Compare linked data">
+      <WorkflowPanelHeader
+        title="Compare linked data"
+        detail="Pick a data kind and experiments. LabRat selects each experiment's confirmed workbook region deterministically, then the normal reviewed chart path takes over."
+      />
+      <div className="linked-data-controls">
+        <label>
+          <span>Data kind</span>
+          <select aria-label="Data kind" value={kind?.dataKind || ""} onChange={(event) => changeKind(event.target.value)}>
+            {dataKinds.map((item) => (
+              <option key={item.dataKind} value={item.dataKind}>{item.dataKind} ({item.experimentCount} experiment{item.experimentCount === 1 ? "" : "s"})</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Chart type</span>
+          <select aria-label="Chart type" value={chartType} onChange={(event) => setChartType(event.target.value)}>
+            {LINKED_CHART_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+        <button type="button" onClick={selectAllLinked} disabled={!linkedIds.size}>Select all with data</button>
+      </div>
+      <ul className="linked-data-experiments" aria-label="Experiments">
+        {experimentRows.map((experiment) => {
+          const linked = linkedById.get(experiment.experimentId) || null;
+          const region = linked ? linked.regions[0] : null;
+          const inputId = `linked-${kind?.dataKind || "kind"}-${experiment.experimentId}`;
+          return (
+            <li key={experiment.experimentId} className={linked ? "is-linked" : "is-missing"}>
+              <input
+                id={inputId}
+                type="checkbox"
+                aria-label={`Include ${experiment.label}`}
+                checked={selectedExperimentIds.includes(experiment.experimentId)}
+                disabled={!linked}
+                onChange={() => toggleExperiment(experiment.experimentId)}
+              />
+              <label htmlFor={inputId}>
+                <strong>{experiment.label}</strong>
+                {region ? (
+                  <span>{region.workbookName} · {region.sheetName}!{region.range}{linked.regions.length > 1 ? ` (+${linked.regions.length - 1} more)` : ""}</span>
+                ) : <span className="browser-muted">no linked {kind?.dataKind || "data"}</span>}
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="linked-data-actions">
+        <button type="button" disabled={!selectedLinked.length || previewState.loading || creating} onClick={preview}>
+          {previewState.loading ? "Previewing..." : "Preview selections"}
+        </button>
+        <button type="button" className="primary" disabled={!selectedLinked.length || creating} onClick={create}>
+          {creating ? "Preparing plan..." : `Create comparison plan (${selectedLinked.length})`}
+        </button>
+      </div>
+      {previewState.error && <p className="workbook-region-error" role="alert">{previewState.error}</p>}
+      {comparison && (
+        <div className="linked-data-preview" aria-label="Comparison preview">
+          <p>{comparison.requestSummary}</p>
+          <ul>
+            {asArray(comparison.experiments).map((experiment) => (
+              <li key={experiment.experimentId}><strong>{experiment.label}</strong> <span>{experiment.workbookName} · {experiment.sheetName}!{experiment.range}</span></li>
+            ))}
+          </ul>
+          {!!asArray(comparison.missingExperiments).length && (
+            <p className="browser-muted">Not included: {comparison.missingExperiments.map((item) => item.label).join(", ")}</p>
+          )}
+          {asArray(comparison.warnings).map((warning, index) => <p className="browser-muted" key={`${warning.code}-${index}`}>{warning.message}</p>)}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function ChartReviewPanel({
   chartInterpretState,
   chartSpecs,
@@ -732,8 +914,16 @@ export function ChartReviewPanel({
   projectId,
   reusableChartTemplates = [],
   onTemplateApplicationReady,
+  onLinkedComparisonReady,
   allowAnalysisPrompt = false,
 }) {
+  if (viewMode === "linked") {
+    return (
+      <div className="chart-review-panel">
+        <LinkedDataComparisonReview projectId={projectId} onComparisonReady={onLinkedComparisonReady} />
+      </div>
+    );
+  }
   if (viewMode === "edit") {
     return (
       <div className="chart-review-panel">

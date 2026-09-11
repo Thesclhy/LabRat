@@ -1,6 +1,6 @@
 # Batch Workbook Upload And Experiment Linking Plan
 
-Status: active (Milestones 1-5 complete, Milestone 6 proposed)
+Status: active (Milestones 1-6 complete; series-slot template authoring deferred)
 Read when: implementing multi-file upload, reusable region extraction
 templates, formula-aware region understanding, or batch series publication.
 Created: 2026-09-09
@@ -406,6 +406,20 @@ natural-language chart request over linked regions plans without asking
 which files belong to which experiment.
 
 ### Milestone 6 — Cross-experiment charts from linked workbook data (backend + frontend)
+
+Status: complete on 2026-09-09 for the comparison path (branch
+`claude/batch-workbook-linking`); series-slot template authoring deferred.
+Implementation notes: `linkedDataComparisons.js` builds the exact source
+selections and a readable plan from linked regions; the route creates the
+thread and awaiting-review revision through the normal validation, so
+acceptance, Python generation, and result review are unchanged. Chart Review
+gains a `Compare linked data` mode. Saving such a chart as a reusable
+template is deferred: the deterministic template executor runs recipes over
+frozen snapshot columns and makes no provider call, whereas a linked-data
+chart still needs generated Python over workbook tables. Repetition is
+already cheap through the picker (deterministic selection, one reviewed run);
+a region-backed slot type and a series recipe executor would be a separate
+milestone.
 
 Backend:
 

@@ -2072,7 +2072,52 @@ test("extraction templates apply as prefilled linked regions and confirm in one 
   assert.equal(accepted.regionUnderstandings.filter((item) => item.region?.selectionMethod === "template_match").length, 2);
   const empty = await jsonFetch(`/api/projects/${project.id}/workbook-review-regions/confirm-batch`, { method: "POST", body: { items: [] } });
   assert.equal(empty.status, 400);
+
+  const kinds = await (await jsonFetch(`/api/projects/${project.id}/linked-data-kinds`)).json();
+  assert.equal(kinds.schemaVersion, "labrat.linkedDataKinds.v1");
+  assert.deepEqual(kinds.dataKinds.map((kind) => [kind.dataKind, kind.experimentCount, kind.regionCount]), [["Overall tots", 1, 2]]);
+  assert.equal(kinds.dataKinds[0].experiments[0].label, "Exp32");
+
+  const dryRun = await jsonFetch(`/api/projects/${project.id}/linked-data-comparisons`, {
+    method: "POST",
+    body: { dataKind: "Overall tots", experimentIds: [`identity_${project.id}_32`], dryRun: true },
+  });
+  assert.equal(dryRun.status, 200);
+  const dryRunBody = await dryRun.json();
+  assert.equal(dryRunBody.analysisThread, null);
+  assert.equal(dryRunBody.comparison.experiments.length, 1);
+  assert.ok(
+    [second.region.id, third.region.id].includes(dryRunBody.comparison.experiments[0].regionId),
+    "one of the two linked regions confirmed in the same batch is used",
+  );
+  const threadsBefore = await (await jsonFetch(`/api/projects/${project.id}/analysis-threads`)).json();
+
+  const created = await jsonFetch(`/api/projects/${project.id}/linked-data-comparisons`, {
+    method: "POST",
+    body: { dataKind: "Overall tots", experimentIds: [`identity_${project.id}_32`], chartType: "grouped_bar" },
+  });
+  assert.equal(created.status, 201);
+  const createdBody = await created.json();
+  assert.equal(createdBody.analysisThread.outputTarget, "chart");
+  assert.equal(createdBody.analysisThread.inputMode, "workbook");
+  assert.equal(createdBody.analysisThread.status, "awaiting_plan_review");
+  assert.equal(createdBody.analysisPlanRevision.status, "awaiting_review");
+  assert.equal(createdBody.analysisPlanRevision.sourceSelections.length, 1);
+  assert.equal(createdBody.analysisPlanRevision.sourceSelections[0].range, "A3:D4");
+  assert.equal(createdBody.analysisPlanRevision.reviewPlan.chart.chartType, "grouped_bar");
+  const threadsAfter = await (await jsonFetch(`/api/projects/${project.id}/analysis-threads`)).json();
+  assert.equal(asArrayLength(threadsAfter) - asArrayLength(threadsBefore), 1, "exactly one analysis thread was created");
+
+  const unknownKind = await jsonFetch(`/api/projects/${project.id}/linked-data-comparisons`, {
+    method: "POST",
+    body: { dataKind: "Nothing here", experimentIds: [`identity_${project.id}_32`] },
+  });
+  assert.equal(unknownKind.status, 404);
 });
+
+function asArrayLength(body) {
+  return Array.isArray(body?.analysisThreads) ? body.analysisThreads.length : Array.isArray(body?.items) ? body.items.length : Number(body?.totalCount) || 0;
+}
 
 test("legacy dataset, source-extract, chart-proposal, and planner routes are retired", async () => {
   const project = await createProject("Snapshot Browser Project");
@@ -2116,6 +2161,7 @@ test("project-content AgentRun returns a direct read-only answer without confirm
 });
 
 test("selected manuscript chart commentary returns prose without creating analysis artifacts", async () => {
+  const analysisCountsBefore = [store.analysisThreads.size, store.analysisPlanRevisions.size, store.analysisRuns.size];
   const project = await createProject("Chart Commentary Project");
   const chartSpecId = `chart_spec_commentary_${Date.now()}`;
   store.chartSpecs.set(chartSpecId, {
@@ -2186,9 +2232,7 @@ test("selected manuscript chart commentary returns prose without creating analys
   assert.deepEqual(body.agentRun.actions, []);
   assert.deepEqual(body.agentRun.proposalRefs, [{ type: "chart_spec", id: chartSpecId }]);
   assert.deepEqual(body.agentRun.toolTrace[0].observation.visibleTraceIds, ["catalyst_a"]);
-  assert.equal(store.analysisThreads.size, 0);
-  assert.equal(store.analysisPlanRevisions.size, 0);
-  assert.equal(store.analysisRuns.size, 0);
+  assert.deepEqual([store.analysisThreads.size, store.analysisPlanRevisions.size, store.analysisRuns.size], analysisCountsBefore, "commentary creates no analysis artifacts");
 });
 
 test("selected chart commentary fails closed when no manuscript traces are visible", async () => {

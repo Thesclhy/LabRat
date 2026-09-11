@@ -15,6 +15,24 @@ Keep entries concise, newest first, and include:
 
 ## 2026-09-09
 
+- Cross-experiment charts from linked workbook data (Milestone 6 of
+  `doc/plans/batch-workbook-experiment-linking-plan.md`). New
+  `backend/src/saas/linkedDataComparisons.js`: `GET
+  /api/projects/:id/linked-data-kinds` groups experiment-linked accepted
+  regions by data kind with coverage, and `POST
+  /api/projects/:id/linked-data-comparisons` deterministically selects each
+  chosen experiment's most recently confirmed region, builds a workbook-mode
+  chart plan (exact source selections, readable processing steps derived
+  from the recorded series shape, display plan naming files and omitted
+  experiments), and creates the AnalysisThread plus awaiting-review revision
+  through the ordinary validation; `dryRun` previews without side effects.
+  Chart Review gains a `Compare linked data` mode with a data-kind picker,
+  experiment coverage, chart type, preview, and hand-off into the existing
+  plan/result review. No provider call for selection; Python generation and
+  ChartSpec creation stay on the reviewed path. Series-slot reusable template
+  authoring is deferred with reasons recorded in the plan. Verification:
+  backend suite, frontend suite, production build.
+
 - Linked workbook data in Experiment Browser (Milestone 5 of
   `doc/plans/batch-workbook-experiment-linking-plan.md`). Accepted regions
   linked to an experiment now project as one shared Browser column per data

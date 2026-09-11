@@ -16,6 +16,7 @@ import {
   applyTemplateMatch,
   confirmTemplateRegionsBatch,
 } from "../regionTemplateApplications.js";
+import { buildLinkedDataComparison, linkedDataKinds } from "../linkedDataComparisons.js";
 import { runImportScan } from "../../import/services/importPipeline.js";
 import { getAuthContext, publicUser, requireAuth, requireLabRole, requireSuperAdmin } from "../authz.js";
 import { clearSessionCookie, setSessionCookie } from "../cookies.js";
@@ -3407,6 +3408,63 @@ async function handleWorkbookReviewRegionConfirmBatch(req, res, context, project
   });
 }
 
+async function handleProjectLinkedDataKinds(req, res, context, projectId) {
+  const { project } = await projectAuth(req, context, projectId, "viewer");
+  sendJson(res, 200, await linkedDataKinds({ store: context.store, projectId: project.id }));
+}
+
+async function handleProjectLinkedDataComparisons(req, res, context, projectId) {
+  const { auth, project } = await projectAuth(req, context, projectId, "editor");
+  const body = await readJsonBody(req);
+  const comparison = await buildLinkedDataComparison({
+    store: context.store,
+    projectId: project.id,
+    dataKind: body.dataKind,
+    experimentIds: body.experimentIds,
+    chartType: body.chartType || null,
+  });
+  if (body.dryRun === true) {
+    sendJson(res, 200, { comparison, analysisThread: null, analysisPlanRevision: null, dryRun: true });
+    return;
+  }
+  if (!comparison.experiments.length) {
+    throw Object.assign(new Error(`None of the chosen experiments has linked ${comparison.dataKind} data.`), {
+      statusCode: 422,
+      code: "linked_data_comparison_empty",
+      details: { missingExperiments: comparison.missingExperiments },
+    });
+  }
+  const analysisThread = await createAnalysisThread({
+    store: context.store,
+    project,
+    actorUserId: auth.user.id,
+    originalRequest: comparison.requestSummary,
+    outputTarget: "chart",
+    inputMode: "workbook",
+  });
+  const revision = await createAnalysisPlanRevision({
+    store: context.store,
+    project,
+    analysisThreadId: analysisThread.id,
+    actorUserId: auth.user.id,
+    plan: comparison.plan,
+  });
+  const updatedThread = await context.store.findAnalysisThreadById(analysisThread.id);
+  await context.store.recordAuditEvent({
+    labId: project.labId, projectId: project.id, actorUserId: auth.user.id,
+    action: "analysis_thread.linked_data_comparison", targetType: "analysis_thread", targetId: analysisThread.id,
+    summary: `Prepared a ${comparison.dataKind} comparison across ${comparison.experiments.length} experiment${comparison.experiments.length === 1 ? "" : "s"} from linked workbook regions.`,
+    metadata: { dataKind: comparison.dataKind, experimentIds: comparison.experiments.map((item) => item.experimentId), analysisPlanRevisionId: revision?.id || null },
+    ipAddress: clientIp(req), userAgent: userAgent(req),
+  });
+  sendJson(res, 201, {
+    comparison,
+    analysisThread: analysisThreadSummary(updatedThread || analysisThread),
+    analysisPlanRevision: analysisPlanRevisionSummary(revision),
+    dryRun: false,
+  });
+}
+
 async function handleProjectReusableChartTemplates(req, res, context, projectId, url) {
   const { auth, project } = await projectAuth(req, context, projectId, req.method === "POST" ? "editor" : "viewer");
   if (req.method === "GET") {
@@ -3966,6 +4024,14 @@ async function dispatch(req, res, context) {
   const regionConfirmBatchMatch = pathName.match(/^\/api\/projects\/([^/]+)\/workbook-review-regions\/confirm-batch$/);
   if (regionConfirmBatchMatch && req.method === "POST") {
     return handleWorkbookReviewRegionConfirmBatch(req, res, context, regionConfirmBatchMatch[1]);
+  }
+  const projectLinkedDataKindsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/linked-data-kinds$/);
+  if (projectLinkedDataKindsMatch && req.method === "GET") {
+    return handleProjectLinkedDataKinds(req, res, context, projectLinkedDataKindsMatch[1]);
+  }
+  const projectLinkedDataComparisonsMatch = pathName.match(/^\/api\/projects\/([^/]+)\/linked-data-comparisons$/);
+  if (projectLinkedDataComparisonsMatch && req.method === "POST") {
+    return handleProjectLinkedDataComparisons(req, res, context, projectLinkedDataComparisonsMatch[1]);
   }
   const chartSpecTemplateEligibilityMatch = pathName.match(/^\/api\/chart-specs\/([^/]+)\/template-eligibility$/);
   if (chartSpecTemplateEligibilityMatch && req.method === "GET") {

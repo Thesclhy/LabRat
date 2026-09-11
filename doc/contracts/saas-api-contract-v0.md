@@ -316,6 +316,37 @@ Failures are reported per item and do not stop the rest.
 Region summaries expose `linkedExperimentId`, `dataKind`,
 `regionExtractionTemplateVersionId`, and `templateMatch`.
 
+## Linked Data Comparisons
+
+```text
+GET  /api/projects/:projectId/linked-data-kinds
+POST /api/projects/:projectId/linked-data-comparisons
+```
+
+`linked-data-kinds` (viewer) groups accepted, experiment-linked regions by
+`dataKind` with per-experiment regions (workbook, sheet, range, template
+version, series metadata) plus the project's experiment list, so a picker can
+show which experiments still lack a data kind.
+
+`linked-data-comparisons` (editor) takes `{ dataKind, experimentIds,
+chartType?, dryRun? }`. The backend deterministically selects, for each
+experiment, its most recently confirmed region of that kind and builds an
+ordinary workbook-mode chart plan: one exact `sourceSelection` per experiment,
+a readable `reviewPlan` whose processing steps describe the header-row or
+column-pair series shape recorded on the regions, a `displayPlan` that names
+the workbooks and the experiments left out, and a `linkedDataComparison`
+block for lineage. Chart type defaults to `grouped_bar` for header-row
+category series and `scatter` for column-pair series; any supported chart
+type may be requested. With `dryRun: true` the response only previews the
+comparison. Otherwise it creates an AnalysisThread (`outputTarget: chart`,
+`inputMode: workbook`) and an awaiting-review AnalysisPlanRevision through the
+normal validation, then returns both; acceptance, Python generation against
+the real materialized tables, result review, and ChartSpec creation follow the
+existing reviewed path. No provider call is made for the selection step and
+no DataSnapshot is read or written. Unknown kinds return `404`; a request in
+which no chosen experiment has linked data returns `422
+linked_data_comparison_empty`.
+
 ## Evidence Retrieval And Historical Data
 
 ```text
