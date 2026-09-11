@@ -156,14 +156,17 @@ function publicExecution(payload = {}) {
 }
 
 export function analysisThreadSummary(thread) {
+  const outputTarget = thread.outputTarget || ANALYSIS_OUTPUT_TARGETS.CHART;
   return {
     id: thread.id,
     labId: thread.labId,
     projectId: thread.projectId,
     schemaVersion: thread.schemaVersion,
     status: thread.status,
-    outputTarget: thread.outputTarget || ANALYSIS_OUTPUT_TARGETS.CHART,
-    inputMode: thread.inputMode || null,
+    outputTarget,
+    inputMode: outputTarget === ANALYSIS_OUTPUT_TARGETS.CHART
+      ? thread.inputMode || ANALYSIS_INPUT_MODES.WORKBOOK
+      : null,
     originalRequest: thread.originalRequest,
     messageCount: asArray(thread.messages).length,
     planRevisionIds: asArray(thread.planRevisionIds),
@@ -181,6 +184,7 @@ export function analysisThreadSummary(thread) {
 
 export function analysisPlanRevisionSummary(revision) {
   const plan = revision.plan || {};
+  const outputTarget = revision.outputTarget || plan.outputTarget || ANALYSIS_OUTPUT_TARGETS.CHART;
   return {
     id: revision.id,
     labId: revision.labId,
@@ -189,8 +193,10 @@ export function analysisPlanRevisionSummary(revision) {
     schemaVersion: revision.schemaVersion,
     revision: revision.revision,
     status: revision.status,
-    outputTarget: revision.outputTarget || plan.outputTarget || ANALYSIS_OUTPUT_TARGETS.CHART,
-    inputMode: plan.inputMode || null,
+    outputTarget,
+    inputMode: outputTarget === ANALYSIS_OUTPUT_TARGETS.CHART
+      ? plan.inputMode || ANALYSIS_INPUT_MODES.WORKBOOK
+      : null,
     requestSummary: revision.requestSummary,
     sourceSelections: revision.sourceSelections || plan.sourceSelections || [],
     experimentSelections: revision.experimentSelections || plan.experimentSelections || [],
@@ -1736,6 +1742,7 @@ export async function getAnalysisResultPreview({
             ...cell,
             storedType: field.valueType || "string",
             unit: field.unit || null,
+            numericScale: field.numericScale || null,
             sourceRefs: asArray(field.sourceRefs).slice(0, 8),
           }];
         })),
@@ -1777,6 +1784,7 @@ export async function getAnalysisResultPreview({
     analysisThreadId: detail.analysisRun.analysisThreadId,
     analysisRunId: detail.analysisRun.id,
     analysisResultId: detail.analysisResult.id,
+    resolvedGeometry: detail.analysisResult.result?.resolvedGeometry || null,
     plotly,
     traces,
     summary: detail.analysisResult.result?.summary || {},

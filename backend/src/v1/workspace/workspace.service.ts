@@ -54,7 +54,7 @@ function mergeProjectProfile(
 function publicProject(project: NonNullable<ProjectRow>, access: {
   shellOnly: boolean;
   capabilities: string[];
-}) {
+}, workflowSummary: Record<string, number> | null = null) {
   return {
     id: project.id,
     labId: project.labId,
@@ -64,6 +64,7 @@ function publicProject(project: NonNullable<ProjectRow>, access: {
     shellOnly: access.shellOnly,
     capabilities: access.capabilities,
     ...(!access.shellOnly ? { projectProfile: projectProfile(project) } : {}),
+    ...(!access.shellOnly && workflowSummary ? { workflowSummary } : {}),
   };
 }
 
@@ -84,7 +85,10 @@ export class WorkspaceService {
     for (const project of projects) {
       const resolved = await this.authorizationService.resolveProjectAccess(auth, project.id);
       if (resolved?.access?.capabilities.includes("read")) {
-        visible.push(publicProject(project, resolved.access));
+        const workflowSummary = resolved.access.shellOnly
+          ? null
+          : await this.repository.projectWorkflowSummary(project.id);
+        visible.push(publicProject(project, resolved.access, workflowSummary));
       }
     }
     return visible;
@@ -96,7 +100,10 @@ export class WorkspaceService {
       projectId,
       "read",
     );
-    return publicProject(project, access!);
+    const workflowSummary = access!.shellOnly
+      ? null
+      : await this.repository.projectWorkflowSummary(project.id);
+    return publicProject(project, access!, workflowSummary);
   }
 
   async createProject(auth: AuthContext, input: {
@@ -129,7 +136,11 @@ export class WorkspaceService {
     if (!resolved?.access) {
       throw new ApiError(500, "project_access_failed", "Created project access could not be resolved.");
     }
-    return publicProject(project, resolved.access);
+    return publicProject(
+      project,
+      resolved.access,
+      resolved.access.shellOnly ? null : await this.repository.projectWorkflowSummary(project.id),
+    );
   }
 
   async updateProject(auth: AuthContext, projectId: string, input: {
@@ -151,11 +162,19 @@ export class WorkspaceService {
     if (!updated) throw new ApiError(404, "project_not_found", "Project not found.");
     await this.auditProject(auth, updated, "project.update", Object.keys(input));
     if (updated.status === "archived") {
-      return publicProject(updated, access!);
+      return publicProject(
+        updated,
+        access!,
+        access!.shellOnly ? null : await this.repository.projectWorkflowSummary(updated.id),
+      );
     }
     const resolved = await this.authorizationService.resolveProjectAccess(auth, updated.id);
     if (!resolved?.access) throw new ApiError(404, "project_not_found", "Project not found.");
-    return publicProject(updated, resolved.access);
+    return publicProject(
+      updated,
+      resolved.access,
+      resolved.access.shellOnly ? null : await this.repository.projectWorkflowSummary(updated.id),
+    );
   }
 
   async updateProjectProfile(auth: AuthContext, projectId: string, input: ProjectProfileDto) {
@@ -172,7 +191,11 @@ export class WorkspaceService {
     await this.auditProject(auth, updated, "project.profile.update", ["projectProfile"]);
     const resolved = await this.authorizationService.resolveProjectAccess(auth, updated.id);
     if (!resolved?.access) throw new ApiError(404, "project_not_found", "Project not found.");
-    return publicProject(updated, resolved.access);
+    return publicProject(
+      updated,
+      resolved.access,
+      resolved.access.shellOnly ? null : await this.repository.projectWorkflowSummary(updated.id),
+    );
   }
 
   private async auditProject(

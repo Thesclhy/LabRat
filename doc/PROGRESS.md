@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-08-30
+Last reviewed: 2026-09-11
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -12,6 +12,83 @@ Keep entries concise, newest first, and include:
 - meaningful changes
 - verification
 - follow-ups or residual risk
+
+## 2026-09-11
+
+- Request: upload the completed new backend architecture to a separate branch.
+- Created `codex/backend-v1-architecture` from `codex/v1-main-reconcile` for
+  publication to `origin`. The checkpoint includes the reconciled NestJS API,
+  generated React client, tests, migration history, and implementation docs.
+  Neither `main` nor `codex/onboarding-chat` is changed.
+- Commit scope excludes local environment/credential files, `postman/cookies.txt`,
+  `.codex/`, `.superpowers/`, `.tmp/`, and private `test excel/` fixtures.
+- Verification: upload-time `npm run codex:verify` passed, including generated
+  client freshness, frontend/backend suites, TypeScript compilation, production
+  entry smoke, and the frontend build. Existing conditional skips and the Vite
+  large-chunk warning remain. The separate PostgreSQL suites were not rerun for
+  this upload-only request; their 2026-09-10 passing results remain below.
+  The common credential-signature scan, exact 37-file staging check, and
+  `git diff --cached --check` passed.
+- Release boundary: the existing Lightsail workflow runs only on `main` pushes
+  or explicit manual dispatch. This dedicated-branch upload does not trigger
+  deployment or that CI pipeline. Independent remote CI and separately
+  authorized production canary/rollback validation remain pending.
+
+## 2026-09-10
+
+- Request: implement the confirmed main/NestJS API reconciliation plan.
+- Created `codex/v1-main-reconcile` from `origin/main@7e6d729` and replayed the
+  two migration commits as `e5ce047` and `4d85b0f`. Kept
+  `codex/onboarding-chat@8c2cdaf` unchanged and retained the backup of pre-existing
+  planning documents.
+- Added `ReusableChartsModule` with all twelve v1 operations, bounded Drizzle
+  collection reads, full-project permissions, immutable version transactions,
+  audit events, and application idempotency. Reconciled OpenAPI, generated types,
+  React template helpers, and explicit project-state collections.
+- Preserved main's product/scientific behavior while adapting input mode,
+  workflow counts, result geometry, and lineage. A full Nest regression exposed
+  dropped percentage-scale metadata during experiment materialization; retaining
+  that metadata restores deterministic fraction-to-percentage rendering without
+  changing accepted snapshots.
+- Renumbered unpublished authorization migration to 027. Disposable PostgreSQL
+  tests execute the real migration/checksum runner from all three starting
+  states, retain the former 024 authorization ledger row, and verify repeat-run
+  idempotency. The twelve-operation HTTP test covers permissions, cross-project
+  concealment, application replay/conflict, no AI/Python calls, explicit approval,
+  immutable ChartSpec lineage/geometry, and stale-head rejection.
+- Fixed local runtime: both Compose services restore stale dependency volumes
+  from their lockfile, and backend development compiles before starting Nest.
+  Runtime verification found and addressed missing backend dependencies, missing
+  Nest injection metadata, and a missing frontend `openapi-fetch` dependency.
+- Verification: `npm run codex:verify` passed: frontend 312/312, legacy backend
+  269 passed / 5 conditional or retired skips, and Nest v1 51/51; generated types,
+  TypeScript build, production entry smoke, and Vite build passed. Separate
+  PostgreSQL suites passed (legacy 2/2, Nest v1 8/8). Skip details are recorded in
+  `doc/current-milestone.md`. Vite retains the existing large-chunk warning.
+  The first full gate exposed a dev-entry assertion tied to the former `tsx`
+  command; it was corrected for compiled startup before the successful rerun.
+- Local runtime: all three Compose services are healthy after restarting the
+  backend with final code; health, frontend page, and API client modules return
+  HTTP 200. `git diff --check` and new-file whitespace checks passed.
+- Follow-up: repeat verification in GitHub CI, then separately authorize
+  production canary/rollback checks. No remote push or production deployment;
+  unrelated worktree files remain untouched.
+
+## 2026-09-07
+
+- Request: preserve the confirmed remote `main` and NestJS `/api/v1` reconciliation
+  approach as documentation only, without beginning implementation.
+- Added `doc/plans/main-v1-api-reconciliation-plan.md`, fixing the integration
+  baseline at `origin/main@7e6d729`, retaining
+  `codex/onboarding-chat@8c2cdaf` as the migration source, and recording merge base
+  `1e3740c`.
+- The plan inventories 12 new API operations, the existing API adaptation matrix,
+  migration 024-027 collision handling, backend/frontend sequencing, verification,
+  and release gates.
+- Updated `doc/plan.md` and `doc/START_HERE.md` with concise routing links. No branch,
+  code, dependency, database, runtime, test, or deployment change was made.
+- Verification: `git diff --check`; only the four intended Markdown documents are
+  changed.
 
 ## 2026-08-30
 

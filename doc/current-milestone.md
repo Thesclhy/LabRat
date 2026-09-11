@@ -2,11 +2,49 @@
 
 Status: active
 Read when: checking what the next implementation slice should be.
-Last reviewed: 2026-08-30
+Last reviewed: 2026-09-11
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
 
-## Active Backend v1 Architecture Migration
+## Main And v1 Reconciliation — Local Implementation
+
+The approved reconciliation is implemented on `codex/v1-main-reconcile` from
+`origin/main@7e6d729`. The migration source `codex/onboarding-chat@8c2cdaf` is
+unchanged. The independent publication/review branch is now
+`codex/backend-v1-architecture`. Detailed scope and the twelve new operations are in
+`doc/plans/main-v1-api-reconciliation-plan.md`.
+
+Nest now owns style/template lifecycle, eligibility, and deterministic
+applications directly. React composes the new collections through its generated
+`/api/v1` client. Analysis preserves input mode, accepted percentage scale,
+geometry, and template lineage; final ChartSpec publication still requires
+`approve` and rejects stale accepted experiment heads.
+
+The migration runner supports fresh, main-024-to-026, and former-local-024-auth
+databases, including checksum-ledger restart checks. Both Compose dependency
+volumes now track their lockfile; development starts the compiled Nest entry.
+This fixes missing `tsx`/`openapi-fetch` dependencies and missing Nest runtime
+metadata without replacing PostgreSQL or uploaded-file volumes.
+
+Verification: `npm run codex:verify` passed, including frontend 312/312, legacy
+backend 269 passed / 5 skipped, Nest v1 51/51, generated client freshness,
+TypeScript compilation, production Nest entry smoke, and the Vite production
+build. Separate PostgreSQL suites passed (legacy 2/2 and Nest v1 8/8), including
+the full template lifecycle and all three migration starting states.
+
+The Windows default gate skips three retired workflows, the Linux-only Python
+check, and the environment-gated PostgreSQL test; PostgreSQL was exercised
+separately. Vite retains the existing large-chunk warning. After loading the
+final code, backend, frontend, and PostgreSQL are healthy; the backend health
+endpoint, frontend page, and API client modules return HTTP 200.
+
+Remaining release work is independent GitHub CI repetition and separately
+authorized production canary/rollback validation. The existing Lightsail
+workflow runs on `main` pushes or explicit manual dispatch, so uploading the
+dedicated architecture branch does not run that pipeline or deploy production.
+No production deployment has been performed.
+
+## Backend v1 Architecture Migration
 
 LabRat is migrating from the single JavaScript HTTP route dispatcher to a
 NestJS + Fastify + TypeScript modular monolith under `/api/v1`. The migration is
@@ -92,7 +130,7 @@ npm run codex:verify
 git diff --check
 ```
 
-Latest local checkpoint: `npm run codex:verify` passed with 291 frontend tests,
+Pre-reconciliation checkpoint: `npm run codex:verify` passed with 291 frontend tests,
 238 legacy backend tests plus 5 intentional skips, and 41 v1 tests. Generated
 OpenAPI types are current; strict v1 TypeScript, the compiled Nest backend,
 production Nest entry smoke, and production frontend build all passed. Shell

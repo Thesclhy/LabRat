@@ -382,7 +382,7 @@ describe("serverApi", () => {
     }, { fetch: fetchImpl });
 
     const { url, options } = lastCall(fetchImpl);
-    expect(url).toBe("/api/projects/project_1/reusable-chart-templates");
+    expect(url).toBe("/api/v1/projects/project_1/reusable-chart-templates");
     expect(options.method).toBe("POST");
     expect(JSON.parse(options.body)).toEqual({
       name: "Yield comparison",
@@ -403,8 +403,8 @@ describe("serverApi", () => {
     }, { fetch: fetchImpl });
 
     const { url, options } = lastCall(fetchImpl);
-    expect(url).toBe("/api/reusable-chart-template-versions/template_version_1/applications");
-    expect(options.headers["Idempotency-Key"]).toBe("application_key_1");
+    expect(url).toBe("/api/v1/reusable-chart-template-versions/template_version_1/applications");
+    expect(options.headers["idempotency-key"]).toBe("application_key_1");
     expect(JSON.parse(options.body)).toEqual({
       experimentIds: ["experiment_1", "experiment_2"],
       bindings: [],
@@ -419,8 +419,8 @@ describe("serverApi", () => {
     await getServerReusableChartTemplate("template_1", { fetch: fetchImpl });
     await getServerChartTemplateEligibility("chart_spec_1", { fetch: fetchImpl });
 
-    expect(fetchImpl.mock.calls[0][0]).toBe("/api/reusable-chart-templates/template_1");
-    expect(fetchImpl.mock.calls[1][0]).toBe("/api/chart-specs/chart_spec_1/template-eligibility");
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/v1/reusable-chart-templates/template_1");
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/v1/chart-specs/chart_spec_1/template-eligibility");
   });
 
   it("surfaces backend error envelopes", async () => {

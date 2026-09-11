@@ -21,6 +21,38 @@ export class WorkspaceRepository {
       .orderBy(asc(projects.name), asc(projects.id));
   }
 
+  async projectWorkflowSummary(projectId: string) {
+    const result = await this.database.rawPool.query<{
+      published_experiment_count: number;
+      chart_spec_count: number;
+      chart_style_profile_count: number;
+      reusable_chart_template_count: number;
+    }>(
+      `select
+         (select count(*)::int from experiment_snapshot_heads where project_id = $1)
+           as published_experiment_count,
+         (select count(*)::int from chart_specs
+           where project_id = $1
+             and spec ->> 'origin' = 'analysis_result'
+             and spec ->> 'schemaVersion' = 'labrat.chartSpec.v3')
+           as chart_spec_count,
+         (select count(*)::int from chart_style_profiles
+           where project_id = $1 and status <> 'archived')
+           as chart_style_profile_count,
+         (select count(*)::int from reusable_chart_templates
+           where project_id = $1 and status <> 'archived')
+           as reusable_chart_template_count`,
+      [projectId],
+    );
+    const row = result.rows[0];
+    return {
+      publishedExperimentCount: Number(row?.published_experiment_count) || 0,
+      chartSpecCount: Number(row?.chart_spec_count) || 0,
+      chartStyleProfileCount: Number(row?.chart_style_profile_count) || 0,
+      reusableChartTemplateCount: Number(row?.reusable_chart_template_count) || 0,
+    };
+  }
+
   async createProject(input: {
     labId: string;
     name: string;

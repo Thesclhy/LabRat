@@ -1,3 +1,9 @@
+import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { getTableColumns, getTableName } from "drizzle-orm";
 import { Pool } from "pg";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
@@ -11,6 +17,36 @@ import {
 } from "../testing/postgres-test-database.js";
 
 const TEST_DATABASE_URL = process.env.LABRAT_TEST_DATABASE_URL;
+
+async function runMigrationRunner(databaseUrl: string, fixtureThrough?: string, formerAuth = false) {
+  const backendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+  const migrationsDirectory = path.join(backendRoot, "migrations");
+  if (fixtureThrough) {
+    const files = (await fs.readdir(migrationsDirectory))
+      .filter((file) => file.endsWith(".sql") && file <= fixtureThrough).sort();
+    if (formerAuth) files.push("024_authorization_v1.sql");
+    const pool = new Pool({ connectionString: databaseUrl });
+    try {
+      for (const filename of files) {
+        const sourceName = filename === "024_authorization_v1.sql" ? "027_authorization_v1.sql" : filename;
+        const sql = await fs.readFile(path.join(migrationsDirectory, sourceName), "utf8");
+        const checksum = createHash("sha256").update(sql).digest("hex");
+        await pool.query(
+          "insert into labrat_schema_migrations (filename, checksum) values ($1, $2)",
+          [filename, checksum],
+        );
+      }
+    } finally {
+      await pool.end();
+    }
+  }
+  const { stdout } = await promisify(execFile)(
+    process.execPath,
+    [path.join(backendRoot, "src", "saas", "migrate.js")],
+    { env: { ...process.env, DATABASE_URL: databaseUrl, NODE_ENV: "test", LABRAT_AI_PROVIDER: "anthropic" } },
+  );
+  return stdout;
+}
 
 function cookieFrom(response: { headers: Record<string, string | string[] | number | undefined> }): string {
   const raw = response.headers["set-cookie"];
@@ -173,6 +209,77 @@ async function login(app: NestFastifyApplication, username: string) {
 }
 
 describe.skipIf(!TEST_DATABASE_URL)("authorization v1 PostgreSQL integration", () => {
+  test("migrations 024-027 support fresh, former-authorization-first, and main-first databases", async () => {
+    const expectReconciledSchema = async (databaseUrl: string) => {
+      const pool = new Pool({ connectionString: databaseUrl });
+      try {
+        const state = await pool.query(`
+          select
+            to_regclass(current_schema() || '.chart_style_profiles') is not null
+              as has_chart_style_profiles,
+            to_regclass(current_schema() || '.reusable_chart_templates') is not null
+              as has_reusable_chart_templates,
+            to_regclass(current_schema() || '.reusable_chart_template_applications') is not null
+              as has_template_applications,
+            to_regclass(current_schema() || '.project_access_grants') is not null
+              as has_project_access_grants,
+            exists (
+              select 1
+              from information_schema.columns
+              where table_schema = current_schema()
+                and table_name = 'analysis_threads'
+                and column_name = 'input_mode'
+            ) as has_analysis_input_mode
+        `);
+        expect(state.rows[0]).toEqual({
+          has_chart_style_profiles: true,
+          has_reusable_chart_templates: true,
+          has_template_applications: true,
+          has_project_access_grants: true,
+          has_analysis_input_mode: true,
+        });
+      } finally {
+        await pool.end();
+      }
+    };
+
+    await withTestSchema(TEST_DATABASE_URL!, async ({ databaseUrl }) => {
+      expect(await runMigrationRunner(databaseUrl)).toContain("Applied 027_authorization_v1.sql");
+      expect(await runMigrationRunner(databaseUrl)).not.toContain("Applied ");
+      await expectReconciledSchema(databaseUrl);
+    });
+
+    await withTestSchema(TEST_DATABASE_URL!, async ({ databaseUrl }) => {
+      await applyTestMigrations(databaseUrl, { through: "026_analysis_chart_input_mode.sql" });
+      const output = await runMigrationRunner(databaseUrl, "026_analysis_chart_input_mode.sql");
+      expect(output).toContain("Applied 027_authorization_v1.sql");
+      expect(output).not.toContain("Applied 024_reusable_chart_templates.sql");
+      await expectReconciledSchema(databaseUrl);
+    });
+
+    await withTestSchema(TEST_DATABASE_URL!, async ({ databaseUrl }) => {
+      await applyTestMigrations(databaseUrl, { through: "023_experiment_custom_columns.sql" });
+      await insertFoundation(databaseUrl);
+      await applyTestMigrations(databaseUrl, { only: "027_authorization_v1.sql" });
+      const output = await runMigrationRunner(databaseUrl, "023_experiment_custom_columns.sql", true);
+      expect(output).toContain("Applied 024_reusable_chart_templates.sql");
+      expect(output).toContain("Applied 027_authorization_v1.sql");
+      expect(await runMigrationRunner(databaseUrl)).not.toContain("Applied ");
+      const pool = new Pool({ connectionString: databaseUrl });
+      try {
+        const ledger = await pool.query("select filename from labrat_schema_migrations where filename like '%authorization_v1.sql' order by filename");
+        expect(ledger.rows).toEqual([
+          { filename: "024_authorization_v1.sql" },
+          { filename: "027_authorization_v1.sql" },
+        ]);
+        expect((await pool.query("select count(*)::int as count from project_access_grants")).rows[0].count).toBe(4);
+      } finally {
+        await pool.end();
+      }
+      await expectReconciledSchema(databaseUrl);
+    });
+  });
+
   test("migration backfills legacy access without rewriting membership roles and is idempotent", async () => {
     await withTestSchema(TEST_DATABASE_URL!, async ({ databaseUrl }) => {
       await applyTestMigrations(databaseUrl, { through: "023_experiment_custom_columns.sql" });

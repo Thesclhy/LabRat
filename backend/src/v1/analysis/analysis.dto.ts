@@ -15,7 +15,8 @@ import {
 } from "class-validator";
 
 const OUTPUT_TARGETS = ["chart", "experiment_browser"] as const;
-const EXECUTION_STRATEGIES = ["model_generated_python", "direct_source_mapping"] as const;
+const INPUT_MODES = ["experiment_browser", "workbook"] as const;
+const EXECUTION_STRATEGIES = ["model_generated_python", "direct_source_mapping", "chart_template_v1"] as const;
 
 export class AnalysisPageQueryDto {
   @IsOptional()
@@ -52,6 +53,10 @@ export class CreateAnalysisThreadDto {
   @IsOptional()
   @IsIn(OUTPUT_TARGETS)
   outputTarget?: typeof OUTPUT_TARGETS[number];
+
+  @IsOptional()
+  @IsIn(INPUT_MODES)
+  inputMode?: typeof INPUT_MODES[number];
 }
 
 export class CreateAgentRunDto {

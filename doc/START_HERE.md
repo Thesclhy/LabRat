@@ -2,7 +2,7 @@
 
 Status: active
 Read when: starting any non-trivial LabRat coding or documentation task.
-Last reviewed: 2026-08-23
+Last reviewed: 2026-09-10
 
 This file is the routing guide for AI agents. It tells you which docs are current source of truth, which docs are long-term plans, and which docs are historical reports.
 
@@ -51,6 +51,7 @@ Always read:
 For backend routes, auth, persistence, project state, migrations, or frontend API helpers, also read:
 
 - `doc/plans/backend-v1-contract-first-migration.md` while the `/api/v1` migration is active
+- `doc/plans/main-v1-api-reconciliation-plan.md` when reconciling remote `main` API and chart-template work with NestJS `/api/v1`
 - `doc/contracts/backend-api-v1.openapi.yaml`
 - `doc/contracts/authorization-v1.md`
 - `doc/contracts/scientific-invariants-v1.md`

@@ -2,7 +2,7 @@
 
 Status: active
 Read when: deciding what LabRat should build next.
-Last reviewed: 2026-08-23
+Last reviewed: 2026-09-11
 
 This is the short active plan. Current execution status lives in `doc/current-milestone.md`; detailed implementation plans live under `doc/plans/`.
 
@@ -15,6 +15,14 @@ scientific evidence/review/publication boundaries below. Existing numbered SQL
 migrations remain the database-history source of truth. See
 `doc/plans/backend-v1-contract-first-migration.md` and
 `doc/current-milestone.md`.
+
+The reconciliation of remote `main` chart-template work with NestJS `/api/v1`
+is implemented locally on `codex/v1-main-reconcile`, with
+`codex/backend-v1-architecture` as the independent publication/review branch.
+The twelve template/style operations, existing analysis adaptations, React
+helpers, migration 027, and
+Compose startup are recorded in `doc/plans/main-v1-api-reconciliation-plan.md`.
+Current verification and release status lives in `doc/current-milestone.md`.
 
 All backend slices, the generated React `/api/v1` client, explicit workspace
 resource composition, atomic production entry wiring, and Docker-backed

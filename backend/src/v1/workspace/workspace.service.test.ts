@@ -23,6 +23,12 @@ describe("WorkspaceService", () => {
     };
     const repository = {
       updateProject: vi.fn().mockResolvedValue({ ...project, status: "archived" }),
+      projectWorkflowSummary: vi.fn().mockResolvedValue({
+        publishedExperimentCount: 0,
+        chartSpecCount: 0,
+        chartStyleProfileCount: 0,
+        reusableChartTemplateCount: 0,
+      }),
     };
     const authorization = {
       requireFullProjectCapability: vi.fn().mockResolvedValue({ project, access }),
@@ -42,5 +48,43 @@ describe("WorkspaceService", () => {
     }));
     expect(authorization.resolveProjectAccess).not.toHaveBeenCalled();
     expect(identity.recordAudit).toHaveBeenCalledOnce();
+  });
+
+  test("returns workflow counts only for a full-project view", async () => {
+    const project = {
+      id: "project_1",
+      labId: "lab_1",
+      name: "Catalyst screening",
+      description: "",
+      status: "active",
+      metadata: {},
+    };
+    const summary = {
+      publishedExperimentCount: 3,
+      chartSpecCount: 2,
+      chartStyleProfileCount: 1,
+      reusableChartTemplateCount: 1,
+    };
+    const repository = {
+      projectWorkflowSummary: vi.fn().mockResolvedValue(summary),
+    };
+    const authorization = {
+      requireProjectCapability: vi.fn()
+        .mockResolvedValueOnce({
+          project,
+          access: { shellOnly: false, allExperiments: true, capabilities: ["read"] },
+        })
+        .mockResolvedValueOnce({
+          project,
+          access: { shellOnly: true, allExperiments: false, capabilities: ["read"] },
+        }),
+    };
+    const service = new WorkspaceService(repository as any, authorization as any, {} as any);
+
+    await expect(service.getProject({} as any, project.id))
+      .resolves.toMatchObject({ workflowSummary: summary });
+    const shell = await service.getProject({} as any, project.id);
+    expect(shell).not.toHaveProperty("workflowSummary");
+    expect(repository.projectWorkflowSummary).toHaveBeenCalledOnce();
   });
 });

@@ -135,6 +135,8 @@ async function loadServerProjectState(projectId, options) {
       fileObjects: [],
       importRuns: [],
       chartSpecs: [],
+      chartStyleProfiles: [],
+      reusableChartTemplates: [],
       manuscripts: [],
       workbookReviewSessions: [],
       workbookReviewRegions: [],
@@ -162,6 +164,8 @@ async function loadServerProjectState(projectId, options) {
     agentRuns,
     analysisThreads,
     chartSpecs,
+    chartStyleProfiles,
+    reusableChartTemplates,
     manuscripts,
     browserViews,
     browserConfig,
@@ -177,6 +181,8 @@ async function loadServerProjectState(projectId, options) {
     projectList("/api/v1/projects/{projectId}/agent/runs", projectId, options, { limit: 100 }),
     projectList("/api/v1/projects/{projectId}/analysis-threads", projectId, options, { limit: 100 }),
     collectProjectPages("/api/v1/projects/{projectId}/chart-specs", projectId, options, { limit: 100 }),
+    collectProjectPages("/api/v1/projects/{projectId}/chart-style-profiles", projectId, options, { limit: 100 }),
+    collectProjectPages("/api/v1/projects/{projectId}/reusable-chart-templates", projectId, options, { limit: 100 }),
     collectProjectPages("/api/v1/projects/{projectId}/manuscripts", projectId, options, { limit: 100 }),
     projectList("/api/v1/projects/{projectId}/browser-views", projectId, options),
     projectList("/api/v1/projects/{projectId}/browser-config", projectId, options),
@@ -196,6 +202,8 @@ async function loadServerProjectState(projectId, options) {
     fileObjects: files?.items || [],
     importRuns: importRuns?.items || [],
     chartSpecs: chartSpecs?.items || [],
+    chartStyleProfiles: chartStyleProfiles?.items || [],
+    reusableChartTemplates: reusableChartTemplates?.items || [],
     manuscripts: manuscripts?.items || [],
     workbookReviewSessions: sessionItems,
     workbookReviewRegions: regionPages.flatMap((page) => page?.items || []),
@@ -468,12 +476,18 @@ export function getServerChartSpec(chartSpecId, options = {}) {
 
 export function getServerChartTemplateEligibility(chartSpecId, options = {}) {
   if (!chartSpecId) throw new ServerApiError("Select a ChartSpec before checking template eligibility.");
-  return serverRequest(`/api/chart-specs/${encodeURIComponent(chartSpecId)}/template-eligibility`, options);
+  return apiV1Request("get", "/api/v1/chart-specs/{chartSpecId}/template-eligibility", {
+    pathParams: { chartSpecId },
+    ...transport(options),
+  });
 }
 
 export function getServerReusableChartTemplate(templateId, options = {}) {
   if (!templateId) throw new ServerApiError("Select a reusable chart template before loading it.");
-  return serverRequest(`/api/reusable-chart-templates/${encodeURIComponent(templateId)}`, options);
+  return apiV1Request("get", "/api/v1/reusable-chart-templates/{reusableChartTemplateId}", {
+    pathParams: { reusableChartTemplateId: templateId },
+    ...transport(options),
+  });
 }
 
 export function createServerReusableChartTemplate(projectId, request = {}, options = {}) {
@@ -482,14 +496,18 @@ export function createServerReusableChartTemplate(projectId, request = {}, optio
   const sourceChartSpecId = String(request.sourceChartSpecId || "").trim();
   if (!name) throw new ServerApiError("Name the chart template before saving it.");
   if (!sourceChartSpecId) throw new ServerApiError("Create the chart before saving it as a template.");
-  return serverJson(`/api/projects/${encodeURIComponent(projectId)}/reusable-chart-templates`, {
-    name,
-    description: String(request.description || "").trim(),
-    sourceChartSpecId,
-    ...(request.chartStyleProfileVersionId
-      ? { chartStyleProfileVersionId: request.chartStyleProfileVersionId }
-      : {}),
-  }, options);
+  return apiV1Request("post", "/api/v1/projects/{projectId}/reusable-chart-templates", {
+    pathParams: { projectId },
+    body: {
+      name,
+      description: String(request.description || "").trim(),
+      sourceChartSpecId,
+      ...(request.chartStyleProfileVersionId
+        ? { chartStyleProfileVersionId: request.chartStyleProfileVersionId }
+        : {}),
+    },
+    ...transport(options),
+  });
 }
 
 export function applyServerReusableChartTemplate(templateVersionId, request = {}, options = {}) {
@@ -500,14 +518,16 @@ export function applyServerReusableChartTemplate(templateVersionId, request = {}
   if (!experimentIds.length) throw new ServerApiError("Select at least one experiment for the chart.");
   const idempotencyKey = String(request.idempotencyKey || "").trim();
   if (!idempotencyKey) throw new ServerApiError("A chart-template application key is required.");
-  return serverJson(
-    `/api/reusable-chart-template-versions/${encodeURIComponent(templateVersionId)}/applications`,
+  return apiV1Request(
+    "post",
+    "/api/v1/reusable-chart-template-versions/{templateVersionId}/applications",
     {
-      experimentIds,
-      bindings: Array.isArray(request.bindings) ? request.bindings : [],
-    },
-    {
-      ...options,
+      pathParams: { templateVersionId },
+      body: {
+        experimentIds,
+        bindings: Array.isArray(request.bindings) ? request.bindings : [],
+      },
+      ...transport(options),
       headers: { ...(options.headers || {}), "Idempotency-Key": idempotencyKey },
     },
   );

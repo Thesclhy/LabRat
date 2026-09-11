@@ -4153,10 +4153,11 @@ export class PostgresSaasStore {
           `insert into analysis_threads
            (id, lab_id, project_id, schema_version, status, original_request, messages,
             plan_revision_ids, analysis_run_ids, accepted_analysis_result_ids, chart_spec_ids,
-            output_target, data_snapshot_ids, browser_view_ids, created_at, updated_at, created_by, updated_by)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+            output_target, input_mode, data_snapshot_ids, browser_view_ids,
+            created_at, updated_at, created_by, updated_by)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
            returning *`,
-          [input.analysisThread.id, input.analysisThread.labId, input.analysisThread.projectId, input.analysisThread.schemaVersion, input.analysisThread.status, input.analysisThread.originalRequest, jsonb(input.analysisThread.messages, []), jsonb(input.analysisThread.planRevisionIds, []), jsonb(input.analysisThread.analysisRunIds, []), jsonb(input.analysisThread.acceptedAnalysisResultIds, []), jsonb(input.analysisThread.chartSpecIds, []), input.analysisThread.outputTarget, jsonb(input.analysisThread.dataSnapshotIds, []), jsonb(input.analysisThread.browserViewIds, []), input.analysisThread.createdAt, input.analysisThread.updatedAt, input.analysisThread.createdBy, input.analysisThread.updatedBy],
+          [input.analysisThread.id, input.analysisThread.labId, input.analysisThread.projectId, input.analysisThread.schemaVersion, input.analysisThread.status, input.analysisThread.originalRequest, jsonb(input.analysisThread.messages, []), jsonb(input.analysisThread.planRevisionIds, []), jsonb(input.analysisThread.analysisRunIds, []), jsonb(input.analysisThread.acceptedAnalysisResultIds, []), jsonb(input.analysisThread.chartSpecIds, []), input.analysisThread.outputTarget, input.analysisThread.inputMode || null, jsonb(input.analysisThread.dataSnapshotIds, []), jsonb(input.analysisThread.browserViewIds, []), input.analysisThread.createdAt, input.analysisThread.updatedAt, input.analysisThread.createdBy, input.analysisThread.updatedBy],
         );
         analysisThread = analysisThreadFromRow(threadResult.rows[0]);
         analysisPlanRevision = await insertAnalysisPlanRevisionRow(client, input.analysisPlanRevision);

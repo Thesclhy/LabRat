@@ -49,8 +49,10 @@ services:
       - labrat_backend_node_modules:/app/backend/node_modules
       - labrat_backend_files:/app/backend/.labrat-files
     command: >
-      sh -c "if [ ! -d backend/node_modules/pg ]; then
-      npm --prefix backend install;
+      sh -c "if [ ! -x backend/node_modules/.bin/tsc ] ||
+      ! cmp -s backend/package-lock.json backend/node_modules/.labrat-package-lock.json; then
+      npm --prefix backend ci --include=dev &&
+      cp backend/package-lock.json backend/node_modules/.labrat-package-lock.json;
       fi
       && npm --prefix backend run migrate
       && npm --prefix backend run dev:v1"
@@ -79,8 +81,10 @@ services:
       - ./:/app
       - labrat_frontend_node_modules:/app/node_modules
     command: >
-      sh -c "if [ ! -x node_modules/.bin/vite ]; then
-      npm install;
+      sh -c "if [ ! -x node_modules/.bin/vite ] ||
+      ! cmp -s package-lock.json node_modules/.labrat-package-lock.json; then
+      npm ci --include=dev &&
+      cp package-lock.json node_modules/.labrat-package-lock.json;
       fi
       && npm run dev"
     healthcheck:

@@ -1,7 +1,7 @@
 # Backend API v1 Migration Inventory
 
 Status: completed migration inventory; retained for cutover audit
-Last reviewed: 2026-08-23
+Last reviewed: 2026-09-10
 
 ## Classification
 
@@ -97,6 +97,16 @@ as a previous-release rollback implementation.
 | `POST /api/v1/analysis-runs/{runId}/accept-and-publish-experiments` | redesign authorization | Experiment | approve |
 | `GET /api/v1/projects/{projectId}/chart-specs` | preserve | Charts | read |
 | `GET /api/v1/chart-specs/{chartSpecId}` | preserve | Charts | read owning project |
+| `GET, POST /api/v1/projects/{projectId}/chart-style-profiles` | preserve | ReusableCharts | read / propose |
+| `GET /api/v1/chart-style-profiles/{chartStyleProfileId}` | preserve | ReusableCharts | read owning project |
+| `POST /api/v1/chart-style-profiles/{chartStyleProfileId}/versions` | preserve | ReusableCharts | propose owning project |
+| `POST /api/v1/chart-style-profiles/{chartStyleProfileId}/archive` | preserve | ReusableCharts | propose owning project |
+| `GET, POST /api/v1/projects/{projectId}/reusable-chart-templates` | preserve | ReusableCharts | read / propose |
+| `GET /api/v1/reusable-chart-templates/{reusableChartTemplateId}` | preserve | ReusableCharts | read owning project |
+| `POST /api/v1/reusable-chart-templates/{reusableChartTemplateId}/versions` | preserve | ReusableCharts | propose owning project |
+| `POST /api/v1/reusable-chart-templates/{reusableChartTemplateId}/archive` | preserve | ReusableCharts | propose owning project |
+| `GET /api/v1/chart-specs/{chartSpecId}/template-eligibility` | preserve | ReusableCharts | read owning project |
+| `POST /api/v1/reusable-chart-template-versions/{templateVersionId}/applications` | preserve | ReusableCharts | propose owning project |
 | `GET, POST /api/v1/projects/{projectId}/manuscripts` | preserve | Manuscripts | read / propose |
 | `PATCH /api/v1/manuscripts/{manuscriptId}` | preserve | Manuscripts | propose owning project |
 
@@ -136,8 +146,9 @@ Nest currently owns these route families without a legacy write bridge:
   result previews, and approval-gated atomic ChartSpec/DataSnapshot
   publication.
 - Accepted analysis-result ChartSpec cursor summaries and full immutable
-  detail reads, plus Manuscript cursor reads, creation, partial JSONB updates,
-  and audit events.
+  detail reads; reusable chart style/template lifecycle, eligibility and
+  idempotent application; plus Manuscript cursor reads, creation, partial
+  JSONB updates, and audit events.
 
 Every active route family has a Nest owner and a closed v1 DTO. React now uses
 the generated `/api/v1` path types and composes its transient workspace view

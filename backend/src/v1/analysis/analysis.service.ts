@@ -265,6 +265,9 @@ export class AnalysisService {
   }
 
   async createThread(auth: AuthContext, projectId: string, input: CreateAnalysisThreadDto) {
+    if (input.outputTarget === "experiment_browser" && input.inputMode) {
+      throw new ApiError(400, "chart_input_mode_conflict", "inputMode is only valid for chart analysis.");
+    }
     const { project } = await this.fullProject(auth, projectId, "propose");
     const thread = await createAnalysisThreadCompat({
       store: this.repository,
@@ -272,6 +275,7 @@ export class AnalysisService {
       actorUserId: auth.user.id,
       originalRequest: input.originalRequest,
       outputTarget: input.outputTarget || "chart",
+      inputMode: input.outputTarget === "experiment_browser" ? null : input.inputMode || null,
     });
     await this.audit(auth, project, "analysis_thread.create", "analysis_thread", thread.id,
       `Created analysis thread ${thread.id}.`);
@@ -641,6 +645,14 @@ export class AnalysisService {
 
   async createAgentRun(auth: AuthContext, projectId: string, input: CreateAgentRunDto) {
     const { project } = await this.fullProject(auth, projectId, "propose");
+    const selectedChartInputMode = String(input.selectedContext?.chartInputMode || "").trim();
+    if (selectedChartInputMode && !["experiment_browser", "workbook"].includes(selectedChartInputMode)) {
+      throw new ApiError(
+        400,
+        "invalid_chart_input_mode",
+        "selectedContext.chartInputMode must be experiment_browser or workbook.",
+      );
+    }
     const [chartSpecs, manuscripts, heads, sourceDocuments, accepted] = await Promise.all([
       this.repository.listChartSpecs({ projectId }),
       this.repository.listManuscripts({ projectId }),
@@ -661,6 +673,17 @@ export class AnalysisService {
       conversation: input.conversation || [],
       selectedContext: input.selectedContext || {},
     });
+    if (
+      selectedChartInputMode
+      && draft.mode === "analysis_planning"
+      && draft.analysisRequest?.outputTarget !== "chart"
+    ) {
+      throw new ApiError(
+        400,
+        "chart_input_mode_conflict",
+        "selectedContext.chartInputMode can only be used with a chart analysis request.",
+      );
+    }
     let agentRun = await this.repository.createAgentRun({
       labId: project.labId,
       projectId,
@@ -688,6 +711,7 @@ export class AnalysisService {
         actorUserId: auth.user.id,
         originalRequest: input.message,
         outputTarget: draft.analysisRequest?.outputTarget || "chart",
+        inputMode: draft.analysisRequest?.outputTarget === "chart" ? selectedChartInputMode || null : null,
         messages: [{
           id: makeId("analysis_message"),
           role: "user",

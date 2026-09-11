@@ -4,6 +4,7 @@ import { makeId } from "../../saas/ids.js";
 import { PostgresSaasStore } from "../../saas/postgresStore.js";
 import { EvidenceRepository } from "../evidence/evidence.repository.js";
 import { DatabaseService } from "../platform/database/database.service.js";
+import { ReusableChartsRepository } from "../reusable-charts/reusable-charts.repository.js";
 import {
   agentRuns,
   analysisExperimentPublications,
@@ -33,6 +34,7 @@ export class AnalysisRepository {
   constructor(
     private readonly database: DatabaseService,
     private readonly evidence: EvidenceRepository,
+    private readonly reusableCharts: ReusableChartsRepository,
   ) {}
 
   private atomicStore(): AtomicStore {
@@ -116,6 +118,7 @@ export class AnalysisRepository {
       acceptedAnalysisResultIds: input.acceptedAnalysisResultIds || [],
       chartSpecIds: input.chartSpecIds || [],
       outputTarget: input.outputTarget || "chart",
+      inputMode: input.inputMode || null,
       dataSnapshotIds: input.dataSnapshotIds || [],
       browserViewIds: input.browserViewIds || [],
       createdAt: timestamp,
@@ -144,6 +147,7 @@ export class AnalysisRepository {
     const [updated] = await this.database.db.update(analysisThreads).set({
       status: changes.status ?? current.status,
       outputTarget: changes.outputTarget ?? current.outputTarget,
+      inputMode: changes.inputMode !== undefined ? changes.inputMode : current.inputMode,
       messages: changes.messages ?? current.messages,
       planRevisionIds: changes.planRevisionIds ?? current.planRevisionIds,
       analysisRunIds: changes.analysisRunIds ?? current.analysisRunIds,
@@ -265,6 +269,34 @@ export class AnalysisRepository {
       eq(analysisExperimentPublications.idempotencyKey, input.idempotencyKey),
     )).limit(1);
     return row || null;
+  }
+
+  findDataSnapshotById(id: string) {
+    return this.atomicStore().findDataSnapshotById(id);
+  }
+
+  findChartStyleProfileVersionById(id: string) {
+    return this.reusableCharts.findChartStyleProfileVersionById(id);
+  }
+
+  findReusableChartTemplateById(id: string) {
+    return this.reusableCharts.findReusableChartTemplateById(id);
+  }
+
+  findReusableChartTemplateVersionById(id: string) {
+    return this.reusableCharts.findReusableChartTemplateVersionById(id);
+  }
+
+  findReusableChartTemplateApplicationById(id: string) {
+    return this.reusableCharts.findReusableChartTemplateApplicationById(id);
+  }
+
+  listReusableChartTemplateSlotBindings(input: Record<string, unknown>) {
+    return this.reusableCharts.listReusableChartTemplateSlotBindings(input);
+  }
+
+  updateReusableChartTemplateApplication(id: string, changes: Record<string, unknown>) {
+    return this.reusableCharts.updateReusableChartTemplateApplication(id, changes);
   }
 
   appendAnalysisPlanRevision(input: Record<string, unknown>) {

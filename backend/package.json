@@ -5,9 +5,9 @@
   "type": "module",
   "description": "LabRat contract-first NestJS/Fastify backend migration with legacy rollback support",
   "scripts": {
-    "dev": "node --env-file-if-exists=../.env --env-file-if-exists=../.env.local --import tsx src/v1/main.ts",
+    "dev": "npm run dev:v1",
     "dev:legacy": "node --env-file-if-exists=../.env --env-file-if-exists=../.env.local src/server.js",
-    "dev:v1": "node --env-file-if-exists=../.env --env-file-if-exists=../.env.local --import tsx src/v1/main.ts",
+    "dev:v1": "npm run build:v1 && node --env-file-if-exists=../.env --env-file-if-exists=../.env.local dist-v1/v1/main.js",
     "start": "node src/server.js",
     "start:v1": "node dist-v1/v1/main.js",
     "start:legacy": "node -e \"import('./src/server.js').then(({ startServer }) => startServer())\"",

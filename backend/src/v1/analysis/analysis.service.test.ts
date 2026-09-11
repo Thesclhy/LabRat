@@ -25,6 +25,12 @@ function fixture() {
   const project = { id: "project_1", labId: "lab_1", metadata: {} };
   const repository = {
     listAnalysisThreads: vi.fn(async () => []),
+    createAnalysisThread: vi.fn(async (input: Record<string, any>) => ({
+      id: "analysis_thread_1",
+      createdAt: "2026-09-10T00:00:00.000Z",
+      updatedAt: "2026-09-10T00:00:00.000Z",
+      ...input,
+    })),
     findAnalysisThreadById: vi.fn(async (): Promise<any> => null),
     findAnalysisPlanRevisionById: vi.fn(async (): Promise<any> => null),
     findAnalysisRunById: vi.fn(async (): Promise<any> => null),
@@ -165,5 +171,46 @@ describe("AnalysisService contract and authorization boundaries", () => {
       action: "agent_run.create",
       targetId: "agent_run_1",
     }));
+  });
+
+  test("persists and exposes the requested chart input mode", async () => {
+    const testFixture = fixture();
+
+    const result = await testFixture.service.createThread(auth, "project_1", {
+      originalRequest: "Chart accepted experiment yields.",
+      outputTarget: "chart",
+      inputMode: "experiment_browser",
+    });
+
+    expect(result).toMatchObject({
+      outputTarget: "chart",
+      inputMode: "experiment_browser",
+    });
+    expect(testFixture.repository.createAnalysisThread).toHaveBeenCalledWith(expect.objectContaining({
+      inputMode: "experiment_browser",
+    }));
+  });
+
+  test("rejects an unsupported selectedContext chart input mode before drafting", async () => {
+    const testFixture = fixture();
+
+    await expect(testFixture.service.createAgentRun(auth, "project_1", {
+      message: "Chart accepted data.",
+      selectedContext: { chartInputMode: "mixed" },
+    })).rejects.toMatchObject({
+      statusCode: 400,
+      code: "invalid_chart_input_mode",
+    });
+    expect(testFixture.repository.createAgentRun).not.toHaveBeenCalled();
+  });
+
+  test("rejects a chart input mode on a data-publication thread", async () => {
+    const testFixture = fixture();
+    await expect(testFixture.service.createThread(auth, "project_1", {
+      originalRequest: "Publish a data column.",
+      outputTarget: "experiment_browser",
+      inputMode: "workbook",
+    })).rejects.toMatchObject({ statusCode: 400, code: "chart_input_mode_conflict" });
+    expect(testFixture.repository.createAnalysisThread).not.toHaveBeenCalled();
   });
 });

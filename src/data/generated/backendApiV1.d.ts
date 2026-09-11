@@ -1174,6 +1174,186 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/api/v1/projects/{projectId}/chart-style-profiles": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly get: operations["listChartStyleProfiles"];
+        readonly put?: never;
+        readonly post: operations["createChartStyleProfile"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/chart-style-profiles/{chartStyleProfileId}": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly chartStyleProfileId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly get: operations["getChartStyleProfile"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/chart-style-profiles/{chartStyleProfileId}/versions": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly chartStyleProfileId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        readonly post: operations["createChartStyleProfileVersion"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/chart-style-profiles/{chartStyleProfileId}/archive": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly chartStyleProfileId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        readonly post: operations["archiveChartStyleProfile"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/projects/{projectId}/reusable-chart-templates": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly get: operations["listReusableChartTemplates"];
+        readonly put?: never;
+        readonly post: operations["createReusableChartTemplate"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/reusable-chart-templates/{reusableChartTemplateId}": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly reusableChartTemplateId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly get: operations["getReusableChartTemplate"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/reusable-chart-templates/{reusableChartTemplateId}/versions": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly reusableChartTemplateId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        readonly post: operations["createReusableChartTemplateVersion"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/reusable-chart-templates/{reusableChartTemplateId}/archive": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly reusableChartTemplateId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        readonly post: operations["archiveReusableChartTemplate"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/chart-specs/{chartSpecId}/template-eligibility": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly chartSpecId: components["parameters"]["ChartSpecId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly get: operations["getChartTemplateEligibility"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/reusable-chart-template-versions/{templateVersionId}/applications": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly templateVersionId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        readonly post: operations["applyReusableChartTemplate"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/api/v1/projects/{projectId}/chart-specs": {
         readonly parameters: {
             readonly query?: never;
@@ -1369,6 +1549,12 @@ export interface components {
             readonly analysisNotes?: string;
             readonly tags?: readonly string[];
         };
+        readonly ProjectWorkflowSummary: {
+            readonly publishedExperimentCount: number;
+            readonly chartSpecCount: number;
+            readonly chartStyleProfileCount: number;
+            readonly reusableChartTemplateCount: number;
+        };
         readonly Project: {
             readonly id: components["schemas"]["OpaqueId"];
             readonly labId: components["schemas"]["OpaqueId"];
@@ -1380,6 +1566,7 @@ export interface components {
             /** @default false */
             readonly shellOnly: boolean;
             readonly capabilities?: readonly components["schemas"]["Capability"][];
+            readonly workflowSummary?: components["schemas"]["ProjectWorkflowSummary"];
         };
         readonly CreateProjectRequest: {
             readonly labId: components["schemas"]["OpaqueId"];
@@ -2180,6 +2367,7 @@ export interface components {
              * @enum {string}
              */
             readonly outputTarget: "chart" | "experiment_browser";
+            readonly inputMode?: ("experiment_browser" | "workbook") | null;
         };
         readonly AnalysisThread: {
             readonly id: components["schemas"]["OpaqueId"];
@@ -2189,6 +2377,7 @@ export interface components {
             readonly status: string;
             /** @enum {string} */
             readonly outputTarget: "chart" | "experiment_browser";
+            readonly inputMode: ("experiment_browser" | "workbook") | null;
             readonly originalRequest: string;
             readonly messageCount: number;
             readonly messages?: readonly components["schemas"]["JsonObject"][];
@@ -2224,6 +2413,7 @@ export interface components {
             readonly status: string;
             /** @enum {string} */
             readonly outputTarget: "chart" | "experiment_browser";
+            readonly inputMode: ("experiment_browser" | "workbook") | null;
             readonly requestSummary: string;
             readonly sourceSelections: readonly components["schemas"]["JsonObject"][];
             readonly experimentSelections: readonly components["schemas"]["JsonObject"][];
@@ -2272,6 +2462,7 @@ export interface components {
             /** @enum {string} */
             readonly outputTarget: "chart" | "experiment_browser";
             readonly summary: components["schemas"]["JsonObject"];
+            readonly resolvedGeometry: components["schemas"]["JsonValue"];
             readonly pointCount: number;
             readonly traceCount: number;
             readonly experimentCount: number;
@@ -2339,7 +2530,7 @@ export interface components {
         };
         readonly ExecuteAnalysisRunRequest: {
             /** @enum {string} */
-            readonly executionStrategy?: "model_generated_python" | "direct_source_mapping";
+            readonly executionStrategy?: "model_generated_python" | "direct_source_mapping" | "chart_template_v1";
         };
         readonly ReviseAnalysisRunRequest: {
             readonly feedback: string;
@@ -2358,6 +2549,7 @@ export interface components {
             readonly analysisThreadId: components["schemas"]["OpaqueId"];
             readonly analysisRunId: components["schemas"]["OpaqueId"];
             readonly analysisResultId: components["schemas"]["OpaqueId"];
+            readonly resolvedGeometry: components["schemas"]["JsonValue"];
             readonly plotly: components["schemas"]["JsonObject"];
             readonly traces: readonly components["schemas"]["JsonObject"][];
             readonly summary: components["schemas"]["JsonObject"];
@@ -2419,6 +2611,174 @@ export interface components {
             readonly changeSummary: components["schemas"]["JsonObject"];
             readonly idempotentReplay: boolean;
         };
+        readonly CreateChartStyleProfileRequest: {
+            readonly name: string;
+            readonly description?: string;
+            readonly style?: components["schemas"]["JsonObject"];
+            readonly definition?: components["schemas"]["JsonObject"];
+        };
+        readonly CreateChartStyleProfileVersionRequest: {
+            readonly style?: components["schemas"]["JsonObject"];
+            readonly definition?: components["schemas"]["JsonObject"];
+        };
+        readonly ChartStyleProfileSummary: {
+            readonly id: components["schemas"]["OpaqueId"];
+            /** @constant */
+            readonly schemaVersion: "labrat.chartStyleProfile.v1";
+            readonly name: string;
+            readonly description: string;
+            /** @enum {string} */
+            readonly status: "active" | "archived";
+            readonly currentVersionId: components["schemas"]["NullableOpaqueId"];
+            readonly currentVersion: number | null;
+            readonly updatedAt: components["schemas"]["Timestamp"];
+        };
+        readonly ChartStyleProfile: {
+            readonly id: components["schemas"]["OpaqueId"];
+            readonly labId: components["schemas"]["OpaqueId"];
+            readonly projectId: components["schemas"]["OpaqueId"];
+            /** @constant */
+            readonly schemaVersion: "labrat.chartStyleProfile.v1";
+            readonly name: string;
+            readonly description: string;
+            /** @enum {string} */
+            readonly status: "active" | "archived";
+            readonly currentVersionId: components["schemas"]["NullableOpaqueId"];
+            readonly createdAt: components["schemas"]["Timestamp"];
+            readonly updatedAt: components["schemas"]["Timestamp"];
+            readonly createdBy: components["schemas"]["NullableOpaqueId"];
+            readonly updatedBy: components["schemas"]["NullableOpaqueId"];
+        };
+        readonly ChartStyleProfileVersion: {
+            readonly id: components["schemas"]["OpaqueId"];
+            readonly labId: components["schemas"]["OpaqueId"];
+            readonly projectId: components["schemas"]["OpaqueId"];
+            readonly chartStyleProfileId: components["schemas"]["OpaqueId"];
+            /** @constant */
+            readonly schemaVersion: "labrat.chartStyleProfileVersion.v1";
+            readonly version: number;
+            /** @enum {string} */
+            readonly status: "draft" | "accepted";
+            readonly contentHash: string;
+            readonly createdAt: components["schemas"]["Timestamp"];
+            readonly createdBy: components["schemas"]["NullableOpaqueId"];
+            readonly acceptedAt: components["schemas"]["NullableTimestamp"];
+            readonly acceptedBy: components["schemas"]["NullableOpaqueId"];
+        } & {
+            readonly [key: string]: unknown;
+        };
+        readonly ChartStyleProfilePage: {
+            readonly items: readonly components["schemas"]["ChartStyleProfileSummary"][];
+            readonly nextCursor: components["schemas"]["NullableString"];
+        };
+        readonly ChartStyleProfileDetail: {
+            readonly chartStyleProfile: components["schemas"]["ChartStyleProfile"];
+            readonly versions: readonly components["schemas"]["ChartStyleProfileVersion"][];
+        };
+        readonly ChartStyleProfileResponse: {
+            readonly chartStyleProfile: components["schemas"]["ChartStyleProfile"];
+        };
+        readonly CreateReusableChartTemplateRequest: {
+            readonly name: string;
+            readonly description?: string;
+            readonly sourceChartSpecId: components["schemas"]["OpaqueId"];
+            readonly chartStyleProfileVersionId?: components["schemas"]["NullableOpaqueId"];
+        };
+        readonly CreateReusableChartTemplateVersionRequest: {
+            readonly sourceChartSpecId?: components["schemas"]["OpaqueId"];
+            readonly chartStyleProfileVersionId?: components["schemas"]["NullableOpaqueId"];
+        };
+        readonly ReusableChartTemplateSummary: {
+            readonly id: components["schemas"]["OpaqueId"];
+            /** @constant */
+            readonly schemaVersion: "labrat.reusableChartTemplate.v1";
+            readonly name: string;
+            readonly description: string;
+            /** @enum {string} */
+            readonly status: "active" | "archived";
+            readonly currentVersionId: components["schemas"]["NullableOpaqueId"];
+            readonly currentVersion: number | null;
+            readonly chartType: components["schemas"]["NullableString"];
+            readonly experimentCardinality: components["schemas"]["JsonObject"] | null;
+            readonly updatedAt: components["schemas"]["Timestamp"];
+        };
+        readonly ReusableChartTemplate: {
+            readonly id: components["schemas"]["OpaqueId"];
+            readonly labId: components["schemas"]["OpaqueId"];
+            readonly projectId: components["schemas"]["OpaqueId"];
+            /** @constant */
+            readonly schemaVersion: "labrat.reusableChartTemplate.v1";
+            readonly name: string;
+            readonly description: string;
+            /** @enum {string} */
+            readonly status: "active" | "archived";
+            readonly currentVersionId: components["schemas"]["NullableOpaqueId"];
+            readonly createdAt: components["schemas"]["Timestamp"];
+            readonly updatedAt: components["schemas"]["Timestamp"];
+            readonly createdBy: components["schemas"]["NullableOpaqueId"];
+            readonly updatedBy: components["schemas"]["NullableOpaqueId"];
+        };
+        readonly ReusableChartTemplateVersion: {
+            readonly id: components["schemas"]["OpaqueId"];
+            readonly labId: components["schemas"]["OpaqueId"];
+            readonly projectId: components["schemas"]["OpaqueId"];
+            readonly reusableChartTemplateId: components["schemas"]["OpaqueId"];
+            /** @constant */
+            readonly schemaVersion: "labrat.reusableChartTemplateVersion.v1";
+            readonly version: number;
+            /** @constant */
+            readonly status: "accepted";
+            readonly sourceChartSpecId: components["schemas"]["OpaqueId"];
+            readonly chartStyleProfileVersionId: components["schemas"]["NullableOpaqueId"];
+            readonly contentHash: string;
+            readonly createdAt: components["schemas"]["Timestamp"];
+            readonly createdBy: components["schemas"]["NullableOpaqueId"];
+            readonly acceptedAt: components["schemas"]["Timestamp"];
+            readonly acceptedBy: components["schemas"]["NullableOpaqueId"];
+        } & {
+            readonly [key: string]: unknown;
+        };
+        readonly ReusableChartTemplatePage: {
+            readonly items: readonly components["schemas"]["ReusableChartTemplateSummary"][];
+            readonly nextCursor: components["schemas"]["NullableString"];
+        };
+        readonly ReusableChartTemplateDetail: {
+            readonly reusableChartTemplate: components["schemas"]["ReusableChartTemplate"];
+            readonly versions: readonly components["schemas"]["ReusableChartTemplateVersion"][];
+        };
+        readonly ReusableChartTemplateResponse: {
+            readonly reusableChartTemplate: components["schemas"]["ReusableChartTemplate"];
+        };
+        readonly ReusableChartTemplateBindingRequest: {
+            readonly slotId: components["schemas"]["OpaqueId"];
+            readonly columnId: components["schemas"]["OpaqueId"];
+        };
+        readonly ApplyReusableChartTemplateRequest: {
+            readonly experimentIds: readonly components["schemas"]["OpaqueId"][];
+            readonly bindings?: readonly components["schemas"]["ReusableChartTemplateBindingRequest"][];
+        };
+        readonly ReusableChartTemplateEligibility: {
+            /** @constant */
+            readonly schemaVersion: "labrat.reusableChartTemplateEligibility.v1";
+            /** @enum {string} */
+            readonly status: "eligible" | "ineligible";
+            readonly chartSpecId: components["schemas"]["OpaqueId"];
+            readonly experimentCardinality?: components["schemas"]["JsonObject"];
+            readonly inputSlots?: readonly components["schemas"]["JsonObject"][];
+            readonly encoding?: components["schemas"]["JsonObject"];
+            readonly missingDataPolicy?: components["schemas"]["JsonObject"];
+            readonly blockers?: readonly components["schemas"]["JsonObject"][];
+        };
+        readonly ReusableChartTemplateApplicationResponse: {
+            /** @constant */
+            readonly schemaVersion: "labrat.reusableChartTemplateApplicationResponse.v1";
+            readonly replayed: boolean;
+            readonly application: components["schemas"]["JsonObject"];
+            readonly compatibility: components["schemas"]["JsonObject"];
+            readonly analysisThread: components["schemas"]["AnalysisThread"] | null;
+            readonly analysisPlanRevision: components["schemas"]["AnalysisPlanRevision"] | null;
+            readonly analysisRun: components["schemas"]["AnalysisRun"] | null;
+        };
         readonly ChartTraceSummary: {
             readonly traceId: components["schemas"]["NullableString"];
             readonly name: components["schemas"]["NullableString"];
@@ -2442,6 +2802,8 @@ export interface components {
             readonly analysisRunId: components["schemas"]["OpaqueId"];
             readonly analysisResultId: components["schemas"]["OpaqueId"];
             readonly experimentSelections: readonly components["schemas"]["JsonObject"][];
+            readonly templateLineage?: components["schemas"]["JsonObject"];
+            readonly resolvedGeometry?: components["schemas"]["JsonObject"];
             readonly traceCatalog: readonly components["schemas"]["ChartTraceSummary"][];
             readonly defaultChartView: components["schemas"]["ChartDefaultView"];
             readonly warnings: readonly components["schemas"]["JsonValue"][];
@@ -2468,6 +2830,8 @@ export interface components {
             readonly analysisResultId: components["schemas"]["OpaqueId"];
             readonly sourceSelections: readonly components["schemas"]["JsonObject"][];
             readonly experimentSelections: readonly components["schemas"]["JsonObject"][];
+            readonly templateLineage?: components["schemas"]["JsonObject"];
+            readonly resolvedGeometry?: components["schemas"]["JsonObject"];
             readonly sourceRefs: readonly components["schemas"]["JsonValue"][];
             readonly plotly: components["schemas"]["JsonObject"];
             readonly traceCatalog: readonly components["schemas"]["ChartTraceSummary"][];
@@ -3184,6 +3548,7 @@ export type SchemaLab = components['schemas']['Lab'];
 export type SchemaCreateLabRequest = components['schemas']['CreateLabRequest'];
 export type SchemaLabResponse = components['schemas']['LabResponse'];
 export type SchemaProjectProfile = components['schemas']['ProjectProfile'];
+export type SchemaProjectWorkflowSummary = components['schemas']['ProjectWorkflowSummary'];
 export type SchemaProject = components['schemas']['Project'];
 export type SchemaCreateProjectRequest = components['schemas']['CreateProjectRequest'];
 export type SchemaUpdateProjectRequest = components['schemas']['UpdateProjectRequest'];
@@ -3307,6 +3672,26 @@ export type SchemaPublishAnalysisChartRequest = components['schemas']['PublishAn
 export type SchemaPublishExperimentAnalysisRequest = components['schemas']['PublishExperimentAnalysisRequest'];
 export type SchemaAnalysisChartPublicationResponse = components['schemas']['AnalysisChartPublicationResponse'];
 export type SchemaExperimentAnalysisPublicationResponse = components['schemas']['ExperimentAnalysisPublicationResponse'];
+export type SchemaCreateChartStyleProfileRequest = components['schemas']['CreateChartStyleProfileRequest'];
+export type SchemaCreateChartStyleProfileVersionRequest = components['schemas']['CreateChartStyleProfileVersionRequest'];
+export type SchemaChartStyleProfileSummary = components['schemas']['ChartStyleProfileSummary'];
+export type SchemaChartStyleProfile = components['schemas']['ChartStyleProfile'];
+export type SchemaChartStyleProfileVersion = components['schemas']['ChartStyleProfileVersion'];
+export type SchemaChartStyleProfilePage = components['schemas']['ChartStyleProfilePage'];
+export type SchemaChartStyleProfileDetail = components['schemas']['ChartStyleProfileDetail'];
+export type SchemaChartStyleProfileResponse = components['schemas']['ChartStyleProfileResponse'];
+export type SchemaCreateReusableChartTemplateRequest = components['schemas']['CreateReusableChartTemplateRequest'];
+export type SchemaCreateReusableChartTemplateVersionRequest = components['schemas']['CreateReusableChartTemplateVersionRequest'];
+export type SchemaReusableChartTemplateSummary = components['schemas']['ReusableChartTemplateSummary'];
+export type SchemaReusableChartTemplate = components['schemas']['ReusableChartTemplate'];
+export type SchemaReusableChartTemplateVersion = components['schemas']['ReusableChartTemplateVersion'];
+export type SchemaReusableChartTemplatePage = components['schemas']['ReusableChartTemplatePage'];
+export type SchemaReusableChartTemplateDetail = components['schemas']['ReusableChartTemplateDetail'];
+export type SchemaReusableChartTemplateResponse = components['schemas']['ReusableChartTemplateResponse'];
+export type SchemaReusableChartTemplateBindingRequest = components['schemas']['ReusableChartTemplateBindingRequest'];
+export type SchemaApplyReusableChartTemplateRequest = components['schemas']['ApplyReusableChartTemplateRequest'];
+export type SchemaReusableChartTemplateEligibility = components['schemas']['ReusableChartTemplateEligibility'];
+export type SchemaReusableChartTemplateApplicationResponse = components['schemas']['ReusableChartTemplateApplicationResponse'];
 export type SchemaChartTraceSummary = components['schemas']['ChartTraceSummary'];
 export type SchemaChartDefaultView = components['schemas']['ChartDefaultView'];
 export type SchemaChartSpecSummaryPayload = components['schemas']['ChartSpecSummaryPayload'];
@@ -5365,6 +5750,357 @@ export interface operations {
         readonly responses: {
             readonly 200: components["responses"]["ExperimentAnalysisPublicationObject"];
             readonly 201: components["responses"]["ExperimentAnalysisPublicationObject"];
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+        };
+    };
+    readonly listChartStyleProfiles: {
+        readonly parameters: {
+            readonly query?: {
+                readonly cursor?: components["parameters"]["Cursor"];
+                readonly limit?: components["parameters"]["PageLimit"];
+                readonly includeArchived?: boolean;
+            };
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Bounded chart-style profiles. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ChartStyleProfilePage"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+        };
+    };
+    readonly createChartStyleProfile: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["CreateChartStyleProfileRequest"];
+            };
+        };
+        readonly responses: {
+            /** @description Chart-style profile and first immutable version created. */
+            readonly 201: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ChartStyleProfileDetail"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+        };
+    };
+    readonly getChartStyleProfile: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly chartStyleProfileId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Profile and immutable versions. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ChartStyleProfileDetail"];
+                };
+            };
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+        };
+    };
+    readonly createChartStyleProfileVersion: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly chartStyleProfileId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["CreateChartStyleProfileVersionRequest"];
+            };
+        };
+        readonly responses: {
+            /** @description Immutable profile version created. */
+            readonly 201: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ChartStyleProfileDetail"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+        };
+    };
+    readonly archiveChartStyleProfile: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly chartStyleProfileId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Profile archived without deleting version history. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ChartStyleProfileResponse"];
+                };
+            };
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+        };
+    };
+    readonly listReusableChartTemplates: {
+        readonly parameters: {
+            readonly query?: {
+                readonly cursor?: components["parameters"]["Cursor"];
+                readonly limit?: components["parameters"]["PageLimit"];
+                readonly includeArchived?: boolean;
+            };
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Bounded reusable chart templates. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ReusableChartTemplatePage"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+        };
+    };
+    readonly createReusableChartTemplate: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["CreateReusableChartTemplateRequest"];
+            };
+        };
+        readonly responses: {
+            /** @description Reusable chart template and first immutable version created. */
+            readonly 201: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ReusableChartTemplateDetail"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+        };
+    };
+    readonly getReusableChartTemplate: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly reusableChartTemplateId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Template and immutable versions. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ReusableChartTemplateDetail"];
+                };
+            };
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+        };
+    };
+    readonly createReusableChartTemplateVersion: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly reusableChartTemplateId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["CreateReusableChartTemplateVersionRequest"];
+            };
+        };
+        readonly responses: {
+            /** @description Immutable reusable template version created. */
+            readonly 201: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ReusableChartTemplateDetail"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+        };
+    };
+    readonly archiveReusableChartTemplate: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly reusableChartTemplateId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Template archived without deleting version history. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ReusableChartTemplateResponse"];
+                };
+            };
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+        };
+    };
+    readonly getChartTemplateEligibility: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly chartSpecId: components["parameters"]["ChartSpecId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Eligibility and bounded compatibility contract for reuse. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ReusableChartTemplateEligibility"];
+                };
+            };
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+        };
+    };
+    readonly applyReusableChartTemplate: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header: {
+                readonly "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            readonly path: {
+                readonly templateVersionId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["ApplyReusableChartTemplateRequest"];
+            };
+        };
+        readonly responses: {
+            /** @description Exact idempotent replay. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ReusableChartTemplateApplicationResponse"];
+                };
+            };
+            /** @description New compatibility check and optional deterministic analysis run. */
+            readonly 201: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ReusableChartTemplateApplicationResponse"];
+                };
+            };
             readonly 400: components["responses"]["ValidationError"];
             readonly 401: components["responses"]["Unauthorized"];
             readonly 403: components["responses"]["Forbidden"];

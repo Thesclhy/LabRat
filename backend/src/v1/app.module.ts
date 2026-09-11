@@ -7,6 +7,7 @@ import { ExperimentModule } from "./experiment/experiment.module.js";
 import { EvidenceModule } from "./evidence/evidence.module.js";
 import { ManuscriptModule } from "./manuscripts/manuscript.module.js";
 import { PlatformModule } from "./platform/platform.module.js";
+import { ReusableChartsModule } from "./reusable-charts/reusable-charts.module.js";
 import { WorkspaceModule } from "./workspace/workspace.module.js";
 
 @Module({
@@ -19,6 +20,7 @@ import { WorkspaceModule } from "./workspace/workspace.module.js";
     EvidenceModule,
     AnalysisModule,
     ChartModule,
+    ReusableChartsModule,
     ManuscriptModule,
   ],
 })

@@ -76,6 +76,12 @@ For local development, copy `.env.example` to the Git-ignored repository-root
 `LABRAT_SEED_DEV_ACCOUNTS=true` only for local development. Production users
 and passwords belong in the database, not in an environment file.
 
+The backend development entry compiles TypeScript before starting Nest so its
+dependency-injection metadata is available. Restart it after backend edits.
+Compose restores each service's dependencies from its lockfile when the
+persistent dependency volume is out of date. The backend then runs migrations
+and starts the compiled service.
+
 Docker Compose reads provider settings from the Git-ignored repository-root
 `.env`. LabRat supports one deployment-selected backend provider at a time:
 

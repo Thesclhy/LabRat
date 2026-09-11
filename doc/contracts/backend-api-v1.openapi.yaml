@@ -1444,6 +1444,279 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/projects/{projectId}/chart-style-profiles:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+    get:
+      tags: [Charts]
+      operationId: listChartStyleProfiles
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/PageLimit" }
+        - name: includeArchived
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Bounded chart-style profiles.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChartStyleProfilePage" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Charts]
+      operationId: createChartStyleProfile
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateChartStyleProfileRequest" }
+      responses:
+        "201":
+          description: Chart-style profile and first immutable version created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChartStyleProfileDetail" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/chart-style-profiles/{chartStyleProfileId}:
+    parameters:
+      - name: chartStyleProfileId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/OpaqueId" }
+    get:
+      tags: [Charts]
+      operationId: getChartStyleProfile
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      responses:
+        "200":
+          description: Profile and immutable versions.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChartStyleProfileDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/chart-style-profiles/{chartStyleProfileId}/versions:
+    parameters:
+      - name: chartStyleProfileId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/OpaqueId" }
+    post:
+      tags: [Charts]
+      operationId: createChartStyleProfileVersion
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateChartStyleProfileVersionRequest" }
+      responses:
+        "201":
+          description: Immutable profile version created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChartStyleProfileDetail" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/chart-style-profiles/{chartStyleProfileId}/archive:
+    parameters:
+      - name: chartStyleProfileId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/OpaqueId" }
+    post:
+      tags: [Charts]
+      operationId: archiveChartStyleProfile
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      responses:
+        "200":
+          description: Profile archived without deleting version history.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChartStyleProfileResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/projects/{projectId}/reusable-chart-templates:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+    get:
+      tags: [Charts]
+      operationId: listReusableChartTemplates
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/PageLimit" }
+        - name: includeArchived
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Bounded reusable chart templates.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReusableChartTemplatePage" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Charts]
+      operationId: createReusableChartTemplate
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateReusableChartTemplateRequest" }
+      responses:
+        "201":
+          description: Reusable chart template and first immutable version created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReusableChartTemplateDetail" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/reusable-chart-templates/{reusableChartTemplateId}:
+    parameters:
+      - name: reusableChartTemplateId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/OpaqueId" }
+    get:
+      tags: [Charts]
+      operationId: getReusableChartTemplate
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      responses:
+        "200":
+          description: Template and immutable versions.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReusableChartTemplateDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/reusable-chart-templates/{reusableChartTemplateId}/versions:
+    parameters:
+      - name: reusableChartTemplateId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/OpaqueId" }
+    post:
+      tags: [Charts]
+      operationId: createReusableChartTemplateVersion
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateReusableChartTemplateVersionRequest" }
+      responses:
+        "201":
+          description: Immutable reusable template version created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReusableChartTemplateDetail" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/reusable-chart-templates/{reusableChartTemplateId}/archive:
+    parameters:
+      - name: reusableChartTemplateId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/OpaqueId" }
+    post:
+      tags: [Charts]
+      operationId: archiveReusableChartTemplate
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      responses:
+        "200":
+          description: Template archived without deleting version history.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReusableChartTemplateResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/chart-specs/{chartSpecId}/template-eligibility:
+    parameters: [{ $ref: "#/components/parameters/ChartSpecId" }]
+    get:
+      tags: [Charts]
+      operationId: getChartTemplateEligibility
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      responses:
+        "200":
+          description: Eligibility and bounded compatibility contract for reuse.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReusableChartTemplateEligibility" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/reusable-chart-template-versions/{templateVersionId}/applications:
+    parameters:
+      - name: templateVersionId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/OpaqueId" }
+    post:
+      tags: [Charts, Analysis]
+      operationId: applyReusableChartTemplate
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ApplyReusableChartTemplateRequest" }
+      responses:
+        "200":
+          description: Exact idempotent replay.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReusableChartTemplateApplicationResponse" }
+        "201":
+          description: New compatibility check and optional deterministic analysis run.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReusableChartTemplateApplicationResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
   /api/v1/projects/{projectId}/chart-specs:
     parameters: [{ $ref: "#/components/parameters/ProjectId" }]
     get:
@@ -2218,6 +2491,15 @@ components:
           type: array
           maxItems: 100
           items: { type: string, maxLength: 200 }
+    ProjectWorkflowSummary:
+      type: object
+      additionalProperties: false
+      required: [publishedExperimentCount, chartSpecCount, chartStyleProfileCount, reusableChartTemplateCount]
+      properties:
+        publishedExperimentCount: { type: integer, minimum: 0 }
+        chartSpecCount: { type: integer, minimum: 0 }
+        chartStyleProfileCount: { type: integer, minimum: 0 }
+        reusableChartTemplateCount: { type: integer, minimum: 0 }
     Project:
       type: object
       additionalProperties: false
@@ -2234,6 +2516,7 @@ components:
           type: array
           uniqueItems: true
           items: { $ref: "#/components/schemas/Capability" }
+        workflowSummary: { $ref: "#/components/schemas/ProjectWorkflowSummary" }
     CreateProjectRequest:
       type: object
       additionalProperties: false
@@ -3402,10 +3685,14 @@ components:
       properties:
         originalRequest: { type: string, minLength: 1, maxLength: 4000 }
         outputTarget: { type: string, enum: [chart, experiment_browser], default: chart }
+        inputMode:
+          oneOf:
+            - { type: string, enum: [experiment_browser, workbook] }
+            - type: "null"
     AnalysisThread:
       type: object
       additionalProperties: false
-      required: [id, labId, projectId, schemaVersion, status, outputTarget, originalRequest, messageCount, planRevisionIds, analysisRunIds, acceptedAnalysisResultIds, chartSpecIds, dataSnapshotIds, browserViewIds, createdAt, updatedAt, createdBy, updatedBy]
+      required: [id, labId, projectId, schemaVersion, status, outputTarget, inputMode, originalRequest, messageCount, planRevisionIds, analysisRunIds, acceptedAnalysisResultIds, chartSpecIds, dataSnapshotIds, browserViewIds, createdAt, updatedAt, createdBy, updatedBy]
       properties:
         id: { $ref: "#/components/schemas/OpaqueId" }
         labId: { $ref: "#/components/schemas/OpaqueId" }
@@ -3413,6 +3700,10 @@ components:
         schemaVersion: { type: string }
         status: { type: string }
         outputTarget: { type: string, enum: [chart, experiment_browser] }
+        inputMode:
+          oneOf:
+            - { type: string, enum: [experiment_browser, workbook] }
+            - type: "null"
         originalRequest: { type: string }
         messageCount: { type: integer, minimum: 0 }
         messages: { type: array, maxItems: 200, items: { $ref: "#/components/schemas/JsonObject" } }
@@ -3448,7 +3739,7 @@ components:
     AnalysisPlanRevision:
       type: object
       additionalProperties: false
-      required: [id, labId, projectId, analysisThreadId, schemaVersion, revision, status, outputTarget, requestSummary, sourceSelections, experimentSelections, reviewPlan, displayPlan, sourceRectangles, feedback, warnings, validation, acceptedAt, acceptedBy, createdAt, updatedAt, createdBy, updatedBy]
+      required: [id, labId, projectId, analysisThreadId, schemaVersion, revision, status, outputTarget, inputMode, requestSummary, sourceSelections, experimentSelections, reviewPlan, displayPlan, sourceRectangles, feedback, warnings, validation, acceptedAt, acceptedBy, createdAt, updatedAt, createdBy, updatedBy]
       properties:
         id: { $ref: "#/components/schemas/OpaqueId" }
         labId: { $ref: "#/components/schemas/OpaqueId" }
@@ -3458,6 +3749,10 @@ components:
         revision: { type: integer, minimum: 1 }
         status: { type: string }
         outputTarget: { type: string, enum: [chart, experiment_browser] }
+        inputMode:
+          oneOf:
+            - { type: string, enum: [experiment_browser, workbook] }
+            - type: "null"
         requestSummary: { type: string }
         sourceSelections: { type: array, maxItems: 500, items: { $ref: "#/components/schemas/JsonObject" } }
         experimentSelections: { type: array, maxItems: 1000, items: { $ref: "#/components/schemas/JsonObject" } }
@@ -3502,7 +3797,7 @@ components:
     AnalysisResult:
       type: object
       additionalProperties: false
-      required: [id, labId, projectId, analysisThreadId, analysisRunId, schemaVersion, status, outputTarget, summary, pointCount, traceCount, experimentCount, newExperimentCount, changedFieldCount, conflictCount, exclusionCount, warnings, validation, acceptedAt, acceptedBy, createdAt, updatedAt, createdBy, updatedBy]
+      required: [id, labId, projectId, analysisThreadId, analysisRunId, schemaVersion, status, outputTarget, summary, resolvedGeometry, pointCount, traceCount, experimentCount, newExperimentCount, changedFieldCount, conflictCount, exclusionCount, warnings, validation, acceptedAt, acceptedBy, createdAt, updatedAt, createdBy, updatedBy]
       properties:
         id: { $ref: "#/components/schemas/OpaqueId" }
         labId: { $ref: "#/components/schemas/OpaqueId" }
@@ -3513,6 +3808,7 @@ components:
         status: { type: string }
         outputTarget: { type: string, enum: [chart, experiment_browser] }
         summary: { $ref: "#/components/schemas/JsonObject" }
+        resolvedGeometry: { $ref: "#/components/schemas/JsonValue" }
         pointCount: { type: integer, minimum: 0 }
         traceCount: { type: integer, minimum: 0 }
         experimentCount: { type: integer, minimum: 0 }
@@ -3607,7 +3903,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        executionStrategy: { type: string, enum: [model_generated_python, direct_source_mapping] }
+        executionStrategy: { type: string, enum: [model_generated_python, direct_source_mapping, chart_template_v1] }
     ReviseAnalysisRunRequest:
       type: object
       additionalProperties: false
@@ -3628,7 +3924,7 @@ components:
     AnalysisChartResultPreview:
       type: object
       additionalProperties: false
-      required: [schemaVersion, outputTarget, projectId, analysisThreadId, analysisRunId, analysisResultId, plotly, traces, summary, exclusions, checks, validation, warnings, sourceRefs, tracePage]
+      required: [schemaVersion, outputTarget, projectId, analysisThreadId, analysisRunId, analysisResultId, resolvedGeometry, plotly, traces, summary, exclusions, checks, validation, warnings, sourceRefs, tracePage]
       properties:
         schemaVersion: { type: string, const: labrat.analysisResultPreview.v2 }
         outputTarget: { type: string, const: chart }
@@ -3636,6 +3932,7 @@ components:
         analysisThreadId: { $ref: "#/components/schemas/OpaqueId" }
         analysisRunId: { $ref: "#/components/schemas/OpaqueId" }
         analysisResultId: { $ref: "#/components/schemas/OpaqueId" }
+        resolvedGeometry: { $ref: "#/components/schemas/JsonValue" }
         plotly: { $ref: "#/components/schemas/JsonObject" }
         traces: { type: array, maxItems: 500, items: { $ref: "#/components/schemas/JsonObject" } }
         summary: { $ref: "#/components/schemas/JsonObject" }
@@ -3720,6 +4017,239 @@ components:
         experimentSnapshotHeads: { type: array, maxItems: 1000, items: { $ref: "#/components/schemas/JsonObject" } }
         changeSummary: { $ref: "#/components/schemas/JsonObject" }
         idempotentReplay: { type: boolean }
+    CreateChartStyleProfileRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: string, maxLength: 1000 }
+        style: { $ref: "#/components/schemas/JsonObject" }
+        definition: { $ref: "#/components/schemas/JsonObject" }
+    CreateChartStyleProfileVersionRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        style: { $ref: "#/components/schemas/JsonObject" }
+        definition: { $ref: "#/components/schemas/JsonObject" }
+    ChartStyleProfileSummary:
+      type: object
+      additionalProperties: false
+      required: [id, schemaVersion, name, description, status, currentVersionId, currentVersion, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        schemaVersion: { type: string, const: labrat.chartStyleProfile.v1 }
+        name: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [active, archived] }
+        currentVersionId: { $ref: "#/components/schemas/NullableOpaqueId" }
+        currentVersion:
+          oneOf:
+            - { type: integer, minimum: 1 }
+            - type: "null"
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    ChartStyleProfile:
+      type: object
+      additionalProperties: false
+      required: [id, labId, projectId, schemaVersion, name, description, status, currentVersionId, createdAt, updatedAt, createdBy, updatedBy]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        schemaVersion: { type: string, const: labrat.chartStyleProfile.v1 }
+        name: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [active, archived] }
+        currentVersionId: { $ref: "#/components/schemas/NullableOpaqueId" }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+        createdBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+        updatedBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+    ChartStyleProfileVersion:
+      type: object
+      additionalProperties: true
+      required: [id, labId, projectId, chartStyleProfileId, schemaVersion, version, status, contentHash, createdAt, createdBy, acceptedAt, acceptedBy]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        chartStyleProfileId: { $ref: "#/components/schemas/OpaqueId" }
+        schemaVersion: { type: string, const: labrat.chartStyleProfileVersion.v1 }
+        version: { type: integer, minimum: 1 }
+        status: { type: string, enum: [draft, accepted] }
+        contentHash: { type: string }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        createdBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+        acceptedAt: { $ref: "#/components/schemas/NullableTimestamp" }
+        acceptedBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+    ChartStyleProfilePage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/ChartStyleProfileSummary" } }
+        nextCursor: { $ref: "#/components/schemas/NullableString" }
+    ChartStyleProfileDetail:
+      type: object
+      additionalProperties: false
+      required: [chartStyleProfile, versions]
+      properties:
+        chartStyleProfile: { $ref: "#/components/schemas/ChartStyleProfile" }
+        versions: { type: array, items: { $ref: "#/components/schemas/ChartStyleProfileVersion" } }
+    ChartStyleProfileResponse:
+      type: object
+      additionalProperties: false
+      required: [chartStyleProfile]
+      properties:
+        chartStyleProfile: { $ref: "#/components/schemas/ChartStyleProfile" }
+    CreateReusableChartTemplateRequest:
+      type: object
+      additionalProperties: false
+      required: [name, sourceChartSpecId]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: string, maxLength: 1000 }
+        sourceChartSpecId: { $ref: "#/components/schemas/OpaqueId" }
+        chartStyleProfileVersionId: { $ref: "#/components/schemas/NullableOpaqueId" }
+    CreateReusableChartTemplateVersionRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        sourceChartSpecId: { $ref: "#/components/schemas/OpaqueId" }
+        chartStyleProfileVersionId: { $ref: "#/components/schemas/NullableOpaqueId" }
+    ReusableChartTemplateSummary:
+      type: object
+      additionalProperties: false
+      required: [id, schemaVersion, name, description, status, currentVersionId, currentVersion, chartType, experimentCardinality, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        schemaVersion: { type: string, const: labrat.reusableChartTemplate.v1 }
+        name: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [active, archived] }
+        currentVersionId: { $ref: "#/components/schemas/NullableOpaqueId" }
+        currentVersion:
+          oneOf:
+            - { type: integer, minimum: 1 }
+            - type: "null"
+        chartType: { $ref: "#/components/schemas/NullableString" }
+        experimentCardinality:
+          oneOf:
+            - { $ref: "#/components/schemas/JsonObject" }
+            - type: "null"
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    ReusableChartTemplate:
+      type: object
+      additionalProperties: false
+      required: [id, labId, projectId, schemaVersion, name, description, status, currentVersionId, createdAt, updatedAt, createdBy, updatedBy]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        schemaVersion: { type: string, const: labrat.reusableChartTemplate.v1 }
+        name: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [active, archived] }
+        currentVersionId: { $ref: "#/components/schemas/NullableOpaqueId" }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+        createdBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+        updatedBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+    ReusableChartTemplateVersion:
+      type: object
+      additionalProperties: true
+      required: [id, labId, projectId, reusableChartTemplateId, schemaVersion, version, status, sourceChartSpecId, chartStyleProfileVersionId, contentHash, createdAt, createdBy, acceptedAt, acceptedBy]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        reusableChartTemplateId: { $ref: "#/components/schemas/OpaqueId" }
+        schemaVersion: { type: string, const: labrat.reusableChartTemplateVersion.v1 }
+        version: { type: integer, minimum: 1 }
+        status: { type: string, const: accepted }
+        sourceChartSpecId: { $ref: "#/components/schemas/OpaqueId" }
+        chartStyleProfileVersionId: { $ref: "#/components/schemas/NullableOpaqueId" }
+        contentHash: { type: string }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        createdBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+        acceptedAt: { $ref: "#/components/schemas/Timestamp" }
+        acceptedBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+    ReusableChartTemplatePage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/ReusableChartTemplateSummary" } }
+        nextCursor: { $ref: "#/components/schemas/NullableString" }
+    ReusableChartTemplateDetail:
+      type: object
+      additionalProperties: false
+      required: [reusableChartTemplate, versions]
+      properties:
+        reusableChartTemplate: { $ref: "#/components/schemas/ReusableChartTemplate" }
+        versions: { type: array, items: { $ref: "#/components/schemas/ReusableChartTemplateVersion" } }
+    ReusableChartTemplateResponse:
+      type: object
+      additionalProperties: false
+      required: [reusableChartTemplate]
+      properties:
+        reusableChartTemplate: { $ref: "#/components/schemas/ReusableChartTemplate" }
+    ReusableChartTemplateBindingRequest:
+      type: object
+      additionalProperties: false
+      required: [slotId, columnId]
+      properties:
+        slotId: { $ref: "#/components/schemas/OpaqueId" }
+        columnId: { $ref: "#/components/schemas/OpaqueId" }
+    ApplyReusableChartTemplateRequest:
+      type: object
+      additionalProperties: false
+      required: [experimentIds]
+      properties:
+        experimentIds:
+          type: array
+          minItems: 1
+          maxItems: 500
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/OpaqueId" }
+        bindings:
+          type: array
+          maxItems: 100
+          items: { $ref: "#/components/schemas/ReusableChartTemplateBindingRequest" }
+    ReusableChartTemplateEligibility:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, status, chartSpecId]
+      properties:
+        schemaVersion: { type: string, const: labrat.reusableChartTemplateEligibility.v1 }
+        status: { type: string, enum: [eligible, ineligible] }
+        chartSpecId: { $ref: "#/components/schemas/OpaqueId" }
+        experimentCardinality: { $ref: "#/components/schemas/JsonObject" }
+        inputSlots: { type: array, items: { $ref: "#/components/schemas/JsonObject" } }
+        encoding: { $ref: "#/components/schemas/JsonObject" }
+        missingDataPolicy: { $ref: "#/components/schemas/JsonObject" }
+        blockers: { type: array, items: { $ref: "#/components/schemas/JsonObject" } }
+    ReusableChartTemplateApplicationResponse:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, replayed, application, compatibility, analysisThread, analysisPlanRevision, analysisRun]
+      properties:
+        schemaVersion: { type: string, const: labrat.reusableChartTemplateApplicationResponse.v1 }
+        replayed: { type: boolean }
+        application: { $ref: "#/components/schemas/JsonObject" }
+        compatibility: { $ref: "#/components/schemas/JsonObject" }
+        analysisThread:
+          oneOf:
+            - { $ref: "#/components/schemas/AnalysisThread" }
+            - type: "null"
+        analysisPlanRevision:
+          oneOf:
+            - { $ref: "#/components/schemas/AnalysisPlanRevision" }
+            - type: "null"
+        analysisRun:
+          oneOf:
+            - { $ref: "#/components/schemas/AnalysisRun" }
+            - type: "null"
     ChartTraceSummary:
       type: object
       additionalProperties: false
@@ -3755,6 +4285,8 @@ components:
         analysisRunId: { $ref: "#/components/schemas/OpaqueId" }
         analysisResultId: { $ref: "#/components/schemas/OpaqueId" }
         experimentSelections: { type: array, maxItems: 1000, items: { $ref: "#/components/schemas/JsonObject" } }
+        templateLineage: { $ref: "#/components/schemas/JsonObject" }
+        resolvedGeometry: { $ref: "#/components/schemas/JsonObject" }
         traceCatalog: { type: array, maxItems: 10000, items: { $ref: "#/components/schemas/ChartTraceSummary" } }
         defaultChartView: { $ref: "#/components/schemas/ChartDefaultView" }
         warnings: { type: array, maxItems: 5000, items: { $ref: "#/components/schemas/JsonValue" } }
@@ -3780,6 +4312,8 @@ components:
         analysisResultId: { $ref: "#/components/schemas/OpaqueId" }
         sourceSelections: { type: array, maxItems: 500, items: { $ref: "#/components/schemas/JsonObject" } }
         experimentSelections: { type: array, maxItems: 1000, items: { $ref: "#/components/schemas/JsonObject" } }
+        templateLineage: { $ref: "#/components/schemas/JsonObject" }
+        resolvedGeometry: { $ref: "#/components/schemas/JsonObject" }
         sourceRefs: { type: array, maxItems: 100000, items: { $ref: "#/components/schemas/JsonValue" } }
         plotly: { $ref: "#/components/schemas/JsonObject" }
         traceCatalog: { type: array, maxItems: 10000, items: { $ref: "#/components/schemas/ChartTraceSummary" } }
