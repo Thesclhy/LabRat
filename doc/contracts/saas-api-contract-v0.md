@@ -108,7 +108,7 @@ GET  /api/source-documents/:sourceDocumentId/cell-classes?sheetName=&range=
 Rules:
 
 - Reads are bounded and project-authorized.
-- Range responses preserve sheet, A1 range, row/column coordinates, values, formulas, merged-cell membership/ranges, and source refs when available.
+- Range responses preserve sheet, A1 range, row/column coordinates, values, formulas, merged-cell membership/ranges, and source refs when available. A formula whose Excel result is an error (`#DIV/0!`, `#REF!`, ...) has `type: "error"`, `rawValue: null`, its formula text, and the error string as `formattedValue`; the Excel error code is never exposed as a number.
 - Query and range endpoints are read-only and cannot create accepted data.
 - Oversized requests return an explicit validation error instead of silently truncating scientific evidence.
 

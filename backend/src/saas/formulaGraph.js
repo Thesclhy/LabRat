@@ -38,8 +38,15 @@ function cleanAddress(address) {
   return String(address || "").replace(/\$/g, "").toUpperCase();
 }
 
+function isErrorCell(cell) {
+  if (!cell) return false;
+  if (cell.type === "error") return true;
+  return typeof cell.formattedValue === "string" && /^#(DIV\/0!|VALUE!|REF!|NAME\?|NUM!|N\/A|NULL!)$/.test(cell.formattedValue.trim());
+}
+
 function isNumericValue(cell) {
   if (!cell) return false;
+  if (isErrorCell(cell)) return false;
   if (typeof cell.rawValue === "number") return true;
   return cell.type === "number";
 }
@@ -362,7 +369,7 @@ export function regionProvenance({ graph, indexBlobs, sheetName, range } = {}) {
   const region = rangeCells(resolvedGraph, sheetName, range);
   const summary = { terminal: 0, intermediate: 0, input: 0, constant: 0, blank: 0 };
   region.cells.forEach((entry) => { summary[entry.cellClass] += 1; });
-  const numeric = region.cells.filter((entry) => entry.cell && (entry.cell.formula || isNumericValue(entry.cell)));
+  const numeric = region.cells.filter((entry) => entry.cell && ((entry.cell.formula && !isErrorCell(entry.cell)) || isNumericValue(entry.cell)));
   const numericCount = numeric.length;
   const count = (cellClass) => numeric.filter((entry) => entry.cellClass === cellClass).length;
   const warnings = [];
@@ -381,6 +388,14 @@ export function regionProvenance({ graph, indexBlobs, sheetName, range } = {}) {
         message: `${count("input")} of ${numericCount} numeric cells are typed inputs used by formulas elsewhere, not calculated results.`,
       });
     }
+  }
+  const errorCells = region.cells.filter((entry) => entry.cell && isErrorCell(entry.cell));
+  if (errorCells.length && errorCells.length >= Math.max(1, Math.ceil(numericCount * 0.5))) {
+    const sample = errorCells.slice(0, 4).map((entry) => entry.address).join(", ");
+    warnings.push({
+      code: "region_formula_errors",
+      message: `${errorCells.length} cell${errorCells.length === 1 ? "" : "s"} in this region show Excel errors such as ${formattedFor(errorCells[0].cell)} (${sample}). The calculation has no valid inputs here; this may be a blank template sheet rather than a result.`,
+    });
   }
   const brokenCells = brokenChainCells(resolvedGraph, region);
   if (brokenCells.length) {

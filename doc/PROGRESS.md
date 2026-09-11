@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-09-09
+Last reviewed: 2026-09-10
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -12,6 +12,20 @@ Keep entries concise, newest first, and include:
 - meaningful changes
 - verification
 - follow-ups or residual risk
+
+## 2026-09-10
+
+- Excel error results are no longer numbers. The workbook scanner typed a
+  formula cell that evaluated to an Excel error (`#DIV/0!`, `#REF!`, ...) as
+  `formula` with the raw error code as its value (7 for `#DIV/0!`), so
+  downstream numeric reads could mistake it for a value. Error results are
+  now typed `error` with a null raw value, keeping the formula text and the
+  displayed error string. Region provenance adds a `region_formula_errors`
+  warning when at least half of a region's calculated cells are errors, which
+  is what a blank calculation-template sheet looks like. Existing indexes
+  keep their stored shape until a workbook is re-indexed. Verification:
+  backend suite. Follow-up: `doc/plans/workbook-chart-template-plan.md`
+  proposes reusable templates for workbook-backed comparison charts.
 
 ## 2026-09-09
 

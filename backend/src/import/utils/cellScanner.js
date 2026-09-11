@@ -4,16 +4,19 @@ import { mergedCellInfo } from "./mergedCellResolver.js";
 
 function cellType(cell) {
   if (!cell) return "blank";
+  // An Excel error result (#DIV/0!, #REF!, ...) stays an error even when the
+  // cell holds a formula; its numeric error code must never read as a value.
+  if (cell.t === "e") return "error";
   if (cell.f) return "formula";
   if (cell.t === "n") return "number";
   if (cell.t === "b") return "boolean";
   if (cell.t === "d") return "date";
-  if (cell.t === "e") return "error";
   return "string";
 }
 
 function cellValue(cell) {
   if (!cell) return null;
+  if (cell.t === "e") return null;
   return cell.v ?? null;
 }
 
@@ -46,7 +49,7 @@ export function scanCells(worksheet) {
         col: colIndex + 1,
         address,
         rawValue,
-        formattedValue: cell?.w ?? (rawValue == null ? "" : String(rawValue)),
+        formattedValue: cell?.w ?? (rawValue == null ? (cell?.t === "e" ? "#ERROR" : "") : String(rawValue)),
         type: cellType(cell),
         formula: cell?.f || null,
         style: cell?.s || null,

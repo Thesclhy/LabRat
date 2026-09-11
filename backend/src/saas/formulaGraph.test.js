@@ -128,3 +128,26 @@ test("oversized workbooks skip the graph with an explicit warning", () => {
   assert.equal(provenance.graphTruncated, true);
   assert.deepEqual(provenance.warnings.map((warning) => warning.code), ["formula_graph_skipped"]);
 });
+
+test("regionProvenance flags a region whose formulas evaluate to Excel errors instead of treating error codes as numbers", () => {
+  const blobs = [{
+    payload: {
+      sheets: [{
+        name: "LDPE TEMPLATE",
+        cellGrid: {
+          range: "A1:H14",
+          cells: [
+            cell("A12", "Total C atoms"), { address: "B12", rawValue: 0, formattedValue: "0", type: "formula", formula: "A11/28.05*2" },
+            cell("E14", "Yield"),
+            ...["F", "G", "H"].map((col) => ({ address: `${col}14`, rawValue: null, formattedValue: "#DIV/0!", type: "error", formula: `${col}6/B12*100` })),
+            ...["F", "G", "H"].map((col) => cell(`${col}13`, `C${col.charCodeAt(0) - 69}`)),
+          ],
+        },
+      }],
+    },
+  }];
+  const provenance = regionProvenance({ indexBlobs: blobs, sheetName: "LDPE TEMPLATE", range: "E13:H14" });
+  assert.deepEqual(provenance.warnings.map((warning) => warning.code), ["region_formula_errors"]);
+  assert.match(provenance.warnings[0].message, /#DIV\/0!/);
+  assert.equal(provenance.numericCellCount, 0, "error cells are not numeric results");
+});
