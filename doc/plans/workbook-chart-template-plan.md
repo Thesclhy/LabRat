@@ -10,178 +10,320 @@ Depends on: `doc/plans/batch-workbook-experiment-linking-plan.md`
 
 ## Goal
 
-Let a user approve one cross-experiment chart built from linked workbook
-regions (for example "Carbon distribution, Exp31 vs Exp32"), save it as a
-reusable template, and later pick other experiments to get the same chart
-with **no model call and no generated Python**, exactly as scalar templates
-work today.
+Approve one cross-experiment chart built from linked workbook regions (for
+example "Carbon distribution, Exp31 vs Exp32"), save it as a reusable
+template, and later pick other experiments to get the same chart with **no
+model call and no generated Python**, the way scalar templates work today.
 
 ```text
 accepted linked-data comparison chart
-  -> Save as template (slot bound to a data kind, not a snapshot column)
-  -> later: choose template + experiments
-  -> deterministic: linked region per experiment -> series points read from
-     the confirmed range -> accepted recipe/encoding/geometry
-  -> ordinary awaiting-review AnalysisResult -> explicit ChartSpec acceptance
+  -> Save as template: one series slot bound to a data kind
+  -> later: pick template + experiments
+  -> per experiment: linked region -> accepted series definition
+     -> points read from the confirmed range (deterministic)
+  -> accepted recipe (select_series, align_x, filter_missing) + encoding
+  -> resolved geometry -> validated Plotly -> awaiting-review AnalysisResult
+  -> explicit ChartSpec acceptance with region-revision lineage
 ```
 
-## Why this is a separate program
+## Where today's code stops
 
-The reusable template executor (`chart_template_v1`) binds input slots to
-Experiment Browser columns inside frozen DataSnapshot heads and runs a fixed
-recipe over those values. Linked workbook data has no snapshot columns: the
-numbers stay in the workbook and are read through confirmed regions. So the
-template needs a second slot source that resolves to a region and a
-deterministic series reader, while everything after the inputs (recipe
-operations, encoding, palette, geometry, validation, AnalysisResult,
-ChartSpec lineage) stays shared.
+| Piece | Today | Needed |
+| --- | --- | --- |
+| `deriveReusableChartTemplateDefinition` (`reusableChartTemplates.js`) | Rejects any chart with `sourceSelections`; builds scalar slots from snapshot fields | Accept a linked-data comparison chart; build one `series` slot bound to a data kind |
+| `inspectReusableChartTemplateEligibility` | Same rejection, drives the "Template unavailable" text | Workbook eligibility with a strict recipe allowlist |
+| `prepareReusableChartTemplateApplication` (`reusableChartTemplateApplications.js`) | Resolves slots to snapshot columns by `columnId`; freezes snapshot heads | Resolve `linked_region` slots to regions by data kind; freeze region revision ids |
+| `buildReusableChartTemplateApplicationArtifacts` | Builds an accepted plan with `experimentSelections` and `inputMode: experiment_browser` | Build a plan with `sourceSelections` and `inputMode: workbook`, keeping `templateLineage` |
+| `executeAnalysisRun` (`analysisThreads.js`) | Materializes snapshot experiments, calls `executeReusableChartTemplate` | Also materialize linked series inputs for template runs |
+| `executeReusableChartTemplate` | Only `select_scalar`; x is the experiment label | Add a series renderer: x is the category or numeric axis, one trace per experiment |
+| Chart Review result (`AnalysisReviewWorkspace.jsx`) | "Template unavailable" for workbook charts | Enabled when eligible, with the exact blocker otherwise |
+| Template picker (`BackendScanPanel.jsx`) | Coverage from Browser columns | Coverage from `linked-data-kinds` for workbook templates |
 
-## Product Decisions To Confirm
+## Product decisions to confirm
 
-1. **Binding is by data kind.** A workbook slot binds to a `dataKind` such as
-   "Carbon distribution". At application time each chosen experiment resolves
-   to its most recently confirmed region of that kind. No cell addresses are
-   stored in the template.
-2. **Lineage freezes region revisions, not snapshot heads.** An application
-   records the exact accepted RegionUnderstandingRevision id per experiment.
-   Re-confirming a region creates a new revision; old ChartSpecs keep pointing
-   at the old one.
-3. **Values are the workbook's cached results**, consistent with the earlier
-   decision. Excel error cells (`#DIV/0!`) and blanks are missing points and
-   follow the template's missing-value policy; they are never invented.
-4. **Provider-free.** Template application makes no model call. If the
-   accepted chart's Python did more than select and align the series (for
-   example re-normalising from raw areas), the chart is not eligible; the
-   user is told to build the chart from a results row instead.
+1. **Binding is by data kind.** A workbook slot binds to `linkedDataKind`
+   ("Carbon distribution"). At application time each chosen experiment
+   resolves to its most recently confirmed region of that kind, exactly as
+   the Milestone 6 picker does. Templates never store cell addresses.
+2. **Lineage freezes region revisions.** Each application records the exact
+   accepted RegionUnderstandingRevision id per experiment in place of a
+   snapshot head. Re-confirming a region creates a new revision; old
+   ChartSpecs keep the old id and are marked stale-lineage in review, not
+   rewritten.
+3. **Values are the workbook's cached results.** Blank and Excel-error cells
+   are missing points and follow the template's missing-point policy. Nothing
+   is interpolated or invented.
+4. **Provider-free by construction.** Eligibility accepts a chart only when
+   its accepted plan did nothing beyond select, align, and drop missing
+   points. A chart whose plan re-normalised raw areas or otherwise computed
+   new values is refused with a message naming the step. Such charts stay on
+   the reviewed path.
+5. **Comparison modes.** `overlay` (lines or points) and `grouped` (one bar
+   per experiment per category) are supported in v1. `stacked_components`
+   and `faceted` are refused for series slots in v1.
 
-## Canonical Additions
+## Canonical additions
 
-### Input slot v1 extension
+### Input slot: workbook source
+
+Additive fields on Reusable Input Slot v1. `sourceKind` defaults to
+`"snapshot"`, so every stored template is unchanged and no migration is
+needed (version payloads are JSON).
 
 ```json
 {
   "slotId": "series",
   "label": "Overall carbon distribution",
   "dataKind": "series",
+  "required": true,
+  "cardinality": "one_per_experiment",
   "sourceKind": "linked_region",
   "linkedDataKind": "Carbon distribution",
+  "identityContract": {
+    "valueType": "series",
+    "readableName": "Overall carbon distribution",
+    "sourceSignature": "sha256:..."
+  },
+  "unitContract": { "allowedUnits": ["% of feed carbon"], "conversionPolicyIds": [] },
   "seriesContract": {
     "orientation": "header_row_categories",
     "xMeaning": "carbon_number",
-    "yUnit": "% of feed carbon",
+    "xValueType": "number",
     "yNumericScale": "percent_points",
-    "alignment": "by_category_label",
-    "missingPoint": "preserve_gap"
+    "alignmentPolicy": "union_with_gaps"
   }
 }
 ```
 
-`sourceKind` defaults to `"snapshot"` for every existing template, so no
-migration of stored payloads is needed; the version payload is JSON.
+`sourceSignature` hashes orientation, x meaning, y unit, and numeric scale,
+so a later extraction-template version that changes the unit fails the
+contract at application time instead of mixing scales.
+
+### Recipe for a workbook series template
+
+```json
+{
+  "schemaVersion": "labrat.chartRecipe.v1",
+  "operations": [
+    { "op": "select_series", "inputSlotId": "series", "outputRole": "trace" },
+    { "op": "align_x", "inputRole": "trace", "policy": "union_with_gaps", "order": "source" },
+    { "op": "filter_missing", "inputRole": "trace", "policy": "preserve_gap" }
+  ]
+}
+```
+
+These three operations are already in the v1 allowlist; only the executor
+implementation is new.
 
 ### Deterministic series reader
 
-`readLinkedRegionSeries({ store, region, revision })`:
+`readLinkedRegionSeries({ store, projectId, region, revision, series })` in a
+new `backend/src/saas/linkedRegionSeries.js`:
 
-- uses the accepted revision's series definition (`orientation`,
-  `xHeaderRange`/`yValueRange` or `xColumn`/`yColumn`);
-- reads only those ranges through the existing bounded range reader;
-- keeps x labels in sheet order, parses y as numbers, marks blanks and error
-  cells as missing with the cell address, and attaches one source ref per
-  point;
-- refuses ranges above the existing 2,500-cell analysis bound.
+- reads only the series ranges (`xHeaderRange` and `yValueRange`, or the two
+  columns inside the region's inclusion rows) through the existing bounded
+  range reader (`readSourceDocumentRange`, 2,500-cell analysis bound);
+- returns `{ points: [{ x, y, xCell, yCell, missing, missingReason }],
+  xLabels, yUnit, orientation, sourceRefs }` with x kept in sheet order;
+- numeric parsing: numbers pass; numeric text such as `"7.22"` parses;
+  blanks, text, and `type: "error"` cells are `missing` with reasons
+  `blank`, `non_numeric`, `excel_error`;
+- never reads outside the region and never evaluates formulas.
 
-### Eligibility of an accepted chart
+### Application record additions
 
-An accepted analysis-result ChartSpec is workbook-template eligible when:
+`ReusableChartTemplateApplication` gains `frozenRegionRefs: [{ experimentId,
+regionId, regionUnderstandingRevisionId, sourceDocumentId, sheetName, range
+}]` beside the existing `frozenHeadRefs` (empty for workbook templates). Both
+stores already persist the application as JSON; no migration.
 
-- its plan carries `linkedDataComparison` (created by the Milestone 6
-  picker) or every source selection is a linked region with exactly one
-  series definition and one shared `dataKind`;
-- all selected series share orientation and y unit and numeric scale;
-- the processing steps are limited to select, align, and missing-value
-  handling (the plan's `processingSteps` are checked against an allowlist,
-  and the accepted Plotly trace count equals the experiment count).
+### Eligibility rules for an accepted chart
 
-Anything else returns the existing "one-off workbook chart" blocker with a
-sharper message naming the reason.
+Eligible when all of the following hold:
+
+- the accepted ChartSpec's plan carries `linkedDataComparison` (created by the
+  Milestone 6 picker), or every `sourceSelection` resolves to a linked region
+  with exactly one series definition and all share one `dataKind`;
+- every selected series shares `orientation`, `yUnit`, and `yNumericScale`;
+- the plan's `processingSteps` match the select/align/missing allowlist
+  (deterministic phrase list plus a check that no step names normalisation,
+  weighting, ratios, sums, or calibration), and the accepted Plotly has
+  exactly one trace per experiment;
+- chart type is `grouped_bar`, `bar`, `scatter`, or `point`.
+
+Blocker codes: `reusable_chart_template_workbook_recomputation`,
+`reusable_chart_template_series_contract_mismatch`,
+`reusable_chart_template_linked_regions_required`, plus the existing lineage
+and unit codes.
 
 ### Application report
 
-Mirrors the scalar path: per experiment `ready`, `missing_data_kind`,
-`ambiguous_region` (several regions, none newer), `series_shape_mismatch`
-(different orientation or unit), `range_too_large`, plus the frozen revision
-ids. Missing experiments follow the template's declared policy
-(`exclude_experiment` or block).
+Per experiment: `ready`, `missing_data_kind`, `ambiguous_region` (several
+regions, none newer), `series_shape_mismatch`, `range_too_large`,
+`session_deleted`. Missing experiments follow the template's
+`missingSeries` policy: `exclude_experiment` (default for series templates)
+or `block`. The report reuses the existing `labrat.reusableChartTemplateCompatibility.v1`
+shape with `frozenRegionRefs` added.
 
 ## Milestones
 
-### Milestone A — Contract and eligibility (backend)
+### Milestone A — Contract, eligibility, and definition (backend)
 
-- Extend the input-slot schema with `sourceKind` and `linkedDataKind`; keep
-  `snapshot` the default.
-- Add workbook eligibility to `inspectReusableChartTemplateEligibility` and
-  a definition deriver that builds the slot, recipe (`select_series`,
-  `align_x`, `filter_missing`), and encoding from the accepted chart.
-- Tests: eligible comparison chart, chart with recomputation steps refused,
-  mixed units refused.
+What gets built:
 
-### Milestone B — Series reader and application (backend)
+- `reusableChartTemplates.js`: `validateReusableChartTemplateVersion` accepts
+  `sourceKind`, `linkedDataKind`, and `seriesContract`; new
+  `deriveLinkedSeriesTemplateDefinition` builds the slot, recipe, encoding
+  (`overlay` for scatter/point, `grouped` for bars), missing-data policy
+  (`missingPoint: preserve_gap`, `missingSeries: exclude_experiment`), and
+  `validation.eligibility: "linked_series_comparison_v1"` from an accepted
+  linked-data chart; `inspectReusableChartTemplateEligibility` branches on
+  the presence of `sourceSelections` and applies the workbook rules above.
+- `deriveReusableChartTemplateDefinition` dispatches to the new deriver when
+  the chart is workbook-backed, so `POST /api/projects/:id/reusable-chart-templates`
+  needs no new route.
+- Contract addendum in `reusable-chart-template-contract-v1.md`
+  ("Workbook series slots").
 
-- Implement `readLinkedRegionSeries` on top of the range reader.
-- Extend `prepareReusableChartTemplateApplication` to resolve
-  `linked_region` slots per experiment, produce the report, and freeze
-  revision ids in the application record (new nullable JSON field, no new
-  table).
-- Extend `executeReusableChartTemplate` to accept workbook series inputs;
-  recipe, geometry, and validation unchanged.
-- Tests: two experiments exact, one missing data kind, error cells as gaps,
-  36 vs 37 categories aligned by label, deleted session reported missing.
+Tests: eligible Exp31/Exp32 comparison chart derives one series slot and the
+three-operation recipe; a chart with a "weighted by C-Response" step is
+refused with `reusable_chart_template_workbook_recomputation`; mixed units
+refused; existing scalar tests unchanged.
 
-### Milestone C — Frontend
+Done when the "Save as template" eligibility call returns `eligible` for a
+picker-created carbon distribution chart and the template version persists
+with `sourceKind: linked_region`.
 
-- Chart Review result: "Save as template" enabled for eligible linked-data
-  charts, with the blocker text otherwise.
-- Template picker: for workbook templates, coverage comes from
-  `linked-data-kinds` rather than Browser columns; rows without the data
-  kind are shown as missing before preview.
-- Result review unchanged; lineage panel shows workbook and range per trace.
+### Milestone B — Series reader and application resolution (backend)
 
-### Milestone D — Lifecycle
+What gets built:
 
-- Re-confirming a linked region does not change existing applications;
-  the picker uses the current accepted revision on the next run.
-- Deleting a workbook session makes that experiment `missing_data_kind` in
-  future applications; existing ChartSpecs are retained.
-- Docs: reusable chart template contract v1 addendum, API contract, data
-  dictionary, plan status, PROGRESS.
+- `linkedRegionSeries.js` with `readLinkedRegionSeries` and
+  `resolveLinkedSeriesForExperiments({ store, projectId, linkedDataKind,
+  experimentIds })`, the latter shared with `linkedDataComparisons.js`
+  (refactor `pickRegion` and the linked context into it).
+- `prepareReusableChartTemplateApplication`: when a slot has
+  `sourceKind: linked_region`, resolve regions instead of columns, run the
+  series reader to confirm shape and unit, emit the report, and return
+  `frozenRegionRefs` plus `sourceSelections` (one per experiment, the exact
+  region range) for the plan.
+- `buildReusableChartTemplateApplicationArtifacts`: build the plan with
+  `inputMode: workbook`, `sourceSelections`, `experimentSelections: []`, and
+  `linkedDataComparison` lineage; thread `originalRequest` unchanged.
+- `MemorySaasStore` and `PostgresSaasStore`: persist `frozenRegionRefs` on
+  the application (JSON payload; no migration).
 
-## Verification Matrix
+Tests: two experiments ready; one lacks the data kind and is excluded with a
+report entry; two regions on one experiment picks the newer with a warning;
+36 versus 37 categories reported as ready with alignment note; a deleted
+session yields `session_deleted`; oversized range yields `range_too_large`;
+error cells produce missing points with `excel_error`.
 
-- Save a Carbon distribution comparison of Exp31 and Exp32 as a template;
-  apply to Exp33 to Exp40; every trace's points equal the workbook's
-  `Overall tots` row values; no provider call recorded.
-- A chart whose plan re-normalised raw areas is refused with a reason.
-- One experiment lacks the data kind: excluded or blocked per policy.
-- One workbook has `C1..C36`: aligned by label with a gap at C37.
+Done when `POST /api/reusable-chart-template-versions/:id/applications`
+with a workbook template returns a `ready` compatibility and a queued run
+without touching snapshots.
+
+### Milestone C — Deterministic series execution (backend)
+
+What gets built:
+
+- `analysisThreads.executeAnalysisRun`: for template runs whose version has a
+  `linked_region` slot, materialize `inputs.linkedSeries` through
+  `readLinkedRegionSeries` using the frozen revision ids (a re-confirmed
+  region is not silently swapped in), and pass them to the executor.
+- `executeReusableChartTemplate`: add a `select_series` branch. Per
+  experiment trace: x from the union of category labels in source order
+  (`align_x`), y from the experiment's points, gaps preserved as nulls
+  (`filter_missing: preserve_gap`) or dropped (`omit_point`). Encodings:
+  `overlay` scatter/points and `grouped` bars. Legend is one entry per
+  experiment; geometry goes through `resolveReusableChartGeometry` with
+  category labels as x labels so long runs (C1 to C37) get rotation and
+  margins from the existing policy.
+- Source refs: one per plotted point (cell address), plus the region ranges;
+  `hashes.inputHash` covers the point arrays so replays are idempotent.
+- Validation: the existing Plotly/shape/limit validator runs unchanged;
+  declared invariants stay empty for v1.
+
+Tests: executor renders two overlay traces with a gap at C37 for the 36-
+category workbook; grouped bars keep category order; stacked mode refused
+with `chart_template_recipe_unsupported`; result source refs point at the
+workbook cells; running twice yields the same `inputHash`.
+
+Done when applying the template to Exp33 to Exp40 produces an awaiting-review
+result whose y values equal the workbooks' `Overall tots` rows, with no
+provider call recorded on the run.
+
+### Milestone D — Frontend
+
+What gets built:
+
+- `AnalysisReviewWorkspace.jsx`: the eligibility call already gates the
+  button; show the workbook-specific blocker text (recomputation, mixed
+  units) instead of the generic "one-off workbook chart" sentence; on
+  success the inline naming flow is unchanged.
+- `BackendScanPanel.jsx` template picker: when the selected template version
+  has a `linked_region` slot, load coverage from `listServerLinkedDataKinds`
+  rather than Browser columns; rows without the data kind show "no linked
+  <kind>" and are excluded by default with a note; the preview table lists
+  workbook, sheet, and range per experiment; bindings UI is hidden because
+  data-kind slots have no column choice.
+- Result review: the lineage panel lists workbook and range per trace and
+  marks a trace stale when its region has a newer accepted revision.
+- Experiment Browser: no change; the linked-data column already shows which
+  experiments can be templated.
+
+Tests: picker shows coverage from data kinds and excludes uncovered rows;
+Save as template enabled for an eligible workbook chart and disabled with the
+recomputation reason otherwise; result lineage shows the region range.
+
+Done when the whole loop runs in the app: save the Exp31/Exp32 carbon
+distribution chart as a template, pick Exp33 to Exp40, preview, accept.
+
+### Milestone E — Lifecycle and docs
+
+- Re-confirming a linked region: existing applications keep their frozen
+  revision; the next application uses the current accepted revision; the
+  result review marks stale lineage.
+- Deleting a workbook session: future applications report
+  `session_deleted` for that experiment; accepted ChartSpecs are retained.
+- Archiving an extraction template does not affect chart templates; the two
+  are linked only through the data kind string, which is documented.
+- Docs: contract addendum finalised, API contract (application response
+  fields), data dictionary (application `frozenRegionRefs`), plan status,
+  PROGRESS entry.
+
+## Verification matrix
+
+- Save a carbon distribution comparison of Exp31 and Exp32 as a template;
+  apply to Exp33 to Exp40; every trace's points equal the workbook's `Overall
+  tots` row values; the run records no provider call.
+- A chart whose plan re-normalised raw areas is refused with the
+  recomputation reason.
+- One experiment lacks the data kind: excluded with a report entry, or
+  blocked when the policy says so.
+- One workbook has C1 to C36: aligned by label with a gap at C37 in overlay
+  mode and an empty slot in grouped mode.
 - A blank template sheet region (all `#DIV/0!`): all points missing, the
-  experiment is reported, nothing is invented.
+  experiment is excluded and named in the preview, nothing is invented.
 - Re-confirm Exp32's region: the old ChartSpec keeps its revision id; a new
-  application uses the new one.
+  application uses the new one and the old result shows stale lineage.
+- Viewer role cannot create templates or applications; editor can.
 
-## Estimated Size
+## Estimated size
 
-Comparable to Milestones 3 and 4 of the linking plan: two backend services,
-one executor extension, schema additions without migration, and two frontend
-surfaces. No new provider prompts.
+Roughly Milestones 3 plus 4 of the linking plan: one new backend module, two
+extended services, an executor branch, JSON-only schema additions, and two
+frontend surfaces. No migration and no new prompts.
 
 ## Risks
 
-- **Silent recomputation.** The eligibility allowlist is what keeps template
-  output equal to the workbook's own numbers; it must stay strict.
-- **Category drift.** Labs add carbon numbers over time; alignment by label
-  with gaps handles it, but stacked encodings need every category present
-  and should block when a category is missing.
-- **Unit drift.** A later template version of the extraction template may
-  change the unit; the slot's unit contract rejects it at application time
-  instead of mixing scales.
+- **Silent recomputation.** The eligibility allowlist is the only thing that
+  keeps template output equal to the sheet's own numbers; it must reject on
+  doubt and say why.
+- **Category drift.** Labs add carbon numbers over time; union alignment with
+  gaps handles overlay, grouped bars show empty slots, and stacked mode is
+  excluded in v1 for this reason.
+- **Unit drift.** A new extraction-template version may change the unit; the
+  slot's source signature rejects it at application time.
+- **Read cost.** Forty regions of 37 points each is small; the 2,500-cell
+  bound per region and the 64-experiment cap keep the worst case bounded.
