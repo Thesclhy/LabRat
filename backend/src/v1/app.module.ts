@@ -9,11 +9,13 @@ import { ManuscriptModule } from "./manuscripts/manuscript.module.js";
 import { PlatformModule } from "./platform/platform.module.js";
 import { ReusableChartsModule } from "./reusable-charts/reusable-charts.module.js";
 import { WorkspaceModule } from "./workspace/workspace.module.js";
+import { InvitationsModule } from "./invitations/invitations.module.js";
 
 @Module({
   imports: [
     PlatformModule,
     IdentityModule,
+    InvitationsModule,
     AuthorizationModule,
     WorkspaceModule,
     ExperimentModule,

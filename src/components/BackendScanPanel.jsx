@@ -1,4 +1,5 @@
 import React from "react";
+import { useWorkspacePermissions } from "./WorkspacePermissions.jsx";
 import { makeChartSpecPreview } from "../charts/chartSpecPreview.js";
 import { Plot } from "../charts/Plot.jsx";
 import {
@@ -113,6 +114,7 @@ function chartSpecNeedsDetail(chartSpec) {
 }
 
 function ApprovedChartSpecReview({ chartSpecs, onLoadChartSpecDetail, onInsertChartSpec }) {
+  const { canEdit } = useWorkspacePermissions();
   const specs = asArray(chartSpecs);
   const [selectedId, setSelectedId] = React.useState(specs[0]?.id || "");
   const [details, setDetails] = React.useState({});
@@ -202,7 +204,7 @@ function ApprovedChartSpecReview({ chartSpecs, onLoadChartSpecDetail, onInsertCh
               <div className="import-review-actions">
                 <button
                   type="button"
-                  disabled={chartSpecNeedsDetail(selected) || detailState.loadingId === selected.id}
+                  disabled={!canEdit || chartSpecNeedsDetail(selected) || detailState.loadingId === selected.id}
                   onClick={() => onInsertChartSpec?.(selected.id)}
                 >
                   Insert in Manuscript
@@ -306,6 +308,7 @@ export function ReusableChartTemplateReview({
   applyTemplate = applyServerReusableChartTemplate,
 }) {
   const activeTemplates = asArray(templates).filter((template) => template?.status !== "archived");
+  const { canEdit } = useWorkspacePermissions();
   const [selectedTemplateId, setSelectedTemplateId] = React.useState(activeTemplates[0]?.id || "");
   const [detailState, setDetailState] = React.useState({ loading: false, value: null, error: "" });
   const [experimentState, setExperimentState] = React.useState({ loading: false, rows: [], columns: [], error: "", nextCursor: null });
@@ -410,7 +413,7 @@ export function ReusableChartTemplateReview({
   const hardBlockers = blockers.filter((blocker) => !asArray(blocker?.candidates).length);
   const unresolvedCandidates = candidateBlockers.filter((blocker) => !bindings[blocker.slotId]);
   const selectionCountValid = selectedExperimentIds.length >= minimum && selectedExperimentIds.length <= hardMaximum;
-  const canPreview = Boolean(version?.id)
+  const canPreview = canEdit && Boolean(version?.id)
     && selectionCountValid
     && !applicationState.loading
     && (!compatibility || compatibility.status === "ready" || (!hardBlockers.length && !unresolvedCandidates.length));

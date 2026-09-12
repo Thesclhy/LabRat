@@ -21,6 +21,240 @@ tags:
 security:
   - cookieAuth: []
 paths:
+  /api/v1/admin/invitations:
+    get:
+      tags: [Identity]
+      operationId: listOwnerInvitations
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvitationPage" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "410": { description: "Invitation expired, revoked or used.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "413": { description: Request body exceeds 8 KiB., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "429": { description: Too many attempts., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+    post:
+      tags: [Identity]
+      operationId: createOwnerInvitation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmptyInvitationRequest" }
+      responses:
+        "201":
+          description: Success.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreatedInvitation" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "410": { description: "Invitation expired, revoked or used.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "413": { description: Request body exceeds 8 KiB., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "429": { description: Too many attempts., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+  /api/v1/admin/invitations/{invitationId}/revoke:
+    parameters:
+      - { name: invitationId, in: path, required: true, schema: { $ref: "#/components/schemas/OpaqueId" } }
+    post:
+      tags: [Identity]
+      operationId: revokeOwnerInvitation
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvitationResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "410": { description: "Invitation expired, revoked or used.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "413": { description: Request body exceeds 8 KiB., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "429": { description: Too many attempts., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+  /api/v1/labs/{labId}/invitations:
+    parameters: [{ $ref: "#/components/parameters/LabId" }]
+    get:
+      tags: [Identity]
+      operationId: listMemberInvitations
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvitationPage" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "410": { description: "Invitation expired, revoked or used.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "413": { description: Request body exceeds 8 KiB., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "429": { description: Too many attempts., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+    post:
+      tags: [Identity]
+      operationId: createMemberInvitation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmptyInvitationRequest" }
+      responses:
+        "201":
+          description: Success.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreatedInvitation" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "410": { description: "Invitation expired, revoked or used.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "413": { description: Request body exceeds 8 KiB., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "429": { description: Too many attempts., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+  /api/v1/labs/{labId}/invitations/{invitationId}/revoke:
+    parameters:
+      - { $ref: "#/components/parameters/LabId" }
+      - { name: invitationId, in: path, required: true, schema: { $ref: "#/components/schemas/OpaqueId" } }
+    post:
+      tags: [Identity]
+      operationId: revokeMemberInvitation
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvitationResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "410": { description: "Invitation expired, revoked or used.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "413": { description: Request body exceeds 8 KiB., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "429": { description: Too many attempts., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+  /api/v1/auth/invitations/preview:
+    post:
+      tags: [Identity]
+      operationId: previewInvitation
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InvitationCodeRequest" }
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvitationPreview" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "410": { description: "Invitation expired, revoked or used.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "413": { description: Request body exceeds 8 KiB., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "429": { description: Too many attempts., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+  /api/v1/auth/register:
+    post:
+      tags: [Identity]
+      operationId: registerWithInvitation
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterInvitationRequest" }
+      responses:
+        "201":
+          description: Success.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvitationRedemption" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "410": { description: "Invitation expired, revoked or used.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "413": { description: Request body exceeds 8 KiB., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "429": { description: Too many attempts., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+  /api/v1/auth/invitations/redeem:
+    post:
+      tags: [Identity]
+      operationId: redeemInvitation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RedeemInvitationRequest" }
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvitationRedemption" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "410": { description: "Invitation expired, revoked or used.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "413": { description: Request body exceeds 8 KiB., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "429": { description: Too many attempts., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+  /api/v1/projects/{projectId}/member-access:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+    get:
+      tags: [Identity]
+      operationId: listProjectMemberAccess
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberAccessPage" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "410": { description: "Invitation expired, revoked or used.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "413": { description: Request body exceeds 8 KiB., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "429": { description: Too many attempts., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+  /api/v1/projects/{projectId}/member-access/{userId}:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }, { $ref: "#/components/parameters/UserId" }]
+    put:
+      tags: [Identity]
+      operationId: setProjectMemberAccess
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetMemberAccessRequest" }
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberAccessResponse" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "410": { description: "Invitation expired, revoked or used.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "413": { description: Request body exceeds 8 KiB., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "429": { description: Too many attempts., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
   /health:
     get:
       tags: [Platform]
@@ -2312,6 +2546,167 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/WorkbookReviewRegionConfirmResponse" }
   schemas:
+    EmptyInvitationRequest:
+      type: object
+      additionalProperties: false
+      properties: {}
+    InvitationCodeRequest:
+      type: object
+      additionalProperties: false
+      required: [invitationCode]
+      properties:
+        invitationCode: { type: string, pattern: "^[A-Za-z0-9_-]{43}$", writeOnly: true }
+    RedeemInvitationRequest:
+      type: object
+      additionalProperties: false
+      required: [invitationCode]
+      properties:
+        invitationCode: { type: string, pattern: "^[A-Za-z0-9_-]{43}$", writeOnly: true }
+        labName: { type: string, minLength: 1, maxLength: 300 }
+    RegisterInvitationRequest:
+      type: object
+      additionalProperties: false
+      required: [invitationCode, username, displayName, password]
+      properties:
+        invitationCode: { type: string, pattern: "^[A-Za-z0-9_-]{43}$", writeOnly: true }
+        labName: { type: string, minLength: 1, maxLength: 300 }
+        username: { type: string, minLength: 1, maxLength: 200 }
+        displayName: { type: string, minLength: 1, maxLength: 300 }
+        password: { type: string, minLength: 12, maxLength: 1000, writeOnly: true }
+    Invitation:
+      type: object
+      additionalProperties: false
+      required: [id, kind, labId, createdBy, createdAt, expiresAt, status, revokedAt, redeemedAt, redeemedBy, redeemedLabId]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        kind: { type: string, enum: [lab_owner, lab_member] }
+        labId: { $ref: "#/components/schemas/NullableOpaqueId" }
+        createdBy: { $ref: "#/components/schemas/OpaqueId" }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        expiresAt: { $ref: "#/components/schemas/Timestamp" }
+        status: { type: string, enum: [pending, used, revoked, expired] }
+        revokedAt: { type: [string, "null"], format: date-time }
+        redeemedAt: { type: [string, "null"], format: date-time }
+        redeemedBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+        redeemedLabId: { $ref: "#/components/schemas/NullableOpaqueId" }
+    InvitationPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Invitation" } }
+        nextCursor: { $ref: "#/components/schemas/NullableString" }
+    CreatedInvitation:
+      type: object
+      additionalProperties: false
+      required: [invitation, invitationCode]
+      properties:
+        invitation: { $ref: "#/components/schemas/Invitation" }
+        invitationCode: { type: string, description: Shown once. Never persist or put in URLs. }
+    InvitationResponse:
+      type: object
+      additionalProperties: false
+      required: [invitation]
+      properties:
+        invitation: { $ref: "#/components/schemas/Invitation" }
+    InvitationPreview:
+      type: object
+      additionalProperties: false
+      required: [kind, expiresAt, lab]
+      properties:
+        kind: { type: string, enum: [lab_owner, lab_member] }
+        expiresAt: { $ref: "#/components/schemas/Timestamp" }
+        lab:
+          oneOf:
+            - { type: "null" }
+            - type: object
+              additionalProperties: false
+              required: [id, name]
+              properties:
+                id: { $ref: "#/components/schemas/OpaqueId" }
+                name: { type: string }
+    InvitationRedemption:
+      type: object
+      additionalProperties: false
+      required: [auth, lab]
+      properties:
+        auth: { $ref: "#/components/schemas/AuthResponse" }
+        lab: { $ref: "#/components/schemas/Lab" }
+    SetMemberAccessRequest:
+      type: object
+      additionalProperties: false
+      required: [preset, expectedGrantId]
+      properties:
+        preset: { type: string, enum: [none, view, edit, approve] }
+        expectedGrantId: { $ref: "#/components/schemas/NullableOpaqueId" }
+    MemberEffectiveAccess:
+      type: object
+      additionalProperties: false
+      required: [projectId, shellOnly, capabilities, allExperiments, experimentIds, experimentCapabilities]
+      properties:
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        shellOnly: { type: boolean }
+        capabilities: { type: array, items: { type: string, enum: [read, propose, approve, export, manage_access] } }
+        allExperiments: { type: boolean }
+        experimentIds: { type: array, items: { $ref: "#/components/schemas/OpaqueId" } }
+        experimentCapabilities: { type: object, additionalProperties: { type: array, items: { type: string } } }
+    MemberAccess:
+      type: object
+      additionalProperties: false
+      required: [user, role, directGrant, editable, effectiveAccess, sources]
+      properties:
+        user:
+          type: object
+          additionalProperties: false
+          required: [id, username, displayName, isActive]
+          properties:
+            id: { $ref: "#/components/schemas/OpaqueId" }
+            username: { type: string }
+            displayName: { type: string }
+            isActive: { type: boolean }
+        role: { type: string, enum: [lab_owner, lab_admin, lab_member] }
+        directGrant:
+          oneOf:
+            - { type: "null" }
+            - type: object
+              additionalProperties: false
+              required: [id, scope, capabilities, preset]
+              properties:
+                id: { $ref: "#/components/schemas/OpaqueId" }
+                scope: { type: string, enum: [all_experiments, selected_experiments] }
+                capabilities: { type: array, items: { type: string } }
+                preset: { type: string, enum: [none, view, edit, approve, custom] }
+        editable: { type: boolean }
+        effectiveAccess:
+          oneOf:
+            - { type: "null" }
+            - { $ref: "#/components/schemas/MemberEffectiveAccess" }
+        sources:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [type, id, scope, capabilities]
+            properties:
+              type: { type: string, enum: [lab_role, direct, group, experiment, group_experiment] }
+              id: { type: string }
+              groupId: { $ref: "#/components/schemas/NullableOpaqueId" }
+              experimentId: { $ref: "#/components/schemas/OpaqueId" }
+              scope: { type: string, enum: [all_experiments, selected_experiments] }
+              capabilities: { type: array, items: { type: string } }
+    MemberAccessPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/MemberAccess" } }
+        nextCursor: { $ref: "#/components/schemas/NullableString" }
+    MemberAccessResponse:
+      type: object
+      additionalProperties: false
+      required: [memberAccess]
+      properties:
+        memberAccess: { $ref: "#/components/schemas/MemberAccess" }
     OpaqueId:
       type: string
       minLength: 1

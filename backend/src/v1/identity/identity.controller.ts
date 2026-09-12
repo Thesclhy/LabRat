@@ -23,16 +23,7 @@ import {
 } from "./identity.dto.js";
 import { IdentityService } from "./identity.service.js";
 import type { AuthContext } from "./identity.types.js";
-
-function setSessionCookie(reply: FastifyReply, config: V1Config, token: string, expiresAt: Date) {
-  reply.setCookie(config.sessionCookieName, token, {
-    path: "/",
-    httpOnly: true,
-    sameSite: "lax",
-    secure: config.secureCookies,
-    expires: expiresAt,
-  });
-}
+import { setSessionCookie } from "./session-cookie.js";
 
 function clearSessionCookie(reply: FastifyReply, config: V1Config) {
   reply.clearCookie(config.sessionCookieName, {

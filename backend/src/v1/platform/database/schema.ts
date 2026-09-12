@@ -755,7 +755,23 @@ export const experimentAccessGrants = pgTable("experiment_access_grants", {
   updatedBy: text("updated_by"),
 });
 
+export const invitations = pgTable("invitations", {
+  id: text("id").primaryKey(),
+  codeHash: text("code_hash").notNull(),
+  kind: text("kind").notNull(),
+  labId: text("lab_id"),
+  createdBy: text("created_by").notNull(),
+  createdAt: utcTimestamp("created_at").notNull(),
+  expiresAt: utcTimestamp("expires_at").notNull(),
+  revokedAt: utcTimestamp("revoked_at"),
+  revokedBy: text("revoked_by"),
+  redeemedAt: utcTimestamp("redeemed_at"),
+  redeemedBy: text("redeemed_by"),
+  redeemedLabId: text("redeemed_lab_id"),
+});
+
 export const v1Schema = {
+  invitations,
   users,
   labs,
   labMemberships,

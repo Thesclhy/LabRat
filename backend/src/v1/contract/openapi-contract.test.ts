@@ -21,6 +21,15 @@ const HTTP_METHODS = new Set([
 ]);
 
 const AUTHORITATIVE_FIRST_SLICE = [
+  "/api/v1/auth/register",
+  "/api/v1/auth/invitations/preview",
+  "/api/v1/auth/invitations/redeem",
+  "/api/v1/admin/invitations",
+  "/api/v1/admin/invitations/{invitationId}/revoke",
+  "/api/v1/labs/{labId}/invitations",
+  "/api/v1/labs/{labId}/invitations/{invitationId}/revoke",
+  "/api/v1/projects/{projectId}/member-access",
+  "/api/v1/projects/{projectId}/member-access/{userId}",
   "/health",
   "/api/v1/auth/login",
   "/api/v1/auth/logout",

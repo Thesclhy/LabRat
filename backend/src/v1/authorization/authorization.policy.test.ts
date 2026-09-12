@@ -6,6 +6,20 @@ import {
 } from "./authorization.policy.js";
 
 describe("authorization v1 policy", () => {
+  test("full-project view does not widen selected-experiment approval", () => {
+    const access = resolveEffectiveProjectAccess({
+      projectId: "project_1", labRole: "lab_member",
+      projectGrants: [
+        { scope: "all_experiments", capabilities: ["read", "export"] },
+        { scope: "selected_experiments", capabilities: ["read", "propose", "approve"] },
+      ],
+      experimentGrants: [{ experimentId: "selected", capabilities: ["read", "propose", "approve"] }],
+    });
+    expect(access?.capabilities).toEqual(["read", "export"]);
+    expect(hasProjectCapability(access, "approve")).toBe(false);
+    expect(hasExperimentCapability(access, "unselected", "approve")).toBe(false);
+    expect(hasExperimentCapability(access, "selected", "approve")).toBe(true);
+  });
   test("Lab owners and administrators receive every project capability", () => {
     for (const labRole of ["lab_owner", "lab_admin"] as const) {
       const access = resolveEffectiveProjectAccess({

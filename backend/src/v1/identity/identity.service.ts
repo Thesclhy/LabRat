@@ -231,7 +231,7 @@ export class IdentityService {
     });
   }
 
-  private async authResponseFor(user: {
+  async authResponseFor(user: {
     id: string;
     username: string;
     displayName: string;

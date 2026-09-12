@@ -9,6 +9,7 @@ import {
 } from "drizzle-orm";
 import { makeId } from "../../saas/ids.js";
 import { DatabaseService } from "../platform/database/database.service.js";
+import { ApiError } from "../platform/http/api-error.js";
 import {
   experimentAccessGrants,
   experimentIdentities,
@@ -21,6 +22,7 @@ import {
   users,
 } from "../platform/database/schema.js";
 import type { Capability, GrantScope } from "./authorization.policy.js";
+import { clearLabMemberAccess } from "./membership-transactions.js";
 
 type ProjectRow = typeof projects.$inferSelect;
 type MembershipRow = typeof labMemberships.$inferSelect;
@@ -154,7 +156,14 @@ export class AuthorizationRepository {
     const now = new Date().toISOString();
     return this.database.db.transaction(async (tx) => {
       const lab = await tx.select({ id: labs.id }).from(labs)
-        .where(and(eq(labs.id, input.labId), eq(labs.status, "active"))).limit(1);
+        .where(and(eq(labs.id, input.labId), eq(labs.status, "active"))).limit(1).for("update");
+      const [actor] = await tx.select().from(labMemberships).where(and(
+        eq(labMemberships.labId, input.labId), eq(labMemberships.userId, input.actorUserId),
+      ));
+      if (actor?.status !== "active" || !["lab_owner", "lab_admin"].includes(actor.role)
+        || (input.role === "lab_admin" && actor.role !== "lab_owner")) {
+        throw new ApiError(403, "forbidden", "Current lab management authority is required.");
+      }
       const user = await tx.select({ id: users.id }).from(users)
         .where(and(eq(users.id, input.userId), eq(users.isActive, true))).limit(1);
       if (!lab[0] || !user[0]) return null;
@@ -165,6 +174,7 @@ export class AuthorizationRepository {
         .limit(1);
       if (existing?.role === "lab_owner") return { ownerProtected: true as const };
       if (existing) {
+        if (existing.status !== "active") await clearLabMemberAccess(tx, input.labId, input.userId, input.actorUserId);
         const [membership] = await tx
           .update(labMemberships)
           .set({ role: input.role, status: "active", updatedAt: now })
@@ -186,20 +196,30 @@ export class AuthorizationRepository {
     });
   }
 
-  async deactivateLabMember(labId: string, userId: string) {
-    const [existing] = await this.database.db
-      .select()
-      .from(labMemberships)
-      .where(and(eq(labMemberships.labId, labId), eq(labMemberships.userId, userId)))
-      .limit(1);
-    if (!existing) return null;
-    if (existing.role === "lab_owner") return { ownerProtected: true as const };
-    const [membership] = await this.database.db
-      .update(labMemberships)
-      .set({ status: "inactive", updatedAt: new Date().toISOString() })
-      .where(eq(labMemberships.id, existing.id))
-      .returning();
-    return { membership };
+  async deactivateLabMember(labId: string, userId: string, actorUserId: string) {
+    return this.database.db.transaction(async (tx) => {
+      const [lab] = await tx.select().from(labs).where(eq(labs.id, labId)).for("update");
+      const [actor] = await tx.select().from(labMemberships).where(and(
+        eq(labMemberships.labId, labId), eq(labMemberships.userId, actorUserId),
+      ));
+      if (lab?.status !== "active" || actor?.status !== "active" || !["lab_owner", "lab_admin"].includes(actor.role)) {
+        throw new ApiError(403, "forbidden", "Current lab management authority is required.");
+      }
+      const [existing] = await tx
+        .select()
+        .from(labMemberships)
+        .where(and(eq(labMemberships.labId, labId), eq(labMemberships.userId, userId)))
+        .limit(1);
+      if (!existing) return null;
+      if (existing.role === "lab_owner") return { ownerProtected: true as const };
+      await clearLabMemberAccess(tx, labId, userId, actorUserId);
+      const [membership] = await tx
+        .update(labMemberships)
+        .set({ status: "inactive", updatedAt: new Date().toISOString() })
+        .where(eq(labMemberships.id, existing.id))
+        .returning();
+      return { membership };
+    });
   }
 
   async listGroups(labId: string) {
@@ -293,6 +313,7 @@ export class AuthorizationRepository {
   }) {
     const now = new Date().toISOString();
     return this.database.db.transaction(async (tx) => {
+      await tx.select({ id: labs.id }).from(labs).where(eq(labs.id, input.labId)).for("update");
       const group = await tx.select({ id: labGroups.id }).from(labGroups).where(and(
         eq(labGroups.id, input.groupId),
         eq(labGroups.labId, input.labId),
@@ -344,6 +365,7 @@ export class AuthorizationRepository {
   }) {
     const now = new Date().toISOString();
     return this.database.db.transaction(async (tx) => {
+      await tx.select({ id: labs.id }).from(labs).where(eq(labs.id, input.project.labId)).for("update");
       if (input.subject.type === "user") {
         const membership = await tx.select({ id: labMemberships.id }).from(labMemberships)
           .where(and(

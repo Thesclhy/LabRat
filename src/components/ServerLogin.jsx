@@ -1,12 +1,18 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
+import { InvitationForm } from "./InvitationForm.jsx";
 
-export function ServerLogin({ loading, error, onLogin }) {
+export function ServerLogin({ loading, error, onLogin, onRegistered }) {
+  const [registering, setRegistering] = useState(false);
+  const submitting = useRef(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
-    onLogin?.({ username, password });
+    if (loading || submitting.current) return;
+    submitting.current = true;
+    try { await onLogin?.({ username, password }); }
+    finally { submitting.current = false; }
   };
 
   return (
@@ -19,7 +25,7 @@ export function ServerLogin({ loading, error, onLogin }) {
             <p>Sign in to your lab workspace.</p>
           </div>
         </div>
-        <form className="server-login-form" onSubmit={submit}>
+        {registering ? <InvitationForm onComplete={onRegistered} onCancel={() => setRegistering(false)} /> : <form className="server-login-form" onSubmit={submit}>
           <label>
             <span>Username</span>
             <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" />
@@ -32,7 +38,8 @@ export function ServerLogin({ loading, error, onLogin }) {
           <button className="primary" type="submit" disabled={loading || !username.trim() || !password}>
             {loading ? "Signing in..." : "Sign in"}
           </button>
-        </form>
+          <button type="button" disabled={loading} onClick={() => { setPassword(""); setRegistering(true); }}>Register with invitation</button>
+        </form>}
       </section>
     </main>
   );

@@ -8,6 +8,7 @@ import { exportManuscriptPagesToPptx } from "../export/pptxExport";
 import { experimentDateSortValue } from "../utils/date";
 import { fmt, uid } from "../utils/format";
 import { SelectionFrame } from "./SelectionFrame";
+import { useWorkspacePermissions } from "./WorkspacePermissions.jsx";
 import { useManuscriptHistory } from "./useManuscriptHistory";
 
 const fontOptions = [
@@ -43,7 +44,18 @@ const TOOLBAR_TRANSITION = {
   BLOCK_SWITCH: "block-switch",
 };
 
-export function ManuscriptCanvas({ blocks, setBlocks, staged, setStaged, references, chartTemplates, setChartTemplates, chartSpecs, pages, setPages, canvasHeight, setCanvasHeight, pageOrientationPreference, setPageOrientationPreference, chartSpecInsertRequest = null, onChartSpecInsertRequestHandled, onLoadChartSpecDetail, onSelectedChartContextChange, onRequestChartAnalysis, onRequestChartWorkflow, onSaveProject }) {
+const ignoreReadonlyChange = () => {};
+export function ManuscriptCanvas(props) {
+  const { canEdit, canExport } = useWorkspacePermissions();
+  const readonlySetters = canEdit ? {} : Object.fromEntries([
+    "setBlocks", "setStaged", "setChartTemplates", "setPages", "setCanvasHeight",
+    "setPageOrientationPreference", "onSaveProject", "onRequestChartAnalysis", "onRequestChartWorkflow",
+  ].map((key) => [key, ignoreReadonlyChange]));
+  return <ManuscriptEditor key={canEdit ? "editable" : "readonly"} {...props} {...readonlySetters}
+    chartSpecInsertRequest={canEdit ? props.chartSpecInsertRequest : null} readOnly={!canEdit} canExport={canExport} />;
+}
+
+function ManuscriptEditor({ blocks, setBlocks, staged, setStaged, references, chartTemplates, setChartTemplates, chartSpecs, pages, setPages, canvasHeight, setCanvasHeight, pageOrientationPreference, setPageOrientationPreference, chartSpecInsertRequest = null, onChartSpecInsertRequestHandled, onLoadChartSpecDetail, onSelectedChartContextChange, onRequestChartAnalysis, onRequestChartWorkflow, onSaveProject, readOnly, canExport }) {
   const [selected, setSelected] = useState(null);
   const [editingTextBoxId, setEditingTextBoxId] = useState(null);
   const [textToolbarState, setTextToolbarState] = useState(null);
@@ -705,6 +717,7 @@ export function ManuscriptCanvas({ blocks, setBlocks, staged, setStaged, referen
   }, [selectedChartComponent, selectedBlockId]);
   useEffect(() => {
     const onKeyDown = (event) => {
+      if (readOnly) return;
       const usesShortcutModifier = event.ctrlKey || event.metaKey;
       if (!usesShortcutModifier) return;
       const target = event.target;
@@ -722,7 +735,7 @@ export function ManuscriptCanvas({ blocks, setBlocks, staged, setStaged, referen
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [undoManuscript, redoManuscript]);
+  }, [undoManuscript, redoManuscript, readOnly]);
   useEffect(() => {
     const session = textEditSessionRef.current;
     if (session && session.blockId !== editingTextBoxId) commitTextEditSession();
@@ -758,7 +771,7 @@ export function ManuscriptCanvas({ blocks, setBlocks, staged, setStaged, referen
             <button type="button" className="sidebar-toggle" title="Hide workspace overview" aria-label="Hide workspace overview" onClick={() => setLeftSidebarOpen(false)}>‹</button>
           </div>
           <p>{safePages.length} page{safePages.length === 1 ? "" : "s"} with {safeBlocks.length} blocks. {safeChartSpecs.length} approved chart{safeChartSpecs.length === 1 ? "" : "s"}.</p>
-          <CanvasOverview
+          <div inert={readOnly || undefined}><CanvasOverview
             blocks={safeBlocks}
             chartSpecs={safeChartSpecs}
             selectedBlockId={selectedBlockId}
@@ -771,7 +784,7 @@ export function ManuscriptCanvas({ blocks, setBlocks, staged, setStaged, referen
               closeFloatingMenus();
               setPageContextMenu({ visible: true, x: event.clientX, y: event.clientY, pageIndex });
             }}
-          />
+          /></div>
           <div className="template-summary approved-chart-summary">
             <h3>Approved Charts</h3>
             {safeChartSpecs.length ? (
@@ -780,7 +793,7 @@ export function ManuscriptCanvas({ blocks, setBlocks, staged, setStaged, referen
                   <button
                     type="button"
                     key={chartSpec.id}
-                    disabled={chartDetailState.busyId === chartSpec.id}
+                    disabled={readOnly || chartDetailState.busyId === chartSpec.id}
                     onClick={() => openInsertChartModal(null, chartSpec.id).catch(() => {})}
                   >
                     <span>{chartSpec.title || "Untitled chart"}</span>
@@ -794,7 +807,7 @@ export function ManuscriptCanvas({ blocks, setBlocks, staged, setStaged, referen
           </div>
           {chartDetailState.error && <p className="import-review-error">{chartDetailState.error}</p>}
           <p className="sidebar-hint">Accept a validated analysis result, then insert its chart here.</p>
-          <button type="button" className="wide-action" disabled={!safePages.length} onClick={() => {
+          <button type="button" className="wide-action" disabled={!canExport || !safePages.length} onClick={() => {
             setExportError("");
             setExportModalOpen(true);
           }}>Export pages to PowerPoint</button>
@@ -804,7 +817,7 @@ export function ManuscriptCanvas({ blocks, setBlocks, staged, setStaged, referen
         </aside>
       )}
       <main className="canvas-wrap" ref={canvasWrapRef}>
-        <ManuscriptToolbar
+        <fieldset disabled={readOnly} className="permission-fieldset"><ManuscriptToolbar
           textState={textToolbarState}
           activeTextBlock={activeTextBlock}
           canUndo={canUndo}
@@ -824,11 +837,11 @@ export function ManuscriptCanvas({ blocks, setBlocks, staged, setStaged, referen
           onRegisterToolbarController={(controller) => {
             toolbarControlControllerRef.current = controller;
           }}
-        />
+        /></fieldset>
         {!leftSidebarOpen && (
           <button type="button" className="sidebar-restore" title="Show workspace overview" aria-label="Show workspace overview" onClick={() => setLeftSidebarOpen(true)}>›</button>
         )}
-        <div className={`canvas ${effectiveCanvasHeight <= 0 && !safePages.length ? "is-empty-canvas" : ""}`} style={{ width: effectiveCanvasWidth, height: visibleCanvasHeight }} onMouseDown={handleCanvasMouseDown} onContextMenu={handleCanvasContextMenu}>
+        <div inert={readOnly || undefined} aria-readonly={readOnly} className={`canvas ${effectiveCanvasHeight <= 0 && !safePages.length ? "is-empty-canvas" : ""}`} style={{ width: effectiveCanvasWidth, height: visibleCanvasHeight }} onMouseDown={readOnly ? undefined : handleCanvasMouseDown} onContextMenu={readOnly ? undefined : handleCanvasContextMenu}>
           {safePages.map((page, index) => (
             <section key={page.id} className={`canvas-page ${page.orientation || "landscape"}`} style={{ top: page.y, width: page.width, height: page.height }} aria-label={`Page ${index + 1}`}>
               <span className="canvas-page-label">Page {index + 1}</span>
@@ -853,6 +866,7 @@ export function ManuscriptCanvas({ blocks, setBlocks, staged, setStaged, referen
             className="canvas-add-page-button"
             title="Add page"
             aria-label="Add page"
+            disabled={readOnly}
             onClick={() => {
               closeFloatingMenus();
               requestPageAction({ type: "append" });

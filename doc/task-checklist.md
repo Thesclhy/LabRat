@@ -2,11 +2,19 @@
 
 Status: active
 Read when: starting or continuing a non-trivial LabRat milestone.
-Last reviewed: 2026-07-16
+Last reviewed: 2026-09-11
 
 This file is the reusable execution checklist for Codex work. It should describe how to run a milestone, not what the current product strategy is. Current milestone state belongs in `doc/current-milestone.md`; recent completed work belongs in `doc/PROGRESS.md`.
 
 ## Long-Task Loop
+
+Current invitation milestone:
+
+- [x] Verify atomic invitation registration and issuer/revocation checks.
+- [x] Verify permission presets, inheritance and membership rejoining.
+- [x] Verify signup and compact Lab/platform management UI.
+- [x] Verify read-only canvas and stale workspace response isolation.
+- [x] Run full, PostgreSQL and browser checks; update progress.
 
 - [ ] Run or mentally perform `npm run codex:preflight`.
 - [ ] Read `README.md`, `AGENTS.md`, `doc/START_HERE.md`, `doc/plan.md`, `doc/PROGRESS.md`, `doc/current-milestone.md`, and this checklist.

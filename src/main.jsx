@@ -8,6 +8,9 @@ import { ChartReviewPanel } from "./components/BackendScanPanel";
 import { ProjectOnboarding } from "./components/ProjectOnboarding.jsx";
 import { ProjectProfileChat } from "./components/ProjectProfileChat.jsx";
 import { ServerLogin } from "./components/ServerLogin.jsx";
+import { LabManagement } from "./components/LabManagement.jsx";
+import { WorkspacePermissions, permissionsForProject, useWorkspacePermissions } from "./components/WorkspacePermissions.jsx";
+import { invalidateWorkspaceRequests, onWorkspaceAccessLost } from "./data/backendApiV1Client.ts";
 import { ThinkingIndicator } from "./components/ThinkingIndicator.jsx";
 import { WorkbookReviewDock } from "./components/WorkbookReviewDock.jsx";
 import { ExperimentBrowser } from "./components/ExperimentBrowser.jsx";
@@ -69,6 +72,7 @@ import {
 import { useWorkbookRegionInterpretationQueue } from "./hooks/useWorkbookRegionInterpretationQueue.js";
 import { shouldShowProjectOnboarding } from "./data/projectOnboardingState.js";
 import "./styles.css";
+import "./components/management.css";
 
 const BLANK_MODE = isBlankDataMode();
 const ONBOARDING_EXPERIMENT_PLAN_REQUEST = "Use the confirmed master table to build reviewed Experiment Browser records.";
@@ -398,6 +402,9 @@ function ProjectSwitcher({
   onOpenImportReview,
   hasImportReview,
   onLogout,
+  onOpenManagement,
+  canCreateProject = false,
+  canEditProject = false,
 }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
@@ -457,10 +464,13 @@ function ProjectSwitcher({
           </label>
           <div className="project-switcher-actions">
             <button type="button" onClick={() => { close(); onOpenDashboard?.(); }}>Projects</button>
-            <button type="button" onClick={() => { close(); onCreateProject?.(); }}>New project</button>
-            <button type="button" disabled={!activeProjectId} onClick={() => { close(); onOpenProfile?.(); }}>Profile</button>
+            <button type="button" disabled={!canCreateProject} onClick={() => { close(); onCreateProject?.(); }}>New project</button>
+            <button type="button" disabled={!activeProjectId || !canEditProject} onClick={() => { close(); onOpenProfile?.(); }}>Profile</button>
             <button type="button" disabled={!hasImportReview || !activeProjectId} onClick={() => { close(); onOpenImportReview?.(); }}>Import workbook</button>
             <button type="button" onClick={() => { close(); onLogout?.(); }}>Logout</button>
+            <button type="button" onClick={() => { close(); onOpenManagement?.("invitation"); }}>Use invitation</button>
+            {canCreateProject && <button type="button" onClick={() => { close(); onOpenManagement?.("lab"); }}>Lab management</button>}
+            {user?.isSuperAdmin && <button type="button" onClick={() => { close(); onOpenManagement?.("platform"); }}>Platform management</button>}
           </div>
         </div>
       )}
@@ -492,6 +502,9 @@ export function Topbar({
   onCreateProject,
   onOpenProfile,
   onLogout,
+  onOpenManagement,
+  canCreateProject = false,
+  canEditProject = false,
 }) {
   const showProjectTabs = workspaceMode !== "dashboard" && !!activeProjectId;
   const showProjectSwitcher = workspaceMode !== "dashboard";
@@ -504,6 +517,12 @@ export function Topbar({
         ))}
       </nav>
       <div className="top-actions" aria-label="Workspace actions">
+        {!showProjectSwitcher && <div className="management-actions">
+          <button type="button" onClick={() => onOpenManagement?.("invitation")}>Use invitation</button>
+          {canCreateProject && <button type="button" onClick={() => onOpenManagement?.("lab")}>Lab management</button>}
+          {user?.isSuperAdmin && <button type="button" onClick={() => onOpenManagement?.("platform")}>Platform management</button>}
+          <button type="button" onClick={onLogout}>Logout</button>
+        </div>}
         {sourceError && <span className="topbar-status bad-src" title={sourceError}>{sourceError}</span>}
         {showProjectSwitcher && (
           <ProjectSwitcher
@@ -520,9 +539,12 @@ export function Topbar({
             onOpenImportReview={onOpenImportReview}
             hasImportReview={hasImportReview}
             onLogout={onLogout}
+            onOpenManagement={onOpenManagement}
+            canCreateProject={canCreateProject}
+            canEditProject={canEditProject}
           />
         )}
-        <button className="agent-btn" type="button" onClick={onAgent}>
+        <button className="agent-btn" type="button" disabled={!canEditProject} onClick={onAgent}>
           <img src={`${import.meta.env.BASE_URL}labrat-logo.png`} alt="" />
           <span>Ask</span>
         </button>
@@ -546,6 +568,7 @@ export function ProjectDashboard({
   projectState,
   projectStateLoading,
   sourceError,
+  canCreateProject = true,
 }) {
   const selectedProject = projects.find((project) => project.id === selectedProjectId)
     || projects.find((project) => project.id === activeProjectId)
@@ -580,16 +603,16 @@ export function ProjectDashboard({
             );
           })}
         </div>
-        <button type="button" className="wide-action primary" disabled={!activeLabId} onClick={onCreateProject}>New project</button>
+        <button type="button" className="wide-action primary" disabled={!activeLabId || !canCreateProject} onClick={onCreateProject}>New project</button>
       </aside>
 
       <section className="project-dashboard-list">
         <div className="project-dashboard-head">
           <div>
             <h1>Projects</h1>
-            <p>{projects.length ? `${projects.length} project${projects.length === 1 ? "" : "s"} in this lab` : "Create your first research project."}</p>
+            <p>{projects.length ? `${projects.length} project${projects.length === 1 ? "" : "s"} in this lab` : canCreateProject ? "Create your first research project." : activeLabId ? "Waiting for your lab owner to assign project access." : "Use an invitation to create or join a lab."}</p>
           </div>
-          <button type="button" className="primary" disabled={!activeLabId} onClick={onCreateProject}>New project</button>
+          <button type="button" className="primary" disabled={!activeLabId || !canCreateProject} onClick={onCreateProject}>New project</button>
         </div>
         {sourceError && <p className="import-review-error">{sourceError}</p>}
         {projects.length ? (
@@ -647,8 +670,8 @@ export function ProjectDashboard({
         ) : (
           <div className="project-dashboard-empty">
             <h2>No projects yet</h2>
-            <p>Start a project for a research topic, then upload data and create reviewed chart specs.</p>
-            <button type="button" className="primary" disabled={!activeLabId} onClick={onCreateProject}>New project</button>
+            <p>{canCreateProject ? "Start a project for a research topic, then upload data and create reviewed chart specs." : activeLabId ? "Waiting for project access. Your lab owner can assign View, Edit or Approve access." : "Use an invitation to create or join a lab."}</p>
+            {canCreateProject && <button type="button" className="primary" disabled={!activeLabId} onClick={onCreateProject}>New project</button>}
           </div>
         )}
       </section>
@@ -677,6 +700,7 @@ export function ProjectDashboard({
               <button
                 type="button"
                 className="danger-subtle"
+                disabled={!canCreateProject}
                 onClick={() => onRequestDeleteProject?.(selectedProject)}
               >
                 Delete project
@@ -686,7 +710,7 @@ export function ProjectDashboard({
         ) : (
           <div className="project-dashboard-empty compact">
             <h2>No project selected</h2>
-            <p>Create a project to start collecting experiment context and data.</p>
+            <p>{canCreateProject ? "Create a project to start collecting experiment context and data." : "Only projects assigned to you appear here."}</p>
           </div>
         )}
       </aside>
@@ -805,6 +829,7 @@ export function ProjectOverview({
   onGoManuscript,
 }) {
   const [workbookListOpen, setWorkbookListOpen] = useState(false);
+  const { canEdit } = useWorkspacePermissions();
   const [deletingWorkbookSessionId, setDeletingWorkbookSessionId] = useState("");
   const [deleteWorkbookError, setDeleteWorkbookError] = useState("");
   const summary = projectWorkflowSummary(projectState?.project, projectState);
@@ -822,6 +847,7 @@ export function ProjectOverview({
     onUploadWorkbook?.(session);
   };
   const deleteWorkbookSession = async (session, fileName) => {
+    if (!canEdit) return;
     if (!session?.id || typeof onDeleteWorkbook !== "function") return;
     const confirmed = window.confirm(
       `Delete ${fileName} from workbook review? Its source history and existing downstream data or charts will be retained.`,
@@ -864,7 +890,7 @@ export function ProjectOverview({
           <h1>{projectState?.project?.name || "Project overview"}</h1>
           <p>{projectState?.projectProfile?.researchGoal || "Complete the project profile so later chart and manuscript suggestions have context."}</p>
         </div>
-        <button type="button" className="primary" onClick={nextAction.action}>{nextAction.label}</button>
+        <button type="button" className="primary" disabled={!canEdit && nextAction.label !== "Open Experiment Browser"} onClick={nextAction.action}>{nextAction.label}</button>
       </section>
       <section className="project-overview-grid">
         <ProjectOverviewCard
@@ -873,8 +899,9 @@ export function ProjectOverview({
           detail="Conversational help for guided workflows and questions; actions still land in review surfaces"
           action="Open Ask LabRat"
           onClick={onAskLabRat}
+          actionDisabled={!canEdit}
         />
-        <ProjectOverviewCard title="Project profile" value={`${summary.profileCount}/7`} detail={summary.profileComplete ? "Enough context for chart AI" : "Add research goal, materials, methods, and analysis notes"} action="Edit profile" onClick={onOpenProfile} />
+        <ProjectOverviewCard title="Project profile" value={`${summary.profileCount}/7`} detail={summary.profileComplete ? "Enough context for chart AI" : "Add research goal, materials, methods, and analysis notes"} action="Edit profile" onClick={onOpenProfile} actionDisabled={!canEdit} />
         <ProjectOverviewCard
           title="Workbook review"
           value={`${workbookReviewSessions.length} uploaded workbook${workbookReviewSessions.length === 1 ? "" : "s"}`}
@@ -893,6 +920,7 @@ export function ProjectOverview({
                 ? "Review workbook"
                 : "Upload workbook"}
           onClick={workbookReviewSessions.length ? openWorkbookList : onAskLabRat}
+          actionDisabled={!canEdit && !workbookReviewSessions.length}
           actionTitle={workbookReviewSessions.length
             ? "Choose an uploaded workbook and review its regions"
             : "Open Ask LabRat, then use the + button to attach a spreadsheet"}
@@ -1086,6 +1114,7 @@ export function WorkbookReviewWorkspace({
   reviewDock = null,
 }) {
   const session = reviewState?.session || reviewState?.workbookReviewSession || null;
+  const { canEdit } = useWorkspacePermissions();
   const initialSourceDocument = reviewState?.sourceDocument || null;
   const [resolvedSourceDocument, setResolvedSourceDocument] = useState(initialSourceDocument);
   const [sourceDocumentError, setSourceDocumentError] = useState("");
@@ -1254,7 +1283,7 @@ export function WorkbookReviewWorkspace({
     if (appliedFocusKeyRef.current === focusKey) return;
     appliedFocusKeyRef.current = focusKey;
     setActiveSheetName(focusSelection.sheetName);
-    if (focusSelection.focusOnly || focusSelection.selectionMethod === "red_box_click") return;
+    if (!canEdit || focusSelection.focusOnly || focusSelection.selectionMethod === "red_box_click") return;
     if (onCreateRegion) {
       onCreateRegion({
         sourceDocumentId: focusSelection.sourceDocumentId,
@@ -1283,6 +1312,7 @@ export function WorkbookReviewWorkspace({
     onActiveDraftRegionChange,
     onCreateRegion,
     sourceDocument?.id,
+    canEdit,
   ]);
 
   useEffect(() => {
@@ -1416,6 +1446,7 @@ export function WorkbookReviewWorkspace({
   ]);
 
   const createCellDraftRegion = (row, col, selectionMethod = "cell_context_menu") => {
+    if (!canEdit) return;
     if (!sourceDocument?.id || !activeSheetName) return;
     const range = formatExcelA1Range({ startRow: row, endRow: row, startCol: col, endCol: col });
     if (onCreateRegion) {
@@ -1443,6 +1474,7 @@ export function WorkbookReviewWorkspace({
     onActiveDraftRegionChange?.(nextRegionId);
   };
   const createRangeDraftRegion = (start, end, selectionMethod = "drag_select") => {
+    if (!canEdit) return;
     if (!sourceDocument?.id || !activeSheetName || !start || !end) return;
     const bounds = normalizeExcelBounds({
       startRow: start.row,
@@ -1477,6 +1509,7 @@ export function WorkbookReviewWorkspace({
     onActiveDraftRegionChange?.(nextRegionId);
   };
   const beginCellDragSelection = (event, row, col) => {
+    if (!canEdit) return;
     if (event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
@@ -2612,10 +2645,16 @@ function App() {
   const [authState, setAuthState] = useState({ checking: true, loading: false, user: null, labs: [], error: "" });
   const [labs, setLabs] = useState([]);
   const [activeLabId, setActiveLabId] = useState("");
+  const [managementMode, setManagementMode] = useState("");
+  const workspaceEpochRef = useRef(0);
   const [projectList, setProjectList] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [activeProjectId, setActiveProjectId] = useState("");
   const [projectState, setProjectState] = useState(null);
+  const activeLab = labs.find((lab) => (lab.id || lab.labId) === activeLabId);
+  const canManageLab = ["lab_owner", "lab_admin"].includes(activeLab?.role);
+  const permissions = permissionsForProject(projectState?.project);
+  const canEditProject = permissions.canEdit;
   const [projectStateLoading, setProjectStateLoading] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newProjectBusy, setNewProjectBusy] = useState(false);
@@ -2702,33 +2741,38 @@ function App() {
 
   const refreshProjectWorkspace = async () => {
     if (!activeProjectId) return null;
+    const epoch = workspaceEpochRef.current;
     const state = await getServerProjectState(activeProjectId);
+    if (epoch !== workspaceEpochRef.current) return null;
     applyProjectWorkspaceRefresh(state);
     return state;
   };
 
   const loadProjectState = async (projectId) => {
     if (!projectId) return;
+    clearWorkspace();
+    const epoch = workspaceEpochRef.current;
     setProjectStateLoading(true);
     setSourceError("");
     try {
       resetReviewState();
       const state = await getServerProjectState(projectId);
+      if (epoch !== workspaceEpochRef.current) return;
       setActiveProjectId(projectId);
       setSelectedProjectId(projectId);
       setWorkspaceMode("project");
       setTab("overview");
       applyProjectState(state);
     } catch (err) {
-      setSourceError(err.message || String(err));
+      if (epoch === workspaceEpochRef.current && !isAbortError(err)) setSourceError(err.message || String(err));
     } finally {
-      setProjectStateLoading(false);
+      if (epoch === workspaceEpochRef.current) setProjectStateLoading(false);
     }
   };
 
 
   const requestChartSpecManuscriptInsert = (chartSpecId, point = null, { direct = false } = {}) => {
-    if (!chartSpecId) return;
+    if (!chartSpecId || !canEditProject) return;
     setChartSpecInsertRequest({ chartSpecId, point, insertMode: direct ? "direct" : "configure", requestId: uid() });
     setTab("manuscript");
   };
@@ -2743,7 +2787,9 @@ function App() {
 
   const loadProjectsForLab = async (labId, preferredProjectId = "", { openPreferred = false } = {}) => {
     if (!labId) return;
+    const epoch = workspaceEpochRef.current;
     const response = await listServerProjects({ labId });
+    if (epoch !== workspaceEpochRef.current) return;
     const projects = response.projects || [];
     setProjectList(projects);
     const nextProjectId = preferredProjectId && projects.some((project) => project.id === preferredProjectId)
@@ -2763,7 +2809,9 @@ function App() {
   };
 
   const loadLabsAndProjects = async (preferredLabId = "", preferredProjectId = "") => {
+    const epoch = workspaceEpochRef.current;
     const labResponse = await listServerLabs();
+    if (epoch !== workspaceEpochRef.current) return;
     const nextLabs = labResponse.labs || [];
     setLabs(nextLabs);
     const nextLabId = preferredLabId && nextLabs.some((lab) => (lab.id || lab.labId) === preferredLabId)
@@ -2792,8 +2840,39 @@ function App() {
     };
   }, []);
   useEffect(() => {
-    if (projectLoaded) setDirty(true);
+    if (projectLoaded && canEditProject) setDirty(true);
   }, [staged, blocks, pages, references, canvasHeight, pageOrientationPreference, chartTemplates]);
+  const clearWorkspace = () => {
+    workspaceEpochRef.current += 1;
+    invalidateWorkspaceRequests();
+    setActiveProjectId(""); setProjectState(null); setDataset(emptyDataset());
+    setBlocks([]); setPages(null); setReferences([]); setStaged([]); setChartTemplates([]);
+    setCanvasHeight(0); setPageOrientationPreference(null); setDirty(false);
+    setSelected(null); setSelectedChartContext(null); setChartSpecInsertRequest(null);
+    setAgentOpen(false); setProfileChatOpen(false); setChartReviewOpen(false); setNewProjectOpen(false);
+    setDeleteProjectTarget(null); setProjectStateLoading(false); setSourceError("");
+    setSourceName(BLANK_PROJECT_SOURCE_NAME); resetReviewState();
+  };
+  const invitationComplete = async ({ auth, lab }) => {
+    clearWorkspace(); setManagementMode("");
+    setAuthState({ checking: false, loading: false, user: auth.user, labs: auth.memberships || [], error: "" });
+    await loadLabsAndProjects(lab.id);
+  };
+  const openManagement = (mode) => {
+    if (mode === "platform" && !authState.user?.isSuperAdmin) return;
+    if (mode === "lab" && !canManageLab) return;
+    clearWorkspace(); setWorkspaceMode("dashboard"); setManagementMode(mode);
+  };
+  useEffect(() => onWorkspaceAccessLost((status) => {
+    clearWorkspace(); setManagementMode(""); setWorkspaceMode("dashboard"); setProjectList([]);
+    if (status === 401) {
+      setAuthState({ checking: false, loading: false, user: null, labs: [], error: "Session expired. Please sign in again." });
+      setLabs([]); setActiveLabId("");
+    } else {
+      setSourceError("Your access changed. The workspace has been cleared.");
+      loadLabsAndProjects(activeLabId).catch(() => {});
+    }
+  }), [activeLabId]);
   const login = async ({ username, password }) => {
     setAuthState((current) => ({ ...current, loading: true, error: "" }));
     try {
@@ -2805,6 +2884,7 @@ function App() {
     }
   };
   const logout = async () => {
+    clearWorkspace(); setManagementMode("");
     try {
       await logoutFromServer();
     } catch {
@@ -2823,6 +2903,7 @@ function App() {
     resetReviewState();
   };
   const changeLab = async (labId) => {
+    clearWorkspace(); setManagementMode("");
     setActiveLabId(labId);
     setProjectList([]);
     setSelectedProjectId("");
@@ -2833,11 +2914,12 @@ function App() {
     await loadProjectsForLab(labId);
   };
   const openNewProjectModal = () => {
+    if (!canManageLab) return;
     setNewProjectError("");
     setNewProjectOpen(true);
   };
   const createProject = async ({ name, description = "" } = {}) => {
-    if (!activeLabId) return;
+    if (!activeLabId || !canManageLab) return;
     if (!name?.trim()) return;
     setSourceError("");
     setNewProjectError("");
@@ -2861,7 +2943,7 @@ function App() {
     }
   };
   const requestDeleteProject = (project) => {
-    if (!project?.id) return;
+    if (!project?.id || !canManageLab) return;
     setDeleteProjectError("");
     setDeleteProjectTarget(project);
   };
@@ -2871,7 +2953,7 @@ function App() {
     setDeleteProjectError("");
   };
   const confirmDeleteProject = async (project = deleteProjectTarget) => {
-    if (!project?.id || !activeLabId) return;
+    if (!project?.id || !activeLabId || !canManageLab) return;
     setDeleteProjectBusy(true);
     setDeleteProjectError("");
     setSourceError("");
@@ -2907,6 +2989,7 @@ function App() {
     }
   };
   const openProjectDashboard = () => {
+    clearWorkspace(); setManagementMode("");
     setWorkspaceMode("dashboard");
     setChartReviewOpen(false);
     setChartReviewStatusFilter("");
@@ -2916,7 +2999,7 @@ function App() {
     setSelectedProjectId(activeProjectId || selectedProjectId || projectList[0]?.id || "");
   };
   const saveProjectProfile = async (projectProfile) => {
-    if (!activeProjectId) return null;
+    if (!activeProjectId || !canEditProject) return null;
     const response = await patchServerProjectProfile(activeProjectId, projectProfile);
     setProjectState((current) => current ? {
       ...current,
@@ -2925,7 +3008,7 @@ function App() {
     } : current);
     return response;
   };
-  const stage = (label) => setStaged((s) => s.includes(label) ? s.filter((x) => x !== label) : [...s, label]);
+  const stage = (label) => { if (canEditProject) setStaged((s) => s.includes(label) ? s.filter((x) => x !== label) : [...s, label]); };
   const openChartReview = (options = "") => {
     const isOptionsObject = options && typeof options === "object" && !("currentTarget" in options);
     setChartReviewStatusFilter(isOptionsObject && options.statusFilter === "active" ? "active" : "");
@@ -2942,6 +3025,7 @@ function App() {
     if (!preserveLaunchContext) setChartLaunchContext(null);
   };
   const openWorkbookUpload = () => {
+    if (!canEditProject) return;
     if (!activeProjectId) {
       setSourceError("Select or create a server project before uploading a workbook.");
       return;
@@ -2949,6 +3033,7 @@ function App() {
     setAgentOpen(true);
   };
   const uploadOnboardingWorkbook = async (file) => {
+    if (!canEditProject) throw new Error("Project editing permission is required.");
     if (!activeProjectId) throw new Error("Select or create a server project before uploading a workbook.");
     const uploaded = await uploadServerProjectFile(activeProjectId, file);
     const fileObjectId = uploaded.fileObject?.id;
@@ -2963,6 +3048,7 @@ function App() {
     };
   };
   const openExperimentBrowserDataRequest = () => {
+    if (!canEditProject) return;
     if (!activeProjectId) {
       setSourceError("Select or create a server project before preparing experiment data.");
       return;
@@ -2971,6 +3057,7 @@ function App() {
     setAgentOpen(true);
   };
   const createOnboardingExperimentPlan = async (options = {}) => {
+    if (!canEditProject) throw new Error("Project editing permission is required.");
     if (!activeProjectId) throw new Error("Select a project before preparing experiment data.");
     return createServerAgentRun(activeProjectId, {
       message: ONBOARDING_EXPERIMENT_PLAN_REQUEST,
@@ -3070,6 +3157,7 @@ function App() {
     return response;
   };
   const deleteWorkbookReviewSessionFromProject = async (session) => {
+    if (!canEditProject) return;
     if (!session?.id) throw new Error("Select a workbook before deleting it.");
     await deleteServerWorkbookReviewSession(session.id, {
       expectedVersion: session.version,
@@ -3196,7 +3284,7 @@ function App() {
     || workbookReviewState.workbookReviewSession?.id
     || "";
   const { retryRegion: queueWorkbookReviewRegionRetry } = useWorkbookRegionInterpretationQueue({
-    sessionId: workbookReviewSessionId,
+    sessionId: canEditProject ? workbookReviewSessionId : "",
     regions: workbookReviewDraftRegions,
     activeRegionId: activeWorkbookReviewDraftRegionId,
     interpretRegion: ({ sessionId, region, signal }) => interpretServerWorkbookReviewRegion(
@@ -3212,6 +3300,7 @@ function App() {
     onRegionError: markWorkbookReviewRegionInterpretationFailed,
   });
   const retryWorkbookReviewRegion = (regionId) => {
+    if (!canEditProject) return false;
     const started = queueWorkbookReviewRegionRetry(regionId);
     if (!started) return false;
     setWorkbookReviewDraftRegions((currentRegions) => {
@@ -3230,6 +3319,7 @@ function App() {
     return true;
   };
   const createWorkbookReviewRegion = async (input = {}) => {
+    if (!canEditProject) throw new Error("Project editing permission is required.");
     const session = workbookReviewState.session || workbookReviewState.workbookReviewSession || null;
     if (!session?.id) throw new Error("Start a workbook review session before selecting a region.");
     try {
@@ -3245,6 +3335,7 @@ function App() {
     }
   };
   const reviseWorkbookReviewRegion = async (regionId, request) => {
+    if (!canEditProject) throw new Error("Project editing permission is required.");
     const session = workbookReviewState.session || workbookReviewState.workbookReviewSession || null;
     if (!session?.id) throw new Error("Start a workbook review session before submitting feedback.");
     const response = await reviseServerWorkbookReviewRegion(session.id, regionId, {
@@ -3254,6 +3345,7 @@ function App() {
     return applyWorkbookReviewRegionResponse(response);
   };
   const confirmWorkbookReviewRegion = async (regionId, request) => {
+    if (!permissions.canApprove) throw new Error("Project approval permission is required.");
     const session = workbookReviewState.session || workbookReviewState.workbookReviewSession || null;
     if (!session?.id) throw new Error("Start a workbook review session before confirming a region.");
     const response = await confirmServerWorkbookReviewRegion(session.id, regionId, {
@@ -3263,12 +3355,14 @@ function App() {
     return applyWorkbookReviewRegionResponse(response);
   };
   const ignoreWorkbookReviewRegion = async (regionId, request) => {
+    if (!canEditProject) throw new Error("Project editing permission is required.");
     const session = workbookReviewState.session || workbookReviewState.workbookReviewSession || null;
     if (!session?.id) throw new Error("Start a workbook review session before ignoring a region.");
     const response = await ignoreServerWorkbookReviewRegion(session.id, regionId, request);
     return applyWorkbookReviewRegionResponse(response, { activate: false });
   };
   const deleteWorkbookReviewRegion = async (regionId, request) => {
+    if (!canEditProject) throw new Error("Project editing permission is required.");
     const session = workbookReviewState.session || workbookReviewState.workbookReviewSession || null;
     if (!session?.id) throw new Error("Start a workbook review session before deleting a region.");
     const response = await deleteServerWorkbookReviewRegion(session.id, regionId, request);
@@ -3306,6 +3400,7 @@ function App() {
     }
   };
   const requestChartAnalysis = (blockId) => {
+    if (!canEditProject) return;
     setAgentOpen(true);
     setPendingChartAnalysis({ blockId, nonce: Date.now() });
   };
@@ -3313,7 +3408,7 @@ function App() {
     setPendingChartAnalysis((request) => request?.nonce === nonce ? null : request);
   };
   const interpretBackendChart = async (prompt, { inputMode = "experiment_browser" } = {}) => {
-    if (!activeProjectId) return;
+    if (!activeProjectId || !canEditProject) return;
     setBackendChartInterpretState({ loading: true, result: null, error: "" });
     try {
       const response = await createServerAgentRun(activeProjectId, {
@@ -3345,7 +3440,7 @@ function App() {
     }
   };
   const save = async () => {
-    if (!activeProjectId) return;
+    if (!activeProjectId || !canEditProject) return;
     const manuscript = asArray(projectState?.manuscripts)[0] || null;
     const request = {
       title: manuscript?.title || `${projectState?.project?.name || "Untitled"} manuscript`,
@@ -3385,6 +3480,7 @@ function App() {
     analysisResultId,
     defaultVisibleTraceIds,
   }) => {
+    if (!permissions.canApprove) throw new Error("Project approval permission is required.");
     if (!activeProjectId || !runId || !analysisResultId) return null;
     const response = await publishAcceptedAnalysisChart(runId, {
       analysisResultId,
@@ -3408,6 +3504,7 @@ function App() {
     analysisResultId,
     identityResolutions,
   }) => {
+    if (!permissions.canApprove) throw new Error("Project approval permission is required.");
     if (!activeProjectId || !runId || !analysisResultId) return null;
     const response = await publishAcceptedExperimentData(runId, {
       analysisResultId,
@@ -3450,7 +3547,10 @@ function App() {
     );
   }
   if (!authState.user) {
-    return <ServerLogin loading={authState.loading} error={authState.error} onLogin={login} />;
+    return <ServerLogin loading={authState.loading} error={authState.error} onLogin={login} onRegistered={invitationComplete} />;
+  }
+  if (managementMode) {
+    return <LabManagement key={`${managementMode}:${activeLabId}`} mode={managementMode} lab={activeLab} projects={projectList} onClose={() => setManagementMode("")} onInvitationComplete={invitationComplete} />;
   }
   if (workspaceMode === "dashboard" || !activeProjectId) {
     return (
@@ -3479,6 +3579,9 @@ function App() {
           onCreateProject={openNewProjectModal}
           onOpenProfile={() => setProfileChatOpen(true)}
           onLogout={logout}
+          onOpenManagement={openManagement}
+          canCreateProject={canManageLab}
+          canEditProject={canEditProject}
         />
         <ProjectDashboard
           user={authState.user}
@@ -3491,6 +3594,7 @@ function App() {
           onOpenProject={loadProjectState}
           onCreateProject={openNewProjectModal}
           onRequestDeleteProject={requestDeleteProject}
+          canCreateProject={canManageLab}
           activeProjectId={activeProjectId}
           projectState={projectState}
           projectStateLoading={projectStateLoading}
@@ -3514,13 +3618,13 @@ function App() {
       </>
     );
   }
-  const showProjectOnboarding = shouldShowProjectOnboarding(activeProjectId, projectState)
+  const showProjectOnboarding = canEditProject && shouldShowProjectOnboarding(activeProjectId, projectState)
     && tab !== "workbook_review"
     && !analysisReviewState
     && !agentOpen;
   if (showProjectOnboarding) {
     return (
-      <ProjectOnboarding
+      <WorkspacePermissions.Provider value={permissions}><ProjectOnboarding
         key={`${activeProjectId}:${onboardingRenderVersion}`}
         projectId={activeProjectId}
         projectState={projectState}
@@ -3552,11 +3656,11 @@ function App() {
           );
         }}
         onExit={openProjectDashboard}
-      />
+      /></WorkspacePermissions.Provider>
     );
   }
   return (
-    <>
+    <WorkspacePermissions.Provider value={permissions}>
       <Topbar tab={tab} setTab={setTab} dirty={dirty} onSave={save} onAgent={() => setAgentOpen(true)}
         workspaceMode={workspaceMode}
         onOpenDashboard={openProjectDashboard}
@@ -3564,7 +3668,7 @@ function App() {
         sourceError={sourceError || (projectStateLoading ? "Loading project..." : "")}
         loadingSource={workbookReviewState.loading}
         onOpenImportReview={openWorkbookUpload}
-        hasImportReview={!!activeProjectId}
+        hasImportReview={!!activeProjectId && canEditProject}
         blankMode={BLANK_MODE}
         user={authState.user}
         labs={labs}
@@ -3576,7 +3680,11 @@ function App() {
         onCreateProject={openNewProjectModal}
         onOpenProfile={() => setProfileChatOpen(true)}
         onLogout={logout}
+        onOpenManagement={openManagement}
+        canCreateProject={canManageLab}
+        canEditProject={canEditProject}
       />
+      {!canEditProject && <div className="workspace-readonly" role="status">Read-only access · Draft editing and analysis proposals are disabled.</div>}
       {tab === "overview" && <ProjectOverview
         projectState={projectState}
         onAskLabRat={() => setAgentOpen(true)}
@@ -3589,8 +3697,8 @@ function App() {
       />}
       {tab === "browser" && <ExperimentBrowser
         projectId={activeProjectId}
-        onOpenImportReview={openWorkbookUpload}
-        onRequestDataChange={openExperimentBrowserDataRequest}
+        onOpenImportReview={canEditProject ? openWorkbookUpload : undefined}
+        onRequestDataChange={canEditProject ? openExperimentBrowserDataRequest : undefined}
         onOpenSourceRange={focusExperimentBrowserSource}
       />}
       {tab === "workbook_review" && (
@@ -3620,7 +3728,7 @@ function App() {
         />
       )}
       {tab === "manuscript" && <ManuscriptCanvas blocks={blocks} setBlocks={setBlocks} staged={staged} setStaged={setStaged} references={references} chartTemplates={chartTemplates} setChartTemplates={setChartTemplates} chartSpecs={activeChartSpecsForProject(projectState)} pages={pages} setPages={setPages} canvasHeight={canvasHeight} setCanvasHeight={setCanvasHeight} pageOrientationPreference={pageOrientationPreference} setPageOrientationPreference={setPageOrientationPreference} chartSpecInsertRequest={chartSpecInsertRequest} onChartSpecInsertRequestHandled={clearChartSpecManuscriptInsertRequest} onLoadChartSpecDetail={loadChartSpecDetailForManuscript} onSelectedChartContextChange={setSelectedChartContext} onRequestChartAnalysis={requestChartAnalysis} onRequestChartWorkflow={(mode, point) => openChartReview({ initialMode: mode, launchContext: { origin: "manuscript", point } })} onSaveProject={save} />}
-      {tab === "reference" && <ReferenceLibrary references={references} setReferences={setReferences} />}
+      {tab === "reference" && <fieldset className="permission-fieldset" disabled={!canEditProject}><ReferenceLibrary references={references} setReferences={canEditProject ? setReferences : () => {}} /></fieldset>}
       {analysisReviewState?.thread?.id && (
         <AnalysisReviewWorkspace
           projectId={activeProjectId}
@@ -3655,7 +3763,7 @@ function App() {
       <DetailModal exp={selected} onClose={() => setSelected(null)} onStage={stage} />
       <ChartReviewModal
         open={chartReviewOpen}
-        allowAnalysisPrompt={Boolean(activeProjectId)}
+        allowAnalysisPrompt={Boolean(activeProjectId) && canEditProject}
         chartInterpretState={backendChartInterpretState}
         chartSpecs={activeChartSpecsForProject(projectState)}
         projectId={activeProjectId}
@@ -3693,7 +3801,7 @@ function App() {
         onCreate={createProject}
         onClose={() => setNewProjectOpen(false)}
       />
-      <AgentPanel
+      {canEditProject && <AgentPanel
         open={agentOpen}
         setOpen={setAgentOpen}
         blocks={blocks}
@@ -3714,8 +3822,8 @@ function App() {
         onRequestedAnalysisTargetHandled={() => setRequestedAnalysisOutputTarget("")}
         requestedDraft={requestedAgentDraft}
         onRequestedDraftHandled={() => setRequestedAgentDraft("")}
-      />
-    </>
+      />}
+    </WorkspacePermissions.Provider>
   );
 }
 

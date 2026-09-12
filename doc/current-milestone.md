@@ -1,10 +1,34 @@
 # Current Milestone
 
-Status: active
+Status: locally verified; main publication and automatic deployment authorized
 Read when: checking what the next implementation slice should be.
-Last reviewed: 2026-09-11
+Last reviewed: 2026-09-12
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
+
+## Invitation Onboarding And Lab Management
+
+Completed locally: invitation-only owner registration, member onboarding, and
+project-level permission management on `codex/backend-v1-architecture`.
+Migration 028, invitation/session/audit transactions, request limits, atomic
+presets, inherited-access display, membership cleanup, generated API types and
+compact management screens are implemented. Readonly workspaces are immutable;
+scope changes cancel pending requests and discard late results.
+
+Verification: `npm run codex:verify` passed (frontend 324/324, Nest 56/56,
+legacy 269 passed / 5 conditional skips), including generated types and builds.
+PostgreSQL suites passed (legacy 2/2, Nest 9/9), as did real separate-account
+Chromium acceptance. Registration rollback, concurrent one-use redemption,
+grant conflicts and removal/rejoin isolation are covered. Local Docker startup
+failed; disposable loopback PostgreSQL 16.14 provided independent verification
+without modifying existing volumes. Existing Vite chunk warning remains.
+
+Execution checklist: `doc/task-checklist.md`; implementation, QA commands and
+handoff: `doc/plans/invitation-onboarding-plan.md`. On 2026-09-12 the user
+authorized promotion to `main` and explicitly confirmed the automatic Lightsail
+deployment side effect. Publication-time full verification passed again.
+The existing pipeline must pass its independent tests, migrations and health
+check before the production rollout can be reported successful.
 
 ## Main And v1 Reconciliation — Local Implementation
 

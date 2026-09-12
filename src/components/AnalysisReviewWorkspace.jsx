@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useWorkspacePermissions } from "./WorkspacePermissions.jsx";
 
 import { Plot } from "../charts/Plot.jsx";
 import { plotLayout } from "../charts/chartLayout.js";
@@ -823,6 +824,7 @@ export function AnalysisReviewWorkspace({
   runRefreshIntervalMs = 1000,
 }) {
   const [thread, setThread] = useState(initialThread || null);
+  const { canEdit, canApprove } = useWorkspacePermissions();
   const [revisions, setRevisions] = useState(() => (
     initialPlanRevisions || (initialRevision ? [initialRevision] : [])
   ));
@@ -1031,7 +1033,7 @@ export function AnalysisReviewWorkspace({
       let attemptedExecution = false;
       try {
         let response;
-        if (run.status === "queued" && !automaticExecutionRef.current.has(runId)) {
+        if (canEdit && run.status === "queued" && !automaticExecutionRef.current.has(runId)) {
           automaticExecutionRef.current.add(runId);
           attemptedExecution = true;
           response = await executeRunForStrategy(runId, strategy);
@@ -1076,6 +1078,7 @@ export function AnalysisReviewWorkspace({
     };
   }, [
     executorCapabilityReady,
+    canEdit,
     executeRun,
     loadResultPreview,
     loadRun,
@@ -1142,7 +1145,7 @@ export function AnalysisReviewWorkspace({
   const awaitingReview = revision?.status === "awaiting_review" && !run;
   const executorReady = !requiresPythonExecutor || executorCapabilityReady;
   const executorUnavailable = !executorReady;
-  const planAcceptanceDisabled = !awaitingReview || busy || !executorReady;
+  const planAcceptanceDisabled = !canApprove || !awaitingReview || busy || !executorReady;
   const preview = resultState.value;
   const declaredOutputTargets = [
     thread?.outputTarget,
@@ -1184,7 +1187,7 @@ export function AnalysisReviewWorkspace({
       return !resolution?.action
         || resolution.action === "reuse" && !resolution.experimentId;
     });
-  const canAcceptResult = chartReady
+  const canAcceptResult = canApprove && chartReady
     && (browserMode
       ? hasBrowserStage && unresolvedIdentityConflicts.length === 0
       : hasChartStage && defaultVisibleTraceIds.length > 0)
@@ -1245,6 +1248,7 @@ export function AnalysisReviewWorkspace({
   ]);
 
   const submitFeedback = async () => {
+    if (!canEdit) return;
     const nextFeedback = feedback.trim();
     if (!nextFeedback || busy || !thread?.id || !awaitingReview) return;
     setPendingAction("revision");
@@ -1274,6 +1278,7 @@ export function AnalysisReviewWorkspace({
   };
 
   const acceptVisiblePlan = async () => {
+    if (!canApprove) return;
     if (!revision?.id || busy || !awaitingReview || executorUnavailable) return;
     setPendingAction("accept");
     setActionError("");
@@ -1300,6 +1305,7 @@ export function AnalysisReviewWorkspace({
   };
 
   const submitResultFeedback = async () => {
+    if (!canEdit) return;
     const nextFeedback = feedback.trim();
     if (!nextFeedback || busy || !run?.id || !resultReviewMode || chartFinalized) return;
     setPendingAction("result_revision");
@@ -1335,6 +1341,7 @@ export function AnalysisReviewWorkspace({
   };
 
   const retryFailedGeneration = async () => {
+    if (!canEdit) return;
     if (!run?.id || busy || !["failed", "validation_failed"].includes(run.status)) return;
     setPendingAction("retry_generation");
     setActionError(null);
@@ -1393,6 +1400,7 @@ export function AnalysisReviewWorkspace({
   };
 
   const submitTemplate = async (event) => {
+    if (!canEdit) { event.preventDefault(); return; }
     event?.preventDefault?.();
     const name = templateName.trim();
     if (!name || !sourceChartSpec?.id || busy) return;
@@ -1764,7 +1772,7 @@ export function AnalysisReviewWorkspace({
                 type="button"
                 className="analysis-retry-generation"
                 onClick={retryFailedGeneration}
-                disabled={busy}
+                disabled={!canEdit || busy}
               >
                 {pendingAction === "retry_generation" || pendingAction === "execute"
                   ? "Retrying generation..."
@@ -1779,7 +1787,7 @@ export function AnalysisReviewWorkspace({
                 <button
                   type="button"
                   className="place-in-manuscript"
-                  disabled={!sourceChartSpec?.id || busy}
+                  disabled={!canEdit || !sourceChartSpec?.id || busy}
                   onClick={() => onPlaceAcceptedChart(sourceChartSpec)}
                 >
                   Place in manuscript
@@ -1792,7 +1800,7 @@ export function AnalysisReviewWorkspace({
                   ? openTemplateForm
                   : resultReviewMode ? acceptVisibleResult : acceptVisiblePlan}
                 disabled={resultReviewMode && chartFinalized && !browserMode
-                  ? (!sourceChartSpec?.id || Boolean(savedTemplate) || busy || templateEligibility.loading || (templateEligibilityRequired && templateEligibilityStatus !== "eligible"))
+                    ? (!canEdit || !sourceChartSpec?.id || Boolean(savedTemplate) || busy || templateEligibility.loading || (templateEligibilityRequired && templateEligibilityStatus !== "eligible"))
                   : resultReviewMode ? (!canAcceptResult || busy) : planAcceptanceDisabled}
               >
                 {resultReviewMode
@@ -1836,7 +1844,7 @@ export function AnalysisReviewWorkspace({
                       maxLength={120}
                       autoFocus
                     />
-                    <button type="submit" disabled={!templateName.trim() || busy}>Save</button>
+                    <button type="submit" disabled={!canEdit || !templateName.trim() || busy}>Save</button>
                     <button
                       type="button"
                       className="secondary"
@@ -1871,7 +1879,7 @@ export function AnalysisReviewWorkspace({
                   placeholder={resultReviewMode
                     ? browserMode ? "Describe a data modification" : "Describe a chart modification"
                     : "Describe a modification"}
-                  disabled={resultReviewMode ? (!run?.id || busy || chartFinalized) : (!awaitingReview || busy)}
+                  disabled={!canEdit || (resultReviewMode ? (!run?.id || busy || chartFinalized) : (!awaitingReview || busy))}
                 />
                 <button
                   type="button"
@@ -1879,7 +1887,7 @@ export function AnalysisReviewWorkspace({
                     ? browserMode ? "Send data modification" : "Send chart modification"
                     : "Send modification"}
                   onClick={resultReviewMode ? submitResultFeedback : submitFeedback}
-                  disabled={!feedback.trim()
+                  disabled={!canEdit || !feedback.trim()
                     || (resultReviewMode ? (!run?.id || chartFinalized) : !awaitingReview)
                     || busy}
                 >

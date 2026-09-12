@@ -27,6 +27,7 @@ function publicException(exception: unknown): PublicException {
 
   if (exception instanceof HttpException) {
     const statusCode = exception.getStatus();
+    if (statusCode === 413) return { statusCode, code: "body_too_large", message: "Request body is too large." };
     const response = exception.getResponse();
     const body = typeof response === "object" && response
       ? response as Record<string, unknown>
@@ -57,6 +58,9 @@ function publicException(exception: unknown): PublicException {
     const candidate = exception as Record<string, unknown>;
     const statusCode = Number(candidate.statusCode);
     const code = String(candidate.code || "");
+    if (statusCode === 413) {
+      return { statusCode: 413, code: "body_too_large", message: "Request body is too large." };
+    }
     if (statusCode >= 400 && statusCode < 500 && /^[a-z][a-z0-9_]{1,79}$/.test(code)) {
       const details = candidate.details && typeof candidate.details === "object"
         && !Array.isArray(candidate.details)

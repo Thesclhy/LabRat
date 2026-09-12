@@ -2,11 +2,19 @@
 
 Status: active
 Read when: deciding what LabRat should build next.
-Last reviewed: 2026-09-11
+Last reviewed: 2026-09-12
 
 This is the short active plan. Current execution status lives in `doc/current-milestone.md`; detailed implementation plans live under `doc/plans/`.
 
 ## Current Focus
+
+Invitation-only account creation and lab membership/project-access
+administration are implemented and locally verified on
+`codex/backend-v1-architecture`. See `doc/plans/invitation-onboarding-plan.md`
+for scope, verification and handoff. Scientific review/version semantics remain
+unchanged. On 2026-09-12 the user authorized promotion to `main` and its
+automatic Lightsail deployment; successful activation still requires a green
+pipeline and production health check.
 
 The active engineering milestone is a contract-first backend migration to a
 NestJS + Fastify + TypeScript modular monolith. New first-party endpoints live

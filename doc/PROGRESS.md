@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-09-11
+Last reviewed: 2026-09-12
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -13,7 +13,66 @@ Keep entries concise, newest first, and include:
 - verification
 - follow-ups or residual risk
 
+## 2026-09-12
+
+- Request: publish the new architecture and invitation/member-management
+  implementation to `main`. The user explicitly confirmed that the push may
+  trigger the active Lightsail production deployment workflow.
+- Remote preflight: `origin/main@7e6d729` is an ancestor of
+  `codex/backend-v1-architecture@d35017b`; no divergent main changes need
+  replacement. Promotion will retain the existing migration/reconciliation
+  commits and use an ordinary fast-forward push, not a force push.
+- Publication-time `npm run codex:preflight` and `npm run codex:verify` passed:
+  frontend 324/324, Nest 56/56, legacy 269 passed / 5 conditional skips,
+  generated types, backend compilation, production-entry smoke and Vite build.
+  PostgreSQL and real browser acceptance remain the passing 2026-09-11 results
+  below; no application code changed in this publication turn. CI repeats the
+  PostgreSQL suite before deploying.
+- Commit scope excludes local environment/credential files, `postman/cookies.txt`,
+  `.codex/`, `.superpowers/`, `.tmp/` and private `test excel/` fixtures.
+  The existing repository provider selection is `anthropic`; no provider
+  variable, secret or deployment configuration is being changed.
+- Release status at commit preparation: authorization and local checks complete;
+  remote push and workflow outcome must be verified before claiming the new
+  version is live. Existing conditional skips and Vite size warning remain.
+
 ## 2026-09-11
+
+- Request: implement invitation-only registration and lab member management on
+  `codex/backend-v1-architecture`; no changes to `main` and no deployment.
+- Implemented: migration 028, transactional invitation registration/redemption,
+  authentication-entry limits, atomic project-access presets, removal/rejoin
+  cleanup, OpenAPI/client types, management screens, readonly workspaces and
+  request-scope invalidation. Mixed full-project/selected-experiment grants no
+  longer widen experiment-only approval. Scientific values/history are unchanged.
+  See `doc/plans/invitation-onboarding-plan.md` and
+  `doc/contracts/invitation-onboarding-v1.md` for QA and usage.
+- Verification: preflight and final `npm run codex:verify` passed — frontend
+  324/324, Nest 56/56, legacy backend 269 passed / 5 conditional skips,
+  generated types, TypeScript build, production entry smoke and frontend build.
+  PostgreSQL passed: legacy 2/2 and Nest 9/9, including 028 fresh/upgrade/restart,
+  concurrent redemption, final audit-write failure rolling back the entire
+  registration, optimistic grant conflict and lab-specific removal/rejoining.
+- Real headless Chromium acceptance with separate platform/owner/employee
+  sessions passed: no-lab platform management, owner lab/project creation,
+  employee registration, refreshed sessions, view/edit/approve presets,
+  readonly denial, saved draft persistence, next-request revocation and
+  existing-account rejoin without old access. Screenshots were reviewed; no
+  JavaScript errors or invitation/password persistence were observed. Compact
+  tables and adjacent actions follow the existing `ui-design` guidance.
+- An initial dashboard layout regression and browser-script asynchronous
+  waits were corrected. Docker Desktop failed at dockerInference initialization;
+  PostgreSQL verification instead used an isolated temporary 16.14 cluster
+  on loopback. No Docker reset, volume deletion or real database migration.
+  Test-only runtimes/screenshots remain under untracked `.tmp`; project
+  dependency manifests and lockfiles were not changed.
+- Cleanup: browser, HTTP and PostgreSQL test processes are stopped and test
+  ports are released. The temporary cluster stalled at its shutdown checkpoint;
+  only its verified test-only processes were terminated, with files retained.
+  Use a fresh disposable cluster for future QA; no existing database was touched.
+- Handoff: no feature commit/push, main merge, remote CI dispatch or deployment.
+  Existing conditional skips and Vite chunk warning remain. Public rollout,
+  remote CI and manual password-reset operations are separate work.
 
 - Request: upload the completed new backend architecture to a separate branch.
 - Created `codex/backend-v1-architecture` from `codex/v1-main-reconcile` for

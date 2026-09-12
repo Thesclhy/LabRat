@@ -27,9 +27,15 @@ contract explicitly defines a narrower rule.
 
 ## Lab Roles
 
+Invitation-based onboarding and project presets are specified in
+`doc/contracts/invitation-onboarding-v1.md`. Members join with no project grants.
+Removal clears the target lab's direct grants and group memberships; rejoining
+never restores historical access.
+
 Public v1 roles are:
 
-- `lab_owner`: all capabilities in the Lab, including ownership transfer.
+- `lab_owner`: all capabilities in the Lab. Ownership transfer remains reserved
+  for a separate workflow and is not exposed by invitation/member management.
 - `lab_admin`: all project and experiment capabilities plus membership, group
   and grant management; cannot transfer Lab ownership.
 - `lab_member`: no project data access unless an active user/group grant
@@ -75,6 +81,12 @@ A project grant has one scope:
 An experiment grant applies capabilities to exactly one Experiment and its
 artifacts. Effective capabilities are the union of active direct-user and
 active-group grants. Explicit deny grants are not part of v1.
+
+Scope is never widened while merging grants: when full-project access exists,
+the returned project capabilities come only from all-experiment grants.
+Additional selected-experiment capabilities remain confined to their explicit
+experiments. For example, project-wide view plus approval of one experiment
+does not confer project-wide approval.
 
 Receiving an experiment grant exposes only this Project shell:
 

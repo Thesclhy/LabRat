@@ -55,11 +55,15 @@ export function resolveEffectiveProjectAccess(input: {
   }
   if (input.labRole !== "lab_member") return null;
 
-  const projectCapabilities = normalizeCapabilities(
-    input.projectGrants.flatMap((grant) => grant.capabilities),
-  );
   const allExperiments = input.projectGrants.some(
     (grant) => grant.scope === "all_experiments",
+  );
+  // A full-project read grant must not promote selected-experiment privileges
+  // into full-project edit/approval privileges.
+  const projectCapabilities = normalizeCapabilities(
+    input.projectGrants
+      .filter((grant) => !allExperiments || grant.scope === "all_experiments")
+      .flatMap((grant) => grant.capabilities),
   );
   const experimentCapabilities: Record<string, Capability[]> = {};
   for (const grant of input.experimentGrants) {

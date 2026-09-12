@@ -4,6 +4,162 @@
  */
 
 export interface paths {
+    readonly "/api/v1/admin/invitations": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get: operations["listOwnerInvitations"];
+        readonly put?: never;
+        readonly post: operations["createOwnerInvitation"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/admin/invitations/{invitationId}/revoke": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly invitationId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        readonly post: operations["revokeOwnerInvitation"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/labs/{labId}/invitations": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly labId: components["parameters"]["LabId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly get: operations["listMemberInvitations"];
+        readonly put?: never;
+        readonly post: operations["createMemberInvitation"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/labs/{labId}/invitations/{invitationId}/revoke": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly labId: components["parameters"]["LabId"];
+                readonly invitationId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        readonly post: operations["revokeMemberInvitation"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/auth/invitations/preview": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        readonly post: operations["previewInvitation"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/auth/register": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        readonly post: operations["registerWithInvitation"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/auth/invitations/redeem": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        readonly post: operations["redeemInvitation"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/projects/{projectId}/member-access": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly get: operations["listProjectMemberAccess"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/projects/{projectId}/member-access/{userId}": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly userId: components["parameters"]["UserId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put: operations["setProjectMemberAccess"];
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/health": {
         readonly parameters: {
             readonly query?: never;
@@ -1430,6 +1586,115 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        readonly EmptyInvitationRequest: Record<string, never>;
+        readonly InvitationCodeRequest: {
+            readonly invitationCode: string;
+        };
+        readonly RedeemInvitationRequest: {
+            readonly invitationCode: string;
+            readonly labName?: string;
+        };
+        readonly RegisterInvitationRequest: {
+            readonly invitationCode: string;
+            readonly labName?: string;
+            readonly username: string;
+            readonly displayName: string;
+            readonly password: string;
+        };
+        readonly Invitation: {
+            readonly id: components["schemas"]["OpaqueId"];
+            /** @enum {string} */
+            readonly kind: "lab_owner" | "lab_member";
+            readonly labId: components["schemas"]["NullableOpaqueId"];
+            readonly createdBy: components["schemas"]["OpaqueId"];
+            readonly createdAt: components["schemas"]["Timestamp"];
+            readonly expiresAt: components["schemas"]["Timestamp"];
+            /** @enum {string} */
+            readonly status: "pending" | "used" | "revoked" | "expired";
+            /** Format: date-time */
+            readonly revokedAt: string | null;
+            /** Format: date-time */
+            readonly redeemedAt: string | null;
+            readonly redeemedBy: components["schemas"]["NullableOpaqueId"];
+            readonly redeemedLabId: components["schemas"]["NullableOpaqueId"];
+        };
+        readonly InvitationPage: {
+            readonly items: readonly components["schemas"]["Invitation"][];
+            readonly nextCursor: components["schemas"]["NullableString"];
+        };
+        readonly CreatedInvitation: {
+            readonly invitation: components["schemas"]["Invitation"];
+            /** @description Shown once. Never persist or put in URLs. */
+            readonly invitationCode: string;
+        };
+        readonly InvitationResponse: {
+            readonly invitation: components["schemas"]["Invitation"];
+        };
+        readonly InvitationPreview: {
+            /** @enum {string} */
+            readonly kind: "lab_owner" | "lab_member";
+            readonly expiresAt: components["schemas"]["Timestamp"];
+            readonly lab: null | {
+                readonly id: components["schemas"]["OpaqueId"];
+                readonly name: string;
+            };
+        };
+        readonly InvitationRedemption: {
+            readonly auth: components["schemas"]["AuthResponse"];
+            readonly lab: components["schemas"]["Lab"];
+        };
+        readonly SetMemberAccessRequest: {
+            /** @enum {string} */
+            readonly preset: "none" | "view" | "edit" | "approve";
+            readonly expectedGrantId: components["schemas"]["NullableOpaqueId"];
+        };
+        readonly MemberEffectiveAccess: {
+            readonly projectId: components["schemas"]["OpaqueId"];
+            readonly shellOnly: boolean;
+            readonly capabilities: readonly ("read" | "propose" | "approve" | "export" | "manage_access")[];
+            readonly allExperiments: boolean;
+            readonly experimentIds: readonly components["schemas"]["OpaqueId"][];
+            readonly experimentCapabilities: {
+                readonly [key: string]: readonly string[];
+            };
+        };
+        readonly MemberAccess: {
+            readonly user: {
+                readonly id: components["schemas"]["OpaqueId"];
+                readonly username: string;
+                readonly displayName: string;
+                readonly isActive: boolean;
+            };
+            /** @enum {string} */
+            readonly role: "lab_owner" | "lab_admin" | "lab_member";
+            readonly directGrant: null | {
+                readonly id: components["schemas"]["OpaqueId"];
+                /** @enum {string} */
+                readonly scope: "all_experiments" | "selected_experiments";
+                readonly capabilities: readonly string[];
+                /** @enum {string} */
+                readonly preset: "none" | "view" | "edit" | "approve" | "custom";
+            };
+            readonly editable: boolean;
+            readonly effectiveAccess: null | components["schemas"]["MemberEffectiveAccess"];
+            readonly sources: readonly {
+                /** @enum {string} */
+                readonly type: "lab_role" | "direct" | "group" | "experiment" | "group_experiment";
+                readonly id: string;
+                readonly groupId?: components["schemas"]["NullableOpaqueId"];
+                readonly experimentId?: components["schemas"]["OpaqueId"];
+                /** @enum {string} */
+                readonly scope: "all_experiments" | "selected_experiments";
+                readonly capabilities: readonly string[];
+            }[];
+        };
+        readonly MemberAccessPage: {
+            readonly items: readonly components["schemas"]["MemberAccess"][];
+            readonly nextCursor: components["schemas"]["NullableString"];
+        };
+        readonly MemberAccessResponse: {
+            readonly memberAccess: components["schemas"]["MemberAccess"];
+        };
         readonly OpaqueId: string;
         /** Format: date-time */
         readonly Timestamp: string;
@@ -3526,6 +3791,21 @@ export interface components {
     headers: never;
     pathItems: never;
 }
+export type SchemaEmptyInvitationRequest = components['schemas']['EmptyInvitationRequest'];
+export type SchemaInvitationCodeRequest = components['schemas']['InvitationCodeRequest'];
+export type SchemaRedeemInvitationRequest = components['schemas']['RedeemInvitationRequest'];
+export type SchemaRegisterInvitationRequest = components['schemas']['RegisterInvitationRequest'];
+export type SchemaInvitation = components['schemas']['Invitation'];
+export type SchemaInvitationPage = components['schemas']['InvitationPage'];
+export type SchemaCreatedInvitation = components['schemas']['CreatedInvitation'];
+export type SchemaInvitationResponse = components['schemas']['InvitationResponse'];
+export type SchemaInvitationPreview = components['schemas']['InvitationPreview'];
+export type SchemaInvitationRedemption = components['schemas']['InvitationRedemption'];
+export type SchemaSetMemberAccessRequest = components['schemas']['SetMemberAccessRequest'];
+export type SchemaMemberEffectiveAccess = components['schemas']['MemberEffectiveAccess'];
+export type SchemaMemberAccess = components['schemas']['MemberAccess'];
+export type SchemaMemberAccessPage = components['schemas']['MemberAccessPage'];
+export type SchemaMemberAccessResponse = components['schemas']['MemberAccessResponse'];
 export type SchemaOpaqueId = components['schemas']['OpaqueId'];
 export type SchemaTimestamp = components['schemas']['Timestamp'];
 export type SchemaCapability = components['schemas']['Capability'];
@@ -3790,6 +4070,614 @@ export type ParameterLimit = components['parameters']['Limit'];
 export type ParameterPageLimit = components['parameters']['PageLimit'];
 export type $defs = Record<string, never>;
 export interface operations {
+    readonly listOwnerInvitations: {
+        readonly parameters: {
+            readonly query?: {
+                readonly limit?: components["parameters"]["Limit"];
+                readonly cursor?: components["parameters"]["Cursor"];
+            };
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Success. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["InvitationPage"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 409: components["responses"]["Conflict"];
+            /** @description Invitation expired, revoked or used. */
+            readonly 410: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request body exceeds 8 KiB. */
+            readonly 413: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many attempts. */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    readonly createOwnerInvitation: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["EmptyInvitationRequest"];
+            };
+        };
+        readonly responses: {
+            /** @description Success. */
+            readonly 201: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["CreatedInvitation"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 409: components["responses"]["Conflict"];
+            /** @description Invitation expired, revoked or used. */
+            readonly 410: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request body exceeds 8 KiB. */
+            readonly 413: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many attempts. */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    readonly revokeOwnerInvitation: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly invitationId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Success. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["InvitationResponse"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 409: components["responses"]["Conflict"];
+            /** @description Invitation expired, revoked or used. */
+            readonly 410: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request body exceeds 8 KiB. */
+            readonly 413: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many attempts. */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    readonly listMemberInvitations: {
+        readonly parameters: {
+            readonly query?: {
+                readonly limit?: components["parameters"]["Limit"];
+                readonly cursor?: components["parameters"]["Cursor"];
+            };
+            readonly header?: never;
+            readonly path: {
+                readonly labId: components["parameters"]["LabId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Success. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["InvitationPage"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 409: components["responses"]["Conflict"];
+            /** @description Invitation expired, revoked or used. */
+            readonly 410: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request body exceeds 8 KiB. */
+            readonly 413: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many attempts. */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    readonly createMemberInvitation: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly labId: components["parameters"]["LabId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["EmptyInvitationRequest"];
+            };
+        };
+        readonly responses: {
+            /** @description Success. */
+            readonly 201: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["CreatedInvitation"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 409: components["responses"]["Conflict"];
+            /** @description Invitation expired, revoked or used. */
+            readonly 410: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request body exceeds 8 KiB. */
+            readonly 413: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many attempts. */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    readonly revokeMemberInvitation: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly labId: components["parameters"]["LabId"];
+                readonly invitationId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Success. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["InvitationResponse"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 409: components["responses"]["Conflict"];
+            /** @description Invitation expired, revoked or used. */
+            readonly 410: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request body exceeds 8 KiB. */
+            readonly 413: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many attempts. */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    readonly previewInvitation: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["InvitationCodeRequest"];
+            };
+        };
+        readonly responses: {
+            /** @description Success. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["InvitationPreview"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 409: components["responses"]["Conflict"];
+            /** @description Invitation expired, revoked or used. */
+            readonly 410: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request body exceeds 8 KiB. */
+            readonly 413: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many attempts. */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    readonly registerWithInvitation: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["RegisterInvitationRequest"];
+            };
+        };
+        readonly responses: {
+            /** @description Success. */
+            readonly 201: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["InvitationRedemption"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 409: components["responses"]["Conflict"];
+            /** @description Invitation expired, revoked or used. */
+            readonly 410: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request body exceeds 8 KiB. */
+            readonly 413: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many attempts. */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    readonly redeemInvitation: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["RedeemInvitationRequest"];
+            };
+        };
+        readonly responses: {
+            /** @description Success. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["InvitationRedemption"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 409: components["responses"]["Conflict"];
+            /** @description Invitation expired, revoked or used. */
+            readonly 410: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request body exceeds 8 KiB. */
+            readonly 413: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many attempts. */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    readonly listProjectMemberAccess: {
+        readonly parameters: {
+            readonly query?: {
+                readonly limit?: components["parameters"]["Limit"];
+                readonly cursor?: components["parameters"]["Cursor"];
+            };
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Success. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["MemberAccessPage"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 409: components["responses"]["Conflict"];
+            /** @description Invitation expired, revoked or used. */
+            readonly 410: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request body exceeds 8 KiB. */
+            readonly 413: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many attempts. */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    readonly setProjectMemberAccess: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly userId: components["parameters"]["UserId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["SetMemberAccessRequest"];
+            };
+        };
+        readonly responses: {
+            /** @description Success. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["MemberAccessResponse"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 409: components["responses"]["Conflict"];
+            /** @description Invitation expired, revoked or used. */
+            readonly 410: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Request body exceeds 8 KiB. */
+            readonly 413: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many attempts. */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     readonly getHealth: {
         readonly parameters: {
             readonly query?: never;

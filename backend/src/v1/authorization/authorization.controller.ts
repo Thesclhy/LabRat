@@ -7,6 +7,7 @@ import {
   Patch,
   Post,
   Put,
+  Query,
 } from "@nestjs/common";
 import { CurrentAuth } from "../identity/current-auth.js";
 import type { AuthContext } from "../identity/identity.types.js";
@@ -17,10 +18,26 @@ import {
   UpsertLabMemberDto,
 } from "./authorization.dto.js";
 import { AuthorizationService } from "./authorization.service.js";
+import { MemberAccessService, SetMemberAccessDto } from "./member-access.service.js";
+import { PageQueryDto } from "../platform/http/page-query.js";
 
 @Controller("api/v1")
 export class AuthorizationController {
-  constructor(private readonly authorizationService: AuthorizationService) {}
+  constructor(
+    private readonly authorizationService: AuthorizationService,
+    private readonly memberAccess: MemberAccessService,
+  ) {}
+
+  @Get("projects/:projectId/member-access")
+  listMemberAccess(@CurrentAuth() auth: AuthContext, @Param("projectId") projectId: string, @Query() query: PageQueryDto) {
+    return this.memberAccess.list(auth, projectId, query);
+  }
+
+  @Put("projects/:projectId/member-access/:userId")
+  setMemberAccess(@CurrentAuth() auth: AuthContext, @Param("projectId") projectId: string,
+    @Param("userId") userId: string, @Body() body: SetMemberAccessDto) {
+    return this.memberAccess.set(auth, projectId, userId, body);
+  }
 
   @Get("labs/:labId/members")
   async listLabMembers(@Param("labId") labId: string, @CurrentAuth() auth: AuthContext) {

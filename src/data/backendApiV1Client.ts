@@ -2,6 +2,20 @@ import createClient from "openapi-fetch";
 import type { paths as BackendApiV1Paths } from "./generated/backendApiV1";
 
 const REQUEST_ORIGIN = "http://labrat.local";
+let workspaceEpoch = 0;
+let workspaceController = new AbortController();
+const accessListeners = new Set<(status: number) => void>();
+
+export function invalidateWorkspaceRequests() {
+  workspaceEpoch += 1;
+  workspaceController.abort();
+  workspaceController = new AbortController();
+}
+
+export function onWorkspaceAccessLost(listener: (status: number) => void) {
+  accessListeners.add(listener);
+  return () => { accessListeners.delete(listener); };
+}
 
 type HttpMethod = "get" | "post" | "put" | "patch" | "delete";
 type ApiV1Path = keyof BackendApiV1Paths;
@@ -107,6 +121,10 @@ export async function apiV1Request<
   Path extends ApiV1Path,
   Method extends ApiV1Method<Path>,
 >(method: Method, path: Path, options: RequestOptions = {}): Promise<any> {
+  const epoch = workspaceEpoch;
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, workspaceController.signal])
+    : workspaceController.signal;
   const fetchImpl = fetchImplFrom(options);
   const client = createClient<BackendApiV1Paths>({
     baseUrl: REQUEST_ORIGIN,
@@ -125,9 +143,10 @@ export async function apiV1Request<
     },
     ...(options.body !== undefined ? { body: options.body } : {}),
     ...(options.headers ? { headers: options.headers } : {}),
-    ...(options.signal ? { signal: options.signal } : {}),
+    signal,
   });
 
+  if (epoch !== workspaceEpoch || signal.aborted) throw new DOMException("Workspace request cancelled.", "AbortError");
   if (result.response.ok) return result.data;
   const body = result.error && typeof result.error === "object"
     ? result.error as Record<string, unknown>
@@ -135,6 +154,14 @@ export async function apiV1Request<
   const error = body?.error && typeof body.error === "object"
     ? body.error as Record<string, unknown>
     : null;
+  const sessionExpired = result.response.status === 401 && !path.startsWith("/api/v1/auth/");
+  const scientificRoute = !path.includes("member-access") && !path.includes("access-grants")
+    && /^\/api\/v1\/(projects|analysis-|workbook-review-sessions|source-documents|chart-specs|manuscripts|agent-runs)/.test(path);
+  const lostProject = scientificRoute && (result.response.status === 403
+    || (result.response.status === 404 && ["project_not_found", "lab_member_not_found"].includes(String(error?.code))));
+  if (sessionExpired || lostProject) {
+    for (const listener of accessListeners) listener(result.response.status);
+  }
   throw new ServerApiError(
     String(error?.message || `LabRat server request failed with HTTP ${result.response.status}.`),
     { status: result.response.status, error, body },

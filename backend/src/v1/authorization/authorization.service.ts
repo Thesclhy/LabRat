@@ -164,7 +164,7 @@ export class AuthorizationService {
 
   async deactivateLabMember(auth: AuthContext, labId: string, userId: string): Promise<void> {
     this.requireLabManager(auth, labId);
-    const result = await this.repository.deactivateLabMember(labId, userId);
+    const result = await this.repository.deactivateLabMember(labId, userId, auth.user.id);
     if (!result) throw new ApiError(404, "lab_member_not_found", "Lab member not found.");
     if ("ownerProtected" in result) {
       throw new ApiError(409, "lab_owner_protected", "Lab owner cannot be deactivated here.");

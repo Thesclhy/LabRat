@@ -6,6 +6,7 @@ import { V1_CONFIG, type V1Config } from "../config/v1-config.js";
 import { v1Schema } from "./schema.js";
 
 export type V1Database = NodePgDatabase<typeof v1Schema>;
+export type V1Transaction = Parameters<Parameters<V1Database["transaction"]>[0]>[0];
 
 @Injectable()
 export class DatabaseService implements OnModuleDestroy {

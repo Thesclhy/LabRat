@@ -17,6 +17,12 @@ The executable source of truth is `backend/migrations/`. This document records o
 
 ### Identity And Access
 
+Migration 028 adds `invitations`: hash-only single-use credentials, immutable
+issuer/target kind, seven-day expiry and redemption/revocation receipts. User,
+Lab/membership, session, redemption and audit writes share a registration transaction.
+The v1 lifecycle and project preset contract is
+`doc/contracts/invitation-onboarding-v1.md`. Scientific table shapes are unchanged.
+
 ```text
 users
 labs
