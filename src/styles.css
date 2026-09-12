@@ -11708,3 +11708,40 @@ tbody tr:hover {
   font-size: 11px;
   color: #2c6b68;
 }
+
+.reusable-chart-linked-note {
+  margin: 0 0 12px;
+}
+
+.reusable-chart-linked-report {
+  margin-top: 12px;
+}
+
+.analysis-template-lineage {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--panel-muted, rgba(0, 0, 0, 0.04));
+  font-size: 0.85rem;
+}
+
+.analysis-template-lineage ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.analysis-template-lineage li {
+  display: grid;
+  gap: 2px;
+}
+
+.analysis-template-lineage li > span:first-child {
+  font-weight: 600;
+}
+
+.analysis-template-lineage li.stale > small {
+  color: var(--warning-text, #8a5a00);
+}

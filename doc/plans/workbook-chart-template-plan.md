@@ -1,6 +1,6 @@
 # Reusable Chart Templates From Linked Workbook Data
 
-Status: active (Milestones A-C complete, D-E proposed)
+Status: active (Milestones A-D complete, E proposed)
 Read when: making an accepted workbook-backed comparison chart repeatable
 with no provider call, or extending reusable chart templates beyond snapshot
 columns.
@@ -290,6 +290,20 @@ result whose y values equal the workbooks' `Overall tots` rows, with no
 provider call recorded on the run.
 
 ### Milestone D — Frontend
+
+Status: complete on 2026-09-12 (branch `claude/batch-workbook-linking`).
+Implementation notes: the "Use template" picker detects a `linked_region`
+slot, loads coverage from `GET /linked-data-kinds`, shows each experiment's
+workbook · sheet!range in the slot column, disables rows without the data
+kind ("no linked <kind>"), offers "Select all with data", sends no bindings,
+and after preview renders the per-experiment report (region, missing
+points) with the `excludedExperiments` and warnings from the compatibility
+payload. Result review shows a "Workbook lineage" block from
+`templateLineage.frozenRegionRefs` and marks a row stale when the data kind
+listing reports a newer accepted revision for that experiment. The
+eligibility blocker text already comes from the backend, so the "Template
+unavailable" panel needed no change; the workbook radio in "Create chart"
+no longer calls workbook charts one-off.
 
 What gets built:
 

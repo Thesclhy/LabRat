@@ -813,6 +813,7 @@ export function AnalysisReviewWorkspace({
   chartSpecs = [],
   saveTemplate = createServerReusableChartTemplate,
   loadTemplateEligibility = null,
+  loadLinkedDataKinds = null,
   onTemplateSaved = null,
   onPlaceAcceptedChart = null,
   onClose,
@@ -855,6 +856,7 @@ export function AnalysisReviewWorkspace({
   const [templateName, setTemplateName] = useState("");
   const [savedTemplate, setSavedTemplate] = useState(null);
   const [templateEligibility, setTemplateEligibility] = useState({ loading: false, value: null });
+  const [linkedLineageState, setLinkedLineageState] = useState({ loading: false, value: null });
   const [runHistory, setRunHistory] = useState(() => (
     initialRun ? [{ run: initialRun, result: initialResult }] : []
   ));
@@ -1170,6 +1172,29 @@ export function AnalysisReviewWorkspace({
     || asArray(chartSpecs).find((item) => asArray(thread?.chartSpecIds).includes(item?.id))
     || null;
   const templateEligibilityRequired = typeof loadTemplateEligibility === "function";
+  const templateLineage = revision?.plan?.templateLineage || revision?.templateLineage || null;
+  const frozenRegionRefs = asArray(templateLineage?.frozenRegionRefs);
+  const lineageDataKind = templateLineage?.linkedDataKind || "";
+  useEffect(() => {
+    if (!projectId || !lineageDataKind || !frozenRegionRefs.length || typeof loadLinkedDataKinds !== "function") {
+      setLinkedLineageState({ loading: false, value: null });
+      return undefined;
+    }
+    let active = true;
+    setLinkedLineageState({ loading: true, value: null });
+    loadLinkedDataKinds(projectId)
+      .then((value) => { if (active) setLinkedLineageState({ loading: false, value }); })
+      .catch(() => { if (active) setLinkedLineageState({ loading: false, value: null }); });
+    return () => { active = false; };
+  }, [projectId, lineageDataKind, frozenRegionRefs.length, loadLinkedDataKinds]);
+  const currentLinkedKind = asArray(linkedLineageState.value?.dataKinds)
+    .find((item) => String(item.dataKind || "").trim().toLowerCase() === String(lineageDataKind).trim().toLowerCase()) || null;
+  const lineageRows = frozenRegionRefs.map((ref) => {
+    const current = asArray(currentLinkedKind?.experiments).find((item) => item.experimentId === ref.experimentId) || null;
+    const newest = current ? asArray(current.regions)[0] : null;
+    const stale = Boolean(newest && newest.revisionId && newest.revisionId !== ref.regionUnderstandingRevisionId);
+    return { ...ref, stale, newest };
+  });
   const templateEligibilityStatus = templateEligibility.value?.status || (templateEligibilityRequired ? "checking" : "not_checked");
   const visibleResultSummary = resultSummary(run, result, preview);
   const browserPreviewUnavailable = browserMode
@@ -1742,6 +1767,20 @@ export function AnalysisReviewWorkspace({
                     <span>{excluded.reason || "Excluded by the reviewed plan."}</span>
                   </p>
                 ))}
+                {lineageRows.length > 0 && (
+                  <div className="analysis-template-lineage" aria-label="Workbook lineage">
+                    <strong>Workbook lineage · {lineageDataKind}</strong>
+                    <ul>
+                      {lineageRows.map((row) => (
+                        <li key={`${row.experimentId}-${row.regionId}`} className={row.stale ? "stale" : ""}>
+                          <span>{row.label}</span>
+                          <span>{row.workbookName} · {row.sheetName}!{row.range}{row.seriesLabel ? ` · ${row.seriesLabel}` : ""}</span>
+                          {row.stale && <small>A newer confirmation of this region exists; this chart keeps the version it was built from.</small>}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 {!browserMode && chartReady && !defaultVisibleTraceIds.length && (
                   <p className="analysis-review-error">Select at least one series before accepting this chart.</p>
                 )}

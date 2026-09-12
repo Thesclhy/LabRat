@@ -67,6 +67,32 @@ function compareTemplateValues(left, right) {
   return experimentLabelCollator.compare(String(left), String(right));
 }
 
+function normalizeKind(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function linkedSlotOf(slots) {
+  return asArray(slots).find((slot) => slot?.sourceKind === "linked_region") || null;
+}
+
+function linkedRegionText(linked) {
+  const region = linked?.regions?.[0];
+  if (!region) return "";
+  const extra = asArray(linked.regions).length > 1 ? ` (+${linked.regions.length - 1} more)` : "";
+  return `${region.workbookName || "Workbook"} · ${region.sheetName}!${region.range}${extra}`;
+}
+
+function linkedRowCompatibility(row, slot, linked) {
+  if (!linked) {
+    return { state: "missing", label: `No linked ${slot.linkedDataKind}`, detail: `${row?.label || "This experiment"} has no confirmed ${slot.linkedDataKind} region. Apply the extraction template to its workbook first.` };
+  }
+  return {
+    state: "compatible",
+    label: asArray(linked.regions).length > 1 ? "Ready · newest region" : "Ready",
+    detail: linkedRegionText(linked),
+  };
+}
+
 function templateRowCompatibility(row, slots, bindings, columnsById) {
   const unresolved = [];
   const missing = [];
@@ -248,7 +274,7 @@ function ReviewedAnalysisRequest({ state, onSubmit }) {
             checked={inputMode === "workbook"}
             onChange={(event) => setInputMode(event.target.value)}
           />
-          <span><strong>Workbook</strong><small>One-off analysis from confirmed workbook ranges</small></span>
+          <span><strong>Workbook</strong><small>Charts from confirmed workbook ranges; experiment-linked regions can become templates</small></span>
         </label>
       </fieldset>
       <div className="backend-normalize-toolbar chart-intent-toolbar workflow-action-row">
@@ -306,6 +332,7 @@ export function ReusableChartTemplateReview({
   loadExperiments = listExperimentBrowserRows,
   loadExperimentDetail = getExperimentBrowserDetail,
   applyTemplate = applyServerReusableChartTemplate,
+  loadDataKinds = listServerLinkedDataKinds,
 }) {
   const activeTemplates = asArray(templates).filter((template) => template?.status !== "archived");
   const [selectedTemplateId, setSelectedTemplateId] = React.useState(activeTemplates[0]?.id || "");
@@ -318,6 +345,7 @@ export function ReusableChartTemplateReview({
   const [bindings, setBindings] = React.useState({});
   const [applicationState, setApplicationState] = React.useState({ loading: false, response: null, error: "" });
   const [experimentDetailState, setExperimentDetailState] = React.useState({ experimentId: "", loading: false, value: null, error: "" });
+  const [linkedKindsState, setLinkedKindsState] = React.useState({ loading: false, value: null, error: "" });
   const experimentDetailCacheRef = React.useRef(new Map());
   const experimentDetailRequestRef = React.useRef(0);
 
@@ -376,9 +404,32 @@ export function ReusableChartTemplateReview({
   const normalizedSearch = search.trim().toLowerCase();
   const columnsById = new Map(experimentState.columns.map((column) => [column.id, column]));
   const templateSlots = asArray(version?.inputSlots);
+  const linkedSlot = linkedSlotOf(templateSlots);
+  const linkedMode = Boolean(linkedSlot);
+  const linkedDataKind = linkedSlot?.linkedDataKind || "";
+
+  React.useEffect(() => {
+    if (!projectId || !linkedMode) {
+      setLinkedKindsState({ loading: false, value: null, error: "" });
+      return undefined;
+    }
+    let active = true;
+    setLinkedKindsState({ loading: true, value: null, error: "" });
+    loadDataKinds(projectId)
+      .then((value) => { if (active) setLinkedKindsState({ loading: false, value, error: "" }); })
+      .catch((error) => { if (active) setLinkedKindsState({ loading: false, value: null, error: error?.message || String(error) }); });
+    return () => { active = false; };
+  }, [loadDataKinds, projectId, linkedMode, linkedDataKind]);
+
+  const linkedKind = linkedMode
+    ? asArray(linkedKindsState.value?.dataKinds).find((item) => normalizeKind(item.dataKind) === normalizeKind(linkedDataKind)) || null
+    : null;
+  const linkedById = new Map(asArray(linkedKind?.experiments).map((item) => [item.experimentId, item]));
   const rowCompatibility = new Map(experimentState.rows.map((row) => [
     row.experimentId,
-    templateRowCompatibility(row, templateSlots, bindings, columnsById),
+    linkedMode
+      ? linkedRowCompatibility(row, linkedSlot, linkedById.get(row.experimentId) || null)
+      : templateRowCompatibility(row, templateSlots, bindings, columnsById),
   ]));
   const visibleRows = experimentState.rows
     .filter((row) => (
@@ -395,6 +446,8 @@ export function ReusableChartTemplateReview({
           rowCompatibility.get(left.experimentId)?.label || "",
           rowCompatibility.get(right.experimentId)?.label || "",
         );
+      } else if (linkedMode) {
+        comparison = Number(linkedById.has(right.experimentId)) - Number(linkedById.has(left.experimentId));
       } else {
         const slot = templateSlots.find((item) => item.slotId === sortState.columnId);
         const columnId = slotColumnId(slot, bindings);
@@ -449,9 +502,16 @@ export function ReusableChartTemplateReview({
   };
 
   const toggleExperiment = (experimentId) => {
+    if (linkedMode && !linkedById.has(experimentId) && !selectedExperimentIds.includes(experimentId)) return;
     setSelectedExperimentIds((current) => current.includes(experimentId)
       ? current.filter((id) => id !== experimentId)
       : current.length < hardMaximum ? [...current, experimentId] : current);
+    resetCompatibility();
+  };
+
+  const selectAllLinked = () => {
+    const covered = experimentState.rows.filter((row) => linkedById.has(row.experimentId)).map((row) => row.experimentId);
+    setSelectedExperimentIds(covered.slice(0, hardMaximum));
     resetCompatibility();
   };
 
@@ -461,7 +521,7 @@ export function ReusableChartTemplateReview({
     try {
       const response = await applyTemplate(version.id, {
         experimentIds: selectedExperimentIds,
-        bindings: Object.entries(bindings).map(([slotId, columnId]) => ({ slotId, columnId })),
+        bindings: linkedMode ? [] : Object.entries(bindings).map(([slotId, columnId]) => ({ slotId, columnId })),
         idempotencyKey: applicationKey(),
       });
       setApplicationState({ loading: false, response, error: "" });
@@ -535,10 +595,21 @@ export function ReusableChartTemplateReview({
                 </div>
                 <div className="reusable-chart-slot-chips" aria-label="Required template inputs">
                   {asArray(version.inputSlots).map((slot) => (
-                    <span key={slot.slotId}>{slot.label}{slot.unitContract?.allowedUnits?.[0] ? ` (${slot.unitContract.allowedUnits[0]})` : ""}</span>
+                    <span key={slot.slotId}>
+                      {slot.label}{slot.unitContract?.allowedUnits?.[0] ? ` (${slot.unitContract.allowedUnits[0]})` : ""}
+                      {slot.sourceKind === "linked_region" ? ` · from linked ${slot.linkedDataKind}` : ""}
+                    </span>
                   ))}
                 </div>
               </div>
+              {linkedMode && (
+                <p className="import-review-note reusable-chart-linked-note">
+                  This template reads each experiment's confirmed <strong>{linkedDataKind}</strong> workbook region
+                  {linkedSlot.seriesContract?.seriesSelector?.label ? <> (the <strong>{linkedSlot.seriesContract.seriesSelector.label}</strong> series)</> : null}.
+                  Experiments without that region cannot be selected; link them by applying the extraction template to their workbooks.
+                </p>
+              )}
+              {linkedMode && linkedKindsState.error && <p className="import-review-error">{linkedKindsState.error}</p>}
 
               <div className="reusable-chart-browser-toolbar">
                 <label>
@@ -549,6 +620,11 @@ export function ReusableChartTemplateReview({
                   <input type="checkbox" checked={selectedOnly} onChange={(event) => setSelectedOnly(event.target.checked)} />
                   <span>Selected only</span>
                 </label>
+                {linkedMode && (
+                  <button type="button" onClick={selectAllLinked} disabled={!linkedById.size || linkedKindsState.loading}>
+                    Select all with data
+                  </button>
+                )}
                 <span className={selectedExperimentIds.length > recommendedMaximum ? "warning" : ""}>
                   {selectedExperimentIds.length}/{hardMaximum} selected
                 </span>
@@ -570,7 +646,7 @@ export function ReusableChartTemplateReview({
                         return (
                           <th key={slot.slotId}>
                             <button type="button" onClick={() => toggleSort(slot.slotId)}>
-                              {templateSlotHeader(slot, column)} {sortState.columnId === slot.slotId ? sortState.direction === "asc" ? "↑" : "↓" : ""}
+                              {slot.sourceKind === "linked_region" ? `Linked ${slot.linkedDataKind}` : templateSlotHeader(slot, column)} {sortState.columnId === slot.slotId ? sortState.direction === "asc" ? "↑" : "↓" : ""}
                             </button>
                           </th>
                         );
@@ -588,6 +664,8 @@ export function ReusableChartTemplateReview({
                       const selectedIndex = selectedExperimentIds.indexOf(row.experimentId);
                       const isSelected = selectedIndex >= 0;
                       const compatibilityStatus = rowCompatibility.get(row.experimentId);
+                      const linked = linkedMode ? linkedById.get(row.experimentId) || null : null;
+                      const selectable = !linkedMode || Boolean(linked) || isSelected;
                       return (
                         <tr
                           key={row.experimentId}
@@ -609,7 +687,7 @@ export function ReusableChartTemplateReview({
                               checked={isSelected}
                               onClick={(event) => event.stopPropagation()}
                               onChange={() => toggleExperiment(row.experimentId)}
-                              disabled={!isSelected && selectedExperimentIds.length >= hardMaximum}
+                              disabled={!selectable || (!isSelected && selectedExperimentIds.length >= hardMaximum)}
                             />
                           </td>
                           <td className="experiment-column">
@@ -617,6 +695,11 @@ export function ReusableChartTemplateReview({
                             {isSelected && <small>Selection {selectedIndex + 1}</small>}
                           </td>
                           {templateSlots.map((slot) => {
+                            if (slot.sourceKind === "linked_region") {
+                              return linked
+                                ? <td key={slot.slotId}>{linkedRegionText(linked)}</td>
+                                : <td key={slot.slotId} className="missing"><span className="browser-muted">no linked {slot.linkedDataKind}</span></td>;
+                            }
                             const columnId = slotColumnId(slot, bindings);
                             const value = templateCellValue(row, columnId);
                             return <td key={slot.slotId} className={value === "—" ? "missing" : ""}>{value}</td>;
@@ -651,6 +734,17 @@ export function ReusableChartTemplateReview({
                 <div className="reusable-chart-coverage">
                   <strong>Input coverage</strong>
                   {asArray(version.inputSlots).map((slot) => {
+                    if (slot.sourceKind === "linked_region") {
+                      const covered = selectedRows.filter((row) => linkedById.has(row.experimentId)).length;
+                      return (
+                        <div key={slot.slotId}>
+                          <span>{slot.label}</span>
+                          <span className={covered === selectedRows.length ? "compatible" : "warning"}>
+                            {covered}/{selectedRows.length} linked regions
+                          </span>
+                        </div>
+                      );
+                    }
                     const coverage = slotCoverage(slot, selectedRows);
                     return (
                       <div key={slot.slotId}>
@@ -688,6 +782,32 @@ export function ReusableChartTemplateReview({
                         </label>
                       )}
                     </div>
+                  ))}
+                </div>
+              )}
+              {linkedMode && compatibility && (asArray(compatibility.experiments).length > 0 || asArray(compatibility.excludedExperiments).length > 0) && (
+                <div className="linked-data-preview reusable-chart-linked-report" aria-label="Template inputs report">
+                  <p>
+                    {compatibility.status === "ready"
+                      ? `Reading ${asArray(compatibility.experiments).length} confirmed ${compatibility.linkedDataKind || linkedDataKind} region${asArray(compatibility.experiments).length === 1 ? "" : "s"}.`
+                      : `No usable ${compatibility.linkedDataKind || linkedDataKind} region among the selected experiments.`}
+                  </p>
+                  <ul>
+                    {asArray(compatibility.experiments).map((experiment) => (
+                      <li key={experiment.experimentId}>
+                        <strong>{experiment.label}</strong>{" "}
+                        <span>
+                          {experiment.region?.workbookName} · {experiment.region?.sheetName}!{experiment.region?.range}
+                          {experiment.missingCount ? ` · ${experiment.missingCount} missing point${experiment.missingCount === 1 ? "" : "s"}` : ""}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  {asArray(compatibility.excludedExperiments).map((item) => (
+                    <p className="browser-muted" key={`${item.experimentId}-${item.code}`}>Not included: {item.message}</p>
+                  ))}
+                  {asArray(compatibility.warnings).map((warning, index) => (
+                    <p className="browser-muted" key={`${warning.code}-${index}`}>{warning.message}</p>
                   ))}
                 </div>
               )}

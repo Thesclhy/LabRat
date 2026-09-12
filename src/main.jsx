@@ -39,6 +39,7 @@ import {
   getServerWorkbookReviewSession,
   listServerSourceDocuments,
   listServerLabs,
+  listServerLinkedDataKinds,
   listServerProjects,
   loginToServer,
   logoutFromServer,
@@ -4557,6 +4558,7 @@ function App() {
             setChartLaunchContext(null);
           } : null}
           loadTemplateEligibility={getServerChartTemplateEligibility}
+          loadLinkedDataKinds={listServerLinkedDataKinds}
           executionStrategy={analysisReviewState.executionStrategy || "model_generated_python"}
         />
       )}

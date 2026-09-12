@@ -257,6 +257,74 @@ describe("ReusableChartTemplateReview", () => {
       bindings: [{ slotId: "value", columnId: "column_alt" }],
     })));
   });
+  it("binds workbook templates by data kind: coverage from linked regions, uncovered rows disabled, no field bindings", async () => {
+    const linkedTemplate = { ...template, id: "template_linked", name: "Carbon distribution", currentVersionId: "version_linked", chartType: "bar" };
+    const linkedVersion = {
+      id: "version_linked",
+      reusableChartTemplateId: "template_linked",
+      experimentCardinality: { minimum: 1, recommendedMaximum: 8, hardMaximum: 24 },
+      inputSlots: [{
+        slotId: "series",
+        label: "Overall carbon distribution",
+        dataKind: "series",
+        sourceKind: "linked_region",
+        linkedDataKind: "Carbon distribution",
+        identityContract: { preferredColumnId: "" },
+        unitContract: { allowedUnits: ["% of feed carbon"] },
+        seriesContract: { orientation: "header_row_categories", seriesSelector: { seriesKey: "carbon_distribution", label: "Overall carbon distribution" } },
+      }],
+      encoding: { chartType: "bar", comparisonMode: "grouped" },
+    };
+    const loadDataKinds = vi.fn().mockResolvedValue({
+      dataKinds: [{
+        dataKind: "Carbon distribution",
+        experimentCount: 1,
+        experiments: [{ experimentId: "exp_1", label: "Exp1", regions: [{ regionId: "region_1", revisionId: "rev_1", workbookName: "Calculation Exp1.xlsx", sheetName: "Sheet1", range: "P31:BA32" }] }],
+      }],
+      experiments: [{ experimentId: "exp_1", label: "Exp1" }, { experimentId: "exp_2", label: "Exp2" }],
+    });
+    const applyTemplate = vi.fn().mockResolvedValue({
+      compatibility: {
+        status: "ready",
+        sourceKind: "linked_region",
+        linkedDataKind: "Carbon distribution",
+        blockers: [],
+        experiments: [{ experimentId: "exp_1", label: "Exp1", region: { workbookName: "Calculation Exp1.xlsx", sheetName: "Sheet1", range: "P31:BA32" }, missingCount: 1 }],
+        excludedExperiments: [{ experimentId: "exp_9", label: "Exp9", code: "chart_template_input_missing", message: "Exp9 has no confirmed Carbon distribution linked to it." }],
+        warnings: [],
+      },
+      analysisThread: { id: "thread_linked" },
+      analysisPlanRevision: { id: "revision_linked" },
+      analysisRun: { id: "run_linked", status: "queued" },
+    });
+    const onApplicationReady = vi.fn();
+    render(
+      <ReusableChartTemplateReview
+        projectId="project_1"
+        templates={[linkedTemplate]}
+        loadTemplate={vi.fn().mockResolvedValue({ reusableChartTemplate: linkedTemplate, versions: [linkedVersion] })}
+        loadExperiments={vi.fn().mockResolvedValue(experiments)}
+        loadDataKinds={loadDataKinds}
+        applyTemplate={applyTemplate}
+        onApplicationReady={onApplicationReady}
+      />,
+    );
+
+    expect(await screen.findByText("Calculation Exp1.xlsx · Sheet1!P31:BA32")).toBeTruthy();
+    expect(screen.getByText("no linked Carbon distribution")).toBeTruthy();
+    expect(screen.getByLabelText("Select Exp2").disabled).toBe(true);
+    expect(screen.queryByLabelText("Bind field")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Select all with data" }));
+    expect(screen.getByText("1/1 linked regions")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Preview chart" }));
+
+    await waitFor(() => expect(applyTemplate).toHaveBeenCalledWith("version_linked", expect.objectContaining({ experimentIds: ["exp_1"], bindings: [] })));
+    await waitFor(() => expect(onApplicationReady).toHaveBeenCalledWith(expect.objectContaining({ analysisRun: { id: "run_linked", status: "queued" } })));
+    expect(await screen.findByText(/Reading 1 confirmed Carbon distribution region/)).toBeTruthy();
+    expect(screen.getByText(/1 missing point/)).toBeTruthy();
+    expect(screen.getByText(/Not included: Exp9 has no confirmed Carbon distribution linked to it\./)).toBeTruthy();
+  });
 });
 
 describe("LinkedDataComparisonReview", () => {

@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../charts/Plot.jsx", () => ({
@@ -1259,6 +1259,51 @@ describe("AnalysisReviewWorkspace", () => {
     expect(unavailable.disabled).toBe(true);
     fireEvent.click(unavailable);
     expect(saveTemplate).not.toHaveBeenCalled();
+  });
+
+  it("lists workbook lineage per experiment for template results and flags regions confirmed again since", async () => {
+    const templateRevision = {
+      ...revision2,
+      status: "accepted",
+      templateLineage: {
+        reusableChartTemplateId: "template_1",
+        linkedDataKind: "Carbon distribution",
+        frozenRegionRefs: [
+          { experimentId: "identity_31", label: "Exp31", regionId: "region_31", regionUnderstandingRevisionId: "rev_31", workbookName: "Calculation Exp31.xlsx", sheetName: "Sheet1", range: "P31:BA32", seriesLabel: "Overall carbon distribution" },
+          { experimentId: "identity_32", label: "Exp32", regionId: "region_32", regionUnderstandingRevisionId: "rev_32_old", workbookName: "Calculation Exp32.xlsx", sheetName: "Sheet1", range: "P31:BA32", seriesLabel: "Overall carbon distribution" },
+        ],
+      },
+    };
+    const loadLinkedDataKinds = vi.fn().mockResolvedValue({
+      dataKinds: [{
+        dataKind: "Carbon distribution",
+        experiments: [
+          { experimentId: "identity_31", label: "Exp31", regions: [{ regionId: "region_31", revisionId: "rev_31" }] },
+          { experimentId: "identity_32", label: "Exp32", regions: [{ regionId: "region_32b", revisionId: "rev_32_new" }] },
+        ],
+      }],
+    });
+    render(
+      <AnalysisReviewWorkspace
+        projectId="project_1"
+        thread={{ ...thread, chartSpecIds: ["chart_spec_1"] }}
+        revision={templateRevision}
+        planRevisions={[templateRevision]}
+        selection={selection}
+        run={{ ...validatedRun, status: "completed" }}
+        result={{ ...validatedResult, status: "accepted" }}
+        resultPreview={resultPreview}
+        chartSpecs={[{ id: "chart_spec_1", analysisResultId: validatedResult.id }]}
+        WorkbookWorkspaceComponent={WorkbookWorkspaceStub}
+        loadLinkedDataKinds={loadLinkedDataKinds}
+      />,
+    );
+
+    const lineage = await screen.findByLabelText("Workbook lineage");
+    expect(within(lineage).getByText("Calculation Exp31.xlsx · Sheet1!P31:BA32 · Overall carbon distribution")).toBeTruthy();
+    await waitFor(() => expect(within(lineage).getAllByText(/A newer confirmation of this region exists/).length).toBe(1));
+    expect(within(lineage).getByText("Exp32").closest("li").className).toContain("stale");
+    expect(within(lineage).getByText("Exp31").closest("li").className).not.toContain("stale");
   });
 
   it("loads the complete validated Plotly trace domain in one result preview", async () => {

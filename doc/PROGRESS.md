@@ -15,6 +15,20 @@ Keep entries concise, newest first, and include:
 
 ## 2026-09-12
 
+- Workbook chart templates, Milestone D of
+  `doc/plans/workbook-chart-template-plan.md` (frontend). The "Use template"
+  picker in Chart Review handles templates with a `linked_region` slot:
+  coverage comes from the linked-data-kinds listing instead of Browser
+  columns, the slot column shows each experiment's workbook · sheet!range,
+  experiments without the data kind are disabled with "no linked <kind>",
+  a "Select all with data" shortcut selects covered rows, the field-binding
+  UI never appears, and after preview the panel lists the regions read per
+  experiment with missing-point counts plus the excluded experiments and
+  warnings the backend reported. Result review adds a "Workbook lineage"
+  block for template runs (from `templateLineage.frozenRegionRefs`) and
+  marks an experiment stale when its region has a newer accepted revision
+  than the one the chart was built from. Verification: frontend tests for
+  the linked picker and the lineage block, `npm run build`.
 - Template source regions are linked. Saving a confirmed region as an
   extraction template left that region without an experiment link or data
   kind, so the experiment the user selected by hand (Exp48 in project 2-1)
