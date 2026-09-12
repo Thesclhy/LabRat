@@ -225,10 +225,64 @@ Fuzzy or model similarity may rank visible candidates, but can never accept a
 binding. Duplicate readable names are independent. Bindings are project- and
 template-version-scoped, append-only decisions with active/superseded status.
 
-The v1 fast path is limited to fields and series in accepted active Experiment
-Browser snapshots. Direct workbook ranges may author the source chart and
-style, but cannot be rebound across experiments until they have a stable
-accepted Browser representation or a later reviewed source-binding contract.
+The v1 fast path binds snapshot slots to fields in accepted active Experiment
+Browser snapshots. Direct workbook ranges can be rebound across experiments
+only through a linked-region slot (below); other workbook charts remain
+one-off.
+
+### Workbook series slots (`sourceKind: "linked_region"`)
+
+An input slot may declare `sourceKind: "linked_region"` (the default is
+`"snapshot"`, so stored templates are unchanged). Such a slot must be a
+`series` slot, names the `linkedDataKind` it binds to (for example "Carbon
+distribution"), and carries a `seriesContract` with `orientation`
+(`header_row_categories` or `column_pair`), `xMeaning`, `xValueType`,
+`yNumericScale`, and `alignmentPolicy` (`union_with_gaps`, `intersection`,
+or `exact`). `identityContract.preferredColumnId` is empty;
+`identityContract.sourceSignature` hashes orientation, x meaning, y unit, and
+numeric scale so a changed unit fails the contract at application time.
+
+```json
+{
+  "slotId": "series",
+  "label": "Overall carbon distribution",
+  "dataKind": "series",
+  "sourceKind": "linked_region",
+  "linkedDataKind": "Carbon distribution",
+  "identityContract": { "preferredColumnId": "", "valueType": "series", "readableName": "Overall carbon distribution", "sourceSignature": "sha256_..." },
+  "unitContract": { "allowedUnits": ["% of feed carbon"], "conversionPolicyIds": [] },
+  "seriesContract": { "orientation": "header_row_categories", "xMeaning": "carbon_number", "xValueType": "number", "yNumericScale": "percent_points", "alignmentPolicy": "union_with_gaps" }
+}
+```
+
+Binding is by data kind: at application time each chosen experiment resolves
+to its most recently confirmed WorkbookReviewRegion whose `dataKind` matches,
+and lineage freezes that region's accepted revision id instead of a snapshot
+head. No cell address is stored in the template.
+
+Eligibility of a source chart (`inspectLinkedSeriesTemplateEligibility`,
+used automatically when an accepted chart has source selections and no
+Experiment Browser selections): every region is a confirmed region linked to
+an experiment under one data kind, each defines exactly one series, all
+series share orientation, unit, and numeric scale, the chart type is
+`grouped_bar`, `bar`, `scatter`, or `point`, the accepted plan's processing
+steps only select and align (steps that normalise, weight, calibrate, sum,
+average, convert, or otherwise compute new values are refused as
+`reusable_chart_template_workbook_recomputation`), and the accepted chart has
+exactly one trace per experiment. The derived recipe is `select_series`,
+`align_x` (`union_with_gaps`, source order), `filter_missing`
+(`preserve_gap`); encoding is `grouped` bars or `overlay` points with
+`colorBy: experiment`; the missing-data policy is `missingPoint:
+preserve_gap`, `missingCategory: union_with_gaps`, `missingSeries:
+exclude_experiment`; `validation.eligibility` is
+`linked_series_comparison_v1`. Blocker codes:
+`reusable_chart_template_linked_regions_required`,
+`reusable_chart_template_series_contract_mismatch`,
+`reusable_chart_template_encoding_unsupported`,
+`reusable_chart_template_workbook_recomputation`,
+`reusable_chart_template_mixed_inputs_unsupported`. Application and
+execution of linked-region slots are later milestones of
+`doc/plans/workbook-chart-template-plan.md`.
 
 ## Deterministic Recipe v1
 

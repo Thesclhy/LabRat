@@ -1,6 +1,6 @@
 # Reusable Chart Templates From Linked Workbook Data
 
-Status: proposed
+Status: active (Milestone A complete, B-E proposed)
 Read when: making an accepted workbook-backed comparison chart repeatable
 with no provider call, or extending reusable chart templates beyond snapshot
 columns.
@@ -168,6 +168,17 @@ shape with `frozenRegionRefs` added.
 ## Milestones
 
 ### Milestone A — Contract, eligibility, and definition (backend)
+
+Status: complete on 2026-09-12 (branch `claude/batch-workbook-linking`).
+Implementation notes: `inspectReusableChartTemplateEligibility` and
+`deriveReusableChartTemplateDefinition` dispatch to the linked-series path
+when the accepted chart has source selections and no Experiment Browser
+selections; mixed charts stay on the scalar path and keep their existing
+blockers. The derive function still throws the generic
+`reusable_chart_template_not_eligible` code with the specific blockers in
+`details`, so existing callers are unchanged. Summaries expose `sourceKind`
+and `linkedDataKind`. Application and execution are Milestones B and C; a
+saved workbook template cannot be applied yet.
 
 What gets built:
 

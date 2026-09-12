@@ -5,7 +5,9 @@ import {
   buildChartStyleProfileVersion,
   buildReusableChartTemplateVersion,
   deriveReusableChartTemplateDefinition,
+  inspectLinkedSeriesTemplateEligibility,
   inspectReusableChartTemplateEligibility,
+  reusableChartTemplateSummary,
   validateChartStyleProfileVersion,
   validateReusableChartTemplateVersion,
 } from "./reusableChartTemplates.js";
@@ -228,4 +230,145 @@ test("template eligibility reports every independently actionable blocker", asyn
     "reusable_chart_template_field_type_incompatible",
     "reusable_chart_template_field_contract_mismatch",
   ]);
+});
+
+function linkedSeriesFixture({ steps = null, secondUnit = "% of feed carbon", link = true, chartType = "grouped_bar", traceCount = 2, seriesCount = 1 } = {}) {
+  const projectId = "project_1";
+  const series = (unit) => Array.from({ length: seriesCount }, (_, index) => ({
+    seriesKey: index ? `extra_${index}` : "carbon_distribution",
+    label: "Overall carbon distribution",
+    orientation: "header_row_categories",
+    xHeaderRange: "Q31:BA31",
+    yValueRange: "Q32:BA32",
+    xSemanticKey: "carbon_number",
+    xValueType: "number",
+    yUnit: unit,
+    yNumericScale: "percent_points",
+    pointCount: 37,
+  }));
+  const regions = {
+    region_31: { id: "region_31", projectId, disposition: "active", acceptedRevisionId: "rev_31", linkedExperimentId: link ? "identity_31" : null, dataKind: link ? "Carbon distribution" : null },
+    region_32: { id: "region_32", projectId, disposition: "active", acceptedRevisionId: "rev_32", linkedExperimentId: "identity_32", dataKind: "Carbon distribution" },
+  };
+  const revisions = {
+    rev_31: { id: "rev_31", regionId: "region_31", interpretation: { series: series("% of feed carbon") } },
+    rev_32: { id: "rev_32", regionId: "region_32", interpretation: { series: series(secondUnit) } },
+  };
+  const planRevision = {
+    id: "plan_rev_1",
+    plan: {
+      reviewPlan: {
+        processingSteps: steps || [
+          "Each input table is one experiment's confirmed Carbon distribution region; the table label is the experiment name.",
+          "In each input table, the header row of category labels is the x axis and the row of numeric values beneath it is the y axis; ignore label cells and blanks.",
+          "Plot one trace per experiment, named by its experiment label, sharing one x axis and one y axis.",
+        ],
+      },
+      linkedDataComparison: { dataKind: "Carbon distribution" },
+    },
+  };
+  const chartSpec = {
+    id: "chart_spec_linked",
+    projectId,
+    chartType,
+    spec: {
+      schemaVersion: "labrat.chartSpec.v3",
+      origin: "analysis_result",
+      status: "accepted",
+      chartType,
+      analysisPlanRevisionId: "plan_rev_1",
+      sourceSelections: [
+        { sourceSelectionId: "s1", regionUnderstandingRevisionId: "rev_31", sourceDocumentId: "doc_31", sheetName: "Sheet1", range: "P31:BA32" },
+        { sourceSelectionId: "s2", regionUnderstandingRevisionId: "rev_32", sourceDocumentId: "doc_32", sheetName: "Sheet1", range: "P31:BA32" },
+      ],
+      experimentSelections: [],
+      traceCatalog: Array.from({ length: traceCount }, (_, index) => ({ traceId: `trace_${index}` })),
+    },
+  };
+  const store = {
+    async findRegionUnderstandingRevisionById(id) { return revisions[id] ? structuredClone(revisions[id]) : null; },
+    async findWorkbookReviewRegionById(id) { return regions[id] ? structuredClone(regions[id]) : null; },
+    async findAnalysisPlanRevisionById(id) { return id === planRevision.id ? structuredClone(planRevision) : null; },
+    async findDataSnapshotById() { return null; },
+  };
+  return { projectId, chartSpec, store };
+}
+
+test("an accepted linked-data comparison chart derives a workbook series template bound to its data kind", async () => {
+  const fixture = linkedSeriesFixture();
+  const eligibility = await inspectReusableChartTemplateEligibility(fixture);
+  assert.deepEqual(eligibility, { status: "eligible", blockers: [], eligibility: "linked_series_comparison_v1" });
+
+  const definition = await deriveReusableChartTemplateDefinition(fixture);
+  assert.equal(definition.inputSlots.length, 1);
+  const slot = definition.inputSlots[0];
+  assert.equal(slot.sourceKind, "linked_region");
+  assert.equal(slot.linkedDataKind, "Carbon distribution");
+  assert.equal(slot.dataKind, "series");
+  assert.equal(slot.label, "Overall carbon distribution");
+  assert.deepEqual(slot.unitContract.allowedUnits, ["% of feed carbon"]);
+  assert.deepEqual(slot.seriesContract, { orientation: "header_row_categories", xMeaning: "carbon_number", xValueType: "number", yNumericScale: "percent_points", alignmentPolicy: "union_with_gaps" });
+  assert.match(slot.identityContract.sourceSignature, /^sha256_[0-9a-f]{16,}$/i);
+  assert.deepEqual(definition.recipe.operations.map((operation) => operation.op), ["select_series", "align_x", "filter_missing"]);
+  assert.deepEqual(definition.encoding, { chartType: "bar", comparisonMode: "grouped", xRole: "category", yRole: "value", colorBy: "experiment", sourceChartType: "grouped_bar" });
+  assert.equal(definition.missingDataPolicy.missingSeries, "exclude_experiment");
+  assert.equal(definition.validation.eligibility, "linked_series_comparison_v1");
+
+  const version = validateReusableChartTemplateVersion({ ...definition, schemaVersion: "labrat.reusableChartTemplateVersion.v1", version: 1 });
+  assert.equal(version.inputSlots[0].sourceKind, "linked_region");
+  assert.equal(version.inputSlots[0].linkedDataKind, "Carbon distribution");
+  assert.equal(version.inputSlots[0].seriesContract.orientation, "header_row_categories");
+  assert.match(version.contentHash, /^sha256_[0-9a-f]+$/i);
+  const summary = reusableChartTemplateSummary({ id: "t", schemaVersion: "s", name: "Carbon distribution", status: "active", currentVersionId: "v", updatedAt: "now" }, version);
+  assert.equal(summary.sourceKind, "linked_region");
+  assert.equal(summary.linkedDataKind, "Carbon distribution");
+
+  const scatter = linkedSeriesFixture({ chartType: "scatter" });
+  const overlay = await deriveReusableChartTemplateDefinition(scatter);
+  assert.equal(overlay.encoding.comparisonMode, "overlay");
+  assert.equal(overlay.encoding.chartType, "scatter");
+});
+
+test("workbook charts whose plan recomputed values, mixed units, or used unlinked regions are refused with reasons", async () => {
+  const recomputed = linkedSeriesFixture({ steps: ["For each experiment, the hydrocarbon component area measurements will be weighted by their respective C-Response calibration factors and normalized to percentages."] });
+  const recomputedEligibility = await inspectLinkedSeriesTemplateEligibility(recomputed);
+  assert.equal(recomputedEligibility.status, "ineligible");
+  assert.deepEqual(recomputedEligibility.blockers.map((blocker) => blocker.code), ["reusable_chart_template_workbook_recomputation"]);
+  await assert.rejects(deriveReusableChartTemplateDefinition(recomputed), (error) => error.code === "reusable_chart_template_not_eligible" && error.details.blockers[0].code === "reusable_chart_template_workbook_recomputation");
+
+  const mixedUnits = await inspectLinkedSeriesTemplateEligibility(linkedSeriesFixture({ secondUnit: "mol%" }));
+  assert.deepEqual(mixedUnits.blockers.map((blocker) => blocker.code), ["reusable_chart_template_series_contract_mismatch"]);
+  assert.match(mixedUnits.blockers[0].message, /% of feed carbon, mol%/);
+
+  const unlinked = await inspectLinkedSeriesTemplateEligibility(linkedSeriesFixture({ link: false }));
+  assert.deepEqual(unlinked.blockers.map((blocker) => blocker.code), ["reusable_chart_template_linked_regions_required"]);
+
+  const stacked = await inspectLinkedSeriesTemplateEligibility(linkedSeriesFixture({ chartType: "stacked_bar" }));
+  assert.deepEqual(stacked.blockers.map((blocker) => blocker.code), ["reusable_chart_template_encoding_unsupported"]);
+
+  const extraTraces = await inspectLinkedSeriesTemplateEligibility(linkedSeriesFixture({ traceCount: 4 }));
+  assert.deepEqual(extraTraces.blockers.map((blocker) => blocker.code), ["reusable_chart_template_workbook_recomputation"]);
+
+  const twoSeries = await inspectLinkedSeriesTemplateEligibility(linkedSeriesFixture({ seriesCount: 2 }));
+  assert.deepEqual(twoSeries.blockers.map((blocker) => blocker.code), ["reusable_chart_template_series_contract_mismatch"]);
+});
+
+test("template version validation rejects linked-region slots without a data kind or orientation and keeps snapshot slots unchanged", async () => {
+  const fixture = linkedSeriesFixture();
+  const definition = await deriveReusableChartTemplateDefinition(fixture);
+  const versionOf = (patch) => validateReusableChartTemplateVersion({
+    ...definition,
+    schemaVersion: "labrat.reusableChartTemplateVersion.v1",
+    version: 1,
+    inputSlots: [{ ...definition.inputSlots[0], ...patch }],
+  });
+  assert.throws(() => versionOf({ linkedDataKind: "" }), /requires the linked data kind/);
+  assert.throws(() => versionOf({ dataKind: "scalar" }), /must be a series slot/);
+  assert.throws(() => versionOf({ seriesContract: { ...definition.inputSlots[0].seriesContract, orientation: "" } }), /requires a series orientation/);
+  assert.throws(() => versionOf({ sourceKind: "elsewhere" }), /unsupported source kind/);
+  const scalar = eligibleFixture();
+  const scalarDefinition = await deriveReusableChartTemplateDefinition({ store: scalar.store, projectId: scalar.projectId, chartSpec: scalar.chartSpec });
+  const scalarVersion = validateReusableChartTemplateVersion({ ...scalarDefinition, schemaVersion: "labrat.reusableChartTemplateVersion.v1", version: 1 });
+  assert.equal(scalarVersion.inputSlots[0].sourceKind, "snapshot");
+  assert.equal("linkedDataKind" in scalarVersion.inputSlots[0], false);
 });

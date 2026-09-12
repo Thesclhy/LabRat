@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-09-10
+Last reviewed: 2026-09-12
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -12,6 +12,27 @@ Keep entries concise, newest first, and include:
 - meaningful changes
 - verification
 - follow-ups or residual risk
+
+## 2026-09-12
+
+- Workbook chart templates, Milestone A of
+  `doc/plans/workbook-chart-template-plan.md` (contract, eligibility,
+  definition). Reusable input slots accept `sourceKind: "linked_region"` with
+  `linkedDataKind` and a validated `seriesContract`; the default stays
+  `snapshot`, so stored templates are unchanged and no migration is needed.
+  `inspectReusableChartTemplateEligibility` routes charts built only from
+  source selections to `inspectLinkedSeriesTemplateEligibility`, which
+  accepts a chart only when every region is linked to an experiment under one
+  data kind, each defines exactly one series with the same orientation, unit,
+  and scale, the chart type is grouped bars, bars, or points, the accepted
+  plan only selected and aligned (recomputation steps are refused with
+  `reusable_chart_template_workbook_recomputation`), and there is one trace
+  per experiment. `deriveLinkedSeriesTemplateDefinition` builds the
+  data-kind-bound series slot, the `select_series`/`align_x`/`filter_missing`
+  recipe, grouped or overlay encoding, and the missing-data policy. Contract
+  addendum added. Verification: backend suite. Follow-up: Milestones B and C
+  make such templates applicable and executable; until then the version
+  saves but cannot run.
 
 ## 2026-09-10
 
