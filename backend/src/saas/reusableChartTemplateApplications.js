@@ -1,5 +1,6 @@
 import { ANALYSIS_RUNTIME_VERSION } from "./analysisSchemas.js";
 import { stableDataHash } from "./dataPlanSchemas.js";
+import { readLinkedRegionSeries, resolveLinkedRegionsForExperiments } from "./linkedRegionSeries.js";
 import { makeId } from "./ids.js";
 import {
   allocateSelectionOrderStyles,
@@ -69,14 +70,15 @@ function blocker(code, message, details = {}) {
   return { code, message, ...details };
 }
 
-export async function prepareReusableChartTemplateApplication({
-  store,
-  projectId,
-  templateVersion,
-  experimentIds,
-  explicitBindings = [],
-} = {}) {
-  const selectedExperimentIds = asArray(experimentIds).map(text).filter(Boolean);
+function linkedSlotsOf(templateVersion) {
+  return asArray(templateVersion?.inputSlots).filter((slot) => text(slot?.sourceKind) === "linked_region");
+}
+
+export function isLinkedSeriesTemplate(templateVersion) {
+  return linkedSlotsOf(templateVersion).length > 0;
+}
+
+function validateExperimentCount(templateVersion, selectedExperimentIds) {
   if (new Set(selectedExperimentIds).size !== selectedExperimentIds.length) {
     applicationError("chart_template_experiment_count_invalid", "Each experiment may be selected only once.");
   }
@@ -91,6 +93,193 @@ export async function prepareReusableChartTemplateApplication({
       422,
     );
   }
+}
+
+function seriesContractProblem(slot, series) {
+  const contract = slot?.seriesContract || {};
+  const expectedOrientation = text(contract.orientation);
+  if (expectedOrientation && text(series?.orientation) !== expectedOrientation) {
+    return { code: "chart_template_series_shape_mismatch", message: `The linked series is laid out as ${text(series?.orientation) || "unknown"}, but the template expects ${expectedOrientation}.` };
+  }
+  const allowedUnits = asArray(slot?.unitContract?.allowedUnits).map(text).filter(Boolean);
+  if (allowedUnits.length && !allowedUnits.includes(text(series?.yUnit))) {
+    return { code: "chart_template_unit_incompatible", message: `The linked series unit ${text(series?.yUnit) || "(none)"} does not match the template unit ${allowedUnits.join(", ")}.` };
+  }
+  const expectedScale = text(slot?.identityContract?.numericScale || contract.yNumericScale);
+  if (expectedScale && text(series?.yNumericScale) && text(series.yNumericScale) !== expectedScale) {
+    return { code: "chart_template_unit_incompatible", message: `The linked series stores ${text(series.yNumericScale)} values, but the template expects ${expectedScale}.` };
+  }
+  return null;
+}
+
+/**
+ * Resolves a linked-region template against experiments by data kind, reads
+ * each series once to confirm its shape, and reports exclusions per the
+ * template's missing-series policy. No snapshot is touched.
+ */
+export async function prepareLinkedSeriesTemplateApplication({ store, projectId, templateVersion, experimentIds, explicitBindings = [] } = {}) {
+  const linkedSlots = linkedSlotsOf(templateVersion);
+  if (linkedSlots.length !== 1 || linkedSlots.length !== asArray(templateVersion?.inputSlots).length) {
+    applicationError("chart_template_slot_mix_unsupported", "Workbook series templates use exactly one linked-region slot and no snapshot slots.", 422);
+  }
+  if (asArray(explicitBindings).length) {
+    applicationError("chart_template_binding_invalid", "Linked-region slots bind by data kind and accept no column bindings.", 422);
+  }
+  const slot = linkedSlots[0];
+  const selectedExperimentIds = asArray(experimentIds).map(text).filter(Boolean);
+  validateExperimentCount(templateVersion, selectedExperimentIds);
+  const resolved = await resolveLinkedRegionsForExperiments({ store, projectId, dataKind: slot.linkedDataKind, experimentIds: selectedExperimentIds });
+  if (resolved.unknownExperimentIds.length) {
+    applicationError("chart_template_input_missing", "A selected experiment does not belong to this project.", 422, { experimentIds: resolved.unknownExperimentIds });
+  }
+  const policy = text(templateVersion?.missingDataPolicy?.missingSeries) || "exclude_experiment";
+  const excluded = [];
+  const warnings = [];
+  const ready = [];
+  for (const missing of resolved.missingExperiments) {
+    excluded.push({
+      experimentId: missing.experimentId,
+      label: missing.label,
+      code: missing.reason === "session_deleted" ? "chart_template_session_deleted" : "chart_template_input_missing",
+      message: missing.reason === "session_deleted"
+        ? `${missing.label}: the workbook that held its ${resolved.dataKind} was deleted from review.`
+        : `${missing.label} has no confirmed ${resolved.dataKind} linked to it.`,
+    });
+  }
+  for (const experiment of resolved.experiments) {
+    const series = experiment.series[0] || null;
+    if (!series || experiment.series.length !== 1) {
+      excluded.push({ experimentId: experiment.experimentId, label: experiment.label, code: "chart_template_series_shape_mismatch", message: `${experiment.label}: the linked region defines ${experiment.series.length} series; exactly one is required.` });
+      continue;
+    }
+    const problem = seriesContractProblem(slot, series);
+    if (problem) {
+      excluded.push({ experimentId: experiment.experimentId, label: experiment.label, code: problem.code, message: `${experiment.label}: ${problem.message}` });
+      continue;
+    }
+    let read;
+    try {
+      read = await readLinkedRegionSeries({
+        store,
+        projectId,
+        region: { sourceDocumentId: experiment.sourceDocumentId, sheetName: experiment.sheetName, range: experiment.range },
+        series,
+        headerRow: experiment.headerRow,
+        inclusion: experiment.inclusion,
+      });
+    } catch (error) {
+      if (["chart_template_range_too_large", "chart_template_series_shape_mismatch", "chart_template_series_outside_region", "chart_template_source_document_missing"].includes(error?.code)) {
+        excluded.push({ experimentId: experiment.experimentId, label: experiment.label, code: error.code, message: `${experiment.label}: ${error.message}` });
+        continue;
+      }
+      throw error;
+    }
+    if (!read.valueCount) {
+      excluded.push({ experimentId: experiment.experimentId, label: experiment.label, code: "chart_template_input_missing", message: `${experiment.label}: every point in ${experiment.sheetName}!${experiment.range} is missing (${[...new Set(read.points.map((point) => point.missingReason))].join(", ")}).` });
+      continue;
+    }
+    if (experiment.alternativeRegionIds.length) {
+      warnings.push({ code: "chart_template_multiple_regions", message: `${experiment.label} has ${experiment.alternativeRegionIds.length + 1} linked ${resolved.dataKind} regions; the most recently confirmed one is used.`, experimentId: experiment.experimentId });
+    }
+    ready.push({ ...experiment, read });
+  }
+  const blockers = [];
+  if (policy === "block") {
+    excluded.forEach((item) => blockers.push(blocker(item.code, item.message, { experimentId: item.experimentId })));
+  }
+  if (!ready.length) {
+    blockers.push(blocker("chart_template_input_missing", `No selected experiment has usable linked ${resolved.dataKind} data.`, { experimentIds: selectedExperimentIds }));
+  }
+  const categories = [];
+  const seen = new Set();
+  ready.forEach((item) => item.read.points.forEach((point) => {
+    const key = point.x == null ? null : String(point.x);
+    if (key == null || seen.has(key)) return;
+    seen.add(key);
+    categories.push(key);
+  }));
+  const status = blockers.length ? "blocked" : "ready";
+  const sourceSelections = status === "ready" ? ready.map((item, index) => ({
+    sourceSelectionId: `template_source_selection_${index + 1}`,
+    regionUnderstandingRevisionId: item.revisionId,
+    sourceDocumentId: item.sourceDocumentId,
+    workbookName: item.workbookName,
+    sheetName: item.sheetName,
+    range: item.range,
+    label: item.label,
+    purpose: `Apply reusable chart template ${templateVersion.reusableChartTemplateId}.`,
+  })) : [];
+  const frozenRegionRefs = ready.map((item) => ({
+    experimentId: item.experimentId,
+    label: item.label,
+    regionId: item.regionId,
+    regionUnderstandingRevisionId: item.revisionId,
+    workbookReviewSessionId: item.workbookReviewSessionId,
+    sourceDocumentId: item.sourceDocumentId,
+    workbookName: item.workbookName,
+    sheetName: item.sheetName,
+    range: item.range,
+  }));
+  return {
+    schemaVersion: "labrat.reusableChartTemplateCompatibility.v1",
+    status,
+    sourceKind: "linked_region",
+    linkedDataKind: resolved.dataKind,
+    templateVersionId: templateVersion.id,
+    experimentCount: ready.length,
+    experiments: ready.map((item) => ({
+      experimentId: item.experimentId,
+      label: item.label,
+      region: { regionId: item.regionId, regionUnderstandingRevisionId: item.revisionId, workbookName: item.workbookName, sheetName: item.sheetName, range: item.range },
+      pointCount: item.read.pointCount,
+      valueCount: item.read.valueCount,
+      missingCount: item.read.missingCount,
+      missingCategories: categories.filter((category) => !item.read.points.some((point) => String(point.x) === category && !point.missing)),
+    })),
+    excludedExperiments: excluded,
+    warnings,
+    resolvedBindings: [{
+      slotId: slot.slotId,
+      mode: "data_kind",
+      linkedDataKind: resolved.dataKind,
+      valueType: "series",
+      unit: asArray(slot.unitContract?.allowedUnits)[0] || null,
+      sourceSignature: text(slot.identityContract?.sourceSignature) || null,
+      explicit: false,
+    }],
+    executionBindings: [],
+    blockers,
+    experimentSelections: [],
+    sourceSelections,
+    frozenHeadRefs: [],
+    frozenRegionRefs,
+    alignment: { categories, policy: text(slot.seriesContract?.alignmentPolicy) || "union_with_gaps" },
+    linkedSeries: status === "ready" ? ready.map((item) => ({
+      experimentId: item.experimentId,
+      label: item.label,
+      regionId: item.regionId,
+      regionUnderstandingRevisionId: item.revisionId,
+      orientation: item.read.orientation,
+      yUnit: item.read.yUnit,
+      yNumericScale: item.read.yNumericScale,
+      points: copy(item.read.points),
+      sourceRefs: copy(item.read.sourceRefs),
+    })) : [],
+  };
+}
+
+export async function prepareReusableChartTemplateApplication({
+  store,
+  projectId,
+  templateVersion,
+  experimentIds,
+  explicitBindings = [],
+} = {}) {
+  if (isLinkedSeriesTemplate(templateVersion)) {
+    return prepareLinkedSeriesTemplateApplication({ store, projectId, templateVersion, experimentIds, explicitBindings });
+  }
+  const selectedExperimentIds = asArray(experimentIds).map(text).filter(Boolean);
+  validateExperimentCount(templateVersion, selectedExperimentIds);
   const heads = await store.listExperimentSnapshotHeads({ projectId });
   const headByExperimentId = new Map(heads.map((head) => [head.experimentId, head]));
   const selected = [];
@@ -279,14 +468,22 @@ export function buildReusableChartTemplateApplicationArtifacts({
     executionStrategy: CHART_TEMPLATE_EXECUTION_STRATEGY,
   };
   const { executionBindings = [], ...publicCompatibility } = compatibility;
+  const linked = compatibility.sourceKind === "linked_region";
+  const linkedSlot = linked ? asArray(templateVersion.inputSlots)[0] : null;
+  const excludedCount = asArray(compatibility.excludedExperiments).length;
   const plan = ready ? {
     outputTarget: "chart",
-    inputMode: "experiment_browser",
-    sourceSelections: [],
-    experimentSelections: copy(compatibility.experimentSelections),
+    inputMode: linked ? "workbook" : "experiment_browser",
+    sourceSelections: linked ? copy(compatibility.sourceSelections) : [],
+    experimentSelections: linked ? [] : copy(compatibility.experimentSelections),
     reviewPlan: {
       summary: `Apply ${templateName} to ${compatibility.experimentCount} selected experiment${compatibility.experimentCount === 1 ? "" : "s"}.`,
-      calculationSteps: [
+      calculationSteps: linked ? [
+        `Read each experiment's confirmed ${compatibility.linkedDataKind} region exactly as stored in its workbook.`,
+        "Align the series on their category labels and keep missing points as gaps.",
+        "Apply the accepted deterministic chart recipe without AI or Python.",
+        "Validate the resulting Plotly chart before user review.",
+      ] : [
         "Read the exact accepted scalar inputs declared by the reusable template.",
         "Apply the accepted deterministic chart recipe without AI or Python.",
         "Validate the resulting Plotly chart before user review.",
@@ -294,17 +491,21 @@ export function buildReusableChartTemplateApplicationArtifacts({
       chart: {
         chartType: templateVersion.encoding?.chartType || "bar",
         title: templateName,
-        xDescription: "Experiment",
+        xDescription: linked ? (text(linkedSlot?.seriesContract?.xMeaning).replace(/_/g, " ") || "Category") : "Experiment",
         yDescription: asArray(templateVersion.inputSlots)[0]?.unitContract?.allowedUnits?.[0] || "Value",
-        seriesDescription: asArray(templateVersion.inputSlots).map((slot) => slot.label).join(", "),
+        seriesDescription: linked ? "One series per experiment" : asArray(templateVersion.inputSlots).map((slot) => slot.label).join(", "),
       },
       invariants: [],
     },
-    displayPlan: [
+    displayPlan: linked ? [
+      `Read ${compatibility.experimentCount} confirmed ${compatibility.linkedDataKind} region${compatibility.experimentCount === 1 ? "" : "s"} directly from the linked workbooks.`,
+      ...asArray(compatibility.experiments).map((item) => `${item.label}: ${item.region.workbookName} · ${item.region.sheetName}!${item.region.range}${item.missingCount ? ` (${item.missingCount} missing point${item.missingCount === 1 ? "" : "s"})` : ""}`),
+      ...(excludedCount ? [`Not included: ${asArray(compatibility.excludedExperiments).map((item) => item.label).join(", ")}`] : []),
+    ] : [
       `Use ${compatibility.experimentCount} frozen accepted experiment snapshot${compatibility.experimentCount === 1 ? "" : "s"}.`,
       `Render ${asArray(templateVersion.inputSlots).length} reusable scalar input${asArray(templateVersion.inputSlots).length === 1 ? "" : "s"}.`,
     ],
-    templateLineage,
+    templateLineage: linked ? { ...templateLineage, linkedDataKind: compatibility.linkedDataKind, frozenRegionRefs: copy(compatibility.frozenRegionRefs) } : templateLineage,
     templateRecipe: copy(templateVersion.recipe),
     templateEncoding: copy(templateVersion.encoding),
     templateStyleProfileVersionId: templateVersion.chartStyleProfileVersionId || null,
@@ -322,6 +523,7 @@ export function buildReusableChartTemplateApplicationArtifacts({
       requestHash,
       experimentIds: compatibility.experiments.map((item) => item.experimentId),
       frozenHeadRefs: copy(compatibility.frozenHeadRefs),
+      frozenRegionRefs: copy(compatibility.frozenRegionRefs || []),
       bindings: copy(executionBindings),
       compatibility: copy(publicCompatibility),
       analysisThreadId: threadId,
@@ -354,7 +556,7 @@ export function buildReusableChartTemplateApplicationArtifacts({
       schemaVersion: "labrat.analysisThread.v1",
       status: "executing",
       outputTarget: "chart",
-      inputMode: "experiment_browser",
+      inputMode: linked ? "workbook" : "experiment_browser",
       originalRequest: `Apply reusable chart template: ${templateName}`,
       messages: [{
         id: makeId("analysis_message"),
@@ -384,7 +586,17 @@ export function buildReusableChartTemplateApplicationArtifacts({
       outputTarget: "chart",
       requestSummary: plan.reviewPlan.summary,
       plan,
-      sourceRectangles: [],
+      sourceRectangles: linked ? asArray(compatibility.sourceSelections).map((selection) => ({
+        sourceType: "excel_range",
+        sourceSelectionId: selection.sourceSelectionId,
+        regionUnderstandingRevisionId: selection.regionUnderstandingRevisionId,
+        sourceDocumentId: selection.sourceDocumentId,
+        workbookName: selection.workbookName,
+        sheetName: selection.sheetName,
+        sheet: selection.sheetName,
+        range: selection.range,
+        label: selection.label,
+      })) : [],
       feedback: null,
       warnings: [],
       validation: { ok: true, errors: [], warnings: [] },
@@ -432,6 +644,13 @@ export function executeReusableChartTemplate({ templateVersion, application, exp
   }
   const slots = asArray(templateVersion.inputSlots);
   const operations = asArray(templateVersion.recipe?.operations);
+  if (isLinkedSeriesTemplate(templateVersion)) {
+    applicationError(
+      "chart_template_series_execution_unavailable",
+      "Workbook series templates resolve and queue, but their deterministic series renderer is not available yet.",
+      422,
+    );
+  }
   if (!operations.length || operations.some((operation) => text(operation?.op) !== "select_scalar")) {
     applicationError(
       "chart_template_recipe_unsupported",

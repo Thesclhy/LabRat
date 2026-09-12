@@ -781,6 +781,7 @@ function reusableChartTemplateApplicationFromRow(row) {
     requestHash: row.request_hash,
     experimentIds: row.experiment_ids || [],
     frozenHeadRefs: row.frozen_head_refs || [],
+    frozenRegionRefs: row.compatibility?.frozenRegionRefs || [],
     bindings: row.bindings || [],
     compatibility: row.compatibility || {},
     analysisThreadId: row.analysis_thread_id || null,

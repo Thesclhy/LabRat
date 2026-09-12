@@ -280,9 +280,59 @@ exclude_experiment`; `validation.eligibility` is
 `reusable_chart_template_series_contract_mismatch`,
 `reusable_chart_template_encoding_unsupported`,
 `reusable_chart_template_workbook_recomputation`,
-`reusable_chart_template_mixed_inputs_unsupported`. Application and
-execution of linked-region slots are later milestones of
-`doc/plans/workbook-chart-template-plan.md`.
+`reusable_chart_template_mixed_inputs_unsupported`.
+
+#### Applying a workbook series template
+
+`POST /api/reusable-chart-template-versions/:id/applications` accepts a
+workbook template with the same body as a scalar template, but `bindings`
+must be empty (`chart_template_binding_invalid`): the slot binds by data
+kind. A version with a linked-region slot next to a snapshot slot is refused
+with `chart_template_slot_mix_unsupported`. Resolution runs per selected
+experiment:
+
+1. Find that experiment's confirmed regions whose `dataKind` matches the
+   slot; the most recently confirmed active region wins and any others are
+   reported as a `chart_template_multiple_regions` warning. An experiment
+   whose only matching regions live in a deleted review session is excluded
+   with `chart_template_session_deleted`; one with no matching region is
+   excluded with `chart_template_input_missing`.
+2. Check the region's single series against the slot: orientation must equal
+   `seriesContract.orientation` (`chart_template_series_shape_mismatch`), the
+   unit must be in `unitContract.allowedUnits`, and the numeric scale must
+   match `identityContract.numericScale` (`chart_template_unit_incompatible`).
+3. Read the series once from the workbook index (cached formula results;
+   `chart_template_range_too_large` above 2,500 cells,
+   `chart_template_series_outside_region` when the series ranges leave the
+   confirmed region). Blank cells, Excel errors, and non-numeric text become
+   missing points with reasons `blank`, `excel_error`, `non_numeric`; a series
+   with no numeric value at all excludes the experiment with
+   `chart_template_input_missing`.
+
+`missingDataPolicy.missingSeries` decides what an exclusion means:
+`exclude_experiment` (default) keeps the application `ready` with the
+experiment listed in `excludedExperiments`; `block` turns every exclusion
+into a blocker. Zero usable experiments is always blocked.
+
+The compatibility payload adds `sourceKind: "linked_region"`,
+`linkedDataKind`, per-experiment `region` (region id, frozen revision id,
+workbook, sheet, range), `pointCount`/`valueCount`/`missingCount`,
+`missingCategories`, `excludedExperiments[{experimentId,label,code,message}]`,
+`warnings`, `alignment {categories, policy}` (union of category labels in
+first-seen order), `sourceSelections` (one exact region range per ready
+experiment, `template_source_selection_n`), `frozenRegionRefs`, and
+`linkedSeries` (the read points with cell addresses and missing reasons).
+`frozenHeadRefs`, `experimentSelections`, and `executionBindings` are empty;
+no snapshot or head is read or written.
+
+The accepted PlanRevision uses `inputMode: "workbook"`, carries the
+`sourceSelections` and matching `sourceRectangles`, and extends
+`templateLineage` with `linkedDataKind` and `frozenRegionRefs`. The
+application record stores `frozenRegionRefs` inside its compatibility JSON
+(Postgres needs no new column). The queued run is `chart_template_v1` like a
+scalar application; until the series renderer lands, executing it fails
+closed with `chart_template_series_execution_unavailable` and the
+application is marked `failed`.
 
 ## Deterministic Recipe v1
 
@@ -564,7 +614,16 @@ chart_template_palette_exhausted
 chart_template_geometry_unreadable
 chart_template_inputs_stale
 chart_template_application_conflict
+chart_template_binding_invalid
+chart_template_slot_mix_unsupported
+chart_template_session_deleted
+chart_template_series_shape_mismatch
+chart_template_series_outside_region
+chart_template_range_too_large
+chart_template_series_execution_unavailable
 ```
+
+Warning code (never blocks): `chart_template_multiple_regions`.
 
 ## Non-Goals For v1
 

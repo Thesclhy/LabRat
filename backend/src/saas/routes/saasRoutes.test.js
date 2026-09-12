@@ -3021,6 +3021,117 @@ test("reusable chart style and template APIs support accepted versioned lifecycl
   assert.equal(archiveStyle.status, 200);
 });
 
+test("workbook series templates apply by data kind and queue a run without touching snapshots", async () => {
+  const project = await createProject("Workbook Chart Template Project");
+  const stamp = Date.now();
+  const cell = (address, rawValue, extra = {}) => ({ address, rawValue, formattedValue: rawValue == null ? extra.formattedValue || null : String(rawValue), type: extra.type || (typeof rawValue === "number" ? "formula" : "string"), formula: extra.formula || null });
+  const seriesDefinition = {
+    seriesKey: "carbon_distribution", label: "Overall carbon distribution", orientation: "header_row_categories",
+    xHeaderRange: "B1:D1", yValueRange: "B2:D2", xSemanticKey: "carbon_number", xValueType: "string",
+    yUnit: "% of feed carbon", yNumericScale: "percent_points", pointCount: 3,
+  };
+  const revisionIds = [];
+  for (const [index, values] of [["31", [0.52, 0.14, 0.07]], ["32", [0.5, null, 0.06]]]) {
+    const experimentId = `identity_wb_${index}_${stamp}`;
+    store.experimentIdentities.set(experimentId, { id: experimentId, labId: project.labId, projectId: project.id, canonicalLabel: `Exp${index}`, aliases: [] });
+    const docId = `doc_wb_${index}_${stamp}`;
+    store.sourceDocuments.set(docId, { id: docId, projectId: project.id, labId: project.labId, fileObjectId: `file_${docId}`, metadata: { workbookName: `Calculation Exp${index}.xlsx` } });
+    store.sourceIndexBlobs.set(`blob_${docId}`, {
+      id: `blob_${docId}`, sourceDocumentId: docId,
+      payload: { sheets: [{ name: "Sheet1", cellGrid: { range: "A1:D2", cells: [
+        cell("A1", "Overall tots"), cell("B1", "C1"), cell("C1", "C2"), cell("D1", "C3"),
+        ...values.map((value, column) => (value == null ? null : cell(`${"BCD"[column]}2`, value, { formula: "F14" }))).filter(Boolean),
+      ] } }] },
+    });
+    const session = await store.createWorkbookReviewSession({ labId: project.labId, projectId: project.id, sourceDocumentId: docId, workbookSummary: { workbookName: `Calculation Exp${index}.xlsx` }, status: "needs_user_review", createdBy: "user_1" });
+    const region = await store.createWorkbookReviewRegion({
+      labId: project.labId, projectId: project.id, workbookReviewSessionId: session.id, sourceDocumentId: docId,
+      sheetName: "Sheet1", rangeRef: "A1:D2", selectionMethod: "template_match", disposition: "active", reviewStatus: "awaiting_review",
+      linkedExperimentId: experimentId, dataKind: "Carbon distribution", createdBy: "user_1",
+    });
+    const revision = await store.createRegionUnderstandingRevision({
+      labId: project.labId, projectId: project.id, workbookReviewSessionId: session.id, sourceDocumentId: docId, regionId: region.id,
+      revisionNumber: 1, trigger: "template_match", summary: ["Prefilled."], sourceContentHash: `h_${docId}`, dependencyHash: `d_${docId}`,
+      interpretation: { semanticType: "component_distribution", experimentAxis: "region", fields: [], series: [seriesDefinition] },
+      validation: { status: "ready", blockers: [] }, createdBy: "user_1",
+    });
+    await store.updateWorkbookReviewRegion(region.id, { reviewStatus: "accepted", currentRevisionId: revision.id, acceptedRevisionId: revision.id, acceptedAt: new Date().toISOString(), acceptedBy: "user_1" });
+    revisionIds.push({ index, experimentId, docId, revisionId: revision.id });
+  }
+  const planRevisionId = `plan_rev_wb_${stamp}`;
+  store.analysisPlanRevisions.set(planRevisionId, {
+    id: planRevisionId, labId: project.labId, projectId: project.id, status: "accepted",
+    plan: {
+      reviewPlan: { processingSteps: [
+        "Each input table is one experiment's confirmed Carbon distribution region; the table label is the experiment name.",
+        "In each input table, the header row of category labels is the x axis and the row of numeric values beneath it is the y axis; ignore label cells and blanks.",
+        "Plot one trace per experiment, named by its experiment label, sharing one x axis and one y axis.",
+      ] },
+      linkedDataComparison: { dataKind: "Carbon distribution" },
+    },
+  });
+  const chartSpecId = `chart_spec_wb_${stamp}`;
+  store.chartSpecs.set(chartSpecId, {
+    id: chartSpecId, labId: project.labId, projectId: project.id, analysisResultId: `analysis_result_wb_${stamp}`,
+    title: "Carbon distribution comparison", chartType: "grouped_bar",
+    spec: {
+      schemaVersion: "labrat.chartSpec.v3", origin: "analysis_result", status: "accepted", chartType: "grouped_bar",
+      analysisPlanRevisionId: planRevisionId,
+      sourceSelections: revisionIds.map((item, position) => ({ sourceSelectionId: `s${position + 1}`, regionUnderstandingRevisionId: item.revisionId, sourceDocumentId: item.docId, sheetName: "Sheet1", range: "A1:D2" })),
+      experimentSelections: [],
+      traceCatalog: revisionIds.map((item) => ({ traceId: `trace_${item.index}` })),
+    },
+    layout: {}, warnings: [],
+  });
+
+  const eligibility = await jsonFetch(`/api/chart-specs/${chartSpecId}/template-eligibility`);
+  assert.equal(eligibility.status, 200);
+  assert.equal((await eligibility.json()).status, "eligible");
+
+  const templateCreate = await jsonFetch(`/api/projects/${project.id}/reusable-chart-templates`, {
+    method: "POST",
+    body: { name: "Carbon distribution comparison", sourceChartSpecId: chartSpecId },
+  });
+  assert.equal(templateCreate.status, 201);
+  const templateBody = await templateCreate.json();
+  const templateVersion = templateBody.versions[0];
+  assert.equal(templateVersion.inputSlots[0].sourceKind, "linked_region");
+  assert.equal(templateVersion.inputSlots[0].linkedDataKind, "Carbon distribution");
+
+  const snapshotCount = store.dataSnapshots.size;
+  const headCount = store.experimentSnapshotHeads.size;
+  const applicationResponse = await jsonFetch(`/api/reusable-chart-template-versions/${templateVersion.id}/applications`, {
+    method: "POST",
+    headers: { "Idempotency-Key": `route_workbook_template_application_${stamp}` },
+    body: { experimentIds: revisionIds.map((item) => item.experimentId) },
+  });
+  assert.equal(applicationResponse.status, 201, JSON.stringify(await applicationResponse.clone().json()));
+  const applicationBody = await applicationResponse.json();
+  assert.equal(applicationBody.compatibility.status, "ready");
+  assert.equal(applicationBody.compatibility.sourceKind, "linked_region");
+  assert.equal(applicationBody.compatibility.linkedDataKind, "Carbon distribution");
+  assert.deepEqual(applicationBody.compatibility.experiments.map((item) => [item.label, item.valueCount, item.missingCount]), [["Exp31", 3, 0], ["Exp32", 2, 1]]);
+  assert.deepEqual(applicationBody.compatibility.alignment.categories, ["C1", "C2", "C3"]);
+  assert.equal(applicationBody.application.frozenRegionRefs.length, 2);
+  assert.deepEqual(applicationBody.application.frozenHeadRefs, []);
+  assert.equal(applicationBody.analysisRun.status, "queued");
+  assert.equal(applicationBody.analysisThread.inputMode, "workbook");
+  assert.equal(store.dataSnapshots.size, snapshotCount);
+  assert.equal(store.experimentSnapshotHeads.size, headCount);
+  const storedPlan = await store.findAnalysisPlanRevisionById(applicationBody.analysisPlanRevision.id);
+  assert.equal(storedPlan.plan.inputMode, "workbook");
+  assert.equal(storedPlan.plan.sourceSelections.length, 2);
+  assert.deepEqual(storedPlan.plan.experimentSelections, []);
+
+  const bindingsRejected = await jsonFetch(`/api/reusable-chart-template-versions/${templateVersion.id}/applications`, {
+    method: "POST",
+    headers: { "Idempotency-Key": `route_workbook_template_bindings_${stamp}` },
+    body: { experimentIds: [revisionIds[0].experimentId], bindings: [{ slotId: "series", columnId: "column_x" }] },
+  });
+  assert.equal(bindingsRejected.status, 422);
+  assert.equal((await bindingsRejected.json()).error.code, "chart_template_binding_invalid");
+});
+
 test("logout revokes the current session", async () => {
   const logout = await jsonFetch("/api/auth/logout", { method: "POST", body: {} });
   assert.equal(logout.status, 200);

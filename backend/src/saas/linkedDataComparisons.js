@@ -1,4 +1,9 @@
-import { linkedRegionSummaries } from "./experimentProjection.js";
+import {
+  identityLabel,
+  loadLinkedRegionContext,
+  normalizeDataKind,
+  resolveLinkedRegionsForExperiments,
+} from "./linkedRegionSeries.js";
 
 export const LINKED_DATA_KINDS_SCHEMA_VERSION = "labrat.linkedDataKinds.v1";
 export const LINKED_DATA_COMPARISON_SCHEMA_VERSION = "labrat.linkedDataComparison.v1";
@@ -13,55 +18,14 @@ function text(value) {
   return String(value ?? "").trim();
 }
 
-function normalizeKind(value) {
-  return text(value).toLowerCase();
-}
+const normalizeKind = normalizeDataKind;
 
 function fail(code, message, statusCode = 400, details = {}) {
   throw Object.assign(new Error(message), { code, statusCode, details });
 }
 
-function seriesSummary(series) {
-  return {
-    seriesKey: text(series?.seriesKey) || null,
-    label: text(series?.label || series?.seriesKey) || null,
-    orientation: text(series?.orientation) || "column_pair",
-    xHeaderRange: text(series?.xHeaderRange) || null,
-    yValueRange: text(series?.yValueRange) || null,
-    xColumn: text(series?.xColumn) || null,
-    yColumn: text(series?.yColumn) || null,
-    xSemanticKey: text(series?.xSemanticKey) || null,
-    xUnit: series?.xUnit || null,
-    yUnit: series?.yUnit || null,
-    yNumericScale: series?.yNumericScale || null,
-    pointCount: Number.isFinite(Number(series?.pointCount)) ? Number(series.pointCount) : null,
-  };
-}
-
-async function linkedContext({ store, projectId }) {
-  const [accepted, sourceDocuments, identities] = await Promise.all([
-    store.listAcceptedRegionUnderstandings({ projectId }),
-    store.listSourceDocuments ? store.listSourceDocuments({ projectId }) : [],
-    store.listExperimentIdentities ? store.listExperimentIdentities({ projectId }) : [],
-  ]);
-  const revisionById = new Map(asArray(accepted).map(({ revision }) => [revision.id, revision]));
-  const linked = linkedRegionSummaries({ acceptedRegionUnderstandings: accepted, sourceDocuments }).map((item) => {
-    const revision = revisionById.get(item.revisionId);
-    return {
-      ...item,
-      series: asArray(revision?.interpretation?.series).map(seriesSummary),
-    };
-  });
-  const identityById = new Map(asArray(identities).map((identity) => [identity.id, identity]));
-  return { linked, identities: asArray(identities), identityById };
-}
-
-function identityLabel(identity, fallback) {
-  return text(identity?.canonicalLabel || identity?.label) || fallback;
-}
-
 export async function linkedDataKinds({ store, projectId } = {}) {
-  const { linked, identities, identityById } = await linkedContext({ store, projectId });
+  const { linked, identities, identityById } = await loadLinkedRegionContext({ store, projectId });
   const byKind = new Map();
   for (const item of linked) {
     const key = normalizeKind(item.dataKind);
@@ -108,16 +72,6 @@ export async function linkedDataKinds({ store, projectId } = {}) {
   };
 }
 
-function pickRegion(regions) {
-  // Most recently confirmed wins; ties (same batch, same millisecond) fall back
-  // to the most recently created region, then to a stable id order.
-  return [...regions].sort((a, b) => (
-    String(b.acceptedAt || "").localeCompare(String(a.acceptedAt || ""))
-    || String(b.createdAt || "").localeCompare(String(a.createdAt || ""))
-    || b.regionId.localeCompare(a.regionId)
-  ))[0];
-}
-
 function chartTypeFor(requested, primarySeries) {
   const wanted = text(requested);
   if (LINKED_COMPARISON_CHART_TYPES.includes(wanted)) return wanted;
@@ -135,36 +89,14 @@ export async function buildLinkedDataComparison({ store, projectId, dataKind, ex
   const requestedIds = [...new Set(asArray(experimentIds).map(text).filter(Boolean))];
   if (!requestedIds.length) fail("linked_data_experiments_required", "Choose at least one experiment to compare.");
   if (requestedIds.length > MAX_COMPARISON_EXPERIMENTS) fail("linked_data_experiment_limit", `Compare at most ${MAX_COMPARISON_EXPERIMENTS} experiments at once.`);
-  const { linked, identityById } = await linkedContext({ store, projectId });
-  const kindRegions = linked.filter((item) => normalizeKind(item.dataKind) === wantedKind);
-  if (!kindRegions.length) fail("linked_data_kind_not_found", `No confirmed regions are linked as ${text(dataKind)} in this project.`, 404);
-  const resolvedKind = kindRegions[0].dataKind;
-  const experiments = [];
-  const missingExperiments = [];
-  for (const experimentId of requestedIds) {
-    const identity = identityById.get(experimentId);
-    if (!identity) fail("experiment_identity_not_found", `Experiment ${experimentId} does not belong to this project.`, 404);
-    const regions = kindRegions.filter((item) => item.linkedExperimentId === experimentId);
-    const label = identityLabel(identity, experimentId);
-    if (!regions.length) {
-      missingExperiments.push({ experimentId, label });
-      continue;
-    }
-    const region = pickRegion(regions);
-    experiments.push({
-      experimentId,
-      label,
-      regionId: region.regionId,
-      revisionId: region.revisionId,
-      sourceDocumentId: region.sourceDocumentId,
-      workbookReviewSessionId: region.workbookReviewSessionId,
-      workbookName: region.workbookName,
-      sheetName: region.sheetName,
-      range: region.range,
-      series: region.series,
-      alternativeRegionIds: regions.filter((item) => item.regionId !== region.regionId).map((item) => item.regionId),
-    });
+  const resolved = await resolveLinkedRegionsForExperiments({ store, projectId, dataKind, experimentIds: requestedIds });
+  if (!resolved.kindFound) fail("linked_data_kind_not_found", `No confirmed regions are linked as ${text(dataKind)} in this project.`, 404);
+  if (resolved.unknownExperimentIds.length) {
+    fail("experiment_identity_not_found", `Experiment ${resolved.unknownExperimentIds[0]} does not belong to this project.`, 404);
   }
+  const resolvedKind = resolved.dataKind;
+  const experiments = resolved.experiments.map(({ headerRow: _headerRow, inclusion: _inclusion, ...experiment }) => experiment);
+  const missingExperiments = resolved.missingExperiments.map(({ experimentId, label }) => ({ experimentId, label }));
   const primarySeries = experiments.map((experiment) => experiment.series[0]).find(Boolean) || null;
   const resolvedChartType = chartTypeFor(chartType, primarySeries);
   const xDescription = primarySeries

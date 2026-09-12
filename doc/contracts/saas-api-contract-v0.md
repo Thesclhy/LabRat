@@ -774,6 +774,18 @@ the deterministic accepted PlanRevision plus queued
 result-preview, revise, and accept-and-create-chart routes remain authoritative.
 Preview creates no ChartSpec.
 
+When the template version's slot has `sourceKind: "linked_region"`, the same
+route resolves each experiment's most recently confirmed region of the slot's
+`linkedDataKind` instead of a snapshot column, reads the series once to
+report shape, unit, and missing points, and returns a compatibility with
+`sourceKind`, `linkedDataKind`, `excludedExperiments`, `alignment`,
+`sourceSelections`, and `frozenRegionRefs` (see the workbook section of
+`doc/contracts/reusable-chart-template-contract-v1.md`). `bindings` must be
+empty for such templates. The accepted PlanRevision is `inputMode:
+"workbook"` with one source selection per ready experiment; snapshots and
+heads are untouched. Execution of these runs is not yet available and fails
+closed with `chart_template_series_execution_unavailable`.
+
 The implemented v1 fast path uses accepted active Experiment Browser scalar
 fields only. It interprets the accepted scalar-selection recipe without a
 model or Python and passes its Plotly result through the normal validator and

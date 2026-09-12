@@ -1,6 +1,6 @@
 # Reusable Chart Templates From Linked Workbook Data
 
-Status: active (Milestone A complete, B-E proposed)
+Status: active (Milestones A-B complete, C-E proposed)
 Read when: making an accepted workbook-backed comparison chart repeatable
 with no provider call, or extending reusable chart templates beyond snapshot
 columns.
@@ -206,6 +206,20 @@ picker-created carbon distribution chart and the template version persists
 with `sourceKind: linked_region`.
 
 ### Milestone B — Series reader and application resolution (backend)
+
+Status: complete on 2026-09-12 (branch `claude/batch-workbook-linking`).
+Implementation notes: the shared resolver is
+`resolveLinkedRegionsForExperiments` in `linkedRegionSeries.js`, and
+`linkedDataComparisons.js` now uses it (same error codes as before).
+`prepareReusableChartTemplateApplication` dispatches to
+`prepareLinkedSeriesTemplateApplication` when any slot is a linked-region
+slot; that path refuses explicit bindings and mixed slot kinds. Exclusions
+follow `missingDataPolicy.missingSeries` (`exclude_experiment` default,
+`block`). `frozenRegionRefs` live inside the application's compatibility JSON,
+so both stores persist them without a migration. Executing a queued workbook
+application fails closed with `chart_template_series_execution_unavailable`
+until Milestone C. Verified end to end by the route test "workbook series
+templates apply by data kind and queue a run without touching snapshots".
 
 What gets built:
 

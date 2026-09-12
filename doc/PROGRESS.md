@@ -15,6 +15,31 @@ Keep entries concise, newest first, and include:
 
 ## 2026-09-12
 
+- Workbook chart templates, Milestone B of
+  `doc/plans/workbook-chart-template-plan.md` (series reader and application
+  resolution). New `backend/src/saas/linkedRegionSeries.js`:
+  `resolveLinkedRegionsForExperiments` picks each experiment's most recently
+  confirmed region of a data kind and reports `missing_data_kind`,
+  `session_deleted`, and unknown experiments; `readLinkedRegionSeries` reads
+  a header-row or column-pair series from the workbook index with cached
+  formula values, turning blanks, Excel errors, and text into missing points
+  with reasons, bounded by the analysis range limit and the confirmed region.
+  `linkedDataComparisons.js` now shares that resolver.
+  `prepareReusableChartTemplateApplication` routes linked-region templates to
+  `prepareLinkedSeriesTemplateApplication`: binding by data kind only,
+  orientation/unit/scale checks against the slot contract, exclusions per
+  `missingDataPolicy.missingSeries`, category union for alignment, exact
+  region `sourceSelections`, and `frozenRegionRefs` in place of snapshot
+  heads. Application artifacts build a `workbook` plan with source
+  rectangles and linked lineage; the Postgres row mapper exposes
+  `frozenRegionRefs` from the compatibility JSON (no migration). Executing
+  such a run fails closed with `chart_template_series_execution_unavailable`
+  until Milestone C. Contract and API docs updated. Verification: backend
+  suite, including new `linkedRegionSeries.test.js`,
+  `reusableChartTemplateApplications.linked.test.js`, and a route test that
+  applies a workbook template end to end without touching snapshots.
+  Follow-up: Milestone C renders the series; Milestone D adds the frontend
+  apply flow.
 - Workbook chart templates, Milestone A of
   `doc/plans/workbook-chart-template-plan.md` (contract, eligibility,
   definition). Reusable input slots accept `sourceKind: "linked_region"` with
