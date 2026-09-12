@@ -6,6 +6,7 @@ import { sourceCellClasses } from "../formulaGraph.js";
 import {
   REGION_EXTRACTION_TEMPLATE_SCHEMA_VERSION,
   buildRegionExtractionTemplateVersion,
+  experimentLabelFromWorkbookName,
   matchTemplateVersionToDocument,
   regionExtractionTemplateDescription,
   regionExtractionTemplateName,
@@ -15,6 +16,7 @@ import {
   APPLY_ELIGIBLE_STATUSES,
   applyTemplateMatch,
   confirmTemplateRegionsBatch,
+  resolveExperimentLink,
 } from "../regionTemplateApplications.js";
 import { buildLinkedDataComparison, linkedDataKinds } from "../linkedDataComparisons.js";
 import { runImportScan } from "../../import/services/importPipeline.js";
@@ -3150,6 +3152,42 @@ async function extractionTemplateVersionFromRegion({ context, projectId, regionI
   return buildRegionExtractionTemplateVersion({ sourceDocument, indexBlobs, region, revision, version });
 }
 
+/**
+ * A region saved as an extraction template is the first member of its own
+ * data kind. Applied matches get linked automatically; this links the source
+ * region the same way (template name as data kind, experiment from the label
+ * cell or the workbook filename) so the source experiment is not the one
+ * experiment missing from Experiment Browser and chart templates.
+ */
+async function linkExtractionTemplateSourceRegion({ context, project, checked, dataKind, actorUserId }) {
+  const region = await context.store.findWorkbookReviewRegionById(checked.sourceRegionId);
+  if (!region) return null;
+  const experimentLabel = String(checked.signature?.experimentLabelRule?.exampleLabel || "").trim()
+    || experimentLabelFromWorkbookName(checked.sourceWorkbookName);
+  const identities = context.store.listExperimentIdentities ? await context.store.listExperimentIdentities({ projectId: project.id }) : [];
+  const link = resolveExperimentLink({ identities, experimentLabel });
+  const nextExperimentId = region.linkedExperimentId || link.linkedExperimentId || null;
+  const nextDataKind = region.dataKind || dataKind || null;
+  const changed = nextExperimentId !== (region.linkedExperimentId || null) || nextDataKind !== (region.dataKind || null);
+  if (changed) {
+    await context.store.updateWorkbookReviewRegion(region.id, {
+      linkedExperimentId: nextExperimentId,
+      dataKind: nextDataKind,
+      updatedAt: new Date().toISOString(),
+      updatedBy: actorUserId,
+    });
+  }
+  return {
+    regionId: region.id,
+    linkedExperimentId: nextExperimentId,
+    experimentLabel: experimentLabel || null,
+    linkStatus: region.linkedExperimentId ? "already_linked" : link.linkStatus,
+    candidates: link.candidates,
+    dataKind: nextDataKind,
+    changed,
+  };
+}
+
 async function extractionTemplateDetail(context, template) {
   const versions = await context.store.listRegionExtractionTemplateVersions({ regionExtractionTemplateId: template.id });
   return { regionExtractionTemplate: template, versions };
@@ -3193,7 +3231,8 @@ async function handleProjectRegionExtractionTemplates(req, res, context, project
     metadata: { regionExtractionTemplateVersionId: versionId, sourceRegionId: checked.sourceRegionId, sourceRevisionId: checked.sourceRevisionId, contentHash: checked.contentHash },
     ipAddress: clientIp(req), userAgent: userAgent(req),
   });
-  sendJson(res, 201, await extractionTemplateDetail(context, stored.template));
+  const sourceRegionLink = await linkExtractionTemplateSourceRegion({ context, project, checked, dataKind: name, actorUserId: auth.user.id });
+  sendJson(res, 201, { ...await extractionTemplateDetail(context, stored.template), sourceRegionLink });
 }
 
 async function handleRegionExtractionTemplate(req, res, context, templateId, action = null) {
@@ -3234,7 +3273,10 @@ async function handleRegionExtractionTemplate(req, res, context, templateId, act
       metadata: { regionExtractionTemplateVersionId: version.id, sourceRegionId: version.sourceRegionId, contentHash: version.contentHash },
       ipAddress: clientIp(req), userAgent: userAgent(req),
     });
-    sendJson(res, 201, await extractionTemplateDetail(context, stored.template));
+    const sourceRegionLink = await linkExtractionTemplateSourceRegion({
+      context, project: { id: template.projectId }, checked, dataKind: template.name, actorUserId: auth.user.id,
+    });
+    sendJson(res, 201, { ...await extractionTemplateDetail(context, stored.template), sourceRegionLink });
   }
 }
 

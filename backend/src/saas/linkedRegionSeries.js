@@ -45,6 +45,35 @@ export function seriesSummary(series) {
 }
 
 /**
+ * Chooses the series a template or application refers to inside a region
+ * that may define several (for example a "C-Response" row and an "Area" row
+ * under one header). Without a selector only a single-series region is
+ * unambiguous. With one, seriesKey wins, then label, then y semantic key.
+ */
+export function selectRegionSeries(seriesList, selector = null) {
+  const list = Array.isArray(seriesList) ? seriesList.filter(Boolean) : [];
+  if (!selector || typeof selector !== "object") return list.length === 1 ? list[0] : null;
+  const key = text(selector.seriesKey).toLowerCase();
+  const label = text(selector.label).toLowerCase();
+  const semantic = text(selector.ySemanticKey).toLowerCase();
+  const byKey = key ? list.filter((item) => text(item?.seriesKey).toLowerCase() === key) : [];
+  if (byKey.length === 1) return byKey[0];
+  const byLabel = label ? list.filter((item) => text(item?.label).toLowerCase() === label) : [];
+  if (byLabel.length === 1) return byLabel[0];
+  const bySemantic = semantic ? list.filter((item) => text(item?.ySemanticKey).toLowerCase() === semantic) : [];
+  if (bySemantic.length === 1) return bySemantic[0];
+  return list.length === 1 && !key && !label && !semantic ? list[0] : null;
+}
+
+export function seriesSelectorOf(series) {
+  return {
+    seriesKey: text(series?.seriesKey) || null,
+    label: text(series?.label) || null,
+    ySemanticKey: text(series?.ySemanticKey) || null,
+  };
+}
+
+/**
  * Loads every accepted, experiment-linked region of a project once, with its
  * series definitions, the project's experiment identities, and the linked
  * regions that were logically deleted (so a vanished workbook can be reported

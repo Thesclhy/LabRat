@@ -438,6 +438,11 @@ function evaluateCandidate({ signature, cells, origin, sheetName, indexBlobs, gr
   };
 }
 
+export function experimentLabelFromWorkbookName(workbookName) {
+  const match = EXPERIMENT_PATTERN.exec(text(workbookName));
+  return match ? `Exp${Number(match[1])}` : null;
+}
+
 function resolveExperimentLabel({ signature, cells, sourceDocument }) {
   const rule = signature.experimentLabelRule || {};
   if (rule.kind === "cell" && rule.address) {

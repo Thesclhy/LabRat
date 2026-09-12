@@ -1870,6 +1870,7 @@ test("region extraction templates are saved from confirmed regions and matched r
   assert.equal((await tooEarly.json()).error.code, "region_extraction_template_requires_confirmed_region");
 
   await confirmReviewRegion(sessionId, region);
+  store.experimentIdentities.set(`identity_exp31_${project.id}`, { id: `identity_exp31_${project.id}`, labId: project.labId, projectId: project.id, canonicalLabel: "Exp31", aliases: ["Exp31"] });
 
   const created = await jsonFetch(`/api/projects/${project.id}/region-extraction-templates`, {
     method: "POST",
@@ -1879,6 +1880,14 @@ test("region extraction templates are saved from confirmed regions and matched r
   const createdBody = await created.json();
   const template = createdBody.regionExtractionTemplate;
   assert.equal(template.name, "Carbon distribution");
+  assert.deepEqual(
+    { status: createdBody.sourceRegionLink.linkStatus, experimentId: createdBody.sourceRegionLink.linkedExperimentId, dataKind: createdBody.sourceRegionLink.dataKind },
+    { status: "resolved", experimentId: `identity_exp31_${project.id}`, dataKind: "Carbon distribution" },
+    "the template source region is linked like an applied match",
+  );
+  const linkedSource = await store.findWorkbookReviewRegionById(region.id);
+  assert.equal(linkedSource.linkedExperimentId, `identity_exp31_${project.id}`);
+  assert.equal(linkedSource.dataKind, "Carbon distribution");
   assert.equal(template.status, "active");
   assert.equal(createdBody.versions.length, 1);
   const version = createdBody.versions[0];
@@ -3122,6 +3131,19 @@ test("workbook series templates apply by data kind and queue a run without touch
   assert.equal(storedPlan.plan.inputMode, "workbook");
   assert.equal(storedPlan.plan.sourceSelections.length, 2);
   assert.deepEqual(storedPlan.plan.experimentSelections, []);
+
+  const executeResponse = await jsonFetch(`/api/analysis-runs/${applicationBody.analysisRun.id}/execute`, { method: "POST", body: {} });
+  assert.equal(executeResponse.status, 201, JSON.stringify(await executeResponse.clone().json()));
+  const executed = await executeResponse.json();
+  assert.equal(executed.analysisRun.status, "awaiting_result_review");
+  assert.equal(executed.analysisResult.validation.ok, true);
+  const storedResult = await store.findAnalysisResultById(executed.analysisResult.id);
+  assert.deepEqual(storedResult.result.plotly.data.map((trace) => trace.name), ["Exp31", "Exp32"]);
+  assert.deepEqual(storedResult.result.plotly.data[1].y, [0.5, null, 0.06]);
+  assert.equal(storedResult.sourceRefs.some((ref) => ref.sourceType === "excel_cell"), true);
+  const storedRun = await store.findAnalysisRunById(executed.analysisRun.id);
+  assert.equal(storedRun.payload?.pythonProgram ?? null, null);
+  assert.equal(storedRun.payload?.inputManifest?.linkedSeries?.length, 2);
 
   const bindingsRejected = await jsonFetch(`/api/reusable-chart-template-versions/${templateVersion.id}/applications`, {
     method: "POST",

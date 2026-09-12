@@ -6,6 +6,7 @@ import {
   buildReusableChartTemplateVersion,
   deriveReusableChartTemplateDefinition,
   inspectLinkedSeriesTemplateEligibility,
+  selectPlottedSeries,
   inspectReusableChartTemplateEligibility,
   reusableChartTemplateSummary,
   validateChartStyleProfileVersion,
@@ -232,7 +233,7 @@ test("template eligibility reports every independently actionable blocker", asyn
   ]);
 });
 
-function linkedSeriesFixture({ steps = null, secondUnit = "% of feed carbon", link = true, chartType = "grouped_bar", traceCount = 2, seriesCount = 1 } = {}) {
+function linkedSeriesFixture({ steps = null, secondUnit = "% of feed carbon", link = true, chartType = "grouped_bar", traceCount = 2, seriesCount = 1, seriesList = null } = {}) {
   const projectId = "project_1";
   const series = (unit) => Array.from({ length: seriesCount }, (_, index) => ({
     seriesKey: index ? `extra_${index}` : "carbon_distribution",
@@ -251,8 +252,8 @@ function linkedSeriesFixture({ steps = null, secondUnit = "% of feed carbon", li
     region_32: { id: "region_32", projectId, disposition: "active", acceptedRevisionId: "rev_32", linkedExperimentId: "identity_32", dataKind: "Carbon distribution" },
   };
   const revisions = {
-    rev_31: { id: "rev_31", regionId: "region_31", interpretation: { series: series("% of feed carbon") } },
-    rev_32: { id: "rev_32", regionId: "region_32", interpretation: { series: series(secondUnit) } },
+    rev_31: { id: "rev_31", regionId: "region_31", interpretation: { series: seriesList || series("% of feed carbon") } },
+    rev_32: { id: "rev_32", regionId: "region_32", interpretation: { series: seriesList || series(secondUnit) } },
   };
   const planRevision = {
     id: "plan_rev_1",
@@ -307,7 +308,10 @@ test("an accepted linked-data comparison chart derives a workbook series templat
   assert.equal(slot.dataKind, "series");
   assert.equal(slot.label, "Overall carbon distribution");
   assert.deepEqual(slot.unitContract.allowedUnits, ["% of feed carbon"]);
-  assert.deepEqual(slot.seriesContract, { orientation: "header_row_categories", xMeaning: "carbon_number", xValueType: "number", yNumericScale: "percent_points", alignmentPolicy: "union_with_gaps" });
+  assert.deepEqual(slot.seriesContract, {
+    orientation: "header_row_categories", xMeaning: "carbon_number", xValueType: "number", yNumericScale: "percent_points", alignmentPolicy: "union_with_gaps",
+    seriesSelector: { seriesKey: "carbon_distribution", label: "Overall carbon distribution", ySemanticKey: null },
+  });
   assert.match(slot.identityContract.sourceSignature, /^sha256_[0-9a-f]{16,}$/i);
   assert.deepEqual(definition.recipe.operations.map((operation) => operation.op), ["select_series", "align_x", "filter_missing"]);
   assert.deepEqual(definition.encoding, { chartType: "bar", comparisonMode: "grouped", xRole: "category", yRole: "value", colorBy: "experiment", sourceChartType: "grouped_bar" });
@@ -349,8 +353,34 @@ test("workbook charts whose plan recomputed values, mixed units, or used unlinke
   const extraTraces = await inspectLinkedSeriesTemplateEligibility(linkedSeriesFixture({ traceCount: 4 }));
   assert.deepEqual(extraTraces.blockers.map((blocker) => blocker.code), ["reusable_chart_template_workbook_recomputation"]);
 
-  const twoSeries = await inspectLinkedSeriesTemplateEligibility(linkedSeriesFixture({ seriesCount: 2 }));
-  assert.deepEqual(twoSeries.blockers.map((blocker) => blocker.code), ["reusable_chart_template_series_contract_mismatch"]);
+  const twoSeries = await inspectLinkedSeriesTemplateEligibility(linkedSeriesFixture({ seriesCount: 2, steps: ["Plot one trace per experiment, named by its experiment label, sharing one x axis and one y axis."] }));
+  assert.deepEqual(twoSeries.blockers.map((blocker) => blocker.code), ["reusable_chart_template_series_ambiguous"]);
+  assert.match(twoSeries.blockers[0].message, /defines 2 series/);
+});
+
+test("a multi-series region is eligible when the accepted plan names the plotted series, and the slot remembers it", async () => {
+  const gasSeries = [
+    { seriesKey: "c_response_series", label: "C-Response", orientation: "header_row_categories", xHeaderRange: "F3:O3", yValueRange: "F4:O4", xSemanticKey: "hydrocarbon_component", ySemanticKey: "c_response_series", xValueType: "string", yUnit: null, yNumericScale: null, pointCount: 10 },
+    { seriesKey: "area_series", label: "Area", orientation: "header_row_categories", xHeaderRange: "F3:O3", yValueRange: "F5:O5", xSemanticKey: "hydrocarbon_component", ySemanticKey: "area_series", xValueType: "string", yUnit: null, yNumericScale: null, pointCount: 10 },
+  ];
+  const steps = [
+    "Extract hydrocarbon component labels from row 3 (F3:O3) for both experiments as shared X-axis categories.",
+    "Extract Area values from row 5 for Exp35 (F5:O5) and Exp45 (F5:O5) as Y-values for two separate bar series.",
+    "Create a grouped bar chart with hydrocarbon components on the X-axis and Area values on the Y-axis.",
+  ];
+  const fixture = linkedSeriesFixture({ seriesList: gasSeries, steps });
+  const eligibility = await inspectLinkedSeriesTemplateEligibility(fixture);
+  assert.deepEqual(eligibility.blockers, []);
+  assert.equal(eligibility.context.series.label, "Area");
+  const definition = await deriveReusableChartTemplateDefinition(fixture);
+  assert.equal(definition.inputSlots[0].label, "Area");
+  assert.deepEqual(definition.inputSlots[0].seriesContract.seriesSelector, { seriesKey: "area_series", label: "Area", ySemanticKey: "area_series" });
+  assert.deepEqual(definition.inputSlots[0].unitContract.allowedUnits, []);
+  const version = validateReusableChartTemplateVersion({ ...definition, schemaVersion: "labrat.reusableChartTemplateVersion.v1", version: 1 });
+  assert.deepEqual(version.inputSlots[0].seriesContract.seriesSelector, { seriesKey: "area_series", label: "Area", ySemanticKey: "area_series" });
+
+  assert.equal(selectPlottedSeries({ series: gasSeries, planRevision: { plan: { reviewPlan: { processingSteps: ["Plot the values."] } } } }).ambiguous, true);
+  assert.equal(selectPlottedSeries({ series: gasSeries, planRevision: { plan: { reviewPlan: { chart: { yDescription: "C-Response per component" } } } } }).series.label, "C-Response");
 });
 
 test("template version validation rejects linked-region slots without a data kind or orientation and keeps snapshot slots unchanged", async () => {

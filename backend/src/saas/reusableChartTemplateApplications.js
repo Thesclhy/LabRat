@@ -1,6 +1,6 @@
 import { ANALYSIS_RUNTIME_VERSION } from "./analysisSchemas.js";
 import { stableDataHash } from "./dataPlanSchemas.js";
-import { readLinkedRegionSeries, resolveLinkedRegionsForExperiments } from "./linkedRegionSeries.js";
+import { readLinkedRegionSeries, resolveLinkedRegionsForExperiments, selectRegionSeries } from "./linkedRegionSeries.js";
 import { makeId } from "./ids.js";
 import {
   allocateSelectionOrderStyles,
@@ -147,9 +147,19 @@ export async function prepareLinkedSeriesTemplateApplication({ store, projectId,
     });
   }
   for (const experiment of resolved.experiments) {
-    const series = experiment.series[0] || null;
-    if (!series || experiment.series.length !== 1) {
-      excluded.push({ experimentId: experiment.experimentId, label: experiment.label, code: "chart_template_series_shape_mismatch", message: `${experiment.label}: the linked region defines ${experiment.series.length} series; exactly one is required.` });
+    const selector = slot.seriesContract?.seriesSelector || null;
+    const series = selectRegionSeries(experiment.series, selector);
+    if (!series) {
+      const wanted = text(selector?.label || selector?.seriesKey);
+      const available = experiment.series.map((item) => text(item?.label || item?.seriesKey)).filter(Boolean);
+      excluded.push({
+        experimentId: experiment.experimentId,
+        label: experiment.label,
+        code: "chart_template_series_shape_mismatch",
+        message: wanted
+          ? `${experiment.label}: the linked region has no "${wanted}" series (it defines ${available.length ? available.join(", ") : "none"}).`
+          : `${experiment.label}: the linked region defines ${experiment.series.length} series; the template cannot tell which one to use.`,
+      });
       continue;
     }
     const problem = seriesContractProblem(slot, series);
@@ -181,7 +191,7 @@ export async function prepareLinkedSeriesTemplateApplication({ store, projectId,
     if (experiment.alternativeRegionIds.length) {
       warnings.push({ code: "chart_template_multiple_regions", message: `${experiment.label} has ${experiment.alternativeRegionIds.length + 1} linked ${resolved.dataKind} regions; the most recently confirmed one is used.`, experimentId: experiment.experimentId });
     }
-    ready.push({ ...experiment, read });
+    ready.push({ ...experiment, read, seriesKey: text(series.seriesKey) || null, seriesLabel: text(series.label) || null });
   }
   const blockers = [];
   if (policy === "block") {
@@ -219,6 +229,8 @@ export async function prepareLinkedSeriesTemplateApplication({ store, projectId,
     workbookName: item.workbookName,
     sheetName: item.sheetName,
     range: item.range,
+    seriesKey: item.seriesKey,
+    seriesLabel: item.seriesLabel,
   }));
   return {
     schemaVersion: "labrat.reusableChartTemplateCompatibility.v1",
@@ -638,18 +650,280 @@ export function buildReusableChartTemplateApplicationArtifacts({
   };
 }
 
-export function executeReusableChartTemplate({ templateVersion, application, experiments, styleVersion = null } = {}) {
+/**
+ * Reads the series each ready experiment was frozen to when the application
+ * was prepared. The frozen revision is used even when the region has since
+ * been re-confirmed; a missing revision or workbook fails closed as stale.
+ */
+export async function materializeLinkedSeriesInputs({ store, projectId, application, templateVersion = null } = {}) {
+  const refs = asArray(application?.frozenRegionRefs);
+  const slotSelector = linkedSlotsOf(templateVersion)[0]?.seriesContract?.seriesSelector || null;
+  const linkedSeries = [];
+  for (const ref of refs) {
+    const revision = await store.findRegionUnderstandingRevisionById(ref.regionUnderstandingRevisionId);
+    if (!revision || revision.projectId !== projectId || revision.regionId !== ref.regionId) {
+      applicationError("chart_template_inputs_stale", `The confirmed ${ref.sheetName}!${ref.range} region used for ${ref.label} is no longer available.`, 409, { experimentId: ref.experimentId, regionId: ref.regionId });
+    }
+    const interpretation = revision.interpretation || {};
+    const frozenSelector = ref.seriesKey || ref.seriesLabel ? { seriesKey: ref.seriesKey || null, label: ref.seriesLabel || null } : null;
+    const chosen = selectRegionSeries(asArray(interpretation.series), frozenSelector || slotSelector);
+    if (!chosen) {
+      applicationError("chart_template_inputs_stale", `The frozen region for ${ref.label} no longer defines the series this template plots.`, 409, { experimentId: ref.experimentId });
+    }
+    const series = [chosen];
+    let read;
+    try {
+      read = await readLinkedRegionSeries({
+        store,
+        projectId,
+        region: { sourceDocumentId: ref.sourceDocumentId, sheetName: ref.sheetName, range: ref.range },
+        series: series[0],
+        headerRow: interpretation.headerRow ?? null,
+        inclusion: interpretation.inclusion ?? null,
+      });
+    } catch (error) {
+      if (error?.code === "chart_template_source_document_missing") {
+        applicationError("chart_template_inputs_stale", `The workbook behind ${ref.label} was removed after this application was prepared.`, 409, { experimentId: ref.experimentId });
+      }
+      throw error;
+    }
+    linkedSeries.push({
+      ...read,
+      seriesLabel: read.label,
+      experimentId: ref.experimentId,
+      label: ref.label,
+      regionId: ref.regionId,
+      regionUnderstandingRevisionId: ref.regionUnderstandingRevisionId,
+      sourceDocumentId: ref.sourceDocumentId,
+      workbookName: ref.workbookName,
+      sheetName: ref.sheetName,
+      range: ref.range,
+    });
+  }
+  return { linkedSeries };
+}
+
+const SERIES_RECIPE_OPERATIONS = new Set(["select_series", "align_x", "filter_missing"]);
+
+function categoryKey(value) {
+  return value == null ? null : String(value);
+}
+
+function displayedSeriesValue(value, series) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const unit = text(series?.yUnit).toLowerCase();
+  return text(series?.yNumericScale) === "fraction" && new Set(["percent", "%", "percentage"]).has(unit) ? value * 100 : value;
+}
+
+function executeLinkedSeriesTemplate({ templateVersion, application, linkedSeries, styleVersion }) {
+  const slots = asArray(templateVersion.inputSlots);
+  const slot = slots[0];
+  const operations = asArray(templateVersion.recipe?.operations);
+  if (slots.length !== 1 || !operations.length || operations.some((operation) => !SERIES_RECIPE_OPERATIONS.has(text(operation?.op)))) {
+    applicationError("chart_template_recipe_unsupported", "Workbook series templates accept only select_series, align_x, and filter_missing operations.", 422);
+  }
+  const select = operations.find((operation) => text(operation.op) === "select_series");
+  if (!select || text(select.inputSlotId) !== slot.slotId) {
+    applicationError("chart_template_recipe_unsupported", "The series recipe must select the template's linked-region slot.", 422);
+  }
+  const alignPolicy = text(operations.find((operation) => text(operation.op) === "align_x")?.policy) || text(slot.seriesContract?.alignmentPolicy) || "union_with_gaps";
+  const missingPolicy = text(operations.find((operation) => text(operation.op) === "filter_missing")?.policy) || text(templateVersion.missingDataPolicy?.missingPoint) || "preserve_gap";
+  if (!new Set(["union_with_gaps", "intersection", "exact"]).has(alignPolicy)) {
+    applicationError("chart_template_recipe_unsupported", `Alignment policy ${alignPolicy} is not supported.`, 422);
+  }
+  if (!new Set(["preserve_gap", "omit_point"]).has(missingPolicy)) {
+    applicationError("chart_template_recipe_unsupported", `Missing-point policy ${missingPolicy} is not supported.`, 422);
+  }
+  const chartType = text(templateVersion.encoding?.chartType) || "bar";
+  if (!new Set(["bar", "scatter", "line"]).has(chartType)) {
+    applicationError("chart_template_recipe_unsupported", `Chart type ${chartType} is not supported by the deterministic series renderer.`, 422);
+  }
+  const comparisonMode = text(templateVersion.encoding?.comparisonMode) || (chartType === "bar" ? "grouped" : "overlay");
+  if (!new Set(["grouped", "overlay"]).has(comparisonMode) || (comparisonMode === "grouped" && chartType !== "bar")) {
+    applicationError("chart_template_recipe_unsupported", `Workbook series templates render grouped bars or overlaid traces, not ${comparisonMode}.`, 422);
+  }
+  const seriesList = asArray(linkedSeries);
+  const expectedIds = asArray(application.experimentIds);
+  if (!seriesList.length || seriesList.length !== expectedIds.length || seriesList.some((item, index) => item.experimentId !== expectedIds[index])) {
+    applicationError("chart_template_inputs_stale", "The materialized workbook series do not match the prepared application.", 409);
+  }
+
+  // align_x: category order is first-seen source order across experiments.
+  const categories = [];
+  const seen = new Map();
+  seriesList.forEach((item) => asArray(item.points).forEach((point) => {
+    const key = categoryKey(point.x);
+    if (key == null) return;
+    if (!seen.has(key)) {
+      seen.set(key, categories.length);
+      categories.push({ key, value: point.x, presentIn: 0 });
+    }
+  }));
+  seriesList.forEach((item) => {
+    const keys = new Set(asArray(item.points).map((point) => categoryKey(point.x)).filter((key) => key != null));
+    categories.forEach((category) => { if (keys.has(category.key)) category.presentIn += 1; });
+  });
+  if (alignPolicy === "exact" && categories.some((category) => category.presentIn !== seriesList.length)) {
+    applicationError("chart_template_alignment_incompatible", "The template requires identical category labels in every experiment.", 422, {
+      categories: categories.filter((category) => category.presentIn !== seriesList.length).map((category) => category.key),
+    });
+  }
+  const aligned = alignPolicy === "intersection" ? categories.filter((category) => category.presentIn === seriesList.length) : categories;
+  if (!aligned.length) {
+    applicationError("chart_template_alignment_incompatible", "The selected experiments share no category labels.", 422);
+  }
+
+  const labels = seriesList.map((item) => item.label);
+  const experimentStyles = allocateSelectionOrderStyles({ styleVersion, itemCount: seriesList.length });
+  const traceDescriptors = seriesList.map((item, index) => ({ traceId: `template_${item.experimentId}`, experimentIndex: index }));
+  const styleAssignments = traceDescriptors.map((descriptor) => ({ traceId: descriptor.traceId, ...experimentStyles[descriptor.experimentIndex] }));
+  const geometry = resolveReusableChartGeometry({
+    styleVersion,
+    templateVersion,
+    comparisonMode,
+    chartType,
+    title: text(templateVersion.templateName) || "Reusable chart",
+    experimentLabels: aligned.map((category) => category.key),
+    legendLabels: labels,
+    showLegend: labels.length > 1,
+    styleAssignments,
+  });
+
+  const exclusions = [];
+  const traces = seriesList.map((item, index) => {
+    const style = styleAssignments[index];
+    const byKey = new Map();
+    asArray(item.points).forEach((point) => {
+      const key = categoryKey(point.x);
+      if (key != null && !byKey.has(key)) byKey.set(key, point);
+    });
+    const cells = [];
+    const x = [];
+    const y = [];
+    aligned.forEach((category) => {
+      const point = byKey.get(category.key);
+      const value = point && !point.missing ? displayedSeriesValue(point.y, item) : null;
+      if (value == null) {
+        exclusions.push({
+          code: "chart_template_missing_point",
+          experimentId: item.experimentId,
+          label: item.label,
+          category: category.key,
+          reason: point ? point.missingReason || "missing" : "category_absent",
+          cell: point?.yCell || null,
+        });
+        if (missingPolicy === "omit_point") return;
+      }
+      x.push(category.value);
+      y.push(value);
+      if (value != null) cells.push(point.yCell);
+    });
+    return {
+      traceId: `template_${item.experimentId}`,
+      type: chartType === "bar" ? "bar" : "scatter",
+      ...(chartType === "bar" ? {} : {
+        mode: chartType === "line" ? "lines+markers" : "markers",
+        line: { color: style.color, dash: style.lineDash },
+        connectgaps: false,
+      }),
+      name: item.label,
+      x,
+      y,
+      marker: {
+        color: style.color,
+        ...(chartType === "bar" ? { pattern: { shape: style.barPattern } } : { symbol: style.markerSymbol }),
+      },
+      meta: {
+        labrat: {
+          traceId: `template_${item.experimentId}`,
+          slotId: slot.slotId,
+          experimentId: item.experimentId,
+          linkedDataKind: text(slot.linkedDataKind),
+          sourceLineage: [{
+            experimentId: item.experimentId,
+            regionId: item.regionId,
+            regionUnderstandingRevisionId: item.regionUnderstandingRevisionId,
+            sourceRefs: copy(item.sourceRefs || []),
+            cells,
+          }],
+        },
+      },
+      hovertemplate: `%{x}<br>${item.label}: %{y}<extra></extra>`,
+    };
+  });
+
+  const unit = text(slot.unitContract?.allowedUnits?.[0]) || text(seriesList[0]?.yUnit);
+  const xTitle = text(slot.seriesContract?.xMeaning).replace(/_/g, " ") || "Category";
+  const layout = {
+    ...geometry.layout,
+    xaxis: {
+      ...(geometry.layout.xaxis || {}),
+      title: { text: xTitle, font: { size: geometry.resolvedStyle.typography.axisTitleSizePt } },
+      tickangle: geometry.tickAngle,
+      tickfont: { size: geometry.resolvedStyle.typography.tickSizePt },
+      ...(text(slot.seriesContract?.xValueType) === "number" && aligned.every((category) => typeof category.value === "number") ? {} : { type: "category", categoryorder: "array", categoryarray: aligned.map((category) => category.value) }),
+    },
+    yaxis: {
+      ...(geometry.layout.yaxis || {}),
+      title: { text: unit || slot.label || "Value", font: { size: geometry.resolvedStyle.typography.axisTitleSizePt } },
+      tickfont: { size: geometry.resolvedStyle.typography.tickSizePt },
+    },
+    showlegend: labels.length > 1,
+    ...(chartType === "bar" ? { barmode: comparisonMode === "overlay" ? "overlay" : "group" } : {}),
+  };
+  const sourceRefs = seriesList.flatMap((item) => [
+    ...asArray(item.sourceRefs).map((ref) => ({ ...copy(ref), experimentId: item.experimentId, slotId: slot.slotId, regionUnderstandingRevisionId: item.regionUnderstandingRevisionId })),
+    ...asArray(item.points).filter((point) => !point.missing).map((point) => ({
+      sourceType: "excel_cell",
+      sourceDocumentId: item.sourceDocumentId,
+      sheet: item.sheetName,
+      cell: point.yCell,
+      experimentId: item.experimentId,
+      slotId: slot.slotId,
+      regionUnderstandingRevisionId: item.regionUnderstandingRevisionId,
+      category: categoryKey(point.x),
+    })),
+  ]);
+  const pointDigest = seriesList.map((item) => ({
+    experimentId: item.experimentId,
+    regionUnderstandingRevisionId: item.regionUnderstandingRevisionId,
+    points: asArray(item.points).map((point) => [categoryKey(point.x), point.missing ? null : point.y]),
+  }));
+  return {
+    executorResult: {
+      ok: true,
+      adapter: CHART_TEMPLATE_EXECUTION_STRATEGY,
+      runtime: { version: ANALYSIS_RUNTIME_VERSION, deterministic: true },
+      result: {
+        plotly: { data: traces, layout },
+        resolvedGeometry: geometry.resolvedGeometry,
+        exclusions,
+        checks: [{
+          code: "chart_template_series_alignment",
+          alignmentPolicy: alignPolicy,
+          missingPointPolicy: missingPolicy,
+          categoryCount: aligned.length,
+          experimentCount: seriesList.length,
+        }],
+      },
+    },
+    sourceRefs,
+    hashes: {
+      inputHash: stableDataHash({ applicationId: application.id, linkedSeries: pointDigest }),
+      programHash: stableDataHash(templateVersion.recipe),
+      packageHash: stableDataHash({ applicationId: application.id, templateVersionId: templateVersion.id, linkedSeries: pointDigest }),
+    },
+  };
+}
+
+export function executeReusableChartTemplate({ templateVersion, application, experiments, linkedSeries = null, styleVersion = null } = {}) {
   if (!templateVersion || !application || application.status !== "queued") {
     applicationError("chart_template_application_conflict", "The reusable chart application is not queued for execution.", 409);
   }
   const slots = asArray(templateVersion.inputSlots);
   const operations = asArray(templateVersion.recipe?.operations);
   if (isLinkedSeriesTemplate(templateVersion)) {
-    applicationError(
-      "chart_template_series_execution_unavailable",
-      "Workbook series templates resolve and queue, but their deterministic series renderer is not available yet.",
-      422,
-    );
+    return executeLinkedSeriesTemplate({ templateVersion, application, linkedSeries, styleVersion });
   }
   if (!operations.length || operations.some((operation) => text(operation?.op) !== "select_scalar")) {
     applicationError(

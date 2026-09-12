@@ -32,6 +32,8 @@ import { experimentFieldColumnId } from "./experimentProjection.js";
 import {
   CHART_TEMPLATE_EXECUTION_STRATEGY,
   executeReusableChartTemplate,
+  isLinkedSeriesTemplate,
+  materializeLinkedSeriesInputs,
 } from "./reusableChartTemplateApplications.js";
 
 const THREAD_LIST_LIMIT = 100;
@@ -995,6 +997,19 @@ function inputManifest(inputs) {
       seriesCount: asArray(experiment.series).length,
       activeHead: experiment.activeHead,
     })),
+    ...(Array.isArray(inputs.linkedSeries) ? {
+      linkedSeries: inputs.linkedSeries.map((item) => ({
+        experimentId: item.experimentId,
+        label: item.label,
+        regionId: item.regionId,
+        regionUnderstandingRevisionId: item.regionUnderstandingRevisionId,
+        sheetName: item.sheetName,
+        range: item.range,
+        pointCount: item.pointCount,
+        valueCount: item.valueCount,
+        missingCount: item.missingCount,
+      })),
+    } : {}),
   };
 }
 
@@ -1307,6 +1322,12 @@ export async function executeAnalysisRun({
       experiments: experimentInputs.experiments,
     };
   } catch (error) {
+    if (resolvedExecutionStrategy === CHART_TEMPLATE_EXECUTION_STRATEGY) {
+      await store.updateReusableChartTemplateApplication?.(
+        run.payload?.reusableChartTemplateApplicationId,
+        { status: "failed", updatedAt: new Date().toISOString(), updatedBy: actorUserId },
+      );
+    }
     return finalizeFailedRun({
       store,
       project,
@@ -1314,7 +1335,13 @@ export async function executeAnalysisRun({
       run,
       revision,
       status: error?.code === "analysis_python_policy_failed" ? "validation_failed" : "failed",
-      error,
+      error: resolvedExecutionStrategy === CHART_TEMPLATE_EXECUTION_STRATEGY
+        ? Object.assign(new Error("An input frozen by this reusable chart application is no longer available."), {
+          code: "chart_template_inputs_stale",
+          statusCode: 409,
+          details: { cause: error?.code || null, message: error?.message || null },
+        })
+        : error,
       payload: {
         phase: "materializing_inputs",
         inputManifest: inputs ? inputManifest(inputs) : null,
@@ -1343,10 +1370,15 @@ export async function executeAnalysisRun({
       if (!application || application.projectId !== project.id || !templateVersion || templateVersion.projectId !== project.id) {
         throw analysisError("chart_template_application_conflict", "The reusable chart application is unavailable.", 409);
       }
+      if (isLinkedSeriesTemplate(templateVersion)) {
+        const linkedInputs = await materializeLinkedSeriesInputs({ store, projectId: project.id, application, templateVersion });
+        inputs = { ...inputs, linkedSeries: linkedInputs.linkedSeries };
+      }
       const rendered = executeReusableChartTemplate({
         templateVersion: { ...templateVersion, templateName: template?.name || "Reusable chart" },
         application,
         experiments: inputs.experiments,
+        linkedSeries: inputs.linkedSeries || null,
         styleVersion,
       });
       executorResult = rendered.executorResult;

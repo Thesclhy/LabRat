@@ -15,6 +15,50 @@ Keep entries concise, newest first, and include:
 
 ## 2026-09-12
 
+- Template source regions are linked. Saving a confirmed region as an
+  extraction template left that region without an experiment link or data
+  kind, so the experiment the user selected by hand (Exp48 in project 2-1)
+  was the one experiment missing from Experiment Browser, linked-data
+  comparisons, and chart templates while the applied matches (Exp49, Exp50)
+  were linked. `POST .../region-extraction-templates` and
+  `POST .../versions` now link the source region the same way an applied
+  match is linked: data kind from the template name, experiment from the
+  label cell or the workbook filename, never overwriting an existing link.
+  The response adds `sourceRegionLink` (region id, experiment, label, link
+  status, data kind). Verification: route test asserts the source region is
+  linked after creation. Existing unlinked source regions were repaired by
+  hand in the dev database.
+- Workbook templates from multi-series regions. Saving the "Gas Product
+  Distribution: Exp35 vs Exp45" chart as a template was refused because each
+  linked region defines two series (C-Response and Area) and eligibility
+  required exactly one. `selectPlottedSeries` now picks the series the
+  accepted plan names (label, key, value range, or row mentions across the
+  reviewed plan text); a clear winner is stored on the slot as
+  `seriesContract.seriesSelector`, and only genuine ambiguity is refused with
+  the new `reusable_chart_template_series_ambiguous` blocker that lists the
+  series. Application and execution select the series through the same
+  selector (`selectRegionSeries`), exclude regions that lack it, and freeze
+  the chosen `seriesKey` in `frozenRegionRefs`. Verification: backend suite
+  with new eligibility and application tests for the two-row case.
+- Workbook chart templates, Milestone C of
+  `doc/plans/workbook-chart-template-plan.md` (deterministic series
+  execution). `chart_template_v1` runs for linked-region templates now
+  materialize `inputs.linkedSeries` from the application's frozen region
+  revisions (`materializeLinkedSeriesInputs`; a re-confirmed region is not
+  swapped in, a vanished revision or workbook fails closed with
+  `chart_template_inputs_stale`) and render through the new
+  `executeLinkedSeriesTemplate` branch: one trace per experiment, x from the
+  category union in source order (`union_with_gaps`, `intersection`, `exact`),
+  gaps preserved as nulls or omitted (`preserve_gap`, `omit_point`), grouped
+  bars or overlay points, geometry from the existing policy with category
+  labels as x labels, `excel_cell` source refs per plotted point plus region
+  ranges, gap list in `result.exclusions`, and an `inputHash` over the read
+  points. Stacked and computed recipes are refused. The Milestone B
+  execution guard is removed. Contract, API, and plan docs updated.
+  Verification: backend suite; the route test applies a workbook template
+  and executes it to `awaiting_result_review` with no Python program.
+  Follow-up: Milestone D adds the frontend apply flow for workbook
+  templates.
 - Workbook chart templates, Milestone B of
   `doc/plans/workbook-chart-template-plan.md` (series reader and application
   resolution). New `backend/src/saas/linkedRegionSeries.js`:
@@ -32,9 +76,9 @@ Keep entries concise, newest first, and include:
   region `sourceSelections`, and `frozenRegionRefs` in place of snapshot
   heads. Application artifacts build a `workbook` plan with source
   rectangles and linked lineage; the Postgres row mapper exposes
-  `frozenRegionRefs` from the compatibility JSON (no migration). Executing
-  such a run fails closed with `chart_template_series_execution_unavailable`
-  until Milestone C. Contract and API docs updated. Verification: backend
+  `frozenRegionRefs` from the compatibility JSON (no migration). Execution
+  was guarded until Milestone C landed the same day. Contract and API docs
+  updated. Verification: backend
   suite, including new `linkedRegionSeries.test.js`,
   `reusableChartTemplateApplications.linked.test.js`, and a route test that
   applies a workbook template end to end without touching snapshots.

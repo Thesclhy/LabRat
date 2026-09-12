@@ -260,6 +260,23 @@ to its most recently confirmed WorkbookReviewRegion whose `dataKind` matches,
 and lineage freezes that region's accepted revision id instead of a snapshot
 head. No cell address is stored in the template.
 
+A confirmed region may define several series under one header (for example
+a "C-Response" row and an "Area" row). `seriesContract.seriesSelector`
+(`{ seriesKey, label, ySemanticKey }`) records which one the template plots.
+At eligibility time the plotted series is chosen deterministically from the
+accepted plan the user reviewed: each series is scored by mentions of its
+label, key, value range, or row number in the chart's y description, series
+description, processing steps, display plan, request summary, and source
+selection purposes. A single-series region needs no mention. When no series
+or more than one scores highest the chart is refused with
+`reusable_chart_template_series_ambiguous`, and the message lists the series
+so the user can rebuild the chart naming the row. Every experiment in the
+source chart must resolve to the same selector. At application and
+execution time the selector picks the series inside each region (key, then
+label, then y semantic key); a region without it is excluded with
+`chart_template_series_shape_mismatch`, and `frozenRegionRefs` carry the
+chosen `seriesKey` so execution reads exactly what was prepared.
+
 Eligibility of a source chart (`inspectLinkedSeriesTemplateEligibility`,
 used automatically when an accepted chart has source selections and no
 Experiment Browser selections): every region is a confirmed region linked to
@@ -277,6 +294,7 @@ preserve_gap`, `missingCategory: union_with_gaps`, `missingSeries:
 exclude_experiment`; `validation.eligibility` is
 `linked_series_comparison_v1`. Blocker codes:
 `reusable_chart_template_linked_regions_required`,
+`reusable_chart_template_series_ambiguous`,
 `reusable_chart_template_series_contract_mismatch`,
 `reusable_chart_template_encoding_unsupported`,
 `reusable_chart_template_workbook_recomputation`,
@@ -330,9 +348,47 @@ The accepted PlanRevision uses `inputMode: "workbook"`, carries the
 `templateLineage` with `linkedDataKind` and `frozenRegionRefs`. The
 application record stores `frozenRegionRefs` inside its compatibility JSON
 (Postgres needs no new column). The queued run is `chart_template_v1` like a
-scalar application; until the series renderer lands, executing it fails
-closed with `chart_template_series_execution_unavailable` and the
-application is marked `failed`.
+scalar application.
+
+#### Executing a workbook series template
+
+`chart_template_v1` execution of a workbook application reads every
+`frozenRegionRefs` entry through `readLinkedRegionSeries` using the frozen
+revision id. A region that was re-confirmed after the application was
+prepared is not swapped in; a frozen revision or workbook that no longer
+exists fails the run closed with `chart_template_inputs_stale` and marks the
+application `failed`. No model provider or Python executor is involved, and
+`inputManifest.linkedSeries` records what was read (region, revision, point
+and value counts).
+
+The deterministic series renderer accepts only recipes made of
+`select_series`, `align_x`, and `filter_missing`, and only `grouped` bars or
+`overlay` points or lines; anything else is `chart_template_recipe_unsupported`.
+It draws one trace per experiment named by the experiment label:
+
+- `align_x` builds the x axis from category labels in first-seen source
+  order across experiments. `union_with_gaps` keeps every label,
+  `intersection` keeps labels present in every experiment, `exact` requires
+  identical labels and otherwise fails with
+  `chart_template_alignment_incompatible` (the offending labels in
+  `details.categories`). Text categories render on a `category` axis with an
+  explicit `categoryarray`.
+- `filter_missing` decides what a blank, Excel error, non-numeric, or absent
+  category becomes: `preserve_gap` keeps the x position with a `null` y
+  (bars leave a gap, scatter traces set `connectgaps: false`); `omit_point`
+  drops the point from that trace. Every gap is listed in
+  `result.exclusions` as `chart_template_missing_point` with the experiment,
+  category, reason, and cell.
+- Fraction-scaled series with a percent unit are displayed as percent
+  points, as scalar templates already do.
+
+Trace `meta.labrat.sourceLineage` carries the region id, frozen revision id,
+the region ranges, and the cell addresses that were plotted. The
+AnalysisResult `sourceRefs` list the region ranges (`excel_range`) plus one
+`excel_cell` entry per plotted point with its category. `hashes.inputHash`
+covers the application id and the read point arrays, so repeating the same
+application yields the same hash. The ordinary Plotly validator, result
+review, and accept-and-create-chart boundary are unchanged.
 
 ## Deterministic Recipe v1
 
@@ -620,7 +676,6 @@ chart_template_session_deleted
 chart_template_series_shape_mismatch
 chart_template_series_outside_region
 chart_template_range_too_large
-chart_template_series_execution_unavailable
 ```
 
 Warning code (never blocks): `chart_template_multiple_regions`.

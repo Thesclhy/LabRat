@@ -1,4 +1,5 @@
 import { stableDataHash } from "./dataPlanSchemas.js";
+import { selectRegionSeries, seriesSelectorOf } from "./linkedRegionSeries.js";
 
 export const CHART_STYLE_PROFILE_SCHEMA_VERSION = "labrat.chartStyleProfile.v1";
 export const CHART_STYLE_PROFILE_VERSION_SCHEMA_VERSION = "labrat.chartStyleProfileVersion.v1";
@@ -314,6 +315,7 @@ function validateTemplateDefinition(input = {}) {
       }
       const alignmentPolicy = text(source.alignmentPolicy) || "union_with_gaps";
       if (!SERIES_ALIGNMENT_POLICIES.has(alignmentPolicy)) error("reusable_chart_template_invalid", `Input slot ${slotId} has an unsupported alignment policy.`);
+      const selectorSource = isObject(source.seriesSelector) ? source.seriesSelector : null;
       seriesContract = {
         ...copy(source),
         ...(orientation ? { orientation } : {}),
@@ -321,6 +323,13 @@ function validateTemplateDefinition(input = {}) {
         xMeaning: text(source.xMeaning) || null,
         xValueType: text(source.xValueType) || null,
         yNumericScale: text(source.yNumericScale) || null,
+        ...(selectorSource ? {
+          seriesSelector: {
+            seriesKey: text(selectorSource.seriesKey) || null,
+            label: text(selectorSource.label) || null,
+            ySemanticKey: text(selectorSource.ySemanticKey) || null,
+          },
+        } : {}),
       };
     }
     return {
@@ -436,6 +445,57 @@ function linkedSeriesSignature(series) {
   });
 }
 
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function rangeRowNumber(range) {
+  const match = /^[A-Z]+(\d+)(?::[A-Z]+(\d+))?$/i.exec(text(range));
+  return match && (!match[2] || match[2] === match[1]) ? Number(match[1]) : null;
+}
+
+/**
+ * Picks which of a region's series the accepted chart plotted by counting
+ * mentions of each series' label, key, value range, or row in the plan text
+ * the user reviewed. One clear winner is required; ties are ambiguous.
+ */
+export function selectPlottedSeries({ series, spec, planRevision } = {}) {
+  const list = asArray(series).filter(Boolean);
+  if (list.length <= 1) return { series: list[0] || null, ambiguous: false, scores: [] };
+  const plan = planRevision?.plan || planRevision || {};
+  const reviewPlan = plan.reviewPlan || {};
+  const corpus = [
+    reviewPlan.chart?.yDescription,
+    reviewPlan.chart?.seriesDescription,
+    reviewPlan.chart?.title,
+    ...asArray(reviewPlan.processingSteps),
+    ...asArray(reviewPlan.calculationSteps),
+    ...asArray(plan.displayPlan),
+    plan.requestSummary,
+    ...asArray(plan.sourceSelections).map((selection) => selection?.purpose),
+    ...asArray(spec?.sourceSelections).map((selection) => selection?.purpose),
+  ].map(text).filter(Boolean).join("\n").toLowerCase();
+  const scores = list.map((item, index) => {
+    let score = 0;
+    const label = text(item.label).toLowerCase();
+    const key = text(item.seriesKey).toLowerCase();
+    const semantic = text(item.ySemanticKey).toLowerCase().replace(/_series$/, "").replace(/_/g, " ");
+    for (const term of new Set([label, key.replace(/_series$/, "").replace(/_/g, " "), semantic].filter((term) => term.length >= 2))) {
+      const pattern = new RegExp(`(^|[^a-z0-9])${escapeRegExp(term)}(?=$|[^a-z0-9])`, "g");
+      score += (corpus.match(pattern) || []).length;
+    }
+    const range = text(item.yValueRange || item.yColumn).toLowerCase();
+    if (range && corpus.includes(range)) score += 3;
+    const row = rangeRowNumber(item.yValueRange);
+    if (row && new RegExp(`\\brow ${row}\\b`).test(corpus)) score += 2;
+    return { index, label: text(item.label || item.seriesKey), score };
+  });
+  const best = Math.max(...scores.map((item) => item.score));
+  const winners = scores.filter((item) => item.score === best);
+  if (best <= 0 || winners.length !== 1) return { series: null, ambiguous: true, scores };
+  return { series: list[winners[0].index], ambiguous: false, scores };
+}
+
 function traceCount(spec) {
   const catalog = asArray(spec?.traceCatalog);
   if (catalog.length) return catalog.length;
@@ -467,9 +527,12 @@ export async function inspectLinkedSeriesTemplateEligibility({ store, projectId,
   }
   const canResolve = typeof store?.findRegionUnderstandingRevisionById === "function"
     && typeof store?.findWorkbookReviewRegionById === "function";
+  const planRevision = typeof store?.findAnalysisPlanRevisionById === "function" && text(spec.analysisPlanRevisionId)
+    ? await store.findAnalysisPlanRevisionById(text(spec.analysisPlanRevisionId))
+    : null;
   const experiments = [];
   const unlinked = [];
-  const multiSeries = [];
+  const ambiguousSeries = [];
   for (const [selectionIndex, selection] of selections.entries()) {
     const revision = canResolve ? await store.findRegionUnderstandingRevisionById(text(selection?.regionUnderstandingRevisionId)) : null;
     const region = revision?.regionId && canResolve ? await store.findWorkbookReviewRegionById(revision.regionId) : null;
@@ -486,8 +549,14 @@ export async function inspectLinkedSeriesTemplateEligibility({ store, projectId,
       continue;
     }
     const series = asArray(revision.interpretation?.series);
-    if (series.length !== 1) {
-      multiSeries.push({ selectionIndex, regionId: region.id, seriesCount: series.length });
+    const plotted = selectPlottedSeries({ series, spec, planRevision });
+    if (!plotted.series) {
+      ambiguousSeries.push({
+        selectionIndex,
+        regionId: region.id,
+        seriesCount: series.length,
+        seriesLabels: series.map((item) => text(item?.label || item?.seriesKey)).filter(Boolean),
+      });
       continue;
     }
     experiments.push({
@@ -496,7 +565,7 @@ export async function inspectLinkedSeriesTemplateEligibility({ store, projectId,
       regionId: region.id,
       regionUnderstandingRevisionId: revision.id,
       dataKind: text(region.dataKind),
-      series: series[0],
+      series: plotted.series,
     });
   }
   if (unlinked.length) {
@@ -506,11 +575,21 @@ export async function inspectLinkedSeriesTemplateEligibility({ store, projectId,
       { regions: unlinked },
     ));
   }
-  if (multiSeries.length) {
+  if (ambiguousSeries.length) {
+    const first = ambiguousSeries[0];
+    blockers.push(eligibilityBlocker(
+      "reusable_chart_template_series_ambiguous",
+      first.seriesCount
+        ? `A linked region defines ${first.seriesCount} series (${first.seriesLabels.join(", ")}) and the accepted plan does not name which one was plotted. Rebuild the chart naming the row you want, or confirm the region with only that series.`
+        : "A linked region defines no series, so there is nothing for a template to read.",
+      { regions: ambiguousSeries },
+    ));
+  }
+  const selectors = [...new Set(experiments.map((item) => JSON.stringify(seriesSelectorOf(item.series))))];
+  if (experiments.length && selectors.length > 1) {
     blockers.push(eligibilityBlocker(
       "reusable_chart_template_series_contract_mismatch",
-      "Each linked region must define exactly one series for a workbook template.",
-      { regions: multiSeries },
+      `The chart plots different series per experiment (${[...new Set(experiments.map((item) => text(item.series?.label || item.series?.seriesKey)))].join(", ")}); a template binds one series.`,
     ));
   }
   const dataKinds = [...new Set(experiments.map((item) => normalizeKind(item.dataKind)))];
@@ -544,9 +623,6 @@ export async function inspectLinkedSeriesTemplateEligibility({ store, projectId,
       { chartType: chartType || null },
     ));
   }
-  const planRevision = typeof store?.findAnalysisPlanRevisionById === "function" && text(spec.analysisPlanRevisionId)
-    ? await store.findAnalysisPlanRevisionById(text(spec.analysisPlanRevisionId))
-    : null;
   const steps = asArray(planRevision?.plan?.reviewPlan?.processingSteps || planRevision?.reviewPlan?.processingSteps).map(text);
   const recomputation = steps.filter((step) => RECOMPUTATION_PATTERN.test(step));
   if (recomputation.length) {
@@ -610,6 +686,7 @@ export async function deriveLinkedSeriesTemplateDefinition({ store, projectId, c
       xValueType: text(series?.xValueType) || (orientation === "header_row_categories" ? "string" : "number"),
       yNumericScale: text(series?.yNumericScale) || null,
       alignmentPolicy: "union_with_gaps",
+      seriesSelector: seriesSelectorOf(series),
     },
   }];
   return {

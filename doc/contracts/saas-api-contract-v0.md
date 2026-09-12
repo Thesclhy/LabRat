@@ -264,6 +264,15 @@ fixed cell such as `A2` and falls back to the filename) plus relative
 relative ranges, inclusion). Content is hashed; duplicate names or identical
 content return `409`.
 
+Saving a template (or a new version) also links its source region the way an
+applied match is linked: `dataKind` is the template name and
+`linkedExperimentId` comes from the region's label cell or the workbook
+filename, resolved against the project's experiment identities. An existing
+link is never overwritten. The response adds `sourceRegionLink`
+(`regionId`, `linkedExperimentId`, `experimentLabel`, `linkStatus` in
+`resolved`, `ambiguous`, `unresolved`, `none`, or `already_linked`,
+`dataKind`).
+
 Matching is read-only and side-effect free. The request lists up to 100
 project source documents; the response has one `labrat.regionTemplateMatchReport.v1`
 per document with `status` in `exact`, `shifted`, `ambiguous`,
@@ -783,8 +792,10 @@ report shape, unit, and missing points, and returns a compatibility with
 `doc/contracts/reusable-chart-template-contract-v1.md`). `bindings` must be
 empty for such templates. The accepted PlanRevision is `inputMode:
 "workbook"` with one source selection per ready experiment; snapshots and
-heads are untouched. Execution of these runs is not yet available and fails
-closed with `chart_template_series_execution_unavailable`.
+heads are untouched. Executing the run reads the frozen region revisions
+and renders one trace per experiment deterministically (no provider, no
+Python); a frozen revision that disappeared fails closed with
+`chart_template_inputs_stale`.
 
 The implemented v1 fast path uses accepted active Experiment Browser scalar
 fields only. It interprets the accepted scalar-selection recipe without a
