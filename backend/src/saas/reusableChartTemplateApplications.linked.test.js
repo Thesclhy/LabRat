@@ -419,3 +419,42 @@ test("a template bound to one series of a multi-series region reads that series 
   assert.equal(ambiguous.status, "blocked");
   assert.match(ambiguous.excludedExperiments[0].message, /defines 2 series/);
 });
+
+test("lifecycle: re-confirmation moves only new applications forward, session deletion is reported, accepted charts survive", async () => {
+  const store = await fixture();
+  const templateVersion = seededTemplate(store);
+  const first = await preparedArtifacts(store, templateVersion, ["identity_31", "identity_32"], "lifecycle_1");
+  await store.createReusableChartTemplateApplication(first);
+  const frozen32 = first.application.frozenRegionRefs.find((ref) => ref.experimentId === "identity_32");
+  store.chartSpecs.set("chart_spec_lifecycle", { id: "chart_spec_lifecycle", projectId: project.id, labId: project.labId, spec: { templateLineage: { frozenRegionRefs: first.application.frozenRegionRefs } } });
+
+  // Exp32 is confirmed again from a re-indexed workbook.
+  const reconfirmed = await seedLinkedRegion(store, { index: 32, docId: "doc_32b", cells: headerRowCells(["C1", "C2", "C3", "C4", "C6"], [0.7, 0.2, 0.05, 0.03, 0.02]), acceptedAt: "2026-09-13T08:00:00.000Z" });
+  const second = await preparedArtifacts(store, templateVersion, ["identity_31", "identity_32"], "lifecycle_2");
+  const next32 = second.application.frozenRegionRefs.find((ref) => ref.experimentId === "identity_32");
+  assert.equal(next32.regionUnderstandingRevisionId, reconfirmed.revision.id, "a new application uses the newest confirmation");
+  assert.notEqual(next32.regionUnderstandingRevisionId, frozen32.regionUnderstandingRevisionId);
+  assert.deepEqual(second.application.compatibility?.warnings?.map((item) => item.code) || [], ["chart_template_multiple_regions"]);
+
+  // The earlier application still executes against the revision it froze.
+  const oldRun = await executeAnalysisRun({
+    store, project, actorUserId, analysisRunId: first.analysisRun.id, executionStrategy: CHART_TEMPLATE_EXECUTION_STRATEGY,
+    modelProvider: { complete: async () => assert.fail("model provider must not be called") },
+    executor: { executeAcceptedRun: async () => assert.fail("Python executor must not be called") },
+  });
+  assert.equal(oldRun.analysisRun.status, "awaiting_result_review");
+  assert.deepEqual(oldRun.analysisResult.result.plotly.data[1].y, [0.5, null, 0.06, null, null, 0.02], "old values, not the re-confirmed ones");
+  assert.equal(oldRun.analysisResult.result.plotly.data[1].meta.labrat.sourceLineage[0].regionUnderstandingRevisionId, frozen32.regionUnderstandingRevisionId);
+
+  // Deleting the workbook session behind Exp31 is reported, and the accepted chart is retained.
+  const session31 = await store.findWorkbookReviewSessionById((await store.findWorkbookReviewRegionById(frozen32.regionId)).workbookReviewSessionId);
+  const region31 = await store.findWorkbookReviewRegionById(first.application.frozenRegionRefs[0].regionId);
+  const sessionFor31 = await store.findWorkbookReviewSessionById(region31.workbookReviewSessionId);
+  await store.deleteWorkbookReviewSession(sessionFor31.id, { expectedVersion: sessionFor31.version, reason: "wrong file", actorUserId });
+  const afterDelete = await prepareReusableChartTemplateApplication({ store, projectId: project.id, templateVersion, experimentIds: ["identity_31", "identity_32"] });
+  assert.equal(afterDelete.status, "ready");
+  assert.deepEqual(afterDelete.excludedExperiments.map((item) => [item.label, item.code]), [["Exp31", "chart_template_session_deleted"]]);
+  assert.ok(session31, "the other session is untouched");
+  assert.ok(store.chartSpecs.get("chart_spec_lifecycle"), "accepted ChartSpecs are retained when a session is deleted");
+  assert.equal((await store.findReusableChartTemplateApplicationById(first.application.id)).status, "result_ready");
+});

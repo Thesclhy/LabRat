@@ -46,6 +46,8 @@ a second chart model:
 ```text
 accepted ReusableChartTemplateVersion + compatible active experiments
   -> strict input-slot binding and frozen snapshot heads
+     (or, for workbook templates, data-kind resolution to each experiment's
+      confirmed linked region and frozen region revision ids)
   -> accepted deterministic plan + queued chart_template_v1 run
   -> backend recipe/encoding/geometry resolution (no provider, no Python)
   -> normal validated awaiting-review AnalysisResult
@@ -102,9 +104,10 @@ Logged-in server mode treats backend project state as the source of truth. Old I
 - **Chart Review**: reviewed analysis plan/result flow, accepted ChartSpec
   management, and inline naming/saving of eligible accepted charts as reusable
   templates.
-- **Reusable Chart Review (planned)**: template and experiment selection,
-  explicit ambiguous-slot binding, missing-data coverage, deterministic preview,
-  and the shared result/trace acceptance UI.
+- **Reusable Chart Review**: template and experiment selection, explicit
+  ambiguous-slot binding for snapshot templates, data-kind coverage for
+  workbook templates, missing-data coverage, deterministic preview, and the
+  shared result/trace acceptance UI with workbook lineage.
 - **Manuscript**: page/block canvas, analysis-result ChartSpec insertion, placement-local trace controls, editable chart layers, persistence, and PPTX export.
 - **Ask LabRat**: project-scoped planning and review-gated actions, not a second data store.
 
@@ -144,10 +147,11 @@ Logged-in server mode treats backend project state as the source of truth. Old I
   immutable complete Plotly, idempotent result/run/thread completion, ChartSpec
   v3 creation, artifact links, receipts, and audit.
 - **Reusable Chart Template Service**: immutable style/template versions,
-  accepted-ChartSpec eligibility compilation, reviewed slot bindings,
-  idempotent frozen-head applications, deterministic scalar-recipe execution,
-  lifecycle APIs, ownership, lineage, and audit. Responsive geometry resolution
-  and the fast template-picker frontend remain planned milestones.
+  accepted-ChartSpec eligibility compilation (scalar snapshot charts and
+  linked-region workbook charts), reviewed slot bindings, idempotent
+  applications that freeze snapshot heads or region revisions, deterministic
+  scalar and series recipe execution, responsive geometry resolution,
+  lifecycle APIs, ownership, lineage, and audit.
 - **Manuscript Store**: pages, blocks, references, ChartSpec snapshots, and canvas state.
 
 ## Domain Ownership

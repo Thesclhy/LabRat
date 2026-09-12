@@ -190,6 +190,14 @@ idempotency receipts for exact template version, experiment snapshot heads,
 and bindings; they point to normal analysis artifacts and never duplicate the
 AnalysisResult.
 
+Workbook chart templates (slot `sourceKind: "linked_region"`) reuse these
+tables without a migration: `frozen_head_refs` stays empty and the frozen
+region revisions live as `frozenRegionRefs` inside the application's
+`compatibility` JSON, which the row mapper exposes as
+`application.frozenRegionRefs`. Slot payloads may carry
+`seriesContract.seriesSelector`; workbook review regions gain no new columns
+beyond the `linked_experiment_id` and `data_kind` added by migration 028.
+
 Reference chart files remain presentation assets through FileObject linkage;
 they are not SourceDocuments or scientific evidence. See
 `doc/contracts/reusable-chart-template-contract-v1.md` before changing this

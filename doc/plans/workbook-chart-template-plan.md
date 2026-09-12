@@ -1,6 +1,6 @@
 # Reusable Chart Templates From Linked Workbook Data
 
-Status: active (Milestones A-D complete, E proposed)
+Status: complete (Milestones A-E delivered 2026-09-12 on `claude/batch-workbook-linking`)
 Read when: making an accepted workbook-backed comparison chart repeatable
 with no provider call, or extending reusable chart templates beyond snapshot
 columns.
@@ -330,6 +330,16 @@ Done when the whole loop runs in the app: save the Exp31/Exp32 carbon
 distribution chart as a template, pick Exp33 to Exp40, preview, accept.
 
 ### Milestone E — Lifecycle and docs
+
+Status: complete on 2026-09-12. Lifecycle behaviour is covered by the
+"lifecycle" test in `reusableChartTemplateApplications.linked.test.js`
+(re-confirmation, session deletion, retained ChartSpecs) and the viewer
+permission checks in the workbook template route test. Docs updated: data
+dictionary (application `frozenRegionRefs`, extraction/chart template
+coupling, lifecycle), database schema note (no migration), architecture,
+START_HERE, and the QA matrix's new "Workbook Series Templates" section. The
+one item left manual is the in-app Exp31/Exp32 to Exp33 to Exp40 run, which
+needs real workbooks.
 
 - Re-confirming a linked region: existing applications keep their frozen
   revision; the next application uses the current accepted revision; the

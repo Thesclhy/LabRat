@@ -32,8 +32,11 @@ The chart-creation program now includes persisted, versioned chart styles and
 scientific templates. New chart meaning still uses the reviewed analysis path;
 repetition with compatible accepted Browser experiments now uses a deterministic
 `chart_template_v1` run and the same AnalysisResult and ChartSpec publication
-boundary. Read
-`doc/plans/reusable-chart-creation-plan.md` and
+boundary. The same fast path applies to charts built from experiment-linked
+workbook regions: a workbook template binds to a data kind and reads each
+experiment's confirmed region. Read
+`doc/plans/reusable-chart-creation-plan.md`,
+`doc/plans/workbook-chart-template-plan.md`, and
 `doc/contracts/reusable-chart-template-contract-v1.md` for this work.
 
 ## Minimal Reading Path

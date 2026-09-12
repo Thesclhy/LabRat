@@ -3152,6 +3152,34 @@ test("workbook series templates apply by data kind and queue a run without touch
   });
   assert.equal(bindingsRejected.status, 422);
   assert.equal((await bindingsRejected.json()).error.code, "chart_template_binding_invalid");
+
+  const ownerCookie = cookie;
+  try {
+    const adminLogin = await jsonFetch("/api/auth/login", { method: "POST", body: { username: "admin", password: "LabRatAdmin123!" } });
+    cookie = cookieFrom(adminLogin);
+    const viewerUsername = `template_viewer_${stamp}`;
+    const createViewer = await jsonFetch("/api/admin/users", {
+      method: "POST",
+      body: { username: viewerUsername, displayName: "Template Viewer", temporaryPassword: "TemplateViewer123!", labId: project.labId, role: "viewer" },
+    });
+    assert.equal(createViewer.status, 201);
+    cookie = cookieFrom(await jsonFetch("/api/auth/login", { method: "POST", body: { username: viewerUsername, password: "TemplateViewer123!" } }));
+    const viewerApply = await jsonFetch(`/api/reusable-chart-template-versions/${templateVersion.id}/applications`, {
+      method: "POST",
+      headers: { "Idempotency-Key": `route_workbook_template_viewer_${stamp}` },
+      body: { experimentIds: [revisionIds[0].experimentId] },
+    });
+    assert.equal(viewerApply.status, 403);
+    const viewerCreate = await jsonFetch(`/api/projects/${project.id}/reusable-chart-templates`, {
+      method: "POST",
+      body: { name: "Viewer template", sourceChartSpecId: chartSpecId },
+    });
+    assert.equal(viewerCreate.status, 403);
+    const viewerRead = await jsonFetch(`/api/reusable-chart-templates/${templateBody.reusableChartTemplate.id}`);
+    assert.equal(viewerRead.status, 200, "viewers may still read templates");
+  } finally {
+    cookie = ownerCookie;
+  }
 });
 
 test("logout revokes the current session", async () => {

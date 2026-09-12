@@ -15,6 +15,22 @@ Keep entries concise, newest first, and include:
 
 ## 2026-09-12
 
+- Workbook chart templates, Milestone E of
+  `doc/plans/workbook-chart-template-plan.md` (lifecycle and docs); the plan
+  is complete. Added a lifecycle test proving that re-confirming a linked
+  region leaves an existing application executing against its frozen
+  revision while the next application picks the new one (with a
+  multiple-regions warning), that deleting a workbook session makes later
+  applications report `chart_template_session_deleted`, and that accepted
+  ChartSpecs and finished applications survive both. Added viewer-role
+  checks: viewers cannot create templates or applications but can read them.
+  Documentation: data dictionary (application `frozenRegionRefs`,
+  extraction-template/chart-template coupling through the data kind string,
+  lifecycle rules), database schema note (no migration; refs live in the
+  compatibility JSON), architecture and START_HERE, and a new "Workbook
+  Series Templates" section in the QA matrix. Verification: `npm run
+  codex:verify`. Follow-up: the in-app Exp31/Exp32 to Exp33 to Exp40 run
+  remains a manual check.
 - Workbook chart templates, Milestone D of
   `doc/plans/workbook-chart-template-plan.md` (frontend). The "Use template"
   picker in Chart Review handles templates with a `linked_region` slot:
