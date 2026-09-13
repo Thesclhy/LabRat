@@ -51,6 +51,17 @@ function lastCall(fetchImpl) {
 }
 
 describe("serverApi", () => {
+  it("lets the final transport choose a matching multipart boundary", async () => {
+    const fetchImpl = vi.fn(async (url, init) => {
+      expect(new Headers(init.headers).has("content-type")).toBe(false);
+      expect(init.body).toBeInstanceOf(FormData);
+      expect(init.body.get("file").name).toBe("Workbook.xlsx");
+      return jsonResponse({fileObject:{id:"file_qa"}});
+    });
+    await uploadServerProjectFile("project_1",new File(["cached workbook bytes"],"Workbook.xlsx"),{fetch:fetchImpl});
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
   it("logs in and includes credentials for session cookies", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ user: { id: "user_1" }, labs: [] }));
 

@@ -10,12 +10,14 @@ import { PlatformModule } from "./platform/platform.module.js";
 import { ReusableChartsModule } from "./reusable-charts/reusable-charts.module.js";
 import { WorkspaceModule } from "./workspace/workspace.module.js";
 import { InvitationsModule } from "./invitations/invitations.module.js";
+import { RegionTemplatesModule } from "./region-templates/region-templates.module.js";
 
 @Module({
   imports: [
     PlatformModule,
     IdentityModule,
     InvitationsModule,
+    RegionTemplatesModule,
     AuthorizationModule,
     WorkspaceModule,
     ExperimentModule,

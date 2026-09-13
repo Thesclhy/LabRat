@@ -137,6 +137,7 @@ async function loadServerProjectState(projectId, options) {
       chartSpecs: [],
       chartStyleProfiles: [],
       reusableChartTemplates: [],
+      regionExtractionTemplates: [],
       manuscripts: [],
       workbookReviewSessions: [],
       workbookReviewRegions: [],
@@ -166,6 +167,7 @@ async function loadServerProjectState(projectId, options) {
     chartSpecs,
     chartStyleProfiles,
     reusableChartTemplates,
+    regionExtractionTemplates,
     manuscripts,
     browserViews,
     browserConfig,
@@ -178,11 +180,12 @@ async function loadServerProjectState(projectId, options) {
     projectList("/api/v1/projects/{projectId}/region-understandings", projectId, options),
     projectList("/api/v1/projects/{projectId}/data-plans", projectId, options),
     projectList("/api/v1/projects/{projectId}/data-snapshots", projectId, options),
-    projectList("/api/v1/projects/{projectId}/agent/runs", projectId, options, { limit: 100 }),
-    projectList("/api/v1/projects/{projectId}/analysis-threads", projectId, options, { limit: 100 }),
+    collectProjectPages("/api/v1/projects/{projectId}/agent/runs", projectId, options, { limit: 100 }),
+    collectProjectPages("/api/v1/projects/{projectId}/analysis-threads", projectId, options, { limit: 100 }),
     collectProjectPages("/api/v1/projects/{projectId}/chart-specs", projectId, options, { limit: 100 }),
     collectProjectPages("/api/v1/projects/{projectId}/chart-style-profiles", projectId, options, { limit: 100 }),
     collectProjectPages("/api/v1/projects/{projectId}/reusable-chart-templates", projectId, options, { limit: 100 }),
+    collectProjectPages("/api/v1/projects/{projectId}/region-extraction-templates", projectId, options, { limit: 100 }),
     collectProjectPages("/api/v1/projects/{projectId}/manuscripts", projectId, options, { limit: 100 }),
     projectList("/api/v1/projects/{projectId}/browser-views", projectId, options),
     projectList("/api/v1/projects/{projectId}/browser-config", projectId, options),
@@ -204,6 +207,7 @@ async function loadServerProjectState(projectId, options) {
     chartSpecs: chartSpecs?.items || [],
     chartStyleProfiles: chartStyleProfiles?.items || [],
     reusableChartTemplates: reusableChartTemplates?.items || [],
+    regionExtractionTemplates: regionExtractionTemplates?.items || [],
     manuscripts: manuscripts?.items || [],
     workbookReviewSessions: sessionItems,
     workbookReviewRegions: regionPages.flatMap((page) => page?.items || []),
@@ -429,6 +433,14 @@ export function readServerSourceDocumentRange(sourceDocumentId, request = {}, op
   });
 }
 
+export function readServerSourceDocumentCellClasses(sourceDocumentId, request = {}, options = {}) {
+  if (!sourceDocumentId) throw new ServerApiError("Select a source document before reading cell classes.");
+  return apiV1Request("get", "/api/v1/source-documents/{sourceDocumentId}/cell-classes", {
+    pathParams: { sourceDocumentId }, query: { sheetName: request.sheetName || "", range: request.range || "" },
+    ...transport(options),
+  });
+}
+
 export function createServerAgentRun(projectId, request = {}, options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before asking LabRat to run a project workflow.");
   return apiV1Request("post", "/api/v1/projects/{projectId}/agent/runs", {
@@ -531,6 +543,103 @@ export function applyServerReusableChartTemplate(templateVersionId, request = {}
       headers: { ...(options.headers || {}), "Idempotency-Key": idempotencyKey },
     },
   );
+}
+
+export async function listServerRegionExtractionTemplates(projectId, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before listing extraction templates.");
+  return namedPage(await collectProjectPages("/api/v1/projects/{projectId}/region-extraction-templates", projectId, options), "regionExtractionTemplates");
+}
+
+export function getServerRegionExtractionTemplate(templateId, options = {}) {
+  if (!templateId) throw new ServerApiError("Select an extraction template before loading it.");
+  return apiV1Request("get", "/api/v1/region-extraction-templates/{templateId}", { pathParams: { templateId }, ...transport(options) });
+}
+
+export function createServerRegionExtractionTemplate(projectId, request = {}, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before saving an extraction template.");
+  const name = String(request.name || "").trim();
+  const regionId = String(request.regionId || "").trim();
+  if (!name) throw new ServerApiError("Name the extraction template before saving it.");
+  if (!regionId) throw new ServerApiError("Confirm a region before saving it as an extraction template.");
+  return apiV1Request("post", "/api/v1/projects/{projectId}/region-extraction-templates", {
+    pathParams: { projectId }, body: { name, description: String(request.description || "").trim(), regionId }, ...transport(options),
+  });
+}
+
+export function createServerRegionExtractionTemplateVersion(templateId, request = {}, options = {}) {
+  if (!templateId) throw new ServerApiError("Select an extraction template before adding a version.");
+  const regionId = String(request.regionId || "").trim();
+  if (!regionId) throw new ServerApiError("Confirm a region before updating the extraction template.");
+  return apiV1Request("post", "/api/v1/region-extraction-templates/{templateId}/versions", {
+    pathParams: { templateId }, body: { regionId }, ...transport(options),
+  });
+}
+
+export function archiveServerRegionExtractionTemplate(templateId, options = {}) {
+  if (!templateId) throw new ServerApiError("Select an extraction template before archiving it.");
+  return apiV1Request("post", "/api/v1/region-extraction-templates/{templateId}/archive", {
+    pathParams: { templateId }, body: {}, ...transport(options),
+  });
+}
+
+export function matchServerRegionExtractionTemplate(templateVersionId, request = {}, options = {}) {
+  if (!templateVersionId) throw new ServerApiError("Select an extraction template version before matching workbooks.");
+  const sourceDocumentIds = Array.isArray(request.sourceDocumentIds)
+    ? request.sourceDocumentIds.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+  if (!sourceDocumentIds.length) throw new ServerApiError("Select at least one uploaded workbook to match.");
+  return apiV1Request("post", "/api/v1/region-extraction-template-versions/{versionId}/matches", {
+    pathParams: { versionId: templateVersionId }, body: { sourceDocumentIds }, ...transport(options),
+  });
+}
+
+export function applyServerRegionExtractionTemplate(templateVersionId, request = {}, options = {}) {
+  if (!templateVersionId) throw new ServerApiError("Select an extraction template version before applying it.");
+  const sourceDocumentIds = Array.isArray(request.sourceDocumentIds)
+    ? request.sourceDocumentIds.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+  if (!sourceDocumentIds.length) throw new ServerApiError("Select at least one matched workbook to apply the template to.");
+  const idempotencyKey = String(request.idempotencyKey || "").trim();
+  if (!idempotencyKey) throw new ServerApiError("A template application key is required.");
+  return apiV1Request("post", "/api/v1/region-extraction-template-versions/{versionId}/apply", {
+    ...transport(options), pathParams: { versionId: templateVersionId },
+    body: { sourceDocumentIds, ...(Array.isArray(request.onlyStatuses) ? { onlyStatuses: request.onlyStatuses } : {}) },
+    headers: { ...(options.headers || {}), "Idempotency-Key": idempotencyKey },
+  });
+}
+
+export function confirmServerWorkbookReviewRegionsBatch(projectId, request = {}, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before confirming regions.");
+  const items = Array.isArray(request.items) ? request.items.filter((item) => item && item.regionId) : [];
+  if (!items.length) throw new ServerApiError("Select at least one region to confirm.");
+  return apiV1Request("post", "/api/v1/projects/{projectId}/workbook-review-regions/confirm-batch", {
+    pathParams: { projectId }, ...transport(options),
+    body: { items: items.map((item) => ({
+      regionId: item.regionId,
+      revisionId: item.revisionId || null,
+      expectedRegionVersion: item.expectedRegionVersion,
+      ...(item.linkedExperimentId !== undefined ? { linkedExperimentId: item.linkedExperimentId } : {}),
+    })) },
+  });
+}
+
+export function listServerLinkedDataKinds(projectId, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before listing linked workbook data.");
+  return apiV1Request("get", "/api/v1/projects/{projectId}/linked-data-kinds", { pathParams: { projectId }, ...transport(options) });
+}
+
+export function createServerLinkedDataComparison(projectId, request = {}, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before comparing linked data.");
+  const dataKind = String(request.dataKind || "").trim();
+  const experimentIds = Array.isArray(request.experimentIds)
+    ? request.experimentIds.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+  if (!dataKind) throw new ServerApiError("Choose a data kind to compare.");
+  if (!experimentIds.length) throw new ServerApiError("Choose at least one experiment to compare.");
+  return apiV1Request("post", "/api/v1/projects/{projectId}/linked-data-comparisons", {
+    pathParams: { projectId }, ...transport(options),
+    body: { dataKind, experimentIds, ...(request.chartType ? { chartType: request.chartType } : {}), ...(request.dryRun ? { dryRun: true } : {}) },
+  });
 }
 
 export function createServerManuscript(projectId, request = {}, options = {}) {

@@ -2,6 +2,8 @@ import { Injectable } from "@nestjs/common";
 import { and, desc, eq, ne } from "drizzle-orm";
 import { PostgresSaasStore } from "../../saas/postgresStore.js";
 import { DatabaseService } from "../platform/database/database.service.js";
+import { EvidenceRepository } from "../evidence/evidence.repository.js";
+import { experimentIdentities } from "../platform/database/schema.js";
 import {
   chartStyleProfiles,
   chartStyleProfileVersions,
@@ -94,17 +96,28 @@ export class ReusableChartsRepository {
       eq(reusableChartTemplateApplications.projectId, projectId),
       eq(reusableChartTemplateApplications.idempotencyKey, key),
     )).limit(1);
-    return row || null;
+    return row ? { ...row, frozenRegionRefs: row.compatibility?.frozenRegionRefs || [] } : null;
   }
 
   async findReusableChartTemplateApplicationById(id: string) {
     const [row] = await this.database.db.select().from(reusableChartTemplateApplications)
       .where(eq(reusableChartTemplateApplications.id, id)).limit(1);
-    return row || null;
+    return row ? { ...row, frozenRegionRefs: row.compatibility?.frozenRegionRefs || [] } : null;
   }
 
   findFileObjectById(id: string) {
     return this.compatStore().findFileObjectById(id);
+  }
+
+  findWorkbookReviewRegionById(id: string) { return new EvidenceRepository(this.database).findWorkbookReviewRegionById(id); }
+  findRegionUnderstandingRevisionById(id: string) { return new EvidenceRepository(this.database).findRegionUnderstandingRevisionById(id); }
+  findSourceDocumentById(id: string) { return new EvidenceRepository(this.database).findSourceDocumentById(id); }
+  listSourceIndexBlobs({ sourceDocumentId }: { sourceDocumentId: string }) { return new EvidenceRepository(this.database).listSourceIndexBlobs(sourceDocumentId); }
+  listSourceDocuments({ projectId }: { projectId: string }) { return new EvidenceRepository(this.database).listSourceDocuments(projectId); }
+  listAcceptedRegionUnderstandings({ projectId }: { projectId: string }) { return new EvidenceRepository(this.database).listAcceptedRegionUnderstandings(projectId); }
+  listWorkbookReviewRegions(input: Record<string, any>) { return new EvidenceRepository(this.database).listWorkbookReviewRegions(input); }
+  listExperimentIdentities({ projectId }: { projectId: string }) {
+    return this.database.db.select().from(experimentIdentities).where(eq(experimentIdentities.projectId, projectId));
   }
 
   findChartSpecById(id: string) {

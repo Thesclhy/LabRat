@@ -1,7 +1,7 @@
 import React, { useRef, useState } from "react";
 import { InvitationForm } from "./InvitationForm.jsx";
 
-export function ServerLogin({ loading, error, onLogin, onRegistered }) {
+export function ServerLogin({ loading, error, onLogin, onRegistered, embedded = false, onBack }) {
   const [registering, setRegistering] = useState(false);
   const submitting = useRef(false);
   const [username, setUsername] = useState("");
@@ -15,8 +15,7 @@ export function ServerLogin({ loading, error, onLogin, onRegistered }) {
     finally { submitting.current = false; }
   };
 
-  return (
-    <main className="server-login">
+  const panel = (
       <section className="server-login-panel">
         <div className="server-login-brand">
           <img src={`${import.meta.env.BASE_URL}labrat-logo.png`} alt="" />
@@ -28,7 +27,7 @@ export function ServerLogin({ loading, error, onLogin, onRegistered }) {
         {registering ? <InvitationForm onComplete={onRegistered} onCancel={() => setRegistering(false)} /> : <form className="server-login-form" onSubmit={submit}>
           <label>
             <span>Username</span>
-            <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" />
+            <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" autoFocus={embedded} />
           </label>
           <label>
             <span>Password</span>
@@ -39,8 +38,9 @@ export function ServerLogin({ loading, error, onLogin, onRegistered }) {
             {loading ? "Signing in..." : "Sign in"}
           </button>
           <button type="button" disabled={loading} onClick={() => { setPassword(""); setRegistering(true); }}>Register with invitation</button>
+          {onBack && <button type="button" className="server-login-back" disabled={loading} onClick={onBack}>Back</button>}
         </form>}
       </section>
-    </main>
   );
+  return embedded ? panel : <main className="server-login">{panel}</main>;
 }

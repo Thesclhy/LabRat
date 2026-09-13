@@ -7,6 +7,7 @@ import {
   HttpCode,
   Param,
   Post,
+  Query,
   Req,
   Res,
 } from "@nestjs/common";
@@ -104,6 +105,12 @@ export class ProjectEvidenceController {
 @Controller("api/v1/source-documents/:sourceDocumentId")
 export class SourceDocumentEvidenceController {
   constructor(private readonly evidenceService: EvidenceService) {}
+
+  @Get("cell-classes")
+  cellClasses(@CurrentAuth() auth: AuthContext, @Param("sourceDocumentId") id: string,
+    @Query() query: SourceDocumentRangeDto) {
+    return this.evidenceService.cellClasses(auth, id, query);
+  }
 
   @Get("regions")
   async listRegions(

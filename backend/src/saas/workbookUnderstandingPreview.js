@@ -10,6 +10,8 @@ const AXES = new Set(["rows", "region"]);
 const FIELD_ROLES = new Set(["identifier", "condition", "outcome", "series_summary", "other"]);
 const VALUE_TYPES = new Set(["number", "string", "date", "boolean"]);
 const NON_EXPERIMENT_SEMANTIC_TYPES = new Set(["ignored_region", "metadata_notes"]);
+const SERIES_ORIENTATIONS = new Set(["header_row_categories", "column_pair"]);
+const NUMERIC_SCALES = new Set(["percent_points", "fraction"]);
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -465,6 +467,85 @@ function fieldFromPatch({ sourceDocument, sheetName, patch, proposedFields, full
   };
 }
 
+function validateRangeInside(rangeRef, fullRange, property) {
+  const normalizedRange = text(rangeRef).toUpperCase().replace(/\$/g, "");
+  if (!/^[A-Z]{1,3}\d{1,7}(?::[A-Z]{1,3}\d{1,7})?$/.test(normalizedRange)) {
+    patchError("invalid_interpretation_patch", `${property} must be an Excel range such as Q31:BA31.`);
+  }
+  const decoded = decodeRange(normalizedRange);
+  if (decoded.s.r < fullRange.s.r || decoded.e.r > fullRange.e.r || decoded.s.c < fullRange.s.c || decoded.e.c > fullRange.e.c) {
+    patchError("interpretation_range_outside_region", `${property} must be inside the selected source range.`, { range: normalizedRange });
+  }
+  return { range: encodeRange(decoded), decoded };
+}
+
+function rangeSourceRef(sourceDocument, sheetName, range) {
+  return {
+    sourceType: "excel_range",
+    sourceDocumentId: sourceDocument.id,
+    fileObjectId: sourceDocument.fileObjectId || null,
+    importRunId: sourceDocument.importRunId || null,
+    sheet: sheetName,
+    range,
+  };
+}
+
+function seriesFromSeriesPatch({ sourceDocument, sheetName, item, fullRange, fields }) {
+  const orientation = text(item?.orientation) || "header_row_categories";
+  if (!SERIES_ORIENTATIONS.has(orientation)) patchError("invalid_series_patch", `Unsupported series orientation: ${orientation}.`);
+  const yNumericScale = text(item?.yNumericScale) || null;
+  if (yNumericScale && !NUMERIC_SCALES.has(yNumericScale)) patchError("invalid_series_patch", `Unsupported series numeric scale: ${yNumericScale}.`);
+  const label = text(item?.label) || text(item?.seriesKey) || "Series";
+  const seriesKey = slug(item?.seriesKey || label, "series");
+  if (orientation === "column_pair") {
+    const xColumn = validateColumn(item?.xColumn, fullRange, "series xColumn");
+    const yColumn = validateColumn(item?.yColumn, fullRange, "series yColumn");
+    return {
+      seriesKey,
+      label,
+      orientation,
+      xColumn,
+      yColumn,
+      xSemanticKey: slug(item?.xMeaning, "x"),
+      ySemanticKey: slug(item?.seriesKey || label, "y"),
+      xUnit: null,
+      yUnit: text(item?.yUnit) || null,
+      yNumericScale,
+      confidence: 0.98,
+      sourceRefs: fields.filter((field) => [xColumn, yColumn].includes(field.column)).flatMap((field) => field.sourceRefs),
+    };
+  }
+  const header = validateRangeInside(item?.xHeaderRange, fullRange, "series xHeaderRange");
+  const values = validateRangeInside(item?.yValueRange, fullRange, "series yValueRange");
+  if (header.decoded.s.r !== header.decoded.e.r || values.decoded.s.r !== values.decoded.e.r) {
+    patchError("invalid_series_patch", "Header-row series need one header row and one value row.");
+  }
+  if (header.decoded.s.c !== values.decoded.s.c || header.decoded.e.c !== values.decoded.e.c) {
+    patchError("invalid_series_patch", "Header-row series header and value ranges must cover the same columns.");
+  }
+  const xValueType = text(item?.xValueType) || "string";
+  if (!VALUE_TYPES.has(xValueType)) patchError("invalid_series_patch", `Unsupported series x value type: ${xValueType}.`);
+  return {
+    seriesKey,
+    label,
+    orientation,
+    xHeaderRange: header.range,
+    yValueRange: values.range,
+    xSemanticKey: slug(item?.xMeaning, "category"),
+    ySemanticKey: slug(item?.seriesKey || label, "value"),
+    xValueType,
+    xUnit: null,
+    yUnit: text(item?.yUnit) || null,
+    yNumericScale,
+    pointCount: header.decoded.e.c - header.decoded.s.c + 1,
+    confidence: 0.98,
+    sourceRefs: [
+      rangeSourceRef(sourceDocument, sheetName, header.range),
+      rangeSourceRef(sourceDocument, sheetName, values.range),
+    ],
+  };
+}
+
 function validatedInclusion(patch, proposal, fullRange) {
   const source = cleanObject(patch);
   const startRow = Number(source.startRow ?? proposal.startRow);
@@ -589,6 +670,14 @@ function applyPatch({ sourceDocument, region, rangeResult, proposal, patch, full
         .flatMap((field) => field.sourceRefs),
     }))
     : (experimentAxis === "region" ? seriesFrom(fields) : []);
+  let mergedSeries = series;
+  for (const item of asArray(source.seriesPatches)) {
+    const nextSeries = seriesFromSeriesPatch({ sourceDocument, sheetName: region.sheetName, item, fullRange, fields });
+    const existingIndex = mergedSeries.findIndex((candidate) => candidate.seriesKey === nextSeries.seriesKey);
+    mergedSeries = existingIndex >= 0
+      ? mergedSeries.map((candidate, index) => (index === existingIndex ? nextSeries : candidate))
+      : [...mergedSeries, nextSeries];
+  }
   const decisionSource = text(source.decisionSource) || "user_patch";
   return {
     ...proposal,
@@ -597,7 +686,7 @@ function applyPatch({ sourceDocument, region, rangeResult, proposal, patch, full
     experimentIdColumn,
     experimentLabel,
     fields,
-    series,
+    series: mergedSeries,
     inclusion,
     confidence: decisionSource === "backend_model" ? proposal.confidence : 0.98,
     decisionSource,

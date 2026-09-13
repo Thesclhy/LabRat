@@ -332,6 +332,56 @@ describe("ProjectOverview", () => {
     expect(onGoManuscript).toHaveBeenCalledTimes(1);
   });
 
+  it("offers a direct multi-file workbook upload entrance on the Workbook review card", () => {
+    const onUploadWorkbookFiles = vi.fn();
+    const onAskLabRat = vi.fn();
+    const withSessions = {
+      ...projectState,
+      sourceDocuments: [{ id: "source_doc_1", fileName: "Pending.xlsx" }],
+      workbookReviewSessions: [{ id: "session_1", sourceDocumentId: "source_doc_1" }],
+      workbookReviewRegions: [],
+    };
+
+    const { container, rerender } = render(
+      <ProjectOverview
+        projectState={withSessions}
+        onAskLabRat={onAskLabRat}
+        onOpenProfile={() => {}}
+        onUploadWorkbook={() => {}}
+        onUploadWorkbookFiles={onUploadWorkbookFiles}
+        onGoBrowser={() => {}}
+        onOpenChartReview={() => {}}
+        onGoManuscript={() => {}}
+      />,
+    );
+
+    const fileInput = screen.getByLabelText("Choose workbooks to upload");
+    expect(fileInput.multiple).toBe(true);
+    expect(screen.getByRole("button", { name: "Review workbook" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Upload workbooks" })).toBeTruthy();
+    const exp31 = new File(["a"], "Calculation Exp31.xlsx");
+    const exp32 = new File(["b"], "Calculation Exp32.xlsx");
+    fireEvent.change(fileInput, { target: { files: [exp31, exp32] } });
+    expect(onUploadWorkbookFiles).toHaveBeenCalledWith([exp31, exp32]);
+    expect(onAskLabRat).not.toHaveBeenCalled();
+
+    rerender(
+      <ProjectOverview
+        projectState={{ ...withSessions, workbookReviewSessions: [], sourceDocuments: [] }}
+        onAskLabRat={onAskLabRat}
+        onOpenProfile={() => {}}
+        onUploadWorkbook={() => {}}
+        onUploadWorkbookFiles={onUploadWorkbookFiles}
+        onGoBrowser={() => {}}
+        onOpenChartReview={() => {}}
+        onGoManuscript={() => {}}
+      />,
+    );
+    expect(screen.getAllByRole("button", { name: "Upload workbooks" })).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "Review workbook" })).toBeNull();
+    expect(container.querySelectorAll('input[type="file"]')).toHaveLength(1);
+  });
+
   it("lists every uploaded workbook before opening confirmed regions", () => {
     const onUploadWorkbook = vi.fn();
     const onDeleteWorkbook = vi.fn().mockResolvedValue({});
@@ -783,6 +833,33 @@ describe("WorkbookReviewWorkspace", () => {
         expect(cell.closest(".rdg-cell")?.classList.contains("is-analysis-input")).toBe(true);
         expect(cell.closest(".rdg-cell")?.classList.contains("is-draft")).toBe(false);
       });
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("overlays formula cell classes only on the matching sheet when a calculation overlay is supplied", async () => {
+    const fetchMock = makeWorkbookReviewFetch();
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    try {
+      render(
+        <WorkbookReviewWorkspace
+          projectId="project_1"
+          reviewState={reviewState}
+          draftRegions={[]}
+          activeDraftRegionId=""
+          onDraftRegionsChange={() => {}}
+          cellClassOverlay={{ regionId: "region_1", sheetName: "sheet1", classes: { A1: "constant", B1: "terminal" }, loading: false, error: "" }}
+        />,
+      );
+
+      const a1 = await screen.findByLabelText("Cell A1");
+      await waitFor(() => {
+        expect(a1.closest(".rdg-cell")?.classList.contains("is-cell-constant")).toBe(true);
+        expect(screen.getByLabelText("Cell B1").closest(".rdg-cell")?.classList.contains("is-cell-terminal")).toBe(true);
+      });
+      expect(screen.getByLabelText("Calculation overlay legend")).toBeTruthy();
     } finally {
       global.fetch = originalFetch;
     }
@@ -1855,6 +1932,13 @@ describe("WorkbookReviewWorkspace", () => {
 
 
 describe("ChartReviewModal", () => {
+  it("keeps approved charts readable without proposal permission", () => {
+    render(<ChartReviewModal open projectId="project_1" statusFilter="active" chartSpecs={[]} onClose={() => {}} />);
+    expect(screen.getByText('No approved ChartSpecs yet.')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Create chart' }).disabled).toBe(true);
+    expect(screen.queryByText('Select a server project first')).toBeNull();
+  });
+
   it("shows reviewed analysis chart creation only in the chart review modal", () => {
     render(
       <ChartReviewModal
@@ -2025,6 +2109,103 @@ describe("AgentPanel", () => {
 
   afterEach(() => {
     clearAgentChatHistoryStorage();
+  });
+
+  it("writes prose for the selected manuscript chart without opening analysis review", async () => {
+    const onOpenAnalysisReview = vi.fn();
+    const onChartAnalysisHandled = vi.fn();
+    const setBlocks = vi.fn();
+    const selectedChartContext = {
+      blockId: "chart_block_1",
+      chartSpecId: "chart_spec_1",
+      title: "Conversion by time",
+      block: { x: 120, y: 160, w: 580, h: 380 },
+      chartView: { visibleTraceIds: ["catalyst_a"] },
+      plottedData: { traces: [{ name: "Catalyst A", x: [1, 2, 3], y: [35, 61, 78] }] },
+    };
+    const fetchMock = vi.fn(async (url, request = {}) => {
+      if (url === "/api/v1/projects/project_1/analysis-capabilities") {
+        return jsonResponse({
+          model: { provider: "anthropic", model: "claude-test", configured: true },
+          executor: { configured: true, adapter: "local" },
+          acceptedData: { acceptedSnapshotCount: 1, activeExperimentHeadCount: 1 },
+        });
+      }
+      if (url === "/api/v1/projects/project_1/agent/runs") {
+        const body = JSON.parse(request.body);
+        expect(body.message).toBe("Write a manuscript-ready analysis of the selected chart.");
+        expect(body.selectedContext).toMatchObject({
+          requestedWorkflow: "chart_commentary",
+          chartCommentaryMode: "analysis",
+          selectedChartSpecId: "chart_spec_1",
+          selectedChartBlockId: "chart_block_1",
+          selectedChartView: { visibleTraceIds: ["catalyst_a"] },
+        });
+        expect(body.selectedContext.plottedData).toBeUndefined();
+        return jsonResponse({
+          reply: "Conversion rises with reaction time for Catalyst A, with the largest increase occurring early in the observed interval.",
+          analysisThread: null,
+          currentPlanRevision: null,
+          agentRun: {
+            id: "agent_run_chart_commentary_1",
+            status: "completed",
+            mode: "chart_commentary",
+            visibleSteps: [],
+            actions: [],
+            warnings: [],
+          },
+        }, { status: 201 });
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+
+    function Harness() {
+      const [pending, setPending] = useState({ blockId: "chart_block_1", nonce: 1 });
+      return (
+        <AgentPanel
+          open
+          setOpen={() => {}}
+          blocks={[]}
+          setBlocks={setBlocks}
+          references={[]}
+          selected={null}
+          selectedChartContext={selectedChartContext}
+          pendingChartAnalysis={pending}
+          onChartAnalysisHandled={(nonce) => {
+            onChartAnalysisHandled(nonce);
+            setPending(null);
+          }}
+          activeProjectId="project_1"
+          projectState={{ project: { id: "project_1", name: "Catalyst Screening" } }}
+          onProjectStateLoaded={() => {}}
+          onOpenAnalysisReview={onOpenAnalysisReview}
+        />
+      );
+    }
+
+    try {
+      render(<Harness />);
+
+      expect(await screen.findByText(/Conversion rises with reaction time/)).toBeTruthy();
+      expect(onChartAnalysisHandled).toHaveBeenCalledWith(1);
+      expect(onOpenAnalysisReview).not.toHaveBeenCalled();
+      expect(screen.queryByRole("button", { name: "Review analysis plan" })).toBeNull();
+      const insert = screen.getByRole("button", { name: "Insert as text box" });
+      fireEvent.click(insert);
+      expect(setBlocks).toHaveBeenCalledTimes(1);
+      const updater = setBlocks.mock.calls[0][0];
+      const nextBlocks = updater([]);
+      expect(nextBlocks[0]).toMatchObject({
+        kind: "text",
+        x: 120,
+        y: 564,
+        html: "Conversion rises with reaction time for Catalyst A, with the largest increase occurring early in the observed interval.",
+      });
+    } finally {
+      global.fetch = originalFetch;
+    }
   });
 
   it("sends the active Browser surface with ordinary LabRat chat requests", async () => {
@@ -3254,7 +3435,7 @@ describe("AgentPanel", () => {
       fireEvent.change(fileInput, { target: { files: [file] } });
 
       expect(screen.getByText("Master.xlsx")).toBeTruthy();
-      expect(fetchMock.mock.calls.some(([url]) => url === "/api/v1/projects/project_1/files")).toBe(false);
+      expect(fetchMock.mock.calls.some(([url, init]) => url === "/api/v1/projects/project_1/files" && init.method === "POST")).toBe(false);
 
       const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
       fireEvent.change(promptInput, { target: { value: "Please help me understand this workbook" } });
@@ -3283,6 +3464,405 @@ describe("AgentPanel", () => {
       }));
     } finally {
       global.fetch = originalFetch;
+    }
+  });
+
+  it("uploads several attached workbooks as one batch, isolates failures, suggests experiments, and retries failed files", async () => {
+    localStorage.removeItem("labrat_blank_chat_history_v1_react");
+    const onWorkbookReviewReady = vi.fn();
+    const onWorkbookReviewLinkOpen = vi.fn().mockResolvedValue(undefined);
+    const onWorkbookBatchUploaded = vi.fn();
+    const onProjectStateLoaded = vi.fn();
+    let exp32SessionAttempts = 0;
+    const sessionResponse = (name, fileId) => ({
+      workbookReviewSession: {
+        id: `session_${fileId}`,
+        sourceDocumentId: `source_${fileId}`,
+        status: "needs_user_review",
+        workbookSummary: { workbookName: name, sheetCount: 1, regionCount: 1, nonEmptyCellCount: 12 },
+      },
+      sourceDocument: { id: `source_${fileId}`, metadata: { workbookName: name, sheets: [{ name: "Sheet1", usedRange: "A1:D5" }] } },
+      regions: [],
+      reviewRegions: [{
+        id: `region_${fileId}`,
+        workbookReviewSessionId: `session_${fileId}`,
+        sourceDocumentId: `source_${fileId}`,
+        sheetName: "Sheet1",
+        rangeRef: "P31:BA32",
+        disposition: "active",
+        reviewStatus: "interpreting",
+        version: 1,
+      }],
+      interpretationDeferred: true,
+    });
+    const fetchMock = vi.fn(async (url, init = {}) => {
+      if (url === "/api/v1/projects/project_1/analysis-capabilities") {
+        return jsonResponse({ model: { configured: true }, executor: { configured: true, adapter: "local" }, acceptedData: {} });
+      }
+      if (url.startsWith("/api/v1/projects/project_1/experiment-browser")) {
+        return jsonResponse({ rows: [{ experimentId: "identity_31", label: "Exp31" }], columns: [] });
+      }
+      if (url === "/api/v1/projects/project_1/files" && init.method === "POST") {
+        const uploaded = init.body.get("file");
+        const fileId = uploaded.name.includes("Exp31") ? "exp31" : "exp32";
+        return jsonResponse({ fileObject: { id: `file_${fileId}`, originalName: uploaded.name } }, { status: 201 });
+      }
+      if (url === "/api/v1/projects/project_1/workbook-review-sessions" && init.method === "POST") {
+        const { fileObjectId } = JSON.parse(init.body);
+        if (fileObjectId === "file_exp31") return jsonResponse(sessionResponse("Calculation Exp31.xlsx", "exp31"), { status: 201 });
+        exp32SessionAttempts += 1;
+        if (exp32SessionAttempts === 1) {
+          return jsonResponse({ error: { code: "workbook_index_failed", message: "Workbook could not be indexed." } }, { status: 422 });
+        }
+        return jsonResponse(sessionResponse("Calculation Exp32.xlsx", "exp32"), { status: 201 });
+      }
+      if (url === "/api/v1/projects/project_1") {
+        return jsonResponse({ project: { id: "project_1" }, sourceDocuments: [], workbookReviewSessions: [] });
+      }
+      return jsonResponse({});
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+
+    try {
+      const { container } = render(
+        <AgentPanel
+          open
+          setOpen={() => {}}
+          blocks={[]}
+          setBlocks={() => {}}
+          references={[]}
+          selected={null}
+          selectedChartContext={null}
+          pendingChartAnalysis={null}
+          activeProjectId="project_1"
+          projectState={{ project: { id: "project_1", name: "Catalyst Screening" }, fileObjects: [] }}
+          onProjectStateLoaded={onProjectStateLoaded}
+          onWorkbookReviewReady={onWorkbookReviewReady}
+          onWorkbookReviewLinkOpen={onWorkbookReviewLinkOpen}
+          onWorkbookBatchUploaded={onWorkbookBatchUploaded}
+          workbookBatchInterpretation={{ session_exp31: { total: 1, pending: 1, failed: 0 } }}
+        />,
+      );
+
+      const fileInput = container.querySelector('input[type="file"]');
+      expect(fileInput.multiple).toBe(true);
+      const exp31 = new File(["a"], "Calculation Exp31.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const exp32 = new File(["b"], "Calculation Exp32.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      fireEvent.change(fileInput, { target: { files: [exp31, exp32] } });
+
+      expect(screen.getByText("2 workbooks attached. Send to upload them as one batch.")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Remove attached spreadsheet Calculation Exp32.xlsx" })).toBeTruthy();
+      expect(fetchMock.mock.calls.some(([url, init]) => url === "/api/v1/projects/project_1/files" && init.method === "POST")).toBe(false);
+
+      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
+      fireEvent.change(promptInput, { target: { value: "Upload these calculation workbooks" } });
+      fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
+
+      expect(await screen.findByText("1/2 workbooks indexed")).toBeTruthy();
+      expect(await screen.findByRole("button", { name: "Retry 1 failed" })).toBeTruthy();
+      expect(screen.getByText("Suggested: Exp31")).toBeTruthy();
+      expect(screen.getByText("Exp32 is not in Experiment Browser yet")).toBeTruthy();
+      expect(screen.getByText("Workbook could not be indexed.")).toBeTruthy();
+      expect(screen.getByText("Understanding regions 0/1")).toBeTruthy();
+      expect(screen.getByText(/I indexed 1 of 2 workbooks/)).toBeTruthy();
+      expect(onWorkbookReviewReady).not.toHaveBeenCalled();
+      expect(onWorkbookBatchUploaded).toHaveBeenCalledTimes(1);
+      expect(onWorkbookBatchUploaded.mock.calls[0][0]).toEqual([
+        expect.objectContaining({
+          sessionId: "session_exp31",
+          sourceDocumentId: "source_exp31",
+          workbookName: "Calculation Exp31.xlsx",
+          regions: [expect.objectContaining({ id: "region_exp31", reviewStatus: "interpreting" })],
+        }),
+      ]);
+      expect(fetchMock.mock.calls.filter(([url]) => url === "/api/v1/projects/project_1")).toHaveLength(1);
+      await waitFor(() => expect(onProjectStateLoaded).toHaveBeenCalledTimes(1));
+
+      fireEvent.click(screen.getByRole("button", { name: "Retry 1 failed" }));
+      expect(await screen.findByText("2/2 workbooks indexed")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: /Retry/ })).toBeNull();
+      expect(fetchMock.mock.calls.filter(([url, init]) => url === "/api/v1/projects/project_1/files" && init.method === "POST")).toHaveLength(3);
+      expect(onWorkbookBatchUploaded).toHaveBeenCalledTimes(2);
+      expect(onWorkbookBatchUploaded.mock.calls[1][0].map((entry) => entry.sessionId)).toEqual(["session_exp32"]);
+
+      fireEvent.click(screen.getByRole("button", { name: "Calculation Exp32.xlsx" }));
+      await waitFor(() => expect(onWorkbookReviewLinkOpen).toHaveBeenCalledWith(expect.objectContaining({
+        workbookReviewSessionId: "session_exp32",
+        workbookName: "Calculation Exp32.xlsx",
+        regionCount: 1,
+      })));
+
+      const stored = JSON.parse(localStorage.getItem("labrat_blank_chat_history_v2_project_project_1") || "[]");
+      const storedBatch = stored.find((message) => message.workbookBatch)?.workbookBatch;
+      expect(storedBatch?.items.every((item) => !("result" in item) && !("file" in item))).toBe(true);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("starts a batch upload from files requested by the Overview without a typed message", async () => {
+    localStorage.removeItem("labrat_blank_chat_history_v2_project_project_1");
+    const onRequestedWorkbookFilesHandled = vi.fn();
+    const onWorkbookBatchUploaded = vi.fn();
+    const fetchMock = vi.fn(async (url, init = {}) => {
+      if (url === "/api/v1/projects/project_1/analysis-capabilities") {
+        return jsonResponse({ model: { configured: true }, executor: { configured: true }, acceptedData: {} });
+      }
+      if (url.startsWith("/api/v1/projects/project_1/experiment-browser")) return jsonResponse({ rows: [] });
+      if (url === "/api/v1/projects/project_1/files" && init.method === "POST") {
+        const uploaded = init.body.get("file");
+        return jsonResponse({ fileObject: { id: `file_${uploaded.name}`, originalName: uploaded.name } }, { status: 201 });
+      }
+      if (url === "/api/v1/projects/project_1/workbook-review-sessions" && init.method === "POST") {
+        const { fileObjectId } = JSON.parse(init.body);
+        const name = fileObjectId.replace(/^file_/, "");
+        return jsonResponse({
+          workbookReviewSession: { id: `session_${name}`, sourceDocumentId: `source_${name}`, status: "needs_user_review", workbookSummary: { workbookName: name } },
+          sourceDocument: { id: `source_${name}`, metadata: { workbookName: name } },
+          regions: [],
+          reviewRegions: [],
+        }, { status: 201 });
+      }
+      if (url === "/api/v1/projects/project_1") return jsonResponse({ project: { id: "project_1" } });
+      return jsonResponse({});
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    try {
+      const files = [new File(["a"], "Calculation Exp31.xlsx"), new File(["b"], "Calculation Exp32.xlsx")];
+      render(
+        <AgentPanel
+          open
+          setOpen={() => {}}
+          blocks={[]}
+          setBlocks={() => {}}
+          references={[]}
+          selected={null}
+          selectedChartContext={null}
+          pendingChartAnalysis={null}
+          activeProjectId="project_1"
+          projectState={{ project: { id: "project_1", name: "Catalyst Screening" }, fileObjects: [] }}
+          onProjectStateLoaded={() => {}}
+          onWorkbookBatchUploaded={onWorkbookBatchUploaded}
+          requestedWorkbookFiles={{ requestId: "request_1", files }}
+          onRequestedWorkbookFilesHandled={onRequestedWorkbookFilesHandled}
+        />,
+      );
+
+      expect(onRequestedWorkbookFilesHandled).toHaveBeenCalledTimes(1);
+      expect(screen.getByText("Upload 2 workbooks from Overview for workbook review.")).toBeTruthy();
+      expect(await screen.findByText("2/2 workbooks indexed")).toBeTruthy();
+      expect(onWorkbookBatchUploaded).toHaveBeenCalledTimes(1);
+      expect(onWorkbookBatchUploaded.mock.calls[0][0].map((entry) => entry.sessionId)).toEqual([
+        "session_Calculation Exp31.xlsx",
+        "session_Calculation Exp32.xlsx",
+      ]);
+      expect(fetchMock.mock.calls.filter(([url, init]) => url === "/api/v1/projects/project_1/files" && init.method === "POST")).toHaveLength(2);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("matches an extraction template against a batch and shows per-file results", async () => {
+    const historyKey = "labrat_blank_chat_history_v2_project_project_1";
+    localStorage.setItem(historyKey, JSON.stringify([{
+      role: "assistant",
+      text: "I indexed 3 workbooks.",
+      workbookBatch: {
+        batchId: "workbook_batch_seed",
+        items: [
+          { index: 0, fileName: "Calculation Exp31.xlsx", status: "uploaded", error: "", workbookReviewLink: { workbookReviewSessionId: "session_31", sourceDocumentId: "doc_31", workbookName: "Calculation Exp31.xlsx", regionCount: 2 } },
+          { index: 1, fileName: "Calculation Exp32.xlsx", status: "uploaded", error: "", workbookReviewLink: { workbookReviewSessionId: "session_32", sourceDocumentId: "doc_32", workbookName: "Calculation Exp32.xlsx", regionCount: 2 } },
+          { index: 2, fileName: "Calculation Exp33.xlsx", status: "uploaded", error: "", workbookReviewLink: { workbookReviewSessionId: "session_33", sourceDocumentId: "doc_33", workbookName: "Calculation Exp33.xlsx", regionCount: 2 } },
+        ],
+      },
+    }]));
+    const fetchMock = vi.fn(async (url, init = {}) => {
+      if (url === "/api/v1/projects/project_1/analysis-capabilities") {
+        return jsonResponse({ model: { configured: true }, executor: { configured: true }, acceptedData: {} });
+      }
+      if (url === "/api/v1/region-extraction-template-versions/template_version_1/matches") {
+        expect(JSON.parse(init.body)).toEqual({ sourceDocumentIds: ["doc_31", "doc_32", "doc_33"] });
+        return jsonResponse({
+          templateName: "Carbon distribution",
+          templateVersionId: "template_version_1",
+          templateVersion: 1,
+          summary: { exact: 2, formula_mismatch: 1 },
+          matches: [
+            { sourceDocumentId: "doc_31", status: "exact", sheetName: "Sheet1", matchedRange: "P31:BA32", offset: { rows: 0, cols: 0 }, experimentLabel: "Exp31", labelSource: "cell", isTemplateSource: true, eligibleForBatchConfirm: true },
+            { sourceDocumentId: "doc_32", status: "exact", sheetName: "Sheet1", matchedRange: "P31:BA32", offset: { rows: 0, cols: 0 }, experimentLabel: "Exp32", labelSource: "cell", isTemplateSource: false, eligibleForBatchConfirm: true },
+            { sourceDocumentId: "doc_33", status: "formula_mismatch", sheetName: "Sheet1", matchedRange: "P31:BA32", offset: { rows: 0, cols: 0 }, experimentLabel: null, brokenCells: [{ address: "F43" }, { address: "G43" }], formulaMismatches: [], eligibleForBatchConfirm: false },
+          ],
+        });
+      }
+      return jsonResponse({});
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    try {
+      render(
+        <AgentPanel
+          open
+          setOpen={() => {}}
+          blocks={[]}
+          setBlocks={() => {}}
+          references={[]}
+          selected={null}
+          selectedChartContext={null}
+          pendingChartAnalysis={null}
+          activeProjectId="project_1"
+          projectState={{
+            project: { id: "project_1", name: "Catalyst Screening" },
+            fileObjects: [],
+            regionExtractionTemplates: [
+              { id: "template_1", name: "Carbon distribution", status: "active", currentVersionId: "template_version_1", currentVersion: 1, sheetName: "Sheet1", anchorRange: "P31:BA32" },
+              { id: "template_old", name: "Retired", status: "archived", currentVersionId: "template_version_old" },
+            ],
+          }}
+          onProjectStateLoaded={() => {}}
+        />,
+      );
+
+      const select = screen.getByLabelText("Extraction template");
+      expect(within(select).getAllByRole("option").map((option) => option.textContent)).toEqual(["Carbon distribution (Sheet1!P31:BA32)"]);
+      fireEvent.click(screen.getByRole("button", { name: "Match workbooks" }));
+
+      expect(await screen.findByText("Carbon distribution v1: 2 exact match, 1 formula mismatch")).toBeTruthy();
+      const exp32 = screen.getByLabelText("Template match for Calculation Exp32.xlsx");
+      expect(within(exp32).getByText("Exact match")).toBeTruthy();
+      expect(within(exp32).getByText("Sheet1!P31:BA32 · Exp32")).toBeTruthy();
+      const exp31 = screen.getByLabelText("Template match for Calculation Exp31.xlsx");
+      expect(within(exp31).getByText("template source")).toBeTruthy();
+      const exp33 = screen.getByLabelText("Template match for Calculation Exp33.xlsx");
+      expect(within(exp33).getByText("Formula mismatch")).toBeTruthy();
+      expect(within(exp33).getByText("Sheet1!P31:BA32 · typed over upstream: F43, G43")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Match again" })).toBeTruthy();
+
+      const stored = JSON.parse(localStorage.getItem(historyKey) || "[]");
+      expect(stored[0].workbookBatch.match.results.map((result) => result.status)).toEqual(["exact", "exact", "formula_mismatch"]);
+    } finally {
+      global.fetch = originalFetch;
+      localStorage.removeItem(historyKey);
+    }
+  });
+
+  it("applies a matched template as prefilled regions and confirms the linked ones in one batch", async () => {
+    const historyKey = "labrat_blank_chat_history_v2_project_project_1";
+    localStorage.setItem(historyKey, JSON.stringify([{
+      role: "assistant",
+      text: "I indexed 2 workbooks.",
+      workbookBatch: {
+        batchId: "workbook_batch_apply",
+        items: [
+          { index: 0, fileName: "Calculation Exp32.xlsx", status: "uploaded", error: "", workbookReviewLink: { workbookReviewSessionId: "session_32", sourceDocumentId: "doc_32", workbookName: "Calculation Exp32.xlsx", regionCount: 2 } },
+          { index: 1, fileName: "Calculation Exp99.xlsx", status: "uploaded", error: "", workbookReviewLink: { workbookReviewSessionId: "session_99", sourceDocumentId: "doc_99", workbookName: "Calculation Exp99.xlsx", regionCount: 2 } },
+        ],
+        match: {
+          templateId: "template_1",
+          templateName: "Carbon distribution",
+          templateVersionId: "template_version_1",
+          templateVersion: 1,
+          summary: { exact: 2 },
+          results: [
+            { sourceDocumentId: "doc_32", status: "exact", sheetName: "Sheet1", matchedRange: "P31:BA32", offset: { rows: 0, cols: 0 }, experimentLabel: "Exp32", labelSource: "cell", isTemplateSource: false, eligibleForBatchConfirm: true },
+            { sourceDocumentId: "doc_99", status: "exact", sheetName: "Sheet1", matchedRange: "P31:BA32", offset: { rows: 0, cols: 0 }, experimentLabel: "Exp99", labelSource: "cell", isTemplateSource: false, eligibleForBatchConfirm: true },
+          ],
+        },
+      },
+    }]));
+    const onWorkbookReviewLinkOpen = vi.fn().mockResolvedValue(undefined);
+    const fetchMock = vi.fn(async (url, init = {}) => {
+      if (url === "/api/v1/projects/project_1/analysis-capabilities") {
+        return jsonResponse({ model: { configured: true }, executor: { configured: true }, acceptedData: {} });
+      }
+      if (url.startsWith("/api/v1/projects/project_1/experiment-browser")) {
+        return jsonResponse({ rows: [{ experimentId: "identity_32", label: "Exp32" }, { experimentId: "identity_99", label: "Exp99" }] });
+      }
+      if (url === "/api/v1/region-extraction-template-versions/template_version_1/apply") {
+        expect(new Headers(init.headers).get("Idempotency-Key")).toBeTruthy();
+        expect(JSON.parse(init.body)).toEqual({ sourceDocumentIds: ["doc_32", "doc_99"] });
+        return jsonResponse({
+          templateName: "Carbon distribution",
+          applied: [
+            { sourceDocumentId: "doc_32", status: "exact", reason: "applied", created: true, workbookReviewSessionId: "session_32", region: { id: "region_32", version: 2, sheetName: "Sheet1", rangeRef: "P31:BA32", reviewStatus: "awaiting_review", linkedExperimentId: "identity_32", templateMatch: { linkStatus: "resolved", experimentLabel: "Exp32" } }, revision: { id: "revision_32" } },
+            { sourceDocumentId: "doc_99", status: "exact", reason: "applied", created: true, workbookReviewSessionId: "session_99", region: { id: "region_99", version: 2, sheetName: "Sheet1", rangeRef: "P31:BA32", reviewStatus: "awaiting_review", linkedExperimentId: null, templateMatch: { linkStatus: "unresolved", experimentLabel: "Exp99" } }, revision: { id: "revision_99" } },
+          ],
+          skipped: [],
+        });
+      }
+      if (url === "/api/v1/projects/project_1/workbook-review-regions/confirm-batch") {
+        const body = JSON.parse(init.body);
+        expect(body.items).toEqual([
+          { regionId: "region_32", revisionId: "revision_32", expectedRegionVersion: 2 },
+          { regionId: "region_99", revisionId: "revision_99", expectedRegionVersion: 2, linkedExperimentId: "identity_99" },
+        ]);
+        return jsonResponse({
+          confirmedCount: 1,
+          rejectedCount: 1,
+          results: [
+            { regionId: "region_32", ok: true, code: "confirmed", region: { id: "region_32", version: 3, reviewStatus: "accepted", linkedExperimentId: "identity_32", templateMatch: { linkStatus: "resolved", experimentLabel: "Exp32" } } },
+            { regionId: "region_99", ok: false, code: "stale_workbook_review_region", message: "Workbook review region changed; reload before confirming." },
+          ],
+        });
+      }
+      if (url === "/api/v1/projects/project_1") return jsonResponse({ project: { id: "project_1" } });
+      return jsonResponse({});
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+    try {
+      render(
+        <AgentPanel
+          open
+          setOpen={() => {}}
+          blocks={[]}
+          setBlocks={() => {}}
+          references={[]}
+          selected={null}
+          selectedChartContext={null}
+          pendingChartAnalysis={null}
+          activeProjectId="project_1"
+          projectState={{
+            project: { id: "project_1", name: "Catalyst Screening" },
+            fileObjects: [],
+            regionExtractionTemplates: [{ id: "template_1", name: "Carbon distribution", status: "active", currentVersionId: "template_version_1", currentVersion: 1 }],
+          }}
+          onProjectStateLoaded={() => {}}
+          onWorkbookReviewLinkOpen={onWorkbookReviewLinkOpen}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Apply to 2 matched files" }));
+      expect(await screen.findByText("0/2 prefilled regions confirmed")).toBeTruthy();
+      const exp32Checkbox = screen.getByLabelText("Select Calculation Exp32.xlsx for confirmation");
+      expect(exp32Checkbox.checked).toBe(true);
+      const exp99Checkbox = screen.getByLabelText("Select Calculation Exp99.xlsx for confirmation");
+      expect(exp99Checkbox.disabled).toBe(true);
+      expect(screen.getByRole("button", { name: "Confirm selected (1)" })).toBeTruthy();
+
+      fireEvent.change(screen.getByLabelText("Experiment for Calculation Exp99.xlsx"), { target: { value: "identity_99" } });
+      expect(exp99Checkbox.disabled).toBe(false);
+      fireEvent.click(exp99Checkbox);
+      expect(screen.getByRole("button", { name: "Confirm selected (2)" })).toBeTruthy();
+
+      fireEvent.click(screen.getByRole("button", { name: "Confirm selected (2)" }));
+      expect(await screen.findByText("1/2 prefilled regions confirmed")).toBeTruthy();
+      expect(screen.getByText("Confirmed · Exp32")).toBeTruthy();
+      expect(screen.getByText("Workbook review region changed; reload before confirming.")).toBeTruthy();
+
+      const checklist = screen.getByLabelText("Confirm prefilled regions");
+      fireEvent.click(within(checklist).getByRole("button", { name: "Calculation Exp99.xlsx" }));
+      await waitFor(() => expect(onWorkbookReviewLinkOpen).toHaveBeenCalledWith(expect.objectContaining({
+        workbookReviewSessionId: "session_99",
+        focusRange: { sheetName: "Sheet1", range: "P31:BA32" },
+      })));
+
+      const stored = JSON.parse(localStorage.getItem(historyKey) || "[]");
+      expect(stored[0].workbookBatch.apply.items.map((row) => [row.regionId, row.confirmed])).toEqual([["region_32", true], ["region_99", false]]);
+    } finally {
+      global.fetch = originalFetch;
+      localStorage.removeItem(historyKey);
     }
   });
 

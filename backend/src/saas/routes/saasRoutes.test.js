@@ -322,6 +322,17 @@ const testModelProvider = {
       },
     };
   },
+  async answerChartCommentary(input) {
+    return {
+      ok: true,
+      answer: `Visible chart series: ${input.chart?.traces?.map((trace) => trace.name).join(", ")}.`,
+      metadata: {
+        provider: "anthropic",
+        model: "test-analysis-model",
+        usage: { inputTokens: 12, outputTokens: 7 },
+      },
+    };
+  },
   async draftAnalysisPlan(input) {
     const region = input.confirmedRegions?.[0];
     if (!region) return { ok: false, warning: { code: "analysis_evidence_required" } };
@@ -1777,6 +1788,346 @@ test("source documents expose bounded ranges, cell search, and extract previews"
   assert.equal(oversizedBody.error.details.maxCells, 500);
 });
 
+function makeFormulaCalculationWorkbookBlob() {
+  const workbook = XLSX.utils.book_new();
+  const worksheet = XLSX.utils.aoa_to_sheet([
+    ["Total C atoms", 1.5711],
+    ["Yield", 0.5237, 0.1374, 0.07],
+    ["Label", "C1", "C2", "C3"],
+    ["Overall tots", 0.5237, 0.1374, 0.07],
+    ["Gas", 0.0082, 0.0022, 0.0011],
+  ]);
+  worksheet.B2 = { t: "n", f: "B5/B1*100", v: 0.5237 };
+  worksheet.C2 = { t: "n", f: "C5/B1*100", v: 0.1374 };
+  worksheet.D2 = { t: "n", f: "D5/B1*100", v: 0.07 };
+  worksheet.B4 = { t: "n", f: "B2", v: 0.5237 };
+  worksheet.C4 = { t: "n", f: "C2", v: 0.1374 };
+  worksheet.D4 = { t: "n", f: "D2", v: 0.07 };
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
+  return new Blob([XLSX.write(workbook, { type: "buffer", bookType: "xlsx" })], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+}
+
+test("source documents expose deterministic formula cell classes for a bounded range", async () => {
+  const project = await createProject("Formula Provenance Project");
+  await uploadAndCreateImportRun(project.id, makeFormulaCalculationWorkbookBlob(), "Calculation Exp31.xlsx");
+  const documents = await (await jsonFetch(`/api/projects/${project.id}/source-documents`)).json();
+  const sourceDocument = documents.sourceDocuments[0];
+
+  const response = await jsonFetch(`/api/source-documents/${sourceDocument.id}/cell-classes?sheetName=Sheet1&range=A3:D4`);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.schemaVersion, "labrat.sourceCellClasses.v1");
+  assert.equal(body.range, "A3:D4");
+  assert.deepEqual(Object.fromEntries(body.cells.map((cell) => [cell.address, cell.cellClass])), {
+    A3: "constant", B3: "constant", C3: "constant", D3: "constant", A4: "constant", B4: "terminal", C4: "terminal", D4: "terminal",
+  });
+  assert.equal(body.cells.find((cell) => cell.address === "B4").formula, "B2");
+  assert.equal(body.summary.terminal, 3);
+  assert.deepEqual(body.provenance.warnings, []);
+  assert.match(body.provenance.derivation, /^B4 = B2 where B2 = 0\.5237 \(Yield\)/);
+  assert.deepEqual(body.provenance.sharedInputs.map((input) => input.address), ["B1"]);
+
+  const intermediate = await (await jsonFetch(`/api/source-documents/${sourceDocument.id}/cell-classes?sheetName=Sheet1&range=A2:D2`)).json();
+  assert.deepEqual(intermediate.provenance.warnings.map((warning) => warning.code), ["region_mostly_intermediate_cells"]);
+  assert.equal(intermediate.cells.find((cell) => cell.address === "B2").cellClass, "intermediate");
+
+  const badRange = await jsonFetch(`/api/source-documents/${sourceDocument.id}/cell-classes?sheetName=Sheet1&range=nope`);
+  assert.equal(badRange.status, 400);
+  assert.equal((await badRange.json()).error.code, "invalid_source_range");
+  const badSheet = await jsonFetch(`/api/source-documents/${sourceDocument.id}/cell-classes?sheetName=Missing&range=A1:B2`);
+  assert.equal(badSheet.status, 404);
+  assert.equal((await badSheet.json()).error.code, "source_sheet_not_found");
+});
+
+test("region extraction templates are saved from confirmed regions and matched read-only across workbooks", async () => {
+  const project = await createProject("Extraction Template Project");
+  const firstUpload = await uploadProjectFile(project.id, makeFormulaCalculationWorkbookBlob(), "Calculation Exp31.xlsx");
+  assert.equal(firstUpload.response.status, 201);
+  const firstSession = await (await jsonFetch(`/api/projects/${project.id}/workbook-review-sessions`, {
+    method: "POST",
+    body: { fileObjectId: firstUpload.body.fileObject.id },
+  })).json();
+  const sessionId = firstSession.workbookReviewSession.id;
+  const sourceDocumentId = firstSession.sourceDocument.id;
+  const createdRegion = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/regions`, {
+    method: "POST",
+    body: { sourceDocumentId, sheetName: "Sheet1", range: "A3:D4", selectionMethod: "manual", deferInterpretation: true, idempotencyKey: "template_region_1" },
+  });
+  assert.equal(createdRegion.status, 201);
+  const region = (await createdRegion.json()).region;
+  const unconfirmedRegion = (await (await jsonFetch(`/api/workbook-review-sessions/${sessionId}/regions`, {
+    method: "POST",
+    body: { sourceDocumentId, sheetName: "Sheet1", range: "A1:B2", selectionMethod: "manual", deferInterpretation: true, idempotencyKey: "template_region_2" },
+  })).json()).region;
+
+  const tooEarly = await jsonFetch(`/api/projects/${project.id}/region-extraction-templates`, {
+    method: "POST",
+    body: { name: "Too early", regionId: unconfirmedRegion.id },
+  });
+  assert.equal(tooEarly.status, 409);
+  assert.equal((await tooEarly.json()).error.code, "region_extraction_template_requires_confirmed_region");
+
+  await confirmReviewRegion(sessionId, region);
+  store.experimentIdentities.set(`identity_exp31_${project.id}`, { id: `identity_exp31_${project.id}`, labId: project.labId, projectId: project.id, canonicalLabel: "Exp31", aliases: ["Exp31"] });
+
+  const created = await jsonFetch(`/api/projects/${project.id}/region-extraction-templates`, {
+    method: "POST",
+    body: { name: "Carbon distribution", description: "Overall tots row", regionId: region.id },
+  });
+  assert.equal(created.status, 201);
+  const createdBody = await created.json();
+  const template = createdBody.regionExtractionTemplate;
+  assert.equal(template.name, "Carbon distribution");
+  assert.deepEqual(
+    { status: createdBody.sourceRegionLink.linkStatus, experimentId: createdBody.sourceRegionLink.linkedExperimentId, dataKind: createdBody.sourceRegionLink.dataKind },
+    { status: "resolved", experimentId: `identity_exp31_${project.id}`, dataKind: "Carbon distribution" },
+    "the template source region is linked like an applied match",
+  );
+  const linkedSource = await store.findWorkbookReviewRegionById(region.id);
+  assert.equal(linkedSource.linkedExperimentId, `identity_exp31_${project.id}`);
+  assert.equal(linkedSource.dataKind, "Carbon distribution");
+  assert.equal(template.status, "active");
+  assert.equal(createdBody.versions.length, 1);
+  const version = createdBody.versions[0];
+  assert.equal(version.version, 1);
+  assert.equal(version.sourceRegionId, region.id);
+  assert.equal(version.sourceDocumentId, sourceDocumentId);
+  assert.equal(version.signature.schemaVersion, "labrat.layoutSignature.v1");
+  assert.equal(version.signature.anchorRange, "A3:D4");
+  assert.equal(version.signature.cellExpectations.filter((item) => item.kind === "formula").length, 3);
+  assert.equal(version.signature.experimentLabelRule.kind, "filename");
+  assert.match(version.contentHash, /^[0-9a-f]{64}$/);
+
+  const duplicateName = await jsonFetch(`/api/projects/${project.id}/region-extraction-templates`, {
+    method: "POST",
+    body: { name: "carbon DISTRIBUTION", regionId: region.id },
+  });
+  assert.equal(duplicateName.status, 409);
+
+  const listed = await (await jsonFetch(`/api/projects/${project.id}/region-extraction-templates`)).json();
+  assert.equal(listed.regionExtractionTemplates.length, 1);
+  assert.equal(listed.regionExtractionTemplates[0].anchorRange, "A3:D4");
+  assert.equal(listed.regionExtractionTemplates[0].currentVersionId, version.id);
+  const detail = await (await jsonFetch(`/api/region-extraction-templates/${template.id}`)).json();
+  assert.equal(detail.versions[0].id, version.id);
+  const state = await (await jsonFetch(`/api/projects/${project.id}/state`)).json();
+  assert.equal(state.regionExtractionTemplates.length, 1);
+  assert.equal(state.regionExtractionTemplates[0].name, "Carbon distribution");
+
+  const secondUpload = await uploadProjectFile(project.id, makeFormulaCalculationWorkbookBlob(), "Calculation Exp32.xlsx");
+  const secondSession = await (await jsonFetch(`/api/projects/${project.id}/workbook-review-sessions`, {
+    method: "POST",
+    body: { fileObjectId: secondUpload.body.fileObject.id },
+  })).json();
+  const secondDocumentId = secondSession.sourceDocument.id;
+  assert.notEqual(secondDocumentId, sourceDocumentId);
+
+  const emptyMatch = await jsonFetch(`/api/region-extraction-template-versions/${version.id}/matches`, { method: "POST", body: { sourceDocumentIds: [] } });
+  assert.equal(emptyMatch.status, 400);
+
+  const matched = await jsonFetch(`/api/region-extraction-template-versions/${version.id}/matches`, {
+    method: "POST",
+    body: { sourceDocumentIds: [sourceDocumentId, secondDocumentId, "source_document_missing"] },
+  });
+  assert.equal(matched.status, 200);
+  const matchBody = await matched.json();
+  assert.equal(matchBody.templateName, "Carbon distribution");
+  assert.equal(matchBody.templateVersion, 1);
+  assert.deepEqual(matchBody.summary, { exact: 2, no_match: 1 });
+  const [own, other, missing] = matchBody.matches;
+  assert.equal(own.status, "exact");
+  assert.equal(own.isTemplateSource, true);
+  assert.equal(own.matchedRange, "A3:D4");
+  assert.equal(other.status, "exact");
+  assert.equal(other.isTemplateSource, false);
+  assert.equal(other.experimentLabel, "Exp32");
+  assert.equal(other.labelSource, "filename");
+  assert.equal(other.eligibleForBatchConfirm, true);
+  assert.equal(missing.status, "no_match");
+  assert.equal(missing.warnings[0].code, "source_document_not_found");
+  const regionsAfterMatch = await (await jsonFetch(`/api/workbook-review-sessions/${secondSession.workbookReviewSession.id}/regions`)).json();
+  assert.equal(
+    (regionsAfterMatch.regions || regionsAfterMatch.reviewRegions || []).some((item) => item.selectionMethod === "template_match"),
+    false,
+    "matching creates no regions",
+  );
+
+  const sameContentVersion = await jsonFetch(`/api/region-extraction-templates/${template.id}/versions`, { method: "POST", body: { regionId: region.id } });
+  assert.equal(sameContentVersion.status, 409);
+  assert.equal((await sameContentVersion.json()).error.code, "region_extraction_template_version_conflict");
+
+  const archived = await jsonFetch(`/api/region-extraction-templates/${template.id}/archive`, { method: "POST", body: {} });
+  assert.equal(archived.status, 200);
+  assert.equal((await archived.json()).regionExtractionTemplate.status, "archived");
+  const afterArchive = await jsonFetch(`/api/region-extraction-templates/${template.id}/versions`, { method: "POST", body: { regionId: region.id } });
+  assert.equal(afterArchive.status, 409);
+  assert.equal((await afterArchive.json()).error.code, "region_extraction_template_archived");
+  const activeOnly = await (await jsonFetch(`/api/projects/${project.id}/region-extraction-templates`)).json();
+  assert.equal(activeOnly.regionExtractionTemplates.length, 0);
+  const withArchived = await (await jsonFetch(`/api/projects/${project.id}/region-extraction-templates?includeArchived=true`)).json();
+  assert.equal(withArchived.regionExtractionTemplates.length, 1);
+});
+
+test("extraction templates apply as prefilled linked regions and confirm in one batch", async () => {
+  const project = await createProject("Template Apply Project");
+  const firstUpload = await uploadProjectFile(project.id, makeFormulaCalculationWorkbookBlob(), "Calculation Exp31.xlsx");
+  const firstSession = await (await jsonFetch(`/api/projects/${project.id}/workbook-review-sessions`, {
+    method: "POST",
+    body: { fileObjectId: firstUpload.body.fileObject.id },
+  })).json();
+  const sessionId = firstSession.workbookReviewSession.id;
+  const sourceDocumentId = firstSession.sourceDocument.id;
+  const region = (await (await jsonFetch(`/api/workbook-review-sessions/${sessionId}/regions`, {
+    method: "POST",
+    body: { sourceDocumentId, sheetName: "Sheet1", range: "A3:D4", selectionMethod: "manual", deferInterpretation: true, idempotencyKey: "apply_region_1" },
+  })).json()).region;
+  await confirmReviewRegion(sessionId, region);
+  const templateBody = await (await jsonFetch(`/api/projects/${project.id}/region-extraction-templates`, {
+    method: "POST",
+    body: { name: "Overall tots", regionId: region.id },
+  })).json();
+  const versionId = templateBody.versions[0].id;
+
+  store.experimentIdentities.set(`identity_${project.id}_32`, {
+    id: `identity_${project.id}_32`, labId: project.labId, projectId: project.id, canonicalLabel: "Exp32", aliases: ["Exp32"],
+  });
+  const secondUpload = await uploadProjectFile(project.id, makeFormulaCalculationWorkbookBlob(), "Calculation Exp32.xlsx");
+  const secondSession = await (await jsonFetch(`/api/projects/${project.id}/workbook-review-sessions`, {
+    method: "POST",
+    body: { fileObjectId: secondUpload.body.fileObject.id },
+  })).json();
+  const secondDocumentId = secondSession.sourceDocument.id;
+  const thirdUpload = await uploadProjectFile(project.id, makeFormulaCalculationWorkbookBlob(), "Calculation Exp33.xlsx");
+  const thirdDocumentId = (await (await jsonFetch(`/api/projects/${project.id}/source-documents`)).json()).sourceDocuments
+    .find((document) => document.fileObjectId === thirdUpload.body.fileObject.id)?.id
+    || (await (await jsonFetch(`/api/projects/${project.id}/workbook-review-sessions`, { method: "POST", body: { fileObjectId: thirdUpload.body.fileObject.id } })).json()).sourceDocument.id;
+
+  const missingKey = await jsonFetch(`/api/region-extraction-template-versions/${versionId}/apply`, {
+    method: "POST",
+    body: { sourceDocumentIds: [secondDocumentId] },
+  });
+  assert.equal(missingKey.status, 400);
+  assert.equal((await missingKey.json()).error.code, "idempotency_key_required");
+
+  const applied = await jsonFetch(`/api/region-extraction-template-versions/${versionId}/apply`, {
+    method: "POST",
+    headers: { "Idempotency-Key": "apply_batch_1" },
+    body: { sourceDocumentIds: [sourceDocumentId, secondDocumentId, thirdDocumentId] },
+  });
+  assert.equal(applied.status, 200);
+  const appliedBody = await applied.json();
+  assert.equal(appliedBody.templateName, "Overall tots");
+  assert.equal(appliedBody.applied.length, 2, "the template source itself is skipped because its region is already confirmed");
+  assert.equal(appliedBody.skipped.length, 1);
+  assert.equal(appliedBody.skipped[0].reason, "region_already_confirmed");
+  const second = appliedBody.applied.find((entry) => entry.sourceDocumentId === secondDocumentId);
+  const third = appliedBody.applied.find((entry) => entry.sourceDocumentId === thirdDocumentId);
+  assert.equal(second.created, true);
+  assert.equal(second.region.selectionMethod, "template_match");
+  assert.equal(second.region.reviewStatus, "awaiting_review");
+  assert.equal(second.region.rangeRef, "A3:D4");
+  assert.equal(second.region.linkedExperimentId, `identity_${project.id}_32`);
+  assert.equal(second.region.dataKind, "Overall tots");
+  assert.equal(second.region.templateMatch.linkStatus, "resolved");
+  assert.equal(second.revision.trigger, "template_match");
+  assert.equal(second.workbookReviewSessionId, secondSession.workbookReviewSession.id, "the existing session is reused");
+  assert.equal(third.region.linkedExperimentId, null);
+  assert.equal(third.region.templateMatch.linkStatus, "unresolved");
+  assert.ok(third.workbookReviewSessionId, "a session is created when the workbook had none");
+
+  const replay = await (await jsonFetch(`/api/region-extraction-template-versions/${versionId}/apply`, {
+    method: "POST",
+    headers: { "Idempotency-Key": "apply_batch_2" },
+    body: { sourceDocumentIds: [secondDocumentId] },
+  })).json();
+  assert.equal(replay.applied[0].created, false);
+  assert.equal(replay.applied[0].reason, "already_applied");
+  assert.equal(replay.applied[0].region.id, second.region.id);
+
+  const regionsInSecond = await (await jsonFetch(`/api/workbook-review-sessions/${secondSession.workbookReviewSession.id}/regions`)).json();
+  const listedRegions = regionsInSecond.regions || regionsInSecond.reviewRegions || [];
+  assert.equal(listedRegions.filter((item) => item.selectionMethod === "template_match").length, 1);
+
+  const manualRegion = (await (await jsonFetch(`/api/workbook-review-sessions/${secondSession.workbookReviewSession.id}/regions`, {
+    method: "POST",
+    body: { sourceDocumentId: secondDocumentId, sheetName: "Sheet1", range: "A1:B1", selectionMethod: "manual", deferInterpretation: true, idempotencyKey: "apply_region_manual" },
+  })).json()).region;
+
+  const confirmed = await jsonFetch(`/api/projects/${project.id}/workbook-review-regions/confirm-batch`, {
+    method: "POST",
+    body: {
+      items: [
+        { regionId: second.region.id, revisionId: second.revision.id, expectedRegionVersion: second.region.version },
+        { regionId: third.region.id, revisionId: third.revision.id, expectedRegionVersion: third.region.version, linkedExperimentId: `identity_${project.id}_32` },
+        { regionId: manualRegion.id, revisionId: null, expectedRegionVersion: manualRegion.version },
+      ],
+    },
+  });
+  assert.equal(confirmed.status, 200);
+  const confirmedBody = await confirmed.json();
+  assert.equal(confirmedBody.confirmedCount, 2);
+  assert.equal(confirmedBody.rejectedCount, 1);
+  assert.equal(confirmedBody.results[0].ok, true);
+  assert.equal(confirmedBody.results[0].region.reviewStatus, "accepted");
+  assert.equal(confirmedBody.results[0].region.acceptedRevisionId, second.revision.id);
+  assert.equal(confirmedBody.results[1].ok, true);
+  assert.equal(confirmedBody.results[1].region.linkedExperimentId, `identity_${project.id}_32`);
+  assert.equal(confirmedBody.results[2].ok, false);
+  assert.equal(confirmedBody.results[2].code, "batch_confirm_requires_individual_review");
+
+  const accepted = await (await jsonFetch(`/api/projects/${project.id}/region-understandings?status=accepted`)).json();
+  assert.equal(accepted.regionUnderstandings.filter((item) => item.region?.selectionMethod === "template_match").length, 2);
+  const empty = await jsonFetch(`/api/projects/${project.id}/workbook-review-regions/confirm-batch`, { method: "POST", body: { items: [] } });
+  assert.equal(empty.status, 400);
+
+  const kinds = await (await jsonFetch(`/api/projects/${project.id}/linked-data-kinds`)).json();
+  assert.equal(kinds.schemaVersion, "labrat.linkedDataKinds.v1");
+  assert.deepEqual(kinds.dataKinds.map((kind) => [kind.dataKind, kind.experimentCount, kind.regionCount]), [["Overall tots", 1, 2]]);
+  assert.equal(kinds.dataKinds[0].experiments[0].label, "Exp32");
+
+  const dryRun = await jsonFetch(`/api/projects/${project.id}/linked-data-comparisons`, {
+    method: "POST",
+    body: { dataKind: "Overall tots", experimentIds: [`identity_${project.id}_32`], dryRun: true },
+  });
+  assert.equal(dryRun.status, 200);
+  const dryRunBody = await dryRun.json();
+  assert.equal(dryRunBody.analysisThread, null);
+  assert.equal(dryRunBody.comparison.experiments.length, 1);
+  assert.ok(
+    [second.region.id, third.region.id].includes(dryRunBody.comparison.experiments[0].regionId),
+    "one of the two linked regions confirmed in the same batch is used",
+  );
+  const threadsBefore = await (await jsonFetch(`/api/projects/${project.id}/analysis-threads`)).json();
+
+  const created = await jsonFetch(`/api/projects/${project.id}/linked-data-comparisons`, {
+    method: "POST",
+    body: { dataKind: "Overall tots", experimentIds: [`identity_${project.id}_32`], chartType: "grouped_bar" },
+  });
+  assert.equal(created.status, 201);
+  const createdBody = await created.json();
+  assert.equal(createdBody.analysisThread.outputTarget, "chart");
+  assert.equal(createdBody.analysisThread.inputMode, "workbook");
+  assert.equal(createdBody.analysisThread.status, "awaiting_plan_review");
+  assert.equal(createdBody.analysisPlanRevision.status, "awaiting_review");
+  assert.equal(createdBody.analysisPlanRevision.sourceSelections.length, 1);
+  assert.equal(createdBody.analysisPlanRevision.sourceSelections[0].range, "A3:D4");
+  assert.equal(createdBody.analysisPlanRevision.reviewPlan.chart.chartType, "grouped_bar");
+  const threadsAfter = await (await jsonFetch(`/api/projects/${project.id}/analysis-threads`)).json();
+  assert.equal(asArrayLength(threadsAfter) - asArrayLength(threadsBefore), 1, "exactly one analysis thread was created");
+
+  const unknownKind = await jsonFetch(`/api/projects/${project.id}/linked-data-comparisons`, {
+    method: "POST",
+    body: { dataKind: "Nothing here", experimentIds: [`identity_${project.id}_32`] },
+  });
+  assert.equal(unknownKind.status, 404);
+});
+
+function asArrayLength(body) {
+  return Array.isArray(body?.analysisThreads) ? body.analysisThreads.length : Array.isArray(body?.items) ? body.items.length : Number(body?.totalCount) || 0;
+}
+
 test("legacy dataset, source-extract, chart-proposal, and planner routes are retired", async () => {
   const project = await createProject("Snapshot Browser Project");
   for (const request of [
@@ -1816,6 +2167,119 @@ test("project-content AgentRun returns a direct read-only answer without confirm
   assert.equal(body.agentRun.status, "completed");
   assert.deepEqual(body.agentRun.actions, []);
   assert.match(body.reply, /Agent Project Summary/);
+});
+
+test("selected manuscript chart commentary returns prose without creating analysis artifacts", async () => {
+  const analysisCountsBefore = [store.analysisThreads.size, store.analysisPlanRevisions.size, store.analysisRuns.size];
+  const project = await createProject("Chart Commentary Project");
+  const chartSpecId = `chart_spec_commentary_${Date.now()}`;
+  store.chartSpecs.set(chartSpecId, {
+    id: chartSpecId,
+    labId: project.labId,
+    projectId: project.id,
+    title: "Conversion by time",
+    chartType: "scatter",
+    spec: {
+      schemaVersion: "labrat.chartSpec.v3",
+      origin: "analysis_result",
+      status: "accepted",
+      title: "Conversion by time",
+      chartType: "scatter",
+      plotly: {
+        data: [{
+          traceId: "catalyst_a",
+          name: "Catalyst A",
+          type: "scatter",
+          mode: "lines+markers",
+          x: [1, 2, 3],
+          y: [35, 61, 78],
+        }, {
+          traceId: "catalyst_b",
+          name: "Catalyst B",
+          type: "scatter",
+          mode: "lines+markers",
+          x: [1, 2, 3],
+          y: [31, 48, 52],
+        }],
+        layout: {
+          xaxis: { title: { text: "Reaction time (h)" } },
+          yaxis: { title: { text: "Conversion (%)" } },
+        },
+      },
+      traceCatalog: [
+        { traceId: "catalyst_a", name: "Catalyst A" },
+        { traceId: "catalyst_b", name: "Catalyst B" },
+      ],
+      defaultChartView: { visibleTraceIds: ["catalyst_a", "catalyst_b"] },
+    },
+  });
+
+  const response = await jsonFetch(`/api/projects/${project.id}/agent/runs`, {
+    method: "POST",
+    body: {
+      message: "Write a manuscript-ready analysis of the selected chart.",
+      selectedContext: {
+        tab: "manuscript_chart",
+        activeSurface: "manuscript_chart",
+        requestedWorkflow: "chart_commentary",
+        chartCommentaryMode: "analysis",
+        selectedChartSpecId: chartSpecId,
+        selectedChartTitle: "Conversion by time",
+        selectedChartBlockId: "chart_block_1",
+        selectedChartView: { visibleTraceIds: ["catalyst_a"] },
+      },
+    },
+  });
+
+  assert.equal(response.status, 201);
+  const body = await response.json();
+  assert.equal(body.agentRun.mode, "chart_commentary");
+  assert.equal(body.agentRun.status, "completed");
+  assert.equal(body.reply, "Visible chart series: Catalyst A.");
+  assert.equal(body.analysisThread, null);
+  assert.equal(body.currentPlanRevision, null);
+  assert.deepEqual(body.agentRun.actions, []);
+  assert.deepEqual(body.agentRun.proposalRefs, [{ type: "chart_spec", id: chartSpecId }]);
+  assert.deepEqual(body.agentRun.toolTrace[0].observation.visibleTraceIds, ["catalyst_a"]);
+  assert.deepEqual([store.analysisThreads.size, store.analysisPlanRevisions.size, store.analysisRuns.size], analysisCountsBefore, "commentary creates no analysis artifacts");
+});
+
+test("selected chart commentary fails closed when no manuscript traces are visible", async () => {
+  const project = await createProject("Empty Chart Commentary Project");
+  const chartSpecId = `chart_spec_empty_commentary_${Date.now()}`;
+  store.chartSpecs.set(chartSpecId, {
+    id: chartSpecId,
+    labId: project.labId,
+    projectId: project.id,
+    spec: {
+      schemaVersion: "labrat.chartSpec.v3",
+      origin: "analysis_result",
+      status: "accepted",
+      chartType: "bar",
+      plotly: { data: [{ traceId: "yield", name: "Yield", x: ["Exp1"], y: [82] }], layout: {} },
+      traceCatalog: [{ traceId: "yield", name: "Yield" }],
+      defaultChartView: { visibleTraceIds: ["yield"] },
+    },
+  });
+
+  const response = await jsonFetch(`/api/projects/${project.id}/agent/runs`, {
+    method: "POST",
+    body: {
+      message: "Analyze the selected chart.",
+      selectedContext: {
+        requestedWorkflow: "chart_commentary",
+        selectedChartSpecId: chartSpecId,
+        selectedChartView: { visibleTraceIds: [] },
+      },
+    },
+  });
+
+  assert.equal(response.status, 201);
+  const body = await response.json();
+  assert.equal(body.agentRun.mode, "chart_commentary");
+  assert.equal(body.agentRun.warnings[0].code, "chart_commentary_visible_trace_required");
+  assert.match(body.reply, /Show at least one chart series/);
+  assert.equal(body.analysisThread, null);
 });
 
 test("experiment trend AgentRun enters reviewed analysis instead of opening Browser", async () => {
@@ -2598,6 +3062,158 @@ test("reusable chart style and template APIs support accepted versioned lifecycl
 
   const archiveStyle = await jsonFetch(`/api/chart-style-profiles/${styleProfile.id}/archive`, { method: "POST", body: {} });
   assert.equal(archiveStyle.status, 200);
+});
+
+test("workbook series templates apply by data kind and queue a run without touching snapshots", async () => {
+  const project = await createProject("Workbook Chart Template Project");
+  const stamp = Date.now();
+  const cell = (address, rawValue, extra = {}) => ({ address, rawValue, formattedValue: rawValue == null ? extra.formattedValue || null : String(rawValue), type: extra.type || (typeof rawValue === "number" ? "formula" : "string"), formula: extra.formula || null });
+  const seriesDefinition = {
+    seriesKey: "carbon_distribution", label: "Overall carbon distribution", orientation: "header_row_categories",
+    xHeaderRange: "B1:D1", yValueRange: "B2:D2", xSemanticKey: "carbon_number", xValueType: "string",
+    yUnit: "% of feed carbon", yNumericScale: "percent_points", pointCount: 3,
+  };
+  const revisionIds = [];
+  for (const [index, values] of [["31", [0.52, 0.14, 0.07]], ["32", [0.5, null, 0.06]]]) {
+    const experimentId = `identity_wb_${index}_${stamp}`;
+    store.experimentIdentities.set(experimentId, { id: experimentId, labId: project.labId, projectId: project.id, canonicalLabel: `Exp${index}`, aliases: [] });
+    const docId = `doc_wb_${index}_${stamp}`;
+    store.sourceDocuments.set(docId, { id: docId, projectId: project.id, labId: project.labId, fileObjectId: `file_${docId}`, metadata: { workbookName: `Calculation Exp${index}.xlsx` } });
+    store.sourceIndexBlobs.set(`blob_${docId}`, {
+      id: `blob_${docId}`, sourceDocumentId: docId,
+      payload: { sheets: [{ name: "Sheet1", cellGrid: { range: "A1:D2", cells: [
+        cell("A1", "Overall tots"), cell("B1", "C1"), cell("C1", "C2"), cell("D1", "C3"),
+        ...values.map((value, column) => (value == null ? null : cell(`${"BCD"[column]}2`, value, { formula: "F14" }))).filter(Boolean),
+      ] } }] },
+    });
+    const session = await store.createWorkbookReviewSession({ labId: project.labId, projectId: project.id, sourceDocumentId: docId, workbookSummary: { workbookName: `Calculation Exp${index}.xlsx` }, status: "needs_user_review", createdBy: "user_1" });
+    const region = await store.createWorkbookReviewRegion({
+      labId: project.labId, projectId: project.id, workbookReviewSessionId: session.id, sourceDocumentId: docId,
+      sheetName: "Sheet1", rangeRef: "A1:D2", selectionMethod: "template_match", disposition: "active", reviewStatus: "awaiting_review",
+      linkedExperimentId: experimentId, dataKind: "Carbon distribution", createdBy: "user_1",
+    });
+    const revision = await store.createRegionUnderstandingRevision({
+      labId: project.labId, projectId: project.id, workbookReviewSessionId: session.id, sourceDocumentId: docId, regionId: region.id,
+      revisionNumber: 1, trigger: "template_match", summary: ["Prefilled."], sourceContentHash: `h_${docId}`, dependencyHash: `d_${docId}`,
+      interpretation: { semanticType: "component_distribution", experimentAxis: "region", fields: [], series: [seriesDefinition] },
+      validation: { status: "ready", blockers: [] }, createdBy: "user_1",
+    });
+    await store.updateWorkbookReviewRegion(region.id, { reviewStatus: "accepted", currentRevisionId: revision.id, acceptedRevisionId: revision.id, acceptedAt: new Date().toISOString(), acceptedBy: "user_1" });
+    revisionIds.push({ index, experimentId, docId, revisionId: revision.id });
+  }
+  const planRevisionId = `plan_rev_wb_${stamp}`;
+  store.analysisPlanRevisions.set(planRevisionId, {
+    id: planRevisionId, labId: project.labId, projectId: project.id, status: "accepted",
+    plan: {
+      reviewPlan: { processingSteps: [
+        "Each input table is one experiment's confirmed Carbon distribution region; the table label is the experiment name.",
+        "In each input table, the header row of category labels is the x axis and the row of numeric values beneath it is the y axis; ignore label cells and blanks.",
+        "Plot one trace per experiment, named by its experiment label, sharing one x axis and one y axis.",
+      ] },
+      linkedDataComparison: { dataKind: "Carbon distribution" },
+    },
+  });
+  const chartSpecId = `chart_spec_wb_${stamp}`;
+  store.chartSpecs.set(chartSpecId, {
+    id: chartSpecId, labId: project.labId, projectId: project.id, analysisResultId: `analysis_result_wb_${stamp}`,
+    title: "Carbon distribution comparison", chartType: "grouped_bar",
+    spec: {
+      schemaVersion: "labrat.chartSpec.v3", origin: "analysis_result", status: "accepted", chartType: "grouped_bar",
+      analysisPlanRevisionId: planRevisionId,
+      sourceSelections: revisionIds.map((item, position) => ({ sourceSelectionId: `s${position + 1}`, regionUnderstandingRevisionId: item.revisionId, sourceDocumentId: item.docId, sheetName: "Sheet1", range: "A1:D2" })),
+      experimentSelections: [],
+      traceCatalog: revisionIds.map((item) => ({ traceId: `trace_${item.index}` })),
+    },
+    layout: {}, warnings: [],
+  });
+
+  const eligibility = await jsonFetch(`/api/chart-specs/${chartSpecId}/template-eligibility`);
+  assert.equal(eligibility.status, 200);
+  assert.equal((await eligibility.json()).status, "eligible");
+
+  const templateCreate = await jsonFetch(`/api/projects/${project.id}/reusable-chart-templates`, {
+    method: "POST",
+    body: { name: "Carbon distribution comparison", sourceChartSpecId: chartSpecId },
+  });
+  assert.equal(templateCreate.status, 201);
+  const templateBody = await templateCreate.json();
+  const templateVersion = templateBody.versions[0];
+  assert.equal(templateVersion.inputSlots[0].sourceKind, "linked_region");
+  assert.equal(templateVersion.inputSlots[0].linkedDataKind, "Carbon distribution");
+
+  const snapshotCount = store.dataSnapshots.size;
+  const headCount = store.experimentSnapshotHeads.size;
+  const applicationResponse = await jsonFetch(`/api/reusable-chart-template-versions/${templateVersion.id}/applications`, {
+    method: "POST",
+    headers: { "Idempotency-Key": `route_workbook_template_application_${stamp}` },
+    body: { experimentIds: revisionIds.map((item) => item.experimentId) },
+  });
+  assert.equal(applicationResponse.status, 201, JSON.stringify(await applicationResponse.clone().json()));
+  const applicationBody = await applicationResponse.json();
+  assert.equal(applicationBody.compatibility.status, "ready");
+  assert.equal(applicationBody.compatibility.sourceKind, "linked_region");
+  assert.equal(applicationBody.compatibility.linkedDataKind, "Carbon distribution");
+  assert.deepEqual(applicationBody.compatibility.experiments.map((item) => [item.label, item.valueCount, item.missingCount]), [["Exp31", 3, 0], ["Exp32", 2, 1]]);
+  assert.deepEqual(applicationBody.compatibility.alignment.categories, ["C1", "C2", "C3"]);
+  assert.equal(applicationBody.application.frozenRegionRefs.length, 2);
+  assert.deepEqual(applicationBody.application.frozenHeadRefs, []);
+  assert.equal(applicationBody.analysisRun.status, "queued");
+  assert.equal(applicationBody.analysisThread.inputMode, "workbook");
+  assert.equal(store.dataSnapshots.size, snapshotCount);
+  assert.equal(store.experimentSnapshotHeads.size, headCount);
+  const storedPlan = await store.findAnalysisPlanRevisionById(applicationBody.analysisPlanRevision.id);
+  assert.equal(storedPlan.plan.inputMode, "workbook");
+  assert.equal(storedPlan.plan.sourceSelections.length, 2);
+  assert.deepEqual(storedPlan.plan.experimentSelections, []);
+
+  const executeResponse = await jsonFetch(`/api/analysis-runs/${applicationBody.analysisRun.id}/execute`, { method: "POST", body: {} });
+  assert.equal(executeResponse.status, 201, JSON.stringify(await executeResponse.clone().json()));
+  const executed = await executeResponse.json();
+  assert.equal(executed.analysisRun.status, "awaiting_result_review");
+  assert.equal(executed.analysisResult.validation.ok, true);
+  const storedResult = await store.findAnalysisResultById(executed.analysisResult.id);
+  assert.deepEqual(storedResult.result.plotly.data.map((trace) => trace.name), ["Exp31", "Exp32"]);
+  assert.deepEqual(storedResult.result.plotly.data[1].y, [0.5, null, 0.06]);
+  assert.equal(storedResult.sourceRefs.some((ref) => ref.sourceType === "excel_cell"), true);
+  const storedRun = await store.findAnalysisRunById(executed.analysisRun.id);
+  assert.equal(storedRun.payload?.pythonProgram ?? null, null);
+  assert.equal(storedRun.payload?.inputManifest?.linkedSeries?.length, 2);
+
+  const bindingsRejected = await jsonFetch(`/api/reusable-chart-template-versions/${templateVersion.id}/applications`, {
+    method: "POST",
+    headers: { "Idempotency-Key": `route_workbook_template_bindings_${stamp}` },
+    body: { experimentIds: [revisionIds[0].experimentId], bindings: [{ slotId: "series", columnId: "column_x" }] },
+  });
+  assert.equal(bindingsRejected.status, 422);
+  assert.equal((await bindingsRejected.json()).error.code, "chart_template_binding_invalid");
+
+  const ownerCookie = cookie;
+  try {
+    const adminLogin = await jsonFetch("/api/auth/login", { method: "POST", body: { username: "admin", password: "LabRatAdmin123!" } });
+    cookie = cookieFrom(adminLogin);
+    const viewerUsername = `template_viewer_${stamp}`;
+    const createViewer = await jsonFetch("/api/admin/users", {
+      method: "POST",
+      body: { username: viewerUsername, displayName: "Template Viewer", temporaryPassword: "TemplateViewer123!", labId: project.labId, role: "viewer" },
+    });
+    assert.equal(createViewer.status, 201);
+    cookie = cookieFrom(await jsonFetch("/api/auth/login", { method: "POST", body: { username: viewerUsername, password: "TemplateViewer123!" } }));
+    const viewerApply = await jsonFetch(`/api/reusable-chart-template-versions/${templateVersion.id}/applications`, {
+      method: "POST",
+      headers: { "Idempotency-Key": `route_workbook_template_viewer_${stamp}` },
+      body: { experimentIds: [revisionIds[0].experimentId] },
+    });
+    assert.equal(viewerApply.status, 403);
+    const viewerCreate = await jsonFetch(`/api/projects/${project.id}/reusable-chart-templates`, {
+      method: "POST",
+      body: { name: "Viewer template", sourceChartSpecId: chartSpecId },
+    });
+    assert.equal(viewerCreate.status, 403);
+    const viewerRead = await jsonFetch(`/api/reusable-chart-templates/${templateBody.reusableChartTemplate.id}`);
+    assert.equal(viewerRead.status, 200, "viewers may still read templates");
+  } finally {
+    cookie = ownerCookie;
+  }
 });
 
 test("logout revokes the current session", async () => {

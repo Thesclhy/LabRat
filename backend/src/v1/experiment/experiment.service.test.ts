@@ -96,6 +96,17 @@ function serviceFixture() {
 }
 
 describe("ExperimentService authorization boundaries", () => {
+  test("detail requests linked evidence only with full-project access", async () => {
+    const fixture = serviceFixture();
+    await fixture.service.getExperiment(auth, "project_1", "experiment_1");
+    expect(fixture.repository.loadProjectionState).toHaveBeenLastCalledWith("project_1", ["experiment_1"], false);
+    fixture.authorization.requireExperimentCapability.mockResolvedValueOnce({
+      project: { id: "project_1", labId: "lab_1" }, access: { ...selectedAccess(), allExperiments: true, shellOnly: false },
+    });
+    await fixture.service.getExperiment(auth, "project_1", "experiment_1");
+    expect(fixture.repository.loadProjectionState).toHaveBeenLastCalledWith("project_1", ["experiment_1"], true);
+  });
+
   test("passes only selected experiment ids into every Browser repository read", async () => {
     const fixture = serviceFixture();
     const result = await fixture.service.getBrowser(auth, "project_1", {});

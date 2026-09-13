@@ -25,6 +25,7 @@ import {
   ReviseAnalysisRunDto,
 } from "./analysis.dto.js";
 import { AnalysisService } from "./analysis.service.js";
+import { LinkedComparisonDto } from "../region-templates/region-templates.dto.js";
 
 function requestMeta(request: FastifyRequest) {
   return {
@@ -42,6 +43,17 @@ function respondWithStatus(reply: FastifyReply, result: Record<string, any>) {
 @Controller("api/v1/projects/:projectId")
 export class ProjectAnalysisController {
   constructor(private readonly analysisService: AnalysisService) {}
+
+  @Get("linked-data-kinds")
+  linkedKinds(@CurrentAuth() auth: AuthContext, @Param("projectId") id: string) {
+    return this.analysisService.linkedKinds(auth, id);
+  }
+
+  @Post("linked-data-comparisons")
+  async linkedComparison(@CurrentAuth() auth: AuthContext, @Param("projectId") id: string,
+    @Body() input: LinkedComparisonDto, @Res({ passthrough: true }) reply: FastifyReply) {
+    return respondWithStatus(reply, await this.analysisService.linkedComparison(auth, id, input));
+  }
 
   @Get("analysis-capabilities")
   capabilities(@CurrentAuth() auth: AuthContext, @Param("projectId") projectId: string) {

@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-09-12
+Last reviewed: 2026-09-13
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -12,6 +12,64 @@ Keep entries concise, newest first, and include:
 - meaningful changes
 - verification
 - follow-ups or residual risk
+
+## 2026-09-13 — Confirmed main publication
+
+- Request: publish the Claude v1 integration to `main`. After being told that
+  this triggers the active Lightsail production workflow, including migrations,
+  the user explicitly confirmed that side effect. Actual historical-backup
+  rehearsal and live-provider end-to-end validation are still unperformed;
+  this approval does not turn those outstanding checks into passing evidence.
+- Remote preflight: `origin/main` and the integration branch both start at
+  `474c1bb`; promotion can use an ordinary fast-forward, never a force push.
+  The GitHub deployment workflow is active. Publishing does not modify its
+  configuration, provider selection, secrets or the server environment file.
+- Publication scope is the reviewed source, tests, migrations, generated types,
+  lockfile repair and docs only. `.env*`, `postman/cookies.txt`, `.codex/`,
+  `.superpowers/`, `.tmp/` and private `test excel/` files are excluded.
+- Publication-time `codex:preflight` and `codex:verify` passed: frontend
+  368/368, Nest 60/60, legacy 331 passed / 5 conditional skips, generated API
+  types, backend/frontend builds and production-entry smoke. No application
+  code changed during this publication turn; prior Linux clean-install,
+  PostgreSQL 15/15 and browser evidence remains the verified implementation
+  checkpoint below. Hosted CI repeats PostgreSQL before deployment.
+- All 111 reviewed files passed staged diff and private-path/key-pattern checks.
+  Remote publication and production activation must be reported separately.
+
+## 2026-09-13 — Claude v1 integration (locally verified)
+
+- Request: integrate Claude `06ecf87` features with main `474c1bb` on
+  `codex/claude-v1-integration`; no publication, deployment or live database edits.
+  Pre-existing local documentation and private files are retained.
+- Implemented: deterministic formula/region/linked-series helpers,
+  historical Claude migrations plus apply receipts, Nest region-template and
+  batch-confirm transactions, linked comparison and frozen-chart adapters,
+  eleven OpenAPI operations, generated client, and Claude UI integration with
+  invitation-aware welcome/login. See `doc/plans/claude-v1-integration-plan.md`.
+- Final verification: Linux Node 22.23.2/npm 10.9.8 clean root/backend installs
+  and full codex verification passed: frontend 368, Nest 60, legacy 332 passed /
+  4 conditional skips. Windows full verification passed with the same frontend
+  and Nest totals and legacy 331/5. Generated types, builds, production-entry
+  smoke and diff checks pass. Lock repair adds missing esbuild entries without
+  upgrading existing versions. Separate PostgreSQL suites pass (v1 13, legacy
+  2), including empty/main/Claude fixture upgrades, concurrency/rollback,
+  async revocation and frozen-source publication.
+- Real Chromium: all six supplied workbooks upload/reload; extraction versions,
+  formula-mismatch individual review, three-item batch confirmation, linked
+  Browser jumps, comparison plans and deterministic template/approval/save
+  flows pass. All 51 valid chart points and source coordinates equal actual
+  workbook cached values. Invitation signup, no-lab platform management and
+  owner/read/edit/approve gates pass. Manuscript insertion, drag/resize/keyboard,
+  save/reload and PPTX export pass with no final runtime errors or old API calls.
+- QA fixes include multipart boundaries, filename hints, scoped linked Browser
+  metadata, page bounds, plan lineage, readonly chart inspection, late-response
+  isolation, Plotly cleanup and accepted axis labels. Existing compact actions
+  and state feedback follow `ui-design`; scientific history is not rewritten.
+- Uncommitted local branch only. Controlled interpretation and historical SQL
+  fixtures do not replace live-model QA or actual backup restoration. Those,
+  hosted CI and separately authorized deployment remain release gates. Exact
+  coverage/limitations: `doc/qa/claude-v1-integration-acceptance.md` and
+  `doc/plans/claude-v1-database-upgrade.md`. Prior user notes remain below.
 
 ## 2026-09-12
 
@@ -32,9 +90,22 @@ Keep entries concise, newest first, and include:
   `.codex/`, `.superpowers/`, `.tmp/` and private `test excel/` fixtures.
   The existing repository provider selection is `anthropic`; no provider
   variable, secret or deployment configuration is being changed.
-- Release status at commit preparation: authorization and local checks complete;
-  remote push and workflow outcome must be verified before claiming the new
-  version is live. Existing conditional skips and Vite size warning remain.
+- Publication result: committed the 56 reviewed files as
+  `474c1bb35b41d7da1bb33cc9cd6e5f5a8df87f87` and fast-forwarded local/remote
+  `main` to that SHA. The architecture migration commits are retained;
+  `origin/main...main` reports zero commits on either side. Excluded private
+  files remain untracked locally.
+- Deployment [run 34705610377](https://github.com/Thesclhy/LabRat/actions/runs/34705610377)
+  was triggered by the push and failed at `Install backend dependencies`:
+  `npm --prefix backend ci` reports a lockfile mismatch, missing
+  `esbuild@0.28.2` and its platform packages. SSH preparation, release upload,
+  migrations and deployment were not reached. No production change was made by
+  this run; Git push success is not deployment success.
+- Follow-up: reconcile the backend lockfile and verify a clean installation
+  using the CI runtime before retrying deployment. No dependency repair or
+  automatic rerun was performed in this publication-only task. The failure
+  record is a local post-push documentation update, not a second deployment.
+  Existing conditional skips and Vite size warning remain.
 
 ## 2026-09-11
 

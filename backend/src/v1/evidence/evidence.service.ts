@@ -1,4 +1,5 @@
 import path from "node:path";
+import { sourceCellClasses } from "../../saas/formulaGraph.js";
 import { Inject, Injectable } from "@nestjs/common";
 import { parseMultipartFormData } from "../../http/multipart.js";
 import { runImportScan } from "../../import/services/importPipeline.js";
@@ -26,6 +27,7 @@ import {
   reviseWorkbookReviewRegion,
 } from "../../saas/workbookReviewRegions.js";
 import { AuthorizationService } from "../authorization/authorization.service.js";
+import { withWriteAuthorization } from "../authorization/authorized-store.js";
 import type { Capability } from "../authorization/authorization.policy.js";
 import { IdentityRepository } from "../identity/identity.repository.js";
 import type { AuthContext } from "../identity/identity.types.js";
@@ -94,6 +96,13 @@ export class EvidenceService {
     await this.fullProject(auth, projectId, "read");
     const rows = await this.repository.listFileObjects(projectId);
     return rows.map(fileObjectSummary);
+  }
+
+  async cellClasses(auth: AuthContext, sourceDocumentId: string, query: SourceDocumentRangeDto) {
+    const sourceDocument = await this.sourceDocument(auth, sourceDocumentId, "read");
+    return (sourceCellClasses as any)({ sourceDocument,
+      indexBlobs: await this.repository.listSourceIndexBlobs(sourceDocumentId),
+      sheetName: query.sheetName, range: query.range });
   }
 
   async retrieveEvidence(auth: AuthContext, projectId: string, input: RetrieveEvidenceDto) {
@@ -402,7 +411,7 @@ export class EvidenceService {
         warning: null,
       }
       : await createWorkbookReviewRegionDraftCompat({
-        store: this.repository,
+        store: this.interpretationStore(auth, session.projectId),
         session,
         sourceDocument,
         indexBlobs,
@@ -442,7 +451,7 @@ export class EvidenceService {
     const { session, region } = await this.region(auth, sessionId, regionId, "propose");
     const { sourceDocument, indexBlobs } = await this.sourceContext(session);
     const interpreted = await interpretWorkbookReviewRegionCompat({
-      store: this.repository,
+      store: this.interpretationStore(auth, region.projectId),
       region,
       sourceDocument,
       indexBlobs,
@@ -501,7 +510,7 @@ export class EvidenceService {
     const { session, region } = await this.region(auth, sessionId, regionId, "propose");
     const { sourceDocument, indexBlobs } = await this.sourceContext(session);
     const revised = await reviseWorkbookReviewRegionCompat({
-      store: this.repository,
+      store: this.interpretationStore(auth, region.projectId),
       region,
       sourceDocument,
       indexBlobs,
@@ -559,6 +568,14 @@ export class EvidenceService {
     await this.auditRegion(auth, region, "ignore", "workbook_review_region", region.id,
       `Ignored workbook review region ${region.sheetName}!${region.rangeRef}.`, { reason: input.reason || "" });
     return workbookReviewRegionSummary(this.repository, ignored.region);
+  }
+
+  private interpretationStore(auth: AuthContext, projectId: string) {
+    return withWriteAuthorization(this.repository, async () => {
+      const actor = await this.identityRepository.findUserById(auth.user.id);
+      if (!actor?.isActive) throw new ApiError(403, "forbidden", "The initiating account is no longer active.");
+      await this.fullProject(auth, projectId, "propose");
+    });
   }
 
   private fullProject(auth: AuthContext, projectId: string, capability: Capability) {

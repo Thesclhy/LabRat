@@ -2,11 +2,20 @@
 
 Status: active
 Read when: deciding what LabRat should build next.
-Last reviewed: 2026-09-12
+Last reviewed: 2026-09-13
 
 This is the short active plan. Current execution status lives in `doc/current-milestone.md`; detailed implementation plans live under `doc/plans/`.
 
 ## Current Focus
+
+Claude `06ecf87` workbook and chart features are integrated and locally verified
+on main's Nest v1 architecture, preserving explicit permissions and invitations.
+Implementation is retained on `codex/claude-v1-integration`. On 2026-09-13 the
+user explicitly confirmed promotion to main and its automatic production
+deployment. Publication and activation status live in `doc/PROGRESS.md`;
+actual-backup rehearsal and real-provider validation remain unperformed. See
+`doc/plans/claude-v1-integration-plan.md` for the feature matrix and acceptance
+gates, and `doc/current-milestone.md` for verified versus outstanding work.
 
 Invitation-only account creation and lab membership/project-access
 administration are implemented and locally verified on

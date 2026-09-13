@@ -3,6 +3,7 @@ import { resolveAnalysisSourceSelections } from "./analysisSourceSelections.js";
 import { resolveExperimentSelections } from "./experimentBrowserAnalysis.js";
 import { stableDataHash } from "./dataPlanSchemas.js";
 import { makeId } from "./ids.js";
+import { loadFrozenLinkedTemplateInputs } from "./reusableChartTemplateApplications.js";
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -215,7 +216,8 @@ export async function publishAcceptedAnalysisChart({
   }
   const sourceSelections = asArray(planRevision.plan?.sourceSelections);
   const experimentSelections = asArray(planRevision.plan?.experimentSelections);
-  if (sourceSelections.length) {
+  const frozenInputs = await loadFrozenLinkedTemplateInputs({ store, projectId: project.id, run, planRevision, sourceSelections });
+  if (sourceSelections.length && !frozenInputs) {
     await resolveAnalysisSourceSelections({
       store,
       projectId: project.id,

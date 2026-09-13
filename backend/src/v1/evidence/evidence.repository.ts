@@ -73,6 +73,10 @@ interface WorkbookReviewSessionInput {
 }
 
 interface WorkbookReviewRegionInput {
+  linkedExperimentId?: string | null;
+  dataKind?: string | null;
+  regionExtractionTemplateVersionId?: string | null;
+  templateMatch?: JsonObject | null;
   labId: string;
   projectId: string;
   workbookReviewSessionId: string;
@@ -418,6 +422,10 @@ export class EvidenceRepository {
 
   async updateWorkbookReviewRegion(id: string, patch: Record<string, unknown> = {}) {
     const [updated] = await this.database.db.update(workbookReviewRegions).set({
+      ...(patch.linkedExperimentId !== undefined ? { linkedExperimentId: patch.linkedExperimentId as string | null } : {}),
+      ...(patch.dataKind !== undefined ? { dataKind: patch.dataKind as string | null } : {}),
+      ...(patch.regionExtractionTemplateVersionId !== undefined ? { regionExtractionTemplateVersionId: patch.regionExtractionTemplateVersionId as string | null } : {}),
+      ...(patch.templateMatch !== undefined ? { templateMatch: patch.templateMatch as JsonObject | null } : {}),
       ...(patch.disposition !== undefined ? { disposition: String(patch.disposition) } : {}),
       ...(patch.reviewStatus !== undefined ? { reviewStatus: String(patch.reviewStatus) } : {}),
       ...(patch.currentRevisionId !== undefined ? { currentRevisionId: String(patch.currentRevisionId) } : {}),

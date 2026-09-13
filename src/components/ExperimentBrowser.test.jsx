@@ -284,6 +284,54 @@ describe("ExperimentBrowser", () => {
     expect(await screen.findByRole("complementary", { name: "Experiment detail" })).toBeTruthy();
   });
 
+  it("renders linked workbook data as chips that open the source region without opening the row", async () => {
+    const onOpenSourceRange = vi.fn();
+    const loadDetail = vi.fn(async () => ({ experiment: { id: "exp_1", canonicalLabel: "Exp 1", aliases: [] }, dataSnapshot: { id: "snapshot_1" }, record: { fields: [], series: [], warnings: [], sourceRefs: [] }, linkedRegions: [] }));
+    const linkedColumn = { id: "linked:carbon_distribution", label: "Carbon distribution", displayName: "Carbon distribution", recommended: true, valueType: "string", unit: null, isLinkedData: true, dataKind: "Carbon distribution" };
+    const linkedRows = [{
+      ...rows[0],
+      cells: {
+        ...rows[0].cells,
+        "linked:carbon_distribution": {
+          value: "Calculation Exp31.xlsx · Sheet1!P31:BA32",
+          formattedValue: "Calculation Exp31.xlsx · Sheet1!P31:BA32",
+          isLinkedData: true,
+          linkedRegions: [{ regionId: "region_31", workbookReviewSessionId: "session_31", sourceDocumentId: "doc_31", workbookName: "Calculation Exp31.xlsx", sheetName: "Sheet1", range: "P31:BA32", seriesLabels: ["Overall carbon distribution"] }],
+        },
+      },
+    }, {
+      ...rows[0],
+      experimentId: "exp_2",
+      label: "Exp 2",
+      cells: { ...rows[0].cells, "linked:carbon_distribution": null },
+    }];
+    render(
+      <ExperimentBrowser
+        projectId="project_1"
+        loadProjection={vi.fn(async () => projection({ columns: [...columns, linkedColumn], rows: linkedRows, totalCount: 2 }))}
+        loadDetail={loadDetail}
+        onOpenSourceRange={onOpenSourceRange}
+        {...viewApi()}
+      />,
+    );
+
+    const chip = await screen.findByRole("button", { name: "Open Carbon distribution for Exp 1 in Calculation Exp31.xlsx" });
+    expect(chip.textContent).toContain("Calculation Exp31.xlsx");
+    expect(chip.textContent).toContain("Sheet1!P31:BA32");
+    fireEvent.click(chip);
+    expect(onOpenSourceRange).toHaveBeenCalledWith({
+      sourceType: "excel_range",
+      sourceDocumentId: "doc_31",
+      sheet: "Sheet1",
+      range: "P31:BA32",
+      workbookReviewSessionId: "session_31",
+      regionId: "region_31",
+    });
+    expect(loadDetail).not.toHaveBeenCalled();
+    const secondRow = screen.getByRole("row", { name: /Exp 2/ });
+    expect(within(secondRow).queryByRole("button", { name: /Open Carbon distribution/ })).toBeNull();
+  });
+
   it("uses main-style direct column controls and opens detail from the full row", async () => {
     const loadDetail = vi.fn(async () => ({
       experiment: { id: "exp_1", canonicalLabel: "Exp 1", aliases: [] },

@@ -5,6 +5,7 @@ import {
   buildExperimentProjection,
   experimentFieldColumnId,
   getExperimentProjectionDetail,
+  linkedRegionSummaries,
 } from "./experimentProjection.js";
 
 function field(fieldKey, value, {
@@ -241,6 +242,68 @@ test("projects custom documentation columns into search, filter, and sort withou
   assert.equal(result.totalCount, 1);
   assert.equal(result.rows[0].cells["custom:custom_notes"].value, "Repeat 48");
   assert.equal(result.rows[0].cells["custom:custom_notes"].version, 1);
+});
+
+test("projects experiment-linked workbook regions as one shared column per data kind without touching snapshots", () => {
+  const state = fixture();
+  const acceptedRegionUnderstandings = [
+    {
+      region: { id: "region_31", disposition: "active", acceptedRevisionId: "rev_31", linkedExperimentId: "exp_1", workbookReviewSessionId: "session_31", sourceDocumentId: "doc_31", sheetName: "Sheet1", rangeRef: "P31:BA32", dataKind: "Carbon distribution", regionExtractionTemplateVersionId: "tv_1", templateMatch: { status: "exact", templateVersion: 1 }, acceptedAt: "2026-09-09T10:00:00.000Z" },
+      revision: { id: "rev_31", interpretation: { semanticType: "component_distribution", series: [{ seriesKey: "carbon_distribution", label: "Overall carbon distribution", orientation: "header_row_categories" }] } },
+    },
+    {
+      region: { id: "region_31_rate", disposition: "active", acceptedRevisionId: "rev_31_rate", linkedExperimentId: "exp_1", workbookReviewSessionId: "session_31r", sourceDocumentId: "doc_31r", sheetName: "Rates", rangeRef: "A1:B60", dataKind: "Reaction rate data" },
+      revision: { id: "rev_31_rate", interpretation: { series: [{ seriesKey: "rate", label: "Rate over time" }] } },
+    },
+    {
+      region: { id: "region_32", disposition: "active", acceptedRevisionId: "rev_32", linkedExperimentId: "exp_2", workbookReviewSessionId: "session_32", sourceDocumentId: "doc_32", sheetName: "Sheet1", rangeRef: "P31:BA32", dataKind: "Carbon distribution" },
+      revision: { id: "rev_32", interpretation: {} },
+    },
+    { region: { id: "region_unlinked", disposition: "active", acceptedRevisionId: "rev_u", linkedExperimentId: null, sourceDocumentId: "doc_u", sheetName: "S", rangeRef: "A1:B2", dataKind: "Carbon distribution" }, revision: { id: "rev_u", interpretation: {} } },
+    { region: { id: "region_ignored", disposition: "ignored", acceptedRevisionId: "rev_i", linkedExperimentId: "exp_3", sourceDocumentId: "doc_i", sheetName: "S", rangeRef: "A1:B2", dataKind: "Carbon distribution" }, revision: { id: "rev_i", interpretation: {} } },
+  ];
+  const sourceDocuments = [
+    { id: "doc_31", metadata: { workbookName: "Calculation Exp31.xlsx" } },
+    { id: "doc_31r", metadata: { workbookName: "Rates Exp31.xlsx" } },
+    { id: "doc_32", metadata: { workbookName: "Calculation Exp32.xlsx" } },
+  ];
+  const experimentLinkedRegions = linkedRegionSummaries({ acceptedRegionUnderstandings, sourceDocuments });
+  assert.deepEqual(experimentLinkedRegions.map((item) => item.regionId), ["region_31", "region_32", "region_31_rate"]);
+
+  const result = buildExperimentProjection({ projectId: "project_1", ...state, experimentLinkedRegions });
+  const carbon = result.columns.find((column) => column.id === "linked:carbon_distribution");
+  const rate = result.columns.find((column) => column.id === "linked:reaction_rate_data");
+  assert.equal(carbon.label, "Carbon distribution");
+  assert.equal(carbon.isLinkedData, true);
+  assert.equal(carbon.role, "linked_data");
+  assert.equal(carbon.coverageCount, 2);
+  assert.equal(rate.coverageCount, 1);
+  assert.ok(result.columns.findIndex((column) => column.isLinkedData) < result.columns.length, "linked columns come before custom columns");
+
+  const exp1 = result.rows.find((row) => row.experimentId === "exp_1");
+  assert.equal(exp1.cells["linked:carbon_distribution"].value, "Calculation Exp31.xlsx · Sheet1!P31:BA32");
+  assert.deepEqual(exp1.cells["linked:carbon_distribution"].linkedRegions.map((item) => [item.regionId, item.workbookReviewSessionId, item.templateVersion, item.seriesLabels]), [["region_31", "session_31", 1, ["Overall carbon distribution"]]]);
+  assert.equal(exp1.cells["linked:reaction_rate_data"].value, "Rates Exp31.xlsx · Rates!A1:B60");
+  assert.equal(exp1.linkedRegionCount, 2);
+  const exp3 = result.rows.find((row) => row.experimentId === "exp_3");
+  assert.equal(exp3.cells["linked:carbon_distribution"], null, "ignored regions never link");
+  assert.equal(exp3.linkedRegionCount, 0);
+  assert.equal(result.rows.find((row) => row.experimentId === "exp_2").cells["linked:reaction_rate_data"], null);
+
+  const filtered = buildExperimentProjection({
+    projectId: "project_1",
+    ...state,
+    experimentLinkedRegions,
+    filters: [{ columnId: "linked:reaction_rate_data", operator: "not_empty" }],
+    sort: [{ columnId: "linked:carbon_distribution", direction: "asc" }],
+  });
+  assert.deepEqual(filtered.rows.map((row) => row.experimentId), ["exp_1"]);
+  const searched = buildExperimentProjection({ projectId: "project_1", ...state, experimentLinkedRegions, search: "Exp32.xlsx" });
+  assert.deepEqual(searched.rows.map((row) => row.experimentId), ["exp_2"]);
+
+  const detail = getExperimentProjectionDetail({ projectId: "project_1", experimentId: "exp_1", ...state, experimentLinkedRegions });
+  assert.deepEqual(detail.linkedRegions.map((item) => item.dataKind), ["Carbon distribution", "Reaction rate data"]);
+  assert.deepEqual(state.dataSnapshots.map((snapshot) => snapshot.id), ["snapshot_old", "snapshot_active", "snapshot_third", "snapshot_preview"], "snapshots are untouched");
 });
 
 test("returns full active experiment detail lazily and rejects inactive or cross-project ids", () => {

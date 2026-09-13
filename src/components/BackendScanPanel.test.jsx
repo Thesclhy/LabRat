@@ -1,7 +1,8 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ChartReviewPanel, ReusableChartTemplateReview } from "./BackendScanPanel.jsx";
+import { ChartReviewPanel, LinkedDataComparisonReview, ReusableChartTemplateReview } from "./BackendScanPanel.jsx";
+import { WorkspacePermissions } from "./WorkspacePermissions.jsx";
 
 vi.mock("../charts/Plot.jsx", () => ({
   Plot: () => <div data-testid="plot" />,
@@ -256,5 +257,175 @@ describe("ReusableChartTemplateReview", () => {
     await waitFor(() => expect(applyTemplate).toHaveBeenLastCalledWith("version_1", expect.objectContaining({
       bindings: [{ slotId: "value", columnId: "column_alt" }],
     })));
+  });
+  it("binds workbook templates by data kind: coverage from linked regions, uncovered rows disabled, no field bindings", async () => {
+    const linkedTemplate = { ...template, id: "template_linked", name: "Carbon distribution", currentVersionId: "version_linked", chartType: "bar" };
+    const linkedVersion = {
+      id: "version_linked",
+      reusableChartTemplateId: "template_linked",
+      experimentCardinality: { minimum: 1, recommendedMaximum: 8, hardMaximum: 24 },
+      inputSlots: [{
+        slotId: "series",
+        label: "Overall carbon distribution",
+        dataKind: "series",
+        sourceKind: "linked_region",
+        linkedDataKind: "Carbon distribution",
+        identityContract: { preferredColumnId: "" },
+        unitContract: { allowedUnits: ["% of feed carbon"] },
+        seriesContract: { orientation: "header_row_categories", seriesSelector: { seriesKey: "carbon_distribution", label: "Overall carbon distribution" } },
+      }],
+      encoding: { chartType: "bar", comparisonMode: "grouped" },
+    };
+    const loadDataKinds = vi.fn().mockResolvedValue({
+      dataKinds: [{
+        dataKind: "Carbon distribution",
+        experimentCount: 1,
+        experiments: [{ experimentId: "exp_1", label: "Exp1", regions: [{ regionId: "region_1", revisionId: "rev_1", workbookName: "Calculation Exp1.xlsx", sheetName: "Sheet1", range: "P31:BA32" }] }],
+      }],
+      experiments: [{ experimentId: "exp_1", label: "Exp1" }, { experimentId: "exp_2", label: "Exp2" }],
+    });
+    const applyTemplate = vi.fn().mockResolvedValue({
+      compatibility: {
+        status: "ready",
+        sourceKind: "linked_region",
+        linkedDataKind: "Carbon distribution",
+        blockers: [],
+        experiments: [{ experimentId: "exp_1", label: "Exp1", region: { workbookName: "Calculation Exp1.xlsx", sheetName: "Sheet1", range: "P31:BA32" }, missingCount: 1 }],
+        excludedExperiments: [{ experimentId: "exp_9", label: "Exp9", code: "chart_template_input_missing", message: "Exp9 has no confirmed Carbon distribution linked to it." }],
+        warnings: [],
+      },
+      analysisThread: { id: "thread_linked" },
+      analysisPlanRevision: { id: "revision_linked" },
+      analysisRun: { id: "run_linked", status: "queued" },
+    });
+    const onApplicationReady = vi.fn();
+    render(
+      <ReusableChartTemplateReview
+        projectId="project_1"
+        templates={[linkedTemplate]}
+        loadTemplate={vi.fn().mockResolvedValue({ reusableChartTemplate: linkedTemplate, versions: [linkedVersion] })}
+        loadExperiments={vi.fn().mockResolvedValue(experiments)}
+        loadDataKinds={loadDataKinds}
+        applyTemplate={applyTemplate}
+        onApplicationReady={onApplicationReady}
+      />,
+    );
+
+    expect(await screen.findByText("Calculation Exp1.xlsx · Sheet1!P31:BA32")).toBeTruthy();
+    expect(screen.getByText("no linked Carbon distribution")).toBeTruthy();
+    expect(screen.getByLabelText("Select Exp2").disabled).toBe(true);
+    expect(screen.queryByLabelText("Bind field")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Select all with data" }));
+    expect(screen.getByText("1/1 linked regions")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Preview chart" }));
+
+    await waitFor(() => expect(applyTemplate).toHaveBeenCalledWith("version_linked", expect.objectContaining({ experimentIds: ["exp_1"], bindings: [] })));
+    await waitFor(() => expect(onApplicationReady).toHaveBeenCalledWith(expect.objectContaining({ analysisRun: { id: "run_linked", status: "queued" } })));
+    expect(await screen.findByText(/Reading 1 confirmed Carbon distribution region/)).toBeTruthy();
+    expect(screen.getByText(/1 missing point/)).toBeTruthy();
+    expect(screen.getByText(/Not included: Exp9 has no confirmed Carbon distribution linked to it\./)).toBeTruthy();
+  });
+});
+
+describe("LinkedDataComparisonReview", () => {
+  const kinds = {
+    schemaVersion: "labrat.linkedDataKinds.v1",
+    dataKinds: [
+      {
+        dataKind: "Carbon distribution",
+        experimentCount: 2,
+        regionCount: 2,
+        experiments: [
+          { experimentId: "identity_31", label: "Exp31", regions: [{ regionId: "region_31", workbookName: "Calculation Exp31.xlsx", sheetName: "Sheet1", range: "P31:BA32", series: [] }] },
+          { experimentId: "identity_32", label: "Exp32", regions: [{ regionId: "region_32", workbookName: "Calculation Exp32.xlsx", sheetName: "Sheet1", range: "P31:BA32", series: [] }] },
+        ],
+      },
+      { dataKind: "Reaction rate data", experimentCount: 1, regionCount: 1, experiments: [{ experimentId: "identity_31", label: "Exp31", regions: [{ regionId: "region_31r", workbookName: "Rates Exp31.xlsx", sheetName: "Rates", range: "A1:B60", series: [] }] }] },
+    ],
+    experiments: [
+      { experimentId: "identity_31", label: "Exp31" },
+      { experimentId: "identity_32", label: "Exp32" },
+      { experimentId: "identity_33", label: "Exp33" },
+    ],
+  };
+
+  it("lists data kinds with coverage, previews deterministic selections, and hands a created plan to review", async () => {
+    const loadDataKinds = vi.fn(async () => kinds);
+    const createComparison = vi.fn(async (_projectId, request) => ({
+      comparison: {
+        dataKind: request.dataKind,
+        chartType: request.chartType,
+        requestSummary: `Compare ${request.dataKind} across 2 experiments: Exp31, Exp32.`,
+        experiments: request.experimentIds.map((experimentId) => ({ experimentId, label: experimentId === "identity_31" ? "Exp31" : "Exp32", workbookName: `Calculation ${experimentId === "identity_31" ? "Exp31" : "Exp32"}.xlsx`, sheetName: "Sheet1", range: "P31:BA32" })),
+        missingExperiments: [],
+        warnings: [],
+      },
+      ...(request.dryRun ? { analysisThread: null, analysisPlanRevision: null } : { analysisThread: { id: "thread_1" }, analysisPlanRevision: { id: "revision_1" } }),
+    }));
+    const onComparisonReady = vi.fn();
+    render(<LinkedDataComparisonReview projectId="project_1" loadDataKinds={loadDataKinds} createComparison={createComparison} onComparisonReady={onComparisonReady} />);
+
+    const kindSelect = await screen.findByLabelText("Data kind");
+    expect(within(kindSelect).getAllByRole("option").map((option) => option.textContent)).toEqual(["Carbon distribution (2 experiments)", "Reaction rate data (1 experiment)"]);
+    const exp33 = screen.getByLabelText("Include Exp33");
+    expect(exp33.disabled).toBe(true);
+    expect(screen.getByText("no linked Carbon distribution")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Create comparison plan (0)" }).disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Select all with data" }));
+    expect(screen.getByLabelText("Include Exp31").checked).toBe(true);
+    expect(screen.getByLabelText("Include Exp32").checked).toBe(true);
+    fireEvent.change(screen.getByLabelText("Chart type"), { target: { value: "scatter" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Preview selections" }));
+    await waitFor(() => expect(createComparison).toHaveBeenCalledWith("project_1", { dataKind: "Carbon distribution", experimentIds: ["identity_31", "identity_32"], chartType: "scatter", dryRun: true }));
+    expect(await screen.findByText("Compare Carbon distribution across 2 experiments: Exp31, Exp32.")).toBeTruthy();
+    expect(onComparisonReady).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create comparison plan (2)" }));
+    await waitFor(() => expect(onComparisonReady).toHaveBeenCalledWith(expect.objectContaining({ analysisThread: { id: "thread_1" }, analysisPlanRevision: { id: "revision_1" } })));
+    expect(createComparison).toHaveBeenLastCalledWith("project_1", { dataKind: "Carbon distribution", experimentIds: ["identity_31", "identity_32"], chartType: "scatter" });
+
+    fireEvent.change(kindSelect, { target: { value: "Reaction rate data" } });
+    expect(screen.getByLabelText("Include Exp32").disabled).toBe(true);
+    expect(screen.getByRole("button", { name: "Create comparison plan (0)" }).disabled).toBe(true);
+  });
+
+  it("lets readonly users preview selections but never create a plan", async () => {
+    const createComparison = vi.fn(async () => ({ comparison: { requestSummary: 'Readonly preview', experiments: [] } }));
+    render(<WorkspacePermissions.Provider value={{ canEdit: false }}>
+      <LinkedDataComparisonReview projectId="project_1" loadDataKinds={async () => kinds} createComparison={createComparison} />
+    </WorkspacePermissions.Provider>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Select all with data' }));
+    expect(screen.getByRole('button', { name: 'Create comparison plan (2)' }).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Preview selections' }));
+    expect(await screen.findByText('Readonly preview')).toBeTruthy();
+    expect(createComparison).toHaveBeenCalledTimes(1);
+    expect(createComparison.mock.calls[0][1].dryRun).toBe(true);
+  });
+
+  it("does not reopen an old project's analysis after the picker unmounts", async () => {
+    let finish;
+    const pending = new Promise((resolve) => { finish = resolve; });
+    const ready = vi.fn();
+    const { unmount } = render(<LinkedDataComparisonReview projectId="project_1" loadDataKinds={async () => kinds}
+      createComparison={() => pending} onComparisonReady={ready} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Select all with data' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create comparison plan (2)' }));
+    unmount();
+    finish({ analysisThread: { id: 'old_thread' }, analysisPlanRevision: { id: 'old_revision' } });
+    await pending;
+    expect(ready).not.toHaveBeenCalled();
+  });
+
+  it("explains how to get linked data when none exists", async () => {
+    render(<LinkedDataComparisonReview projectId="project_1" loadDataKinds={vi.fn(async () => ({ dataKinds: [], experiments: [] }))} createComparison={vi.fn()} />);
+    expect(await screen.findByText("No linked workbook data is available in this project yet.")).toBeTruthy();
+  });
+
+  it("renders the linked comparison mode from the chart review panel", async () => {
+    render(<ChartReviewPanel viewMode="linked" projectId="project_1" chartSpecs={[]} chartInterpretState={{}} />);
+    expect(await screen.findByText("Compare linked data")).toBeTruthy();
   });
 });

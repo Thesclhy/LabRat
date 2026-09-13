@@ -1582,10 +1582,261 @@ export interface paths {
         readonly patch: operations["updateManuscript"];
         readonly trace?: never;
     };
+    readonly "/api/v1/source-documents/{sourceDocumentId}/cell-classes": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get: operations["getSourceCellClasses"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/projects/{projectId}/region-extraction-templates": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get: operations["listRegionExtractionTemplates"];
+        readonly put?: never;
+        readonly post: operations["createRegionExtractionTemplate"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/region-extraction-templates/{templateId}": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get: operations["getRegionExtractionTemplate"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/region-extraction-templates/{templateId}/versions": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        readonly post: operations["createRegionExtractionTemplateVersion"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/region-extraction-templates/{templateId}/archive": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        readonly post: operations["archiveRegionExtractionTemplate"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/region-extraction-template-versions/{versionId}/matches": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        readonly post: operations["matchRegionExtractionTemplate"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/region-extraction-template-versions/{versionId}/apply": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        readonly post: operations["applyRegionExtractionTemplate"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/projects/{projectId}/workbook-review-regions/confirm-batch": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        readonly post: operations["confirmWorkbookReviewRegionsBatch"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/projects/{projectId}/linked-data-kinds": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get: operations["listLinkedDataKinds"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/projects/{projectId}/linked-data-comparisons": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        readonly post: operations["createLinkedDataComparison"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        readonly CreateRegionExtractionTemplateRequest: {
+            readonly name: string;
+            readonly description?: string;
+            readonly regionId: string;
+        };
+        readonly RegionTemplateVersionRequest: {
+            readonly regionId: string;
+        };
+        readonly MatchRegionTemplateRequest: {
+            readonly sourceDocumentIds: readonly string[];
+        };
+        readonly ApplyRegionTemplateRequest: {
+            readonly sourceDocumentIds: readonly string[];
+            readonly onlyStatuses?: readonly ("exact" | "shifted")[];
+        };
+        readonly ConfirmRegionBatchItem: {
+            readonly regionId: string;
+            readonly revisionId: string;
+            readonly expectedRegionVersion: number;
+            readonly linkedExperimentId?: string;
+        };
+        readonly ConfirmRegionBatchRequest: {
+            readonly items: readonly components["schemas"]["ConfirmRegionBatchItem"][];
+        };
+        readonly LinkedDataComparisonRequest: {
+            readonly dataKind: string;
+            readonly experimentIds: readonly string[];
+            /** @enum {string} */
+            readonly chartType?: "grouped_bar" | "bar" | "scatter" | "point" | "stacked_bar";
+            readonly dryRun?: boolean;
+        };
+        readonly RegionExtractionTemplatePage: {
+            readonly items: readonly components["schemas"]["JsonObject"][];
+            readonly nextCursor: components["schemas"]["NullableString"];
+        };
+        readonly RegionExtractionTemplateDetail: {
+            readonly regionExtractionTemplate: components["schemas"]["JsonObject"];
+            readonly versions: readonly components["schemas"]["JsonObject"][];
+            readonly sourceRegionLink?: components["schemas"]["JsonObject"] | null;
+        };
+        readonly RegionExtractionTemplateResponse: {
+            readonly regionExtractionTemplate: components["schemas"]["JsonObject"];
+        };
+        readonly RegionTemplateMatches: {
+            readonly schemaVersion: string;
+            readonly regionExtractionTemplateId: string;
+            readonly templateName: string;
+            readonly templateVersionId: string;
+            readonly templateVersion: number;
+            readonly matches: readonly components["schemas"]["JsonObject"][];
+            readonly summary: components["schemas"]["JsonObject"];
+        };
+        readonly RegionTemplateApplyResult: {
+            readonly schemaVersion: string;
+            readonly regionExtractionTemplateId: string;
+            readonly templateName: string;
+            readonly templateVersionId: string;
+            readonly templateVersion: number;
+            readonly applied: readonly components["schemas"]["JsonObject"][];
+            readonly skipped: readonly components["schemas"]["JsonObject"][];
+        };
+        readonly RegionBatchConfirmResult: {
+            readonly schemaVersion: string;
+            readonly projectId: string;
+            readonly results: readonly components["schemas"]["JsonObject"][];
+            readonly confirmedCount: number;
+            readonly rejectedCount: number;
+        };
+        readonly LinkedDataKindsResponse: {
+            readonly schemaVersion: string;
+            readonly projectId: string;
+            readonly dataKinds: readonly components["schemas"]["JsonObject"][];
+            readonly experiments: readonly components["schemas"]["JsonObject"][];
+        };
+        readonly LinkedDataComparisonResponse: {
+            readonly comparison: components["schemas"]["JsonObject"];
+            readonly analysisThread: components["schemas"]["AnalysisThread"] | null;
+            readonly analysisPlanRevision: components["schemas"]["AnalysisPlanRevision"] | null;
+            readonly dryRun: boolean;
+        };
+        readonly SourceCellClassesResponse: {
+            readonly schemaVersion: string;
+            readonly sourceDocumentId: string;
+            readonly sheetName: string;
+            readonly range: string;
+            readonly cellCount: number;
+            readonly graphTruncated: boolean;
+            readonly cells: readonly components["schemas"]["JsonObject"][];
+            readonly summary: components["schemas"]["JsonObject"];
+            readonly provenance: components["schemas"]["JsonObject"];
+        };
         readonly EmptyInvitationRequest: Record<string, never>;
         readonly InvitationCodeRequest: {
             readonly invitationCode: string;
@@ -2451,6 +2702,10 @@ export interface components {
             readonly createdBy: components["schemas"]["NullableOpaqueId"];
         };
         readonly WorkbookReviewRegion: {
+            readonly linkedExperimentId?: components["schemas"]["NullableOpaqueId"];
+            readonly dataKind?: components["schemas"]["NullableString"];
+            readonly regionExtractionTemplateVersionId?: components["schemas"]["NullableOpaqueId"];
+            readonly templateMatch?: components["schemas"]["JsonObject"] | null;
             readonly id: components["schemas"]["OpaqueId"];
             readonly labId: components["schemas"]["OpaqueId"];
             readonly projectId: components["schemas"]["OpaqueId"];
@@ -2684,6 +2939,8 @@ export interface components {
             readonly experimentSelections: readonly components["schemas"]["JsonObject"][];
             readonly reviewPlan: components["schemas"]["JsonObject"];
             readonly displayPlan: readonly string[];
+            readonly templateLineage?: components["schemas"]["JsonObject"];
+            readonly linkedDataComparison?: components["schemas"]["JsonObject"];
             readonly sourceRectangles: readonly components["schemas"]["JsonObject"][];
             readonly feedback: components["schemas"]["NullableString"];
             readonly warnings: readonly components["schemas"]["JsonObject"][];
@@ -3791,6 +4048,22 @@ export interface components {
     headers: never;
     pathItems: never;
 }
+export type SchemaCreateRegionExtractionTemplateRequest = components['schemas']['CreateRegionExtractionTemplateRequest'];
+export type SchemaRegionTemplateVersionRequest = components['schemas']['RegionTemplateVersionRequest'];
+export type SchemaMatchRegionTemplateRequest = components['schemas']['MatchRegionTemplateRequest'];
+export type SchemaApplyRegionTemplateRequest = components['schemas']['ApplyRegionTemplateRequest'];
+export type SchemaConfirmRegionBatchItem = components['schemas']['ConfirmRegionBatchItem'];
+export type SchemaConfirmRegionBatchRequest = components['schemas']['ConfirmRegionBatchRequest'];
+export type SchemaLinkedDataComparisonRequest = components['schemas']['LinkedDataComparisonRequest'];
+export type SchemaRegionExtractionTemplatePage = components['schemas']['RegionExtractionTemplatePage'];
+export type SchemaRegionExtractionTemplateDetail = components['schemas']['RegionExtractionTemplateDetail'];
+export type SchemaRegionExtractionTemplateResponse = components['schemas']['RegionExtractionTemplateResponse'];
+export type SchemaRegionTemplateMatches = components['schemas']['RegionTemplateMatches'];
+export type SchemaRegionTemplateApplyResult = components['schemas']['RegionTemplateApplyResult'];
+export type SchemaRegionBatchConfirmResult = components['schemas']['RegionBatchConfirmResult'];
+export type SchemaLinkedDataKindsResponse = components['schemas']['LinkedDataKindsResponse'];
+export type SchemaLinkedDataComparisonResponse = components['schemas']['LinkedDataComparisonResponse'];
+export type SchemaSourceCellClassesResponse = components['schemas']['SourceCellClassesResponse'];
 export type SchemaEmptyInvitationRequest = components['schemas']['EmptyInvitationRequest'];
 export type SchemaInvitationCodeRequest = components['schemas']['InvitationCodeRequest'];
 export type SchemaRedeemInvitationRequest = components['schemas']['RedeemInvitationRequest'];
@@ -7097,6 +7370,345 @@ export interface operations {
             readonly 401: components["responses"]["Unauthorized"];
             readonly 403: components["responses"]["Forbidden"];
             readonly 404: components["responses"]["NotFound"];
+        };
+    };
+    readonly getSourceCellClasses: {
+        readonly parameters: {
+            readonly query: {
+                readonly sheetName: string;
+                readonly range: string;
+            };
+            readonly header?: never;
+            readonly path: {
+                readonly sourceDocumentId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Success. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["SourceCellClassesResponse"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+        };
+    };
+    readonly listRegionExtractionTemplates: {
+        readonly parameters: {
+            readonly query?: {
+                readonly limit?: components["parameters"]["Limit"];
+                readonly cursor?: components["parameters"]["Cursor"];
+                readonly includeArchived?: "true" | "false";
+            };
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Success. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["RegionExtractionTemplatePage"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+        };
+    };
+    readonly createRegionExtractionTemplate: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["CreateRegionExtractionTemplateRequest"];
+            };
+        };
+        readonly responses: {
+            /** @description Success. */
+            readonly 201: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["RegionExtractionTemplateDetail"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+        };
+    };
+    readonly getRegionExtractionTemplate: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly templateId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Success. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["RegionExtractionTemplateDetail"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+        };
+    };
+    readonly createRegionExtractionTemplateVersion: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly templateId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["RegionTemplateVersionRequest"];
+            };
+        };
+        readonly responses: {
+            /** @description Success. */
+            readonly 201: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["RegionExtractionTemplateDetail"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+        };
+    };
+    readonly archiveRegionExtractionTemplate: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly templateId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Success. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["RegionExtractionTemplateResponse"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+        };
+    };
+    readonly matchRegionExtractionTemplate: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly versionId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["MatchRegionTemplateRequest"];
+            };
+        };
+        readonly responses: {
+            /** @description Success. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["RegionTemplateMatches"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+        };
+    };
+    readonly applyRegionExtractionTemplate: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header: {
+                readonly "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            readonly path: {
+                readonly versionId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["ApplyRegionTemplateRequest"];
+            };
+        };
+        readonly responses: {
+            /** @description Success. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["RegionTemplateApplyResult"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+        };
+    };
+    readonly confirmWorkbookReviewRegionsBatch: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["ConfirmRegionBatchRequest"];
+            };
+        };
+        readonly responses: {
+            /** @description Success. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["RegionBatchConfirmResult"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+        };
+    };
+    readonly listLinkedDataKinds: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Success. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["LinkedDataKindsResponse"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+        };
+    };
+    readonly createLinkedDataComparison: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["schemas"]["OpaqueId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["LinkedDataComparisonRequest"];
+            };
+        };
+        readonly responses: {
+            /** @description Success. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["LinkedDataComparisonResponse"];
+                };
+            };
+            /** @description Success. */
+            readonly 201: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["LinkedDataComparisonResponse"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
         };
     };
 }

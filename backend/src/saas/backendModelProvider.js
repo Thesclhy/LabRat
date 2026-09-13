@@ -73,6 +73,28 @@ const READ_ONLY_ANSWER_OUTPUT_SCHEMA = {
   additionalProperties: false,
 };
 
+const CHART_COMMENTARY_SYSTEM = [
+  "Write text about one existing accepted LabRat chart.",
+  "Return JSON only with answer.",
+  "Use only the supplied visible traces, plotted values, chart labels, and project context.",
+  "Never propose, plan, or create another chart and never request a calculation.",
+  "Do not invent mechanisms, methods, statistical significance, values, or conclusions that are not supported by the supplied chart.",
+  "Mention only supplied visible traces. If a trace was sampled or visible traces were omitted by a stated backend limit, qualify conclusions accordingly.",
+  "For mode analysis, write one polished manuscript-ready paragraph of 80-130 words describing what is plotted, the main trend, and visible caveats.",
+  "For mode trend, write 2-3 concise sentences about the main visible trend.",
+  "For mode caption, write a neutral manuscript-style caption of 1-2 concise sentences.",
+  "Return plain prose without Markdown headings, lists, tables, or hidden reasoning.",
+].join(" ");
+
+const CHART_COMMENTARY_OUTPUT_SCHEMA = {
+  type: "object",
+  properties: {
+    answer: { type: "string" },
+  },
+  required: ["answer"],
+  additionalProperties: false,
+};
+
 const ANALYSIS_PLAN_SYSTEM = [
   "Draft one reviewable LabRat analysis plan as JSON only.",
   "Return exactly {requestSummary, sourceSelections, experimentSelections, reviewPlan, displayPlan, warnings}.",
@@ -374,6 +396,11 @@ const WORKBOOK_REGION_SYSTEM = [
   "Use complete identityEvidence exactly when describing experiment counts or first and last identifiers.",
   "Do not infer experiment counts, identifier ranges, or whole-table numeric ranges from the bounded inspection sample.",
   "Use only supplied cells, formulas, merged ranges, workbook metadata, prior visible interpretation, and user feedback.",
+  "region.provenance and each inspection cell's cellClass come from a deterministic formula graph: terminal cells are calculated results that nothing else references, intermediate cells are formulas that feed other formulas, input cells are typed values used by formulas, and constant cells are labels or unused values.",
+  "Treat terminal cells as the scientific result of a calculation sheet. When the selected region is mostly intermediate or input cells, say plainly in the summary that these are inputs or intermediate calculations rather than final results.",
+  "Use region.provenance.derivation to name the unit or normalization of calculated values only when the formula makes it explicit, for example a division by total feed carbon multiplied by 100 is a percentage of feed carbon.",
+  "When the region is one header row of ordered categories such as C1 to C37 above one or more value rows, describe each value row as one series through seriesPatches with orientation header_row_categories, xHeaderRange covering the header cells, yValueRange covering that value row, xMeaning naming what the categories are, and yUnit when explicit.",
+  "Each seriesPatches item requires every property; use an empty string for properties that do not apply.",
   "Never invent source cells, scientific values, units, or experiment identities, and never return hidden reasoning.",
   "Do not return source hashes or request additional workbook data.",
 ].join(" ");
@@ -422,6 +449,39 @@ const WORKBOOK_REGION_OUTPUT_SCHEMA = {
             additionalProperties: false,
           },
         },
+        seriesPatches: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              seriesKey: { type: "string" },
+              label: { type: "string" },
+              orientation: { type: "string", enum: ["", "header_row_categories", "column_pair"] },
+              xHeaderRange: { type: "string" },
+              yValueRange: { type: "string" },
+              xColumn: { type: "string" },
+              yColumn: { type: "string" },
+              xMeaning: { type: "string" },
+              xValueType: { type: "string", enum: ["", "string", "number", "date", "boolean"] },
+              yUnit: { type: "string" },
+              yNumericScale: { type: "string", enum: ["", "percent_points", "fraction"] },
+            },
+            required: [
+              "seriesKey",
+              "label",
+              "orientation",
+              "xHeaderRange",
+              "yValueRange",
+              "xColumn",
+              "yColumn",
+              "xMeaning",
+              "xValueType",
+              "yUnit",
+              "yNumericScale",
+            ],
+            additionalProperties: false,
+          },
+        },
         confidence: { type: "number" },
       },
       required: [
@@ -431,6 +491,7 @@ const WORKBOOK_REGION_OUTPUT_SCHEMA = {
         "experimentIdColumn",
         "experimentLabel",
         "fieldPatches",
+        "seriesPatches",
         "confidence",
       ],
       additionalProperties: false,
@@ -463,6 +524,21 @@ function normalizeWorkbookRegionPatch(value) {
     return [fieldPatch];
   });
   if (fieldPatches.length) patch.fieldPatches = fieldPatches;
+  const seriesPatches = (Array.isArray(source.seriesPatches) ? source.seriesPatches : []).flatMap((candidate) => {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return [];
+    const seriesPatch = {};
+    for (const property of ["seriesKey", "label", "orientation", "xHeaderRange", "yValueRange", "xColumn", "yColumn", "xMeaning", "xValueType", "yUnit", "yNumericScale"]) {
+      const normalized = String(candidate[property] ?? "").trim();
+      if (normalized) seriesPatch[property] = normalized;
+    }
+    const orientation = seriesPatch.orientation || (seriesPatch.xColumn && seriesPatch.yColumn ? "column_pair" : "header_row_categories");
+    const complete = orientation === "column_pair"
+      ? Boolean(seriesPatch.xColumn && seriesPatch.yColumn)
+      : Boolean(seriesPatch.xHeaderRange && seriesPatch.yValueRange);
+    if (!complete || !(seriesPatch.seriesKey || seriesPatch.label)) return [];
+    return [{ ...seriesPatch, orientation }];
+  });
+  if (seriesPatches.length) patch.seriesPatches = seriesPatches;
   return patch;
 }
 
@@ -656,6 +732,16 @@ export function createBackendModelProvider({
         payload: input,
         maxTokens: 800,
         outputSchema: READ_ONLY_ANSWER_OUTPUT_SCHEMA,
+        thinking: { enabled: false },
+        signal: options.signal,
+      });
+    },
+    answerChartCommentary(input = {}, options = {}) {
+      return requestStructured({
+        system: CHART_COMMENTARY_SYSTEM,
+        payload: input,
+        maxTokens: 700,
+        outputSchema: CHART_COMMENTARY_OUTPUT_SCHEMA,
         thinking: { enabled: false },
         signal: options.signal,
       });

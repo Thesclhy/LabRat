@@ -106,6 +106,19 @@ Contains:
 Ignoring or deleting a region never erases its immutable revision history or
 already-created downstream artifacts.
 
+A region created by applying a RegionExtractionTemplate carries
+`selectionMethod: "template_match"`, `regionExtractionTemplateVersionId`,
+`dataKind` (the template name, for example "Reaction rate data"), a bounded
+`templateMatch` record (status, offset, resolved experiment label, link status
+and candidates), and `linkedExperimentId` once the label resolves to exactly
+one ExperimentIdentity or the user chooses one. The region a template was
+saved from is linked the same way when the template is created (template name
+as `dataKind`, experiment from its label cell or filename). The link is
+metadata about the evidence; it publishes nothing. Experiment Browser projects linked regions as
+one shared `linked:<data-kind>` column per data kind and lists them in
+experiment detail; the values stay in the workbook and charts read the
+confirmed regions directly.
+
 Automatically detected and manually selected regions are persisted before any
 model call. While `reviewStatus` is `interpreting`, Workbook Review can display
 the exact source rectangle immediately and asynchronously request the first
@@ -121,6 +134,41 @@ provider metadata, warnings, confidence, trigger, and optional user feedback.
 The backend model receives only the selected bounded range, limited neighboring
 context, and workbook manifest. Feedback creates a later revision. Confirmation
 moves the region's accepted pointer to one exact revision.
+
+Since the formula-aware milestone, `interpretation` also carries:
+
+- `provenance` (`labrat.regionProvenance.v1`), computed deterministically from
+  the workbook's stored formula text: `cellClassSummary` (terminal,
+  intermediate, input, constant, blank counts), `numericCellCount`, a bounded
+  one-level `derivation` sentence for the first terminal cell, up to two
+  `sharedInputs` reached by at least 80% of the region's formulas, up to
+  twenty `brokenCells` where a typed number sits inside an otherwise formula
+  run up to four steps upstream, and `warnings`. Values are never recomputed;
+  cached formula results are the numbers.
+- `series[]` entries may use `orientation: "header_row_categories"` with
+  `xHeaderRange`, `yValueRange`, `xValueType`, `yNumericScale`, and
+  `pointCount` in addition to the historical column-pair shape. Both shapes
+  keep exact range or cell source refs.
+
+## RegionExtractionTemplate
+
+A project-owned, named, versioned description of where one wanted result sits
+inside a workbook layout family, compiled from one confirmed
+WorkbookReviewRegion. Versions are immutable and content-hashed. A version
+carries a `labrat.layoutSignature.v1` (structure and relative formula shapes,
+never cell values) and relative `semantics` (the accepted interpretation with
+ranges expressed as offsets). It is the ingest-side twin of
+ReusableChartTemplate: define once, match deterministically, and return
+ambiguity to the user. Matching a template against another SourceDocument
+produces a transient `labrat.regionTemplateMatchReport.v1` and creates no
+evidence or accepted data.
+
+A RegionExtractionTemplate and a ReusableChartTemplate are coupled only
+through the data kind string: the extraction template's name becomes the
+`dataKind` on every region it links, and a workbook chart template binds its
+slot to that `dataKind`. Archiving or re-versioning an extraction template
+changes nothing about existing linked regions or chart templates; renaming
+would start a new data kind, which is why names are treated as stable.
 
 ## DataPlan v2 (Historical)
 
@@ -407,10 +455,25 @@ block. Direct workbook-layout replay is not a v1 reusable input.
 ## ReusableChartTemplateApplication
 
 An idempotent record of applying one accepted template version to exact frozen
-experiment snapshot heads and reviewed slot bindings. It points to the
-deterministic analysis artifacts and compatibility summary but does not copy
-scientific values or Plotly arrays. Preview creates no ChartSpec; explicit
-result acceptance does.
+inputs and reviewed slot bindings. For a snapshot-bound template the frozen
+inputs are experiment snapshot heads (`frozenHeadRefs`); for a workbook
+template (slot `sourceKind: "linked_region"`) they are `frozenRegionRefs`:
+one confirmed WorkbookReviewRegion per experiment with its accepted
+RegionUnderstandingRevision id and the `seriesKey` the template plots. The
+application points to the deterministic analysis artifacts and compatibility
+summary but does not copy scientific values or Plotly arrays. Preview creates
+no ChartSpec; explicit result acceptance does.
+
+Lifecycle of the frozen region refs:
+
+- Re-confirming a linked region does not change existing applications or
+  their ChartSpecs; the next application resolves the newest accepted region
+  and the result review of the older one shows stale lineage.
+- Deleting a workbook review session marks its regions deleted; later
+  applications report `chart_template_session_deleted` for that experiment
+  while accepted ChartSpecs and finished applications are retained.
+- An application whose frozen revision or workbook no longer exists fails
+  execution closed with `chart_template_inputs_stale`.
 
 ## Manuscript
 

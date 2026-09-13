@@ -2030,6 +2030,379 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /api/v1/source-documents/{sourceDocumentId}/cell-classes:
+    get:
+      tags:
+        - Evidence
+      operationId: getSourceCellClasses
+      parameters:
+        - name: sourceDocumentId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/OpaqueId"
+        - name: sheetName
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+        - name: range
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 80
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SourceCellClassesResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/v1/projects/{projectId}/region-extraction-templates:
+    get:
+      tags:
+        - Evidence
+      operationId: listRegionExtractionTemplates
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/OpaqueId"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - name: includeArchived
+          in: query
+          schema:
+            type: string
+            enum:
+              - "true"
+              - "false"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegionExtractionTemplatePage"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    post:
+      tags:
+        - Evidence
+      operationId: createRegionExtractionTemplate
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/OpaqueId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRegionExtractionTemplateRequest"
+      responses:
+        "201":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegionExtractionTemplateDetail"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/v1/region-extraction-templates/{templateId}:
+    get:
+      tags:
+        - Evidence
+      operationId: getRegionExtractionTemplate
+      parameters:
+        - name: templateId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/OpaqueId"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegionExtractionTemplateDetail"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/v1/region-extraction-templates/{templateId}/versions:
+    post:
+      tags:
+        - Evidence
+      operationId: createRegionExtractionTemplateVersion
+      parameters:
+        - name: templateId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/OpaqueId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegionTemplateVersionRequest"
+      responses:
+        "201":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegionExtractionTemplateDetail"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/v1/region-extraction-templates/{templateId}/archive:
+    post:
+      tags:
+        - Evidence
+      operationId: archiveRegionExtractionTemplate
+      parameters:
+        - name: templateId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/OpaqueId"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegionExtractionTemplateResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/v1/region-extraction-template-versions/{versionId}/matches:
+    post:
+      tags:
+        - Evidence
+      operationId: matchRegionExtractionTemplate
+      parameters:
+        - name: versionId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/OpaqueId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MatchRegionTemplateRequest"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegionTemplateMatches"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/v1/region-extraction-template-versions/{versionId}/apply:
+    post:
+      tags:
+        - Evidence
+      operationId: applyRegionExtractionTemplate
+      parameters:
+        - name: versionId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/OpaqueId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplyRegionTemplateRequest"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegionTemplateApplyResult"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/v1/projects/{projectId}/workbook-review-regions/confirm-batch:
+    post:
+      tags:
+        - Evidence
+      operationId: confirmWorkbookReviewRegionsBatch
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/OpaqueId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmRegionBatchRequest"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegionBatchConfirmResult"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/v1/projects/{projectId}/linked-data-kinds:
+    get:
+      tags:
+        - Analysis
+      operationId: listLinkedDataKinds
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/OpaqueId"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinkedDataKindsResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/v1/projects/{projectId}/linked-data-comparisons:
+    post:
+      tags:
+        - Analysis
+      operationId: createLinkedDataComparison
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/OpaqueId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LinkedDataComparisonRequest"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinkedDataComparisonResponse"
+        "201":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinkedDataComparisonResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
 components:
   securitySchemes:
     cookieAuth:
@@ -2546,6 +2919,360 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/WorkbookReviewRegionConfirmResponse" }
   schemas:
+    CreateRegionExtractionTemplateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - regionId
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        description:
+          type: string
+          maxLength: 1000
+        regionId:
+          type: string
+          minLength: 1
+          maxLength: 160
+    RegionTemplateVersionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - regionId
+      properties:
+        regionId:
+          type: string
+          minLength: 1
+          maxLength: 160
+    MatchRegionTemplateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - sourceDocumentIds
+      properties:
+        sourceDocumentIds:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 160
+          maxItems: 100
+          minItems: 1
+          uniqueItems: true
+    ApplyRegionTemplateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - sourceDocumentIds
+      properties:
+        sourceDocumentIds:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 160
+          maxItems: 100
+          minItems: 1
+          uniqueItems: true
+        onlyStatuses:
+          type: array
+          items:
+            type: string
+            enum:
+              - exact
+              - shifted
+          maxItems: 2
+          minItems: 1
+          uniqueItems: true
+    ConfirmRegionBatchItem:
+      type: object
+      additionalProperties: false
+      required:
+        - regionId
+        - revisionId
+        - expectedRegionVersion
+      properties:
+        regionId:
+          type: string
+          minLength: 1
+          maxLength: 160
+        revisionId:
+          type: string
+          minLength: 1
+          maxLength: 160
+        expectedRegionVersion:
+          type: integer
+          minimum: 1
+        linkedExperimentId:
+          type: string
+          minLength: 1
+          maxLength: 160
+    ConfirmRegionBatchRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConfirmRegionBatchItem"
+          maxItems: 200
+          minItems: 1
+    LinkedDataComparisonRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - dataKind
+        - experimentIds
+      properties:
+        dataKind:
+          type: string
+          minLength: 1
+          maxLength: 160
+        experimentIds:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 160
+          maxItems: 64
+          minItems: 1
+          uniqueItems: true
+        chartType:
+          type: string
+          enum:
+            - grouped_bar
+            - bar
+            - scatter
+            - point
+            - stacked_bar
+        dryRun:
+          type: boolean
+    RegionExtractionTemplatePage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - nextCursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/JsonObject"
+          maxItems: 100
+        nextCursor:
+          $ref: "#/components/schemas/NullableString"
+    RegionExtractionTemplateDetail:
+      type: object
+      additionalProperties: false
+      required:
+        - regionExtractionTemplate
+        - versions
+      properties:
+        regionExtractionTemplate:
+          $ref: "#/components/schemas/JsonObject"
+        versions:
+          type: array
+          items:
+            $ref: "#/components/schemas/JsonObject"
+        sourceRegionLink:
+          oneOf:
+            - $ref: "#/components/schemas/JsonObject"
+            - type: "null"
+    RegionExtractionTemplateResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - regionExtractionTemplate
+      properties:
+        regionExtractionTemplate:
+          $ref: "#/components/schemas/JsonObject"
+    RegionTemplateMatches:
+      type: object
+      additionalProperties: false
+      required:
+        - schemaVersion
+        - regionExtractionTemplateId
+        - templateName
+        - templateVersionId
+        - templateVersion
+        - matches
+        - summary
+      properties:
+        schemaVersion:
+          type: string
+        regionExtractionTemplateId:
+          type: string
+          minLength: 1
+          maxLength: 160
+        templateName:
+          type: string
+          minLength: 1
+          maxLength: 120
+        templateVersionId:
+          type: string
+          minLength: 1
+          maxLength: 160
+        templateVersion:
+          type: integer
+        matches:
+          type: array
+          items:
+            $ref: "#/components/schemas/JsonObject"
+          maxItems: 100
+        summary:
+          $ref: "#/components/schemas/JsonObject"
+    RegionTemplateApplyResult:
+      type: object
+      additionalProperties: false
+      required:
+        - schemaVersion
+        - regionExtractionTemplateId
+        - templateName
+        - templateVersionId
+        - templateVersion
+        - applied
+        - skipped
+      properties:
+        schemaVersion:
+          type: string
+        regionExtractionTemplateId:
+          type: string
+          minLength: 1
+          maxLength: 160
+        templateName:
+          type: string
+          minLength: 1
+          maxLength: 120
+        templateVersionId:
+          type: string
+          minLength: 1
+          maxLength: 160
+        templateVersion:
+          type: integer
+        applied:
+          type: array
+          items:
+            $ref: "#/components/schemas/JsonObject"
+          maxItems: 100
+        skipped:
+          type: array
+          items:
+            $ref: "#/components/schemas/JsonObject"
+          maxItems: 100
+    RegionBatchConfirmResult:
+      type: object
+      additionalProperties: false
+      required:
+        - schemaVersion
+        - projectId
+        - results
+        - confirmedCount
+        - rejectedCount
+      properties:
+        schemaVersion:
+          type: string
+        projectId:
+          type: string
+          minLength: 1
+          maxLength: 160
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/JsonObject"
+          maxItems: 200
+        confirmedCount:
+          type: integer
+        rejectedCount:
+          type: integer
+    LinkedDataKindsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - schemaVersion
+        - projectId
+        - dataKinds
+        - experiments
+      properties:
+        schemaVersion:
+          type: string
+        projectId:
+          type: string
+          minLength: 1
+          maxLength: 160
+        dataKinds:
+          type: array
+          items:
+            $ref: "#/components/schemas/JsonObject"
+        experiments:
+          type: array
+          items:
+            $ref: "#/components/schemas/JsonObject"
+    LinkedDataComparisonResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - comparison
+        - analysisThread
+        - analysisPlanRevision
+        - dryRun
+      properties:
+        comparison:
+          $ref: "#/components/schemas/JsonObject"
+        analysisThread:
+          oneOf:
+            - $ref: "#/components/schemas/AnalysisThread"
+            - type: "null"
+        analysisPlanRevision:
+          oneOf:
+            - $ref: "#/components/schemas/AnalysisPlanRevision"
+            - type: "null"
+        dryRun:
+          type: boolean
+    SourceCellClassesResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - schemaVersion
+        - sourceDocumentId
+        - sheetName
+        - range
+        - cellCount
+        - graphTruncated
+        - cells
+        - summary
+        - provenance
+      properties:
+        schemaVersion:
+          type: string
+        sourceDocumentId:
+          type: string
+          minLength: 1
+          maxLength: 160
+        sheetName:
+          type: string
+          minLength: 1
+          maxLength: 200
+        range:
+          type: string
+          minLength: 1
+          maxLength: 80
+        cellCount:
+          type: integer
+        graphTruncated:
+          type: boolean
+        cells:
+          type: array
+          items:
+            $ref: "#/components/schemas/JsonObject"
+        summary:
+          $ref: "#/components/schemas/JsonObject"
+        provenance:
+          $ref: "#/components/schemas/JsonObject"
     EmptyInvitationRequest:
       type: object
       additionalProperties: false
@@ -3808,6 +4535,10 @@ components:
       additionalProperties: false
       required: [id, labId, projectId, workbookReviewSessionId, sourceDocumentId, sourceRegionId, sheetName, rangeRef, selectionMethod, interpretationHint, disposition, reviewStatus, currentRevisionId, acceptedRevisionId, version, warnings, acceptedAt, acceptedBy, ignoredAt, ignoredBy, ignoredReason, deletedAt, deletedBy, deletedReason, currentRevision, acceptedRevision, createdAt, updatedAt, createdBy, updatedBy]
       properties:
+        linkedExperimentId: { $ref: "#/components/schemas/NullableOpaqueId" }
+        dataKind: { $ref: "#/components/schemas/NullableString" }
+        regionExtractionTemplateVersionId: { $ref: "#/components/schemas/NullableOpaqueId" }
+        templateMatch: { oneOf: [{ $ref: "#/components/schemas/JsonObject" }, { type: "null" }] }
         id: { $ref: "#/components/schemas/OpaqueId" }
         labId: { $ref: "#/components/schemas/OpaqueId" }
         projectId: { $ref: "#/components/schemas/OpaqueId" }
@@ -4153,6 +4884,8 @@ components:
         experimentSelections: { type: array, maxItems: 1000, items: { $ref: "#/components/schemas/JsonObject" } }
         reviewPlan: { $ref: "#/components/schemas/JsonObject" }
         displayPlan: { type: array, maxItems: 500, items: { type: string } }
+        templateLineage: { $ref: "#/components/schemas/JsonObject" }
+        linkedDataComparison: { $ref: "#/components/schemas/JsonObject" }
         sourceRectangles: { type: array, maxItems: 500, items: { $ref: "#/components/schemas/JsonObject" } }
         feedback: { $ref: "#/components/schemas/NullableString" }
         warnings: { type: array, maxItems: 500, items: { $ref: "#/components/schemas/JsonObject" } }

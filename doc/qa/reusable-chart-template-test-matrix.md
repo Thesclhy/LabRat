@@ -2,7 +2,7 @@
 
 Status: active QA plan
 Read when: implementing or reviewing reusable chart creation milestones.
-Last reviewed: 2026-08-20
+Last reviewed: 2026-09-12
 
 ## Contract And Persistence
 
@@ -84,6 +84,43 @@ Last reviewed: 2026-08-20
 - [ ] Approved chart listing/detail, Manuscript insertion, independent placement
       trace views, save/reload, and PPTX export work for both origins of the
       analysis execution strategy.
+
+## Workbook Series Templates
+
+- [x] An accepted linked-data comparison chart derives a series slot bound to
+      its data kind with a `select_series`/`align_x`/`filter_missing` recipe.
+- [x] A chart whose plan re-normalised or weighted raw values is refused with
+      `reusable_chart_template_workbook_recomputation`.
+- [x] A region with several series is eligible when the accepted plan names
+      the plotted one; otherwise `reusable_chart_template_series_ambiguous`.
+- [x] Applying resolves each experiment's newest confirmed region of the data
+      kind; explicit bindings and mixed slot kinds are refused.
+- [x] An experiment without the data kind is excluded with a report entry, or
+      blocks the application when the missing-series policy is `block`.
+- [x] Category sets that differ (C1 to C36 versus C37) align by label with a
+      gap; `intersection` and `exact` policies behave as declared.
+- [x] Blank, `#DIV/0!`, and text cells become missing points with reasons; a
+      series with no numeric value excludes its experiment and nothing is
+      invented.
+- [x] Execution reads the frozen region revision, calls no provider or
+      Python, writes per-cell source refs, and yields the same input hash on
+      repeat.
+- [x] Re-confirming a region leaves earlier applications and ChartSpecs
+      unchanged; the next application uses the new revision; a vanished
+      revision fails closed with `chart_template_inputs_stale`.
+- [x] Deleting a workbook session yields `chart_template_session_deleted` for
+      later applications while accepted ChartSpecs remain.
+- [x] Saving an extraction template links its source region so the source
+      experiment is covered like the matched ones.
+- [x] Viewers cannot create templates or applications; editors can; viewers
+      can read.
+- [x] The picker binds by data kind: coverage from linked regions, uncovered
+      rows disabled, no field-binding step, per-experiment report after
+      preview.
+- [x] Result review lists workbook lineage per experiment and marks a region
+      confirmed again since the chart was built.
+- [ ] Manual: Exp31/Exp32 carbon distribution template applied to Exp33 to
+      Exp40 reproduces every workbook `Overall tots` row in the app.
 
 ## Frontend Review
 

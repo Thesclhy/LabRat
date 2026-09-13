@@ -9,6 +9,9 @@ the NestJS/Fastify modules under `backend/src/v1`. The unversioned JavaScript
 dispatcher and `doc/contracts/saas-api-contract-v0.md` are rollback references,
 not valid targets for new frontend calls.
 
+The eleven Claude workbook operations and their transaction, frozen-source and
+permission boundaries are specified in `doc/contracts/claude-features-v1.md`.
+
 ## Service Boundary
 
 The HTTP service exposes:

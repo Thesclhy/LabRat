@@ -1,4 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
+import { linkedDataKinds, buildLinkedDataComparison } from "../../saas/linkedDataComparisons.js";
+import type { LinkedComparisonDto } from "../region-templates/region-templates.dto.js";
 import { makeId, sha256Hex } from "../../saas/ids.js";
 import {
   acceptAnalysisPlanRevision,
@@ -21,6 +23,7 @@ import { publishAcceptedExperimentAnalysis } from "../../saas/analysisExperiment
 import { agentRunSummary, buildAgentRunDraft } from "../../saas/agentRuns.js";
 import { sourceDocumentSummary } from "../../saas/sourceDocuments.js";
 import { AuthorizationService } from "../authorization/authorization.service.js";
+import { withWriteAuthorization } from "../authorization/authorized-store.js";
 import type { Capability } from "../authorization/authorization.policy.js";
 import { IdentityRepository } from "../identity/identity.repository.js";
 import type { AuthContext } from "../identity/identity.types.js";
@@ -264,6 +267,23 @@ export class AnalysisService {
     return paginate(threads.map(analysisThreadSummary), query);
   }
 
+  async linkedKinds(auth: AuthContext, projectId: string) {
+    await this.fullProject(auth, projectId, "read");
+    return (linkedDataKinds as any)({ store: this.repository, projectId });
+  }
+
+  async linkedComparison(auth: AuthContext, projectId: string, input: LinkedComparisonDto) {
+    const { project } = await this.fullProject(auth, projectId, input.dryRun ? "read" : "propose");
+    const comparison = await (buildLinkedDataComparison as any)({ store: this.repository, projectId, ...input });
+    if (input.dryRun) return { statusCode: 200, comparison, analysisThread: null, analysisPlanRevision: null, dryRun: true };
+    if (!comparison.experiments.length) throw new ApiError(422, "linked_data_comparison_empty",
+      "None of the chosen experiments has this linked data.", { missingExperiments: comparison.missingExperiments });
+    const { thread, revision } = await this.repository.createLinkedComparison(auth, project, comparison);
+    return { statusCode: 201, comparison,
+      analysisThread: analysisThreadSummary(thread),
+      analysisPlanRevision: analysisPlanRevisionSummary(revision), dryRun: false };
+  }
+
   async createThread(auth: AuthContext, projectId: string, input: CreateAnalysisThreadDto) {
     if (input.outputTarget === "experiment_browser" && input.inputMode) {
       throw new ApiError(400, "chart_input_mode_conflict", "inputMode is only valid for chart analysis.");
@@ -322,7 +342,7 @@ export class AnalysisService {
         feedback: input.feedback,
       })
       : await draftAnalysisPlanRevisionCompat({
-        store: this.repository,
+        store: this.proposalStore(auth, thread.projectId),
         project: resolved.project,
         analysisThreadId: thread.id,
         actorUserId: auth.user.id,
@@ -426,7 +446,7 @@ export class AnalysisService {
     let replayed = false;
     try {
       revision = await draftAnalysisPlanRevisionCompat({
-        store: this.repository,
+        store: this.proposalStore(auth, project.id),
         project,
         analysisThreadId: thread.id,
         actorUserId: auth.user.id,
@@ -491,7 +511,16 @@ export class AnalysisService {
     const run = await this.run(auth, runId, "propose");
     const { project } = await this.fullProject(auth, run.projectId, "propose");
     const result = await executeAnalysisRunCompat({
-      store: this.repository,
+      store: withWriteAuthorization(this.repository, async () => {
+        const actor = await this.identityRepository.findUserById(auth.user.id);
+        if (!actor?.isActive) throw new ApiError(403, "forbidden", "The initiating account is no longer active.");
+        await this.fullProject(auth, project.id, "propose");
+        if (run.createdBy && run.createdBy !== auth.user.id) {
+          const initiator = await this.identityRepository.findUserById(run.createdBy);
+          if (!initiator?.isActive) throw new ApiError(403, "forbidden", "The initiating account is no longer active.");
+          await this.fullProject({ ...auth, user: initiator }, project.id, "propose");
+        }
+      }),
       project,
       actorUserId: auth.user.id,
       analysisRunId: run.id,
@@ -645,6 +674,7 @@ export class AnalysisService {
 
   async createAgentRun(auth: AuthContext, projectId: string, input: CreateAgentRunDto) {
     const { project } = await this.fullProject(auth, projectId, "propose");
+    const store = this.proposalStore(auth, projectId);
     const selectedChartInputMode = String(input.selectedContext?.chartInputMode || "").trim();
     if (selectedChartInputMode && !["experiment_browser", "workbook"].includes(selectedChartInputMode)) {
       throw new ApiError(
@@ -662,7 +692,7 @@ export class AnalysisService {
     ]);
     const boundedChartSpecs = chartSpecs.map(chartSpecListItem).filter(Boolean);
     const draft = await buildAgentRunDraftCompat({
-      context: { store: this.repository, modelProvider: this.modelProvider },
+      context: { store, modelProvider: this.modelProvider },
       project,
       projectProfile: project.metadata?.projectProfile || {},
       chartSpecs: boundedChartSpecs,
@@ -684,7 +714,7 @@ export class AnalysisService {
         "selectedContext.chartInputMode can only be used with a chart analysis request.",
       );
     }
-    let agentRun = await this.repository.createAgentRun({
+    let agentRun = await store.createAgentRun({
       labId: project.labId,
       projectId,
       status: draft.status || "waiting_for_user",
@@ -706,7 +736,7 @@ export class AnalysisService {
     let reply = String(draft.reply || "");
     if (draft.mode === "analysis_planning") {
       thread = await createAnalysisThreadCompat({
-        store: this.repository,
+        store,
         project,
         actorUserId: auth.user.id,
         originalRequest: input.message,
@@ -725,7 +755,7 @@ export class AnalysisService {
       if (accepted.length || (draft.analysisRequest?.outputTarget === "experiment_browser" && heads.length)) {
         try {
           revision = await draftAnalysisPlanRevisionCompat({
-            store: this.repository,
+            store,
             project,
             analysisThreadId: thread.id,
             actorUserId: auth.user.id,
@@ -749,7 +779,7 @@ export class AnalysisService {
       const metadata = revision?.draftMetadata || failedMetadata || {};
       const diagnostics = planningDiagnostics(metadata);
       const priorUsage = agentRun.usage || {};
-      agentRun = await this.repository.updateAgentRun(agentRun.id, {
+      agentRun = await store.updateAgentRun(agentRun.id, {
         visibleSteps: [
           ...asArray(agentRun.visibleSteps),
           {
@@ -801,7 +831,7 @@ export class AnalysisService {
       });
       if (!agentRun) throw new ApiError(500, "agent_run_update_failed", "Agent run could not be updated.");
       if (!revision && warnings.some((warning) => warning.code !== "analysis_evidence_required")) {
-        await this.repository.updateAnalysisThread(thread.id, { status: "plan_failed", updatedBy: auth.user.id });
+        await store.updateAnalysisThread(thread.id, { status: "plan_failed", updatedBy: auth.user.id });
       }
       thread = await this.repository.findAnalysisThreadById(thread.id);
       if (!thread) throw new ApiError(500, "analysis_thread_missing", "Created analysis thread could not be reloaded.");
@@ -856,6 +886,14 @@ export class AnalysisService {
       summary: `Cancelled AgentRun ${run.id}.`,
     });
     return agentRunSummary(updated);
+  }
+
+  private proposalStore(auth: AuthContext, projectId: string) {
+    return withWriteAuthorization(this.repository, async () => {
+      const actor = await this.identityRepository.findUserById(auth.user.id);
+      if (!actor?.isActive) throw new ApiError(403, "forbidden", "The initiating account is no longer active.");
+      await this.fullProject(auth, projectId, "propose");
+    });
   }
 
   private fullProject(auth: AuthContext, projectId: string, capability: Capability) {

@@ -22,6 +22,15 @@ function ok(body) {
 }
 
 describe("experimentBrowserApi", () => {
+  it("bounds legacy picker page sizes to v1 and preserves the continuation cursor", async () => {
+    const fetch = vi.fn(async () => ok({ rows: [{ experimentId: 'exp_1' }], nextCursor: 'next_page' }));
+    const response = await listExperimentBrowserRows('project_1', { limit: 1000, cursor: 'first_page' }, { fetch });
+    const url = new URL(fetch.mock.calls[0][0], 'http://localhost');
+    expect(url.searchParams.get('limit')).toBe('250');
+    expect(url.searchParams.get('cursor')).toBe('first_page');
+    expect(response.nextCursor).toBe('next_page');
+  });
+
   it("encodes bounded list query state without sending undefined values", async () => {
     const fetch = vi.fn(async () => ok({ rows: [] }));
     await listExperimentBrowserRows("project / 1", {

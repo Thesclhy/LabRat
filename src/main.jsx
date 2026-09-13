@@ -7,10 +7,10 @@ import { makePlot } from "./charts/makePlot";
 import { ChartReviewPanel } from "./components/BackendScanPanel";
 import { ProjectOnboarding } from "./components/ProjectOnboarding.jsx";
 import { ProjectProfileChat } from "./components/ProjectProfileChat.jsx";
-import { ServerLogin } from "./components/ServerLogin.jsx";
 import { LabManagement } from "./components/LabManagement.jsx";
 import { WorkspacePermissions, permissionsForProject, useWorkspacePermissions } from "./components/WorkspacePermissions.jsx";
 import { invalidateWorkspaceRequests, onWorkspaceAccessLost } from "./data/backendApiV1Client.ts";
+import { WelcomeScreen } from "./components/WelcomeScreen.jsx";
 import { ThinkingIndicator } from "./components/ThinkingIndicator.jsx";
 import { WorkbookReviewDock } from "./components/WorkbookReviewDock.jsx";
 import { ExperimentBrowser } from "./components/ExperimentBrowser.jsx";
@@ -42,12 +42,19 @@ import {
   getServerWorkbookReviewSession,
   listServerSourceDocuments,
   listServerLabs,
+  listServerLinkedDataKinds,
   listServerProjects,
   loginToServer,
   logoutFromServer,
   patchServerManuscript,
   patchServerProjectProfile,
   reviseServerWorkbookReviewRegion,
+  readServerSourceDocumentCellClasses,
+  createServerRegionExtractionTemplate,
+  matchServerRegionExtractionTemplate,
+  applyServerRegionExtractionTemplate,
+  confirmServerWorkbookReviewRegionsBatch,
+  createServerRegionExtractionTemplateVersion,
   readServerSourceDocumentRange,
   confirmServerWorkbookReviewRegion,
   createServerWorkbookReviewRegion,
@@ -71,6 +78,14 @@ import {
 } from "./data/workbookRangeTiles.js";
 import { useWorkbookRegionInterpretationQueue } from "./hooks/useWorkbookRegionInterpretationQueue.js";
 import { shouldShowProjectOnboarding } from "./data/projectOnboardingState.js";
+import { listExperimentBrowserRows } from "./data/experimentBrowserApi.js";
+import {
+  createWorkbookBatchItems,
+  runWorkbookBatchUpload,
+  suggestExperimentForFile,
+  summarizeWorkbookBatch,
+  workbookBatchItemForStorage,
+} from "./data/workbookBatchUpload.js";
 import "./styles.css";
 import "./components/management.css";
 
@@ -823,6 +838,7 @@ export function ProjectOverview({
   onAskLabRat,
   onOpenProfile,
   onUploadWorkbook,
+  onUploadWorkbookFiles,
   onDeleteWorkbook,
   onGoBrowser,
   onOpenChartReview,
@@ -832,6 +848,21 @@ export function ProjectOverview({
   const { canEdit } = useWorkspacePermissions();
   const [deletingWorkbookSessionId, setDeletingWorkbookSessionId] = useState("");
   const [deleteWorkbookError, setDeleteWorkbookError] = useState("");
+  const workbookFileInputRef = useRef(null);
+  const canPickWorkbookFiles = canEdit && typeof onUploadWorkbookFiles === "function";
+  const chooseWorkbookFiles = () => {
+    if (!canPickWorkbookFiles) {
+      onAskLabRat?.();
+      return;
+    }
+    workbookFileInputRef.current?.click();
+  };
+  const onWorkbookFilesSelected = (event) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    if (!files.length) return;
+    onUploadWorkbookFiles?.(files);
+  };
   const summary = projectWorkflowSummary(projectState?.project, projectState);
   const workbookReviewSessions = asArray(projectState?.workbookReviewSessions)
     .filter((session) => session?.status !== "deleted");
@@ -875,7 +906,7 @@ export function ProjectOverview({
     : pendingWorkbookReviewRegions.length
       ? { label: "Review workbook regions", action: openWorkbookList }
       : !workbookReviewSessions.length
-        ? { label: "Upload workbook", action: onAskLabRat }
+        ? { label: "Upload workbooks", action: chooseWorkbookFiles }
         : summary.hasPublishedData
           ? { label: "Open Experiment Browser", action: onGoBrowser }
           : confirmedWorkbookReviewRegions.length
@@ -918,13 +949,28 @@ export function ProjectOverview({
               ? "View confirmed regions"
               : workbookReviewSessions.length
                 ? "Review workbook"
-                : "Upload workbook"}
-          onClick={workbookReviewSessions.length ? openWorkbookList : onAskLabRat}
+                : "Upload workbooks"}
+          onClick={workbookReviewSessions.length ? openWorkbookList : chooseWorkbookFiles}
           actionDisabled={!canEdit && !workbookReviewSessions.length}
           actionTitle={workbookReviewSessions.length
             ? "Choose an uploaded workbook and review its regions"
-            : "Open Ask LabRat, then use the + button to attach a spreadsheet"}
-        />
+            : "Choose one or more Excel workbooks to index for review"}
+          secondaryAction={canEdit && workbookReviewSessions.length ? "Upload workbooks" : undefined}
+          onSecondaryClick={chooseWorkbookFiles}
+          secondaryTitle="Choose one or more Excel workbooks to index for review"
+        >
+          {canPickWorkbookFiles && (
+            <input
+              ref={workbookFileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              multiple
+              hidden
+              aria-label="Choose workbooks to upload"
+              onChange={onWorkbookFilesSelected}
+            />
+          )}
+        </ProjectOverviewCard>
         <ProjectOverviewCard
           title="Experiment Browser"
           value={`${summary.publishedExperimentCount} published experiments`}
@@ -1111,6 +1157,7 @@ export function WorkbookReviewWorkspace({
   onActiveDraftRegionChange,
   onCreateRegion,
   focusSelection = null,
+  cellClassOverlay = null,
   reviewDock = null,
 }) {
   const session = reviewState?.session || reviewState?.workbookReviewSession || null;
@@ -1663,6 +1710,11 @@ export function WorkbookReviewWorkspace({
     && visibleTileBounds.some((bounds) => boundsContainCell(bounds, row, col))
     && !loadedTileBounds.some((bounds) => boundsContainCell(bounds, row, col))
   );
+  const overlayClasses = cellClassOverlay
+    && cellClassOverlay.classes
+    && String(cellClassOverlay.sheetName || "").toLowerCase() === String(activeSheetName || "").toLowerCase()
+    ? cellClassOverlay.classes
+    : null;
   const gridRows = useMemo(() => rowIndexes.map((row) => {
     const item = { __rowIndex: row, __rowNumber: row + 1 };
     colIndexes.forEach((col) => {
@@ -1691,6 +1743,10 @@ export function WorkbookReviewWorkspace({
       resizable: true,
       cellClass: (row) => {
         const classes = [];
+        if (overlayClasses) {
+          const overlayClass = overlayClasses[`${excelIndexToColumnLabel(col)}${row.__rowIndex + 1}`];
+          if (overlayClass) classes.push(`is-cell-${overlayClass}`);
+        }
         if (cellInAnyWorkbookRegion(row.__rowIndex, col, regionsForSheet)) classes.push("is-detected");
         if (cellInAnyWorkbookRegion(row.__rowIndex, col, reviewedAnalysisInputs)) classes.push("is-analysis-input");
         if (cellInAnyWorkbookRegion(row.__rowIndex, col, highlightedEditableDrafts)) classes.push("is-draft");
@@ -1731,6 +1787,7 @@ export function WorkbookReviewWorkspace({
     dragSelection,
     highlightedEditableDrafts,
     loadedTileBounds,
+    overlayClasses,
     rangeState.loading,
     regionsForSheet,
     reviewedAnalysisInputs,
@@ -1757,6 +1814,15 @@ export function WorkbookReviewWorkspace({
     <main className="workbook-review-workspace">
       <section className="workbook-excel-toolbar" aria-label="Workbook controls">
         <strong>{workbookName}</strong>
+        {overlayClasses && (
+          <div className="workbook-cell-class-legend" aria-label="Calculation overlay legend">
+            <span className="is-terminal">result</span>
+            <span className="is-intermediate">intermediate</span>
+            <span className="is-input">input</span>
+            <span className="is-constant">label or unused</span>
+            {cellClassOverlay?.loading && <em>loading</em>}
+          </div>
+        )}
         <div className="workbook-sheet-tabs" aria-label="Workbook sheets">
           {sheets.map((sheet) => (
             <button
@@ -1850,18 +1916,19 @@ export function ChartReviewModal({
   onLoadChartSpecDetail,
   onInsertChartSpec,
   onTemplateApplicationReady,
+  onLinkedComparisonReady,
   onOpenImportReview,
   onClose,
 }) {
   const resolvedInitialMode = statusFilter === "active"
     ? "edit"
-    : ["review", "template", "edit"].includes(initialMode) ? initialMode : "review";
+    : ["review", "template", "edit", "linked"].includes(initialMode) ? initialMode : "review";
   const [reviewMode, setReviewMode] = useState(resolvedInitialMode);
   useEffect(() => {
     if (open) setReviewMode(resolvedInitialMode);
   }, [open, resolvedInitialMode]);
   if (!open) return null;
-  const canReviewCharts = allowAnalysisPrompt;
+  const canReviewCharts = Boolean(projectId) || allowAnalysisPrompt;
   const title = statusFilter === "active" ? "Manage approved charts" : "Create and review charts";
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -1881,6 +1948,7 @@ export function ChartReviewModal({
               aria-selected={reviewMode === "review"}
               className={reviewMode === "review" ? "active" : ""}
               onClick={() => setReviewMode("review")}
+              disabled={!allowAnalysisPrompt}
             >
               Create chart
             </button>
@@ -1892,6 +1960,15 @@ export function ChartReviewModal({
               onClick={() => setReviewMode("template")}
             >
               Use template
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={reviewMode === "linked"}
+              className={reviewMode === "linked" ? "active" : ""}
+              onClick={() => setReviewMode("linked")}
+            >
+              Compare linked data
             </button>
             <button
               type="button"
@@ -1915,6 +1992,7 @@ export function ChartReviewModal({
               onLoadChartSpecDetail={onLoadChartSpecDetail}
               onInsertChartSpec={onInsertChartSpec}
               onTemplateApplicationReady={onTemplateApplicationReady}
+              onLinkedComparisonReady={onLinkedComparisonReady}
             />
           ) : (
             <div className="import-review-empty chart-review-empty">
@@ -1956,6 +2034,315 @@ function readAgentChatHistory(key) {
   return sanitizeStoredChatHistory(ls.get(key, []));
 }
 
+const WORKBOOK_BATCH_STATUS_LABELS = {
+  pending: "Waiting",
+  uploading: "Uploading",
+  uploaded: "Indexed",
+  failed: "Failed",
+};
+
+function workbookBatchSuggestionLabel(suggestion) {
+  if (!suggestion) return "";
+  switch (suggestion.status) {
+    case "matched":
+      return `Suggested: ${suggestion.match?.label || suggestion.label}`;
+    case "unmatched":
+      return `${suggestion.label} is not in Experiment Browser yet`;
+    case "ambiguous":
+      return `${suggestion.label} matches several experiments`;
+    default:
+      return "No experiment number in the file name";
+  }
+}
+
+const TEMPLATE_MATCH_LABELS = {
+  exact: "Exact match",
+  shifted: "Shifted match",
+  ambiguous: "Ambiguous",
+  label_missing: "Label missing",
+  formula_mismatch: "Formula mismatch",
+  header_mismatch: "Header mismatch",
+  no_match: "No match",
+};
+
+export function templateMatchDetail(result) {
+  if (!result) return "";
+  const parts = [];
+  if (result.matchedRange) parts.push(`${result.sheetName ? `${result.sheetName}!` : ""}${result.matchedRange}`);
+  if (result.status === "shifted" && result.offset) {
+    const rows = result.offset.rows ? `${Math.abs(result.offset.rows)} row${Math.abs(result.offset.rows) === 1 ? "" : "s"} ${result.offset.rows > 0 ? "down" : "up"}` : "";
+    const cols = result.offset.cols ? `${Math.abs(result.offset.cols)} column${Math.abs(result.offset.cols) === 1 ? "" : "s"} ${result.offset.cols > 0 ? "right" : "left"}` : "";
+    parts.push(`moved ${[rows, cols].filter(Boolean).join(" and ")}`);
+  }
+  if (result.experimentLabel) parts.push(result.labelSource === "filename" ? `${result.experimentLabel} from file name` : result.experimentLabel);
+  if (result.status === "ambiguous" && asArray(result.alternatives).length) {
+    parts.push(`${result.alternatives.length} candidate blocks: ${result.alternatives.map((item) => item.matchedRange).join(", ")}`);
+  }
+  if (result.status === "formula_mismatch") {
+    const typed = asArray(result.formulaMismatches).map((item) => item.address);
+    const broken = asArray(result.brokenCells).map((item) => item.address);
+    if (typed.length) parts.push(`typed values at ${typed.slice(0, 6).join(", ")}`);
+    if (broken.length) parts.push(`typed over upstream: ${broken.slice(0, 6).join(", ")}`);
+  }
+  if (result.status === "header_mismatch") {
+    const run = asArray(result.headerRuns).find((item) => !item.ok);
+    if (run) parts.push(`${run.foundCount} of ${run.expectedCount} header cells found`);
+  }
+  if (result.status === "label_missing") parts.push("no experiment label in the sheet or file name");
+  return parts.join(" · ");
+}
+
+function workbookBatchInterpretationLabel(progress) {
+  if (!progress || !progress.total) return "";
+  const done = Math.max(0, progress.total - progress.pending);
+  if (progress.pending) return `Understanding regions ${done}/${progress.total}`;
+  if (progress.failed) return `${progress.failed} region${progress.failed === 1 ? "" : "s"} need${progress.failed === 1 ? "s" : ""} retry`;
+  return "Regions understood";
+}
+
+export function WorkbookBatchCard({
+  batch,
+  interpretation = {},
+  openingSessionId = "",
+  canRetry = false,
+  retrying = false,
+  templates = [],
+  matching = false,
+  applying = false,
+  confirming = false,
+  experiments = [],
+  onOpen,
+  onRetry,
+  onMatchTemplate,
+  onApplyTemplate,
+  onConfirmApplied,
+}) {
+  const { canApprove } = useWorkspacePermissions();
+  const items = asArray(batch?.items);
+  const summary = summarizeWorkbookBatch(items);
+  const running = summary.pending > 0 || summary.uploading > 0;
+  const match = batch?.match || null;
+  const apply = batch?.apply || null;
+  const appliedRows = asArray(apply?.items);
+  const [selectionOverrides, setSelectionOverrides] = useState({});
+  const [chosenLinks, setChosenLinks] = useState({});
+  const eligibleMatches = asArray(match?.results).filter((result) => result.eligibleForBatchConfirm && !result.isTemplateSource);
+  const confirmableRows = appliedRows.filter((row) => !row.confirmed && row.regionId);
+  const rowLink = (row) => (chosenLinks[row.regionId] !== undefined ? chosenLinks[row.regionId] : row.linkedExperimentId || "");
+  // Rows that arrived already linked are selected by default; the user can
+  // untick them, and rows that needed a manual link are ticked explicitly.
+  const isRowSelected = (row) => (
+    !row.confirmed
+    && Boolean(rowLink(row))
+    && (selectionOverrides[row.regionId] !== undefined ? selectionOverrides[row.regionId] : Boolean(row.linkedExperimentId))
+  );
+  const toggleRow = (regionId, checked) => {
+    setSelectionOverrides((current) => ({ ...current, [regionId]: checked }));
+  };
+  const selectAll = () => setSelectionOverrides(Object.fromEntries(confirmableRows.filter((row) => rowLink(row)).map((row) => [row.regionId, true])));
+  const selectedRows = confirmableRows.filter(isRowSelected);
+  const confirmSelected = () => {
+    const selection = selectedRows
+      .map((row) => ({
+        regionId: row.regionId,
+        revisionId: row.revisionId,
+        expectedRegionVersion: row.regionVersion,
+        ...(rowLink(row) !== (row.linkedExperimentId || "") ? { linkedExperimentId: rowLink(row) } : {}),
+      }));
+    if (canApprove && selection.length) onConfirmApplied?.(batch, selection);
+  };
+  const activeTemplates = asArray(templates).filter((template) => template?.status !== "archived" && template?.currentVersionId);
+  const [selectedTemplateId, setSelectedTemplateId] = useState(match?.templateId || activeTemplates[0]?.id || "");
+  const matchable = items.some((item) => item.status === "uploaded" && item.workbookReviewLink?.sourceDocumentId);
+  const resultsByDocument = new Map(asArray(match?.results).map((result) => [result.sourceDocumentId, result]));
+  const matchSummary = match?.summary || {};
+  return (
+    <div className="agent-workbook-batch" aria-label="Workbook batch upload">
+      <div className="agent-workbook-batch-head">
+        <strong>{summary.uploaded}/{summary.total} workbooks indexed</strong>
+        {summary.failed > 0 && canRetry && !running && (
+          <button type="button" onClick={onRetry} disabled={retrying}>
+            {retrying ? "Retrying failed files" : `Retry ${summary.failed} failed`}
+          </button>
+        )}
+      </div>
+      {matchable && !running && onMatchTemplate && (
+        <div className="agent-workbook-batch-template" aria-label="Match an extraction template">
+          {activeTemplates.length ? (
+            <>
+              <label htmlFor={`batch-template-${batch.batchId}`}>Extraction template</label>
+              <select
+                id={`batch-template-${batch.batchId}`}
+                value={activeTemplates.some((template) => template.id === selectedTemplateId) ? selectedTemplateId : activeTemplates[0].id}
+                onChange={(event) => setSelectedTemplateId(event.target.value)}
+                disabled={matching}
+              >
+                {activeTemplates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name}{template.anchorRange ? ` (${template.sheetName ? `${template.sheetName}!` : ""}${template.anchorRange})` : ""}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                disabled={matching}
+                onClick={() => onMatchTemplate(batch, activeTemplates.find((template) => template.id === selectedTemplateId) || activeTemplates[0])}
+              >
+                {matching ? "Matching workbooks" : match ? "Match again" : "Match workbooks"}
+              </button>
+            </>
+          ) : (
+            <small>Confirm a region in one workbook and save it as an extraction template to match the others.</small>
+          )}
+          {match && (
+            <small className="agent-workbook-batch-template-summary">
+              {match.templateName} v{match.templateVersion}: {Object.entries(matchSummary).map(([status, count]) => `${count} ${(TEMPLATE_MATCH_LABELS[status] || status).toLowerCase()}`).join(", ")}
+            </small>
+          )}
+          {match?.error && <small className="agent-workbook-batch-error">{match.error}</small>}
+          {match && eligibleMatches.length > 0 && onApplyTemplate && (
+            <button
+              type="button"
+              className="agent-workbook-batch-apply"
+              disabled={applying || matching}
+              onClick={() => onApplyTemplate(batch, eligibleMatches.map((result) => result.sourceDocumentId))}
+            >
+              {applying ? "Applying template" : `Apply to ${eligibleMatches.length} matched file${eligibleMatches.length === 1 ? "" : "s"}`}
+            </button>
+          )}
+          {apply?.error && <small className="agent-workbook-batch-error">{apply.error}</small>}
+        </div>
+      )}
+      {appliedRows.length > 0 && (
+        <div className="agent-workbook-batch-confirm" aria-label="Confirm prefilled regions">
+          <div className="agent-workbook-batch-confirm-head">
+            <strong>{appliedRows.filter((row) => row.confirmed).length}/{appliedRows.length} prefilled regions confirmed</strong>
+            {canApprove && confirmableRows.length > 0 && (
+              <>
+                <button type="button" disabled={confirming} onClick={selectAll}>Select all linked</button>
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={confirming || !selectedRows.length}
+                  onClick={confirmSelected}
+                >
+                  {confirming ? "Confirming" : `Confirm selected (${selectedRows.length})`}
+                </button>
+              </>
+            )}
+          </div>
+          <ul className="agent-workbook-batch-confirm-list">
+            {appliedRows.map((row) => {
+              const link = rowLink(row);
+              const checkboxId = `confirm-${batch.batchId}-${row.regionId}`;
+              return (
+                <li key={row.regionId || row.sourceDocumentId} className={`agent-workbook-batch-confirm-item${row.confirmed ? " is-confirmed" : ""}${row.error ? " is-failed" : ""}`}>
+                  <input
+                    id={checkboxId}
+                    type="checkbox"
+                    aria-label={`Select ${row.fileName} for confirmation`}
+                    checked={isRowSelected(row)}
+                    disabled={!canApprove || row.confirmed || confirming || !link}
+                    onChange={(event) => toggleRow(row.regionId, event.target.checked)}
+                  />
+                  <label htmlFor={checkboxId} className="agent-workbook-batch-confirm-file">
+                    <button
+                      type="button"
+                      className="agent-workbook-batch-confirm-open"
+                      onClick={() => onOpen?.({
+                        workbookReviewSessionId: row.workbookReviewSessionId,
+                        sourceDocumentId: row.sourceDocumentId,
+                        workbookName: row.fileName,
+                        regionCount: 0,
+                        focusRange: { sheetName: row.sheetName, range: row.range },
+                      })}
+                    >
+                      {row.fileName}
+                    </button>
+                    <span>{row.sheetName ? `${row.sheetName}!` : ""}{row.range}</span>
+                  </label>
+                  {row.confirmed ? (
+                    <span className="agent-workbook-batch-confirm-status is-confirmed">Confirmed{row.experimentLabel ? ` · ${row.experimentLabel}` : ""}</span>
+                  ) : row.linkStatus === "resolved" && row.linkedExperimentId && chosenLinks[row.regionId] === undefined ? (
+                    <span className="agent-workbook-batch-confirm-status">{row.experimentLabel || "linked"}</span>
+                  ) : (
+                    <select
+                      aria-label={`Experiment for ${row.fileName}`}
+                      value={link}
+                      disabled={!canApprove || confirming}
+                      onChange={(event) => setChosenLinks((current) => ({ ...current, [row.regionId]: event.target.value }))}
+                    >
+                      <option value="">Choose experiment{row.experimentLabel ? ` for ${row.experimentLabel}` : ""}</option>
+                      {asArray(experiments).map((experiment) => (
+                        <option key={experiment.experimentId} value={experiment.experimentId}>{experiment.label}</option>
+                      ))}
+                    </select>
+                  )}
+                  {row.error && <small className="agent-workbook-batch-error">{row.error}</small>}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+      <ul className="agent-workbook-batch-list">
+        {items.map((item) => {
+          const link = item.workbookReviewLink;
+          const sessionId = link?.workbookReviewSessionId || "";
+          const progressLabel = workbookBatchInterpretationLabel(interpretation?.[sessionId]);
+          return (
+            <li className={`agent-workbook-batch-item is-${item.status}`} key={`${item.index}-${item.fileName}`}>
+              <div className="agent-workbook-batch-file">
+                {link ? (
+                  <button type="button" disabled={openingSessionId === sessionId} onClick={() => onOpen?.(link)}>
+                    {item.fileName}
+                  </button>
+                ) : <span>{item.fileName}</span>}
+                <span className={`agent-workbook-batch-status is-${item.status}`}>{WORKBOOK_BATCH_STATUS_LABELS[item.status] || item.status}</span>
+              </div>
+              <div className="agent-workbook-batch-meta">
+                {item.status === "uploaded" && (
+                  <span>{link?.regionCount || 0} {link?.regionCount === 1 ? "region" : "regions"}</span>
+                )}
+                {progressLabel && <span>{progressLabel}</span>}
+                {item.suggestedExperiment && (
+                  <span className={`agent-workbook-batch-suggestion is-${item.suggestedExperiment.status}`}>
+                    {workbookBatchSuggestionLabel(item.suggestedExperiment)}
+                  </span>
+                )}
+              </div>
+              {(() => {
+                const result = link?.sourceDocumentId ? resultsByDocument.get(link.sourceDocumentId) : null;
+                if (!result) return null;
+                return (
+                  <div className="agent-workbook-batch-match" aria-label={`Template match for ${item.fileName}`}>
+                    <span className={`agent-workbook-batch-match-status is-${result.status}`}>{TEMPLATE_MATCH_LABELS[result.status] || result.status}</span>
+                    {result.isTemplateSource && <span className="agent-workbook-batch-match-source">template source</span>}
+                    <span>{templateMatchDetail(result)}</span>
+                    {!result.eligibleForBatchConfirm && result.matchedRange && link && (
+                      <button
+                        type="button"
+                        className="agent-workbook-batch-match-open"
+                        onClick={() => onOpen?.({ ...link, focusRange: { sheetName: result.sheetName, range: result.matchedRange } })}
+                      >
+                        Review in workbook
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+              {item.error && <small className="agent-workbook-batch-error">{item.error}</small>}
+            </li>
+          );
+        })}
+      </ul>
+      {summary.failed > 0 && !canRetry && (
+        <small className="agent-workbook-batch-note">Re-attach the failed files to upload them again.</small>
+      )}
+    </div>
+  );
+}
+
 export function AgentPanel({
   open,
   setOpen,
@@ -1971,6 +2358,10 @@ export function AgentPanel({
   onProjectStateLoaded,
   onWorkbookReviewReady,
   onWorkbookReviewLinkOpen,
+  onWorkbookBatchUploaded,
+  workbookBatchInterpretation = {},
+  requestedWorkbookFiles = null,
+  onRequestedWorkbookFilesHandled,
   onOpenAnalysisReview,
   activeSurface = "project",
   requestedAnalysisOutputTarget = "",
@@ -1978,6 +2369,15 @@ export function AgentPanel({
   requestedDraft = "",
   onRequestedDraftHandled,
 }) {
+  const { canApprove } = useWorkspacePermissions();
+  const workbookAbortRef = useRef(new AbortController());
+  useEffect(() => {
+    workbookAbortRef.current = new AbortController();
+    return () => {
+      workbookAbortRef.current.abort();
+      batchFilesRef.current.clear();
+    };
+  }, [activeProjectId]);
   const chatHistoryKey = useMemo(
     () => agentChatHistoryKey(activeProjectId, projectState),
     [activeProjectId, projectState?.project?.id],
@@ -2001,7 +2401,13 @@ export function AgentPanel({
   const [busyOperation, setBusyOperation] = useState(null);
   const [expanded, setExpanded] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [pendingSpreadsheetFile, setPendingSpreadsheetFile] = useState(null);
+  const [pendingSpreadsheetFiles, setPendingSpreadsheetFiles] = useState([]);
+  const [retryingBatchId, setRetryingBatchId] = useState("");
+  const [matchingBatchId, setMatchingBatchId] = useState("");
+  const [applyingBatchId, setApplyingBatchId] = useState("");
+  const [confirmingBatchId, setConfirmingBatchId] = useState("");
+  const [batchExperiments, setBatchExperiments] = useState([]);
+  const batchFilesRef = useRef(new Map());
   const [analysisCapabilitiesState, setAnalysisCapabilitiesState] = useState({
     loading: false,
     error: "",
@@ -2106,7 +2512,7 @@ export function AgentPanel({
   };
   const resetChat = () => {
     setHistory([]);
-    setPendingSpreadsheetFile(null);
+    setPendingSpreadsheetFiles([]);
     chatScrollInitializedRef.current = false;
     lastChatScrollTopRef.current = 0;
     if (messagesRef.current) messagesRef.current.scrollTop = 0;
@@ -2183,13 +2589,16 @@ export function AgentPanel({
       setRetryingAnalysisThreadId("");
     }
   };
-  const createWorkbookReviewSessionFromChatAttachment = async (file) => {
+  const createWorkbookReviewSessionFromChatAttachment = async (file, { notify = true, reload = true, signal = workbookAbortRef.current.signal } = {}) => {
+    signal.throwIfAborted();
     if (!activeProjectId) throw new Error("Select a server project first.");
     if (!file) throw new Error("Choose a workbook file first.");
-    const uploaded = await uploadServerProjectFile(activeProjectId, file);
+    const uploaded = await uploadServerProjectFile(activeProjectId, file, { signal });
+    signal.throwIfAborted();
     const fileObjectId = uploaded.fileObject?.id;
     if (!fileObjectId) throw new Error("The server did not return an uploaded file id.");
-    const response = await createServerWorkbookReviewSession(activeProjectId, { fileObjectId });
+    const response = await createServerWorkbookReviewSession(activeProjectId, { fileObjectId }, { signal });
+    signal.throwIfAborted();
     const session = response.workbookReviewSession || response.session || null;
     const sourceDocument = response.sourceDocument || null;
     if (!session?.id) throw new Error("The server did not return a workbook review session id.");
@@ -2203,20 +2612,270 @@ export function AgentPanel({
       workbookName,
       regionCount: asArray(response.reviewRegions).length || asArray(response.regions).length,
     };
-    onWorkbookReviewReady?.({
-      response,
-      session,
-      sourceDocument,
-      regions: asArray(response.regions),
-      file,
-    });
-    await reloadProjectAfterAgentAction();
+    if (notify) {
+      onWorkbookReviewReady?.({
+        response,
+        session,
+        sourceDocument,
+        regions: asArray(response.regions),
+        file,
+      });
+    }
+    if (reload) await reloadProjectAfterAgentAction();
     return {
       response,
       session,
       sourceDocument,
       workbookReviewLink,
     };
+  };
+  const updateWorkbookBatchMessage = (batchId, updater) => {
+    setHistory((current) => current.map((message) => (
+      message?.workbookBatch?.batchId === batchId
+        ? { ...message, ...updater(message) }
+        : message
+    )));
+  };
+  const loadExperimentSuggestionsForBatch = async () => {
+    if (!activeProjectId) return [];
+    try {
+      const response = await listExperimentBrowserRows(activeProjectId, { limit: 200 });
+      return asArray(response?.rows)
+        .map((row) => ({ experimentId: row?.experimentId || "", label: row?.label || "" }))
+        .filter((row) => row.experimentId && row.label);
+    } catch {
+      return [];
+    }
+  };
+  const batchSummaryText = (items) => {
+    const summary = summarizeWorkbookBatch(items);
+    if (summary.uploading || summary.pending) {
+      return `Uploading ${summary.total} workbooks: ${summary.uploaded} indexed, ${summary.failed} failed so far.`;
+    }
+    if (!summary.failed) {
+      return `I indexed ${summary.uploaded} workbooks. AI is understanding their regions in the background; open any file to review it.`;
+    }
+    if (!summary.uploaded) {
+      return `None of the ${summary.total} workbooks could be uploaded. Fix the errors below and retry.`;
+    }
+    return `I indexed ${summary.uploaded} of ${summary.total} workbooks. ${summary.failed} failed; retry them below or re-attach the files.`;
+  };
+  const runWorkbookBatch = async (batchId, files, { items = null, onlyIndexes = null } = {}) => {
+    const signal = workbookAbortRef.current.signal;
+    const experiments = await loadExperimentSuggestionsForBatch();
+    signal.throwIfAborted();
+    const seededItems = (asArray(items).length ? asArray(items) : createWorkbookBatchItems(files)).map((item) => ({
+      ...item,
+      suggestedExperiment: suggestExperimentForFile(item.fileName, experiments),
+    }));
+    const finalItems = await runWorkbookBatchUpload({
+      files,
+      items: seededItems,
+      onlyIndexes,
+      signal,
+      uploadFile: (file) => createWorkbookReviewSessionFromChatAttachment(file, { notify: false, reload: false, signal }),
+      onUpdate: (nextItems) => updateWorkbookBatchMessage(batchId, (message) => ({
+        text: batchSummaryText(nextItems),
+        workbookBatch: { ...message.workbookBatch, items: nextItems.map(workbookBatchItemForStorage) },
+      })),
+    });
+    const uploadedSessions = finalItems
+      .filter((item) => item.status === "uploaded" && item.result?.session?.id)
+      .map((item) => ({
+        sessionId: item.result.session.id,
+        sourceDocumentId: item.result.sourceDocument?.id || item.result.session.sourceDocumentId || "",
+        workbookName: item.workbookReviewLink?.workbookName || item.fileName,
+        regions: asArray(item.result.response?.reviewRegions),
+      }));
+    updateWorkbookBatchMessage(batchId, (message) => ({
+      text: batchSummaryText(finalItems),
+      workbookBatch: { ...message.workbookBatch, items: finalItems.map(workbookBatchItemForStorage) },
+    }));
+    if (uploadedSessions.length) onWorkbookBatchUploaded?.(uploadedSessions);
+    try {
+      await reloadProjectAfterAgentAction();
+    } catch {
+      // The next explicit project refresh reloads state; batch results are already shown.
+    }
+    return finalItems;
+  };
+  const compactTemplateMatch = (result) => ({
+    sourceDocumentId: result?.sourceDocumentId || "",
+    workbookName: result?.workbookName || "",
+    status: result?.status || "no_match",
+    sheetName: result?.sheetName || "",
+    matchedRange: result?.matchedRange || null,
+    offset: result?.offset || null,
+    experimentLabel: result?.experimentLabel || null,
+    labelSource: result?.labelSource || null,
+    isTemplateSource: Boolean(result?.isTemplateSource),
+    eligibleForBatchConfirm: Boolean(result?.eligibleForBatchConfirm),
+    headerRuns: asArray(result?.headerRuns).slice(0, 4),
+    formulaMismatches: asArray(result?.formulaMismatches).slice(0, 8).map((item) => ({ address: item.address, found: item.found })),
+    brokenCells: asArray(result?.brokenCells).slice(0, 8).map((item) => ({ address: item.address })),
+    alternatives: asArray(result?.alternatives).slice(0, 4).map((item) => ({ matchedRange: item.matchedRange, offset: item.offset })),
+  });
+  const matchWorkbookBatchTemplate = async (batch, template) => {
+    const batchId = batch?.batchId;
+    if (!batchId || !template?.currentVersionId || matchingBatchId) return;
+    const sourceDocumentIds = asArray(batch.items)
+      .filter((item) => item.status === "uploaded" && item.workbookReviewLink?.sourceDocumentId)
+      .map((item) => item.workbookReviewLink.sourceDocumentId);
+    if (!sourceDocumentIds.length) return;
+    setMatchingBatchId(batchId);
+    try {
+      const response = await matchServerRegionExtractionTemplate(template.currentVersionId, { sourceDocumentIds });
+      updateWorkbookBatchMessage(batchId, (message) => ({
+        workbookBatch: {
+          ...message.workbookBatch,
+          match: {
+            templateId: template.id,
+            templateName: response?.templateName || template.name,
+            templateVersionId: response?.templateVersionId || template.currentVersionId,
+            templateVersion: response?.templateVersion || template.currentVersion || 1,
+            summary: response?.summary || {},
+            results: asArray(response?.matches).map(compactTemplateMatch),
+            error: "",
+          },
+        },
+      }));
+    } catch (error) {
+      updateWorkbookBatchMessage(batchId, (message) => ({
+        workbookBatch: {
+          ...message.workbookBatch,
+          match: {
+            ...(message.workbookBatch?.match || {}),
+            templateId: template.id,
+            templateName: template.name,
+            templateVersion: template.currentVersion || 1,
+            results: asArray(message.workbookBatch?.match?.results),
+            summary: message.workbookBatch?.match?.summary || {},
+            error: `Template match failed: ${error?.message || String(error)}`,
+          },
+        },
+      }));
+    } finally {
+      setMatchingBatchId("");
+    }
+  };
+  const appliedRowFromEntry = (entry, batch) => {
+    const item = asArray(batch?.items).find((candidate) => candidate.workbookReviewLink?.sourceDocumentId === entry.sourceDocumentId);
+    const region = entry.region || {};
+    return {
+      sourceDocumentId: entry.sourceDocumentId,
+      fileName: item?.fileName || entry.workbookName || entry.sourceDocumentId,
+      workbookReviewSessionId: entry.workbookReviewSessionId || region.workbookReviewSessionId || item?.workbookReviewLink?.workbookReviewSessionId || "",
+      regionId: region.id || "",
+      revisionId: entry.revision?.id || region.currentRevisionId || "",
+      regionVersion: region.version,
+      sheetName: region.sheetName || "",
+      range: region.rangeRef || "",
+      status: entry.status,
+      reason: entry.reason,
+      experimentLabel: region.templateMatch?.experimentLabel || null,
+      linkStatus: region.templateMatch?.linkStatus || "none",
+      linkedExperimentId: region.linkedExperimentId || null,
+      confirmed: region.reviewStatus === "accepted",
+      error: entry.warning?.message || "",
+    };
+  };
+  const applyWorkbookBatchTemplate = async (batch, sourceDocumentIds) => {
+    const batchId = batch?.batchId;
+    const templateVersionId = batch?.match?.templateVersionId;
+    if (!batchId || !templateVersionId || applyingBatchId || !asArray(sourceDocumentIds).length) return;
+    setApplyingBatchId(batchId);
+    try {
+      const [response, experiments] = await Promise.all([
+        applyServerRegionExtractionTemplate(templateVersionId, { sourceDocumentIds, idempotencyKey: `apply_template_${uid()}` }),
+        loadExperimentSuggestionsForBatch(),
+      ]);
+      setBatchExperiments(experiments);
+      const rows = [
+        ...asArray(response?.applied).map((entry) => appliedRowFromEntry(entry, batch)),
+        ...asArray(response?.skipped).filter((entry) => entry.region?.id).map((entry) => appliedRowFromEntry(entry, batch)),
+      ];
+      updateWorkbookBatchMessage(batchId, (message) => ({
+        workbookBatch: {
+          ...message.workbookBatch,
+          apply: { templateVersionId, templateName: response?.templateName || batch.match?.templateName || "", items: rows, error: "" },
+        },
+      }));
+      try {
+        await reloadProjectAfterAgentAction();
+      } catch {
+        // Prefilled regions are already created; the next refresh lists them.
+      }
+    } catch (error) {
+      updateWorkbookBatchMessage(batchId, (message) => ({
+        workbookBatch: {
+          ...message.workbookBatch,
+          apply: { ...(message.workbookBatch?.apply || { items: [] }), templateVersionId, error: `Template apply failed: ${error?.message || String(error)}` },
+        },
+      }));
+    } finally {
+      setApplyingBatchId("");
+    }
+  };
+  const confirmWorkbookBatchRegions = async (batch, selection) => {
+    if (!canApprove) return;
+    const batchId = batch?.batchId;
+    if (!batchId || !activeProjectId || confirmingBatchId || !asArray(selection).length) return;
+    setConfirmingBatchId(batchId);
+    try {
+      const response = await confirmServerWorkbookReviewRegionsBatch(activeProjectId, { items: selection });
+      const resultsByRegion = new Map(asArray(response?.results).map((result) => [result.regionId, result]));
+      updateWorkbookBatchMessage(batchId, (message) => ({
+        workbookBatch: {
+          ...message.workbookBatch,
+          apply: {
+            ...(message.workbookBatch?.apply || {}),
+            items: asArray(message.workbookBatch?.apply?.items).map((row) => {
+              const result = resultsByRegion.get(row.regionId);
+              if (!result) return row;
+              return result.ok
+                ? {
+                  ...row,
+                  confirmed: true,
+                  error: "",
+                  regionVersion: result.region?.version ?? row.regionVersion,
+                  linkedExperimentId: result.region?.linkedExperimentId ?? row.linkedExperimentId,
+                  linkStatus: result.region?.templateMatch?.linkStatus || row.linkStatus,
+                  experimentLabel: result.region?.templateMatch?.experimentLabel || row.experimentLabel,
+                }
+                : { ...row, error: result.message || result.code || "Confirmation failed." };
+            }),
+            error: "",
+          },
+        },
+      }));
+      try {
+        await reloadProjectAfterAgentAction();
+      } catch {
+        // Confirmed regions are already saved; the next refresh lists them.
+      }
+    } catch (error) {
+      updateWorkbookBatchMessage(batchId, (message) => ({
+        workbookBatch: {
+          ...message.workbookBatch,
+          apply: { ...(message.workbookBatch?.apply || { items: [] }), error: `Batch confirmation failed: ${error?.message || String(error)}` },
+        },
+      }));
+    } finally {
+      setConfirmingBatchId("");
+    }
+  };
+  const retryWorkbookBatch = async (batch) => {
+    const batchId = batch?.batchId;
+    const files = batchFilesRef.current.get(batchId);
+    if (!batchId || !files || retryingBatchId) return;
+    const failedIndexes = asArray(batch.items).filter((item) => item.status === "failed").map((item) => item.index);
+    if (!failedIndexes.length) return;
+    setRetryingBatchId(batchId);
+    try {
+      await runWorkbookBatch(batchId, files, { items: batch.items, onlyIndexes: failedIndexes });
+    } finally {
+      setRetryingBatchId("");
+    }
   };
   const openWorkbookReviewLink = async (link) => {
     const sessionId = String(link?.workbookReviewSessionId || "").trim();
@@ -2251,51 +2910,111 @@ export function AgentPanel({
     fileActionInputRef.current?.click();
   };
   const onAgentFileSelected = async (event) => {
-    const file = event.target.files?.[0];
+    const selectedFiles = Array.from(event.target.files || []);
     event.target.value = "";
-    if (!file) return;
-    setPendingSpreadsheetFile(file);
+    if (!selectedFiles.length) return;
+    setPendingSpreadsheetFiles((current) => {
+      const known = new Set(current.map((file) => `${file.name}:${file.size}`));
+      return [...current, ...selectedFiles.filter((file) => !known.has(`${file.name}:${file.size}`))];
+    });
   };
+  const removePendingSpreadsheetFile = (index) => {
+    setPendingSpreadsheetFiles((current) => current.filter((_, position) => position !== index));
+  };
+  const uploadWorkbookAttachments = async (files, next) => {
+    const spreadsheetAttachments = asArray(files);
+    if (!spreadsheetAttachments.length) return;
+    if (spreadsheetAttachments.length > 1) {
+      const batchId = `workbook_batch_${uid()}`;
+      batchFilesRef.current.set(batchId, spreadsheetAttachments);
+      const items = createWorkbookBatchItems(spreadsheetAttachments);
+      setHistory([...next, {
+        role: "assistant",
+        text: batchSummaryText(items),
+        workbookBatch: { batchId, items },
+      }]);
+      setBusy(true);
+      try {
+        await runWorkbookBatch(batchId, spreadsheetAttachments);
+      } catch (err) {
+        setHistory((current) => [...current, { role: "assistant", text: `Workbook batch upload failed: ${err.message || String(err)}` }]);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    const spreadsheetAttachment = spreadsheetAttachments[0];
+    setBusy(true);
+    try {
+      const result = await createWorkbookReviewSessionFromChatAttachment(spreadsheetAttachment);
+      const workbookReviewLink = result.workbookReviewLink;
+      const workbookName = workbookReviewLink.workbookName;
+      const regionCount = workbookReviewLink.regionCount;
+      setHistory([...next, {
+        role: "assistant",
+        text: regionCount
+          ? `I indexed ${workbookName} and created ${regionCount} potentially useful ${regionCount === 1 ? "region" : "regions"}. AI is understanding them in Workbook Review.`
+          : `I indexed ${workbookName}. You can inspect the workbook in the preview; select a range and describe it if you want LabRat to revise its understanding.`,
+        workbookReviewLink,
+      }]);
+    } catch (err) {
+      setPendingSpreadsheetFiles([spreadsheetAttachment]);
+      setHistory([...next, { role: "assistant", text: `Workbook upload failed: ${err.message || String(err)}` }]);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const handledWorkbookFileRequestRef = useRef("");
+  useEffect(() => {
+    const requestId = String(requestedWorkbookFiles?.requestId || "");
+    const files = asArray(requestedWorkbookFiles?.files);
+    if (!open || !requestId || !files.length || busy) return;
+    if (handledWorkbookFileRequestRef.current === requestId) return;
+    handledWorkbookFileRequestRef.current = requestId;
+    onRequestedWorkbookFilesHandled?.();
+    if (!serverAgentEnabled) {
+      setHistory((current) => [...current, {
+        role: "assistant",
+        text: "Select a server project before uploading workbooks.",
+      }]);
+      return;
+    }
+    const next = [...history.map(({ streaming, streamId, ...message }) => message), {
+      role: "user",
+      text: files.length === 1
+        ? `Upload ${files[0].name} from Overview for workbook review.`
+        : `Upload ${files.length} workbooks from Overview for workbook review.`,
+      meta: { source: "overview_upload" },
+      attachments: files.map((file) => ({ name: file.name, kind: "spreadsheet" })),
+    }];
+    setHistory(next);
+    uploadWorkbookAttachments(files, next);
+  }, [busy, open, requestedWorkbookFiles]);
   const send = async (prefill, meta = null) => {
     const text = (prefill ?? input).trim();
     if (!text || busy) return;
-    const spreadsheetAttachment = pendingSpreadsheetFile;
+    const spreadsheetAttachments = pendingSpreadsheetFiles;
+    const spreadsheetAttachment = spreadsheetAttachments.length === 1 ? spreadsheetAttachments[0] : null;
     setInput("");
-    if (spreadsheetAttachment) setPendingSpreadsheetFile(null);
+    if (spreadsheetAttachments.length) setPendingSpreadsheetFiles([]);
     const next = [...history.map(({ streaming, streamId, ...message }) => message), {
       role: "user",
       text,
       meta,
-      attachments: spreadsheetAttachment ? [{ name: spreadsheetAttachment.name, kind: "spreadsheet" }] : [],
+      attachments: spreadsheetAttachments.map((file) => ({ name: file.name, kind: "spreadsheet" })),
     }];
     setHistory(next);
-    if (serverAgentEnabled && spreadsheetAttachment && !meta?.source) {
-      setBusy(true);
-      try {
-        const result = await createWorkbookReviewSessionFromChatAttachment(spreadsheetAttachment);
-        const workbookReviewLink = result.workbookReviewLink;
-        const workbookName = workbookReviewLink.workbookName;
-        const regionCount = workbookReviewLink.regionCount;
-        setHistory([...next, {
-          role: "assistant",
-          text: regionCount
-            ? `I indexed ${workbookName} and created ${regionCount} potentially useful ${regionCount === 1 ? "region" : "regions"}. AI is understanding them in Workbook Review.`
-            : `I indexed ${workbookName}. You can inspect the workbook in the preview; select a range and describe it if you want LabRat to revise its understanding.`,
-          workbookReviewLink,
-        }]);
-      } catch (err) {
-        setPendingSpreadsheetFile(spreadsheetAttachment);
-        setHistory([...next, { role: "assistant", text: `Workbook upload failed: ${err.message || String(err)}` }]);
-      } finally {
-        setBusy(false);
-      }
+    if (serverAgentEnabled && spreadsheetAttachments.length && !meta?.source) {
+      await uploadWorkbookAttachments(spreadsheetAttachments, next);
       return;
     }
     if (serverAgentEnabled) {
       const requestAbortController = new AbortController();
       agentRequestAbortRef.current = requestAbortController;
       setBusyOperation({
-        stage: "Routing request and drafting a reviewable plan",
+        stage: meta?.source === "chart"
+          ? "Writing about the selected chart"
+          : "Routing request and drafting a reviewable plan",
         startedAt: Date.now(),
         elapsedSeconds: 0,
         cancelling: false,
@@ -2320,6 +3039,11 @@ export function AgentPanel({
               ? { analysisOutputTarget: requestedAnalysisOutputTarget }
               : {}),
             selectedExperimentLabel: selected?.label || "",
+            ...(meta?.source === "chart" ? {
+              requestedWorkflow: "chart_commentary",
+              chartCommentaryMode: meta.chartCommentaryMode || "analysis",
+              selectedChartSpecId: selectedChartContext?.chartSpecId || "",
+            } : {}),
             selectedChartTitle: selectedChartContext?.title || "",
             selectedChartBlockId: selectedChartContext?.blockId || "",
             selectedChartView: selectedChartContext?.chartView || null,
@@ -2333,7 +3057,9 @@ export function AgentPanel({
         onRequestedAnalysisTargetHandled?.();
         const agentRun = response.agentRun || {};
         const warningText = asArray(agentRun.warnings).map((warning) => warning.message || warning.code).filter(Boolean).join(" ");
-        const reply = response.reply || warningText || "I need more detail before I can answer or prepare an analysis plan.";
+        const reply = response.reply || warningText || (meta?.source === "chart"
+          ? "I could not write an analysis for the selected chart."
+          : "I need more detail before I can answer or prepare an analysis plan.");
         const analysisThread = response.analysisThread || null;
         const currentPlanRevision = response.currentPlanRevision || null;
         setHistory([...next, {
@@ -2342,6 +3068,7 @@ export function AgentPanel({
           agentRun,
           analysisThread,
           currentPlanRevision,
+          ...(meta ? { meta } : {}),
         }]);
         if (analysisThread?.id && currentPlanRevision?.id) {
           onOpenAnalysisReview?.({
@@ -2356,7 +3083,9 @@ export function AgentPanel({
         }
         setHistory([...next, {
           role: "assistant",
-          text: `LabRat could not create a reviewable plan or action: ${err.message || String(err)} No plan or chart was created.`,
+          text: meta?.source === "chart"
+            ? `LabRat could not write about the selected chart: ${err.message || String(err)} No manuscript text was created.`
+            : `LabRat could not create a reviewable plan or action: ${err.message || String(err)} No plan or chart was created.`,
         }]);
       } finally {
         if (agentRequestAbortRef.current === requestAbortController) {
@@ -2372,19 +3101,19 @@ export function AgentPanel({
       text: "Select a server project before asking LabRat. Model access is configured on the backend.",
     }]);
   };
-  const selectedChartMeta = selectedChartContext
-    ? { source: "chart", chartBlockId: selectedChartContext.blockId, chartBox: selectedChartContext.block }
-    : null;
   const chartPrompt = (task) => {
     if (!selectedChartContext) return;
-    const chartJson = JSON.stringify(selectedChartContext);
-    const plainTextRule = "Return plain text only. Do not use Markdown headings, bold text, bullet points, numbered lists, tables, labels, or section headers.";
     const prompts = {
-      describe: `Describe the selected chart for insertion into a manuscript text box. Write one polished paragraph of 80-130 words. Focus on what is plotted, the major trend, and any caveats visible from the data. Avoid inventing mechanisms. ${plainTextRule} Selected chart JSON:\n${chartJson}`,
-      trend: `Summarize the key trend in the selected chart for insertion into a manuscript text box. Write 2-3 concise plain sentences. Mention experiment labels and values when useful. Avoid overclaiming. ${plainTextRule} Selected chart JSON:\n${chartJson}`,
-      caption: `Draft a manuscript-style figure caption for insertion into a manuscript text box. Write 1-2 concise plain sentences. Include chart type, compared experiments, plotted quantities, and a neutral takeaway. ${plainTextRule} Selected chart JSON:\n${chartJson}`,
+      describe: "Write a manuscript-ready analysis of the selected chart.",
+      trend: "Summarize the key trend in the selected chart.",
+      caption: "Draft a manuscript-style caption for the selected chart.",
     };
-    send(prompts[task], selectedChartMeta);
+    send(prompts[task], {
+      source: "chart",
+      chartCommentaryMode: task === "describe" ? "analysis" : task,
+      chartBlockId: selectedChartContext.blockId,
+      chartBox: selectedChartContext.block,
+    });
   };
   useEffect(() => {
     if (!pendingChartAnalysis || busy) return;
@@ -2519,6 +3248,25 @@ export function AgentPanel({
               </button>
             </div>
           )}
+          {m.workbookBatch && (
+            <WorkbookBatchCard
+              batch={m.workbookBatch}
+              interpretation={workbookBatchInterpretation}
+              openingSessionId={openingWorkbookReviewSessionId}
+              canRetry={batchFilesRef.current.has(m.workbookBatch.batchId)}
+              retrying={retryingBatchId === m.workbookBatch.batchId}
+              templates={asArray(projectState?.regionExtractionTemplates)}
+              matching={matchingBatchId === m.workbookBatch.batchId}
+              applying={applyingBatchId === m.workbookBatch.batchId}
+              confirming={confirmingBatchId === m.workbookBatch.batchId}
+              experiments={batchExperiments}
+              onOpen={openWorkbookReviewLink}
+              onRetry={() => retryWorkbookBatch(m.workbookBatch)}
+              onMatchTemplate={matchWorkbookBatchTemplate}
+              onApplyTemplate={applyWorkbookBatchTemplate}
+              onConfirmApplied={confirmWorkbookBatchRegions}
+            />
+          )}
           {m.agentRun?.visibleSteps?.length > 0 && (
             <div className="backend-workflow-steps agent-run-steps">
               {m.agentRun.visibleSteps.map((step, stepIndex) => (
@@ -2566,18 +3314,29 @@ export function AgentPanel({
       )}
     </div>
     <div className="agent-foot">
-      {pendingSpreadsheetFile && (
-        <div className="agent-pending-attachment">
-          <span>{pendingSpreadsheetFile.name}</span>
-          <button type="button" aria-label="Remove attached spreadsheet" onClick={() => setPendingSpreadsheetFile(null)}>
-            x
-          </button>
+      {pendingSpreadsheetFiles.length > 0 && (
+        <div className="agent-pending-attachments" aria-label="Attached spreadsheets">
+          {pendingSpreadsheetFiles.length > 1 && (
+            <span className="agent-pending-attachment-count">{pendingSpreadsheetFiles.length} workbooks attached. Send to upload them as one batch.</span>
+          )}
+          {pendingSpreadsheetFiles.map((file, index) => (
+            <div className="agent-pending-attachment" key={`${file.name}:${file.size}:${index}`}>
+              <span>{file.name}</span>
+              <button
+                type="button"
+                aria-label={pendingSpreadsheetFiles.length > 1 ? `Remove attached spreadsheet ${file.name}` : "Remove attached spreadsheet"}
+                onClick={() => removePendingSpreadsheetFile(index)}
+              >
+                x
+              </button>
+            </div>
+          ))}
         </div>
       )}
-      <button type="button" className="agent-tool" aria-label="Attach spreadsheet" title="Attach spreadsheet" onClick={chooseSpreadsheetAttachment}>+</button>
+      <button type="button" className="agent-tool" aria-label="Attach spreadsheet" title="Attach one or more spreadsheets" onClick={chooseSpreadsheetAttachment}>+</button>
       <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="Ask the rat about your data, charts, or manuscript..." />
       <button type="button" className="agent-send" onClick={() => send()}>&#8593;</button>
-      <input ref={fileActionInputRef} className="agent-file-input" type="file" accept=".xlsx,.xls" onChange={onAgentFileSelected} />
+      <input ref={fileActionInputRef} className="agent-file-input" type="file" accept=".xlsx,.xls" multiple onChange={onAgentFileSelected} />
     </div>
   </aside>
   {settingsOpen && (
@@ -2650,6 +3409,8 @@ function App() {
   const [projectList, setProjectList] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [activeProjectId, setActiveProjectId] = useState("");
+  const currentWorkspaceProjectRef = useRef(activeProjectId);
+  currentWorkspaceProjectRef.current = activeProjectId;
   const [projectState, setProjectState] = useState(null);
   const activeLab = labs.find((lab) => (lab.id || lab.labId) === activeLabId);
   const canManageLab = ["lab_owner", "lab_admin"].includes(activeLab?.role);
@@ -2670,6 +3431,44 @@ function App() {
   const [workbookReviewState, setWorkbookReviewState] = useState({ loading: false, error: "", revisionLoading: false, confirmLoading: false, revisionError: "", clarification: null, session: null, sourceDocument: null, regions: [] });
   const [workbookReviewDraftRegions, setWorkbookReviewDraftRegions] = useState([]);
   const [activeWorkbookReviewDraftRegionId, setActiveWorkbookReviewDraftRegionId] = useState("");
+  const [backgroundWorkbookSessions, setBackgroundWorkbookSessions] = useState([]);
+  const [calculationOverlay, setCalculationOverlay] = useState(null);
+  useEffect(() => {
+    setBackgroundWorkbookSessions([]);
+  }, [activeProjectId]);
+  const patchBackgroundWorkbookRegion = (sessionId, regionId, patch) => {
+    if (!sessionId || !regionId) return;
+    setBackgroundWorkbookSessions((current) => current.map((entry) => (
+      entry.sessionId !== sessionId
+        ? entry
+        : {
+          ...entry,
+          regions: asArray(entry.regions).map((region) => (
+            region.id === regionId
+              ? (typeof patch === "function" ? patch(region) : { ...region, ...patch })
+              : region
+          )),
+        }
+    )));
+  };
+  const handleWorkbookBatchUploaded = (entries) => {
+    const incoming = asArray(entries).filter((entry) => entry?.sessionId);
+    if (!incoming.length) return;
+    setBackgroundWorkbookSessions((current) => {
+      const incomingIds = new Set(incoming.map((entry) => entry.sessionId));
+      return [...current.filter((entry) => !incomingIds.has(entry.sessionId)), ...incoming];
+    });
+  };
+  const workbookBatchInterpretation = useMemo(() => Object.fromEntries(
+    backgroundWorkbookSessions.map((entry) => {
+      const active = asArray(entry.regions).filter((region) => region.disposition === "active");
+      return [entry.sessionId, {
+        total: active.length,
+        pending: active.filter((region) => region.reviewStatus === "interpreting").length,
+        failed: active.filter((region) => region.reviewStatus === "interpretation_failed").length,
+      }];
+    }),
+  ), [backgroundWorkbookSessions]);
   const [workbookReviewFocusSelection, setWorkbookReviewFocusSelection] = useState(null);
   const [backendChartInterpretState, setBackendChartInterpretState] = useState({ loading: false, result: null, error: "" });
   const resetReviewState = () => {
@@ -2726,6 +3525,7 @@ function App() {
   };
 
   const applyProjectWorkspaceRefresh = (state) => {
+    if (!state?.project?.id || state.project.id !== currentWorkspaceProjectRef.current) return;
     setProjectState((current) => mergeProjectStateForWorkspaceRefresh(current, state, { preserveManuscripts: true }));
     applyProjectShellState(state);
     applyDatasetState(state);
@@ -2844,6 +3644,7 @@ function App() {
   }, [staged, blocks, pages, references, canvasHeight, pageOrientationPreference, chartTemplates]);
   const clearWorkspace = () => {
     workspaceEpochRef.current += 1;
+    currentWorkspaceProjectRef.current = "";
     invalidateWorkspaceRequests();
     setActiveProjectId(""); setProjectState(null); setDataset(emptyDataset());
     setBlocks([]); setPages(null); setReferences([]); setStaged([]); setChartTemplates([]);
@@ -2852,6 +3653,7 @@ function App() {
     setAgentOpen(false); setProfileChatOpen(false); setChartReviewOpen(false); setNewProjectOpen(false);
     setDeleteProjectTarget(null); setProjectStateLoading(false); setSourceError("");
     setSourceName(BLANK_PROJECT_SOURCE_NAME); resetReviewState();
+    setBackgroundWorkbookSessions([]); setRequestedWorkbookFiles(null); setCalculationOverlay(null);
   };
   const invitationComplete = async ({ auth, lab }) => {
     clearWorkspace(); setManagementMode("");
@@ -3012,7 +3814,7 @@ function App() {
   const openChartReview = (options = "") => {
     const isOptionsObject = options && typeof options === "object" && !("currentTarget" in options);
     setChartReviewStatusFilter(isOptionsObject && options.statusFilter === "active" ? "active" : "");
-    setChartReviewInitialMode(isOptionsObject && ["review", "template", "edit"].includes(options.initialMode)
+    setChartReviewInitialMode(isOptionsObject && ["review", "template", "linked", "edit"].includes(options.initialMode)
       ? options.initialMode
       : "review");
     setChartLaunchContext(isOptionsObject ? options.launchContext || null : null);
@@ -3030,6 +3832,18 @@ function App() {
       setSourceError("Select or create a server project before uploading a workbook.");
       return;
     }
+    setAgentOpen(true);
+  };
+  const [requestedWorkbookFiles, setRequestedWorkbookFiles] = useState(null);
+  const uploadWorkbookFilesFromOverview = (files) => {
+    if (!canEditProject) return;
+    const selected = asArray(files).filter(Boolean);
+    if (!selected.length) return;
+    if (!activeProjectId) {
+      setSourceError("Select or create a server project before uploading a workbook.");
+      return;
+    }
+    setRequestedWorkbookFiles({ requestId: `workbook_files_${uid()}`, files: selected });
     setAgentOpen(true);
   };
   const uploadOnboardingWorkbook = async (file) => {
@@ -3172,6 +3986,23 @@ function App() {
     try {
       const response = await getServerWorkbookReviewSession(sessionId);
       handleWorkbookReviewReadyFromAgent({ response });
+      const focusRange = link?.focusRange;
+      if (focusRange?.sheetName && focusRange?.range) {
+        const sourceDocumentId = response?.sourceDocument?.id || link.sourceDocumentId || "";
+        const matchingRegion = asArray(response?.reviewRegions).find((region) => (
+          region.disposition === "active"
+          && String(region.sheetName || "").toLowerCase() === String(focusRange.sheetName).toLowerCase()
+          && String(region.rangeRef || "").toUpperCase() === String(focusRange.range).toUpperCase()
+        ));
+        if (matchingRegion) setActiveWorkbookReviewDraftRegionId(matchingRegion.id);
+        setWorkbookReviewFocusSelection({
+          sourceDocumentId,
+          sheetName: focusRange.sheetName,
+          range: focusRange.range,
+          requestId: uid(),
+          selectionMethod: "red_box_click",
+        });
+      }
     } catch (error) {
       setWorkbookReviewState((current) => ({
         ...current,
@@ -3180,6 +4011,17 @@ function App() {
       }));
       throw error;
     }
+  };
+  const updateRegionExtractionTemplate = async (region, template) => {
+    if (!permissions.canApprove) throw new Error("Approval permission is required to save an extraction template.");
+    if (!template?.id) throw new Error("Choose an extraction template to update.");
+    const response = await createServerRegionExtractionTemplateVersion(template.id, { regionId: region?.id });
+    try {
+      await refreshProjectWorkspace();
+    } catch {
+      // The version is saved; the next project refresh lists it.
+    }
+    return response;
   };
   const handleWorkbookReviewRegionActivate = (regionId) => {
     setActiveWorkbookReviewDraftRegionId(regionId);
@@ -3204,6 +4046,9 @@ function App() {
       ).filter((region) => region.disposition !== "deleted");
       return { ...current, workbookReviewRegions: nextRegions };
     });
+    if (nextRegion.workbookReviewSessionId) {
+      patchBackgroundWorkbookRegion(nextRegion.workbookReviewSessionId, nextRegion.id, nextRegion);
+    }
     setWorkbookReviewDraftRegions((currentRegions) => {
       const existingRegions = asArray(currentRegions);
       const nextRegions = (
@@ -3283,10 +4128,90 @@ function App() {
   const workbookReviewSessionId = workbookReviewState.session?.id
     || workbookReviewState.workbookReviewSession?.id
     || "";
+  useEffect(() => {
+    setCalculationOverlay(null);
+  }, [workbookReviewSessionId]);
+  const saveRegionExtractionTemplate = async (region, { name } = {}) => {
+    if (!permissions.canApprove) throw new Error("Approval permission is required to save an extraction template.");
+    if (!activeProjectId) throw new Error("Select a project before saving an extraction template.");
+    const response = await createServerRegionExtractionTemplate(activeProjectId, { name, regionId: region?.id });
+    try {
+      await refreshProjectWorkspace();
+    } catch {
+      // The template is saved; the next project refresh lists it.
+    }
+    return response;
+  };
+  const toggleWorkbookCalculationOverlay = async (region) => {
+    if (!region?.id) return;
+    if (calculationOverlay?.regionId === region.id) {
+      setCalculationOverlay(null);
+      return;
+    }
+    const sourceDocumentId = region.sourceDocumentId || workbookReviewState.sourceDocument?.id || "";
+    const range = region.rangeRef || region.range || "";
+    setCalculationOverlay({ regionId: region.id, sheetName: region.sheetName, range, classes: null, loading: true, error: "" });
+    try {
+      const response = await readServerSourceDocumentCellClasses(sourceDocumentId, { sheetName: region.sheetName, range });
+      const classes = Object.fromEntries(asArray(response?.cells).map((cell) => [cell.address, cell.cellClass]));
+      setCalculationOverlay((current) => (
+        current?.regionId === region.id ? { ...current, classes, loading: false, error: "" } : current
+      ));
+    } catch (error) {
+      setCalculationOverlay((current) => (
+        current?.regionId === region.id
+          ? { ...current, classes: null, loading: false, error: error?.message || String(error) }
+          : current
+      ));
+    }
+  };
+  const applyBackgroundWorkbookRegionResult = (response, context = {}) => {
+    const nextRegion = response?.region || null;
+    if (!nextRegion?.id) return;
+    patchBackgroundWorkbookRegion(context.sessionId, nextRegion.id, nextRegion);
+    setProjectState((current) => {
+      if (!current) return current;
+      const existing = asArray(current.workbookReviewRegions);
+      const nextRegions = (
+        existing.some((region) => region.id === nextRegion.id)
+          ? existing.map((region) => region.id === nextRegion.id ? nextRegion : region)
+          : [...existing, nextRegion]
+      ).filter((region) => region.disposition !== "deleted");
+      return { ...current, workbookReviewRegions: nextRegions };
+    });
+  };
+  const markBackgroundWorkbookRegionFailed = (region, error, context = {}) => {
+    if (!region?.id) return;
+    const alreadyHandledOnServer = [
+      "stale_workbook_review_region",
+      "workbook_review_region_not_pending",
+    ].includes(error?.code);
+    const superseded = [
+      "workbook_review_region_inactive",
+      "workbook_review_region_not_found",
+      "workbook_review_session_not_found",
+    ].includes(error?.code);
+    patchBackgroundWorkbookRegion(context.sessionId, region.id, (current) => (
+      current.reviewStatus !== "interpreting"
+        ? current
+        : {
+          ...current,
+          reviewStatus: alreadyHandledOnServer || superseded ? "needs_user_review" : "interpretation_failed",
+          warnings: alreadyHandledOnServer || superseded ? asArray(current.warnings) : [{
+            code: error?.code || "region_interpretation_request_failed",
+            message: error?.message || String(error),
+          }],
+        }
+    ));
+  };
   const { retryRegion: queueWorkbookReviewRegionRetry } = useWorkbookRegionInterpretationQueue({
     sessionId: canEditProject ? workbookReviewSessionId : "",
     regions: workbookReviewDraftRegions,
     activeRegionId: activeWorkbookReviewDraftRegionId,
+    backgroundSessions: canEditProject ? backgroundWorkbookSessions : [],
+    scopeKey: canEditProject ? activeProjectId : "",
+    onBackgroundRegionResult: applyBackgroundWorkbookRegionResult,
+    onBackgroundRegionError: markBackgroundWorkbookRegionFailed,
     interpretRegion: ({ sessionId, region, signal }) => interpretServerWorkbookReviewRegion(
       sessionId,
       region.id,
@@ -3378,7 +4303,10 @@ function App() {
       selectionMethod: "experiment_browser_source_link",
       focusOnly: true,
     };
-    const session = latestItem(projectState?.workbookReviewSessions);
+    const sessions = asArray(projectState?.workbookReviewSessions).filter((item) => item?.status !== "deleted");
+    const session = (source.workbookReviewSessionId && sessions.find((item) => item.id === source.workbookReviewSessionId))
+      || sessions.find((item) => item.sourceDocumentId === source.sourceDocumentId)
+      || latestItem(sessions);
     if (!session?.id) {
       setWorkbookReviewFocusSelection(focusSelection);
       setTab("workbook_review");
@@ -3388,6 +4316,13 @@ function App() {
     try {
       const response = await getServerWorkbookReviewSession(session.id);
       handleWorkbookReviewReadyFromAgent({ response });
+      const targetRegion = asArray(response?.reviewRegions).find((region) => (
+        region.disposition === "active"
+        && (region.id === source.regionId
+          || (String(region.sheetName || "").toLowerCase() === String(focusSelection.sheetName).toLowerCase()
+            && String(region.rangeRef || "").toUpperCase() === String(focusSelection.range).toUpperCase()))
+      ));
+      if (targetRegion) setActiveWorkbookReviewDraftRegionId(targetRegion.id);
       setWorkbookReviewFocusSelection(focusSelection);
     } catch (error) {
       setWorkbookReviewState((current) => ({
@@ -3467,6 +4402,7 @@ function App() {
   };
   const openAnalysisReview = ({ thread, revision, run = null, result = null, executionStrategy = "model_generated_python" }) => {
     if (!thread?.id || !revision?.id) return;
+    if (thread.projectId && thread.projectId !== currentWorkspaceProjectRef.current) return;
     closeChartReview({ preserveLaunchContext: true });
     setAnalysisReviewState({ thread, revision, run, result, executionStrategy });
     setAgentOpen(false);
@@ -3547,7 +4483,7 @@ function App() {
     );
   }
   if (!authState.user) {
-    return <ServerLogin loading={authState.loading} error={authState.error} onLogin={login} onRegistered={invitationComplete} />;
+    return <WelcomeScreen loading={authState.loading} error={authState.error} onLogin={login} onRegistered={invitationComplete} />;
   }
   if (managementMode) {
     return <LabManagement key={`${managementMode}:${activeLabId}`} mode={managementMode} lab={activeLab} projects={projectList} onClose={() => setManagementMode("")} onInvitationComplete={invitationComplete} />;
@@ -3690,6 +4626,7 @@ function App() {
         onAskLabRat={() => setAgentOpen(true)}
         onOpenProfile={() => setProfileChatOpen(true)}
         onUploadWorkbook={continueWorkbookReview}
+        onUploadWorkbookFiles={uploadWorkbookFilesFromOverview}
         onDeleteWorkbook={deleteWorkbookReviewSessionFromProject}
         onGoBrowser={() => setTab("browser")}
         onOpenChartReview={openChartReview}
@@ -3711,6 +4648,7 @@ function App() {
           onActiveDraftRegionChange={setActiveWorkbookReviewDraftRegionId}
           onCreateRegion={createWorkbookReviewRegion}
           focusSelection={workbookReviewFocusSelection}
+          cellClassOverlay={calculationOverlay}
           reviewDock={(
             <WorkbookReviewDock
               reviewState={workbookReviewState}
@@ -3722,6 +4660,12 @@ function App() {
               onRetryRegion={retryWorkbookReviewRegion}
               onIgnoreRegion={ignoreWorkbookReviewRegion}
               onDeleteRegion={deleteWorkbookReviewRegion}
+              calculationOverlayRegionId={calculationOverlay?.regionId || ""}
+              calculationOverlayState={calculationOverlay}
+              onToggleCalculationOverlay={toggleWorkbookCalculationOverlay}
+              onSaveExtractionTemplate={saveRegionExtractionTemplate}
+              onUpdateExtractionTemplate={updateRegionExtractionTemplate}
+              extractionTemplates={asArray(projectState?.regionExtractionTemplates)}
               onReviewExtractedExperiments={openExperimentBrowserDataRequest}
             />
           )}
@@ -3757,11 +4701,13 @@ function App() {
             setChartLaunchContext(null);
           } : null}
           loadTemplateEligibility={getServerChartTemplateEligibility}
+          loadLinkedDataKinds={listServerLinkedDataKinds}
           executionStrategy={analysisReviewState.executionStrategy || "model_generated_python"}
         />
       )}
       <DetailModal exp={selected} onClose={() => setSelected(null)} onStage={stage} />
       <ChartReviewModal
+        key={`${activeProjectId || "none"}:${canEditProject}`}
         open={chartReviewOpen}
         allowAnalysisPrompt={Boolean(activeProjectId) && canEditProject}
         chartInterpretState={backendChartInterpretState}
@@ -3784,6 +4730,12 @@ function App() {
             executionStrategy: "chart_template_v1",
           });
         }}
+        onLinkedComparisonReady={(response) => {
+          openAnalysisReview({
+            thread: response.analysisThread,
+            revision: response.analysisPlanRevision,
+          });
+        }}
         onOpenImportReview={openWorkbookUpload}
         onClose={closeChartReview}
       />
@@ -3802,6 +4754,7 @@ function App() {
         onClose={() => setNewProjectOpen(false)}
       />
       {canEditProject && <AgentPanel
+        key={activeProjectId}
         open={agentOpen}
         setOpen={setAgentOpen}
         blocks={blocks}
@@ -3816,6 +4769,10 @@ function App() {
         onProjectStateLoaded={applyProjectWorkspaceRefresh}
         onWorkbookReviewReady={handleWorkbookReviewReadyFromAgent}
         onWorkbookReviewLinkOpen={handleWorkbookReviewLinkOpen}
+        onWorkbookBatchUploaded={handleWorkbookBatchUploaded}
+        workbookBatchInterpretation={workbookBatchInterpretation}
+        requestedWorkbookFiles={requestedWorkbookFiles}
+        onRequestedWorkbookFilesHandled={() => setRequestedWorkbookFiles(null)}
         onOpenAnalysisReview={openAnalysisReview}
         activeSurface={tab}
         requestedAnalysisOutputTarget={requestedAnalysisOutputTarget}

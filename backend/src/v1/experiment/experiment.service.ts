@@ -225,8 +225,8 @@ export class ExperimentService {
   }
 
   async getExperiment(auth: AuthContext, projectId: string, experimentId: string) {
-    await this.authorization.requireExperimentCapability(auth, projectId, experimentId, "read");
-    const state = await this.repository.loadProjectionState(projectId, [experimentId]);
+    const { access } = await this.authorization.requireExperimentCapability(auth, projectId, experimentId, "read");
+    const state = await this.repository.loadProjectionState(projectId, [experimentId], Boolean(access?.allExperiments));
     const detail = projectExperimentDetail({ projectId, experimentId, ...state });
     if (!detail) throw new ApiError(404, "experiment_not_found", "Experiment not found.");
     return detail;

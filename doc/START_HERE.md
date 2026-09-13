@@ -8,6 +8,12 @@ This file is the routing guide for AI agents. It tells you which docs are curren
 
 ## Current Direction
 
+For Claude workbook feature integration into Nest v1, read
+`doc/plans/claude-v1-integration-plan.md`, `doc/contracts/claude-features-v1.md`,
+`doc/qa/claude-v1-integration-acceptance.md` and
+`doc/plans/claude-v1-database-upgrade.md`. The v1 capability addendum takes
+precedence over old role/path descriptions in the Claude feature plans.
+
 For invitation registration, lab owners/employees, or project-access management,
 read `doc/plans/invitation-onboarding-plan.md`,
 `doc/contracts/invitation-onboarding-v1.md`, and
@@ -37,8 +43,11 @@ The chart-creation program now includes persisted, versioned chart styles and
 scientific templates. New chart meaning still uses the reviewed analysis path;
 repetition with compatible accepted Browser experiments now uses a deterministic
 `chart_template_v1` run and the same AnalysisResult and ChartSpec publication
-boundary. Read
-`doc/plans/reusable-chart-creation-plan.md` and
+boundary. The same fast path applies to charts built from experiment-linked
+workbook regions: a workbook template binds to a data kind and reads each
+experiment's confirmed region. Read
+`doc/plans/reusable-chart-creation-plan.md`,
+`doc/plans/workbook-chart-template-plan.md`, and
 `doc/contracts/reusable-chart-template-contract-v1.md` for this work.
 
 ## Minimal Reading Path

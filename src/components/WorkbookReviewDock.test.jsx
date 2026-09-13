@@ -225,4 +225,173 @@ describe("WorkbookReviewDock", () => {
     fireEvent.click(screen.getByRole("button", { name: "Review extracted experiments" }));
     expect(onReviewExtractedExperiments).toHaveBeenCalledTimes(1);
   });
+
+  it("shows calculation provenance, a header-row series preview, and a calculation overlay toggle", () => {
+    const onToggleCalculationOverlay = vi.fn();
+    const regions = [{
+      id: "region_calc",
+      sourceDocumentId: "source_doc_1",
+      sheetName: "Sheet1",
+      rangeRef: "P31:BA32",
+      disposition: "active",
+      reviewStatus: "awaiting_review",
+      version: 1,
+      currentRevisionId: "revision_calc",
+      acceptedRevisionId: null,
+      warnings: [{ code: "formula_chain_broken", message: "2 cells in this calculation chain hold typed numbers where neighbouring cells hold formulas (F43, G43)." }],
+      currentRevision: {
+        id: "revision_calc",
+        summary: ["This row holds the overall carbon distribution for Exp31."],
+        confidence: 0.9,
+        validation: { status: "ready", blockers: [] },
+        warnings: [{ code: "formula_chain_broken", message: "2 cells in this calculation chain hold typed numbers where neighbouring cells hold formulas (F43, G43)." }],
+        interpretation: {
+          semanticType: "component_distribution",
+          experimentAxis: "region",
+          experimentLabel: "Exp31",
+          series: [{
+            seriesKey: "carbon_distribution",
+            label: "Overall carbon distribution",
+            orientation: "header_row_categories",
+            xHeaderRange: "Q31:BA31",
+            yValueRange: "Q32:BA32",
+            xSemanticKey: "carbon_number",
+            yUnit: "% of feed carbon",
+            pointCount: 37,
+          }],
+          provenance: {
+            schemaVersion: "labrat.regionProvenance.v1",
+            cellClassSummary: { terminal: 37, intermediate: 0, input: 0, constant: 38, blank: 1 },
+            derivation: "Q32 = F14 where F14 = 0.5237 (Yield). Every calculated cell also depends on B12 (Total C atoms = 1.5711)",
+            sharedInputs: [{ address: "B12", label: "Total C atoms", formattedValue: "1.5711" }],
+            brokenCells: [{ sheetName: "Sheet1", address: "F43" }, { sheetName: "Sheet1", address: "G43" }],
+            warnings: [{ code: "formula_chain_broken", message: "2 cells hold typed numbers." }],
+          },
+        },
+      },
+    }];
+
+    const { rerender } = render(
+      <WorkbookReviewDock
+        reviewState={reviewState()}
+        reviewRegions={regions}
+        activeRegionId="region_calc"
+        onToggleCalculationOverlay={onToggleCalculationOverlay}
+      />,
+    );
+
+    const card = screen.getByRole("article", { name: "Region Sheet1!P31:BA32" });
+    expect(within(card).getByText("37 results")).toBeTruthy();
+    expect(within(card).getByText("38 labels or unused values")).toBeTruthy();
+    expect(within(card).queryByText(/intermediate/)).toBeNull();
+    expect(within(card).getByText(/^Q32 = F14 where F14 = 0\.5237 \(Yield\)/)).toBeTruthy();
+    expect(within(card).getByText("Typed over formulas: F43, G43")).toBeTruthy();
+    expect(within(card).getByText("Overall carbon distribution: 37 points, x = carbon number (Q31:BA31), y in % of feed carbon (Q32:BA32)")).toBeTruthy();
+    const notices = within(card).getByLabelText("Notices for Sheet1!P31:BA32");
+    expect(within(notices).getAllByText(/typed numbers where neighbouring cells hold formulas/)).toHaveLength(1);
+
+    const toggle = within(card).getByRole("button", { name: "Show calculation for Sheet1!P31:BA32" });
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(toggle);
+    expect(onToggleCalculationOverlay).toHaveBeenCalledWith(expect.objectContaining({ id: "region_calc" }));
+
+    rerender(
+      <WorkbookReviewDock
+        reviewState={reviewState()}
+        reviewRegions={regions}
+        activeRegionId="region_calc"
+        calculationOverlayRegionId="region_calc"
+        calculationOverlayState={{ regionId: "region_calc", loading: false, error: "" }}
+        onToggleCalculationOverlay={onToggleCalculationOverlay}
+      />,
+    );
+    expect(within(card).getByRole("button", { name: "Hide calculation for Sheet1!P31:BA32" }).getAttribute("aria-pressed")).toBe("true");
+
+    rerender(
+      <WorkbookReviewDock
+        reviewState={reviewState()}
+        reviewRegions={regions}
+        activeRegionId="region_calc"
+        calculationOverlayRegionId="region_calc"
+        calculationOverlayState={{ regionId: "region_calc", loading: false, error: "Cell classes are unavailable." }}
+        onToggleCalculationOverlay={onToggleCalculationOverlay}
+      />,
+    );
+    expect(within(card).getByRole("alert").textContent).toBe("Cell classes are unavailable.");
+  });
+
+  it("keeps cards without provenance unchanged", () => {
+    render(<WorkbookReviewDock reviewState={reviewState()} reviewRegions={reviewRegions} activeRegionId="region_1" onToggleCalculationOverlay={() => {}} />);
+    expect(screen.queryByRole("button", { name: /calculation for/ })).toBeNull();
+    expect(screen.queryByLabelText(/Calculation provenance/)).toBeNull();
+  });
+
+  it("saves a confirmed region as an extraction template and shows an existing template name", async () => {
+    const onSaveExtractionTemplate = vi.fn().mockResolvedValue({ regionExtractionTemplate: { id: "template_1", name: "Carbon distribution" } });
+    const { rerender } = render(
+      <WorkbookReviewDock
+        reviewState={reviewState()}
+        reviewRegions={reviewRegions}
+        activeRegionId="region_2"
+        onSaveExtractionTemplate={onSaveExtractionTemplate}
+      />,
+    );
+
+    const unconfirmed = screen.getByRole("article", { name: "Region Runs!A1:D3" });
+    expect(within(unconfirmed).queryByRole("button", { name: /as extraction template/ })).toBeNull();
+
+    const confirmedCard = screen.getByRole("article", { name: "Region Runs!F1:H5" });
+    fireEvent.click(within(confirmedCard).getByRole("button", { name: "Save Runs!F1:H5 as extraction template" }));
+    const input = within(confirmedCard).getByLabelText("Template name");
+    expect(within(confirmedCard).getByRole("button", { name: "Save template" }).disabled).toBe(true);
+    fireEvent.change(input, { target: { value: "Carbon distribution" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => expect(onSaveExtractionTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "region_2" }),
+      { name: "Carbon distribution" },
+    ));
+    expect(await within(confirmedCard).findByText("Carbon distribution")).toBeTruthy();
+    expect(within(confirmedCard).queryByRole("button", { name: /as extraction template/ })).toBeNull();
+
+    rerender(
+      <WorkbookReviewDock
+        reviewState={reviewState()}
+        reviewRegions={reviewRegions}
+        activeRegionId="region_2"
+        onSaveExtractionTemplate={onSaveExtractionTemplate}
+        extractionTemplates={[{ id: "template_1", name: "Carbon distribution", status: "active", sourceRegionId: "region_2", currentVersion: 2 }]}
+      />,
+    );
+    expect(within(confirmedCard).getByText(/\(v2\)/)).toBeTruthy();
+  });
+
+  it("saves a confirmed region as a new version of an existing template", async () => {
+    const onUpdateExtractionTemplate = vi.fn().mockResolvedValue({ regionExtractionTemplate: { id: "template_1" }, versions: [{ id: "v2", version: 2 }] });
+    render(
+      <WorkbookReviewDock
+        reviewState={reviewState()}
+        reviewRegions={reviewRegions}
+        activeRegionId="region_2"
+        onSaveExtractionTemplate={vi.fn()}
+        onUpdateExtractionTemplate={onUpdateExtractionTemplate}
+        extractionTemplates={[
+          { id: "template_1", name: "Carbon distribution", status: "active", sourceRegionId: "region_other", currentVersion: 1 },
+          { id: "template_archived", name: "Old", status: "archived", sourceRegionId: "region_x" },
+        ]}
+      />,
+    );
+    const card = screen.getByRole("article", { name: "Region Runs!F1:H5" });
+    const select = within(card).getByLabelText("Update an existing template from this region");
+    expect(within(select).getAllByRole("option").map((option) => option.textContent)).toEqual(["Choose template", "Carbon distribution (v1)"]);
+    const button = within(card).getByRole("button", { name: "Save Runs!F1:H5 as a new template version" });
+    expect(button.disabled).toBe(true);
+    fireEvent.change(select, { target: { value: "template_1" } });
+    fireEvent.click(button);
+    await waitFor(() => expect(onUpdateExtractionTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "region_2" }),
+      expect.objectContaining({ id: "template_1" }),
+    ));
+    expect(await within(card).findByText("Carbon distribution updated to v2")).toBeTruthy();
+  });
 });

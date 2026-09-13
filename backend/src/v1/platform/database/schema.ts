@@ -364,6 +364,49 @@ export const reusableChartTemplateApplications = pgTable("reusable_chart_templat
   updatedBy: text("updated_by"),
 });
 
+export const regionExtractionTemplates = pgTable("region_extraction_templates", {
+  id: text("id").primaryKey(),
+  labId: text("lab_id").notNull(),
+  projectId: text("project_id").notNull(),
+  schemaVersion: text("schema_version").notNull().default("labrat.regionExtractionTemplate.v1"),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  status: text("status").notNull().default("active"),
+  currentVersionId: text("current_version_id"),
+  createdAt: utcTimestamp("created_at").notNull(),
+  updatedAt: utcTimestamp("updated_at").notNull(),
+  createdBy: text("created_by"),
+  updatedBy: text("updated_by"),
+});
+
+export const regionExtractionTemplateVersions = pgTable("region_extraction_template_versions", {
+  id: text("id").primaryKey(),
+  labId: text("lab_id").notNull(),
+  projectId: text("project_id").notNull(),
+  regionExtractionTemplateId: text("region_extraction_template_id").notNull(),
+  schemaVersion: text("schema_version").notNull().default("labrat.regionExtractionTemplateVersion.v1"),
+  version: integer("version").notNull(),
+  status: text("status").notNull().default("accepted"),
+  sourceRegionId: text("source_region_id").notNull(),
+  sourceRevisionId: text("source_revision_id").notNull(),
+  sourceDocumentId: text("source_document_id"),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+  contentHash: text("content_hash").notNull(),
+  createdAt: utcTimestamp("created_at").notNull(),
+  createdBy: text("created_by"),
+});
+
+export const regionTemplateApplyReceipts = pgTable("region_template_apply_receipts", {
+  projectId: text("project_id").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  labId: text("lab_id").notNull(),
+  actorUserId: text("actor_user_id").notNull(),
+  templateVersionId: text("template_version_id").notNull(),
+  requestHash: text("request_hash").notNull(),
+  response: jsonb("response").$type<Record<string, unknown>>().notNull(),
+  createdAt: utcTimestamp("created_at").notNull(),
+}, (table) => [primaryKey({ columns: [table.projectId, table.idempotencyKey] })]);
+
 export const manuscripts = pgTable("manuscripts", {
   id: text("id").primaryKey(),
   labId: text("lab_id").notNull(),
@@ -485,6 +528,10 @@ export const workbookReviewRegions = pgTable("workbook_review_regions", {
   workbookReviewSessionId: text("workbook_review_session_id").notNull(),
   sourceDocumentId: text("source_document_id").notNull(),
   sourceRegionId: text("source_region_id"),
+  linkedExperimentId: text("linked_experiment_id"),
+  dataKind: text("data_kind"),
+  regionExtractionTemplateVersionId: text("region_extraction_template_version_id"),
+  templateMatch: jsonb("template_match").$type<Record<string, unknown>>(),
   sheetName: text("sheet_name").notNull(),
   rangeRef: text("range_ref").notNull(),
   selectionMethod: text("selection_method").notNull().default("manual"),
@@ -786,6 +833,9 @@ export const v1Schema = {
   reusableChartTemplateVersions,
   reusableChartTemplateSlotBindings,
   reusableChartTemplateApplications,
+  regionExtractionTemplates,
+  regionExtractionTemplateVersions,
+  regionTemplateApplyReceipts,
   manuscripts,
   sourceDocuments,
   sourceRegions,

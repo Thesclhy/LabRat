@@ -1,4 +1,5 @@
 import { stableDataHash } from "./dataPlanSchemas.js";
+import { selectRegionSeries, seriesSelectorOf } from "./linkedRegionSeries.js";
 
 export const CHART_STYLE_PROFILE_SCHEMA_VERSION = "labrat.chartStyleProfile.v1";
 export const CHART_STYLE_PROFILE_VERSION_SCHEMA_VERSION = "labrat.chartStyleProfileVersion.v1";
@@ -22,6 +23,14 @@ const RECIPE_OPERATIONS = new Set([
   "unit_convert",
 ]);
 const COMPARISON_MODES = new Set(["overlay", "grouped", "stacked_components", "faceted"]);
+const SLOT_SOURCE_KINDS = new Set(["snapshot", "linked_region"]);
+const SERIES_ORIENTATIONS = new Set(["header_row_categories", "column_pair"]);
+const SERIES_ALIGNMENT_POLICIES = new Set(["union_with_gaps", "intersection", "exact"]);
+const WORKBOOK_TEMPLATE_CHART_TYPES = new Set(["grouped_bar", "bar", "scatter", "point"]);
+// Processing steps that mean the accepted Python computed new values instead
+// of selecting and aligning the workbook's own results. A template must
+// reproduce the sheet's numbers, so these are refused.
+const RECOMPUTATION_PATTERN = /\b(normali[sz]|weight|calibrat|response factor|ratio|divid|sum(?:med|ming)?\b|total(?:led|ling)?\b|averag|mean\b|integrat|smooth|interpolat|convert|percent of|fraction of|scal(?:e|ed|ing) (?:by|to)|multipl)/i;
 
 const DEFAULT_STYLE = Object.freeze({
   typography: {
@@ -288,14 +297,49 @@ function validateTemplateDefinition(input = {}) {
     slotIds.add(slotId);
     const dataKind = text(slot?.dataKind);
     if (!new Set(["scalar", "series"]).has(dataKind)) error("reusable_chart_template_invalid", `Input slot ${slotId} has an unsupported data kind.`);
+    const sourceKind = text(slot?.sourceKind) || "snapshot";
+    if (!SLOT_SOURCE_KINDS.has(sourceKind)) error("reusable_chart_template_invalid", `Input slot ${slotId} has an unsupported source kind.`);
     const preferredColumnId = text(slot?.identityContract?.preferredColumnId);
-    if (!preferredColumnId) error("reusable_chart_template_invalid", `Input slot ${slotId} requires a preferred stable column id.`);
+    const linkedDataKind = text(slot?.linkedDataKind);
+    if (sourceKind === "snapshot" && !preferredColumnId) error("reusable_chart_template_invalid", `Input slot ${slotId} requires a preferred stable column id.`);
+    if (sourceKind === "linked_region") {
+      if (!linkedDataKind) error("reusable_chart_template_invalid", `Input slot ${slotId} requires the linked data kind it binds to.`);
+      if (dataKind !== "series") error("reusable_chart_template_invalid", `Input slot ${slotId} binds a linked region and must be a series slot.`);
+    }
+    let seriesContract = null;
+    if (dataKind === "series") {
+      const source = isObject(slot?.seriesContract) ? slot.seriesContract : {};
+      const orientation = text(source.orientation) || (sourceKind === "linked_region" ? "" : "column_pair");
+      if (sourceKind === "linked_region" && !SERIES_ORIENTATIONS.has(orientation)) {
+        error("reusable_chart_template_invalid", `Input slot ${slotId} requires a series orientation.`);
+      }
+      const alignmentPolicy = text(source.alignmentPolicy) || "union_with_gaps";
+      if (!SERIES_ALIGNMENT_POLICIES.has(alignmentPolicy)) error("reusable_chart_template_invalid", `Input slot ${slotId} has an unsupported alignment policy.`);
+      const selectorSource = isObject(source.seriesSelector) ? source.seriesSelector : null;
+      seriesContract = {
+        ...copy(source),
+        ...(orientation ? { orientation } : {}),
+        alignmentPolicy,
+        xMeaning: text(source.xMeaning) || null,
+        xValueType: text(source.xValueType) || null,
+        yNumericScale: text(source.yNumericScale) || null,
+        ...(selectorSource ? {
+          seriesSelector: {
+            seriesKey: text(selectorSource.seriesKey) || null,
+            label: text(selectorSource.label) || null,
+            ySemanticKey: text(selectorSource.ySemanticKey) || null,
+          },
+        } : {}),
+      };
+    }
     return {
       slotId,
       label: boundedText(slot?.label || slotId, `inputSlots[${index}].label`, { maximum: 160 }),
       dataKind,
       required: slot?.required !== false,
       cardinality: text(slot?.cardinality || "one_per_experiment"),
+      sourceKind,
+      ...(sourceKind === "linked_region" ? { linkedDataKind } : {}),
       identityContract: {
         preferredColumnId,
         valueType: text(slot?.identityContract?.valueType),
@@ -307,7 +351,7 @@ function validateTemplateDefinition(input = {}) {
         allowedUnits: asArray(slot?.unitContract?.allowedUnits).map(text),
         conversionPolicyIds: asArray(slot?.unitContract?.conversionPolicyIds).map(text),
       },
-      ...(dataKind === "series" ? { seriesContract: copy(slot?.seriesContract || {}) } : {}),
+      ...(seriesContract ? { seriesContract } : {}),
     };
   });
   const recipe = isObject(source.recipe) ? source.recipe : {};
@@ -388,6 +432,295 @@ function reusableScalarChartType(value) {
   return chartType || "scatter";
 }
 
+function normalizeKind(value) {
+  return text(value).toLowerCase();
+}
+
+function linkedSeriesSignature(series) {
+  return stableDataHash({
+    orientation: text(series?.orientation) || "column_pair",
+    xSemanticKey: text(series?.xSemanticKey) || null,
+    yUnit: text(series?.yUnit) || null,
+    yNumericScale: text(series?.yNumericScale) || null,
+  });
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function rangeRowNumber(range) {
+  const match = /^[A-Z]+(\d+)(?::[A-Z]+(\d+))?$/i.exec(text(range));
+  return match && (!match[2] || match[2] === match[1]) ? Number(match[1]) : null;
+}
+
+/**
+ * Picks which of a region's series the accepted chart plotted by counting
+ * mentions of each series' label, key, value range, or row in the plan text
+ * the user reviewed. One clear winner is required; ties are ambiguous.
+ */
+export function selectPlottedSeries({ series, spec, planRevision } = {}) {
+  const list = asArray(series).filter(Boolean);
+  if (list.length <= 1) return { series: list[0] || null, ambiguous: false, scores: [] };
+  const plan = planRevision?.plan || planRevision || {};
+  const reviewPlan = plan.reviewPlan || {};
+  const corpus = [
+    reviewPlan.chart?.yDescription,
+    reviewPlan.chart?.seriesDescription,
+    reviewPlan.chart?.title,
+    ...asArray(reviewPlan.processingSteps),
+    ...asArray(reviewPlan.calculationSteps),
+    ...asArray(plan.displayPlan),
+    plan.requestSummary,
+    ...asArray(plan.sourceSelections).map((selection) => selection?.purpose),
+    ...asArray(spec?.sourceSelections).map((selection) => selection?.purpose),
+  ].map(text).filter(Boolean).join("\n").toLowerCase();
+  const scores = list.map((item, index) => {
+    let score = 0;
+    const label = text(item.label).toLowerCase();
+    const key = text(item.seriesKey).toLowerCase();
+    const semantic = text(item.ySemanticKey).toLowerCase().replace(/_series$/, "").replace(/_/g, " ");
+    for (const term of new Set([label, key.replace(/_series$/, "").replace(/_/g, " "), semantic].filter((term) => term.length >= 2))) {
+      const pattern = new RegExp(`(^|[^a-z0-9])${escapeRegExp(term)}(?=$|[^a-z0-9])`, "g");
+      score += (corpus.match(pattern) || []).length;
+    }
+    const range = text(item.yValueRange || item.yColumn).toLowerCase();
+    if (range && corpus.includes(range)) score += 3;
+    const row = rangeRowNumber(item.yValueRange);
+    if (row && new RegExp(`\\brow ${row}\\b`).test(corpus)) score += 2;
+    return { index, label: text(item.label || item.seriesKey), score };
+  });
+  const best = Math.max(...scores.map((item) => item.score));
+  const winners = scores.filter((item) => item.score === best);
+  if (best <= 0 || winners.length !== 1) return { series: null, ambiguous: true, scores };
+  return { series: list[winners[0].index], ambiguous: false, scores };
+}
+
+function traceCount(spec) {
+  const catalog = asArray(spec?.traceCatalog);
+  if (catalog.length) return catalog.length;
+  return asArray(spec?.plotly?.data).length;
+}
+
+/**
+ * Workbook-backed charts are template-eligible only when every source
+ * selection is a confirmed region linked to an experiment under one data
+ * kind, every region exposes one series with the same shape and unit, and the
+ * accepted plan did nothing beyond selecting and aligning those series.
+ */
+export async function inspectLinkedSeriesTemplateEligibility({ store, projectId, chartSpec } = {}) {
+  const spec = acceptedAnalysisChartSpec(chartSpec);
+  const blockers = [];
+  const selections = asArray(spec?.sourceSelections);
+  if (!spec || chartSpec?.projectId !== projectId || !selections.length) {
+    return {
+      status: "ineligible",
+      blockers: [eligibilityBlocker("reusable_chart_template_linked_regions_required", "Workbook templates require an accepted chart built from confirmed workbook regions.")],
+      context: null,
+    };
+  }
+  if (asArray(spec.experimentSelections).length) {
+    blockers.push(eligibilityBlocker(
+      "reusable_chart_template_mixed_inputs_unsupported",
+      "A template cannot mix workbook regions and Experiment Browser inputs.",
+    ));
+  }
+  const canResolve = typeof store?.findRegionUnderstandingRevisionById === "function"
+    && typeof store?.findWorkbookReviewRegionById === "function";
+  const planRevision = typeof store?.findAnalysisPlanRevisionById === "function" && text(spec.analysisPlanRevisionId)
+    ? await store.findAnalysisPlanRevisionById(text(spec.analysisPlanRevisionId))
+    : null;
+  const experiments = [];
+  const unlinked = [];
+  const ambiguousSeries = [];
+  for (const [selectionIndex, selection] of selections.entries()) {
+    const revision = canResolve ? await store.findRegionUnderstandingRevisionById(text(selection?.regionUnderstandingRevisionId)) : null;
+    const region = revision?.regionId && canResolve ? await store.findWorkbookReviewRegionById(revision.regionId) : null;
+    if (!revision || !region || region.projectId !== projectId || region.disposition !== "active" || region.acceptedRevisionId !== revision.id) {
+      blockers.push(eligibilityBlocker(
+        "reusable_chart_template_lineage_unavailable",
+        "The chart no longer resolves to confirmed workbook regions.",
+        { selectionIndex, regionUnderstandingRevisionId: selection?.regionUnderstandingRevisionId || null },
+      ));
+      continue;
+    }
+    if (!region.linkedExperimentId || !text(region.dataKind)) {
+      unlinked.push({ selectionIndex, regionId: region.id });
+      continue;
+    }
+    const series = asArray(revision.interpretation?.series);
+    const plotted = selectPlottedSeries({ series, spec, planRevision });
+    if (!plotted.series) {
+      ambiguousSeries.push({
+        selectionIndex,
+        regionId: region.id,
+        seriesCount: series.length,
+        seriesLabels: series.map((item) => text(item?.label || item?.seriesKey)).filter(Boolean),
+      });
+      continue;
+    }
+    experiments.push({
+      selectionIndex,
+      experimentId: region.linkedExperimentId,
+      regionId: region.id,
+      regionUnderstandingRevisionId: revision.id,
+      dataKind: text(region.dataKind),
+      series: plotted.series,
+    });
+  }
+  if (unlinked.length) {
+    blockers.push(eligibilityBlocker(
+      "reusable_chart_template_linked_regions_required",
+      "Every workbook region in the chart must be linked to an experiment with a data kind. Apply an extraction template or link the regions first.",
+      { regions: unlinked },
+    ));
+  }
+  if (ambiguousSeries.length) {
+    const first = ambiguousSeries[0];
+    blockers.push(eligibilityBlocker(
+      "reusable_chart_template_series_ambiguous",
+      first.seriesCount
+        ? `A linked region defines ${first.seriesCount} series (${first.seriesLabels.join(", ")}) and the accepted plan does not name which one was plotted. Rebuild the chart naming the row you want, or confirm the region with only that series.`
+        : "A linked region defines no series, so there is nothing for a template to read.",
+      { regions: ambiguousSeries },
+    ));
+  }
+  const selectors = [...new Set(experiments.map((item) => JSON.stringify(seriesSelectorOf(item.series))))];
+  if (experiments.length && selectors.length > 1) {
+    blockers.push(eligibilityBlocker(
+      "reusable_chart_template_series_contract_mismatch",
+      `The chart plots different series per experiment (${[...new Set(experiments.map((item) => text(item.series?.label || item.series?.seriesKey)))].join(", ")}); a template binds one series.`,
+    ));
+  }
+  const dataKinds = [...new Set(experiments.map((item) => normalizeKind(item.dataKind)))];
+  if (dataKinds.length > 1) {
+    blockers.push(eligibilityBlocker(
+      "reusable_chart_template_series_contract_mismatch",
+      `The chart mixes data kinds (${[...new Set(experiments.map((item) => item.dataKind))].join(", ")}); a template binds one data kind.`,
+    ));
+  }
+  const signatures = [...new Set(experiments.map((item) => linkedSeriesSignature(item.series)))];
+  if (experiments.length && signatures.length > 1) {
+    const units = [...new Set(experiments.map((item) => text(item.series?.yUnit) || "no unit"))];
+    blockers.push(eligibilityBlocker(
+      "reusable_chart_template_series_contract_mismatch",
+      `The linked series do not share one orientation, unit, and numeric scale (${units.join(", ")}).`,
+      { units },
+    ));
+  }
+  const experimentIds = new Set(experiments.map((item) => item.experimentId));
+  if (experiments.length && experimentIds.size !== experiments.length) {
+    blockers.push(eligibilityBlocker(
+      "reusable_chart_template_series_contract_mismatch",
+      "Each experiment may appear once in a template source chart.",
+    ));
+  }
+  const chartType = text(spec.chartType || chartSpec?.chartType);
+  if (!WORKBOOK_TEMPLATE_CHART_TYPES.has(chartType)) {
+    blockers.push(eligibilityBlocker(
+      "reusable_chart_template_encoding_unsupported",
+      `Workbook series templates support grouped bars, bars, and points; this chart is ${chartType || "unknown"}.`,
+      { chartType: chartType || null },
+    ));
+  }
+  const steps = asArray(planRevision?.plan?.reviewPlan?.processingSteps || planRevision?.reviewPlan?.processingSteps).map(text);
+  const recomputation = steps.filter((step) => RECOMPUTATION_PATTERN.test(step));
+  if (recomputation.length) {
+    blockers.push(eligibilityBlocker(
+      "reusable_chart_template_workbook_recomputation",
+      `The accepted plan computed new values ("${recomputation[0].slice(0, 120)}"). A template must reproduce the workbook's own numbers; build the chart from a results row instead.`,
+      { steps: recomputation.slice(0, 5) },
+    ));
+  }
+  const traces = traceCount(spec);
+  if (experiments.length === selections.length && traces && traces !== experiments.length) {
+    blockers.push(eligibilityBlocker(
+      "reusable_chart_template_workbook_recomputation",
+      `The accepted chart has ${traces} traces for ${experiments.length} experiments; a workbook series template draws exactly one trace per experiment.`,
+      { traceCount: traces, experimentCount: experiments.length },
+    ));
+  }
+  const status = blockers.length ? "ineligible" : "eligible";
+  return {
+    status,
+    blockers,
+    context: status === "eligible" ? {
+      dataKind: experiments[0].dataKind,
+      series: experiments[0].series,
+      chartType,
+      experiments: experiments.map(({ series: _series, ...item }) => item),
+    } : null,
+  };
+}
+
+export async function deriveLinkedSeriesTemplateDefinition({ store, projectId, chartSpec, chartStyleProfileVersionId = null } = {}) {
+  const eligibility = await inspectLinkedSeriesTemplateEligibility({ store, projectId, chartSpec });
+  if (eligibility.status !== "eligible") {
+    const first = eligibility.blockers[0];
+    error("reusable_chart_template_not_eligible", first?.message || "This workbook chart cannot be saved as a template.", 422, { blockers: eligibility.blockers });
+  }
+  const { dataKind, series, chartType } = eligibility.context;
+  const orientation = text(series?.orientation) || "column_pair";
+  const label = text(series?.label || series?.seriesKey) || dataKind;
+  const yUnit = text(series?.yUnit) || null;
+  const encodingChartType = ["bar", "grouped_bar"].includes(chartType) ? "bar" : "scatter";
+  const inputSlots = [{
+    slotId: "series",
+    label,
+    dataKind: "series",
+    required: true,
+    cardinality: "one_per_experiment",
+    sourceKind: "linked_region",
+    linkedDataKind: dataKind,
+    identityContract: {
+      preferredColumnId: "",
+      valueType: "series",
+      readableName: label,
+      sourceSignature: linkedSeriesSignature(series),
+      numericScale: text(series?.yNumericScale),
+    },
+    unitContract: { allowedUnits: yUnit ? [yUnit] : [], conversionPolicyIds: [] },
+    seriesContract: {
+      orientation,
+      xMeaning: text(series?.xSemanticKey) || null,
+      xValueType: text(series?.xValueType) || (orientation === "header_row_categories" ? "string" : "number"),
+      yNumericScale: text(series?.yNumericScale) || null,
+      alignmentPolicy: "union_with_gaps",
+      seriesSelector: seriesSelectorOf(series),
+    },
+  }];
+  return {
+    sourceChartSpecId: chartSpec.id,
+    chartStyleProfileVersionId: chartStyleProfileVersionId || null,
+    experimentCardinality: { minimum: 1, recommendedMaximum: 8, hardMaximum: 24 },
+    inputSlots,
+    recipe: {
+      schemaVersion: CHART_RECIPE_SCHEMA_VERSION,
+      operations: [
+        { op: "select_series", inputSlotId: "series", outputRole: "trace" },
+        { op: "align_x", inputRole: "trace", outputRole: "trace", policy: "union_with_gaps", order: "source" },
+        { op: "filter_missing", inputRole: "trace", outputRole: "trace", policy: "preserve_gap" },
+      ],
+    },
+    encoding: {
+      chartType: encodingChartType,
+      comparisonMode: encodingChartType === "bar" ? "grouped" : "overlay",
+      xRole: "category",
+      yRole: "value",
+      colorBy: "experiment",
+      sourceChartType: chartType,
+    },
+    missingDataPolicy: {
+      missingScalar: "block",
+      missingPoint: "preserve_gap",
+      missingCategory: "union_with_gaps",
+      missingSeries: "exclude_experiment",
+    },
+    geometryPolicy: { inheritStyleProfile: true },
+    validation: { ok: true, errors: [], eligibility: "linked_series_comparison_v1" },
+  };
+}
+
 export async function inspectReusableChartTemplateEligibility({ store, projectId, chartSpec } = {}) {
   const spec = acceptedAnalysisChartSpec(chartSpec);
   if (!spec || chartSpec?.projectId !== projectId) {
@@ -399,12 +732,16 @@ export async function inspectReusableChartTemplateEligibility({ store, projectId
       )],
     };
   }
+  if (asArray(spec.sourceSelections).length && !asArray(spec.experimentSelections).length) {
+    const linked = await inspectLinkedSeriesTemplateEligibility({ store, projectId, chartSpec });
+    return { status: linked.status, blockers: linked.blockers, ...(linked.status === "eligible" ? { eligibility: "linked_series_comparison_v1" } : {}) };
+  }
   const blockers = [];
   const selections = asArray(spec.experimentSelections);
   if (asArray(spec.sourceSelections).length) {
     blockers.push(eligibilityBlocker(
       "reusable_chart_template_workbook_inputs_unsupported",
-      "This is a one-off workbook chart. Create it with Experiment Browser data to save it as a reusable template.",
+      "This chart mixes workbook ranges with Experiment Browser inputs. Build it from one source to save it as a reusable template.",
       { sourceSelectionCount: asArray(spec.sourceSelections).length },
     ));
   }
@@ -502,6 +839,9 @@ export async function deriveReusableChartTemplateDefinition({ store, projectId, 
   const spec = acceptedAnalysisChartSpec(chartSpec);
   if (!spec || chartSpec?.projectId !== projectId) {
     error("reusable_chart_template_not_eligible", "Templates require an accepted analysis-result ChartSpec in this project.", 422);
+  }
+  if (asArray(spec.sourceSelections).length && !asArray(spec.experimentSelections).length) {
+    return deriveLinkedSeriesTemplateDefinition({ store, projectId, chartSpec, chartStyleProfileVersionId });
   }
   const selections = asArray(spec.experimentSelections);
   if (asArray(spec.sourceSelections).length || !selections.length) {
@@ -646,6 +986,8 @@ export function reusableChartTemplateSummary(template, currentVersion = null) {
     currentVersion: currentVersion?.version || null,
     chartType: currentVersion?.encoding?.chartType || null,
     experimentCardinality: currentVersion?.experimentCardinality || null,
+    sourceKind: asArray(currentVersion?.inputSlots).some((slot) => slot?.sourceKind === "linked_region") ? "linked_region" : "snapshot",
+    linkedDataKind: asArray(currentVersion?.inputSlots).find((slot) => slot?.sourceKind === "linked_region")?.linkedDataKind || null,
     updatedAt: template.updatedAt,
   };
 }

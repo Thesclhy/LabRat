@@ -9,44 +9,52 @@ function loadPlotly() {
 
 export function Plot({ traces = [], layout, config, className = "" }) {
   const ref = useRef(null);
+  const pending = useRef(Promise.resolve());
   useEffect(() => {
     const node = ref.current;
     if (!node) return;
     let active = true;
     let Plotly = null;
+    let ready = false;
 
-    loadPlotly()
-      .then((loaded) => {
-        Plotly = loaded;
-        if (!active) {
-          Plotly.purge(node);
-          return;
-        }
+    pending.current = pending.current
+      .then(async () => {
+        Plotly = await loadPlotly();
+        if (!active) return;
         if (!traces.length) {
           Plotly.purge(node);
           return;
         }
-        Plotly.react(node, traces, layout, {
+        await Plotly.react(node, traces, layout, {
           responsive: true,
           displaylogo: false,
           modeBarButtonsToRemove: ["sendDataToCloud"],
           ...config,
-        }).then(() => Plotly.Plots?.resize(node));
+        });
+        if (!active) return;
+        ready = true;
+        await Plotly.Plots?.resize(node);
       })
-      .catch((err) => console.error("Failed to load Plotly", err));
+      .catch((err) => { if (active) console.error("Failed to render Plotly", err); });
 
     const observer = new ResizeObserver(() => {
-      if (Plotly && active) Plotly.Plots?.resize(node);
+      if (Plotly && active && ready) {
+        Promise.resolve(Plotly.Plots?.resize(node)).catch((err) => {
+          if (active) console.error("Failed to resize Plotly", err);
+        });
+      }
     });
     observer.observe(node);
 
     return () => {
       active = false;
+      ready = false;
       observer.disconnect();
-      if (Plotly) Plotly.purge(node);
+      // Never purge a node while its asynchronous render is still using its emitter.
+      pending.current = pending.current.then(() => { if (Plotly) Plotly.purge(node); });
     };
   }, [traces, layout, config]);
   return traces.length
     ? <div className={`plot ${className}`} ref={ref} />
-    : <div className={`plot plot-empty ${className}`}>No plottable data for this chart.</div>;
+    : <div className={`plot plot-empty ${className}`} ref={ref}>No plottable data for this chart.</div>;
 }

@@ -1114,10 +1114,11 @@ function chartSpecAxisTitle(axis, fallback) {
 function chartSpecLayoutOpts(chartSpec) {
   const model = chartSpecModel(chartSpec);
   const yFields = Array.isArray(model.yFields) && model.yFields.length ? model.yFields : [model.y].filter(Boolean);
+  const axisTitle = (axis) => typeof axis?.title === "string" ? axis.title : axis?.title?.text;
   return {
     title: model.title || chartSpec?.title || "Chart",
-    xLabel: chartSpecAxisTitle(model.x, "Experiment"),
-    yLabel: yFields.length > 1 ? "Value" : chartSpecAxisTitle(yFields[0], "Value"),
+    xLabel: axisTitle(model.plotly?.layout?.xaxis) || chartSpecAxisTitle(model.x, "Experiment"),
+    yLabel: axisTitle(model.plotly?.layout?.yaxis) || (yFields.length > 1 ? "Value" : chartSpecAxisTitle(yFields[0], "Value")),
   };
 }
 

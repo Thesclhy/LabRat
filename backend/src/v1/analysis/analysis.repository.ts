@@ -5,6 +5,11 @@ import { PostgresSaasStore } from "../../saas/postgresStore.js";
 import { EvidenceRepository } from "../evidence/evidence.repository.js";
 import { DatabaseService } from "../platform/database/database.service.js";
 import { ReusableChartsRepository } from "../reusable-charts/reusable-charts.repository.js";
+import { authorizeProjectTransaction } from "../authorization/authorized-store.js";
+import type { AuthContext } from "../identity/identity.types.js";
+import { IdentityRepository } from "../identity/identity.repository.js";
+import { ApiError } from "../platform/http/api-error.js";
+import { createAnalysisThread, createAnalysisPlanRevision } from "../../saas/analysisThreads.js";
 import {
   agentRuns,
   analysisExperimentPublications,
@@ -235,6 +240,35 @@ export class AnalysisRepository {
   findSourceDocumentById(id: string) {
     return this.evidence.findSourceDocumentById(id);
   }
+
+  createLinkedComparison(auth: AuthContext, project: {id: string; labId: string}, comparison: Record<string, any>) {
+    return this.database.db.transaction(async (tx) => {
+      const database = { db: tx } as unknown as DatabaseService;
+      await authorizeProjectTransaction(database, auth, project, "propose");
+      const scoped = new AnalysisRepository(database, new EvidenceRepository(database), new ReusableChartsRepository(database));
+      const thread = await (createAnalysisThread as any)({store:scoped,project,actorUserId:auth.user.id,
+        originalRequest:comparison.requestSummary,outputTarget:"chart",inputMode:"workbook"});
+      // This adapter only appends the first revision of the thread created in
+      // this transaction. Existing-thread mutation keeps its established path.
+      scoped.appendAnalysisPlanRevision = async (input: Record<string, any>) => {
+        if (input.threadId !== thread.id || input.priorRevisionId) throw new ApiError(409,"analysis_plan_revision_conflict","Expected a new comparison thread.");
+        const [revision] = await tx.insert(analysisPlanRevisions).values(input.revision).returning();
+        await scoped.updateAnalysisThread(thread.id,{status:"awaiting_plan_review",planRevisionIds:[revision!.id],
+          messages:[...(thread.messages || []),...input.messages],updatedBy:auth.user.id});
+        return revision;
+      };
+      const revision = await (createAnalysisPlanRevision as any)({store:scoped,project,analysisThreadId:thread.id,
+        actorUserId:auth.user.id,plan:comparison.plan});
+      await new IdentityRepository(database).recordAudit({actorUserId:auth.user.id,labId:project.labId,projectId:project.id,
+        action:"analysis_thread.linked_data_comparison",targetType:"analysis_thread",targetId:thread.id,
+        summary:comparison.requestSummary,metadata:{dataKind:comparison.dataKind,analysisPlanRevisionId:revision.id}});
+      return {thread:await scoped.findAnalysisThreadById(thread.id),revision};
+    });
+  }
+
+  findWorkbookReviewRegionById(id: string) { return this.evidence.findWorkbookReviewRegionById(id); }
+  findRegionUnderstandingRevisionById(id: string) { return this.evidence.findRegionUnderstandingRevisionById(id); }
+  listWorkbookReviewRegions(input: Record<string, any>) { return this.evidence.listWorkbookReviewRegions(input); }
 
   listSourceIndexBlobs({ sourceDocumentId }: { sourceDocumentId: string }) {
     return this.evidence.listSourceIndexBlobs(sourceDocumentId);

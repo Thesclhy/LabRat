@@ -32,6 +32,9 @@ import { experimentFieldColumnId } from "./experimentProjection.js";
 import {
   CHART_TEMPLATE_EXECUTION_STRATEGY,
   executeReusableChartTemplate,
+  isLinkedSeriesTemplate,
+  materializeLinkedSeriesInputs,
+  loadFrozenLinkedTemplateInputs,
 } from "./reusableChartTemplateApplications.js";
 
 const THREAD_LIST_LIMIT = 100;
@@ -202,6 +205,8 @@ export function analysisPlanRevisionSummary(revision) {
     experimentSelections: revision.experimentSelections || plan.experimentSelections || [],
     reviewPlan: revision.reviewPlan || plan.reviewPlan || {},
     displayPlan: revision.displayPlan || plan.displayPlan || [],
+    ...(plan.templateLineage ? { templateLineage: structuredClone(plan.templateLineage) } : {}),
+    ...(plan.linkedDataComparison ? { linkedDataComparison: structuredClone(plan.linkedDataComparison) } : {}),
     sourceRectangles: revision.sourceRectangles || [],
     feedback: revision.feedback || null,
     warnings: revision.warnings || [],
@@ -1001,6 +1006,19 @@ function inputManifest(inputs) {
       seriesCount: asArray(experiment.series).length,
       activeHead: experiment.activeHead,
     })),
+    ...(Array.isArray(inputs.linkedSeries) ? {
+      linkedSeries: inputs.linkedSeries.map((item) => ({
+        experimentId: item.experimentId,
+        label: item.label,
+        regionId: item.regionId,
+        regionUnderstandingRevisionId: item.regionUnderstandingRevisionId,
+        sheetName: item.sheetName,
+        range: item.range,
+        pointCount: item.pointCount,
+        valueCount: item.valueCount,
+        missingCount: item.missingCount,
+      })),
+    } : {}),
   };
 }
 
@@ -1294,7 +1312,9 @@ export async function executeAnalysisRun({
   let deterministicSourceRefs = null;
   const programAttempts = [];
   try {
-    const workbookInputs = await materializeAnalysisInputs({
+    const frozenInputs = await loadFrozenLinkedTemplateInputs({ store, projectId: project.id, run, planRevision: revision,
+      sourceSelections: revision.plan?.sourceSelections });
+    const workbookInputs = frozenInputs ? { projectId: project.id, tables: [], warnings: [], ...frozenInputs } : await materializeAnalysisInputs({
       store,
       projectId: project.id,
       sourceSelections: revision.plan?.sourceSelections,
@@ -1313,6 +1333,12 @@ export async function executeAnalysisRun({
       experiments: experimentInputs.experiments,
     };
   } catch (error) {
+    if (resolvedExecutionStrategy === CHART_TEMPLATE_EXECUTION_STRATEGY) {
+      await store.updateReusableChartTemplateApplication?.(
+        run.payload?.reusableChartTemplateApplicationId,
+        { status: "failed", updatedAt: new Date().toISOString(), updatedBy: actorUserId },
+      );
+    }
     return finalizeFailedRun({
       store,
       project,
@@ -1320,7 +1346,13 @@ export async function executeAnalysisRun({
       run,
       revision,
       status: error?.code === "analysis_python_policy_failed" ? "validation_failed" : "failed",
-      error,
+      error: resolvedExecutionStrategy === CHART_TEMPLATE_EXECUTION_STRATEGY
+        ? Object.assign(new Error("An input frozen by this reusable chart application is no longer available."), {
+          code: "chart_template_inputs_stale",
+          statusCode: 409,
+          details: { cause: error?.code || null, message: error?.message || null },
+        })
+        : error,
       payload: {
         phase: "materializing_inputs",
         inputManifest: inputs ? inputManifest(inputs) : null,
@@ -1349,10 +1381,15 @@ export async function executeAnalysisRun({
       if (!application || application.projectId !== project.id || !templateVersion || templateVersion.projectId !== project.id) {
         throw analysisError("chart_template_application_conflict", "The reusable chart application is unavailable.", 409);
       }
+      if (isLinkedSeriesTemplate(templateVersion)) {
+        const linkedInputs = inputs.linkedSeries ? { linkedSeries: inputs.linkedSeries } : await materializeLinkedSeriesInputs({ store, projectId: project.id, application, templateVersion });
+        inputs = { ...inputs, linkedSeries: linkedInputs.linkedSeries };
+      }
       const rendered = executeReusableChartTemplate({
         templateVersion: { ...templateVersion, templateName: template?.name || "Reusable chart" },
         application,
         experiments: inputs.experiments,
+        linkedSeries: inputs.linkedSeries || null,
         styleVersion,
       });
       executorResult = rendered.executorResult;
@@ -1628,6 +1665,10 @@ export async function executeAnalysisRun({
       startedAt: run.payload?.startedAt || startedAt,
       completedAt,
       phase: "result_ready",
+      ...(resolvedExecutionStrategy === CHART_TEMPLATE_EXECUTION_STRATEGY ? {
+        reusableChartTemplateApplicationId: run.payload?.reusableChartTemplateApplicationId,
+        reusableChartTemplateVersionId: run.payload?.reusableChartTemplateVersionId,
+      } : {}),
       inputManifest: inputManifest(inputs),
       executionStrategy: resolvedExecutionStrategy,
       inputHash: runPackage.inputHash,

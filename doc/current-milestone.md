@@ -1,10 +1,35 @@
 # Current Milestone
 
-Status: locally verified; main publication and automatic deployment authorized
+Status: Claude v1 locally verified; main promotion and automatic deployment authorized
 Read when: checking what the next implementation slice should be.
-Last reviewed: 2026-09-12
+Last reviewed: 2026-09-13
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
+
+## Claude Feature Parity On v1
+
+Active branch: `codex/claude-v1-integration`, based on main `474c1bb`;
+feature and interaction reference: Claude `06ecf87`. Locked scope and gates:
+`doc/plans/claude-v1-integration-plan.md`. On 2026-09-13 the user explicitly
+confirmed promotion to main and its automatic Lightsail deployment/migrations.
+
+Domain, eleven new Nest operations, migrations and React adapters are complete.
+Final Linux clean installation and Windows full codex verification passed:
+frontend 368, Nest 60, legacy Linux 332 passed/4 conditional skips and Windows
+331/5. PostgreSQL passed 15/15, including empty/main/Claude historical fixtures,
+restarts, checksum rejection, concurrency, rollback and frozen-source history.
+Real six-file Chromium acceptance covers region/template/batch review, linked
+Browser sources/comparison, chart templates, invitation signup, four roles,
+manuscript drag/resize/keyboard/save/reload and PPTX export. All 51 valid plotted
+values and source coordinates equal their workbook cache. No old API calls or
+runtime errors remain in the final browser runs.
+
+The integration is being committed and promoted through the existing guarded
+pipeline. See `doc/PROGRESS.md` for publication results and
+`doc/qa/claude-v1-integration-acceptance.md` for test-fixture boundaries. Actual
+database backup rehearsal and live-provider comparison remain unperformed;
+hosted CI and production health must still be checked. The confirmed approval
+does not replace those tests. The prior deployment failure below is historical.
 
 ## Invitation Onboarding And Lab Management
 
@@ -27,8 +52,13 @@ Execution checklist: `doc/task-checklist.md`; implementation, QA commands and
 handoff: `doc/plans/invitation-onboarding-plan.md`. On 2026-09-12 the user
 authorized promotion to `main` and explicitly confirmed the automatic Lightsail
 deployment side effect. Publication-time full verification passed again.
-The existing pipeline must pass its independent tests, migrations and health
-check before the production rollout can be reported successful.
+Local and remote `main` now point to `474c1bb`. Automatic deployment run
+`34705610377` failed during clean backend dependency installation because the
+lockfile lacks `esbuild@0.28.2` and its platform packages. Upload, migrations
+and production activation were not reached. The missing lock entries are now
+repaired and clean-install verified on the Claude integration branch, without
+dependency upgrades. No deployment retry is authorized by that local repair.
+See `doc/PROGRESS.md` for the run link and verified stage details.
 
 ## Main And v1 Reconciliation — Local Implementation
 

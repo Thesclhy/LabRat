@@ -225,10 +225,170 @@ Fuzzy or model similarity may rank visible candidates, but can never accept a
 binding. Duplicate readable names are independent. Bindings are project- and
 template-version-scoped, append-only decisions with active/superseded status.
 
-The v1 fast path is limited to fields and series in accepted active Experiment
-Browser snapshots. Direct workbook ranges may author the source chart and
-style, but cannot be rebound across experiments until they have a stable
-accepted Browser representation or a later reviewed source-binding contract.
+The v1 fast path binds snapshot slots to fields in accepted active Experiment
+Browser snapshots. Direct workbook ranges can be rebound across experiments
+only through a linked-region slot (below); other workbook charts remain
+one-off.
+
+### Workbook series slots (`sourceKind: "linked_region"`)
+
+An input slot may declare `sourceKind: "linked_region"` (the default is
+`"snapshot"`, so stored templates are unchanged). Such a slot must be a
+`series` slot, names the `linkedDataKind` it binds to (for example "Carbon
+distribution"), and carries a `seriesContract` with `orientation`
+(`header_row_categories` or `column_pair`), `xMeaning`, `xValueType`,
+`yNumericScale`, and `alignmentPolicy` (`union_with_gaps`, `intersection`,
+or `exact`). `identityContract.preferredColumnId` is empty;
+`identityContract.sourceSignature` hashes orientation, x meaning, y unit, and
+numeric scale so a changed unit fails the contract at application time.
+
+```json
+{
+  "slotId": "series",
+  "label": "Overall carbon distribution",
+  "dataKind": "series",
+  "sourceKind": "linked_region",
+  "linkedDataKind": "Carbon distribution",
+  "identityContract": { "preferredColumnId": "", "valueType": "series", "readableName": "Overall carbon distribution", "sourceSignature": "sha256_..." },
+  "unitContract": { "allowedUnits": ["% of feed carbon"], "conversionPolicyIds": [] },
+  "seriesContract": { "orientation": "header_row_categories", "xMeaning": "carbon_number", "xValueType": "number", "yNumericScale": "percent_points", "alignmentPolicy": "union_with_gaps" }
+}
+```
+
+Binding is by data kind: at application time each chosen experiment resolves
+to its most recently confirmed WorkbookReviewRegion whose `dataKind` matches,
+and lineage freezes that region's accepted revision id instead of a snapshot
+head. No cell address is stored in the template.
+
+A confirmed region may define several series under one header (for example
+a "C-Response" row and an "Area" row). `seriesContract.seriesSelector`
+(`{ seriesKey, label, ySemanticKey }`) records which one the template plots.
+At eligibility time the plotted series is chosen deterministically from the
+accepted plan the user reviewed: each series is scored by mentions of its
+label, key, value range, or row number in the chart's y description, series
+description, processing steps, display plan, request summary, and source
+selection purposes. A single-series region needs no mention. When no series
+or more than one scores highest the chart is refused with
+`reusable_chart_template_series_ambiguous`, and the message lists the series
+so the user can rebuild the chart naming the row. Every experiment in the
+source chart must resolve to the same selector. At application and
+execution time the selector picks the series inside each region (key, then
+label, then y semantic key); a region without it is excluded with
+`chart_template_series_shape_mismatch`, and `frozenRegionRefs` carry the
+chosen `seriesKey` so execution reads exactly what was prepared.
+
+Eligibility of a source chart (`inspectLinkedSeriesTemplateEligibility`,
+used automatically when an accepted chart has source selections and no
+Experiment Browser selections): every region is a confirmed region linked to
+an experiment under one data kind, each defines exactly one series, all
+series share orientation, unit, and numeric scale, the chart type is
+`grouped_bar`, `bar`, `scatter`, or `point`, the accepted plan's processing
+steps only select and align (steps that normalise, weight, calibrate, sum,
+average, convert, or otherwise compute new values are refused as
+`reusable_chart_template_workbook_recomputation`), and the accepted chart has
+exactly one trace per experiment. The derived recipe is `select_series`,
+`align_x` (`union_with_gaps`, source order), `filter_missing`
+(`preserve_gap`); encoding is `grouped` bars or `overlay` points with
+`colorBy: experiment`; the missing-data policy is `missingPoint:
+preserve_gap`, `missingCategory: union_with_gaps`, `missingSeries:
+exclude_experiment`; `validation.eligibility` is
+`linked_series_comparison_v1`. Blocker codes:
+`reusable_chart_template_linked_regions_required`,
+`reusable_chart_template_series_ambiguous`,
+`reusable_chart_template_series_contract_mismatch`,
+`reusable_chart_template_encoding_unsupported`,
+`reusable_chart_template_workbook_recomputation`,
+`reusable_chart_template_mixed_inputs_unsupported`.
+
+#### Applying a workbook series template
+
+`POST /api/reusable-chart-template-versions/:id/applications` accepts a
+workbook template with the same body as a scalar template, but `bindings`
+must be empty (`chart_template_binding_invalid`): the slot binds by data
+kind. A version with a linked-region slot next to a snapshot slot is refused
+with `chart_template_slot_mix_unsupported`. Resolution runs per selected
+experiment:
+
+1. Find that experiment's confirmed regions whose `dataKind` matches the
+   slot; the most recently confirmed active region wins and any others are
+   reported as a `chart_template_multiple_regions` warning. An experiment
+   whose only matching regions live in a deleted review session is excluded
+   with `chart_template_session_deleted`; one with no matching region is
+   excluded with `chart_template_input_missing`.
+2. Check the region's single series against the slot: orientation must equal
+   `seriesContract.orientation` (`chart_template_series_shape_mismatch`), the
+   unit must be in `unitContract.allowedUnits`, and the numeric scale must
+   match `identityContract.numericScale` (`chart_template_unit_incompatible`).
+3. Read the series once from the workbook index (cached formula results;
+   `chart_template_range_too_large` above 2,500 cells,
+   `chart_template_series_outside_region` when the series ranges leave the
+   confirmed region). Blank cells, Excel errors, and non-numeric text become
+   missing points with reasons `blank`, `excel_error`, `non_numeric`; a series
+   with no numeric value at all excludes the experiment with
+   `chart_template_input_missing`.
+
+`missingDataPolicy.missingSeries` decides what an exclusion means:
+`exclude_experiment` (default) keeps the application `ready` with the
+experiment listed in `excludedExperiments`; `block` turns every exclusion
+into a blocker. Zero usable experiments is always blocked.
+
+The compatibility payload adds `sourceKind: "linked_region"`,
+`linkedDataKind`, per-experiment `region` (region id, frozen revision id,
+workbook, sheet, range), `pointCount`/`valueCount`/`missingCount`,
+`missingCategories`, `excludedExperiments[{experimentId,label,code,message}]`,
+`warnings`, `alignment {categories, policy}` (union of category labels in
+first-seen order), `sourceSelections` (one exact region range per ready
+experiment, `template_source_selection_n`), `frozenRegionRefs`, and
+`linkedSeries` (the read points with cell addresses and missing reasons).
+`frozenHeadRefs`, `experimentSelections`, and `executionBindings` are empty;
+no snapshot or head is read or written.
+
+The accepted PlanRevision uses `inputMode: "workbook"`, carries the
+`sourceSelections` and matching `sourceRectangles`, and extends
+`templateLineage` with `linkedDataKind` and `frozenRegionRefs`. The
+application record stores `frozenRegionRefs` inside its compatibility JSON
+(Postgres needs no new column). The queued run is `chart_template_v1` like a
+scalar application.
+
+#### Executing a workbook series template
+
+`chart_template_v1` execution of a workbook application reads every
+`frozenRegionRefs` entry through `readLinkedRegionSeries` using the frozen
+revision id. A region that was re-confirmed after the application was
+prepared is not swapped in; a frozen revision or workbook that no longer
+exists fails the run closed with `chart_template_inputs_stale` and marks the
+application `failed`. No model provider or Python executor is involved, and
+`inputManifest.linkedSeries` records what was read (region, revision, point
+and value counts).
+
+The deterministic series renderer accepts only recipes made of
+`select_series`, `align_x`, and `filter_missing`, and only `grouped` bars or
+`overlay` points or lines; anything else is `chart_template_recipe_unsupported`.
+It draws one trace per experiment named by the experiment label:
+
+- `align_x` builds the x axis from category labels in first-seen source
+  order across experiments. `union_with_gaps` keeps every label,
+  `intersection` keeps labels present in every experiment, `exact` requires
+  identical labels and otherwise fails with
+  `chart_template_alignment_incompatible` (the offending labels in
+  `details.categories`). Text categories render on a `category` axis with an
+  explicit `categoryarray`.
+- `filter_missing` decides what a blank, Excel error, non-numeric, or absent
+  category becomes: `preserve_gap` keeps the x position with a `null` y
+  (bars leave a gap, scatter traces set `connectgaps: false`); `omit_point`
+  drops the point from that trace. Every gap is listed in
+  `result.exclusions` as `chart_template_missing_point` with the experiment,
+  category, reason, and cell.
+- Fraction-scaled series with a percent unit are displayed as percent
+  points, as scalar templates already do.
+
+Trace `meta.labrat.sourceLineage` carries the region id, frozen revision id,
+the region ranges, and the cell addresses that were plotted. The
+AnalysisResult `sourceRefs` list the region ranges (`excel_range`) plus one
+`excel_cell` entry per plotted point with its category. `hashes.inputHash`
+covers the application id and the read point arrays, so repeating the same
+application yields the same hash. The ordinary Plotly validator, result
+review, and accept-and-create-chart boundary are unchanged.
 
 ## Deterministic Recipe v1
 
@@ -484,9 +644,10 @@ responses remain bounded and omit large artifacts.
 
 - Project viewers may list/read profiles, templates, compatibility, and
   accepted ChartSpecs.
-- Editors, lab admins, and lab owners may create versions, applications, and
-  accepted charts.
-- Archive is editor-authorized and logical.
+- In Nest v1, `propose` permits chart-template versions, applications and
+  logical archive. Creating an accepted ChartSpec requires `approve`.
+- Saving an extraction template/version also associates accepted evidence and
+  requires `approve`; see `doc/contracts/claude-features-v1.md`.
 - Cross-project ids return not found without revealing ownership.
 - Create/version/application/publication operations are audited.
 - Application and publication writes require idempotency keys; conflicting key
@@ -510,7 +671,15 @@ chart_template_palette_exhausted
 chart_template_geometry_unreadable
 chart_template_inputs_stale
 chart_template_application_conflict
+chart_template_binding_invalid
+chart_template_slot_mix_unsupported
+chart_template_session_deleted
+chart_template_series_shape_mismatch
+chart_template_series_outside_region
+chart_template_range_too_large
 ```
+
+Warning code (never blocks): `chart_template_multiple_regions`.
 
 ## Non-Goals For v1
 

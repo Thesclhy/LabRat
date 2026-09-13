@@ -18,6 +18,8 @@ function workbookBuffer() {
     [2, ""],
   ]);
   formulaSheet.B2 = { t: "n", f: "A2*2", v: 4, w: "4" };
+  formulaSheet.C2 = { t: "e", f: "A2/0", v: 7, w: "#DIV/0!" };
+  formulaSheet["!ref"] = "A1:C2";
   formulaSheet["!merges"] = [XLSX.utils.decode_range("A1:B1")];
   XLSX.utils.book_append_sheet(workbook, formulaSheet, "Formula");
 
@@ -71,7 +73,7 @@ test("scanWorkbook preserves formula, merged-cell, and empty-sheet scan details"
   assert.equal(result.file.type, "xls");
 
   const formulaSheet = result.sheets.find((sheet) => sheet.name === "Formula");
-  assert.equal(formulaSheet.usedRange, "A1:B2");
+  assert.equal(formulaSheet.usedRange, "A1:C2");
   const mergedCell = formulaSheet.cellGrid.cells.find((cell) => cell.address === "A1");
   assert.equal(mergedCell.merged, true);
   assert.equal(mergedCell.mergedRange, "A1:B1");
@@ -80,6 +82,11 @@ test("scanWorkbook preserves formula, merged-cell, and empty-sheet scan details"
   assert.equal(formulaCell.formula, "A2*2");
   assert.equal(formulaCell.rawValue, 4);
   assert.equal(formulaCell.formattedValue, "4");
+  const errorCell = formulaSheet.cellGrid.cells.find((cell) => cell.address === "C2");
+  assert.equal(errorCell.type, "error", "an Excel error result is typed as an error even though it holds a formula");
+  assert.equal(errorCell.formula, "A2/0");
+  assert.equal(errorCell.rawValue, null, "the numeric Excel error code never becomes a value");
+  assert.equal(errorCell.formattedValue, "#DIV/0!");
 
   const emptySheet = result.sheets.find((sheet) => sheet.name === "Empty");
   assert.equal(emptySheet.usedRange, null);

@@ -58,13 +58,16 @@ function activeAcceptedUnderstanding(item) {
 }
 
 export async function confirmedSourceRegionCatalog({ store, projectId } = {}) {
-  const [accepted, sourceDocuments] = await Promise.all([
+  const [accepted, sourceDocuments, identities] = await Promise.all([
     store.listAcceptedRegionUnderstandings({ projectId }),
     store.listSourceDocuments({ projectId }),
+    store.listExperimentIdentities ? store.listExperimentIdentities({ projectId }) : [],
   ]);
   const sourceById = new Map(asArray(sourceDocuments).map((item) => [item.id, item]));
+  const identityById = new Map(asArray(identities).map((item) => [item.id, item]));
   return asArray(accepted).filter(activeAcceptedUnderstanding).map(({ region, revision }) => {
     const interpretation = revision.interpretation || {};
+    const linkedIdentity = region.linkedExperimentId ? identityById.get(region.linkedExperimentId) : null;
     return {
       regionUnderstandingRevisionId: revision.id,
       regionId: region.id,
@@ -72,6 +75,9 @@ export async function confirmedSourceRegionCatalog({ store, projectId } = {}) {
       workbookName: workbookName(sourceById.get(region.sourceDocumentId)),
       sheetName: region.sheetName,
       range: canonicalRange(region.rangeRef),
+      linkedExperimentId: region.linkedExperimentId || null,
+      linkedExperimentLabel: linkedIdentity ? text(linkedIdentity.canonicalLabel || linkedIdentity.label) || null : null,
+      dataKind: text(region.dataKind) || null,
       semanticType: text(interpretation.semanticType) || "unknown_region",
       experimentAxis: interpretation.experimentAxis || null,
       experimentLabel: interpretation.experimentLabel || null,
@@ -95,11 +101,17 @@ export async function confirmedSourceRegionCatalog({ store, projectId } = {}) {
       series: asArray(interpretation.series).map((series) => ({
         seriesKey: text(series?.seriesKey),
         label: text(series?.label || series?.seriesKey),
+        orientation: text(series?.orientation) || "column_pair",
         xColumn: text(series?.xColumn).toUpperCase(),
         yColumn: text(series?.yColumn).toUpperCase(),
+        xHeaderRange: text(series?.xHeaderRange) || null,
+        yValueRange: text(series?.yValueRange) || null,
+        xSemanticKey: text(series?.xSemanticKey) || null,
         xUnit: series?.xUnit || null,
         yUnit: series?.yUnit || null,
-      })).filter((series) => series.xColumn || series.yColumn),
+        yNumericScale: series?.yNumericScale || null,
+        pointCount: Number.isFinite(Number(series?.pointCount)) ? Number(series.pointCount) : null,
+      })).filter((series) => series.xColumn || series.yColumn || (series.xHeaderRange && series.yValueRange)),
     };
   });
 }

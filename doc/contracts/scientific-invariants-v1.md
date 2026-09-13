@@ -9,7 +9,8 @@ Last reviewed: 2026-08-23
   FileObject. It is not an experiment table and is never a published dataset.
 - `WorkbookReviewRegion` is the mutable review anchor for one exact workbook
   rectangle. `RegionUnderstandingRevision` is immutable interpretation;
-  downstream evidence may use only the exact active accepted revision.
+  new selections use the exact active accepted revision; a prepared linked
+  chart-template application retains the accepted revision it already froze.
 - `DataSnapshot` is immutable accepted structured scientific data. Corrections
   create another snapshot instead of overwriting history.
 - `ExperimentSnapshotHead` selects one active `(dataSnapshotId, recordIndex)`
@@ -47,6 +48,13 @@ approval at a later boundary.
   entire accepted point collections.
 - Source selections must stay inside active accepted regions. Experiment
   selections must resolve through frozen active snapshot heads.
+
+Prepared linked-region chart templates are a narrow current-pointer exception:
+execution/publication verify the persisted application, version, run and
+accepted-plan binding, then use its exact frozen region revision even after
+reconfirmation. Ordinary analysis selection and scalar snapshot-head checks are
+unchanged. Missing frozen source material remains an error. See
+`doc/contracts/claude-features-v1.md`.
 - Model tool output and generated Python are untrusted until deterministic
   validation succeeds.
 

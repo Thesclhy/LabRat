@@ -1,6 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { makeId } from "../../saas/ids.js";
+import { linkedRegionSummaries } from "../../saas/experimentProjection.js";
+import { EvidenceRepository } from "../evidence/evidence.repository.js";
 import { DatabaseService } from "../platform/database/database.service.js";
 import {
   browserViews,
@@ -55,7 +57,7 @@ interface ProjectionRow {
 export class ExperimentRepository {
   constructor(private readonly database: DatabaseService) {}
 
-  async loadProjectionState(projectId: string, experimentIds: string[] | null) {
+  async loadProjectionState(projectId: string, experimentIds: string[] | null, includeLinkedEvidence = experimentIds === null) {
     if (experimentIds?.length === 0) {
       return { dataSnapshots: [], experimentIdentities: [], experimentSnapshotHeads: [] };
     }
@@ -163,7 +165,12 @@ export class ExperimentRepository {
         updatedBy: row.head_updated_by,
       });
     }
+    const evidence = new EvidenceRepository(this.database);
+    // Workbook artifacts are full-project-only. Do not expose them through a selected-experiment shell.
+    const acceptedRegionUnderstandings = includeLinkedEvidence ? await evidence.listAcceptedRegionUnderstandings(projectId) : [];
+    const sourceDocuments = includeLinkedEvidence ? await evidence.listSourceDocuments(projectId) : [];
     return {
+      experimentLinkedRegions: linkedRegionSummaries({ acceptedRegionUnderstandings, sourceDocuments } as never),
       dataSnapshots: [...snapshots.values()],
       experimentIdentities,
       experimentSnapshotHeads,

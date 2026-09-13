@@ -97,4 +97,24 @@ describe("ExperimentDetailDrawer", () => {
     }));
     expect(onOpenSourceRange).toHaveBeenCalledWith(missingDetail.record.fields[0].sourceRefs[0]);
   });
+
+  it("lists linked workbook data with openers and an empty state", () => {
+    const onOpenSourceRange = vi.fn();
+    const { rerender } = render(<ExperimentDetailDrawer detail={detail} onClose={vi.fn()} onOpenSourceRange={onOpenSourceRange} />);
+    expect(screen.getByText("No linked workbooks. Confirm a region linked to this experiment to see it here.")).toBeTruthy();
+
+    rerender(<ExperimentDetailDrawer
+      detail={{
+        ...detail,
+        linkedRegions: [{ regionId: "region_31", workbookReviewSessionId: "session_31", sourceDocumentId: "doc_31", workbookName: "Calculation Exp31.xlsx", sheetName: "Sheet1", range: "P31:BA32", dataKind: "Carbon distribution", templateVersion: 1, seriesLabels: ["Overall carbon distribution"] }],
+      }}
+      onClose={vi.fn()}
+      onOpenSourceRange={onOpenSourceRange}
+    />);
+    const button = screen.getByRole("button", { name: "Open Carbon distribution in Calculation Exp31.xlsx" });
+    expect(button.textContent).toContain("Sheet1!P31:BA32 · template v1");
+    expect(button.textContent).toContain("Overall carbon distribution");
+    fireEvent.click(button);
+    expect(onOpenSourceRange).toHaveBeenCalledWith(expect.objectContaining({ sourceDocumentId: "doc_31", sheet: "Sheet1", range: "P31:BA32", regionId: "region_31", workbookReviewSessionId: "session_31" }));
+  });
 });

@@ -205,6 +205,11 @@ inputs; it does not authorize ChartSpec publication.
   processing, and style. The later code-generation model may produce Python,
   but neither model can publish or bypass Plotly validation.
 - A ChartSpec owns the complete accepted trace domain. A Manuscript placement owns only its local `visibleTraceIds`; model suggestions and user visibility changes cannot remove traces from the immutable catalog.
+- Existing-chart commentary is read-only: the backend resolves the accepted
+  project ChartSpec by id, limits the provider context to the manuscript
+  placement's visible traces, and returns prose through AgentRun. Commentary
+  must not create or revise analysis plans, runs, results, charts, or manuscript
+  blocks; insertion of returned text remains an explicit user action.
 
 ## AgentRun Rules
 

@@ -60,7 +60,7 @@ function fixture() {
       access: { allExperiments: true, capabilities: ["read", "propose", "approve"] },
     })),
   };
-  const identityRepository = { recordAudit: vi.fn(async () => undefined) };
+  const identityRepository = { recordAudit: vi.fn(async () => undefined), findUserById: vi.fn(async () => ({...auth.user})) };
   const modelProvider = { publicConfig: vi.fn(() => ({ provider: "test", model: "test-model", configured: true })) };
   const executor = { publicConfig: vi.fn(() => ({ mode: "disabled", adapter: "disabled", configured: false })) };
   const service = new AnalysisService(
@@ -74,6 +74,14 @@ function fixture() {
 }
 
 describe("AnalysisService contract and authorization boundaries", () => {
+  test("rejects a deactivated initiator before saving an AgentRun", async () => {
+    const testFixture = fixture();
+    testFixture.identityRepository.findUserById.mockResolvedValueOnce({...auth.user,isActive:false});
+    await expect(testFixture.service.createAgentRun(auth,"project_1",{message:"Upload a workbook",selectedContext:{}}))
+      .rejects.toMatchObject({statusCode:403,code:"forbidden"});
+    expect(testFixture.repository.createAgentRun).not.toHaveBeenCalled();
+  });
+
   test("rejects shell-only access before listing project-wide analysis artifacts", async () => {
     const testFixture = fixture();
     testFixture.authorization.requireFullProjectCapability.mockRejectedValueOnce(

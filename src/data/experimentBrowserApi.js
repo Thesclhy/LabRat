@@ -18,7 +18,7 @@ export async function listExperimentBrowserRows(projectId, query = {}, options =
       ...(Array.isArray(query.sort) && query.sort.length ? { sort: JSON.stringify(query.sort) } : {}),
       ...(query.starredOnly ? { starredOnly: "true" } : {}),
       ...(query.cursor ? { cursor: query.cursor } : {}),
-      ...(query.limit ? { limit: query.limit } : {}),
+      ...(query.limit ? { limit: Math.min(250, Math.max(1, Math.trunc(Number(query.limit)) || 250)) } : {}),
     },
     ...transport(options),
   });

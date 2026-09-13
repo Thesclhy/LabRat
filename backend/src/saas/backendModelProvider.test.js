@@ -78,6 +78,49 @@ test("validates and returns structured intent metadata", async () => {
   });
 });
 
+test("generates structured prose for an existing chart without invoking chart planning", async () => {
+  const provider = createBackendModelProvider({
+    config: {
+      aiProvider: "anthropic",
+      anthropicApiKey: "server-secret",
+      anthropicModel: "claude-test",
+    },
+    fetchImpl: async (_url, request) => {
+      const body = JSON.parse(request.body);
+      assert.match(body.system, /existing accepted LabRat chart/);
+      assert.match(body.system, /Never propose, plan, or create another chart/);
+      return {
+        ok: true,
+        async json() {
+          return {
+            usage: { input_tokens: 42, output_tokens: 28 },
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                answer: "Conversion increases across the displayed reaction-time range for Catalyst A.",
+              }),
+            }],
+          };
+        },
+      };
+    },
+  });
+
+  const result = await provider.answerChartCommentary({
+    mode: "analysis",
+    chart: {
+      chartSpecId: "chart_spec_1",
+      title: "Conversion by time",
+      visibleTraceIds: ["catalyst_a"],
+      traces: [{ traceId: "catalyst_a", name: "Catalyst A", x: [1, 2], y: [35, 61] }],
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.answer, "Conversion increases across the displayed reaction-time range for Catalyst A.");
+  assert.deepEqual(result.metadata.usage, { inputTokens: 42, outputTokens: 28 });
+});
+
 test("DeepSeek uses task-specific thinking policies through the backend provider", async () => {
   const requests = [];
   const provider = createBackendModelProvider({
@@ -642,6 +685,13 @@ test("interpretWorkbookRegion requests a concise structured region explanation",
         interpretationSchema.properties.fieldPatches.items.required,
         Object.keys(interpretationSchema.properties.fieldPatches.items.properties),
       );
+      assert.deepEqual(
+        interpretationSchema.properties.seriesPatches.items.required,
+        Object.keys(interpretationSchema.properties.seriesPatches.items.properties),
+      );
+      assert.ok(interpretationSchema.properties.seriesPatches.items.properties.orientation.enum.includes("header_row_categories"));
+      assert.match(body.system, /terminal cells are calculated results/i);
+      assert.match(body.system, /seriesPatches with orientation header_row_categories/i);
       const roleSchema = interpretationSchema.properties.fieldPatches.items.properties.role;
       assert.ok(roleSchema.enum.includes(""));
       assert.ok(roleSchema.enum.includes("outcome"));
@@ -676,6 +726,31 @@ test("interpretWorkbookRegion requests a concise structured region explanation",
                     valueType: "number",
                     unit: "",
                   }],
+                  seriesPatches: [{
+                    seriesKey: "carbon_distribution",
+                    label: "Overall carbon distribution",
+                    orientation: "header_row_categories",
+                    xHeaderRange: "B1:D1",
+                    yValueRange: "B2:D2",
+                    xColumn: "",
+                    yColumn: "",
+                    xMeaning: "carbon_number",
+                    xValueType: "number",
+                    yUnit: "% of feed carbon",
+                    yNumericScale: "percent_points",
+                  }, {
+                    seriesKey: "",
+                    label: "",
+                    orientation: "",
+                    xHeaderRange: "",
+                    yValueRange: "",
+                    xColumn: "",
+                    yColumn: "",
+                    xMeaning: "",
+                    xValueType: "",
+                    yUnit: "",
+                    yNumericScale: "",
+                  }],
                   confidence: 0.9,
                 },
               }),
@@ -699,6 +774,17 @@ test("interpretWorkbookRegion requests a concise structured region explanation",
   assert.equal(result.summary.length, 2);
   assert.equal(result.interpretation.experimentAxis, "rows");
   assert.equal("experimentLabel" in result.interpretation, false);
+  assert.deepEqual(result.interpretation.seriesPatches, [{
+    seriesKey: "carbon_distribution",
+    label: "Overall carbon distribution",
+    orientation: "header_row_categories",
+    xHeaderRange: "B1:D1",
+    yValueRange: "B2:D2",
+    xMeaning: "carbon_number",
+    xValueType: "number",
+    yUnit: "% of feed carbon",
+    yNumericScale: "percent_points",
+  }], "empty series patch rows are dropped and blank properties omitted");
   assert.deepEqual(result.interpretation.fieldPatches, [{
     column: "B",
     semanticKey: "temperature",

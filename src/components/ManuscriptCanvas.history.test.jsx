@@ -523,6 +523,18 @@ describe("ManuscriptCanvas chart specs", () => {
     expect(onRequestChartWorkflow).toHaveBeenCalledWith("template", { x: 460, y: 360 });
   });
 
+  it("inherits accepted workbook plot axis titles for a new manuscript placement", async () => {
+    const chart = structuredClone(analysisChartSpecFixture);
+    chart.spec.plotly.layout = { xaxis: { title: { text: 'Mean time (min)' } }, yaxis: { title: 'Rate (mol/s)' } };
+    render(<Harness initialBlocks={[]} initialPages={[createPage('page-1')]} chartSpecs={[chart]}
+      chartSpecInsertRequest={{ chartSpecId: chart.id, requestId: 'linked-axis-insert' }} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Insert chart' }));
+    await waitFor(() => {
+      expect(readDocState().blocks[0].chartLayout.xAxisTitle.text).toBe('Mean time (min)');
+      expect(readDocState().blocks[0].chartLayout.yAxisTitle.text).toBe('Rate (mol/s)');
+    });
+  });
+
   it("loads complete analysis ChartSpec detail before preview and insertion", async () => {
     const summary = {
       ...analysisChartSpecFixture,

@@ -105,9 +105,12 @@ function compatibleFetch(fetchImpl: FetchLike, originalBody: unknown) {
     const body = originalBody instanceof FormData
       ? originalBody
       : serializedBody || undefined;
+    const headers = new Headers(request.headers);
+    // The final fetch serializes FormData again and must choose its own boundary.
+    if (originalBody instanceof FormData) headers.delete("content-type");
     const response = await fetchImpl(endpoint, {
       method: request.method,
-      headers: Object.fromEntries(request.headers.entries()),
+      headers: Object.fromEntries(headers.entries()),
       ...(body !== undefined ? { body } : {}),
       signal: request.signal,
       credentials: request.credentials || "include",
@@ -156,7 +159,7 @@ export async function apiV1Request<
     : null;
   const sessionExpired = result.response.status === 401 && !path.startsWith("/api/v1/auth/");
   const scientificRoute = !path.includes("member-access") && !path.includes("access-grants")
-    && /^\/api\/v1\/(projects|analysis-|workbook-review-sessions|source-documents|chart-specs|manuscripts|agent-runs)/.test(path);
+    && /^\/api\/v1\/(projects|analysis-|workbook-review-sessions|source-documents|chart-specs|manuscripts|agent-runs|region-extraction-template|reusable-chart-template)/.test(path);
   const lostProject = scientificRoute && (result.response.status === 403
     || (result.response.status === 404 && ["project_not_found", "lab_member_not_found"].includes(String(error?.code))));
   if (sessionExpired || lostProject) {
