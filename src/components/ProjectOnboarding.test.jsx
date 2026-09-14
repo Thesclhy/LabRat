@@ -196,7 +196,7 @@ describe("ProjectOnboarding", () => {
         step: "plan_generating",
         analysisThreadId: "thread_drafting",
       });
-      expect(screen.getByText("Generating a reviewable plan…")).toBeTruthy();
+      expect(screen.getByText("Drafting a plan for your Experiment Browser…")).toBeTruthy();
       await act(async () => { await vi.advanceTimersByTimeAsync(1_500); });
       expect(screen.getByRole("button", { name: "Accept plan" })).toBeTruthy();
       expect(readProjectOnboarding("project_1")).toMatchObject({
@@ -356,13 +356,13 @@ describe("ProjectOnboarding", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Review extracted experiments" }));
+    fireEvent.click(screen.getByRole("button", { name: "Draft Experiment Browser plan" }));
     expect(await screen.findByRole("button", { name: "Accept plan" })).toBeTruthy();
     expect(onRecoverExperimentPlan).toHaveBeenCalledTimes(1);
     expect(onCreateExperimentPlan).not.toHaveBeenCalled();
   });
 
-  it("lets the user cancel slow plan generation without losing confirmed regions", async () => {
+  it("lets the user cancel slow plan generation without losing confirmed interpretations", async () => {
     writeProjectOnboarding("project_1", {
       ...INITIAL_PROJECT_ONBOARDING,
       step: "region_review",
@@ -393,8 +393,8 @@ describe("ProjectOnboarding", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Review extracted experiments" }));
-    expect(await screen.findByText("Generating a reviewable plan…")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Draft Experiment Browser plan" }));
+    expect(await screen.findByText("Drafting a plan for your Experiment Browser…")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
 
     expect(await screen.findByText(/This page stopped waiting/i)).toBeTruthy();
@@ -434,7 +434,7 @@ describe("ProjectOnboarding", () => {
         />,
       );
 
-      fireEvent.click(screen.getByRole("button", { name: "Review extracted experiments" }));
+      fireEvent.click(screen.getByRole("button", { name: "Draft Experiment Browser plan" }));
       expect(screen.getByText("Preparing review plan · 0s")).toBeTruthy();
       await act(async () => {
         await vi.advanceTimersByTimeAsync(120_000);
@@ -521,7 +521,7 @@ describe("ProjectOnboarding", () => {
     fireEvent.change(fileInput, { target: { files: [file] } });
 
     await waitFor(() => expect(onUploadWorkbook).toHaveBeenCalledWith(file));
-    fireEvent.click(screen.getByRole("button", { name: "Review extracted experiments" }));
+    fireEvent.click(screen.getByRole("button", { name: "Draft Experiment Browser plan" }));
     expect(onCreateExperimentPlan).toHaveBeenCalledTimes(1);
     const acceptPlan = await screen.findByRole("button", { name: "Accept plan" });
     expect(loadAnalysisThread).not.toHaveBeenCalled();
@@ -677,7 +677,7 @@ describe("ProjectOnboarding", () => {
         onExit={onExit}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Review extracted experiments" }));
+    fireEvent.click(screen.getByRole("button", { name: "Draft Experiment Browser plan" }));
     fireEvent.click(await screen.findByRole("button", { name: "Report failed generation" }));
     expect(screen.getByText("Generation failed")).toBeTruthy();
     expect(screen.getByText(/too long and was cut off/i)).toBeTruthy();

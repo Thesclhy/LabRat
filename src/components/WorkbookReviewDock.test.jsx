@@ -107,8 +107,8 @@ describe("WorkbookReviewDock", () => {
     expect(within(card).getByText("E12:K14")).toBeTruthy();
     expect(within(card).getByText("Rates")).toBeTruthy();
     expect(within(card).getByRole("status").textContent).toMatch(/AI is understanding/i);
-    expect(within(card).queryByPlaceholderText("Describe what this region means or what should change...")).toBeNull();
-    expect(within(card).queryByRole("button", { name: "Confirm region Rates!E12:K14" })).toBeNull();
+    expect(within(card).queryByPlaceholderText("Correct the interpretation or describe what should change...")).toBeNull();
+    expect(within(card).queryByRole("button", { name: "Confirm interpretation of Rates!E12:K14" })).toBeNull();
 
     fireEvent.click(within(card).getByRole("button", { name: "Ignore region Rates!E12:K14" }));
     await waitFor(() => expect(onIgnoreRegion).toHaveBeenCalledWith("region_pending", {
@@ -152,7 +152,7 @@ describe("WorkbookReviewDock", () => {
     );
 
     const firstCard = screen.getByRole("article", { name: "Region Runs!A1:D3" });
-    fireEvent.change(within(firstCard).getByPlaceholderText("Describe what this region means or what should change..."), {
+    fireEvent.change(within(firstCard).getByPlaceholderText("Correct the interpretation or describe what should change..."), {
       target: { value: "Column D is liquid selectivity, not gas selectivity." },
     });
     fireEvent.click(within(firstCard).getByRole("button", { name: "Submit revision for Runs!A1:D3" }));
@@ -162,7 +162,7 @@ describe("WorkbookReviewDock", () => {
       previousRevisionId: "revision_1",
       expectedRegionVersion: 2,
     }));
-    expect(within(firstCard).getByPlaceholderText("Describe what this region means or what should change...").value).toBe("");
+    expect(within(firstCard).getByPlaceholderText("Correct the interpretation or describe what should change...").value).toBe("");
   });
 
   it("confirms an exact current revision and disables an already accepted one", async () => {
@@ -176,12 +176,12 @@ describe("WorkbookReviewDock", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Confirm region Runs!A1:D3" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm interpretation of Runs!A1:D3" }));
     await waitFor(() => expect(onConfirmRegion).toHaveBeenCalledWith("region_1", {
       revisionId: "revision_1",
       expectedRegionVersion: 2,
     }));
-    expect(screen.getByRole("button", { name: "Region Runs!F1:H5 confirmed" }).disabled).toBe(true);
+    expect(screen.getByRole("button", { name: "Interpretation of Runs!F1:H5 confirmed" }).disabled).toBe(true);
   });
 
   it("keeps ignore and logical delete scoped to one region", async () => {
@@ -222,7 +222,7 @@ describe("WorkbookReviewDock", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Review extracted experiments" }));
+    fireEvent.click(screen.getByRole("button", { name: "Draft Experiment Browser plan" }));
     expect(onReviewExtractedExperiments).toHaveBeenCalledTimes(1);
   });
 

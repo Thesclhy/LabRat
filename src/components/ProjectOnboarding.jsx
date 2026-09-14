@@ -298,7 +298,7 @@ export function ProjectOnboarding({
         if (!revision?.id && PLAN_DRAFTING_STATUSES.has(thread.status)) {
           setAnalysisFlow({
             loading: false,
-            error: "The saved server draft became stale before producing a plan. Your confirmed regions are safe; start a new attempt.",
+            error: "The saved server draft became stale before producing a plan. Your confirmed interpretations are safe; start a new attempt.",
             thread,
             revision: null,
           });
@@ -606,7 +606,7 @@ export function ProjectOnboarding({
         }
       }
       const message = abortReason === "timeout"
-        ? "This page stopped waiting after two minutes. The server may still finish the plan; your confirmed regions are safe, and retry will check the server first."
+        ? "This page stopped waiting after two minutes. The server may still finish the plan; your confirmed interpretations are safe, and retry will check the server first."
         : abortReason === "cancelled"
           ? "This page stopped waiting. The server may still finish the plan; retry will reopen it instead of starting a duplicate."
           : error?.message || String(error);
@@ -837,7 +837,7 @@ export function ProjectOnboarding({
 
           {["region_review", "plan_generating"].includes(state.step) && (
             <OnboardingMessage>
-              <p>I found the main sections of {state.workbookFileName || "your workbook"}. Confirm what each region means before I prepare the Experiment Browser plan.</p>
+              <p>I found the main sections of {state.workbookFileName || "your workbook"}. Confirm my interpretation of each region, then I’ll draft your Experiment Browser plan.</p>
             </OnboardingMessage>
           )}
 
@@ -869,7 +869,7 @@ export function ProjectOnboarding({
           {state.step === "plan_generating" && analysisFlow.loading && (
             <OnboardingMessage>
               <p>I’m using the confirmed workbook evidence to prepare an Experiment Browser plan.</p>
-              <div className="project-onboarding-processing"><span /> Generating a reviewable plan…</div>
+              <div className="project-onboarding-processing"><span /> Drafting a plan for your Experiment Browser…</div>
               <div className="project-onboarding-plan-status" role="status" aria-live="polite">
                 <small>{planGenerationElapsed}s elapsed</small>
                 <button type="button" className="project-onboarding-secondary" onClick={cancelExperimentPlan}>Stop waiting</button>
@@ -887,7 +887,7 @@ export function ProjectOnboarding({
           {state.step === "plan_generating" && !analysisFlow.loading && !planRecoveryChecking && !analysisFlow.thread && (
             <OnboardingMessage>
               <p><strong>Plan generation was interrupted.</strong></p>
-              <p>Your workbook and confirmed regions are safe. LabRat will check the server before starting another plan.</p>
+              <p>Your workbook and confirmed interpretations are safe. LabRat will check the server before starting another plan.</p>
               <button type="button" className="project-onboarding-primary" onClick={createExperimentPlan}>
                 Try generating the plan again
               </button>
@@ -984,7 +984,7 @@ export function ProjectOnboarding({
             <OnboardingMessage>
               <p><strong>Experiment Browser generation failed.</strong></p>
               <p>{state.generationError || "LabRat could not create a reviewable preview from this attempt."}</p>
-              <p>Your workbook, confirmed region, accepted plan, and onboarding answers are still saved.</p>
+              <p>Your workbook, confirmed interpretations, accepted plan, and onboarding answers are still saved.</p>
               <button type="button" className="project-onboarding-secondary" onClick={pauseOnboarding}>Quit for now</button>
             </OnboardingMessage>
           )}

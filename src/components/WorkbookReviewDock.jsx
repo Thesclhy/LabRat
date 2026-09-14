@@ -12,7 +12,7 @@ function statusLabel(region) {
   if (region?.disposition === "ignored") return "Ignored";
   if (region?.reviewStatus === "interpreting") return "Interpreting";
   if (region?.reviewStatus === "interpretation_failed") return "Needs retry";
-  if (region?.acceptedRevisionId === region?.currentRevisionId && region?.acceptedRevisionId) return "Confirmed";
+  if (region?.acceptedRevisionId === region?.currentRevisionId && region?.acceptedRevisionId) return "Interpretation confirmed";
   if (region?.acceptedRevisionId) return "New revision";
   return "Review";
 }
@@ -103,7 +103,7 @@ function RegionReviewCard({
   };
 
   const deleteRegion = () => {
-    if (hasAcceptedRevision && !window.confirm(`Delete the confirmed region ${label}? Existing source history and downstream artifacts will be retained.`)) {
+    if (hasAcceptedRevision && !window.confirm(`Delete region ${label}? Its confirmed interpretation, source history, and downstream artifacts will be retained.`)) {
       return;
     }
     run("delete", () => onDelete?.(region.id, {
@@ -225,7 +225,7 @@ function RegionReviewCard({
                 className="workbook-region-feedback"
                 value={feedback}
                 onChange={(event) => setFeedback(event.target.value)}
-                placeholder="Describe what this region means or what should change..."
+                placeholder="Correct the interpretation or describe what should change..."
                 aria-label={`Feedback for ${label}`}
                 rows={3}
               />
@@ -245,14 +245,14 @@ function RegionReviewCard({
                 <button
                   type="button"
                   className="primary"
-                  aria-label={confirmed ? `Region ${label} confirmed` : `Confirm region ${label}`}
+                  aria-label={confirmed ? `Interpretation of ${label} confirmed` : `Confirm interpretation of ${label}`}
                   disabled={busy || confirmed || !revision || blockers.length > 0 || !onConfirm}
                   onClick={() => run("confirm", () => onConfirm(region.id, {
                     revisionId: revision.id,
                     expectedRegionVersion: region.version,
                   }))}
                 >
-                  {pendingAction === "confirm" ? "Confirming..." : confirmed ? "Confirmed" : "Confirm region"}
+                  {pendingAction === "confirm" ? "Confirming..." : confirmed ? "Confirmed" : "Confirm interpretation"}
                 </button>
               </div>
             </>
@@ -435,9 +435,9 @@ export function WorkbookReviewDock({
 
       {acceptedCount > 0 && onReviewExtractedExperiments && (
         <div className="workbook-review-next-step">
-          <span>{acceptedCount} confirmed region{acceptedCount === 1 ? "" : "s"}</span>
+          <span>{acceptedCount} of {regions.length} interpretation{regions.length === 1 ? "" : "s"} confirmed</span>
           <button type="button" className="primary" onClick={onReviewExtractedExperiments}>
-            Review extracted experiments
+            Draft Experiment Browser plan
           </button>
         </div>
       )}
