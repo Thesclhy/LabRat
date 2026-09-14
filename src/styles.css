@@ -10824,7 +10824,7 @@ tbody tr:hover {
 .project-onboarding-composer {
   display: grid;
   width: min(100%, 1200px);
-  grid-template-columns: minmax(0, 1fr) 40px;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   align-items: end;
   margin: 0 auto;
@@ -10855,7 +10855,32 @@ tbody tr:hover {
   outline: none;
 }
 
-.project-onboarding-composer button {
+.project-onboarding-composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.project-onboarding-skip {
+  border: 1px solid var(--color-slate-300);
+  border-radius: 999px;
+  background: var(--color-surface);
+  padding: 7px 12px;
+  color: var(--color-slate-600);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.project-onboarding-skip:hover,
+.project-onboarding-skip:focus-visible {
+  border-color: #60a5fa;
+  background: #f8fbff;
+  outline: none;
+}
+
+.project-onboarding-composer-send {
   display: grid;
   width: 40px;
   height: 40px;
@@ -10868,9 +10893,15 @@ tbody tr:hover {
   cursor: pointer;
 }
 
-.project-onboarding-composer button:disabled {
+.project-onboarding-composer-send:disabled {
   cursor: default;
   opacity: 0.4;
+}
+
+.project-onboarding-hint {
+  margin-top: 8px;
+  color: var(--color-text-muted);
+  font-size: 12px;
 }
 
 @media (max-width: 640px) {

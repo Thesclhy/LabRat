@@ -4,6 +4,7 @@ import { WorkbookReviewDock } from "./WorkbookReviewDock.jsx";
 import { getAnalysisThread } from "../data/analysisApi.js";
 import {
   INITIAL_PROJECT_ONBOARDING,
+  ONBOARDING_CONTEXT_QUESTIONS,
   readProjectOnboarding,
   writeProjectOnboarding,
 } from "../data/projectOnboardingState.js";
@@ -46,8 +47,7 @@ const PROGRESS_BY_STEP = {
   region_review: 54,
   plan_generating: 64,
   plan_review: 72,
-  workflow: 78,
-  analysis: 84,
+  context: 80,
   waiting_result: 86,
   result_review: 90,
   preview: 92,
@@ -57,6 +57,43 @@ const PROGRESS_BY_STEP = {
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
+}
+
+function contextQuestionAt(index) {
+  return ONBOARDING_CONTEXT_QUESTIONS[index] || null;
+}
+
+function isContextChainStart(index) {
+  const item = contextQuestionAt(index);
+  if (!item) return false;
+  return ONBOARDING_CONTEXT_QUESTIONS.findIndex((candidate) => candidate.chain === item.chain) === index;
+}
+
+function hasContextAnswer(answers, id) {
+  return Object.prototype.hasOwnProperty.call(answers || {}, id);
+}
+
+// Records one context answer ("" means skipped) and decides where the
+// conversation goes next: the next question, the rest of the chain skipped,
+// the waiting state once every question is done, or straight to the result
+// review when the preview finished while the user was answering.
+function contextAnswerPatch(current, answerText, { skipChain = false } = {}) {
+  const item = contextQuestionAt(current.contextIndex);
+  if (!item) return {};
+  const contextAnswers = { ...(current.contextAnswers || {}), [item.id]: answerText };
+  let contextIndex = current.contextIndex + 1;
+  if (skipChain) {
+    while (contextIndex < ONBOARDING_CONTEXT_QUESTIONS.length && ONBOARDING_CONTEXT_QUESTIONS[contextIndex].chain === item.chain) {
+      contextIndex += 1;
+    }
+  }
+  if (["ready", "error"].includes(current.generationStatus)) {
+    return { contextAnswers, contextIndex, step: "result_review" };
+  }
+  if (contextIndex >= ONBOARDING_CONTEXT_QUESTIONS.length) {
+    return { contextAnswers, contextIndex, step: "waiting_result" };
+  }
+  return { contextAnswers, contextIndex };
 }
 
 function planFailureMessage(response) {
@@ -492,20 +529,11 @@ export function ProjectOnboarding({
     const answer = input.trim();
     if (!answer || assistantThinking) return;
     setInput("");
-    if (state.step === "workflow") {
+    if (state.step === "context") {
+      const questionId = contextQuestionAt(state.contextIndex)?.id || "";
       respondAfterThinking(
-        { kind: "workflow", text: answer },
-        () => updateState({ experimentalWorkflow: answer, step: "analysis" }),
-      );
-      return;
-    }
-    if (state.step === "analysis") {
-      respondAfterThinking(
-        { kind: "analysis", text: answer },
-        () => updateState((current) => ({
-          dataAnalysisProcess: answer,
-          step: ["ready", "error"].includes(current.generationStatus) ? "result_review" : "waiting_result",
-        })),
+        { kind: "context", questionId, text: answer },
+        () => updateState((current) => contextAnswerPatch(current, answer)),
       );
       return;
     }
@@ -518,6 +546,17 @@ export function ProjectOnboarding({
         },
       );
     }
+  };
+
+  const skipContextQuestion = () => {
+    if (state.step !== "context" || assistantThinking) return;
+    const questionId = contextQuestionAt(state.contextIndex)?.id || "";
+    const skipChain = isContextChainStart(state.contextIndex);
+    setInput("");
+    respondAfterThinking(
+      { kind: "context", questionId, text: "" },
+      () => updateState((current) => contextAnswerPatch(current, "", { skipChain })),
+    );
   };
 
   const createExperimentPlan = async () => {
@@ -673,7 +712,7 @@ export function ProjectOnboarding({
       if (workflow?.revision?.status === "accepted" && workflow?.run?.id) {
         if (current.generationStatus !== "ready") patch.generationStatus = workflow.previewReady ? "ready" : "working";
         if (["queued", "running"].includes(workflow?.run?.status)) patch.generationError = "";
-        if (["plan_review", "plan_generating"].includes(current.step)) patch.step = "workflow";
+        if (["plan_review", "plan_generating"].includes(current.step)) patch.step = "context";
       }
       if (workflow?.previewReady) {
         patch.generationStatus = "ready";
@@ -711,12 +750,11 @@ export function ProjectOnboarding({
     onExit?.();
   };
 
-  const showComposer = ["workflow", "analysis", "correction"].includes(state.step);
-  const placeholder = state.step === "workflow"
-    ? "Describe your experimental workflow..."
-    : state.step === "analysis"
-      ? "Describe how you analyze your data..."
-      : "Describe what looks wrong and what should be corrected...";
+  const showComposer = ["context", "correction"].includes(state.step);
+  const placeholder = state.step === "correction"
+    ? "Describe what looks wrong and what should be corrected..."
+    : "";
+  const contextStageVisible = ["context", "waiting_result", "result_review"].includes(state.step);
   const planGenerationWorking = state.step === "plan_generating" && analysisFlow.loading;
   const planGenerationStatusVisible = planGenerationWorking || planRecoveryChecking;
   const planReviewMissing = state.step === "plan_review"
@@ -940,34 +978,37 @@ export function ProjectOnboarding({
             </div>
           )}
 
-          {["workflow", "analysis", "waiting_result", "result_review"].includes(state.step) && (
+          {contextStageVisible && (
             <OnboardingMessage>
               <p>Plan accepted. I’m now creating your Experiment Browser preview, and it may take a little while.</p>
-              <p>While I work, tell me more about your project. What does a typical experimental workflow look like—from preparing materials and setting up the reactor through reaction time, sampling, and data collection? Include details such as the reactor type, operating conditions, reaction duration, and your usual experimental routine.</p>
-              <p>The more detail you share about your experimental procedure, the more helpful LabRat can become in the future—for example, when diagnosing unusual data or checking calculations.</p>
+              <p>While I work, a few quick questions about your project. Skip any you like.</p>
             </OnboardingMessage>
           )}
 
-          {pendingAnswer?.kind === "workflow" && (
-            <OnboardingMessage role="user"><p>{pendingAnswer.text}</p></OnboardingMessage>
-          )}
-
-          {state.experimentalWorkflow && (
-            <>
-              <OnboardingMessage role="user"><p>{state.experimentalWorkflow}</p></OnboardingMessage>
-              <OnboardingMessage>
-                <p>Got it. Now tell me about your data-analysis process. How do you turn raw measurements into the final values you use?</p>
-                <p>Include details such as the software or spreadsheets you use, calculations, data cleaning or exclusions, unit conversions, quality checks, and how you prepare plots or summary tables.</p>
-                <p>This context does not change the current import yet, but it will help future LabRat versions diagnose data problems, verify calculations, and suggest more useful analyses.</p>
-              </OnboardingMessage>
-            </>
-          )}
-
-          {pendingAnswer?.kind === "analysis" && (
-            <OnboardingMessage role="user"><p>{pendingAnswer.text}</p></OnboardingMessage>
-          )}
-
-          {state.dataAnalysisProcess && <OnboardingMessage role="user"><p>{state.dataAnalysisProcess}</p></OnboardingMessage>}
+          {contextStageVisible && ONBOARDING_CONTEXT_QUESTIONS.map((item, index) => {
+            const answered = hasContextAnswer(state.contextAnswers, item.id);
+            const isCurrent = state.step === "context" && index === state.contextIndex;
+            if (!answered && !isCurrent) return null;
+            const previous = index > 0 ? ONBOARDING_CONTEXT_QUESTIONS[index - 1] : null;
+            const acknowledge = previous && (state.contextAnswers?.[previous.id] || "").trim() ? "Got it. " : "";
+            const pending = pendingAnswer?.kind === "context" && pendingAnswer.questionId === item.id;
+            return (
+              <React.Fragment key={item.id}>
+                <OnboardingMessage>
+                  <p>{acknowledge}{item.question}</p>
+                  {isCurrent && !pending && state.generationStatus === "ready" && (
+                    <p className="project-onboarding-hint">Your preview is ready. Answer or skip this question to open it.</p>
+                  )}
+                </OnboardingMessage>
+                {pending && (
+                  <OnboardingMessage role="user"><p>{pendingAnswer.text || "Skipped"}</p></OnboardingMessage>
+                )}
+                {answered && (
+                  <OnboardingMessage role="user"><p>{state.contextAnswers[item.id] || "Skipped"}</p></OnboardingMessage>
+                )}
+              </React.Fragment>
+            );
+          })}
 
           {state.step === "waiting_result" && (
             <OnboardingMessage>
@@ -1060,9 +1101,15 @@ export function ProjectOnboarding({
                 }
               }}
               placeholder={placeholder}
+              aria-label={state.step === "context" ? "Your answer" : "Correction request"}
               autoFocus
             />
-            <button type="button" disabled={!input.trim()} onClick={submitTextAnswer} aria-label="Send onboarding answer">↑</button>
+            <div className="project-onboarding-composer-actions">
+              {state.step === "context" && (
+                <button type="button" className="project-onboarding-skip" onClick={skipContextQuestion}>Skip</button>
+              )}
+              <button type="button" className="project-onboarding-composer-send" disabled={!input.trim()} onClick={submitTextAnswer} aria-label="Send onboarding answer">↑</button>
+            </div>
           </div>
         </div>
       )}

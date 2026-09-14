@@ -528,17 +528,25 @@ describe("ProjectOnboarding", () => {
     fireEvent.click(acceptPlan);
 
     expect(screen.getByText("Generating your Experiment Browser preview…")).toBeTruthy();
-    const workflowInput = screen.getByPlaceholderText("Describe your experimental workflow...");
-    fireEvent.change(workflowInput, { target: { value: "We run batch reactions and record each experiment in one row." } });
+    expect(screen.getByText("In one sentence, what is the focus of this project?")).toBeTruthy();
+    expect(screen.queryByText("What does a typical experiment routine look like?")).toBeNull();
+    const focusInput = screen.getByRole("textbox", { name: "Your answer" });
+    expect(focusInput.getAttribute("placeholder")).toBe("");
+    fireEvent.change(focusInput, { target: { value: "We run batch reactions and record each experiment in one row." } });
     fireEvent.click(screen.getByRole("button", { name: "Send onboarding answer" }));
 
-    const pendingWorkflow = screen.getByText("We run batch reactions and record each experiment in one row.");
-    expect(pendingWorkflow.closest(".project-onboarding-message")?.classList.contains("user")).toBe(true);
-    const analysisInput = await screen.findByPlaceholderText("Describe how you analyze your data...");
-    fireEvent.change(analysisInput, { target: { value: "We calculate conversion and selectivity in Excel." } });
+    const pendingFocus = screen.getByText("We run batch reactions and record each experiment in one row.");
+    expect(pendingFocus.closest(".project-onboarding-message")?.classList.contains("user")).toBe(true);
+    expect(await screen.findByText("Got it. What does a typical experiment routine look like?")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Skip" }));
+    expect(await screen.findByText("Which parameters do you measure, and which matter most?")).toBeTruthy();
+    fireEvent.change(screen.getByRole("textbox", { name: "Your answer" }), { target: { value: "Conversion and selectivity." } });
     fireEvent.click(screen.getByRole("button", { name: "Send onboarding answer" }));
+    expect(await screen.findByText("Got it. Which instruments collect your data?")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Skip" }));
 
     expect(await screen.findByText(/still validating the Experiment Browser preview/i)).toBeTruthy();
+    expect(screen.queryByText(/How do you turn the raw data/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Finish preview", hidden: true }));
     expect(screen.getByText("Preview ready")).toBeTruthy();
     expect(screen.getByText(/Perfect—the preview is ready/i)).toBeTruthy();
@@ -546,12 +554,59 @@ describe("ProjectOnboarding", () => {
     const stored = readProjectOnboarding("project_1");
     expect(stored.projectStage).toBe("established");
     expect(stored.masterTableStatus).toBe("yes");
-    expect(stored.experimentalWorkflow).toContain("batch reactions");
-    expect(stored.dataAnalysisProcess).toContain("conversion");
+    expect(stored.contextAnswers.project_focus).toContain("batch reactions");
+    expect(stored.contextAnswers.experiment_routine).toBe("");
+    expect(stored.contextAnswers.measured_parameters).toBe("Conversion and selectivity.");
+    expect(stored.contextAnswers.instruments).toBe("");
+    expect(stored.contextAnswers).not.toHaveProperty("raw_data_processing");
     expect(stored.workbookReviewSessionId).toBe("session_1");
     expect(stored.analysisThreadId).toBe("thread_1");
     expect(stored.analysisRunId).toBe("run_1");
     expect(stored.analysisResultId).toBe("result_1");
+  });
+
+  it("opens the result review after the current answer once the preview is ready mid-chain", async () => {
+    writeProjectOnboarding("project_1", {
+      ...INITIAL_PROJECT_ONBOARDING,
+      step: "context",
+      contextIndex: 1,
+      contextAnswers: { project_focus: "Catalyst screening." },
+      workbookStatus: "ready",
+      generationStatus: "ready",
+    });
+
+    render(<ProjectOnboarding projectId="project_1" projectState={baseProjectState} />);
+
+    expect(screen.getByText("Got it. What does a typical experiment routine look like?")).toBeTruthy();
+    expect(screen.getByText(/Your preview is ready\. Answer or skip/)).toBeTruthy();
+    fireEvent.change(screen.getByRole("textbox", { name: "Your answer" }), { target: { value: "Load, heat, sample." } });
+    fireEvent.click(screen.getByRole("button", { name: "Send onboarding answer" }));
+
+    expect(await screen.findByText(/Perfect—the preview is ready/i)).toBeTruthy();
+    expect(screen.queryByText("Which parameters do you measure, and which matter most?")).toBeNull();
+    const stored = readProjectOnboarding("project_1");
+    expect(stored.step).toBe("result_review");
+    expect(stored.contextAnswers.experiment_routine).toBe("Load, heat, sample.");
+  });
+
+  it("loads a version 3 session with essay answers into the question map", () => {
+    window.localStorage.setItem(projectOnboardingStorageKey("project_1"), JSON.stringify({
+      schemaVersion: 3,
+      status: "in_progress",
+      step: "analysis",
+      projectStage: "established",
+      masterTableStatus: "yes",
+      experimentalWorkflow: "Batch reactor runs.",
+      dataAnalysisProcess: "",
+      workbookStatus: "ready",
+      generationStatus: "working",
+    }));
+
+    render(<ProjectOnboarding projectId="project_1" projectState={baseProjectState} />);
+
+    expect(screen.getByText("Batch reactor runs.")).toBeTruthy();
+    expect(screen.getByText("Which instruments collect your data?")).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Your answer" })).toBeTruthy();
   });
 
   it("offers the published Experiment Browser as an explicit destination", () => {

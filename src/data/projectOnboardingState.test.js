@@ -47,6 +47,33 @@ describe("project onboarding state", () => {
     expect(shouldShowProjectOnboarding("project_1", projectState)).toBe(false);
   });
 
+  it("migrates version 3 essay answers and steps onto the context questions", () => {
+    window.localStorage.setItem(projectOnboardingStorageKey("project_1"), JSON.stringify({
+      schemaVersion: 3,
+      status: "in_progress",
+      step: "workflow",
+      experimentalWorkflow: "Batch reactor runs.",
+      dataAnalysisProcess: "Peak areas to mol%.",
+    }));
+
+    const migrated = readProjectOnboarding("project_1");
+    expect(migrated.schemaVersion).toBe(4);
+    expect(migrated.step).toBe("context");
+    expect(migrated.contextIndex).toBe(1);
+    expect(migrated.contextAnswers).toEqual({
+      project_focus: "Batch reactor runs.",
+      instruments: "Peak areas to mol%.",
+    });
+    expect(migrated).not.toHaveProperty("experimentalWorkflow");
+    expect(migrated.workbookRounds).toEqual([]);
+
+    writeProjectOnboarding("project_1", { step: "analysis", dataAnalysisProcess: "" });
+    const rewritten = readProjectOnboarding("project_1");
+    expect(rewritten.step).toBe("context");
+    expect(rewritten.contextIndex).toBe(3);
+    expect(rewritten.contextAnswers).toEqual({});
+  });
+
   it("stores independent progress for each project", () => {
     writeProjectOnboarding("project_alpha", { projectStage: "early", step: "master_table" });
     writeProjectOnboarding("project_beta", { projectStage: "mature", step: "upload" });
