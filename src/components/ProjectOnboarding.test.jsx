@@ -23,21 +23,24 @@ describe("ProjectOnboarding", () => {
     window.localStorage.removeItem(projectOnboardingStorageKey("project_1"));
   });
 
-  it("keeps the viewport-height conversation pane as the scroll owner", () => {
+  it("keeps the full-page stream as the only scroll owner", () => {
     const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
-    const messagesRule = css.match(/\.project-onboarding-messages\s*\{([^}]*)\}/)?.[1] || "";
-    const reviewPageRule = css.match(/\.project-onboarding-page\.has-review-surface \.project-onboarding-chat\s*\{([^}]*)\}/)?.[1] || "";
+    const pageRule = css.match(/\.project-onboarding-page\s*\{([^}]*)\}/)?.[1] || "";
+    const streamRule = css.match(/\.project-onboarding-stream\s*\{([^}]*)\}/)?.[1] || "";
+    const embeddedDockRule = css.match(/\.project-onboarding-inline-review \.workbook-review-chat\s*\{([^}]*)\}/)?.[1] || "";
     const embeddedWorkspaceRule = css.match(/\.analysis-review-workspace\.is-onboarding\s*\{([^}]*)\}/)?.[1] || "";
 
-    expect(messagesRule).toMatch(/min-height:\s*0/);
-    expect(messagesRule).toMatch(/overflow-y:\s*auto/);
-    expect(reviewPageRule).toMatch(/height:\s*auto/);
-    expect(reviewPageRule).toMatch(/overflow:\s*visible/);
+    expect(pageRule).toMatch(/height:\s*100dvh/);
+    expect(pageRule).toMatch(/flex-direction:\s*column/);
+    expect(streamRule).toMatch(/min-height:\s*0/);
+    expect(streamRule).toMatch(/overflow-y:\s*auto/);
+    expect(embeddedDockRule).toMatch(/max-height:\s*none/);
+    expect(embeddedDockRule).toMatch(/overflow:\s*visible/);
     expect(embeddedWorkspaceRule).toMatch(/display:\s*grid/);
     expect(embeddedWorkspaceRule).toMatch(/overflow:\s*hidden/);
   });
 
-  it("uses ordinary page scrolling while a review surface is visible", () => {
+  it("renders a review surface as a wide block inside the stream", () => {
     writeProjectOnboarding("project_1", {
       ...INITIAL_PROJECT_ONBOARDING,
       step: "plan_review",
@@ -66,7 +69,8 @@ describe("ProjectOnboarding", () => {
     );
 
     return screen.findByRole("button", { name: "Accept plan" }).then((button) => {
-      expect(button.closest(".project-onboarding-page.has-review-surface")).toBeTruthy();
+      expect(button.closest(".project-onboarding-wide")).toBeTruthy();
+      expect(button.closest(".project-onboarding-stream")).toBeTruthy();
     });
   });
 

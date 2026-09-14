@@ -10311,25 +10311,26 @@ tbody tr:hover {
 }
 
 .project-onboarding-page {
-  min-height: 100vh;
-  background:
-    radial-gradient(circle at 50% -10%, rgba(37, 99, 235, 0.11), transparent 38rem),
-    #f5f7fb;
+  display: flex;
+  height: 100dvh;
+  min-height: 0;
+  flex-direction: column;
+  background: var(--color-bg-app);
   color: #172033;
 }
 
 .project-onboarding-header {
-  position: sticky;
-  top: 0;
+  position: relative;
   z-index: 5;
   display: flex;
-  min-height: 68px;
+  flex: 0 0 auto;
+  min-height: 60px;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid rgba(203, 213, 225, 0.8);
-  background: rgba(255, 255, 255, 0.9);
-  padding: 0 28px;
-  backdrop-filter: blur(12px);
+  gap: 16px;
+  border-bottom: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  padding: 0 clamp(16px, 4vw, 28px);
 }
 
 .project-onboarding-brand {
@@ -10346,59 +10347,71 @@ tbody tr:hover {
 }
 
 .project-onboarding-brand img {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   object-fit: contain;
 }
 
-.project-onboarding-header > div {
+.project-onboarding-header-tools {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 16px;
-  color: #64748b;
+  color: var(--color-text-muted);
   font-size: 13px;
 }
 
-.project-onboarding-header > div button {
+.project-onboarding-project-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.project-onboarding-header-tools > button {
+  flex: 0 0 auto;
   border: 0;
   background: transparent;
-  color: #64748b;
+  color: var(--color-text-muted);
   font: inherit;
   text-decoration: underline;
   text-underline-offset: 3px;
   cursor: pointer;
 }
 
-.project-onboarding-chat {
-  position: relative;
-  display: flex;
-  width: min(900px, calc(100% - 32px));
-  height: calc(100dvh - 104px);
-  min-height: 0;
-  flex-direction: column;
-  margin: 20px auto 16px;
-  overflow: hidden;
-  border: 1px solid #dbe3ef;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 22px 60px rgba(51, 65, 85, 0.12);
+.project-onboarding-progress {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 3px;
+  background: var(--color-border-soft);
+}
+
+.project-onboarding-progress span {
+  display: block;
+  height: 100%;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(90deg, var(--color-accent), #4f8cf7);
+  transition: width 240ms ease;
 }
 
 .project-onboarding-generation-status {
-  position: fixed;
-  top: 82px;
-  right: 22px;
-  z-index: 20;
   display: inline-flex;
+  min-width: 0;
   align-items: center;
   gap: 8px;
-  border: 1px solid #dbe3ef;
+  border: 1px solid var(--color-border-strong);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.96);
-  padding: 7px 11px;
-  color: #475569;
+  background: var(--color-surface);
+  padding: 6px 11px;
+  color: var(--color-slate-600);
   font-size: 12px;
-  box-shadow: 0 5px 18px rgba(51, 65, 85, 0.1);
+}
+
+.project-onboarding-generation-status strong {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .project-onboarding-generation-status.is-ready {
@@ -10407,55 +10420,48 @@ tbody tr:hover {
 }
 
 .project-onboarding-generation-status.is-error {
-  border-color: #fecaca;
-  color: #b91c1c;
+  border-color: var(--color-red-200);
+  color: var(--color-red-700);
 }
 
 .project-onboarding-status-spinner {
+  flex: 0 0 auto;
   width: 14px;
   height: 14px;
-  border: 2px solid #bfdbfe;
-  border-top-color: #2563eb;
+  border: 2px solid var(--color-blue-200);
+  border-top-color: var(--color-accent);
   border-radius: 50%;
   animation: project-onboarding-spin 800ms linear infinite;
 }
 
-.project-onboarding-progress {
-  height: 4px;
-  flex: 0 0 4px;
-  background: #e8edf5;
-}
-
-.project-onboarding-progress span {
-  display: block;
-  height: 100%;
-  border-radius: 0 4px 4px 0;
-  background: linear-gradient(90deg, #2563eb, #4f8cf7);
-  transition: width 240ms ease;
-}
-
-.project-onboarding-messages {
-  display: grid;
-  flex: 1;
+/* The stream is the only scroll owner on the page. */
+.project-onboarding-stream {
+  flex: 1 1 auto;
   min-height: 0;
-  align-content: start;
-  gap: 18px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 40px clamp(22px, 7vw, 76px);
   scroll-behavior: smooth;
   scrollbar-gutter: stable;
 }
 
-.project-onboarding-page.has-review-surface .project-onboarding-chat {
-  height: auto;
-  min-height: calc(100dvh - 104px);
-  overflow: visible;
+/* One wide column. Message rows span it so LabRat's avatar sits at the left
+   edge and the user's at the right; bubbles stay readable via max-width. */
+.project-onboarding-messages {
+  display: grid;
+  width: min(100%, 1200px);
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: start;
+  gap: 18px;
+  margin: 0 auto;
+  padding: 28px clamp(16px, 4vw, 40px) 40px;
 }
 
-.project-onboarding-page.has-review-surface .project-onboarding-messages {
-  flex: 0 0 auto;
-  overflow-y: visible;
+.project-onboarding-messages > * {
+  min-width: 0;
+}
+
+.project-onboarding-messages > .project-onboarding-wide {
+  width: 100%;
 }
 
 .project-onboarding-scroll-anchor {
@@ -10467,29 +10473,22 @@ tbody tr:hover {
 .project-onboarding-inline-review,
 .project-onboarding-analysis {
   min-width: 0;
-  width: 100%;
 }
 
 .project-onboarding-inline-review .workbook-review-chat {
   position: static;
-  max-height: min(720px, calc(100dvh - 150px));
-  overflow: hidden;
+  max-height: none;
+  overflow: visible;
   border-radius: 14px;
   box-shadow: 0 8px 24px rgba(51, 65, 85, 0.08);
-}
-
-.project-onboarding-inline-review .workbook-region-list {
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
 }
 
 .project-onboarding-analysis {
   order: 1;
   overflow: hidden;
-  border: 1px solid #dbe3ef;
+  border: 1px solid var(--color-border-strong);
   border-radius: 14px;
-  background: #fff;
+  background: var(--color-surface);
   box-shadow: 0 8px 24px rgba(51, 65, 85, 0.08);
 }
 
@@ -10504,7 +10503,7 @@ tbody tr:hover {
   justify-items: start;
   gap: 10px;
   padding: 28px;
-  color: #475569;
+  color: var(--color-slate-600);
 }
 
 .project-onboarding-plan-recovery strong,
@@ -10518,10 +10517,9 @@ tbody tr:hover {
   z-index: auto;
   display: grid;
   grid-template-rows: minmax(0, 1fr);
-  height: min(680px, calc(100dvh - 150px));
-  min-height: min(480px, calc(100dvh - 150px));
+  height: clamp(480px, calc(100dvh - 160px), 760px);
   overflow: hidden;
-  background: #fff;
+  background: var(--color-surface);
 }
 
 .analysis-review-workspace.is-onboarding > .analysis-review-header,
@@ -10547,7 +10545,7 @@ tbody tr:hover {
 .analysis-review-workspace.is-onboarding .analysis-review-stage {
   min-height: 360px;
   border-right: 0;
-  border-bottom: 1px solid #dbe3ef;
+  border-bottom: 1px solid var(--color-border-strong);
 }
 
 .analysis-review-workspace.is-onboarding .analysis-review-conversation {
@@ -10557,38 +10555,35 @@ tbody tr:hover {
 
 .project-onboarding-message {
   display: flex;
-  width: min(88%, 720px);
+  width: 100%;
   gap: 13px;
   align-items: start;
-  justify-self: start;
 }
 
 .project-onboarding-message.user {
-  width: min(76%, 620px);
   flex-direction: row-reverse;
-  justify-self: end;
-  margin-left: auto;
 }
 
 .project-onboarding-message > img,
 .project-onboarding-user-avatar {
   display: grid;
-  width: 42px;
-  height: 42px;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
   place-items: center;
   border-radius: 50%;
   object-fit: contain;
 }
 
 .project-onboarding-message > img {
-  border: 1px solid #dbeafe;
-  background: #eff6ff;
+  border: 1px solid var(--color-blue-100);
+  background: var(--color-blue-50);
   padding: 5px;
 }
 
 .project-onboarding-user-avatar {
   background: #e7ecf3;
-  color: #475569;
+  color: var(--color-slate-600);
   font-size: 10px;
   font-weight: 700;
 }
@@ -10605,7 +10600,7 @@ tbody tr:hover {
 .project-onboarding-message > div > strong {
   display: block;
   margin-bottom: 6px;
-  color: #64748b;
+  color: var(--color-text-muted);
   font-size: 11px;
   font-weight: 750;
   letter-spacing: 0.07em;
@@ -10614,19 +10609,19 @@ tbody tr:hover {
 
 .project-onboarding-message > div > div {
   width: fit-content;
-  max-width: 100%;
+  max-width: min(100%, 680px);
   border: 1px solid #e1e7f0;
   border-radius: 6px 18px 18px 18px;
-  background: #f8fafc;
+  background: var(--color-surface);
   padding: 14px 16px;
   line-height: 1.55;
 }
 
 .project-onboarding-message.user > div > div {
   margin-left: auto;
-  border-color: #bfdbfe;
+  border-color: var(--color-blue-200);
   border-radius: 18px 6px 18px 18px;
-  background: #eff6ff;
+  background: var(--color-blue-50);
   text-align: left;
 }
 
@@ -10648,11 +10643,11 @@ tbody tr:hover {
   display: grid;
   gap: 2px;
   width: 100%;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--color-slate-300);
   border-radius: 12px;
-  background: #fff;
+  background: var(--color-surface);
   padding: 12px 14px;
-  color: #1e293b;
+  color: var(--color-text);
   text-align: left;
   cursor: pointer;
 }
@@ -10670,7 +10665,7 @@ tbody tr:hover {
 }
 
 .project-onboarding-choices button span {
-  color: #64748b;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -10688,14 +10683,14 @@ tbody tr:hover {
 
 .project-onboarding-primary,
 .project-onboarding-upload {
-  border: 1px solid #2563eb;
-  background: #2563eb;
+  border: 1px solid var(--color-accent);
+  background: var(--color-accent);
   color: #fff;
 }
 
 .project-onboarding-secondary {
-  border: 1px solid #cbd5e1;
-  background: #fff;
+  border: 1px solid var(--color-slate-300);
+  background: var(--color-surface);
   color: #334155;
 }
 
@@ -10715,15 +10710,15 @@ tbody tr:hover {
   align-items: center;
   gap: 9px;
   margin-top: 12px;
-  color: #475569;
+  color: var(--color-slate-600);
   font-size: 13px;
 }
 
 .project-onboarding-processing span {
   width: 15px;
   height: 15px;
-  border: 2px solid #bfdbfe;
-  border-top-color: #2563eb;
+  border: 2px solid var(--color-blue-200);
+  border-top-color: var(--color-accent);
   border-radius: 50%;
   animation: project-onboarding-spin 800ms linear infinite;
 }
@@ -10737,7 +10732,7 @@ tbody tr:hover {
 }
 
 .project-onboarding-plan-status small {
-  color: #64748b;
+  color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -10758,7 +10753,7 @@ tbody tr:hover {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #64748b;
+  background: var(--color-text-muted);
   animation: project-onboarding-thinking 900ms ease-in-out infinite;
 }
 
@@ -10781,7 +10776,7 @@ tbody tr:hover {
 
 .project-onboarding-error {
   margin-top: 10px;
-  color: #b91c1c;
+  color: var(--color-red-700);
   font-size: 13px;
 }
 
@@ -10791,9 +10786,9 @@ tbody tr:hover {
 
 .analysis-retry-generation {
   width: fit-content;
-  border: 1px solid #2563eb;
+  border: 1px solid var(--color-accent);
   border-radius: 10px;
-  background: #2563eb;
+  background: var(--color-accent);
   padding: 10px 15px;
   color: #fff;
   font: inherit;
@@ -10807,40 +10802,67 @@ tbody tr:hover {
   opacity: 0.55;
 }
 
+/* Composer sits below the stream and fades the page into it. */
+.project-onboarding-composer-bar {
+  position: relative;
+  flex: 0 0 auto;
+  padding: 4px clamp(16px, 4vw, 40px) 18px;
+  background: var(--color-bg-app);
+}
+
+.project-onboarding-composer-bar::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  left: 0;
+  height: 28px;
+  background: linear-gradient(to bottom, rgba(246, 248, 251, 0), var(--color-bg-app));
+  pointer-events: none;
+}
+
 .project-onboarding-composer {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 42px;
+  width: min(100%, 1200px);
+  grid-template-columns: minmax(0, 1fr) 40px;
   gap: 10px;
   align-items: end;
-  border-top: 1px solid #e2e8f0;
-  background: #fff;
-  padding: 16px clamp(22px, 7vw, 76px);
+  margin: 0 auto;
+  border: 1px solid var(--color-slate-300);
+  border-radius: 18px;
+  background: var(--color-surface);
+  padding: 10px 10px 10px 16px;
+  box-shadow: 0 8px 24px rgba(51, 65, 85, 0.08);
+}
+
+.project-onboarding-composer:focus-within {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px var(--color-blue-100), 0 8px 24px rgba(51, 65, 85, 0.08);
 }
 
 .project-onboarding-composer textarea {
-  min-height: 54px;
-  max-height: 150px;
-  resize: vertical;
-  border: 1px solid #cbd5e1;
-  border-radius: 14px;
-  padding: 11px 13px;
+  min-height: 44px;
+  max-height: 160px;
+  resize: none;
+  border: 0;
+  padding: 10px 0;
+  background: transparent;
   font: inherit;
   line-height: 1.4;
 }
 
 .project-onboarding-composer textarea:focus {
-  border-color: #60a5fa;
-  outline: 3px solid #dbeafe;
+  outline: none;
 }
 
 .project-onboarding-composer button {
   display: grid;
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
   place-items: center;
   border: 0;
   border-radius: 50%;
-  background: #2563eb;
+  background: var(--color-accent);
   color: #fff;
   font-size: 20px;
   cursor: pointer;
@@ -10852,42 +10874,27 @@ tbody tr:hover {
 }
 
 @media (max-width: 640px) {
-  .project-onboarding-header {
-    padding: 0 16px;
-  }
-  .project-onboarding-header > div > span {
+  .project-onboarding-project-name,
+  .project-onboarding-generation-status strong {
     display: none;
   }
-  .project-onboarding-chat {
-    width: 100%;
-    height: calc(100dvh - 68px);
-    min-height: 0;
-    margin: 0;
-    border-width: 0;
-    border-radius: 0;
-  }
   .project-onboarding-generation-status {
-    top: 78px;
-    right: 12px;
-    max-width: calc(100vw - 24px);
+    padding: 6px;
   }
   .project-onboarding-messages {
-    padding: 26px 16px;
+    gap: 14px;
+    padding-top: 20px;
   }
   .project-onboarding-message {
-    width: 96%;
     gap: 9px;
-  }
-  .project-onboarding-message.user {
-    width: 88%;
   }
   .project-onboarding-message > img,
   .project-onboarding-user-avatar {
-    width: 34px;
-    height: 34px;
+    width: 32px;
+    height: 32px;
   }
-  .project-onboarding-composer {
-    padding: 12px 16px;
+  .project-onboarding-composer-bar {
+    padding-bottom: 12px;
   }
   .analysis-review-workspace.is-onboarding.has-result-stage .analysis-review-split {
     grid-template-rows: minmax(320px, auto) minmax(380px, auto);

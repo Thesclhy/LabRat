@@ -38,6 +38,23 @@ const PLAN_HYDRATION_POLL_MS = 1_500;
 const PLAN_DRAFT_STALE_MS = 6 * 60_000;
 const PLAN_DRAFTING_STATUSES = new Set(["planning", "retry_drafting", "plan_drafting"]);
 
+const PROGRESS_BY_STEP = {
+  welcome: 8,
+  project_stage: 18,
+  master_table: 30,
+  upload: 42,
+  region_review: 54,
+  plan_generating: 64,
+  plan_review: 72,
+  workflow: 78,
+  analysis: 84,
+  waiting_result: 86,
+  result_review: 90,
+  preview: 92,
+  correction: 94,
+  complete: 100,
+};
+
 function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -704,62 +721,44 @@ export function ProjectOnboarding({
   const planGenerationStatusVisible = planGenerationWorking || planRecoveryChecking;
   const planReviewMissing = state.step === "plan_review"
     && (!analysisFlow.thread?.id || !analysisFlow.revision?.id);
-  const reviewSurfaceVisible = ["plan_review", "result_review"].includes(state.step)
-    && Boolean(analysisFlow.thread?.id && analysisFlow.revision?.id);
+  const progressPercent = Math.min(100, PROGRESS_BY_STEP[state.step] || 8);
 
   return (
-    <main className={`project-onboarding-page${reviewSurfaceVisible ? " has-review-surface" : ""}`}>
+    <main className="project-onboarding-page">
       <header className="project-onboarding-header">
         <button type="button" className="project-onboarding-brand" onClick={onExit}>
           <img src={`${import.meta.env.BASE_URL}labrat-logo.png`} alt="" />
           <span>LabRat</span>
         </button>
-        <div>
-          <span>{projectState?.project?.name || "New project"}</span>
+        <div className="project-onboarding-header-tools">
+          {(planGenerationStatusVisible || ["working", "ready", "error"].includes(state.generationStatus)) && (
+            <div className={`project-onboarding-generation-status is-${planGenerationStatusVisible ? "working" : state.generationStatus}`} role="status" aria-live="polite">
+              {(planGenerationStatusVisible || state.generationStatus === "working") && <span className="project-onboarding-status-spinner" aria-hidden="true" />}
+              {state.generationStatus === "ready" && <span aria-hidden="true">✓</span>}
+              {!planGenerationStatusVisible && state.generationStatus === "error" && <span aria-hidden="true">!</span>}
+              <strong>
+                {planRecoveryChecking
+                  ? "Checking for your review plan…"
+                  : planGenerationWorking
+                  ? `Preparing review plan · ${planGenerationElapsed}s`
+                  : state.generationStatus === "working"
+                  ? "Generating your Experiment Browser preview…"
+                  : state.generationStatus === "ready"
+                    ? "Preview ready"
+                    : "Generation failed"}
+              </strong>
+            </div>
+          )}
+          <span className="project-onboarding-project-name">{projectState?.project?.name || "New project"}</span>
           <button type="button" onClick={skipOnboarding}>Skip onboarding</button>
+        </div>
+        <div className="project-onboarding-progress" aria-hidden="true">
+          <span style={{ width: `${progressPercent}%` }} />
         </div>
       </header>
 
-      <section className="project-onboarding-chat" aria-label="Project onboarding">
-        <div className="project-onboarding-progress">
-          <span style={{ width: `${Math.min(100, {
-            welcome: 8,
-            project_stage: 18,
-            master_table: 30,
-            upload: 42,
-            region_review: 54,
-            plan_generating: 64,
-            plan_review: 72,
-            workflow: 78,
-            analysis: 84,
-            waiting_result: 86,
-            result_review: 90,
-            preview: 92,
-            correction: 94,
-            complete: 100,
-          }[state.step] || 8)}%` }} />
-        </div>
-
-        {(planGenerationStatusVisible || ["working", "ready", "error"].includes(state.generationStatus)) && (
-          <div className={`project-onboarding-generation-status is-${planGenerationStatusVisible ? "working" : state.generationStatus}`} role="status" aria-live="polite">
-            {(planGenerationStatusVisible || state.generationStatus === "working") && <span className="project-onboarding-status-spinner" aria-hidden="true" />}
-            {state.generationStatus === "ready" && <span aria-hidden="true">✓</span>}
-            {!planGenerationStatusVisible && state.generationStatus === "error" && <span aria-hidden="true">!</span>}
-            <strong>
-              {planRecoveryChecking
-                ? "Checking for your review plan…"
-                : planGenerationWorking
-                ? `Preparing review plan · ${planGenerationElapsed}s`
-                : state.generationStatus === "working"
-                ? "Generating your Experiment Browser preview…"
-                : state.generationStatus === "ready"
-                  ? "Preview ready"
-                  : "Generation failed"}
-            </strong>
-          </div>
-        )}
-
-        <div className="project-onboarding-messages" ref={messagesRef}>
+      <section className="project-onboarding-stream" aria-label="Project onboarding" ref={messagesRef}>
+        <div className="project-onboarding-messages">
           <OnboardingMessage>
             <p>Hi, I’m LabRat, your AI research assistant.</p>
             <p>I can help you manage experimental data, create visualizations, and prepare research outputs. First, help me understand your project.</p>
@@ -843,7 +842,7 @@ export function ProjectOnboarding({
           )}
 
           {state.step === "region_review" && (
-            <div className="project-onboarding-inline-review">
+            <div className="project-onboarding-inline-review project-onboarding-wide">
               <WorkbookReviewDock
                 reviewState={{ ...reviewState, session: reviewState.session || currentSession }}
                 reviewRegions={activeRegions}
@@ -906,7 +905,7 @@ export function ProjectOnboarding({
           )}
 
           {planReviewMissing && (
-            <div className="project-onboarding-analysis">
+            <div className="project-onboarding-analysis project-onboarding-wide">
               <section className="project-onboarding-plan-recovery" aria-live="polite">
                 {analysisFlow.error ? (
                   <>
@@ -927,7 +926,7 @@ export function ProjectOnboarding({
           )}
 
           {analysisFlow.thread?.id && analysisFlow.revision?.id && (
-            <div className={`project-onboarding-analysis${["plan_review", "result_review"].includes(state.step) ? "" : " is-background"}`}>
+            <div className={`project-onboarding-analysis project-onboarding-wide${["plan_review", "result_review"].includes(state.step) ? "" : " is-background"}`}>
               <AnalysisReviewComponent
                 projectId={projectId}
                 thread={analysisFlow.thread}
@@ -1046,8 +1045,10 @@ export function ProjectOnboarding({
           )}
           <div className="project-onboarding-scroll-anchor" ref={latestContentRef} aria-hidden="true" />
         </div>
+      </section>
 
-        {showComposer && !assistantThinking && (
+      {showComposer && !assistantThinking && (
+        <div className="project-onboarding-composer-bar">
           <div className="project-onboarding-composer">
             <textarea
               value={input}
@@ -1063,8 +1064,8 @@ export function ProjectOnboarding({
             />
             <button type="button" disabled={!input.trim()} onClick={submitTextAnswer} aria-label="Send onboarding answer">↑</button>
           </div>
-        )}
-      </section>
+        </div>
+      )}
 
       <input ref={fileInputRef} type="file" accept=".xlsx,.xls" hidden onChange={onFileSelected} />
     </main>
