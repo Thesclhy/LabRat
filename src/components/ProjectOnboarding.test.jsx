@@ -835,6 +835,69 @@ describe("ProjectOnboarding", () => {
     expect(screen.queryByText("Do you have other workbooks to upload?")).toBeNull();
   });
 
+  it("offers a saved template after a batch uploads and applies it without teaching", async () => {
+    writeProjectOnboarding("project_1", {
+      ...INITIAL_PROJECT_ONBOARDING,
+      step: "batch_pick",
+      projectStage: "established",
+      masterTableStatus: "yes",
+      workbookRounds: [{ number: 1, workbookFileName: "Master.xlsx", workbookReviewSessionId: "session_master", publishedCount: 3 }],
+      publishedCountAtRoundStart: 3,
+    });
+    const onUploadBatchFile = vi.fn(async (file) => {
+      const n = file.name.includes("41") ? "41" : "42";
+      return {
+        response: { reviewRegions: [] },
+        session: { id: `session_${n}`, sourceDocumentId: `sd_${n}` },
+        sourceDocument: { id: `sd_${n}`, metadata: { workbookName: file.name } },
+        workbookReviewLink: { workbookReviewSessionId: `session_${n}`, sourceDocumentId: `sd_${n}`, workbookName: file.name, regionCount: 0 },
+      };
+    });
+    listExperimentBrowserRows.mockResolvedValue({ rows: [{ experimentId: "exp_41", label: "Exp41" }, { experimentId: "exp_42", label: "Exp42" }] });
+    matchServerRegionExtractionTemplate.mockResolvedValue({
+      templateName: "Reaction rate data",
+      templateVersionId: "tplv_1",
+      templateVersion: 1,
+      summary: { exact: 2 },
+      matches: [
+        { sourceDocumentId: "sd_41", status: "exact", eligibleForBatchConfirm: true, experimentLabel: "Exp41", labelSource: "filename", sheetName: "Sheet1", matchedRange: "P31:BA32" },
+        { sourceDocumentId: "sd_42", status: "exact", eligibleForBatchConfirm: true, experimentLabel: "Exp42", labelSource: "filename", sheetName: "Sheet1", matchedRange: "P31:BA32" },
+      ],
+    });
+    const onHydrateWorkbookReview = vi.fn(async () => ({}));
+
+    render(
+      <ProjectOnboarding
+        projectId="project_1"
+        projectState={{ ...baseProjectState, experimentSnapshotHeads: [{ id: "a" }, { id: "b" }, { id: "c" }] }}
+        onUploadBatchFile={onUploadBatchFile}
+        onRefreshProject={vi.fn(async () => ({}))}
+        onHydrateWorkbookReview={onHydrateWorkbookReview}
+        extractionTemplates={[{ id: "tpl_1", name: "Reaction rate data", status: "active", currentVersionId: "tplv_1", currentVersion: 1, sheetName: "Sheet1", anchorRange: "P31:BA32" }]}
+        renderWorkbookGrid={(dock) => <div data-testid="onboarding-grid">{dock}</div>}
+      />,
+    );
+
+    const files = [
+      new File(["a"], "Calculation Exp41.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
+      new File(["b"], "Calculation Exp42.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
+    ];
+    fireEvent.change(screen.getByLabelText("Choose per-experiment workbook files"), { target: { files } });
+
+    expect(await screen.findByText(/apply a saved template or teach a new one/)).toBeTruthy();
+    expect(screen.queryByTestId("onboarding-grid")).toBeNull();
+    expect(onHydrateWorkbookReview).not.toHaveBeenCalled();
+    expect(readProjectOnboarding("project_1").step).toBe("batch_template_choice");
+    expect(screen.getByRole("button", { name: /Teach a new template on one file/ })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /Apply “Reaction rate data”/ }));
+    await waitFor(() => expect(matchServerRegionExtractionTemplate).toHaveBeenCalledWith("tplv_1", { sourceDocumentIds: ["sd_41", "sd_42"] }));
+    expect(await screen.findByText(/Using “Reaction rate data”\. I’ll look for its block in all 2 files\./)).toBeTruthy();
+    expect(await screen.findByText(/2 files match\. Apply the template/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Apply to 2 matched files" })).toBeTruthy();
+    expect(readProjectOnboarding("project_1")).toMatchObject({ step: "batch_apply", batch: { templateSource: "chosen", template: { id: "tpl_1" } } });
+  });
+
   it("uploads per-experiment workbooks, teaches a template, applies it, and links the rest without leaving onboarding", async () => {
     writeProjectOnboarding("project_1", {
       ...INITIAL_PROJECT_ONBOARDING,

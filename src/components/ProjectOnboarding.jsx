@@ -57,6 +57,7 @@ const PROGRESS_BY_STEP = {
   more_workbooks: 92,
   batch_pick: 93,
   batch_upload: 93,
+  batch_template_choice: 94,
   batch_teach: 94,
   batch_apply: 95,
   batch_leftovers: 95,
@@ -66,7 +67,7 @@ const PROGRESS_BY_STEP = {
   complete: 100,
 };
 
-const BATCH_STEPS = new Set(["batch_pick", "batch_upload", "batch_teach", "batch_apply", "batch_leftovers", "batch_repeat"]);
+const BATCH_STEPS = new Set(["batch_pick", "batch_upload", "batch_template_choice", "batch_teach", "batch_apply", "batch_leftovers", "batch_repeat"]);
 const BATCH_SOFT_NOTICE_FILES = 40;
 
 function isBatchStep(step) {
@@ -81,7 +82,8 @@ function batchUploadedItems(batch) {
 // was confirmed by hand before the template existed.
 function batchLinkedCount(batch) {
   const viaTemplate = asArray(batch?.apply?.items).filter((row) => row.confirmed).length;
-  return viaTemplate + (batch?.teach?.sessionId ? 1 : 0);
+  const taughtByHand = batch?.teach?.sessionId && batch?.templateSource !== "chosen" ? 1 : 0;
+  return viaTemplate + taughtByHand;
 }
 
 // Files still needing attention after apply and confirm: uploaded, not the
@@ -89,7 +91,8 @@ function batchLinkedCount(batch) {
 function batchLeftovers(batch) {
   const confirmedDocs = new Set(asArray(batch?.apply?.items).filter((row) => row.confirmed).map((row) => row.sourceDocumentId));
   const resultsByDoc = new Map(asArray(batch?.match?.results).map((result) => [result.sourceDocumentId, result]));
-  const teachDoc = batch?.teach?.sourceDocumentId || "";
+  // With a saved template applied, the first file is an ordinary file too.
+  const teachDoc = batch?.templateSource === "chosen" ? "" : (batch?.teach?.sourceDocumentId || "");
   return batchUploadedItems(batch)
     .filter((item) => {
       const docId = item.workbookReviewLink?.sourceDocumentId || "";
@@ -640,7 +643,7 @@ export function ProjectOnboarding({
 
   // In the per-experiment path the grid shows whichever batch file is open.
   const batchOpenSessionId = isBatchStep(state.step)
-    ? (state.batch?.openSessionId || state.batch?.teach?.sessionId || "")
+    ? (state.batch?.openSessionId || (state.step === "batch_teach" ? state.batch?.teach?.sessionId : "") || "")
     : "";
   useEffect(() => {
     if (!batchOpenSessionId || !onHydrateWorkbookReview) return;
@@ -673,6 +676,8 @@ export function ProjectOnboarding({
       ? 0
       : Number.POSITIVE_INFINITY;
   const completedBatchRounds = asArray(state.batchRounds);
+  const savedTemplates = asArray(extractionTemplates)
+    .filter((template) => template?.status !== "archived" && template?.currentVersionId);
   const batchVisible = Boolean(state.batch) && isBatchStep(state.step) && state.step !== "batch_pick";
   const batchItems = asArray(state.batch?.items);
   const batchSummary = summarizeWorkbookBatch(batchItems);
@@ -926,19 +931,33 @@ export function ProjectOnboarding({
     const uploaded = asArray(items).filter((item) => item.status === "uploaded" && item.workbookReviewLink?.workbookReviewSessionId);
     if (!uploaded.length) return false;
     const first = uploaded[0];
+    const teach = {
+      sessionId: first.workbookReviewLink.workbookReviewSessionId,
+      sourceDocumentId: first.workbookReviewLink.sourceDocumentId || "",
+      fileName: first.workbookReviewLink.workbookName || first.fileName,
+    };
+    // A saved template can be applied straight away; teaching is only needed
+    // when none exists or the user wants a new one.
+    const canReuse = savedTemplates.length > 0;
     updateState((current) => ({
-      batch: {
-        ...current.batch,
-        teach: {
-          sessionId: first.workbookReviewLink.workbookReviewSessionId,
-          sourceDocumentId: first.workbookReviewLink.sourceDocumentId || "",
-          fileName: first.workbookReviewLink.workbookName || first.fileName,
-        },
-        openSessionId: first.workbookReviewLink.workbookReviewSessionId,
-      },
-      step: "batch_teach",
+      batch: { ...current.batch, teach, openSessionId: canReuse ? "" : teach.sessionId },
+      step: canReuse ? "batch_template_choice" : "batch_teach",
     }));
     return true;
+  };
+
+  const chooseBatchTemplate = (option) => {
+    respondAfterThinking({ kind: "batch_template", text: option.label }, () => {
+      if (option.value === "teach_new") {
+        updateState((current) => ({
+          batch: { ...current.batch, openSessionId: current.batch?.teach?.sessionId || "" },
+          step: "batch_teach",
+        }));
+        return;
+      }
+      const template = savedTemplates.find((item) => item.id === option.value);
+      if (template) rematchBatch(template, { source: "chosen" });
+    });
   };
 
   const startBatchFromFiles = async (files) => {
@@ -977,14 +996,21 @@ export function ProjectOnboarding({
     }));
   };
 
-  const rematchBatch = async (template) => {
+  const rematchBatch = async (template, { source } = {}) => {
     const batch = stateRef.current.batch;
     const chosen = template
       || asArray(extractionTemplates).find((item) => item.id === batch?.template?.id)
       || batch?.template;
     if (!batch || !chosen?.currentVersionId) return;
     updateState((current) => ({
-      batch: { ...current.batch, template: { ...current.batch?.template, ...chosen }, match: null, apply: null, openSessionId: "" },
+      batch: {
+        ...current.batch,
+        template: { ...current.batch?.template, ...chosen },
+        templateSource: source || current.batch?.templateSource || "saved",
+        match: null,
+        apply: null,
+        openSessionId: "",
+      },
       step: "batch_apply",
     }));
     await batchActions.matchTemplate({ ...batch, match: null, apply: null }, chosen);
@@ -993,14 +1019,14 @@ export function ProjectOnboarding({
   const saveBatchTemplate = async (region, options) => {
     const saved = await onSaveExtractionTemplate?.(region, options);
     const template = templateSummaryFrom(saved);
-    if (template) await rematchBatch(template);
+    if (template) await rematchBatch(template, { source: "saved" });
     return saved;
   };
 
   const updateBatchTemplate = async (region, template) => {
     const saved = await onUpdateExtractionTemplate?.(region, template);
     const updated = templateSummaryFrom(saved);
-    if (updated) await rematchBatch(updated);
+    if (updated) await rematchBatch(updated, { source: "saved" });
     return saved;
   };
 
@@ -1015,9 +1041,17 @@ export function ProjectOnboarding({
   const finishBatch = (option) => {
     respondAfterThinking({ kind: "batch_repeat", text: option.label }, () => {
       if (option.value === "another_result") {
+        const canReuse = savedTemplates.length > 0;
         updateState((current) => ({
-          batch: { ...current.batch, match: null, apply: null, template: null, openSessionId: current.batch?.teach?.sessionId || "" },
-          step: "batch_teach",
+          batch: {
+            ...current.batch,
+            match: null,
+            apply: null,
+            template: null,
+            templateSource: "",
+            openSessionId: canReuse ? "" : (current.batch?.teach?.sessionId || ""),
+          },
+          step: canReuse ? "batch_template_choice" : "batch_teach",
         }));
         return;
       }
@@ -1515,6 +1549,34 @@ export function ProjectOnboarding({
             </OnboardingMessage>
           )}
 
+          {batchVisible && state.step === "batch_template_choice" && (
+            <OnboardingMessage>
+              <p>These files are indexed. Do you want to apply a saved template or teach a new one?</p>
+              <ChoiceButtons
+                options={[
+                  ...savedTemplates.map((template) => ({
+                    value: template.id,
+                    label: `Apply “${template.name}”`,
+                    detail: template.anchorRange
+                      ? `Looks for ${template.sheetName ? `${template.sheetName}!` : ""}${template.anchorRange} in every file.`
+                      : "Match this saved layout across the batch.",
+                  })),
+                  {
+                    value: "teach_new",
+                    label: "Teach a new template on one file",
+                    detail: `Draw the result in ${state.batch.teach?.fileName || "the first file"} and save it as a template.`,
+                  },
+                ]}
+                onChoose={chooseBatchTemplate}
+                disabled={assistantThinking}
+              />
+            </OnboardingMessage>
+          )}
+
+          {pendingAnswer?.kind === "batch_template" && (
+            <OnboardingMessage role="user"><p>{pendingAnswer.text}</p></OnboardingMessage>
+          )}
+
           {batchVisible && state.step === "batch_teach" && (
             <>
               <OnboardingMessage>
@@ -1527,7 +1589,11 @@ export function ProjectOnboarding({
           {batchVisible && state.step === "batch_apply" && (
             <>
               <OnboardingMessage>
-                <p>Saved as “{state.batch.template?.name || "template"}”. I’ll look for this same block in the other {Math.max(0, batchSummary.uploaded - 1)} {batchSummary.uploaded - 1 === 1 ? "file" : "files"}.</p>
+                <p>
+                  {state.batch.templateSource === "chosen"
+                    ? `Using “${state.batch.template?.name || "template"}”. I’ll look for its block in all ${batchSummary.uploaded} ${batchSummary.uploaded === 1 ? "file" : "files"}.`
+                    : `Saved as “${state.batch.template?.name || "template"}”. I’ll look for this same block in the other ${Math.max(0, batchSummary.uploaded - 1)} ${batchSummary.uploaded - 1 === 1 ? "file" : "files"}.`}
+                </p>
                 {state.batch.match && !state.batch.match.error && (
                   <p>
                     {batchEligibleMatches} {batchEligibleMatches === 1 ? "file matches" : "files match"}. Apply the template, review the list, and confirm them in one click.
