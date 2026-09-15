@@ -19,6 +19,7 @@ export const INITIAL_PROJECT_ONBOARDING = {
   masterTableStatus: "",
   contextAnswers: {},
   contextIndex: 0,
+  contextIndexAtPlanReview: null,
   workbookStatus: "idle",
   workbookFileName: "",
   workbookReviewSessionId: "",

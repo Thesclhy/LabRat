@@ -198,9 +198,19 @@ describe("ProjectOnboarding", () => {
       });
       expect(screen.getByText("Drafting a plan for your Experiment Browser…")).toBeTruthy();
       await act(async () => { await vi.advanceTimersByTimeAsync(1_500); });
+      expect(screen.getByText("Plan ready")).toBeTruthy();
+      expect(screen.getByText(/Your plan is ready\. Answer or skip/)).toBeTruthy();
+      expect(readProjectOnboarding("project_1")).toMatchObject({
+        step: "plan_generating",
+        analysisThreadId: "thread_drafting",
+        analysisPlanRevisionId: "revision_durable",
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Skip" }));
+      await act(async () => { await vi.advanceTimersByTimeAsync(500); });
       expect(screen.getByRole("button", { name: "Accept plan" })).toBeTruthy();
       expect(readProjectOnboarding("project_1")).toMatchObject({
         step: "plan_review",
+        contextIndexAtPlanReview: 3,
         analysisThreadId: "thread_drafting",
         analysisPlanRevisionId: "revision_durable",
       });
@@ -523,13 +533,11 @@ describe("ProjectOnboarding", () => {
     await waitFor(() => expect(onUploadWorkbook).toHaveBeenCalledWith(file));
     fireEvent.click(screen.getByRole("button", { name: "Draft Experiment Browser plan" }));
     expect(onCreateExperimentPlan).toHaveBeenCalledTimes(1);
-    const acceptPlan = await screen.findByRole("button", { name: "Accept plan" });
-    expect(loadAnalysisThread).not.toHaveBeenCalled();
-    fireEvent.click(acceptPlan);
-
-    expect(screen.getByText("Generating your Experiment Browser preview…")).toBeTruthy();
     expect(screen.getByText("In one sentence, what is the focus of this project?")).toBeTruthy();
     expect(screen.queryByText("What does a typical experiment routine look like?")).toBeNull();
+    expect(await screen.findByText("Plan ready")).toBeTruthy();
+    expect(screen.getByText(/Your plan is ready\. Answer or skip/)).toBeTruthy();
+    expect(readProjectOnboarding("project_1").step).toBe("plan_generating");
     const focusInput = screen.getByRole("textbox", { name: "Your answer" });
     expect(focusInput.getAttribute("placeholder")).toBe("");
     fireEvent.change(focusInput, { target: { value: "We run batch reactions and record each experiment in one row." } });
@@ -537,7 +545,16 @@ describe("ProjectOnboarding", () => {
 
     const pendingFocus = screen.getByText("We run batch reactions and record each experiment in one row.");
     expect(pendingFocus.closest(".project-onboarding-message")?.classList.contains("user")).toBe(true);
-    expect(await screen.findByText("Got it. What does a typical experiment routine look like?")).toBeTruthy();
+    await waitFor(() => expect(readProjectOnboarding("project_1").step).toBe("plan_review"));
+    expect(readProjectOnboarding("project_1").contextIndexAtPlanReview).toBe(1);
+    const acceptPlan = screen.getByRole("button", { name: "Accept plan" });
+    expect(screen.queryByRole("textbox", { name: "Your answer" })).toBeNull();
+    expect(loadAnalysisThread).not.toHaveBeenCalled();
+    fireEvent.click(acceptPlan);
+
+    expect(screen.getByText("Generating your Experiment Browser preview…")).toBeTruthy();
+    expect(screen.getByText(/let’s finish the quick questions/)).toBeTruthy();
+    expect(screen.getByText("Got it. What does a typical experiment routine look like?")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Skip" }));
     expect(await screen.findByText("Which parameters do you measure, and which matter most?")).toBeTruthy();
     fireEvent.change(screen.getByRole("textbox", { name: "Your answer" }), { target: { value: "Conversion and selectivity." } });

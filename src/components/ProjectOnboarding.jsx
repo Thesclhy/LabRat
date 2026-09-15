@@ -73,11 +73,34 @@ function hasContextAnswer(answers, id) {
   return Object.prototype.hasOwnProperty.call(answers || {}, id);
 }
 
+function contextQuestionsRemain(current) {
+  return current.contextIndex < ONBOARDING_CONTEXT_QUESTIONS.length;
+}
+
+// A drafted plan opens plan review immediately unless the user is in the
+// middle of a context question during drafting; then the step stays at
+// plan_generating with the plan held until that answer or skip.
+function planArrivalPatch(current, threadId, revisionId, { hold = true } = {}) {
+  const questionOpen = hold && current.step === "plan_generating" && contextQuestionsRemain(current);
+  return {
+    step: questionOpen ? "plan_generating" : "plan_review",
+    analysisThreadId: threadId,
+    analysisPlanRevisionId: revisionId,
+    generationStatus: "idle",
+    ...(questionOpen ? {} : {
+      contextIndexAtPlanReview: Number.isInteger(current.contextIndexAtPlanReview)
+        ? current.contextIndexAtPlanReview
+        : current.contextIndex,
+    }),
+  };
+}
+
 // Records one context answer ("" means skipped) and decides where the
-// conversation goes next: the next question, the rest of the chain skipped,
+// conversation goes next. During drafting: the next question, or plan review
+// if the plan is already waiting. After plan acceptance: the next question,
 // the waiting state once every question is done, or straight to the result
 // review when the preview finished while the user was answering.
-function contextAnswerPatch(current, answerText, { skipChain = false } = {}) {
+function contextAnswerPatch(current, answerText, { skipChain = false, planReady = false } = {}) {
   const item = contextQuestionAt(current.contextIndex);
   if (!item) return {};
   const contextAnswers = { ...(current.contextAnswers || {}), [item.id]: answerText };
@@ -87,6 +110,10 @@ function contextAnswerPatch(current, answerText, { skipChain = false } = {}) {
       contextIndex += 1;
     }
   }
+  if (current.step === "plan_generating") {
+    if (planReady) return { contextAnswers, contextIndex, step: "plan_review", contextIndexAtPlanReview: contextIndex };
+    return { contextAnswers, contextIndex };
+  }
   if (["ready", "error"].includes(current.generationStatus)) {
     return { contextAnswers, contextIndex, step: "result_review" };
   }
@@ -95,6 +122,7 @@ function contextAnswerPatch(current, answerText, { skipChain = false } = {}) {
   }
   return { contextAnswers, contextIndex };
 }
+
 
 function planFailureMessage(response) {
   const failure = response?.planFailure || null;
@@ -133,6 +161,28 @@ function OnboardingMessage({ role = "assistant", children }) {
         <div>{children}</div>
       </div>
     </div>
+  );
+}
+
+function ContextQuestionTurn({ item, index, answers, isCurrent, pendingAnswer, hint }) {
+  const answered = hasContextAnswer(answers, item.id);
+  if (!answered && !isCurrent) return null;
+  const previous = index > 0 ? ONBOARDING_CONTEXT_QUESTIONS[index - 1] : null;
+  const acknowledge = previous && (answers?.[previous.id] || "").trim() ? "Got it. " : "";
+  const pending = pendingAnswer?.kind === "context" && pendingAnswer.questionId === item.id;
+  return (
+    <>
+      <OnboardingMessage>
+        <p>{acknowledge}{item.question}</p>
+        {isCurrent && !pending && hint && <p className="project-onboarding-hint">{hint}</p>}
+      </OnboardingMessage>
+      {pending && (
+        <OnboardingMessage role="user"><p>{pendingAnswer.text || "Skipped"}</p></OnboardingMessage>
+      )}
+      {answered && (
+        <OnboardingMessage role="user"><p>{answers[item.id] || "Skipped"}</p></OnboardingMessage>
+      )}
+    </>
   );
 }
 
@@ -197,6 +247,8 @@ export function ProjectOnboarding({
   const planAbortReasonRef = useRef("");
   const planRecoveryAttemptedRef = useRef(false);
   const analysisHydrationTimerRef = useRef(null);
+  const analysisFlowRef = useRef(analysisFlow);
+  analysisFlowRef.current = analysisFlow;
   const publishedCount = asArray(projectState?.experimentSnapshotHeads).length;
   const activeRegions = asArray(reviewRegions.length ? reviewRegions : projectState?.workbookReviewRegions)
     .filter((region) => !region?.disposition || region.disposition === "active");
@@ -361,11 +413,7 @@ export function ProjectOnboarding({
           thread,
           revision,
         });
-        updateState({
-          step: "plan_review",
-          analysisPlanRevisionId: revision.id,
-          generationStatus: "idle",
-        });
+        updateState((current) => planArrivalPatch(current, current.analysisThreadId, revision.id));
       })
       .catch((error) => {
         if (!cancelled) setAnalysisFlow({ loading: false, error: error?.message || String(error), thread: null, revision: null });
@@ -440,12 +488,7 @@ export function ProjectOnboarding({
         }
         setAnalysisFlow({ loading: false, error: "", thread, revision });
         setPlanRecoveryChecking(false);
-        updateState({
-          step: "plan_review",
-          analysisThreadId: thread.id,
-          analysisPlanRevisionId: revision.id,
-          generationStatus: "idle",
-        });
+        updateState((current) => planArrivalPatch(current, thread.id, revision.id, { hold: false }));
       })
       .catch((error) => {
         if (cancelled) return;
@@ -482,6 +525,22 @@ export function ProjectOnboarding({
       updateState({ step: "preview", workbookStatus: "published" });
     }
   }, [publishedCount, state.step]);
+
+  const planHeldFor = (flow) => Boolean(flow?.thread?.id && flow?.revision?.id) && !flow?.loading;
+  const planReadyPending = state.step === "plan_generating" && planHeldFor(analysisFlow);
+  const draftingWindowOpen = state.step === "plan_generating" && (analysisFlow.loading || planReadyPending);
+  const contextQuestionOpen = contextQuestionsRemain(state)
+    && (state.step === "context" || draftingWindowOpen);
+  // Questions answered before plan review render above the plan surface;
+  // the rest render below it. Sessions that never recorded the split (older
+  // saved state) show everything in the post-acceptance block.
+  const contextSplitIndex = Number.isInteger(state.contextIndexAtPlanReview)
+    ? state.contextIndexAtPlanReview
+    : ["context", "waiting_result", "result_review", "preview", "correction", "complete"].includes(state.step)
+      ? 0
+      : Number.POSITIVE_INFINITY;
+  const contextQuestionsAfterPlan = Number.isFinite(contextSplitIndex)
+    && ONBOARDING_CONTEXT_QUESTIONS.length > contextSplitIndex;
 
   const selectProjectStage = (option) => {
     respondAfterThinking(
@@ -529,11 +588,11 @@ export function ProjectOnboarding({
     const answer = input.trim();
     if (!answer || assistantThinking) return;
     setInput("");
-    if (state.step === "context") {
+    if (contextQuestionOpen) {
       const questionId = contextQuestionAt(state.contextIndex)?.id || "";
       respondAfterThinking(
         { kind: "context", questionId, text: answer },
-        () => updateState((current) => contextAnswerPatch(current, answer)),
+        () => updateState((current) => contextAnswerPatch(current, answer, { planReady: planHeldFor(analysisFlowRef.current) })),
       );
       return;
     }
@@ -549,13 +608,13 @@ export function ProjectOnboarding({
   };
 
   const skipContextQuestion = () => {
-    if (state.step !== "context" || assistantThinking) return;
+    if (!contextQuestionOpen || assistantThinking) return;
     const questionId = contextQuestionAt(state.contextIndex)?.id || "";
     const skipChain = isContextChainStart(state.contextIndex);
     setInput("");
     respondAfterThinking(
       { kind: "context", questionId, text: "" },
-      () => updateState((current) => contextAnswerPatch(current, "", { skipChain })),
+      () => updateState((current) => contextAnswerPatch(current, "", { skipChain, planReady: planHeldFor(analysisFlowRef.current) })),
     );
   };
 
@@ -589,12 +648,7 @@ export function ProjectOnboarding({
         }
         if (recoveredThread?.id && recoveredRevision?.id) {
           setAnalysisFlow({ loading: false, error: "", thread: recoveredThread, revision: recoveredRevision });
-          updateState({
-            step: "plan_review",
-            analysisThreadId: recoveredThread.id,
-            analysisPlanRevisionId: recoveredRevision.id,
-            generationStatus: "idle",
-          });
+          updateState((current) => planArrivalPatch(current, recoveredThread.id, recoveredRevision.id));
           return;
         }
       }
@@ -605,12 +659,7 @@ export function ProjectOnboarding({
         throw new Error(response?.reply || "LabRat did not return a reviewable Experiment Browser plan.");
       }
       setAnalysisFlow({ loading: false, error: "", thread, revision });
-      updateState({
-        step: "plan_review",
-        analysisThreadId: thread.id,
-        analysisPlanRevisionId: revision.id,
-        generationStatus: "idle",
-      });
+      updateState((current) => planArrivalPatch(current, thread.id, revision.id));
     } catch (error) {
       const abortReason = planAbortReasonRef.current;
       if (!abortReason && onRecoverExperimentPlan) {
@@ -632,12 +681,7 @@ export function ProjectOnboarding({
           }
           if (recoveredThread?.id && recoveredRevision?.id) {
             setAnalysisFlow({ loading: false, error: "", thread: recoveredThread, revision: recoveredRevision });
-            updateState({
-              step: "plan_review",
-              analysisThreadId: recoveredThread.id,
-              analysisPlanRevisionId: recoveredRevision.id,
-              generationStatus: "idle",
-            });
+            updateState((current) => planArrivalPatch(current, recoveredThread.id, recoveredRevision.id));
             return;
           }
         } catch {
@@ -712,7 +756,9 @@ export function ProjectOnboarding({
       if (workflow?.revision?.status === "accepted" && workflow?.run?.id) {
         if (current.generationStatus !== "ready") patch.generationStatus = workflow.previewReady ? "ready" : "working";
         if (["queued", "running"].includes(workflow?.run?.status)) patch.generationError = "";
-        if (["plan_review", "plan_generating"].includes(current.step)) patch.step = "context";
+        if (["plan_review", "plan_generating"].includes(current.step)) {
+          patch.step = contextQuestionsRemain(current) ? "context" : "waiting_result";
+        }
       }
       if (workflow?.previewReady) {
         patch.generationStatus = "ready";
@@ -750,7 +796,7 @@ export function ProjectOnboarding({
     onExit?.();
   };
 
-  const showComposer = ["context", "correction"].includes(state.step);
+  const showComposer = contextQuestionOpen || state.step === "correction";
   const placeholder = state.step === "correction"
     ? "Describe what looks wrong and what should be corrected..."
     : "";
@@ -769,16 +815,18 @@ export function ProjectOnboarding({
           <span>LabRat</span>
         </button>
         <div className="project-onboarding-header-tools">
-          {(planGenerationStatusVisible || ["working", "ready", "error"].includes(state.generationStatus)) && (
-            <div className={`project-onboarding-generation-status is-${planGenerationStatusVisible ? "working" : state.generationStatus}`} role="status" aria-live="polite">
+          {(planGenerationStatusVisible || planReadyPending || ["working", "ready", "error"].includes(state.generationStatus)) && (
+            <div className={`project-onboarding-generation-status is-${planGenerationStatusVisible ? "working" : planReadyPending ? "ready" : state.generationStatus}`} role="status" aria-live="polite">
               {(planGenerationStatusVisible || state.generationStatus === "working") && <span className="project-onboarding-status-spinner" aria-hidden="true" />}
-              {state.generationStatus === "ready" && <span aria-hidden="true">✓</span>}
-              {!planGenerationStatusVisible && state.generationStatus === "error" && <span aria-hidden="true">!</span>}
+              {(planReadyPending || state.generationStatus === "ready") && <span aria-hidden="true">✓</span>}
+              {!planGenerationStatusVisible && !planReadyPending && state.generationStatus === "error" && <span aria-hidden="true">!</span>}
               <strong>
                 {planRecoveryChecking
                   ? "Checking for your review plan…"
                   : planGenerationWorking
                   ? `Preparing review plan · ${planGenerationElapsed}s`
+                  : planReadyPending
+                  ? "Plan ready"
                   : state.generationStatus === "working"
                   ? "Generating your Experiment Browser preview…"
                   : state.generationStatus === "ready"
@@ -907,6 +955,7 @@ export function ProjectOnboarding({
           {state.step === "plan_generating" && analysisFlow.loading && (
             <OnboardingMessage>
               <p>I’m using the confirmed workbook evidence to prepare an Experiment Browser plan.</p>
+              {contextQuestionsRemain(state) && <p>While I draft, a few quick questions about your project. Skip any you like.</p>}
               <div className="project-onboarding-processing"><span /> Drafting a plan for your Experiment Browser…</div>
               <div className="project-onboarding-plan-status" role="status" aria-live="polite">
                 <small>{planGenerationElapsed}s elapsed</small>
@@ -931,6 +980,18 @@ export function ProjectOnboarding({
               </button>
             </OnboardingMessage>
           )}
+
+          {ONBOARDING_CONTEXT_QUESTIONS.map((item, index) => (index < contextSplitIndex ? (
+            <ContextQuestionTurn
+              key={item.id}
+              item={item}
+              index={index}
+              answers={state.contextAnswers}
+              isCurrent={draftingWindowOpen && index === state.contextIndex}
+              pendingAnswer={pendingAnswer}
+              hint={planReadyPending ? "Your plan is ready. Answer or skip this question to review it." : ""}
+            />
+          ) : null))}
 
           {state.analysisThreadId && analysisFlow.error && !["region_review", "plan_review"].includes(state.step) && (
             <div className="project-onboarding-error" role="alert">
@@ -981,34 +1042,27 @@ export function ProjectOnboarding({
           {contextStageVisible && (
             <OnboardingMessage>
               <p>Plan accepted. I’m now creating your Experiment Browser preview, and it may take a little while.</p>
-              <p>While I work, a few quick questions about your project. Skip any you like.</p>
+              {contextQuestionsAfterPlan && (
+                <p>
+                  {contextSplitIndex > 0
+                    ? "While I work, let’s finish the quick questions. Skip any you like."
+                    : "While I work, a few quick questions about your project. Skip any you like."}
+                </p>
+              )}
             </OnboardingMessage>
           )}
 
-          {contextStageVisible && ONBOARDING_CONTEXT_QUESTIONS.map((item, index) => {
-            const answered = hasContextAnswer(state.contextAnswers, item.id);
-            const isCurrent = state.step === "context" && index === state.contextIndex;
-            if (!answered && !isCurrent) return null;
-            const previous = index > 0 ? ONBOARDING_CONTEXT_QUESTIONS[index - 1] : null;
-            const acknowledge = previous && (state.contextAnswers?.[previous.id] || "").trim() ? "Got it. " : "";
-            const pending = pendingAnswer?.kind === "context" && pendingAnswer.questionId === item.id;
-            return (
-              <React.Fragment key={item.id}>
-                <OnboardingMessage>
-                  <p>{acknowledge}{item.question}</p>
-                  {isCurrent && !pending && state.generationStatus === "ready" && (
-                    <p className="project-onboarding-hint">Your preview is ready. Answer or skip this question to open it.</p>
-                  )}
-                </OnboardingMessage>
-                {pending && (
-                  <OnboardingMessage role="user"><p>{pendingAnswer.text || "Skipped"}</p></OnboardingMessage>
-                )}
-                {answered && (
-                  <OnboardingMessage role="user"><p>{state.contextAnswers[item.id] || "Skipped"}</p></OnboardingMessage>
-                )}
-              </React.Fragment>
-            );
-          })}
+          {contextStageVisible && ONBOARDING_CONTEXT_QUESTIONS.map((item, index) => (index >= contextSplitIndex ? (
+            <ContextQuestionTurn
+              key={item.id}
+              item={item}
+              index={index}
+              answers={state.contextAnswers}
+              isCurrent={state.step === "context" && index === state.contextIndex}
+              pendingAnswer={pendingAnswer}
+              hint={state.generationStatus === "ready" ? "Your preview is ready. Answer or skip this question to open it." : ""}
+            />
+          ) : null))}
 
           {state.step === "waiting_result" && (
             <OnboardingMessage>
@@ -1101,11 +1155,11 @@ export function ProjectOnboarding({
                 }
               }}
               placeholder={placeholder}
-              aria-label={state.step === "context" ? "Your answer" : "Correction request"}
+              aria-label={contextQuestionOpen ? "Your answer" : "Correction request"}
               autoFocus
             />
             <div className="project-onboarding-composer-actions">
-              {state.step === "context" && (
+              {contextQuestionOpen && (
                 <button type="button" className="project-onboarding-skip" onClick={skipContextQuestion}>Skip</button>
               )}
               <button type="button" className="project-onboarding-composer-send" disabled={!input.trim()} onClick={submitTextAnswer} aria-label="Send onboarding answer">↑</button>
