@@ -255,3 +255,130 @@ sixty small files proceed with the notice.
   File objects are not. The hook already supports retrying failed files only
   while the files are in memory; after a reload, LabRat lists the uploaded
   sessions and continues from apply.
+
+## Milestone E — Formula-mismatch files and the apply-step exits (backend + frontend)
+
+Status: proposed 2026-09-15
+
+### The problem
+
+A template taught on `Reaction_Rate_Exp29.xlsx` (formulas at A10, B10, ...)
+matched `Exp32`, `Exp54`, and `Exp55` at the same range but reported
+`formula_mismatch` because those files have typed numbers where the template
+expects formulas. Three things then go wrong:
+
+1. The apply route refuses anything but `exact` and `shifted`
+   (`APPLY_ELIGIBLE_STATUSES` in `backend/src/saas/regionTemplateApplications.js`),
+   so the template cannot be applied to those files at all.
+2. A region confirmed by hand in one of those files receives no
+   `linkedExperimentId` and no `dataKind`, because only template apply sets
+   them. The file never gets its "reaction rate" chip.
+3. The onboarding apply step says "0 files match. Apply the template, review
+   the list, and confirm" and offers only Continue. The exits that exist,
+   the leftovers step behind Continue and the template dropdown on the card,
+   are not visible as exits.
+
+Decision 1 of the batch-linking plan already states the intended behavior:
+when a template expects a formula and finds a typed constant, the value is
+still read and the region carries a `formula_chain_broken` warning that the
+user must see before confirming. The apply path never implemented that.
+
+### Part 1 — Apply with a warning (backend)
+
+- `APPLY_ELIGIBLE_STATUSES` stays the one-click confirm rule (`exact`,
+  `shifted`). Add `APPLY_PREFILL_STATUSES` = `exact`, `shifted`,
+  `formula_mismatch`, and use it in `applyTemplateMatch` and in the apply
+  route's `onlyStatuses` filter.
+- For a `formula_mismatch` report, `applyTemplateMatch` prefills the region at
+  `report.matchedRange` exactly as it does for an exact match. The revision
+  already computes provenance, so `brokenCells` and the
+  `formula_chain_broken` warning land on it without new code. Add one
+  explicit warning `template_formula_mismatch` listing the report's
+  `formulaMismatches` addresses so the user sees which cells were typed over
+  even when provenance finds no upstream break.
+- Resolve the experiment label for `formula_mismatch` reports too.
+  `matchSheet` in `regionExtractionTemplates.js` currently resolves the label
+  only for `exact` and `shifted`, so the link picker has nothing to prefill.
+  Run `resolveExperimentLabel` for `formula_mismatch` as well; do not convert
+  a missing label into `label_missing` for that status.
+- `confirmTemplateRegionsBatch` keeps rejecting `formula_mismatch` regions
+  with `batch_confirm_requires_individual_review`. They are confirmed one at
+  a time through the ordinary confirm route, which already carries the
+  region's warnings to the dock.
+- `templateMatch.status` on the region records `formula_mismatch`, so the
+  Experiment Browser chip and later charts can tell a typed-over region from a
+  clean one if they ever need to.
+- Tests in `regionTemplateApplications.test.js` and the route tests: apply
+  creates a prefilled region with the warning for a formula-mismatch file,
+  the region carries `linkedExperimentId` when the file name resolves, batch
+  confirm rejects it, individual confirm accepts it.
+
+No migration: regions, revisions, warnings, and `templateMatch` already have
+the needed columns.
+
+### Part 2 — Outcome-aware apply step (frontend)
+
+In `src/components/ProjectOnboarding.jsx`, the apply step branches on the
+match summary:
+
+- **Some one-click matches.** As today: apply, confirm list, Continue. Add a
+  secondary "Use a different template" action.
+- **Only individual matches** (`formula_mismatch` with a matched range).
+  Copy: "N files have typed numbers where the template expects formulas. I
+  can still fill in the block; confirm each one after checking the typed
+  cells." Actions: "Apply and review each file" (apply with the wider status
+  list, then go to the leftovers step), "Use a different template", "Teach a
+  new template on one file".
+- **Nothing matched.** Copy explains that the layout was not found. Actions:
+  "Review the files", "Use a different template", "Teach a new template on
+  one file".
+- **Always** a "Go back" link to the template choice step.
+
+`useWorkbookBatchActions.applyTemplate` gains an `onlyStatuses` option so
+onboarding can request the wider prefill set; the chat panel keeps the
+default.
+
+### Part 3 — Leftovers become an individual-confirm list (frontend)
+
+- Rows that were prefilled but need individual confirmation show "Needs
+  individual confirmation" with the typed-over cells, not "did not match".
+- Opening a row shows the grid and dock for that file. The prefilled region
+  is the active card, the dock's existing "Typed over formulas" line lists
+  the cells, and its Confirm button performs the individual confirmation.
+  After confirming, the row shows as confirmed and the count updates.
+- Each row also offers "Teach a new template from this file", which makes
+  that file the teaching source instead of always the first uploaded file.
+- "Use a different template" appears here too.
+
+### Part 4 — Card copy (frontend)
+
+`WorkbookBatchCard` explains `formula_mismatch` in one line under the status:
+"Typed numbers where the template expects formulas at A10, B10, C10. The
+values are readable; confirm this file individually." Applies to the chat
+panel as well as onboarding.
+
+### Why this fixes it
+
+- Part 1 removes the real dead end: the three files get prefilled regions
+  carrying the experiment link and data kind, so after individual
+  confirmation they show the chip and can be charted, which hand-drawn
+  regions never could.
+- Parts 2 and 3 give every outcome of a match at least two ways forward and a
+  way back, and make the leftovers step the place where the individual
+  confirmations happen, rather than a list of failures.
+- Part 4 stops "formula mismatch" from reading as an error. It is a review
+  requirement, which is what decision 1 intended.
+- The one-click boundary is unchanged. Nothing typed-over is ever confirmed
+  in bulk, and every confirmation still records its own accepted revision,
+  actor, and audit event.
+
+### Order and verification
+
+1. Part 1 with backend tests (`npm --prefix backend test`).
+2. Parts 2 to 4 with onboarding and card tests.
+3. `npm run codex:verify`, then a browser run against the local backend with
+   the Exp29, Exp32, Exp54, Exp55 files.
+
+Also clear a stale `generationStatus` on load when the step is past
+publication, so the "Generating preview" pill cannot persist from state
+saved before the earlier fix.
