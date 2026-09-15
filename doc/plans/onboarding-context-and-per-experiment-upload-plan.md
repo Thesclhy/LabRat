@@ -340,15 +340,48 @@ default.
 
 ### Part 3 — Leftovers become an individual-confirm list (frontend)
 
-- Rows that were prefilled but need individual confirmation show "Needs
-  individual confirmation" with the typed-over cells, not "did not match".
-- Opening a row shows the grid and dock for that file. The prefilled region
-  is the active card, the dock's existing "Typed over formulas" line lists
-  the cells, and its Confirm button performs the individual confirmation.
-  After confirming, the row shows as confirmed and the count updates.
-- Each row also offers "Teach a new template from this file", which makes
-  that file the teaching source instead of always the first uploaded file.
-- "Use a different template" appears here too.
+Every leftover row, whether prefilled with a warning or not matched at all,
+has the same three actions so the user never has to know which case applies:
+
+- **Confirm the prefilled block.** Only for prefilled rows. Opening the row
+  shows the grid and dock for that file with the prefilled region active,
+  the dock's existing "Typed over formulas" line listing the cells, and its
+  Confirm button performing the individual confirmation. Confirming links
+  the region, since apply already set its experiment and data kind.
+- **Redraw the block in this file.** Opens the grid for that file in
+  drawing mode. The user draws the box, LabRat interprets it, the user
+  confirms. This is the entrance for a block that sits somewhere the
+  template did not expect, or for a prefilled block the user rejects.
+- **Teach a new template from this file.** Makes that file the teaching
+  source instead of always the first uploaded file.
+
+Rows that were prefilled show "Needs individual confirmation" with the
+typed-over cells; rows with no match show the matcher's reason. "Use a
+different template" appears at the bottom of the list.
+
+**A redrawn block must be linked, and the flow must make that automatic.**
+A region drawn and confirmed by hand carries no experiment link and no data
+kind, because only template apply and template save set them. Left like
+that, the file never shows its chip and cross-experiment charts bound to the
+data kind never see it, even though it holds the same kind of data. The
+backend already links a template's source region when a template is saved
+or a new version is added from a region (data kind from the template name,
+experiment from the label cell or file name, never overwriting an existing
+link). So, immediately after a redrawn region is confirmed in the batch
+path, onboarding calls the existing "update template" handler with the
+batch's template and that region, which:
+
+- adds a version to the same template, so the data kind string stays the
+  same and charts treat the file as the same kind of data;
+- links the region to its experiment from the file name or label cell;
+- offers "Re-match the remaining files with the updated template" as an
+  optional follow-up, since the new version may now match files with the
+  same typed-over layout.
+
+The dock's "Update template" control stays available for the manual case,
+but in onboarding the user should not have to find it. The confirmation
+message names what happened: "Confirmed and linked to Exp32 as 'reaction
+rate'."
 
 ### Part 4 — Card copy (frontend)
 
@@ -366,6 +399,11 @@ panel as well as onboarding.
 - Parts 2 and 3 give every outcome of a match at least two ways forward and a
   way back, and make the leftovers step the place where the individual
   confirmations happen, rather than a list of failures.
+- The redraw path keeps the data comparable. Because a redrawn block is
+  linked through a new version of the same template, its data kind is the
+  same string as the applied matches, so linked-data comparisons and chart
+  templates bound to that data kind include it. A hand-drawn region that
+  skipped this step would be the one file missing from every chart.
 - Part 4 stops "formula mismatch" from reading as an error. It is a review
   requirement, which is what decision 1 intended.
 - The one-click boundary is unchanged. Nothing typed-over is ever confirmed
@@ -375,10 +413,18 @@ panel as well as onboarding.
 ### Order and verification
 
 1. Part 1 with backend tests (`npm --prefix backend test`).
-2. Parts 2 to 4 with onboarding and card tests.
+2. Parts 2 to 4 with onboarding and card tests, including: a redrawn region
+   in a leftover file is confirmed, the update-template handler is called
+   with the batch's template and that region, and the resulting link and
+   data kind are shown.
 3. `npm run codex:verify`, then a browser run against the local backend with
    the Exp29, Exp32, Exp54, Exp55 files.
 
 Also clear a stale `generationStatus` on load when the step is past
 publication, so the "Generating preview" pill cannot persist from state
 saved before the earlier fix.
+
+Done 2026-09-15 ahead of this milestone: when every context question is
+answered before the plan arrives, LabRat acknowledges the answers and keeps
+the drafting progress visible instead of leaving the stream without a
+current message.
