@@ -60,6 +60,10 @@ export function templateMatchDetail(result) {
     if (run) parts.push(`${run.foundCount} of ${run.expectedCount} header cells found`);
   }
   if (result.status === "label_missing") parts.push("no experiment label in the sheet or file name");
+  if (["exact", "shifted"].includes(result.status) && asArray(result.typedOverCells).length) {
+    const typed = asArray(result.typedOverCells).map((item) => item.address);
+    parts.push(`typed values at ${typed.slice(0, 6).join(", ")}${typed.length > 6 ? ` and ${typed.length - 6} more` : ""}`);
+  }
   return parts.join(" · ");
 }
 
@@ -105,7 +109,7 @@ export function WorkbookBatchCard({
   const isRowSelected = (row) => (
     !row.confirmed
     && Boolean(rowLink(row))
-    && (selectionOverrides[row.regionId] !== undefined ? selectionOverrides[row.regionId] : Boolean(row.linkedExperimentId))
+    && (selectionOverrides[row.regionId] !== undefined ? selectionOverrides[row.regionId] : Boolean(row.linkedExperimentId) && !row.typedOver)
   );
   const toggleRow = (regionId, checked) => {
     setSelectionOverrides((current) => ({ ...current, [regionId]: checked }));
@@ -190,6 +194,7 @@ export function WorkbookBatchCard({
             <strong>
               {appliedRows.filter((row) => row.confirmed).length}/{appliedRows.length} prefilled regions confirmed
               {individualRows.length ? ` · ${individualRows.length} need${individualRows.length === 1 ? "s" : ""} individual confirmation` : ""}
+              {confirmableRows.filter((row) => row.typedOver).length ? ` · ${confirmableRows.filter((row) => row.typedOver).length} with typed values to check` : ""}
             </strong>
             {confirmableRows.length > 0 && (
               <>

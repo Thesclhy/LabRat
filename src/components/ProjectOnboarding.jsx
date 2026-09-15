@@ -709,6 +709,7 @@ export function ProjectOnboarding({
   const batchPrefillableResults = batchMatchResults.filter((result) => result.status === "formula_mismatch" && result.matchedRange && !result.isTemplateSource);
   const batchAppliedDocs = new Set(asArray(state.batch?.apply?.items).map((row) => row.sourceDocumentId));
   const batchPrefillPending = batchPrefillableResults.filter((result) => !batchAppliedDocs.has(result.sourceDocumentId));
+  const batchTypedOverMatches = batchMatchResults.filter((result) => result.eligibleForBatchConfirm && !result.isTemplateSource && asArray(result.typedOverCells).length).length;
   const batchUnmatched = batchMatchResults.filter((result) => (
     !result.eligibleForBatchConfirm && !result.isTemplateSource && !(result.status === "formula_mismatch" && result.matchedRange)
   )).length;
@@ -1766,6 +1767,7 @@ export function ProjectOnboarding({
                   batchEligibleMatches > 0 ? (
                     <p>
                       {batchEligibleMatches} {batchEligibleMatches === 1 ? "file matches" : "files match"}. Apply the template, review the list, and confirm them in one click.
+                      {batchTypedOverMatches ? ` ${batchTypedOverMatches} of them ${batchTypedOverMatches === 1 ? "has" : "have"} typed values where the template expects formulas; ${batchTypedOverMatches === 1 ? "it stays" : "they stay"} unticked until you check ${batchTypedOverMatches === 1 ? "it" : "them"}.` : ""}
                       {batchPrefillableResults.length ? ` ${batchPrefillableResults.length} more ${batchPrefillableResults.length === 1 ? "has" : "have"} typed numbers where the template expects formulas; I can fill those in for individual confirmation.` : ""}
                       {batchUnmatched ? ` ${batchUnmatched} ${batchUnmatched === 1 ? "file has" : "files have"} a different layout; we’ll handle those next.` : ""}
                     </p>

@@ -396,20 +396,28 @@ function evaluateCandidate({ signature, cells, origin, sheetName, indexBlobs, gr
     return isTextCell(cell) ? fuzzyTextMatch(anchor.text, cell.rawValue) : 0;
   });
   const textScore = anchors.length ? anchorScores.reduce((sum, score) => sum + score, 0) / anchors.length : 1;
+  // Hard mismatches (a different formula, text, or a blank where a formula
+  // belongs) break the match. A typed number where a formula belongs is a
+  // soft mismatch: the block still matches and the cells are reported so the
+  // user sees them before confirming.
   const formulaMismatches = [];
+  const typedOverCells = [];
   let formulaExpected = 0;
   let formulaOk = 0;
   for (const expectation of asArray(signature.cellExpectations)) {
     const cell = cellAt(cells, origin.r + expectation.relRow, origin.c + expectation.relCol);
     if (expectation.kind === "formula") {
       formulaExpected += 1;
+      const address = XLSX.utils.encode_cell({ r: origin.r + expectation.relRow, c: origin.c + expectation.relCol });
       if (cell?.formula && formulaShape(cell.formula, cell.address) === expectation.formulaShape) {
         formulaOk += 1;
+      } else if (!cell?.formula && isNumericCell(cell)) {
+        if (typedOverCells.length < MAX_MISMATCH_DETAILS) typedOverCells.push({ address, expected: "formula", found: "typed_number" });
       } else if (formulaMismatches.length < MAX_MISMATCH_DETAILS) {
         formulaMismatches.push({
-          address: XLSX.utils.encode_cell({ r: origin.r + expectation.relRow, c: origin.c + expectation.relCol }),
+          address,
           expected: "formula",
-          found: cell?.formula ? "different_formula" : isNumericCell(cell) ? "typed_number" : cell ? "other_value" : "blank",
+          found: cell?.formula ? "different_formula" : cell ? "other_value" : "blank",
         });
       }
     } else if (expectation.kind === "number") {
@@ -442,9 +450,15 @@ function evaluateCandidate({ signature, cells, origin, sheetName, indexBlobs, gr
       provenance = null;
     }
   }
+  for (const item of brokenCells) {
+    if (typedOverCells.length >= MAX_MISMATCH_DETAILS) break;
+    if (!typedOverCells.some((entry) => entry.address === item.address)) {
+      typedOverCells.push({ address: item.address, expected: "formula", found: "typed_upstream" });
+    }
+  }
   let status;
   if (!headerRunsOk) status = "header_mismatch";
-  else if (formulaMismatches.length || brokenCells.length) status = "formula_mismatch";
+  else if (formulaMismatches.length) status = "formula_mismatch";
   else status = "matched";
   const anchorEvidence = textScore > 0 || headerRunResults.some((result) => result.foundCount > 0);
   return {
@@ -457,6 +471,7 @@ function evaluateCandidate({ signature, cells, origin, sheetName, indexBlobs, gr
     headerRuns: headerRunResults,
     formulaMismatches,
     brokenCells,
+    typedOverCells,
     provenanceWarnings: asArray(provenance?.warnings),
   };
 }
@@ -502,6 +517,7 @@ function matchSheet({ signature, sheet, sourceDocument, indexBlobs, graph, origi
     headerRuns: candidate.headerRuns,
     formulaMismatches: candidate.formulaMismatches,
     brokenCells: candidate.brokenCells,
+    typedOverCells: candidate.typedOverCells,
     provenanceWarnings: candidate.provenanceWarnings,
   });
   let chosen = null;
@@ -535,10 +551,15 @@ function matchSheet({ signature, sheet, sourceDocument, indexBlobs, graph, origi
   return {
     sheetName: sheet.name,
     status,
-    ...(chosen ? describe(chosen) : { matchedRange: null, offset: null, score: 0, textAnchorScore: 0, headerRuns: [], formulaMismatches: [], brokenCells: [], provenanceWarnings: [] }),
+    ...(chosen ? describe(chosen) : { matchedRange: null, offset: null, score: 0, textAnchorScore: 0, headerRuns: [], formulaMismatches: [], brokenCells: [], typedOverCells: [], provenanceWarnings: [] }),
     alternatives,
     ...label,
-    warnings: [],
+    warnings: asArray(chosen?.typedOverCells).length
+      ? [{
+        code: "template_typed_over_formulas",
+        message: `Typed values where the template expects formulas at ${chosen.typedOverCells.slice(0, 8).map((item) => item.address).join(", ")}${chosen.typedOverCells.length > 8 ? ` and ${chosen.typedOverCells.length - 8} more` : ""}. The values are readable; check them before confirming.`,
+      }]
+      : [],
   };
 }
 
@@ -567,7 +588,7 @@ export function matchTemplateVersionToDocument({ templateVersion, sourceDocument
     }
     if (best.status === "exact") break;
   }
-  const report = best || { sheetName: null, status: "no_match", matchedRange: null, offset: null, score: 0, textAnchorScore: 0, headerRuns: [], formulaMismatches: [], brokenCells: [], provenanceWarnings: [], alternatives: [], experimentLabel: null, labelSource: null, labelAddress: null, warnings: [] };
+  const report = best || { sheetName: null, status: "no_match", matchedRange: null, offset: null, score: 0, textAnchorScore: 0, headerRuns: [], formulaMismatches: [], brokenCells: [], typedOverCells: [], provenanceWarnings: [], alternatives: [], experimentLabel: null, labelSource: null, labelAddress: null, warnings: [] };
   return {
     schemaVersion: TEMPLATE_MATCH_REPORT_SCHEMA_VERSION,
     templateVersionId: templateVersion.id || null,

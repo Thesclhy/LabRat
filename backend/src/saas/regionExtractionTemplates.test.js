@@ -212,28 +212,46 @@ test("a shorter header run is a header mismatch", () => {
   assert.equal(report.eligibleForBatchConfirm, false);
 });
 
-test("typed numbers where the template expects formulas are a formula mismatch", () => {
+test("typed numbers where the template expects formulas still match, with the cells reported", () => {
   const report = matchTemplateVersionToDocument({
     templateVersion: templateVersion(),
     sourceDocument: sourceDocument("doc_36", "Calculation Exp36.xlsx"),
     indexBlobs: blobs("Sheet1", calculationCells({ label: "Exp36", typedOverallCells: ["R32", "S32"] })),
   });
-  assert.equal(report.status, "formula_mismatch");
-  assert.deepEqual(report.formulaMismatches.map((item) => [item.address, item.found]), [["R32", "typed_number"], ["S32", "typed_number"]]);
-  assert.equal(report.eligibleForBatchConfirm, false);
-  assert.equal(report.eligibleForPrefill, true);
+  assert.equal(report.status, "exact");
+  assert.deepEqual(report.formulaMismatches, []);
+  assert.deepEqual(report.typedOverCells.map((item) => [item.address, item.found]), [["R32", "typed_number"], ["S32", "typed_number"]]);
+  assert.equal(report.eligibleForBatchConfirm, true);
   assert.equal(report.experimentLabel, "Exp36");
+  assert.equal(report.warnings[0].code, "template_typed_over_formulas");
+  assert.match(report.warnings[0].message, /R32, S32/);
 });
 
-test("a typed constant upstream of an otherwise matching block is a formula mismatch with broken cells", () => {
+test("a different formula where the template expects one is still a formula mismatch", () => {
+  const cells = calculationCells({ label: "Exp39" }).map((item) => (
+    item.address === "R32" ? { ...item, formula: "F14+1", rawValue: 0.2 } : item
+  ));
+  const report = matchTemplateVersionToDocument({
+    templateVersion: templateVersion(),
+    sourceDocument: sourceDocument("doc_39", "Calculation Exp39.xlsx"),
+    indexBlobs: blobs("Sheet1", cells),
+  });
+  assert.equal(report.status, "formula_mismatch");
+  assert.deepEqual(report.formulaMismatches.map((item) => [item.address, item.found]), [["R32", "different_formula"]]);
+  assert.equal(report.eligibleForBatchConfirm, false);
+});
+
+test("a typed constant upstream of an otherwise matching block still matches and lists the broken cells", () => {
   const report = matchTemplateVersionToDocument({
     templateVersion: templateVersion(),
     sourceDocument: sourceDocument("doc_37", "Calculation Exp37.xlsx"),
     indexBlobs: blobs("Sheet1", calculationCells({ label: "Exp37", typedUpstreamCells: ["G14", "H14"] })),
   });
-  assert.equal(report.status, "formula_mismatch");
+  assert.equal(report.status, "exact");
   assert.deepEqual(report.formulaMismatches, []);
   assert.deepEqual(report.brokenCells.map((item) => item.address).sort(), ["G14", "H14"]);
+  assert.deepEqual(report.typedOverCells.map((item) => [item.address, item.found]).sort(), [["G14", "typed_upstream"], ["H14", "typed_upstream"]]);
+  assert.equal(report.eligibleForBatchConfirm, true);
 });
 
 test("typed inputs upstream of the template's own block are expected, not typed-over formulas", () => {
@@ -263,8 +281,9 @@ test("typed inputs upstream of the template's own block are expected, not typed-
     sourceDocument: sourceDocument("doc_42", "Calculation Exp42.xlsx"),
     indexBlobs: blobs("Sheet1", calculationCells({ label: "Exp42", typedUpstreamCells: ["G14", "H14", "I14"] })),
   });
-  assert.equal(extra.status, "formula_mismatch");
+  assert.equal(extra.status, "exact");
   assert.deepEqual(extra.brokenCells.map((item) => item.address), ["I14"]);
+  assert.deepEqual(extra.typedOverCells.map((item) => item.address), ["I14"]);
 });
 
 test("a matching block without any experiment label is label_missing", () => {

@@ -49,6 +49,7 @@ function compactTemplateMatch(result) {
       : Boolean(result?.eligibleForPrefill),
     headerRuns: asArray(result?.headerRuns).slice(0, 4),
     formulaMismatches: asArray(result?.formulaMismatches).slice(0, 8).map((item) => ({ address: item.address, found: item.found })),
+    typedOverCells: asArray(result?.typedOverCells).slice(0, 8).map((item) => ({ address: item.address, found: item.found })),
     brokenCells: asArray(result?.brokenCells).slice(0, 8).map((item) => ({ address: item.address })),
     alternatives: asArray(result?.alternatives).slice(0, 4).map((item) => ({ matchedRange: item.matchedRange, offset: item.offset })),
   };
@@ -75,6 +76,10 @@ function appliedRowFromEntry(entry, batch) {
     // Typed-over formulas are prefilled but must be confirmed one at a time.
     needsIndividualConfirm: region.templateMatch?.status === "formula_mismatch",
     warning: asArray(region.warnings).find((item) => item?.code === "template_formula_mismatch")?.message || "",
+    // Matched, but with typed numbers where the template expects formulas:
+    // stays out of the default selection until the user looks at it.
+    typedOver: region.templateMatch?.status !== "formula_mismatch"
+      && asArray(region.warnings).some((item) => item?.code === "template_formula_mismatch"),
     confirmed: region.reviewStatus === "accepted",
     error: entry.warning?.message || "",
   };

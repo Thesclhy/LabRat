@@ -170,7 +170,7 @@ test("applyTemplateMatch prefills a formula-mismatch file with a warning, a link
   const other = documentFixture("doc_36", "Exp36", "Calculation Exp36.xlsx");
   const identities = [{ id: "identity_36", projectId: "project_1", labId: "lab_1", canonicalLabel: "Exp36", aliases: [] }];
   const clean = matchTemplateVersionToDocument({ templateVersion: version, sourceDocument: other.sourceDocument, indexBlobs: other.indexBlobs });
-  const report = { ...clean, status: "formula_mismatch", eligibleForBatchConfirm: false, formulaMismatches: [{ address: "R32", expected: "formula", found: "typed_number" }] };
+  const report = { ...clean, status: "formula_mismatch", eligibleForBatchConfirm: false, formulaMismatches: [{ address: "R32", expected: "formula", found: "different_formula" }] };
 
   const outcome = await applyTemplateMatch({
     store, project, actorUserId: "user_1", template, templateVersion: version,
@@ -182,10 +182,10 @@ test("applyTemplateMatch prefills a formula-mismatch file with a warning, a link
   assert.equal(outcome.region.dataKind, "Carbon distribution");
   assert.equal(outcome.region.reviewStatus, "awaiting_review");
   const warning = outcome.region.warnings.find((item) => item.code === "template_formula_mismatch");
-  assert.match(warning.message, /typed values where the template expects formulas at R32/);
+  assert.match(warning.message, /a different formula layout at R32/);
   assert.match(warning.message, /confirm this file individually/);
   assert.equal(outcome.revision.warnings.some((item) => item.code === "template_formula_mismatch"), true);
-  assert.match(outcome.revision.summary[1], /typed values where the template expects formulas; confirm this file individually/);
+  assert.match(outcome.revision.summary[1], /formula layout that differs from the template; confirm this file individually/);
 
   const batch = await confirmTemplateRegionsBatch({
     store, project, actorUserId: "user_2", identities,

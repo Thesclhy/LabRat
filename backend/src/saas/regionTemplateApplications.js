@@ -15,15 +15,23 @@ export const APPLY_ELIGIBLE_STATUSES = Object.freeze(["exact", "shifted"]);
 // confirmed individually. Decision 1 of the batch-linking plan.
 export const APPLY_PREFILL_STATUSES = Object.freeze(["exact", "shifted", "formula_mismatch"]);
 
-function formulaMismatchWarning(report) {
-  const typed = asArray(report?.formulaMismatches).map((item) => item.address).filter(Boolean);
-  const broken = asArray(report?.brokenCells).map((item) => item.address).filter(Boolean);
+function formulaMismatchWarning(report, { individual }) {
+  const typed = [...new Set([
+    ...asArray(report?.typedOverCells).filter((item) => item.found !== "typed_upstream").map((item) => item.address),
+    ...asArray(report?.formulaMismatches).filter((item) => item.found === "typed_number").map((item) => item.address),
+  ].filter(Boolean))];
+  const upstream = [...new Set([
+    ...asArray(report?.typedOverCells).filter((item) => item.found === "typed_upstream").map((item) => item.address),
+    ...asArray(report?.brokenCells).map((item) => item.address),
+  ].filter(Boolean))];
+  const hard = asArray(report?.formulaMismatches).filter((item) => item.found !== "typed_number").map((item) => item.address).filter(Boolean);
   const parts = [];
   if (typed.length) parts.push(`typed values where the template expects formulas at ${typed.slice(0, 8).join(", ")}${typed.length > 8 ? ` and ${typed.length - 8} more` : ""}`);
-  if (broken.length) parts.push(`typed constants upstream of the block at ${broken.slice(0, 8).join(", ")}${broken.length > 8 ? ` and ${broken.length - 8} more` : ""}`);
+  if (upstream.length) parts.push(`typed constants upstream of the block at ${upstream.slice(0, 8).join(", ")}${upstream.length > 8 ? ` and ${upstream.length - 8} more` : ""}`);
+  if (hard.length) parts.push(`a different formula layout at ${hard.slice(0, 8).join(", ")}`);
   return {
     code: "template_formula_mismatch",
-    message: `This file has ${parts.join(" and ") || "a formula layout that differs from the template"}. The values are readable; confirm this file individually.`,
+    message: `This file has ${parts.join(" and ") || "a formula layout that differs from the template"}. The values are readable; ${individual ? "confirm this file individually" : "check them before confirming"}.`,
   };
 }
 
@@ -194,6 +202,7 @@ export async function applyTemplateMatch({
     return { skipped: true, reason: "not_eligible", status: report?.status || "no_match", sourceDocumentId: sourceDocument.id };
   }
   const formulaMismatch = report.status === "formula_mismatch";
+  const typedOver = asArray(report.typedOverCells).length > 0;
   const sheetName = text(report.sheetName);
   const range = text(report.matchedRange);
   if (!sheetName || !range) return { skipped: true, reason: "match_incomplete", status: report.status, sourceDocumentId: sourceDocument.id };
@@ -294,15 +303,18 @@ export async function applyTemplateMatch({
     ...(provenance ? { provenance } : {}),
   };
   const warnings = [
-    ...(formulaMismatch ? [formulaMismatchWarning(report)] : []),
+    ...(formulaMismatch || typedOver ? [formulaMismatchWarning(report, { individual: formulaMismatch })] : []),
     ...asArray(preview.warnings),
     ...asArray(provenance?.warnings),
   ];
+  const typedOverText = typedOver
+    ? `; typed values where the template expects formulas at ${asArray(report.typedOverCells).slice(0, 6).map((item) => item.address).join(", ")}`
+    : "";
   const summary = [
     `Prefilled from extraction template ${template?.name || "template"} v${templateVersion.version}.`,
     formulaMismatch
-      ? `Matched at ${sheetName}!${range}${offsetText(report.offset)} with typed values where the template expects formulas; confirm this file individually.`
-      : `Matched ${report.status === "exact" ? "exactly" : "with an offset"} at ${sheetName}!${range}${offsetText(report.offset)}.`,
+      ? `Matched at ${sheetName}!${range}${offsetText(report.offset)} with a formula layout that differs from the template; confirm this file individually.`
+      : `Matched ${report.status === "exact" ? "exactly" : "with an offset"} at ${sheetName}!${range}${offsetText(report.offset)}${typedOverText}.`,
     link.linkStatus === "resolved"
       ? `Linked to experiment ${link.candidates[0]?.label || report.experimentLabel}.`
       : report.experimentLabel
