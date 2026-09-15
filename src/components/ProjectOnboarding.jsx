@@ -1373,6 +1373,13 @@ export function ProjectOnboarding({
             />
           ) : null))}
 
+          {contextRoundActive && planGenerationWorking && !contextQuestionsRemain(state) && Object.keys(state.contextAnswers || {}).length > 0 && (
+            <OnboardingMessage>
+              <p>Great, I’ll remember these. Your plan is still drafting; give it a bit more time.</p>
+              <div className="project-onboarding-processing"><span /> Drafting a plan for your Experiment Browser… {planGenerationElapsed}s</div>
+            </OnboardingMessage>
+          )}
+
           {state.analysisThreadId && analysisFlow.error && !["region_review", "plan_review"].includes(state.step) && (
             <div className="project-onboarding-error" role="alert">
               <p>{analysisFlow.error}</p>
@@ -1446,7 +1453,7 @@ export function ProjectOnboarding({
 
           {state.step === "waiting_result" && (
             <OnboardingMessage>
-              <p>Thanks—I’ll keep that context with this onboarding session. I’m still validating the Experiment Browser preview.</p>
+              <p>{Object.keys(state.contextAnswers || {}).length ? "Great, I’ll remember these. " : ""}Your preview is still generating; give it a bit more time.</p>
               <div className="project-onboarding-processing"><span /> Finishing source and calculation checks…</div>
             </OnboardingMessage>
           )}

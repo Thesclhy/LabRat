@@ -463,7 +463,7 @@ describe("ProjectOnboarding", () => {
       );
 
       fireEvent.click(screen.getByRole("button", { name: "Draft Experiment Browser plan" }));
-      expect(screen.getByText("Preparing review plan · 0s")).toBeTruthy();
+      expect(screen.getByText(/Preparing review plan · \d+s/)).toBeTruthy();
       await act(async () => {
         await vi.advanceTimersByTimeAsync(120_000);
       });
@@ -580,7 +580,7 @@ describe("ProjectOnboarding", () => {
     expect(await screen.findByText("Got it. Which instruments collect your data?")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Skip" }));
 
-    expect(await screen.findByText(/still validating the Experiment Browser preview/i)).toBeTruthy();
+    expect(await screen.findByText(/Great, I’ll remember these\. Your preview is still generating/i)).toBeTruthy();
     expect(screen.queryByText(/How do you turn the raw data/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Finish preview", hidden: true }));
     expect(screen.getByText("Preview ready")).toBeTruthy();
@@ -598,6 +598,40 @@ describe("ProjectOnboarding", () => {
     expect(stored.analysisThreadId).toBe("thread_1");
     expect(stored.analysisRunId).toBe("run_1");
     expect(stored.analysisResultId).toBe("result_1");
+  });
+
+  it("acknowledges the answers and keeps showing drafting progress when the questions finish first", async () => {
+    writeProjectOnboarding("project_1", {
+      ...INITIAL_PROJECT_ONBOARDING,
+      step: "region_review",
+      workbookStatus: "ready",
+      workbookFileName: "Master.xlsx",
+    });
+    render(
+      <ProjectOnboarding
+        projectId="project_1"
+        projectState={baseProjectState}
+        reviewRegions={[{
+          id: "region_1",
+          disposition: "active",
+          reviewStatus: "accepted",
+          acceptedRevisionId: "understanding_1",
+          currentRevision: { id: "understanding_1", validation: {} },
+        }]}
+        onCreateExperimentPlan={vi.fn(() => new Promise(() => {}))}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Draft Experiment Browser plan" }));
+    expect(screen.getByText("In one sentence, what is the focus of this project?")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Skip" }));
+    expect(await screen.findByText("Which instruments collect your data?")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Skip" }));
+
+    expect(await screen.findByText(/Great, I’ll remember these\. Your plan is still drafting/)).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: "Your answer" })).toBeNull();
+    expect(screen.getByText(/Preparing review plan · \d+s/)).toBeTruthy();
+    expect(readProjectOnboarding("project_1")).toMatchObject({ step: "plan_generating", contextIndex: 5 });
   });
 
   it("opens the result review after the current answer once the preview is ready mid-chain", async () => {
