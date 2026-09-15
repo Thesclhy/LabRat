@@ -3756,7 +3756,7 @@ function App() {
   const createOnboardingExperimentPlan = async (options = {}) => {
     if (!activeProjectId) throw new Error("Select a project before preparing experiment data.");
     return createServerAgentRun(activeProjectId, {
-      message: ONBOARDING_EXPERIMENT_PLAN_REQUEST,
+      message: options.request || ONBOARDING_EXPERIMENT_PLAN_REQUEST,
       conversation: [],
       selectedContext: {
         tab: "experiment_browser",
@@ -3765,13 +3765,16 @@ function App() {
       },
     }, { signal: options.signal });
   };
-  const recoverOnboardingExperimentPlan = async () => {
+  // Each onboarding round drafts its plan with its own request text, so
+  // recovery reopens only the thread for the current round's workbook.
+  const recoverOnboardingExperimentPlan = async (options = {}) => {
     if (!activeProjectId) return null;
+    const request = options.request || ONBOARDING_EXPERIMENT_PLAN_REQUEST;
     const response = await listAnalysisThreads(activeProjectId, { limit: 100 });
     const candidate = asArray(response?.analysisThreads)
       .filter((thread) => (
         thread?.outputTarget === "experiment_browser"
-        && thread?.originalRequest === ONBOARDING_EXPERIMENT_PLAN_REQUEST
+        && thread?.originalRequest === request
         && !["completed", "cancelled"].includes(thread?.status)
         && !(
           ["planning", "retry_drafting", "plan_drafting"].includes(thread?.status)

@@ -50,8 +50,9 @@ const PROGRESS_BY_STEP = {
   context: 80,
   waiting_result: 86,
   result_review: 90,
-  preview: 92,
-  correction: 94,
+  more_workbooks: 92,
+  preview: 95,
+  correction: 96,
   complete: 100,
 };
 
@@ -73,8 +74,41 @@ function hasContextAnswer(answers, id) {
   return Object.prototype.hasOwnProperty.call(answers || {}, id);
 }
 
+const DEFAULT_PLAN_REQUEST = "Use the confirmed master table to build reviewed Experiment Browser records.";
+
+function planRequestForWorkbook(fileName) {
+  return `Use the confirmed regions in ${fileName} to build reviewed Experiment Browser records.`;
+}
+
+// Rounds: each master table upload is one round. Completed rounds are kept
+// in workbookRounds; the current round descriptor is set at upload time.
+function roundNumberOf(current) {
+  return current?.round?.number || asArray(current?.workbookRounds).length + 1;
+}
+
+function planRequestOf(current) {
+  if (current?.round?.planRequest) return current.round.planRequest;
+  return current?.workbookFileName ? planRequestForWorkbook(current.workbookFileName) : DEFAULT_PLAN_REQUEST;
+}
+
+const ROUND_RESET_FIELDS = {
+  round: null,
+  workbookStatus: "idle",
+  workbookFileName: "",
+  workbookReviewSessionId: "",
+  analysisThreadId: "",
+  analysisPlanRevisionId: "",
+  analysisRunId: "",
+  analysisResultId: "",
+  generationStatus: "idle",
+  generationError: "",
+  correction: "",
+  contextIndexAtPlanReview: null,
+};
+
+// Context questions are asked in the first round only.
 function contextQuestionsRemain(current) {
-  return current.contextIndex < ONBOARDING_CONTEXT_QUESTIONS.length;
+  return roundNumberOf(current) === 1 && current.contextIndex < ONBOARDING_CONTEXT_QUESTIONS.length;
 }
 
 // A drafted plan opens plan review immediately unless the user is in the
@@ -250,7 +284,20 @@ export function ProjectOnboarding({
   const analysisFlowRef = useRef(analysisFlow);
   analysisFlowRef.current = analysisFlow;
   const publishedCount = asArray(projectState?.experimentSnapshotHeads).length;
-  const activeRegions = asArray(reviewRegions.length ? reviewRegions : projectState?.workbookReviewRegions)
+  const currentSession = useMemo(() => {
+    const activeSessions = asArray(projectState?.workbookReviewSessions)
+      .filter((session) => session?.status !== "deleted");
+    return activeSessions.find((session) => session.id === state.workbookReviewSessionId)
+      || activeSessions[activeSessions.length - 1]
+      || null;
+  }, [projectState?.workbookReviewSessions, state.workbookReviewSessionId]);
+  // Only the current round's workbook is under review; regions from earlier
+  // rounds stay confirmed on the server but must not reappear in the dock.
+  const belongsToCurrentSession = (region) => !currentSession?.id
+    || !region?.workbookReviewSessionId
+    || region.workbookReviewSessionId === currentSession.id;
+  const draftRegions = asArray(reviewRegions).filter(belongsToCurrentSession);
+  const activeRegions = (draftRegions.length ? draftRegions : asArray(projectState?.workbookReviewRegions).filter(belongsToCurrentSession))
     .filter((region) => !region?.disposition || region.disposition === "active");
   const acceptedRegionCount = activeRegions
     .filter((region) => Boolean(region.acceptedRevisionId)).length;
@@ -261,13 +308,10 @@ export function ProjectOnboarding({
     region.acceptedRevisionId,
   ].join(":"))
     .join("|");
-  const currentSession = useMemo(() => {
-    const activeSessions = asArray(projectState?.workbookReviewSessions)
-      .filter((session) => session?.status !== "deleted");
-    return activeSessions.find((session) => session.id === state.workbookReviewSessionId)
-      || activeSessions[activeSessions.length - 1]
-      || null;
-  }, [projectState?.workbookReviewSessions, state.workbookReviewSessionId]);
+  const planRequest = planRequestOf(state);
+  const roundNumber = roundNumberOf(state);
+  const completedRounds = asArray(state.workbookRounds);
+  const roundPublishedCount = Math.max(0, publishedCount - (state.publishedCountAtRoundStart || 0));
 
   const updateState = useCallback((patch) => {
     setState((current) => {
@@ -446,7 +490,7 @@ export function ProjectOnboarding({
     planRecoveryAttemptedRef.current = true;
     let cancelled = false;
     setPlanRecoveryChecking(true);
-    Promise.resolve(onRecoverExperimentPlan())
+    Promise.resolve(onRecoverExperimentPlan({ request: planRequest }))
       .then((response) => {
         if (cancelled) return;
         const thread = response?.analysisThread || null;
@@ -505,6 +549,7 @@ export function ProjectOnboarding({
     analysisFlow.loading,
     analysisHydrationAttempt,
     onRecoverExperimentPlan,
+    planRequest,
     state.analysisThreadId,
     state.step,
     updateState,
@@ -519,12 +564,12 @@ export function ProjectOnboarding({
     });
   }, [currentSession, onHydrateWorkbookReview, reviewState?.session?.id]);
 
+  // Publication of this round's experiments ends the round. Earlier rounds'
+  // experiments are excluded through the count recorded at round start.
   useEffect(() => {
-    if (!publishedCount || state.step === "complete") return;
-    if (!["preview", "correction"].includes(state.step)) {
-      updateState({ step: "preview", workbookStatus: "published" });
-    }
-  }, [publishedCount, state.step]);
+    if (roundPublishedCount <= 0 || ["complete", "more_workbooks", "preview", "correction"].includes(state.step)) return;
+    updateState({ step: "more_workbooks", workbookStatus: "published" });
+  }, [roundPublishedCount, state.step]);
 
   const planHeldFor = (flow) => Boolean(flow?.thread?.id && flow?.revision?.id) && !flow?.loading;
   const planReadyPending = state.step === "plan_generating" && planHeldFor(analysisFlow);
@@ -539,7 +584,9 @@ export function ProjectOnboarding({
     : ["context", "waiting_result", "result_review", "preview", "correction", "complete"].includes(state.step)
       ? 0
       : Number.POSITIVE_INFINITY;
-  const contextQuestionsAfterPlan = Number.isFinite(contextSplitIndex)
+  const contextRoundActive = roundNumber === 1;
+  const contextQuestionsAfterPlan = contextRoundActive
+    && Number.isFinite(contextSplitIndex)
     && ONBOARDING_CONTEXT_QUESTIONS.length > contextSplitIndex;
 
   const selectProjectStage = (option) => {
@@ -559,11 +606,13 @@ export function ProjectOnboarding({
   const uploadWorkbook = async (file) => {
     if (!file) return;
     setUploadError("");
-    updateState({
+    updateState((current) => ({
       step: "region_review",
       workbookStatus: "processing",
       workbookFileName: file.name,
-    });
+      round: { number: roundNumberOf(current), planRequest: planRequestForWorkbook(file.name) },
+      publishedCountAtRoundStart: publishedCount,
+    }));
     try {
       const result = await onUploadWorkbook?.(file);
       const session = result?.session || result?.workbookReviewSession || null;
@@ -631,7 +680,7 @@ export function ProjectOnboarding({
     }, PLAN_GENERATION_TIMEOUT_MS);
     try {
       if (onRecoverExperimentPlan) {
-        const recovered = await onRecoverExperimentPlan();
+        const recovered = await onRecoverExperimentPlan({ request: planRequest });
         const recoveredThread = recovered?.analysisThread || null;
         const recoveredRevision = recovered?.currentPlanRevision
           || asArray(recovered?.planRevisions).findLast((item) => ["awaiting_review", "accepted"].includes(item.status))
@@ -652,7 +701,7 @@ export function ProjectOnboarding({
           return;
         }
       }
-      const response = await onCreateExperimentPlan({ signal: controller.signal });
+      const response = await onCreateExperimentPlan({ signal: controller.signal, request: planRequest });
       const thread = response?.analysisThread || null;
       const revision = response?.currentPlanRevision || response?.analysisPlanRevision || null;
       if (!thread?.id || !revision?.id) {
@@ -664,7 +713,7 @@ export function ProjectOnboarding({
       const abortReason = planAbortReasonRef.current;
       if (!abortReason && onRecoverExperimentPlan) {
         try {
-          const recovered = await onRecoverExperimentPlan();
+          const recovered = await onRecoverExperimentPlan({ request: planRequest });
           const recoveredThread = recovered?.analysisThread || null;
           const recoveredRevision = recovered?.currentPlanRevision
             || asArray(recovered?.planRevisions).findLast((item) => ["awaiting_review", "accepted"].includes(item.status))
@@ -774,6 +823,30 @@ export function ProjectOnboarding({
       return patch;
     });
   }, [updateState]);
+
+  const chooseMoreWorkbooks = (option) => {
+    if (option.value === "master_table") {
+      respondAfterThinking({ kind: "more_workbooks", text: option.label }, () => {
+        planRecoveryAttemptedRef.current = false;
+        hydratedSessionRef.current = "";
+        setUploadError("");
+        setAnalysisFlow({ loading: false, error: "", thread: null, revision: null });
+        updateState((current) => ({
+          ...ROUND_RESET_FIELDS,
+          workbookRounds: [...asArray(current.workbookRounds), {
+            number: roundNumberOf(current),
+            workbookFileName: current.workbookFileName,
+            workbookReviewSessionId: current.workbookReviewSessionId,
+            publishedCount: Math.max(0, publishedCount - (current.publishedCountAtRoundStart || 0)),
+          }],
+          publishedCountAtRoundStart: publishedCount,
+          step: "upload",
+        }));
+      });
+      return;
+    }
+    respondAfterThinking({ kind: "more_workbooks", text: option.label }, () => updateState({ step: "preview" }));
+  };
 
   const completeOnboarding = (destination = "overview") => {
     const next = { ...state, status: "completed", step: "complete" };
@@ -894,11 +967,23 @@ export function ProjectOnboarding({
               <OnboardingMessage role="user">
                 <p>{MASTER_TABLE_OPTIONS.find((option) => option.value === state.masterTableStatus)?.label}</p>
               </OnboardingMessage>
+              {completedRounds.map((round) => (
+                <React.Fragment key={`round-${round.number}`}>
+                  <OnboardingMessage role="user"><p>Uploaded {round.workbookFileName || "a workbook"}</p></OnboardingMessage>
+                  <OnboardingMessage>
+                    <p>
+                      Published {round.publishedCount} {round.publishedCount === 1 ? "experiment" : "experiments"} from {round.workbookFileName || "that workbook"} to the Experiment Browser.
+                    </p>
+                  </OnboardingMessage>
+                </React.Fragment>
+              ))}
               <OnboardingMessage>
                 <p>
-                  {state.masterTableStatus === "no"
-                    ? "That’s okay. For this preview, upload the workbook that currently comes closest to compiling your experiments."
-                    : "Great. Upload that workbook and I’ll start mapping its structure."}
+                  {completedRounds.length
+                    ? "Upload the next master table and I’ll map its structure the same way."
+                    : state.masterTableStatus === "no"
+                      ? "That’s okay. For this preview, upload the workbook that currently comes closest to compiling your experiments."
+                      : "Great. Upload that workbook and I’ll start mapping its structure."}
                 </p>
                 {state.step === "upload" && (
                   <button type="button" className="project-onboarding-upload" onClick={() => fileInputRef.current?.click()}>
@@ -981,7 +1066,7 @@ export function ProjectOnboarding({
             </OnboardingMessage>
           )}
 
-          {ONBOARDING_CONTEXT_QUESTIONS.map((item, index) => (index < contextSplitIndex ? (
+          {contextRoundActive && ONBOARDING_CONTEXT_QUESTIONS.map((item, index) => (index < contextSplitIndex ? (
             <ContextQuestionTurn
               key={item.id}
               item={item}
@@ -1052,7 +1137,7 @@ export function ProjectOnboarding({
             </OnboardingMessage>
           )}
 
-          {contextStageVisible && ONBOARDING_CONTEXT_QUESTIONS.map((item, index) => (index >= contextSplitIndex ? (
+          {contextStageVisible && contextRoundActive && ONBOARDING_CONTEXT_QUESTIONS.map((item, index) => (index >= contextSplitIndex ? (
             <ContextQuestionTurn
               key={item.id}
               item={item}
@@ -1082,6 +1167,36 @@ export function ProjectOnboarding({
               <p>Your workbook, confirmed interpretations, accepted plan, and onboarding answers are still saved.</p>
               <button type="button" className="project-onboarding-secondary" onClick={pauseOnboarding}>Quit for now</button>
             </OnboardingMessage>
+          )}
+
+          {state.step === "more_workbooks" && (
+            <OnboardingMessage>
+              <p>
+                {completedRounds.length
+                  ? `${roundPublishedCount} more ${roundPublishedCount === 1 ? "experiment is" : "experiments are"} in the Experiment Browser, ${publishedCount} in total.`
+                  : `Your ${roundPublishedCount} ${roundPublishedCount === 1 ? "experiment is" : "experiments are"} in the Experiment Browser.`}
+              </p>
+              <p>Do you have another master table to upload?</p>
+              <ChoiceButtons
+                options={[
+                  {
+                    value: "master_table",
+                    label: "Upload another master table",
+                    detail: "More experiments in the same kind of table.",
+                  },
+                  {
+                    value: "done",
+                    label: "No, I’m done",
+                  },
+                ]}
+                onChoose={chooseMoreWorkbooks}
+                disabled={assistantThinking}
+              />
+            </OnboardingMessage>
+          )}
+
+          {pendingAnswer?.kind === "more_workbooks" && (
+            <OnboardingMessage role="user"><p>{pendingAnswer.text}</p></OnboardingMessage>
           )}
 
           {state.step === "preview" && (

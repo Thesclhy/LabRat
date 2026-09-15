@@ -122,7 +122,7 @@ describe("ProjectOnboarding", () => {
 
     expect(screen.getByText("Plan generation was interrupted.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Try generating the plan again" }));
-    expect(onCreateExperimentPlan).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) });
+    expect(onCreateExperimentPlan).toHaveBeenCalledWith({ signal: expect.any(AbortSignal), request: expect.any(String) });
   });
 
   it("reopens a server-completed review plan after the onboarding request was interrupted", async () => {
@@ -624,6 +624,169 @@ describe("ProjectOnboarding", () => {
     expect(screen.getByText("Batch reactor runs.")).toBeTruthy();
     expect(screen.getByText("Which instruments collect your data?")).toBeTruthy();
     expect(screen.getByRole("textbox", { name: "Your answer" })).toBeTruthy();
+  });
+
+  it("asks for another master table after publication and starts a fresh round", async () => {
+    writeProjectOnboarding("project_1", {
+      ...INITIAL_PROJECT_ONBOARDING,
+      step: "waiting_result",
+      projectStage: "established",
+      masterTableStatus: "yes",
+      workbookStatus: "ready",
+      workbookFileName: "Master.xlsx",
+      workbookReviewSessionId: "session_1",
+      contextIndex: 5,
+      contextAnswers: { project_focus: "Catalyst screening." },
+      round: { number: 1, planRequest: "Use the confirmed regions in Master.xlsx to build reviewed Experiment Browser records." },
+    });
+
+    render(
+      <ProjectOnboarding
+        projectId="project_1"
+        projectState={{ ...baseProjectState, experimentSnapshotHeads: [{ id: "a" }, { id: "b" }, { id: "c" }] }}
+      />,
+    );
+
+    expect(await screen.findByText("Your 3 experiments are in the Experiment Browser.")).toBeTruthy();
+    expect(screen.getByText("Do you have another master table to upload?")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Upload another master table/ }));
+
+    expect(await screen.findByRole("button", { name: "Upload Excel workbook" })).toBeTruthy();
+    expect(screen.getByText("Published 3 experiments from Master.xlsx to the Experiment Browser.")).toBeTruthy();
+    expect(screen.getByText("Upload the next master table and I’ll map its structure the same way.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /We have an established workflow/ })).toBeNull();
+    expect(screen.queryByText("In one sentence, what is the focus of this project?")).toBeNull();
+
+    const stored = readProjectOnboarding("project_1");
+    expect(stored.step).toBe("upload");
+    expect(stored.workbookRounds).toEqual([{
+      number: 1,
+      workbookFileName: "Master.xlsx",
+      workbookReviewSessionId: "session_1",
+      publishedCount: 3,
+    }]);
+    expect(stored.round).toBeNull();
+    expect(stored.workbookFileName).toBe("");
+    expect(stored.workbookReviewSessionId).toBe("");
+    expect(stored.publishedCountAtRoundStart).toBe(3);
+    expect(stored.projectStage).toBe("established");
+    expect(stored.contextAnswers).toEqual({ project_focus: "Catalyst screening." });
+  });
+
+  it("does not reopen the publish step for round one's experiments during round two", async () => {
+    writeProjectOnboarding("project_1", {
+      ...INITIAL_PROJECT_ONBOARDING,
+      step: "upload",
+      projectStage: "established",
+      masterTableStatus: "yes",
+      workbookRounds: [{ number: 1, workbookFileName: "Master.xlsx", workbookReviewSessionId: "session_1", publishedCount: 3 }],
+      publishedCountAtRoundStart: 3,
+    });
+    const heads = [{ id: "a" }, { id: "b" }, { id: "c" }];
+    const { rerender } = render(
+      <ProjectOnboarding projectId="project_1" projectState={{ ...baseProjectState, experimentSnapshotHeads: heads }} />,
+    );
+
+    expect(screen.getByRole("button", { name: "Upload Excel workbook" })).toBeTruthy();
+    expect(readProjectOnboarding("project_1").step).toBe("upload");
+
+    rerender(
+      <ProjectOnboarding
+        projectId="project_1"
+        projectState={{ ...baseProjectState, experimentSnapshotHeads: [...heads, { id: "d" }, { id: "e" }] }}
+      />,
+    );
+    expect(await screen.findByText("2 more experiments are in the Experiment Browser, 5 in total.")).toBeTruthy();
+    expect(readProjectOnboarding("project_1").step).toBe("more_workbooks");
+  });
+
+  it("shows only the current session's regions when falling back to project regions", () => {
+    writeProjectOnboarding("project_1", {
+      ...INITIAL_PROJECT_ONBOARDING,
+      step: "region_review",
+      projectStage: "established",
+      masterTableStatus: "yes",
+      workbookStatus: "ready",
+      workbookFileName: "Second.xlsx",
+      workbookReviewSessionId: "session_2",
+      workbookRounds: [{ number: 1, workbookFileName: "Master.xlsx", workbookReviewSessionId: "session_1", publishedCount: 3 }],
+      publishedCountAtRoundStart: 3,
+    });
+    const region = (id, sessionId, rangeRef) => ({
+      id,
+      workbookReviewSessionId: sessionId,
+      sourceDocumentId: `source_${sessionId}`,
+      sheetName: "Runs",
+      rangeRef,
+      disposition: "active",
+      reviewStatus: "accepted",
+      version: 1,
+      currentRevisionId: `${id}_rev`,
+      acceptedRevisionId: `${id}_rev`,
+      currentRevision: { id: `${id}_rev`, summary: ["Each row is one experiment."], validation: {} },
+    });
+
+    render(
+      <ProjectOnboarding
+        projectId="project_1"
+        projectState={{
+          ...baseProjectState,
+          workbookReviewSessions: [
+            { id: "session_1", workbookSummary: { workbookName: "Master.xlsx" } },
+            { id: "session_2", workbookSummary: { workbookName: "Second.xlsx" } },
+          ],
+          workbookReviewRegions: [region("region_1", "session_1", "A1:D3"), region("region_2", "session_2", "F1:H5")],
+          experimentSnapshotHeads: [{ id: "a" }, { id: "b" }, { id: "c" }],
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("article", { name: "Region Runs!F1:H5" })).toBeTruthy();
+    expect(screen.queryByRole("article", { name: "Region Runs!A1:D3" })).toBeNull();
+    expect(readProjectOnboarding("project_1").step).toBe("region_review");
+  });
+
+  it("drafts a second-round plan with the round's request text and no context questions", async () => {
+    const planRequest = "Use the confirmed regions in Second.xlsx to build reviewed Experiment Browser records.";
+    writeProjectOnboarding("project_1", {
+      ...INITIAL_PROJECT_ONBOARDING,
+      step: "region_review",
+      projectStage: "established",
+      masterTableStatus: "yes",
+      workbookStatus: "ready",
+      workbookFileName: "Second.xlsx",
+      workbookReviewSessionId: "session_2",
+      workbookRounds: [{ number: 1, workbookFileName: "Master.xlsx", workbookReviewSessionId: "session_1", publishedCount: 3 }],
+      round: { number: 2, planRequest },
+      publishedCountAtRoundStart: 3,
+    });
+    const onRecoverExperimentPlan = vi.fn().mockResolvedValue(null);
+    const onCreateExperimentPlan = vi.fn(() => new Promise(() => {}));
+
+    render(
+      <ProjectOnboarding
+        projectId="project_1"
+        projectState={{ ...baseProjectState, experimentSnapshotHeads: [{ id: "a" }, { id: "b" }, { id: "c" }] }}
+        reviewRegions={[{
+          id: "region_2",
+          workbookReviewSessionId: "session_2",
+          disposition: "active",
+          reviewStatus: "accepted",
+          acceptedRevisionId: "understanding_2",
+          currentRevision: { id: "understanding_2", validation: {} },
+        }]}
+        onCreateExperimentPlan={onCreateExperimentPlan}
+        onRecoverExperimentPlan={onRecoverExperimentPlan}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Draft Experiment Browser plan" }));
+    await waitFor(() => expect(onCreateExperimentPlan).toHaveBeenCalledWith({ signal: expect.any(AbortSignal), request: planRequest }));
+    expect(onRecoverExperimentPlan).toHaveBeenCalledWith({ request: planRequest });
+    expect(screen.getByText("Drafting a plan for your Experiment Browser…")).toBeTruthy();
+    expect(screen.queryByText(/a few quick questions/)).toBeNull();
+    expect(screen.queryByText("In one sentence, what is the focus of this project?")).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "Your answer" })).toBeNull();
   });
 
   it("offers the published Experiment Browser as an explicit destination", () => {
