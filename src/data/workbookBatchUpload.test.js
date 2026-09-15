@@ -17,6 +17,8 @@ describe("parseExperimentNumberFromFileName", () => {
     expect(parseExperimentNumberFromFileName("Calculation Exp31.xlsx")).toBe(31);
     expect(parseExperimentNumberFromFileName("exp_007 rates.xlsx")).toBe(7);
     expect(parseExperimentNumberFromFileName("Experiment-12 carbon.xlsx")).toBe(12);
+    expect(parseExperimentNumberFromFileName("Reaction_Rate_Exp29.xlsx")).toBe(29);
+    expect(parseExperimentNumberFromFileName("Exp29_rate.xlsx")).toBe(29);
   });
 
   it("returns null when no experiment number is present", () => {

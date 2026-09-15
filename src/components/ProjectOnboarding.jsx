@@ -82,8 +82,14 @@ function batchUploadedItems(batch) {
 // was confirmed by hand before the template existed.
 function batchLinkedCount(batch) {
   const viaTemplate = asArray(batch?.apply?.items).filter((row) => row.confirmed).length;
-  const taughtByHand = batch?.teach?.sessionId && batch?.templateSource !== "chosen" ? 1 : 0;
-  return viaTemplate + taughtByHand;
+  if (batch?.templateSource === "chosen") {
+    // A saved template's own source file, if it is in this batch, was linked
+    // when the template was taught.
+    const uploadedDocs = new Set(batchUploadedItems(batch).map((item) => item.workbookReviewLink?.sourceDocumentId));
+    const sources = asArray(batch?.match?.results).filter((result) => result.isTemplateSource && uploadedDocs.has(result.sourceDocumentId)).length;
+    return viaTemplate + sources;
+  }
+  return viaTemplate + (batch?.teach?.sessionId ? 1 : 0);
 }
 
 // Files still needing attention after apply and confirm: uploaded, not the
@@ -659,7 +665,7 @@ export function ProjectOnboarding({
   useEffect(() => {
     if (roundPublishedCount <= 0) return;
     if (["complete", "more_workbooks", "preview", "correction"].includes(state.step) || isBatchStep(state.step)) return;
-    updateState({ step: "more_workbooks", workbookStatus: "published" });
+    updateState({ step: "more_workbooks", workbookStatus: "published", generationStatus: "idle", generationError: "" });
   }, [roundPublishedCount, state.step]);
 
   const planHeldFor = (flow) => Boolean(flow?.thread?.id && flow?.revision?.id) && !flow?.loading;

@@ -3,6 +3,7 @@ import test from "node:test";
 import * as XLSX from "xlsx";
 
 import { formulaShape } from "./formulaGraph.js";
+import { experimentLabelFromWorkbookName } from "./regionExtractionTemplates.js";
 import {
   buildRegionExtractionTemplateVersion,
   compileLayoutSignature,
@@ -285,4 +286,11 @@ test("a layout on a differently named sheet is still found, and an unrelated wor
   });
   assert.equal(unrelated.status, "no_match");
   assert.equal(unrelated.matchedRange, null);
+});
+
+test("experiment labels parse from underscore-separated and spaced workbook names", () => {
+  assert.equal(experimentLabelFromWorkbookName("Calculation Exp31.xlsx"), "Exp31");
+  assert.equal(experimentLabelFromWorkbookName("Reaction_Rate_Exp29.xlsx"), "Exp29");
+  assert.equal(experimentLabelFromWorkbookName("exp_007 rates.xlsx"), "Exp7");
+  assert.equal(experimentLabelFromWorkbookName("MasterTable_updated.xlsx"), null);
 });

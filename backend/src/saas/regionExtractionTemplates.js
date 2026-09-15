@@ -25,7 +25,7 @@ const MIN_HEADER_RUN = 4;
 const MAX_SHEET_CELLS = 50_000;
 const MAX_CANDIDATES = 6;
 const MAX_MISMATCH_DETAILS = 20;
-const EXPERIMENT_PATTERN = /\bexp(?:eriment)?[\s_-]*0*(\d{1,5})\b/i;
+const EXPERIMENT_PATTERN = /(?<![a-z0-9])exp(?:eriment)?[\s_-]*0*(\d{1,5})(?![0-9])/i;
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];

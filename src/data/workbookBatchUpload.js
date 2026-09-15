@@ -1,6 +1,6 @@
 export const WORKBOOK_BATCH_UPLOAD_CONCURRENCY = 2;
 
-const EXPERIMENT_NUMBER_PATTERN = /\bexp(?:eriment)?[\s_-]*0*(\d{1,5})\b/i;
+const EXPERIMENT_NUMBER_PATTERN = /(?<![a-z0-9])exp(?:eriment)?[\s_-]*0*(\d{1,5})(?![0-9])/i;
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
