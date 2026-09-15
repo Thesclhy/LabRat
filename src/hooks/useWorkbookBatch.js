@@ -177,7 +177,7 @@ export function useWorkbookBatchActions({
     if (!failedIndexes.length) return;
     setRetryingBatchId(batchId);
     try {
-      await runBatch(batchId, files, { items: batch.items, onlyIndexes: failedIndexes });
+      return await runBatch(batchId, files, { items: batch.items, onlyIndexes: failedIndexes });
     } finally {
       setRetryingBatchId("");
     }

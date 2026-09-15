@@ -33,6 +33,8 @@ export const INITIAL_PROJECT_ONBOARDING = {
   workbookRounds: [],
   round: null,
   publishedCountAtRoundStart: 0,
+  batch: null,
+  batchRounds: [],
 };
 
 export function projectOnboardingStorageKey(projectId) {

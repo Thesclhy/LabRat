@@ -1,6 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnalysisReviewWorkspace } from "./AnalysisReviewWorkspace.jsx";
 import { WorkbookReviewDock } from "./WorkbookReviewDock.jsx";
+import { WorkbookBatchCard, templateMatchDetail } from "./WorkbookBatchCard.jsx";
+import { useWorkbookBatchActions } from "../hooks/useWorkbookBatch.js";
+import { createWorkbookBatchItems, summarizeWorkbookBatch } from "../data/workbookBatchUpload.js";
+import { uid } from "../utils/format";
 import { getAnalysisThread } from "../data/analysisApi.js";
 import {
   INITIAL_PROJECT_ONBOARDING,
@@ -51,10 +55,61 @@ const PROGRESS_BY_STEP = {
   waiting_result: 86,
   result_review: 90,
   more_workbooks: 92,
-  preview: 95,
-  correction: 96,
+  batch_pick: 93,
+  batch_upload: 93,
+  batch_teach: 94,
+  batch_apply: 95,
+  batch_leftovers: 95,
+  batch_repeat: 96,
+  preview: 97,
+  correction: 98,
   complete: 100,
 };
+
+const BATCH_STEPS = new Set(["batch_pick", "batch_upload", "batch_teach", "batch_apply", "batch_leftovers", "batch_repeat"]);
+const BATCH_SOFT_NOTICE_FILES = 40;
+
+function isBatchStep(step) {
+  return BATCH_STEPS.has(step);
+}
+
+function batchUploadedItems(batch) {
+  return asArray(batch?.items).filter((item) => item.status === "uploaded" && item.workbookReviewLink?.workbookReviewSessionId);
+}
+
+// Files linked through the template plus the teaching file itself, which
+// was confirmed by hand before the template existed.
+function batchLinkedCount(batch) {
+  const viaTemplate = asArray(batch?.apply?.items).filter((row) => row.confirmed).length;
+  return viaTemplate + (batch?.teach?.sessionId ? 1 : 0);
+}
+
+// Files still needing attention after apply and confirm: uploaded, not the
+// teaching file, not confirmed through the batch list, not a template source.
+function batchLeftovers(batch) {
+  const confirmedDocs = new Set(asArray(batch?.apply?.items).filter((row) => row.confirmed).map((row) => row.sourceDocumentId));
+  const resultsByDoc = new Map(asArray(batch?.match?.results).map((result) => [result.sourceDocumentId, result]));
+  const teachDoc = batch?.teach?.sourceDocumentId || "";
+  return batchUploadedItems(batch)
+    .filter((item) => {
+      const docId = item.workbookReviewLink?.sourceDocumentId || "";
+      if (!docId || docId === teachDoc || confirmedDocs.has(docId)) return false;
+      return !resultsByDoc.get(docId)?.isTemplateSource;
+    })
+    .map((item) => ({ item, result: resultsByDoc.get(item.workbookReviewLink?.sourceDocumentId) || null }));
+}
+
+function templateSummaryFrom(response) {
+  const template = response?.regionExtractionTemplate || null;
+  if (!template?.id) return null;
+  return {
+    id: template.id,
+    name: template.name || "",
+    currentVersionId: template.currentVersionId || "",
+    currentVersion: template.currentVersion || asArray(response?.versions).length || 1,
+    status: template.status || "active",
+  };
+}
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -251,6 +306,12 @@ export function ProjectOnboarding({
   onRecoverExperimentPlan,
   onAcceptAnalysisResult,
   onRequestCorrection,
+  onUploadBatchFile,
+  onRefreshProject,
+  renderWorkbookGrid,
+  onSaveExtractionTemplate,
+  onUpdateExtractionTemplate,
+  extractionTemplates = [],
   onComplete,
   onExit,
   loadAnalysisThread = getAnalysisThread,
@@ -273,6 +334,9 @@ export function ProjectOnboarding({
       && Boolean(onRecoverExperimentPlan),
   );
   const fileInputRef = useRef(null);
+  const batchInputRef = useRef(null);
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const messagesRef = useRef(null);
   const latestContentRef = useRef(null);
   const hydratedSessionRef = useRef("");
@@ -325,6 +389,15 @@ export function ProjectOnboarding({
       return next;
     });
   }, [projectId]);
+
+  const batchActions = useWorkbookBatchActions({
+    projectId,
+    uploadFile: onUploadBatchFile,
+    reloadProject: onRefreshProject,
+    onBatchUpdate: (batchId, updater) => updateState((current) => (
+      current.batch?.batchId === batchId ? { batch: updater(current.batch) } : {}
+    )),
+  });
 
   const respondAfterThinking = useCallback((answer, callback) => {
     if (assistantResponseTimerRef.current) return;
@@ -556,13 +629,27 @@ export function ProjectOnboarding({
   ]);
 
   useEffect(() => {
+    if (isBatchStep(state.step)) return;
     if (!currentSession?.id || reviewState?.session?.id === currentSession.id) return;
     if (hydratedSessionRef.current === currentSession.id || !onHydrateWorkbookReview) return;
     hydratedSessionRef.current = currentSession.id;
     Promise.resolve(onHydrateWorkbookReview(currentSession)).catch(() => {
       hydratedSessionRef.current = "";
     });
-  }, [currentSession, onHydrateWorkbookReview, reviewState?.session?.id]);
+  }, [currentSession, onHydrateWorkbookReview, reviewState?.session?.id, state.step]);
+
+  // In the per-experiment path the grid shows whichever batch file is open.
+  const batchOpenSessionId = isBatchStep(state.step)
+    ? (state.batch?.openSessionId || state.batch?.teach?.sessionId || "")
+    : "";
+  useEffect(() => {
+    if (!batchOpenSessionId || !onHydrateWorkbookReview) return;
+    if (reviewState?.session?.id === batchOpenSessionId || hydratedSessionRef.current === batchOpenSessionId) return;
+    hydratedSessionRef.current = batchOpenSessionId;
+    Promise.resolve(onHydrateWorkbookReview({ id: batchOpenSessionId })).catch(() => {
+      hydratedSessionRef.current = "";
+    });
+  }, [batchOpenSessionId, onHydrateWorkbookReview, reviewState?.session?.id]);
 
   // Publication of this round's experiments ends the round. Earlier rounds'
   // experiments are excluded through the count recorded at round start.
@@ -584,6 +671,16 @@ export function ProjectOnboarding({
     : ["context", "waiting_result", "result_review", "preview", "correction", "complete"].includes(state.step)
       ? 0
       : Number.POSITIVE_INFINITY;
+  const completedBatchRounds = asArray(state.batchRounds);
+  const batchVisible = Boolean(state.batch) && isBatchStep(state.step) && state.step !== "batch_pick";
+  const batchItems = asArray(state.batch?.items);
+  const batchSummary = summarizeWorkbookBatch(batchItems);
+  const batchRunning = batchSummary.pending > 0 || batchSummary.uploading > 0;
+  const batchNameMatches = batchUploadedItems(state.batch).filter((item) => item.suggestedExperiment?.status === "matched").length;
+  const batchNameUnresolved = Math.max(0, batchSummary.uploaded - batchNameMatches);
+  const batchEligibleMatches = asArray(state.batch?.match?.results).filter((result) => result.eligibleForBatchConfirm && !result.isTemplateSource).length;
+  const batchNonMatches = asArray(state.batch?.match?.results).filter((result) => !result.eligibleForBatchConfirm && !result.isTemplateSource).length;
+  const batchLeftoverEntries = batchLeftovers(state.batch);
   const contextRoundActive = roundNumber === 1;
   const contextQuestionsAfterPlan = contextRoundActive
     && Number.isFinite(contextSplitIndex)
@@ -824,7 +921,123 @@ export function ProjectOnboarding({
     });
   }, [updateState]);
 
+  const advanceBatchToTeach = (items) => {
+    const uploaded = asArray(items).filter((item) => item.status === "uploaded" && item.workbookReviewLink?.workbookReviewSessionId);
+    if (!uploaded.length) return false;
+    const first = uploaded[0];
+    updateState((current) => ({
+      batch: {
+        ...current.batch,
+        teach: {
+          sessionId: first.workbookReviewLink.workbookReviewSessionId,
+          sourceDocumentId: first.workbookReviewLink.sourceDocumentId || "",
+          fileName: first.workbookReviewLink.workbookName || first.fileName,
+        },
+        openSessionId: first.workbookReviewLink.workbookReviewSessionId,
+      },
+      step: "batch_teach",
+    }));
+    return true;
+  };
+
+  const startBatchFromFiles = async (files) => {
+    const list = Array.from(files || []).filter(Boolean);
+    if (!list.length) return;
+    const batchId = `onboarding_batch_${uid()}`;
+    batchActions.rememberFiles(batchId, list);
+    updateState({
+      batch: { batchId, items: createWorkbookBatchItems(list), match: null, apply: null, teach: null, template: null, openSessionId: "", error: "" },
+      step: "batch_upload",
+    });
+    try {
+      const finalItems = await batchActions.runBatch(batchId, list);
+      advanceBatchToTeach(finalItems);
+    } catch (error) {
+      updateState((current) => ({ batch: { ...current.batch, error: error?.message || String(error) } }));
+    }
+  };
+
+  const onBatchFilesSelected = (event) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    startBatchFromFiles(files);
+  };
+
+  const retryBatchUpload = async () => {
+    const finalItems = await batchActions.retryBatch(stateRef.current.batch);
+    if (stateRef.current.step === "batch_upload") advanceBatchToTeach(finalItems);
+  };
+
+  const openBatchFile = (link) => {
+    const sessionId = link?.workbookReviewSessionId || "";
+    if (!sessionId) return;
+    updateState((current) => ({
+      batch: { ...current.batch, openSessionId: sessionId, openFileName: link.workbookName || "" },
+    }));
+  };
+
+  const rematchBatch = async (template) => {
+    const batch = stateRef.current.batch;
+    const chosen = template
+      || asArray(extractionTemplates).find((item) => item.id === batch?.template?.id)
+      || batch?.template;
+    if (!batch || !chosen?.currentVersionId) return;
+    updateState((current) => ({
+      batch: { ...current.batch, template: { ...current.batch?.template, ...chosen }, match: null, apply: null, openSessionId: "" },
+      step: "batch_apply",
+    }));
+    await batchActions.matchTemplate({ ...batch, match: null, apply: null }, chosen);
+  };
+
+  const saveBatchTemplate = async (region, options) => {
+    const saved = await onSaveExtractionTemplate?.(region, options);
+    const template = templateSummaryFrom(saved);
+    if (template) await rematchBatch(template);
+    return saved;
+  };
+
+  const updateBatchTemplate = async (region, template) => {
+    const saved = await onUpdateExtractionTemplate?.(region, template);
+    const updated = templateSummaryFrom(saved);
+    if (updated) await rematchBatch(updated);
+    return saved;
+  };
+
+  const continueAfterBatchApply = () => {
+    const leftovers = batchLeftovers(state.batch);
+    updateState((current) => ({
+      batch: { ...current.batch, openSessionId: "" },
+      step: leftovers.length ? "batch_leftovers" : "batch_repeat",
+    }));
+  };
+
+  const finishBatch = (option) => {
+    respondAfterThinking({ kind: "batch_repeat", text: option.label }, () => {
+      if (option.value === "another_result") {
+        updateState((current) => ({
+          batch: { ...current.batch, match: null, apply: null, template: null, openSessionId: current.batch?.teach?.sessionId || "" },
+          step: "batch_teach",
+        }));
+        return;
+      }
+      updateState((current) => ({
+        batchRounds: [...asArray(current.batchRounds), {
+          number: asArray(current.batchRounds).length + 1,
+          fileCount: batchUploadedItems(current.batch).length,
+          linkedCount: batchLinkedCount(current.batch),
+          dataKind: current.batch?.template?.name || "",
+        }],
+        batch: null,
+        step: option.value === "different_set" ? "more_workbooks" : "preview",
+      }));
+    });
+  };
+
   const chooseMoreWorkbooks = (option) => {
+    if (option.value === "per_experiment") {
+      respondAfterThinking({ kind: "more_workbooks", text: option.label }, () => updateState({ step: "batch_pick" }));
+      return;
+    }
     if (option.value === "master_table") {
       respondAfterThinking({ kind: "more_workbooks", text: option.label }, () => {
         planRecoveryAttemptedRef.current = false;
@@ -879,6 +1092,45 @@ export function ProjectOnboarding({
   const planReviewMissing = state.step === "plan_review"
     && (!analysisFlow.thread?.id || !analysisFlow.revision?.id);
   const progressPercent = Math.min(100, PROGRESS_BY_STEP[state.step] || 8);
+
+  const batchDock = (
+    <WorkbookReviewDock
+      reviewState={reviewState}
+      reviewRegions={asArray(reviewRegions)}
+      activeRegionId={activeRegionId}
+      onActiveRegionChange={onActiveRegionChange}
+      onReviseRegion={onReviseRegion}
+      onConfirmRegion={onConfirmRegion}
+      onRetryRegion={onRetryRegion}
+      onIgnoreRegion={onIgnoreRegion}
+      onDeleteRegion={onDeleteRegion}
+      onSaveExtractionTemplate={saveBatchTemplate}
+      onUpdateExtractionTemplate={updateBatchTemplate}
+      extractionTemplates={extractionTemplates}
+    />
+  );
+  const batchCardBlock = batchVisible ? (
+    <div className="project-onboarding-wide project-onboarding-batch-card">
+        <WorkbookBatchCard
+          batch={state.batch}
+          canRetry={batchActions.hasFiles(state.batch.batchId)}
+          retrying={batchActions.retryingBatchId === state.batch.batchId}
+          templates={extractionTemplates}
+          matching={batchActions.matchingBatchId === state.batch.batchId}
+          applying={batchActions.applyingBatchId === state.batch.batchId}
+          confirming={batchActions.confirmingBatchId === state.batch.batchId}
+          experiments={batchActions.experiments}
+          onOpen={openBatchFile}
+          onRetry={retryBatchUpload}
+          onMatchTemplate={batchActions.matchTemplate}
+          onApplyTemplate={batchActions.applyTemplate}
+          onConfirmApplied={batchActions.confirmRegions}
+        />
+      </div>
+  ) : null;
+  const batchGridBlock = renderWorkbookGrid
+    ? <div className="project-onboarding-wide project-onboarding-grid">{renderWorkbookGrid(batchDock)}</div>
+    : <div className="project-onboarding-inline-review project-onboarding-wide">{batchDock}</div>;
 
   return (
     <main className="project-onboarding-page">
@@ -977,6 +1229,7 @@ export function ProjectOnboarding({
                   </OnboardingMessage>
                 </React.Fragment>
               ))}
+              {(!completedRounds.length || state.step === "upload" || state.round) && (
               <OnboardingMessage>
                 <p>
                   {completedRounds.length
@@ -997,6 +1250,7 @@ export function ProjectOnboarding({
                   </div>
                 )}
               </OnboardingMessage>
+              )}
             </>
           )}
 
@@ -1169,6 +1423,15 @@ export function ProjectOnboarding({
             </OnboardingMessage>
           )}
 
+          {completedBatchRounds.map((round) => (
+            <React.Fragment key={`batch-round-${round.number}`}>
+              <OnboardingMessage role="user"><p>Uploaded {round.fileCount} per-experiment {round.fileCount === 1 ? "workbook" : "workbooks"}</p></OnboardingMessage>
+              <OnboardingMessage>
+                <p>Linked {round.linkedCount} of {round.fileCount} files to experiments{round.dataKind ? ` as “${round.dataKind}”` : ""}.</p>
+              </OnboardingMessage>
+            </React.Fragment>
+          ))}
+
           {state.step === "more_workbooks" && (
             <OnboardingMessage>
               <p>
@@ -1176,12 +1439,17 @@ export function ProjectOnboarding({
                   ? `${roundPublishedCount} more ${roundPublishedCount === 1 ? "experiment is" : "experiments are"} in the Experiment Browser, ${publishedCount} in total.`
                   : `Your ${roundPublishedCount} ${roundPublishedCount === 1 ? "experiment is" : "experiments are"} in the Experiment Browser.`}
               </p>
-              <p>Do you have another master table to upload?</p>
+              <p>Do you have other workbooks to upload?</p>
               <ChoiceButtons
                 options={[
                   {
+                    value: "per_experiment",
+                    label: "Per-experiment workbooks",
+                    detail: "One file per experiment, such as calculation sheets. I’ll learn the layout from one file and apply it to the rest.",
+                  },
+                  {
                     value: "master_table",
-                    label: "Upload another master table",
+                    label: "Another master table",
                     detail: "More experiments in the same kind of table.",
                   },
                   {
@@ -1196,6 +1464,126 @@ export function ProjectOnboarding({
           )}
 
           {pendingAnswer?.kind === "more_workbooks" && (
+            <OnboardingMessage role="user"><p>{pendingAnswer.text}</p></OnboardingMessage>
+          )}
+
+          {state.step === "batch_pick" && (
+            <OnboardingMessage>
+              <p>Per-experiment workbooks work like this: I learn where the result sits in one file, save that as a template, and apply it to every other file with the same layout.</p>
+              <p>Upload all files that share a layout together, and name each file with its experiment number, for example “Calculation Exp31.xlsx”, so I can link it to the right experiment.</p>
+              <button type="button" className="project-onboarding-upload" onClick={() => batchInputRef.current?.click()}>
+                Choose workbook files
+              </button>
+            </OnboardingMessage>
+          )}
+
+          {batchVisible && (
+            <OnboardingMessage role="user">
+              <p>Selected {batchItems.length} {batchItems.length === 1 ? "workbook" : "workbooks"}</p>
+            </OnboardingMessage>
+          )}
+
+          {batchVisible && state.step === "batch_upload" && (
+            <OnboardingMessage>
+              {batchRunning ? (
+                <div className="project-onboarding-processing"><span /> Uploading {batchItems.length} {batchItems.length === 1 ? "file" : "files"}…</div>
+              ) : batchSummary.uploaded ? (
+                <p>Uploaded {batchSummary.uploaded} of {batchSummary.total} files.{batchSummary.failed ? ` ${batchSummary.failed} failed; retry them below.` : ""}</p>
+              ) : (
+                <p>None of the files could be uploaded. Retry them below or choose the files again.</p>
+              )}
+              {batchItems.length > BATCH_SOFT_NOTICE_FILES && (
+                <p>That’s {batchItems.length} files. Uploading will take a couple of minutes, and I’ll link them all in one confirmation list.</p>
+              )}
+              {state.batch?.error && (
+                <div className="project-onboarding-error" role="alert"><p>{state.batch.error}</p></div>
+              )}
+            </OnboardingMessage>
+          )}
+
+          {batchVisible && state.step === "batch_upload" && batchCardBlock}
+
+          {batchVisible && state.step !== "batch_upload" && (
+            <OnboardingMessage>
+              <p>
+                Uploaded {batchSummary.uploaded} of {batchSummary.total} files. I linked {batchNameMatches} to experiments from their file names
+                {batchNameUnresolved
+                  ? `; ${batchNameUnresolved} ${batchNameUnresolved === 1 ? "name has" : "names have"} no matching experiment number and you can pick their experiment later.`
+                  : "."}
+              </p>
+            </OnboardingMessage>
+          )}
+
+          {batchVisible && state.step === "batch_teach" && (
+            <>
+              <OnboardingMessage>
+                <p>Let’s start with {state.batch.teach?.fileName || "the first file"}. Draw a box around the result you want me to extract from every file, confirm my interpretation of it, then save it as a template.</p>
+              </OnboardingMessage>
+              {batchGridBlock}
+            </>
+          )}
+
+          {batchVisible && state.step === "batch_apply" && (
+            <>
+              <OnboardingMessage>
+                <p>Saved as “{state.batch.template?.name || "template"}”. I’ll look for this same block in the other {Math.max(0, batchSummary.uploaded - 1)} {batchSummary.uploaded - 1 === 1 ? "file" : "files"}.</p>
+                {state.batch.match && !state.batch.match.error && (
+                  <p>
+                    {batchEligibleMatches} {batchEligibleMatches === 1 ? "file matches" : "files match"}. Apply the template, review the list, and confirm them in one click.
+                    {batchNonMatches ? ` ${batchNonMatches} ${batchNonMatches === 1 ? "file has" : "files have"} a different layout; we’ll handle those next.` : ""}
+                  </p>
+                )}
+              </OnboardingMessage>
+              {batchCardBlock}
+              <button type="button" className="project-onboarding-primary" onClick={continueAfterBatchApply} disabled={!state.batch.match}>
+                Continue
+              </button>
+            </>
+          )}
+
+          {batchVisible && state.step === "batch_leftovers" && (
+            <>
+              <OnboardingMessage>
+                <p>
+                  {batchLeftoverEntries.length} {batchLeftoverEntries.length === 1 ? "file" : "files"} did not match or {batchLeftoverEntries.length === 1 ? "was" : "were"} not confirmed.
+                  Open a file to mark the block by hand and update the template, re-match after updating, or skip the rest.
+                </p>
+                <ul className="project-onboarding-leftovers">
+                  {batchLeftoverEntries.map(({ item, result }) => (
+                    <li key={item.workbookReviewLink?.sourceDocumentId || item.fileName}>
+                      <button type="button" onClick={() => openBatchFile(item.workbookReviewLink)}>{item.fileName}</button>
+                      <span>{result ? templateMatchDetail(result) || result.status : "not matched"}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="project-onboarding-actions">
+                  <button type="button" className="project-onboarding-secondary" onClick={() => rematchBatch()}>Re-match with the current template</button>
+                  <button type="button" className="project-onboarding-secondary" onClick={() => updateState((current) => ({ batch: { ...current.batch, openSessionId: "" }, step: "batch_repeat" }))}>Skip the rest</button>
+                </div>
+              </OnboardingMessage>
+              {batchCardBlock}
+              {state.batch.openSessionId && batchGridBlock}
+            </>
+          )}
+
+          {batchVisible && state.step === "batch_repeat" && (
+            <OnboardingMessage>
+              <p>{batchLinkedCount(state.batch)} of {batchSummary.uploaded} files are linked to experiments{state.batch.template?.name ? ` as “${state.batch.template.name}”` : ""}.</p>
+              <p>Linked workbook data appears as a chip on each experiment and can be charted directly. It does not change the values in your master table.</p>
+              <p>Do you want to extract another result from the same files, upload a different set of workbooks, or finish?</p>
+              <ChoiceButtons
+                options={[
+                  { value: "another_result", label: "Extract another result from the same files", detail: "Teach a second template on the same batch." },
+                  { value: "different_set", label: "Upload a different set of workbooks" },
+                  { value: "done", label: "I’m done" },
+                ]}
+                onChoose={finishBatch}
+                disabled={assistantThinking}
+              />
+            </OnboardingMessage>
+          )}
+
+          {pendingAnswer?.kind === "batch_repeat" && (
             <OnboardingMessage role="user"><p>{pendingAnswer.text}</p></OnboardingMessage>
           )}
 
@@ -1284,6 +1672,7 @@ export function ProjectOnboarding({
       )}
 
       <input ref={fileInputRef} type="file" accept=".xlsx,.xls" hidden onChange={onFileSelected} />
+      <input ref={batchInputRef} type="file" accept=".xlsx,.xls" multiple hidden onChange={onBatchFilesSelected} aria-label="Choose per-experiment workbook files" />
     </main>
   );
 }

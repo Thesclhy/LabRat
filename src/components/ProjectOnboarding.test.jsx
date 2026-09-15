@@ -1,9 +1,27 @@
 import React, { act } from "react";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProjectOnboarding } from "./ProjectOnboarding.jsx";
+import {
+  applyServerRegionExtractionTemplate,
+  confirmServerWorkbookReviewRegionsBatch,
+  matchServerRegionExtractionTemplate,
+} from "../data/serverApi.js";
+import { listExperimentBrowserRows } from "../data/experimentBrowserApi.js";
+
+vi.mock("../data/serverApi.js", async (importOriginal) => ({
+  ...(await importOriginal()),
+  matchServerRegionExtractionTemplate: vi.fn(),
+  applyServerRegionExtractionTemplate: vi.fn(),
+  confirmServerWorkbookReviewRegionsBatch: vi.fn(),
+}));
+
+vi.mock("../data/experimentBrowserApi.js", async (importOriginal) => ({
+  ...(await importOriginal()),
+  listExperimentBrowserRows: vi.fn(),
+}));
 import {
   INITIAL_PROJECT_ONBOARDING,
   projectOnboardingStorageKey,
@@ -648,8 +666,8 @@ describe("ProjectOnboarding", () => {
     );
 
     expect(await screen.findByText("Your 3 experiments are in the Experiment Browser.")).toBeTruthy();
-    expect(screen.getByText("Do you have another master table to upload?")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /Upload another master table/ }));
+    expect(screen.getByText("Do you have other workbooks to upload?")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^Another master table/ }));
 
     expect(await screen.findByRole("button", { name: "Upload Excel workbook" })).toBeTruthy();
     expect(screen.getByText("Published 3 experiments from Master.xlsx to the Experiment Browser.")).toBeTruthy();
@@ -787,6 +805,144 @@ describe("ProjectOnboarding", () => {
     expect(screen.queryByText(/a few quick questions/)).toBeNull();
     expect(screen.queryByText("In one sentence, what is the focus of this project?")).toBeNull();
     expect(screen.queryByRole("textbox", { name: "Your answer" })).toBeNull();
+  });
+
+  it("uploads per-experiment workbooks, teaches a template, applies it, and links the rest without leaving onboarding", async () => {
+    writeProjectOnboarding("project_1", {
+      ...INITIAL_PROJECT_ONBOARDING,
+      step: "batch_pick",
+      projectStage: "established",
+      masterTableStatus: "yes",
+      workbookRounds: [{ number: 1, workbookFileName: "Master.xlsx", workbookReviewSessionId: "session_master", publishedCount: 3 }],
+      publishedCountAtRoundStart: 3,
+    });
+    const sessionFor = (file) => (file.name.includes("31") ? "31" : "32");
+    const onUploadBatchFile = vi.fn(async (file) => {
+      const n = sessionFor(file);
+      return {
+        response: { reviewRegions: [] },
+        session: { id: `session_${n}`, sourceDocumentId: `sd_${n}` },
+        sourceDocument: { id: `sd_${n}`, metadata: { workbookName: file.name } },
+        workbookReviewLink: { workbookReviewSessionId: `session_${n}`, sourceDocumentId: `sd_${n}`, workbookName: file.name, regionCount: 0 },
+      };
+    });
+    listExperimentBrowserRows.mockResolvedValue({ rows: [{ experimentId: "exp_31", label: "Exp31" }, { experimentId: "exp_32", label: "Exp32" }] });
+    matchServerRegionExtractionTemplate.mockResolvedValue({
+      templateName: "Reaction rate data",
+      templateVersionId: "tplv_1",
+      templateVersion: 1,
+      summary: { exact: 2 },
+      matches: [
+        { sourceDocumentId: "sd_31", status: "exact", isTemplateSource: true, eligibleForBatchConfirm: false },
+        { sourceDocumentId: "sd_32", status: "exact", eligibleForBatchConfirm: true, experimentLabel: "Exp32", labelSource: "filename", sheetName: "Sheet1", matchedRange: "P31:BA32" },
+      ],
+    });
+    applyServerRegionExtractionTemplate.mockResolvedValue({
+      templateName: "Reaction rate data",
+      applied: [{
+        sourceDocumentId: "sd_32",
+        workbookReviewSessionId: "session_32",
+        status: "applied",
+        region: {
+          id: "region_32",
+          version: 1,
+          sheetName: "Sheet1",
+          rangeRef: "P31:BA32",
+          reviewStatus: "awaiting_review",
+          linkedExperimentId: "exp_32",
+          templateMatch: { linkStatus: "resolved", experimentLabel: "Exp32" },
+        },
+        revision: { id: "rev_32" },
+      }],
+      skipped: [],
+    });
+    confirmServerWorkbookReviewRegionsBatch.mockResolvedValue({
+      results: [{ regionId: "region_32", ok: true, region: { version: 2, linkedExperimentId: "exp_32", templateMatch: { linkStatus: "resolved", experimentLabel: "Exp32" } } }],
+    });
+    const onHydrateWorkbookReview = vi.fn(async () => ({}));
+    const onSaveExtractionTemplate = vi.fn(async () => ({
+      regionExtractionTemplate: { id: "tpl_1", name: "Reaction rate data", currentVersionId: "tplv_1" },
+      versions: [{ id: "tplv_1" }],
+    }));
+    const teachRegion = {
+      id: "region_31",
+      workbookReviewSessionId: "session_31",
+      sourceDocumentId: "sd_31",
+      sheetName: "Sheet1",
+      rangeRef: "P31:BA32",
+      disposition: "active",
+      reviewStatus: "accepted",
+      version: 2,
+      currentRevisionId: "rev_31",
+      acceptedRevisionId: "rev_31",
+      currentRevision: { id: "rev_31", summary: ["Carbon distribution of the product."], validation: {} },
+    };
+
+    render(
+      <ProjectOnboarding
+        projectId="project_1"
+        projectState={{
+          ...baseProjectState,
+          workbookReviewSessions: [{ id: "session_master", workbookSummary: { workbookName: "Master.xlsx" } }],
+          experimentSnapshotHeads: [{ id: "a" }, { id: "b" }, { id: "c" }],
+        }}
+        reviewState={{ session: { id: "session_31" }, sourceDocument: { id: "sd_31", metadata: { workbookName: "Calculation Exp31.xlsx" } } }}
+        reviewRegions={[teachRegion]}
+        activeRegionId="region_31"
+        onUploadBatchFile={onUploadBatchFile}
+        onRefreshProject={vi.fn(async () => ({}))}
+        onHydrateWorkbookReview={onHydrateWorkbookReview}
+        onSaveExtractionTemplate={onSaveExtractionTemplate}
+        renderWorkbookGrid={(dock) => <div data-testid="onboarding-grid">{dock}</div>}
+      />,
+    );
+
+    expect(screen.getByText(/Upload all files that share a layout together/)).toBeTruthy();
+    const files = [
+      new File(["a"], "Calculation Exp31.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
+      new File(["b"], "Calculation Exp32.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
+    ];
+    fireEvent.change(screen.getByLabelText("Choose per-experiment workbook files"), { target: { files } });
+
+    expect(await screen.findByText(/Let’s start with Calculation Exp31.xlsx/)).toBeTruthy();
+    expect(onUploadBatchFile).toHaveBeenCalledTimes(2);
+    expect(screen.getByText(/I linked 2 to experiments from their file names\./)).toBeTruthy();
+    // The teaching session is already the active review here, so no hydration request is made.
+    expect(onHydrateWorkbookReview).not.toHaveBeenCalled();
+    const grid = screen.getByTestId("onboarding-grid");
+    expect(readProjectOnboarding("project_1")).toMatchObject({ step: "batch_teach", batch: { teach: { sessionId: "session_31" } } });
+
+    const card = within(grid).getByRole("article", { name: "Region Sheet1!P31:BA32" });
+    fireEvent.click(within(card).getByRole("button", { name: "Save Sheet1!P31:BA32 as extraction template" }));
+    const nameInput = within(card).getByLabelText("Template name");
+    fireEvent.change(nameInput, { target: { value: "Reaction rate data" } });
+    fireEvent.keyDown(nameInput, { key: "Enter" });
+
+    await waitFor(() => expect(onSaveExtractionTemplate).toHaveBeenCalledWith(expect.objectContaining({ id: "region_31" }), { name: "Reaction rate data" }));
+    expect(await screen.findByText(/Saved as “Reaction rate data”/)).toBeTruthy();
+    await waitFor(() => expect(matchServerRegionExtractionTemplate).toHaveBeenCalledWith("tplv_1", { sourceDocumentIds: ["sd_31", "sd_32"] }));
+    expect(await screen.findByText(/1 file matches\. Apply the template/)).toBeTruthy();
+    expect(screen.queryByTestId("onboarding-grid")).toBeNull();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Apply to 1 matched file" }));
+    await waitFor(() => expect(applyServerRegionExtractionTemplate).toHaveBeenCalledWith("tplv_1", expect.objectContaining({ sourceDocumentIds: ["sd_32"] })));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm selected (1)" }));
+    await waitFor(() => expect(confirmServerWorkbookReviewRegionsBatch).toHaveBeenCalledWith("project_1", {
+      items: [{ regionId: "region_32", revisionId: "rev_32", expectedRegionVersion: 1 }],
+    }));
+    expect(await screen.findByText(/Confirmed · Exp32/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText(/2 of 2 files are linked to experiments as “Reaction rate data”/)).toBeTruthy();
+    expect(screen.getByText(/does not change the values in your master table/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /^I’m done/ }));
+    await waitFor(() => expect(readProjectOnboarding("project_1").step).toBe("preview"));
+    expect(readProjectOnboarding("project_1").batchRounds).toEqual([
+      { number: 1, fileCount: 2, linkedCount: 2, dataKind: "Reaction rate data" },
+    ]);
+    expect(readProjectOnboarding("project_1").batch).toBeNull();
+    expect(screen.getByText("Linked 2 of 2 files to experiments as “Reaction rate data”.")).toBeTruthy();
   });
 
   it("offers the published Experiment Browser as an explicit destination", () => {

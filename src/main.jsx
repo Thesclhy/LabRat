@@ -3200,6 +3200,32 @@ function App() {
       session: response.workbookReviewSession || response.session || null,
     };
   };
+  // Per-experiment batch files during onboarding: upload and index each file
+  // without making it the active review session; the onboarding flow opens
+  // the teaching file itself. Nothing is interpreted in the background.
+  const uploadOnboardingBatchFile = async (file) => {
+    if (!activeProjectId) throw new Error("Select or create a server project before uploading a workbook.");
+    if (!file) throw new Error("Choose a workbook file first.");
+    const uploaded = await uploadServerProjectFile(activeProjectId, file);
+    const fileObjectId = uploaded.fileObject?.id;
+    if (!fileObjectId) throw new Error("The server did not return an uploaded file id.");
+    const response = await createServerWorkbookReviewSession(activeProjectId, { fileObjectId });
+    const session = response.workbookReviewSession || response.session || null;
+    const sourceDocument = response.sourceDocument || null;
+    if (!session?.id) throw new Error("The server did not return a workbook review session id.");
+    const workbookName = sourceDocument?.metadata?.workbookName || session?.workbookSummary?.workbookName || file.name || "workbook";
+    return {
+      response,
+      session,
+      sourceDocument,
+      workbookReviewLink: {
+        workbookReviewSessionId: session.id,
+        sourceDocumentId: sourceDocument?.id || session.sourceDocumentId || "",
+        workbookName,
+        regionCount: asArray(response.reviewRegions).length || asArray(response.regions).length,
+      },
+    };
+  };
   const openExperimentBrowserDataRequest = () => {
     if (!activeProjectId) {
       setSourceError("Select or create a server project before preparing experiment data.");
@@ -3897,6 +3923,25 @@ function App() {
         onCreateExperimentPlan={createOnboardingExperimentPlan}
         onRecoverExperimentPlan={recoverOnboardingExperimentPlan}
         onAcceptAnalysisResult={acceptAnalysisResultExperiments}
+        onUploadBatchFile={uploadOnboardingBatchFile}
+        onRefreshProject={refreshProjectWorkspace}
+        onSaveExtractionTemplate={saveRegionExtractionTemplate}
+        onUpdateExtractionTemplate={updateRegionExtractionTemplate}
+        extractionTemplates={asArray(projectState?.regionExtractionTemplates)}
+        renderWorkbookGrid={(reviewDock) => (
+          <WorkbookReviewWorkspace
+            projectId={activeProjectId}
+            reviewState={workbookReviewState}
+            draftRegions={workbookReviewDraftRegions}
+            activeDraftRegionId={activeWorkbookReviewDraftRegionId}
+            onDraftRegionsChange={setWorkbookReviewDraftRegions}
+            onActiveDraftRegionChange={setActiveWorkbookReviewDraftRegionId}
+            onCreateRegion={createWorkbookReviewRegion}
+            focusSelection={workbookReviewFocusSelection}
+            cellClassOverlay={calculationOverlay}
+            reviewDock={reviewDock}
+          />
+        )}
         onRequestCorrection={(correction) => {
           setRequestedAgentDraft(`The Experiment Browser preview needs this correction: ${correction}`);
           setRequestedAnalysisOutputTarget("experiment_browser");
