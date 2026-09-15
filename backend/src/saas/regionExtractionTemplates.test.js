@@ -236,6 +236,37 @@ test("a typed constant upstream of an otherwise matching block is a formula mism
   assert.deepEqual(report.brokenCells.map((item) => item.address).sort(), ["G14", "H14"]);
 });
 
+test("typed inputs upstream of the template's own block are expected, not typed-over formulas", () => {
+  const source = {
+    sourceDocument: sourceDocument("doc_40", "Calculation Exp40.xlsx"),
+    indexBlobs: blobs("Sheet1", calculationCells({ label: "Exp40", typedUpstreamCells: ["G14", "H14"] })),
+  };
+  const version = { id: "template_version_typed", ...buildRegionExtractionTemplateVersion({ ...source, region: templateRegion, revision: templateRevision }) };
+  assert.deepEqual(
+    version.signature.expectedBrokenCells.map((item) => [item.relRow, item.relCol]).sort((a, b) => a[1] - b[1]),
+    [[-17, -9], [-17, -8]],
+  );
+
+  const self = matchTemplateVersionToDocument({ templateVersion: version, sourceDocument: source.sourceDocument, indexBlobs: source.indexBlobs });
+  assert.equal(self.status, "exact");
+  assert.deepEqual(self.brokenCells, []);
+
+  const same = matchTemplateVersionToDocument({
+    templateVersion: version,
+    sourceDocument: sourceDocument("doc_41", "Calculation Exp41.xlsx"),
+    indexBlobs: blobs("Sheet1", calculationCells({ label: "Exp41", typedUpstreamCells: ["G14", "H14"] })),
+  });
+  assert.equal(same.status, "exact");
+
+  const extra = matchTemplateVersionToDocument({
+    templateVersion: version,
+    sourceDocument: sourceDocument("doc_42", "Calculation Exp42.xlsx"),
+    indexBlobs: blobs("Sheet1", calculationCells({ label: "Exp42", typedUpstreamCells: ["G14", "H14", "I14"] })),
+  });
+  assert.equal(extra.status, "formula_mismatch");
+  assert.deepEqual(extra.brokenCells.map((item) => item.address), ["I14"]);
+});
+
 test("a matching block without any experiment label is label_missing", () => {
   const report = matchTemplateVersionToDocument({
     templateVersion: templateVersion(),

@@ -264,6 +264,23 @@ export function compileLayoutSignature({ sourceDocument, indexBlobs, region, rev
     }
   }
   borderAnchors.sort((a, b) => b.text.length - a.text.length);
+  // Typed constants in the calculation chain of the source block are inputs
+  // the layout legitimately has (feed mass, conditions). Record them so a
+  // match does not report the same cells as typed-over formulas.
+  let expectedBrokenCells = [];
+  try {
+    const provenance = regionProvenance({ graph: buildFormulaGraph(indexBlobs), indexBlobs, sheetName: sheet.name, range: rangeRef });
+    expectedBrokenCells = asArray(provenance?.brokenCells).map((item) => {
+      const position = XLSX.utils.decode_cell(item.address);
+      return {
+        sheet: normalizeText(item.sheetName) === normalizeText(sheet.name) ? "" : text(item.sheetName),
+        relRow: position.r - origin.r,
+        relCol: position.c - origin.c,
+      };
+    });
+  } catch {
+    expectedBrokenCells = [];
+  }
   const experimentLabel = text(revision?.interpretation?.experimentLabel);
   let labelCell = null;
   if (experimentLabel) {
@@ -285,6 +302,7 @@ export function compileLayoutSignature({ sourceDocument, indexBlobs, region, rev
     textAnchors: textAnchors.slice(0, MAX_TEXT_ANCHORS),
     borderAnchors: borderAnchors.slice(0, MAX_BORDER_ANCHORS),
     cellExpectations,
+    expectedBrokenCells,
     blankCount,
     experimentLabelRule: {
       ...(labelCell ? { kind: "cell", address: labelCell } : { kind: "filename" }),
@@ -414,7 +432,12 @@ function evaluateCandidate({ signature, cells, origin, sheetName, indexBlobs, gr
   if (structureOk) {
     try {
       provenance = regionProvenance({ graph, indexBlobs, sheetName, range: matchedRange });
-      brokenCells = asArray(provenance.brokenCells);
+      const expected = new Set(asArray(signature.expectedBrokenCells).map((item) => `${text(item.sheet)}|${item.relRow}|${item.relCol}`));
+      brokenCells = asArray(provenance.brokenCells).filter((item) => {
+        const position = XLSX.utils.decode_cell(item.address);
+        const sheetKey = normalizeText(item.sheetName) === normalizeText(sheetName) ? "" : text(item.sheetName);
+        return !expected.has(`${sheetKey}|${position.r - origin.r}|${position.c - origin.c}`);
+      });
     } catch {
       provenance = null;
     }
@@ -573,6 +596,7 @@ export function regionExtractionTemplateSummary(template, currentVersion = null)
     anchorRange: currentVersion?.signature?.anchorRange || null,
     semanticType: currentVersion?.semantics?.semanticType || null,
     seriesCount: asArray(currentVersion?.semantics?.series).length,
+    seriesKeys: asArray(currentVersion?.semantics?.series).map((series) => text(series?.seriesKey)).filter(Boolean),
     updatedAt: template.updatedAt,
   };
 }

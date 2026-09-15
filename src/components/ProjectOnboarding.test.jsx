@@ -1103,7 +1103,7 @@ describe("ProjectOnboarding", () => {
     },
     ...overrides,
   });
-  const templateSummary = { id: "tpl_1", name: "reaction rate", status: "active", currentVersionId: "tplv_1", currentVersion: 1, sheetName: "Exp29", anchorRange: "A1:D69", seriesCount: 1 };
+  const templateSummary = { id: "tpl_1", name: "reaction rate", status: "active", currentVersionId: "tplv_1", currentVersion: 1, sheetName: "Exp29", anchorRange: "A1:D69", seriesCount: 1, seriesKeys: ["reaction_rate"] };
 
   it("prefills typed-over files for individual confirmation and marks them linked once confirmed", async () => {
     writeProjectOnboarding("project_1", mismatchBatchState());
@@ -1289,7 +1289,7 @@ describe("ProjectOnboarding", () => {
 
     const grid = screen.getByTestId("onboarding-grid");
     fireEvent.click(within(grid).getByRole("button", { name: "Confirm interpretation of Exp32!A3:D70" }));
-    expect(await screen.findByText(/“reaction rate” expects 1 series but this block has 2/)).toBeTruthy();
+    expect(await screen.findByText(/“reaction rate” expects the series reaction_rate but this block has a, b/)).toBeTruthy();
     expect(onUpdateExtractionTemplate).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Link anyway" }));
     await waitFor(() => expect(onUpdateExtractionTemplate).toHaveBeenCalledTimes(1));

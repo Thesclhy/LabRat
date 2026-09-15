@@ -1165,18 +1165,24 @@ export function ProjectOnboarding({
     }
     if (batch.template && !region.dataKind && batch.redrawSessionId && batch.redrawSessionId === region.workbookReviewSessionId) {
       const template = savedTemplates.find((item) => item.id === batch.template.id) || batch.template;
-      const regionSeries = asArray(region.currentRevision?.interpretation?.series).length;
-      const expected = Number.isInteger(template?.seriesCount) ? template.seriesCount : null;
-      if (expected !== null && regionSeries !== expected) {
+      const regionSeriesKeys = asArray(region.currentRevision?.interpretation?.series)
+        .map((series) => String(series?.seriesKey || series?.label || "").trim().toLowerCase())
+        .filter(Boolean);
+      const templateSeriesKeys = asArray(template?.seriesKeys).map((key) => String(key).toLowerCase());
+      // Charts read a linked region by series key, so the block must carry at
+      // least one series the template defines. Older summaries without keys
+      // fall back to comparing counts.
+      let mismatchText = "";
+      if (templateSeriesKeys.length) {
+        if (!templateSeriesKeys.some((key) => regionSeriesKeys.includes(key))) {
+          mismatchText = `“${template.name}” expects the series ${templateSeriesKeys.join(", ")} but this block has ${regionSeriesKeys.length ? regionSeriesKeys.join(", ") : "no series"}. Correct the interpretation before linking, or link it anyway.`;
+        }
+      } else if (Number.isInteger(template?.seriesCount) && regionSeriesKeys.length !== template.seriesCount) {
+        mismatchText = `“${template.name}” expects ${template.seriesCount} series but this block has ${regionSeriesKeys.length}. Correct the interpretation before linking, or link it anyway.`;
+      }
+      if (mismatchText) {
         updateState((current) => ({
-          batch: {
-            ...current.batch,
-            linkNotice: {
-              kind: "series_mismatch",
-              regionId: region.id,
-              text: `“${template.name}” expects ${expected} ${expected === 1 ? "series" : "series"} but this block has ${regionSeries}. Correct the interpretation before linking, or link it anyway.`,
-            },
-          },
+          batch: { ...current.batch, linkNotice: { kind: "series_mismatch", regionId: region.id, text: mismatchText } },
         }));
         return response;
       }
