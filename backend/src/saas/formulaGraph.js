@@ -103,14 +103,22 @@ function r1c1Token(ref, origin) {
  * so the same calculation at another position produces the same string.
  * String literals are blanked and sheet prefixes are preserved.
  */
+// The shape of a formula is its structure: relative references and
+// operators. Numeric constants are replaced by a placeholder, so the same
+// calculation with per-experiment offsets (C3-33.02 versus C3-31) has one
+// shape. Function names keep their digits (LOG10).
 export function formulaShape(formula, address) {
   const origin = XLSX.utils.decode_cell(cleanAddress(address));
   const source = stripStringLiterals(formula).toUpperCase();
-  return source.replace(REFERENCE_PATTERN, (full, quotedSheet, plainSheet, start, end) => {
+  const references = [];
+  const withPlaceholders = source.replace(REFERENCE_PATTERN, (full, quotedSheet, plainSheet, start, end) => {
     const prefix = quotedSheet ? `'${quotedSheet}'!` : plainSheet ? `${plainSheet}!` : "";
     const startToken = r1c1Token(start, origin);
-    return end ? `${prefix}${startToken}:${r1c1Token(end, origin)}` : `${prefix}${startToken}`;
+    references.push(end ? `${prefix}${startToken}:${r1c1Token(end, origin)}` : `${prefix}${startToken}`);
+    return `\u0000${references.length - 1}\u0000`;
   });
+  const withoutConstants = withPlaceholders.replace(/(?<![\u0000A-Z_\d.])\d+(?:\.\d+)?(?:E[+-]?\d+)?(?![\u0000A-Z_\d])/g, "#");
+  return withoutConstants.replace(/\u0000(\d+)\u0000/g, (match, index) => references[Number(index)]);
 }
 
 function blobSheets(indexBlobs) {

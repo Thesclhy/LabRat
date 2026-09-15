@@ -50,9 +50,14 @@ export function templateMatchDetail(result) {
     parts.push(`${result.alternatives.length} candidate blocks: ${result.alternatives.map((item) => item.matchedRange).join(", ")}`);
   }
   if (result.status === "formula_mismatch") {
-    const typed = asArray(result.formulaMismatches).map((item) => item.address);
+    const mismatches = asArray(result.formulaMismatches);
+    const typed = mismatches.filter((item) => item.found === "typed_number").map((item) => item.address);
+    const different = mismatches.filter((item) => item.found === "different_formula").map((item) => item.address);
+    const missing = mismatches.filter((item) => !["typed_number", "different_formula"].includes(item.found)).map((item) => item.address);
     const broken = asArray(result.brokenCells).map((item) => item.address);
     if (typed.length) parts.push(`typed values at ${typed.slice(0, 6).join(", ")}`);
+    if (different.length) parts.push(`different formulas at ${different.slice(0, 6).join(", ")}`);
+    if (missing.length) parts.push(`no formula at ${missing.slice(0, 6).join(", ")}`);
     if (broken.length) parts.push(`typed over upstream: ${broken.slice(0, 6).join(", ")}`);
   }
   if (result.status === "header_mismatch") {
@@ -303,7 +308,9 @@ export function WorkbookBatchCard({
                     <span>{templateMatchDetail(result)}</span>
                     {result.status === "formula_mismatch" && (
                       <small className="agent-workbook-batch-match-note">
-                        Typed numbers where the template expects formulas. The values are readable; this file is confirmed individually.
+                        {asArray(result.formulaMismatches).some((item) => item.found === "different_formula")
+                          ? "The formulas here are built differently from the template's, so the block is not treated as the same layout. Confirm this file individually, or link it as this data kind by hand."
+                          : "Typed numbers where the template expects formulas. The values are readable; this file is confirmed individually."}
                       </small>
                     )}
                     {!result.eligibleForBatchConfirm && result.matchedRange && link && (

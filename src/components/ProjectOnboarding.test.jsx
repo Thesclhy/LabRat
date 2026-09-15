@@ -1209,10 +1209,9 @@ describe("ProjectOnboarding", () => {
       currentRevision: { id: "rev_manual", summary: ["Reaction rate over time."], validation: {}, interpretation: { series: [{ seriesKey: "reaction_rate" }] } },
     };
     const onConfirmRegion = vi.fn(async () => ({ region: { ...manualRegion, reviewStatus: "accepted", acceptedRevisionId: "rev_manual", version: 2 } }));
-    const onUpdateExtractionTemplate = vi.fn(async () => ({
-      regionExtractionTemplate: { id: "tpl_1", name: "reaction rate", currentVersionId: "tplv_2" },
-      versions: [{ id: "tplv_1" }, { id: "tplv_2" }],
-      sourceRegionLink: { regionId: "region_manual", linkedExperimentId: "exp_32", experimentLabel: "Exp32", linkStatus: "resolved", dataKind: "reaction rate", changed: true },
+    const onLinkRegion = vi.fn(async () => ({
+      region: { ...manualRegion, reviewStatus: "accepted", dataKind: "reaction rate", linkedExperimentId: "exp_32" },
+      link: { regionId: "region_manual", dataKind: "reaction rate", linkedExperimentId: "exp_32", experimentLabel: "Exp32", linkStatus: "resolved", candidates: [] },
     }));
 
     render(
@@ -1223,7 +1222,7 @@ describe("ProjectOnboarding", () => {
         reviewRegions={[manualRegion]}
         activeRegionId="region_manual"
         onConfirmRegion={onConfirmRegion}
-        onUpdateExtractionTemplate={onUpdateExtractionTemplate}
+        onLinkRegion={onLinkRegion}
         onHydrateWorkbookReview={vi.fn(async () => ({}))}
         onRefreshProject={vi.fn(async () => ({}))}
         extractionTemplates={[templateSummary]}
@@ -1237,10 +1236,10 @@ describe("ProjectOnboarding", () => {
     const grid = screen.getByTestId("onboarding-grid");
     fireEvent.click(within(grid).getByRole("button", { name: "Confirm interpretation of Exp32!A3:D70" }));
 
-    await waitFor(() => expect(onUpdateExtractionTemplate).toHaveBeenCalledWith(expect.objectContaining({ id: "region_manual" }), expect.objectContaining({ id: "tpl_1" })));
+    await waitFor(() => expect(onLinkRegion).toHaveBeenCalledWith("region_manual", { dataKind: "reaction rate" }));
     expect(await screen.findByText("Confirmed and linked to Exp32 as “reaction rate”.")).toBeTruthy();
     expect(screen.getByText("Every file in this batch is linked.")).toBeTruthy();
-    expect(readProjectOnboarding("project_1").batch).toMatchObject({ handLinkedDocs: ["sd_32"], template: { currentVersionId: "tplv_2" } });
+    expect(readProjectOnboarding("project_1").batch).toMatchObject({ handLinkedDocs: ["sd_32"], template: { currentVersionId: "tplv_1" } });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(await screen.findByText(/2 of 2 files are linked to experiments as “reaction rate”/)).toBeTruthy();
   });
@@ -1265,10 +1264,9 @@ describe("ProjectOnboarding", () => {
       currentRevision: { id: "rev_manual", summary: ["Two series."], validation: {}, interpretation: { series: [{ seriesKey: "a" }, { seriesKey: "b" }] } },
     };
     const onConfirmRegion = vi.fn(async () => ({ region: { ...manualRegion, reviewStatus: "accepted", acceptedRevisionId: "rev_manual", version: 2 } }));
-    const onUpdateExtractionTemplate = vi.fn(async () => ({
-      regionExtractionTemplate: { id: "tpl_1", name: "reaction rate", currentVersionId: "tplv_2" },
-      versions: [{}, {}],
-      sourceRegionLink: { linkedExperimentId: "exp_32", experimentLabel: "Exp32", linkStatus: "resolved", dataKind: "reaction rate" },
+    const onLinkRegion = vi.fn(async () => ({
+      region: { ...manualRegion, dataKind: "reaction rate", linkedExperimentId: "exp_32" },
+      link: { dataKind: "reaction rate", linkedExperimentId: "exp_32", experimentLabel: "Exp32", linkStatus: "resolved", candidates: [] },
     }));
 
     render(
@@ -1279,7 +1277,7 @@ describe("ProjectOnboarding", () => {
         reviewRegions={[manualRegion]}
         activeRegionId="region_manual"
         onConfirmRegion={onConfirmRegion}
-        onUpdateExtractionTemplate={onUpdateExtractionTemplate}
+        onLinkRegion={onLinkRegion}
         onHydrateWorkbookReview={vi.fn(async () => ({}))}
         onRefreshProject={vi.fn(async () => ({}))}
         extractionTemplates={[templateSummary]}
@@ -1290,9 +1288,9 @@ describe("ProjectOnboarding", () => {
     const grid = screen.getByTestId("onboarding-grid");
     fireEvent.click(within(grid).getByRole("button", { name: "Confirm interpretation of Exp32!A3:D70" }));
     expect(await screen.findByText(/“reaction rate” expects the series reaction_rate but this block has a, b/)).toBeTruthy();
-    expect(onUpdateExtractionTemplate).not.toHaveBeenCalled();
+    expect(onLinkRegion).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Link anyway" }));
-    await waitFor(() => expect(onUpdateExtractionTemplate).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onLinkRegion).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("Confirmed and linked to Exp32 as “reaction rate”.")).toBeTruthy();
   });
 

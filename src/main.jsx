@@ -51,6 +51,7 @@ import {
   createServerRegionExtractionTemplateVersion,
   readServerSourceDocumentRange,
   confirmServerWorkbookReviewRegion,
+  linkServerWorkbookReviewRegion,
   createServerWorkbookReviewRegion,
   interpretServerWorkbookReviewRegion,
   ignoreServerWorkbookReviewRegion,
@@ -3637,6 +3638,18 @@ function App() {
     });
     return applyWorkbookReviewRegionResponse(response);
   };
+  const linkWorkbookReviewRegion = async (regionId, request) => {
+    const session = workbookReviewState.session || workbookReviewState.workbookReviewSession || null;
+    if (!session?.id) throw new Error("Start a workbook review session before linking a region.");
+    const response = await linkServerWorkbookReviewRegion(session.id, regionId, request);
+    applyWorkbookReviewRegionResponse(response, { activate: false });
+    try {
+      await refreshProjectWorkspace();
+    } catch {
+      // The link is saved; the next project refresh lists it.
+    }
+    return response;
+  };
   const ignoreWorkbookReviewRegion = async (regionId, request) => {
     const session = workbookReviewState.session || workbookReviewState.workbookReviewSession || null;
     if (!session?.id) throw new Error("Start a workbook review session before ignoring a region.");
@@ -3927,6 +3940,7 @@ function App() {
         onRefreshProject={refreshProjectWorkspace}
         onSaveExtractionTemplate={saveRegionExtractionTemplate}
         onUpdateExtractionTemplate={updateRegionExtractionTemplate}
+        onLinkRegion={linkWorkbookReviewRegion}
         extractionTemplates={asArray(projectState?.regionExtractionTemplates)}
         renderWorkbookGrid={(reviewDock) => (
           <WorkbookReviewWorkspace

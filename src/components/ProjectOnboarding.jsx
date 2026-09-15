@@ -332,6 +332,7 @@ export function ProjectOnboarding({
   renderWorkbookGrid,
   onSaveExtractionTemplate,
   onUpdateExtractionTemplate,
+  onLinkRegion,
   extractionTemplates = [],
   onComplete,
   onExit,
@@ -1109,28 +1110,26 @@ export function ProjectOnboarding({
     }));
   };
 
-  // A redrawn block is linked by adding a version to the batch's template:
-  // the backend gives the source region the template's data kind and the
-  // experiment from its label or file name, so charts treat it as the same
-  // kind of data as the applied matches.
+  // A redrawn block is linked directly as the batch's data kind: the region
+  // gets the template's name as its data kind and the experiment from the
+  // file name, so charts treat it as the same kind of data as the applied
+  // matches. The template itself is not changed.
   const linkRedrawnRegion = async (region) => {
     const batch = stateRef.current.batch;
     const template = savedTemplates.find((item) => item.id === batch?.template?.id) || batch?.template;
-    if (!region?.id || !template?.id) return;
+    const dataKind = template?.name || "";
+    if (!region?.id || !dataKind || !onLinkRegion) return;
     try {
-      const saved = await onUpdateExtractionTemplate?.(region, template);
-      const link = saved?.sourceRegionLink || null;
-      const updated = templateSummaryFrom(saved);
-      const dataKind = link?.dataKind || template.name;
+      const result = await onLinkRegion(region.id, { dataKind });
+      const link = result?.link || null;
       updateState((current) => ({
         batch: {
           ...current.batch,
-          template: updated ? { ...current.batch?.template, ...updated } : current.batch?.template,
           handLinkedDocs: [...new Set([...asArray(current.batch?.handLinkedDocs), region.sourceDocumentId])],
           redrawSessionId: "",
           linkNotice: {
             kind: "linked",
-            text: `Confirmed and linked${link?.experimentLabel ? ` to ${link.experimentLabel}` : ""} as “${dataKind}”.${link && link.linkStatus === "unresolved" ? " No experiment matched the file name; pick it in the Experiment Browser later." : ""}`,
+            text: `Confirmed and linked${link?.experimentLabel && link?.linkedExperimentId ? ` to ${link.experimentLabel}` : ""} as “${link?.dataKind || dataKind}”.${link && !link.linkedExperimentId ? " No experiment matched the file name; pick it in the Experiment Browser later." : ""}`,
           },
         },
       }));
@@ -1164,7 +1163,7 @@ export function ProjectOnboarding({
       }));
       return response;
     }
-    if (batch.template && !region.dataKind && batch.redrawSessionId && batch.redrawSessionId === region.workbookReviewSessionId) {
+    if (batch.template && !region.dataKind && onLinkRegion && batch.redrawSessionId && batch.redrawSessionId === region.workbookReviewSessionId) {
       const template = savedTemplates.find((item) => item.id === batch.template.id) || batch.template;
       const regionSeriesKeys = asArray(region.currentRevision?.interpretation?.series)
         .map((series) => String(series?.seriesKey || series?.label || "").trim().toLowerCase())

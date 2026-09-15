@@ -410,6 +410,17 @@ export function applyServerRegionExtractionTemplate(templateVersionId, request =
   });
 }
 
+export function linkServerWorkbookReviewRegion(sessionId, regionId, request = {}, options = {}) {
+  if (!sessionId || !regionId) throw new ServerApiError("Select a confirmed region before linking it.");
+  const dataKind = String(request.dataKind || "").trim();
+  if (!dataKind) throw new ServerApiError("Choose the data kind to link this region as.");
+  return serverJson(`/api/workbook-review-sessions/${encodeURIComponent(sessionId)}/regions/${encodeURIComponent(regionId)}/link`, {
+    dataKind,
+    ...(request.linkedExperimentId ? { linkedExperimentId: request.linkedExperimentId } : {}),
+    ...(request.experimentLabel ? { experimentLabel: request.experimentLabel } : {}),
+  }, options);
+}
+
 export function confirmServerWorkbookReviewRegionsBatch(projectId, request = {}, options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before confirming regions.");
   const items = Array.isArray(request.items) ? request.items.filter((item) => item && item.regionId) : [];

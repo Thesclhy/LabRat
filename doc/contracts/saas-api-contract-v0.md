@@ -148,6 +148,7 @@ POST /api/workbook-review-sessions/:sessionId/regions/:regionId/interpret
 GET  /api/workbook-review-sessions/:sessionId/regions/:regionId/revisions
 POST /api/workbook-review-sessions/:sessionId/regions/:regionId/revisions
 POST /api/workbook-review-sessions/:sessionId/regions/:regionId/confirm
+POST /api/workbook-review-sessions/:sessionId/regions/:regionId/link
 POST /api/workbook-review-sessions/:sessionId/regions/:regionId/ignore
 DELETE /api/workbook-review-sessions/:sessionId/regions/:regionId
 GET  /api/projects/:projectId/region-understandings?status=accepted
@@ -290,6 +291,25 @@ blocks are listed as alternatives. Only shifted candidates in two places is
 - Matching creates no regions, revisions, or sessions.
 - Bounded: template regions have at most 600 cells; sheets above 50,000
   indexed cells are skipped with a warning.
+
+Linking a region by hand:
+
+```text
+POST /api/workbook-review-sessions/:sessionId/regions/:regionId/link
+```
+
+Body `{ dataKind, linkedExperimentId?, experimentLabel? }`. The region must be
+confirmed (`409 region_not_confirmed` otherwise). It sets `dataKind` and, when
+the experiment resolves, `linkedExperimentId`: from `linkedExperimentId` when
+given (`404 experiment_identity_not_found` if it is not in the project),
+otherwise from `experimentLabel` or the workbook file name through the same
+label resolution as template apply. An existing experiment link is never
+overwritten by an unresolved label. Returns `{ region, link }` where `link`
+carries `dataKind`, `linkedExperimentId`, `experimentLabel`, `linkStatus`
+(`resolved`, `already_linked`, `ambiguous`, `unresolved`, `none`) and
+`candidates`. No template, version, or revision is created; the region then
+counts as linked data of that kind for the Experiment Browser and charts,
+exactly like an applied template match.
 
 Applying and batch confirmation:
 

@@ -102,13 +102,20 @@ function templateVersion() {
   };
 }
 
+test("formulaShape ignores numeric constants but keeps references and function names", () => {
+  assert.equal(formulaShape("C3-33.02-IF(C3>=587.88,37.77,0)", "F3"), formulaShape("C3-31-IF(C3>=600,40,0)", "F3"));
+  assert.equal(formulaShape("C3-33.02-IF(C3>=587.88,37.77,0)", "F3"), "RC[-3]-#-IF(RC[-3]>=#,#,#)");
+  assert.equal(formulaShape("LOG10(B2)*2E-3", "C2"), "LOG10(RC[-1])*#");
+  assert.notEqual(formulaShape("C3-33.02", "F3"), formulaShape("D3-33.02", "F3"));
+});
+
 test("formulaShape makes the same calculation identical at any position", () => {
   assert.equal(formulaShape("F14", "Q32"), "R[-18]C[-11]");
   assert.equal(formulaShape("F51", "Q69"), "R[-18]C[-11]");
   assert.equal(formulaShape("=I14+Q29", "T32"), "=R[-18]C[-11]+R[-3]C[-3]");
   assert.equal(formulaShape("=Q29", "Q32"), "=R[-3]C");
-  assert.equal(formulaShape("SUM(Q26:CA26)/$B$12*100", "P29"), "SUM(R[-3]C[1]:R[-3]C[63])/R12C2*100");
-  assert.equal(formulaShape("'LDPE TEMPLATE'!B2*2", "A1"), "'LDPE TEMPLATE'!R[1]C[1]*2");
+  assert.equal(formulaShape("SUM(Q26:CA26)/$B$12*100", "P29"), "SUM(R[-3]C[1]:R[-3]C[63])/R12C2*#");
+  assert.equal(formulaShape("'LDPE TEMPLATE'!B2*2", "A1"), "'LDPE TEMPLATE'!R[1]C[1]*#");
 });
 
 test("fuzzyTextMatch tolerates the corrupted labels seen in real calculation sheets", () => {

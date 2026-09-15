@@ -1970,6 +1970,42 @@ test("region extraction templates are saved from confirmed regions and matched r
   assert.equal(withArchived.regionExtractionTemplates.length, 1);
 });
 
+test("a confirmed region links to a data kind by hand and resolves its experiment from the file name", async () => {
+  const project = await createProject("Region Link Project");
+  store.experimentIdentities.set(`identity_${project.id}_31`, {
+    id: `identity_${project.id}_31`, labId: project.labId, projectId: project.id, canonicalLabel: "Exp31", aliases: ["Exp31"],
+  });
+  const upload = await uploadProjectFile(project.id, makeFormulaCalculationWorkbookBlob(), "Reaction_Rate_Exp31.xlsx");
+  const session = await (await jsonFetch(`/api/projects/${project.id}/workbook-review-sessions`, {
+    method: "POST",
+    body: { fileObjectId: upload.body.fileObject.id },
+  })).json();
+  const sessionId = session.workbookReviewSession.id;
+  const region = (await (await jsonFetch(`/api/workbook-review-sessions/${sessionId}/regions`, {
+    method: "POST",
+    body: { sourceDocumentId: session.sourceDocument.id, sheetName: "Sheet1", range: "A3:D4", selectionMethod: "manual", deferInterpretation: true, idempotencyKey: "link_region_1" },
+  })).json()).region;
+
+  const early = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/regions/${region.id}/link`, { method: "POST", body: { dataKind: "reaction rate" } });
+  assert.equal(early.status, 409);
+  assert.equal((await early.json()).error.code, "region_not_confirmed");
+
+  await confirmReviewRegion(sessionId, region);
+  const missingKind = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/regions/${region.id}/link`, { method: "POST", body: {} });
+  assert.equal(missingKind.status, 400);
+
+  const linked = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/regions/${region.id}/link`, { method: "POST", body: { dataKind: "reaction rate" } });
+  assert.equal(linked.status, 200);
+  const body = await linked.json();
+  assert.equal(body.region.dataKind, "reaction rate");
+  assert.equal(body.region.linkedExperimentId, `identity_${project.id}_31`);
+  assert.equal(body.link.experimentLabel, "Exp31");
+  assert.equal(body.link.linkStatus, "resolved");
+
+  const kinds = await (await jsonFetch(`/api/projects/${project.id}/linked-data-kinds`)).json();
+  assert.ok(JSON.stringify(kinds).includes("reaction rate"));
+});
+
 test("extraction templates apply as prefilled linked regions and confirm in one batch", async () => {
   const project = await createProject("Template Apply Project");
   const firstUpload = await uploadProjectFile(project.id, makeFormulaCalculationWorkbookBlob(), "Calculation Exp31.xlsx");

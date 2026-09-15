@@ -2953,6 +2953,62 @@ async function handleWorkbookReviewRegionConfirm(req, res, context, sessionId, r
   });
 }
 
+// Links a confirmed region to a data kind (and an experiment) without
+// creating a template or a template version. This is how a block drawn by
+// hand in a file the template could not match still counts as the same kind
+// of data as the applied matches.
+async function handleWorkbookReviewRegionLink(req, res, context, sessionId, regionId) {
+  const { auth, region } = await workbookReviewRegionAuth(req, context, sessionId, regionId, "editor");
+  const body = await readJsonBody(req);
+  const dataKind = String(body.dataKind || "").trim();
+  if (!dataKind) throw Object.assign(new Error("Provide the data kind to link this region as."), { statusCode: 400, code: "data_kind_required" });
+  if (!region.acceptedRevisionId) {
+    throw Object.assign(new Error("Confirm the region before linking it to a data kind."), { statusCode: 409, code: "region_not_confirmed" });
+  }
+  const identities = context.store.listExperimentIdentities ? await context.store.listExperimentIdentities({ projectId: region.projectId }) : [];
+  const requestedExperimentId = String(body.linkedExperimentId || "").trim();
+  let experimentLabel = String(body.experimentLabel || "").trim() || null;
+  let link;
+  if (requestedExperimentId) {
+    const identity = identities.find((item) => item.id === requestedExperimentId);
+    if (!identity) throw Object.assign(new Error("The chosen experiment does not belong to this project."), { statusCode: 404, code: "experiment_identity_not_found" });
+    experimentLabel = experimentLabel || identity.canonicalLabel || identity.label || null;
+    link = { linkedExperimentId: identity.id, linkStatus: "resolved", candidates: [{ experimentId: identity.id, label: identity.canonicalLabel || identity.label || identity.id }] };
+  } else {
+    if (!experimentLabel) {
+      const sourceDocument = region.sourceDocumentId ? await context.store.findSourceDocumentById?.(region.sourceDocumentId) : null;
+      experimentLabel = experimentLabelFromWorkbookName(sourceDocument?.metadata?.workbookName || sourceDocument?.metadata?.fileName || "");
+    }
+    link = resolveExperimentLink({ identities, experimentLabel });
+  }
+  const updated = await context.store.updateWorkbookReviewRegion(region.id, {
+    dataKind,
+    linkedExperimentId: link.linkedExperimentId || region.linkedExperimentId || null,
+    updatedBy: auth.user.id,
+  });
+  await context.store.recordAuditEvent({
+    labId: region.labId,
+    projectId: region.projectId,
+    actorUserId: auth.user.id,
+    action: "workbook_review_region.link",
+    targetType: "workbook_review_region",
+    targetId: region.id,
+    summary: `Linked workbook review region ${region.sheetName}!${region.rangeRef} as ${dataKind}${link.linkedExperimentId ? ` for ${experimentLabel || link.linkedExperimentId}` : ""}.`,
+    metadata: { dataKind, linkedExperimentId: updated.linkedExperimentId || null, linkStatus: link.linkStatus },
+  });
+  sendJson(res, 200, {
+    region: await workbookReviewRegionSummary(context, updated),
+    link: {
+      regionId: region.id,
+      dataKind,
+      linkedExperimentId: updated.linkedExperimentId || null,
+      experimentLabel,
+      linkStatus: updated.linkedExperimentId ? (link.linkStatus === "resolved" ? "resolved" : "already_linked") : link.linkStatus,
+      candidates: link.candidates,
+    },
+  });
+}
+
 async function handleWorkbookReviewRegionIgnore(req, res, context, sessionId, regionId) {
   const { auth, region } = await workbookReviewRegionAuth(req, context, sessionId, regionId, "editor");
   const body = await readJsonBody(req);
@@ -3950,6 +4006,10 @@ async function dispatch(req, res, context) {
   const workbookReviewRegionConfirmMatch = pathName.match(/^\/api\/workbook-review-sessions\/([^/]+)\/regions\/([^/]+)\/confirm$/);
   if (workbookReviewRegionConfirmMatch && req.method === "POST") {
     return handleWorkbookReviewRegionConfirm(req, res, context, workbookReviewRegionConfirmMatch[1], workbookReviewRegionConfirmMatch[2]);
+  }
+  const workbookReviewRegionLinkMatch = pathName.match(/^\/api\/workbook-review-sessions\/([^/]+)\/regions\/([^/]+)\/link$/);
+  if (workbookReviewRegionLinkMatch && req.method === "POST") {
+    return handleWorkbookReviewRegionLink(req, res, context, workbookReviewRegionLinkMatch[1], workbookReviewRegionLinkMatch[2]);
   }
   const workbookReviewRegionIgnoreMatch = pathName.match(/^\/api\/workbook-review-sessions\/([^/]+)\/regions\/([^/]+)\/ignore$/);
   if (workbookReviewRegionIgnoreMatch && req.method === "POST") {
