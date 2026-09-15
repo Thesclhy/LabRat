@@ -654,7 +654,8 @@ export function ProjectOnboarding({
   // Publication of this round's experiments ends the round. Earlier rounds'
   // experiments are excluded through the count recorded at round start.
   useEffect(() => {
-    if (roundPublishedCount <= 0 || ["complete", "more_workbooks", "preview", "correction"].includes(state.step)) return;
+    if (roundPublishedCount <= 0) return;
+    if (["complete", "more_workbooks", "preview", "correction"].includes(state.step) || isBatchStep(state.step)) return;
     updateState({ step: "more_workbooks", workbookStatus: "published" });
   }, [roundPublishedCount, state.step]);
 

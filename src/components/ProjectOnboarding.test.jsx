@@ -807,6 +807,34 @@ describe("ProjectOnboarding", () => {
     expect(screen.queryByRole("textbox", { name: "Your answer" })).toBeNull();
   });
 
+  it("moves to the per-experiment picker after publication instead of bouncing back to the question", async () => {
+    writeProjectOnboarding("project_1", {
+      ...INITIAL_PROJECT_ONBOARDING,
+      step: "more_workbooks",
+      projectStage: "established",
+      masterTableStatus: "yes",
+      workbookStatus: "published",
+      workbookFileName: "Master.xlsx",
+      workbookReviewSessionId: "session_1",
+      round: { number: 1, planRequest: "Use the confirmed regions in Master.xlsx to build reviewed Experiment Browser records." },
+      publishedCountAtRoundStart: 0,
+    });
+
+    render(
+      <ProjectOnboarding
+        projectId="project_1"
+        projectState={{ ...baseProjectState, experimentSnapshotHeads: [{ id: "a" }, { id: "b" }, { id: "c" }] }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /^Per-experiment workbooks/ }));
+    expect(await screen.findByRole("button", { name: "Choose workbook files" })).toBeTruthy();
+    expect(screen.getByText(/Upload all files that share a layout together/)).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(readProjectOnboarding("project_1").step).toBe("batch_pick");
+    expect(screen.queryByText("Do you have other workbooks to upload?")).toBeNull();
+  });
+
   it("uploads per-experiment workbooks, teaches a template, applies it, and links the rest without leaving onboarding", async () => {
     writeProjectOnboarding("project_1", {
       ...INITIAL_PROJECT_ONBOARDING,
