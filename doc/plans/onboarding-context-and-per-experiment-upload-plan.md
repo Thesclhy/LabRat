@@ -378,6 +378,15 @@ batch's template and that region, which:
   optional follow-up, since the new version may now match files with the
   same typed-over layout.
 
+**Series compatibility check before linking.** Charts read a linked region
+through its accepted interpretation, matching series by key and then by
+label, so a redrawn block only compares if its series keys agree with the
+template's. Before adding the version, compare the redrawn region's series
+keys with the template's current semantics. If they differ, LabRat says
+which series the template expects and which the region has, and asks the
+user to correct the interpretation before linking. A mismatch is never
+linked silently; missing stays missing in charts.
+
 The dock's "Update template" control stays available for the manual case,
 but in onboarding the user should not have to find it. The confirmation
 message names what happened: "Confirmed and linked to Exp32 as 'reaction
