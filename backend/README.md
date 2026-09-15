@@ -53,7 +53,13 @@ PostgreSQL tests create and remove isolated schemas inside the configured test
 database. They skip when `LABRAT_TEST_DATABASE_URL` is absent. The local
 Compose database is exposed on port 5433 by default.
 
-Seeded development accounts, when explicitly enabled:
+## Local-Only Test Accounts
+
+These public test fixtures are for isolated local development with
+`LABRAT_SEED_DEV_ACCOUNTS=true` only. They are not intended for hosted access;
+do not assume they are the current server credentials. Never reuse these
+passwords on a public server or publish credentials for real users here.
+Hosted account provisioning and password changes are separate operations.
 
 ```text
 admin / LabRatAdmin123!

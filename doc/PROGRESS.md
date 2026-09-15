@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-09-13
+Last reviewed: 2026-09-15
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -12,6 +12,52 @@ Keep entries concise, newest first, and include:
 - meaningful changes
 - verification
 - follow-ups or residual risk
+
+## 2026-09-15 — README publication
+
+- Request: the user explicitly approved pushing the README update to main,
+  including the existing automatic Lightsail deployment, migration step and
+  service restart. They also asked for Guest credentials; no Guest account has
+  been created or provisioned, so no credentials are available.
+- Publication scope is `README.md`, `backend/README.md`, `postman/README.md`
+  and these README-related progress entries only. Earlier local cloud-operation
+  notes, `doc/current-milestone.md` changes and all private/untracked files stay
+  outside this commit. No application, account, permission, secret or deployment
+  configuration changes are included.
+- Pre-push checks: local and remote main both start at `ed02131`; ordinary
+  fast-forward publication is possible. Documentation preflight, all 28 local
+  links/anchors, homepage credential/access checks and diff checks pass. Full
+  application suites are not rerun for Markdown-only changes; the existing
+  hosted workflow performs its own test/build gates before deployment.
+- This is the pre-publication record. Remote commit and workflow status are
+  checked after pushing; no manual deployment dispatch or Guest creation is
+  authorized by this documentation update.
+
+## 2026-09-15 — README refresh and historical guidance cleanup
+
+- Request: update the README after the hosted-access/Guest discussion and
+  remove confusing historical README material. Replaced the root homepage's
+  old blank-copy setup, retired workflow and milestone narrative with current
+  features, Nest v1 architecture, hosted link, invitation roles, local startup,
+  verification and focused documentation links.
+- Removed public development passwords from the homepage. The backend README
+  now explicitly scopes its existing fixtures to isolated local development;
+  they are not verified server credentials. No public Guest is advertised as
+  available; runtime hardening and an isolated demo remain separate work.
+- Inventory found one root README and four distinct backend/tool/fixture
+  READMEs, not a standalone duplicate historical homepage. Retained these
+  purpose-specific files; marked the old Postman collection's README as an
+  archived unversioned-API reference, not current v1 verification. No files or
+  Git history were deleted; previous homepage text remains recoverable in Git.
+- Verification: `npm run codex:preflight`, all 28 local documentation links and
+  anchors, homepage credential/access checks and `git diff --check` passed.
+  Tracked differences are Markdown only; existing LF/CRLF notices remain.
+  Full application suites and browser/server probes were not run because this
+  changes documentation only, not behavior or runtime configuration.
+- Preserved the existing local operational notes and current-milestone edits.
+  No account, invitation, permission, code, dependency, environment, server,
+  commit, push or deployment changes. A future main push can still trigger
+  deployment even when the changes are documentation-only.
 
 ## 2026-09-13 — Confirmed main publication
 
