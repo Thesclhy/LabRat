@@ -13,12 +13,28 @@ manuscript figures and PPTX exports.
   project access after registration.
 - **Existing accounts:** sign in normally; use **Use invitation** to join another
   lab without creating a second account.
-- **Guest access:** no public Guest/demo account is currently provided.
+- **Guest access:** use the public, read-only demo account below.
 
 Do not publish real-user or administrator passwords, API keys, or live invitation
-codes in this repository. Production runtime hardening and an isolated Guest
-demo remain separate work; the hosted site is not an unrestricted public demo.
+codes in this repository. Only the dedicated demo credential below is intentionally
+public. Production runtime hardening remains separate work.
 See [current status and outstanding checks](doc/current-milestone.md).
+
+### Public Guest Demo
+
+- Username: `guest`
+- Password: `Guest-uWCJn5ZC-Demo!`
+- Sign in at [LabRat](https://labrat.100.50.25.194.nip.io/LabRat/) and open
+  **Guest Workspace** in **LabRat Public Demo**.
+
+This dedicated workspace currently starts empty: no real lab data, workbooks or
+scientific results are copied into it. Guest can explore the read-only interface,
+but cannot upload, edit, run AI, create projects or redeem invitations. The session
+expires after 30 minutes. Request a private invitation and use a personal account
+for actual research work.
+
+Never add confidential information to this public demo project. See the
+[Guest isolation and operating contract](doc/contracts/public-guest-v1.md).
 
 ## Current Capabilities
 
@@ -55,6 +71,8 @@ examples only and are never imported automatically.
 - **Lab member:** starts without project access and waits for an explicit grant.
   The View preset includes viewing and exporting; Edit adds proposals and draft
   changes; Approve also permits scientific approval/publication.
+- **Public Guest:** fixed to the separate demo project, with a server-enforced
+  read-only restriction in addition to its View grant.
 
 Read-only access is not a substitute for an isolated public-demo dataset. See
 [invitation and member-management usage](doc/contracts/invitation-onboarding-v1.md)

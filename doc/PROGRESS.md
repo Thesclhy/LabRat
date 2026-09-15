@@ -13,6 +13,34 @@ Keep entries concise, newest first, and include:
 - verification
 - follow-ups or residual risk
 
+## 2026-09-15 — Public Guest preparation
+
+- Request: prepare a Guest account and push. Scope is a dedicated public demo
+  project, not access to existing research data. Existing normal accounts and
+  scientific workflows retain their permissions and review boundaries.
+- Added migration 030 and a server-owned Guest project restriction, readonly
+  request guard, invitation/AI/write rejection, bounded login/read limits and
+  short sessions. The operator helper creates the account, lab, grant and audit
+  atomically and refuses collisions or reuse of the operator password.
+- Full verification passes: frontend 368, Nest 64, legacy 331 with five
+  conditional skips, generated API types, both builds and production-entry
+  smoke. PostgreSQL passes 16/16, including Guest rollback/concurrency,
+  accidental elevated-role isolation and revocation. Additional HTTP login
+  limits/body size and logout after read exhaustion also pass.
+- Browser discovery confirms the isolated project and disabled create/upload/
+  AI/profile controls. An initial empty list was transient asynchronous loading,
+  not a missing membership; acceptance now waits for the rendered project.
+  The requested Playwright browser cache was absent, so existing Chrome is used.
+  Final Chrome acceptance passes login, only the demo lab/project, inert canvas
+  and disabled Save, HTTP mutation/invitation/admin denial, refresh and logout.
+  No unintended UI writes, legacy requests or runtime errors occur. The browser
+  harness and synthetic schema clean up their own services/data after each run.
+  Hosted provisioning remains pending deployment of this enforcement build.
+- Prior local operational notes and private files remain outside publication.
+  README public demo credentials are prepared; the account must be provisioned
+  only after this enforcement build is deployed. Hosted verification and the
+  requested main push are still required before completion.
+
 ## 2026-09-15 — README publication
 
 - Request: the user explicitly approved pushing the README update to main,

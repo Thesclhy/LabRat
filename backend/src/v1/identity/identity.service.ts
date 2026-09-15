@@ -11,6 +11,7 @@ import type {
 } from "./identity.types.js";
 import { normalizeLabRole } from "./identity.types.js";
 import { IdentityRepository } from "./identity.repository.js";
+import { PublicGuestLimiter } from "./public-guest-policy.js";
 
 function publicUser(user: {
   id: string;
@@ -34,6 +35,8 @@ function uniqueViolation(error: unknown): boolean {
 
 @Injectable()
 export class IdentityService {
+  private readonly guestLimiter = new PublicGuestLimiter();
+
   constructor(
     private readonly repository: IdentityRepository,
     @Inject(V1_CONFIG) private readonly config: V1Config,
@@ -46,11 +49,14 @@ export class IdentityService {
     userAgent?: string;
   }): Promise<{ token: string; expiresAt: Date; auth: AuthResponse }> {
     const user = await this.repository.findUserByUsername(input.username.trim());
+    const guestScope = user?.isActive ? await this.repository.findPublicGuestScope(user.id) : undefined;
+    if (guestScope) this.guestLimiter.take(user!.id, input.ipAddress || "unknown", "login");
     if (!user || !user.isActive || !verifyPassword(input.password, user.passwordHash)) {
       throw new ApiError(401, "invalid_credentials", "Username or password is incorrect.");
     }
     const token = makeSessionToken();
-    const expiresAt = new Date(Date.now() + this.config.sessionTtlMs);
+    const expiresAt = new Date(Date.now() + (guestScope
+      ? Math.min(this.config.sessionTtlMs, 30 * 60_000) : this.config.sessionTtlMs));
     await this.repository.createSession({
       userId: user.id,
       tokenHash: sha256Hex(token),
@@ -81,14 +87,17 @@ export class IdentityService {
     const active = await this.repository.findActiveSession(sha256Hex(token));
     if (!active) return null;
     const memberships = await this.repository.listMembershipsForUser(active.user.id);
+    const guestScope = await this.repository.findPublicGuestScope(active.user.id);
     return {
       sessionId: active.sessionId,
-      user: publicUser(active.user),
-      memberships: memberships.map(({ membership, lab }) => ({
+      user: publicUser({ ...active.user, isSuperAdmin: guestScope ? false : active.user.isSuperAdmin }),
+      ...(guestScope ? { publicGuest: guestScope } : {}),
+      memberships: memberships.filter(({ lab }) => !guestScope || lab.id === guestScope.labId)
+        .map(({ membership, lab }) => ({
         labId: lab.id,
         labName: lab.name,
         labSlug: lab.slug,
-        role: normalizeLabRole(membership.role),
+        role: guestScope ? "lab_member" as const : normalizeLabRole(membership.role),
         status: "active" as const,
       })),
     };
@@ -112,6 +121,10 @@ export class IdentityService {
       user: auth.user,
       memberships: auth.memberships.map(({ labId, role, status }) => ({ labId, role, status })),
     };
+  }
+
+  limitPublicGuestRequest(auth: AuthContext, ip: string) {
+    if (auth.publicGuest) this.guestLimiter.take(auth.user.id, ip, "read");
   }
 
   async listLabsFor(auth: AuthContext) {
@@ -239,11 +252,13 @@ export class IdentityService {
     isSuperAdmin: boolean;
   }): Promise<AuthResponse> {
     const memberships = await this.repository.listMembershipsForUser(user.id);
+    const guestScope = await this.repository.findPublicGuestScope(user.id);
     return {
-      user: publicUser(user),
-      memberships: memberships.map(({ membership, lab }) => ({
+      user: publicUser({ ...user, isSuperAdmin: guestScope ? false : user.isSuperAdmin }),
+      memberships: memberships.filter(({ lab }) => !guestScope || lab.id === guestScope.labId)
+        .map(({ membership, lab }) => ({
         labId: lab.id,
-        role: normalizeLabRole(membership.role),
+        role: guestScope ? "lab_member" as const : normalizeLabRole(membership.role),
         status: "active" as const,
       })),
     };

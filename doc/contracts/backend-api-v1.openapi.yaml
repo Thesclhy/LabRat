@@ -5,6 +5,10 @@ info:
   description: >-
     Contract-first API for the NestJS modular monolith. All documented
     operations have closed DTOs and authoritative v1 behavior.
+    Public Guest identities are restricted to one demo project with read/export
+    access. Authenticated Guest writes, AI requests and invitation redemption
+    return 403 public_guest_read_only; only GET/HEAD and POST logout are allowed.
+    Guest request limits may return 429 too_many_requests on authenticated reads.
 servers:
   - url: http://127.0.0.1:8788
     description: Local v1 development server
@@ -290,6 +294,8 @@ paths:
                 $ref: "#/components/schemas/AuthResponse"
         "400": { $ref: "#/components/responses/ValidationError" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "413": { description: Login body exceeds 8 KiB., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+        "429": { description: Public Guest login attempt limit reached., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
   /api/v1/auth/logout:
     post:
       tags: [Identity]

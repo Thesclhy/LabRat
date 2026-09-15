@@ -8,6 +8,12 @@ This is the short active plan. Current execution status lives in `doc/current-mi
 
 ## Current Focus
 
+The requested public Guest is being prepared as an isolated read-only demo
+identity with one fixed project, no AI/write/invitation actions and explicit
+operator provisioning. Account creation, browser/HTTP checks and the requested
+main publication must all complete before credentials are advertised as ready.
+See `doc/contracts/public-guest-v1.md` and `doc/current-milestone.md`.
+
 Claude `06ecf87` workbook and chart features are integrated and locally verified
 on main's Nest v1 architecture, preserving explicit permissions and invitations.
 Implementation is retained on `codex/claude-v1-integration`. On 2026-09-13 the

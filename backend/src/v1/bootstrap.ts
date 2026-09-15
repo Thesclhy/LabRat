@@ -29,9 +29,10 @@ export async function createV1Application(
   const limiter = new AuthEntryLimiter();
   const fastify = adapter.getInstance();
   fastify.addHook("onRoute", (route) => {
-    if (isInvitationEntry(route.url)) route.bodyLimit = 8 * 1024;
+    if (isInvitationEntry(route.url) || route.url === "/api/v1/auth/login") route.bodyLimit = 8 * 1024;
   });
   fastify.addHook("onRequest", async (request, reply) => {
+    if (request.url.startsWith("/api/v1/auth/")) reply.header("Cache-Control", "no-store");
     if (request.method === "POST" && isInvitationEntry(request.routeOptions.url || request.url)) {
       reply.header("Cache-Control", "no-store");
       limiter.take(request.ip, request.routeOptions.url || request.url);

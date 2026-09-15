@@ -12,6 +12,12 @@ not valid targets for new frontend calls.
 The eleven Claude workbook operations and their transaction, frozen-source and
 permission boundaries are specified in `doc/contracts/claude-features-v1.md`.
 
+Public shared Guest identities have a fixed demo-project scope and permit only
+authenticated GET/HEAD and their own POST logout. Other authenticated requests
+return `403 public_guest_read_only`; Guest limits return `429 too_many_requests`.
+The operator-only provisioning and shared-credential boundary are documented
+in `doc/contracts/public-guest-v1.md`. Login bodies are capped at 8 KiB.
+
 ## Service Boundary
 
 The HTTP service exposes:

@@ -817,7 +817,15 @@ export const invitations = pgTable("invitations", {
   redeemedLabId: text("redeemed_lab_id"),
 });
 
+export const publicGuestAccounts = pgTable("public_guest_accounts", {
+  userId: text("user_id").primaryKey(),
+  projectId: text("project_id").notNull(),
+  createdAt: utcTimestamp("created_at").notNull(),
+  createdBy: text("created_by").notNull(),
+});
+
 export const v1Schema = {
+  publicGuestAccounts,
   invitations,
   users,
   labs,

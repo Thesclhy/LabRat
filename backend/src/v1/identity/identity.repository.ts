@@ -6,6 +6,8 @@ import {
   auditEvents,
   labMemberships,
   labs,
+  projects,
+  publicGuestAccounts,
   sessions,
   users,
 } from "../platform/database/schema.js";
@@ -33,6 +35,15 @@ export class IdentityRepository {
     return this.database.db.query.users.findFirst({
       where: eq(users.username, username),
     });
+  }
+
+  async findPublicGuestScope(userId: string) {
+    const [scope] = await this.database.db
+      .select({ labId: projects.labId, projectId: projects.id })
+      .from(publicGuestAccounts)
+      .innerJoin(projects, eq(projects.id, publicGuestAccounts.projectId))
+      .where(eq(publicGuestAccounts.userId, userId)).limit(1);
+    return scope;
   }
 
   findUserById(userId: string): Promise<UserRow | undefined> {

@@ -36,11 +36,14 @@ export class AuthorizationService {
   ) {}
 
   async resolveProjectAccess(auth: AuthContext, projectId: string) {
+    if (auth.publicGuest && auth.publicGuest.projectId !== projectId) return null;
+    if (auth.publicGuest && !auth.memberships.some((membership) => membership.labId === auth.publicGuest!.labId)) return null;
     const project = await this.repository.findProject(projectId);
     if (!project) return null;
+    if (auth.publicGuest && auth.publicGuest.labId !== project.labId) return null;
     const membership = await this.repository.findLabMembership(auth.user.id, project.labId);
     if (!membership) return { project, access: null };
-    const labRole = normalizeLabRole(membership.role);
+    const labRole = auth.publicGuest ? "lab_member" : normalizeLabRole(membership.role);
     const grants = labRole === "lab_member"
       ? await this.repository.listEffectiveGrantRows(auth.user.id, project.id)
       : { projectGrants: [], experimentGrants: [] };
@@ -56,6 +59,12 @@ export class AuthorizationService {
         capabilities: grant.capabilities,
       })),
     });
+    if (auth.publicGuest && access) {
+      access.capabilities = access.capabilities.filter((value) => value === "read" || value === "export");
+      for (const [id, values] of Object.entries(access.experimentCapabilities)) {
+        access.experimentCapabilities[id] = values.filter((value) => value === "read" || value === "export");
+      }
+    }
     return { project, access };
   }
 
@@ -104,6 +113,11 @@ export class AuthorizationService {
 
   async listAccessibleProjectIds(auth: AuthContext, labId: string): Promise<string[]> {
     if (!auth.memberships.some((membership) => membership.labId === labId)) return [];
+    if (auth.publicGuest) {
+      if (auth.publicGuest.labId !== labId) return [];
+      const resolved = await this.resolveProjectAccess(auth, auth.publicGuest.projectId);
+      return resolved?.access?.capabilities.includes("read") ? [auth.publicGuest.projectId] : [];
+    }
     return this.repository.listAccessibleProjectIds(auth.user.id, labId);
   }
 
@@ -342,6 +356,7 @@ export class AuthorizationService {
   }
 
   private requireLabManager(auth: AuthContext, labId: string): LabRole {
+    if (auth.publicGuest) throw new ApiError(403, "public_guest_read_only", "The public Guest cannot manage labs.");
     const role = auth.memberships.find((membership) => membership.labId === labId)?.role;
     if (!role) throw new ApiError(404, "lab_not_found", "Lab not found.");
     if (role !== "lab_owner" && role !== "lab_admin") {

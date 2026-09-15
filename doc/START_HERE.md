@@ -19,6 +19,10 @@ read `doc/plans/invitation-onboarding-plan.md`,
 `doc/contracts/invitation-onboarding-v1.md`, and
 `doc/contracts/authorization-v1.md` alongside the OpenAPI contract.
 
+For public Guest/demo account work, also read
+`doc/contracts/public-guest-v1.md`; normal View membership alone is not the
+shared-account restriction. Never add real research data to the public demo.
+
 LabRat is a server-first, multi-lab research workflow app for messy workbook ingestion, source-backed evidence review, chart specs, manuscript figures, and controlled conversational agent actions.
 
 The current product direction is the Workbook Understanding First workflow:

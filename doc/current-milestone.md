@@ -1,10 +1,28 @@
 # Current Milestone
 
-Status: Claude v1 locally verified; main promotion and automatic deployment authorized
+Status: Public Guest locally verified; hosted publication in progress
 Read when: checking what the next implementation slice should be.
-Last reviewed: 2026-09-13
+Last reviewed: 2026-09-15
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
+
+## Public Guest Access
+
+Request: prepare and publish a public Guest account. Scope is one isolated,
+read-only demo project using existing lab membership and View grants, with an
+additional server-owned scope that blocks writes, AI and invitation redemption.
+No real project data is copied and no administrator password is reused.
+See `doc/contracts/public-guest-v1.md` for limits and release prerequisites.
+
+The guard, scope restriction, migration 030 and transactional operator helper
+are implemented. Full verification passes: frontend 368, Nest 64, legacy 331
+with five conditional skips; PostgreSQL passes 16/16 (14 Nest and two legacy).
+The additional HTTP login-limit/body-limit and logout-after-limit checks pass.
+Real Chrome acceptance passes login, readonly controls/canvas, refresh/logout
+and rejection of writes, AI, invitations and admin access, with no unintended
+UI writes or legacy API calls. Hosted provisioning and publication remain.
+Do not report Guest credentials as usable until the deployed enforcement and
+actual login have been checked. Existing production-hardening work is separate.
 
 ## Claude Feature Parity On v1
 

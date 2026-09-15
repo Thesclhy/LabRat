@@ -70,6 +70,22 @@ Production must provide `DATABASE_URL`, a non-default `SESSION_SECRET`, durable
 file storage, disabled development seed accounts, and exactly one selected AI
 provider with its server-side key.
 
+## Public Guest Provisioning
+
+Public Guest access uses existing read/export grants plus a server-owned fixed
+project restriction. Migration 030 and the Guest-aware Nest build must be active
+before the explicit operator command is used:
+
+```bash
+node backend/scripts/provision-public-guest.mjs --help
+```
+
+The helper requires `DATABASE_URL`, `LABRAT_GUEST_ADMIN_USERNAME` and
+`LABRAT_GUEST_PASSWORD`; it creates a new, empty demo lab/project and refuses
+existing account/lab collisions. It is not automatic startup seeding. Keep real
+account passwords out of the demo configuration and never copy production
+research data. See [Public Guest contract](../doc/contracts/public-guest-v1.md).
+
 ## Endpoint Families
 
 - identity, sessions, Labs, memberships, groups, and explicit access grants

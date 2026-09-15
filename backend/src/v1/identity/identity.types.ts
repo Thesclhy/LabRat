@@ -20,6 +20,7 @@ export interface AuthContext {
   sessionId: string;
   user: PublicUser;
   memberships: PublicMembership[];
+  publicGuest?: { labId: string; projectId: string };
 }
 
 export interface AuthResponse {

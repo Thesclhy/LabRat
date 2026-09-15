@@ -17,6 +17,7 @@ describe.skipIf(!url)("invitation onboarding PostgreSQL", () => {
         values ('platform','platform','Platform',$1,true,now(),now())`, [hashPassword(password)]);
       await applyTestMigrations(databaseUrl, { only: "028_invitation_onboarding.sql" });
       await applyTestMigrations(databaseUrl, { only: "028_invitation_onboarding.sql" });
+      await applyTestMigrations(databaseUrl, { only: "030_public_guest_accounts.sql" });
       process.env.NODE_ENV = "test";
       process.env.LABRAT_AI_PROVIDER = "anthropic";
       process.env.DATABASE_URL = databaseUrl;

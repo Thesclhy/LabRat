@@ -52,6 +52,13 @@ administrator must also have an active Lab membership to read Lab data.
 
 ## Capabilities
 
+Public demo accounts are additionally restricted by `public_guest_accounts`.
+Their accessible labs/projects are pinned to one project and effective
+capabilities are capped at read/export, even after accidental broader grants.
+Guest writes, AI calls and invitation redemption are rejected at the request
+boundary. This is not a new Lab role and does not weaken ordinary authorization.
+See `doc/contracts/public-guest-v1.md` for provisioning, limits and revocation.
+
 - `read`: list and read the permitted resource and bounded evidence.
 - `propose`: create or revise project metadata, uploads, review proposals,
   analysis plans, annotations, Browser documentation and Manuscript drafts.

@@ -4996,6 +4996,24 @@ export interface operations {
             };
             readonly 400: components["responses"]["ValidationError"];
             readonly 401: components["responses"]["Unauthorized"];
+            /** @description Login body exceeds 8 KiB. */
+            readonly 413: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Public Guest login attempt limit reached. */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     readonly logout: {
