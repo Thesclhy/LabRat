@@ -14,6 +14,7 @@ import {
 } from "../regionExtractionTemplates.js";
 import {
   APPLY_ELIGIBLE_STATUSES,
+  APPLY_PREFILL_STATUSES,
   applyTemplateMatch,
   confirmTemplateRegionsBatch,
   resolveExperimentLink,
@@ -3345,7 +3346,9 @@ async function handleRegionExtractionTemplateApply(req, res, context, templateVe
   if (requestedIds.length > MAX_TEMPLATE_APPLY_DOCUMENTS) {
     throw Object.assign(new Error(`Apply to at most ${MAX_TEMPLATE_APPLY_DOCUMENTS} source documents per request.`), { statusCode: 400, code: "too_many_source_documents" });
   }
-  const onlyStatuses = asArray(body.onlyStatuses).map((status) => String(status || "").trim()).filter((status) => APPLY_ELIGIBLE_STATUSES.includes(status));
+  // Callers opt in to prefilling formula mismatches through onlyStatuses; the
+  // default stays the one-click set so existing callers are unchanged.
+  const onlyStatuses = asArray(body.onlyStatuses).map((status) => String(status || "").trim()).filter((status) => APPLY_PREFILL_STATUSES.includes(status));
   const allowedStatuses = onlyStatuses.length ? onlyStatuses : [...APPLY_ELIGIBLE_STATUSES];
   const identities = context.store.listExperimentIdentities ? await context.store.listExperimentIdentities({ projectId: project.id }) : [];
   const applied = [];

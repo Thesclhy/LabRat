@@ -503,7 +503,11 @@ function matchSheet({ signature, sheet, sourceDocument, indexBlobs, graph, origi
       status = best.status;
     }
   }
-  const label = ["exact", "shifted"].includes(status) ? resolveExperimentLabel({ signature, cells, sourceDocument }) : { experimentLabel: null, labelSource: null, labelAddress: null };
+  // Formula mismatches are still prefillable, so they need the experiment
+  // label too; only clean matches turn a missing label into label_missing.
+  const label = ["exact", "shifted", "formula_mismatch"].includes(status)
+    ? resolveExperimentLabel({ signature, cells, sourceDocument })
+    : { experimentLabel: null, labelSource: null, labelAddress: null };
   if (["exact", "shifted"].includes(status) && !label.experimentLabel) status = "label_missing";
   return {
     sheetName: sheet.name,
@@ -549,6 +553,7 @@ export function matchTemplateVersionToDocument({ templateVersion, sourceDocument
     isTemplateSource: Boolean(templateVersion.sourceDocumentId && templateVersion.sourceDocumentId === sourceDocument?.id),
     ...report,
     eligibleForBatchConfirm: ["exact", "shifted"].includes(report.status),
+    eligibleForPrefill: ["exact", "shifted", "formula_mismatch"].includes(report.status) && Boolean(report.matchedRange),
   };
 }
 

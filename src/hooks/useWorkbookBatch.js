@@ -44,6 +44,9 @@ function compactTemplateMatch(result) {
     labelSource: result?.labelSource || null,
     isTemplateSource: Boolean(result?.isTemplateSource),
     eligibleForBatchConfirm: Boolean(result?.eligibleForBatchConfirm),
+    eligibleForPrefill: result?.eligibleForPrefill === undefined
+      ? Boolean(result?.eligibleForBatchConfirm)
+      : Boolean(result?.eligibleForPrefill),
     headerRuns: asArray(result?.headerRuns).slice(0, 4),
     formulaMismatches: asArray(result?.formulaMismatches).slice(0, 8).map((item) => ({ address: item.address, found: item.found })),
     brokenCells: asArray(result?.brokenCells).slice(0, 8).map((item) => ({ address: item.address })),
@@ -68,6 +71,10 @@ function appliedRowFromEntry(entry, batch) {
     experimentLabel: region.templateMatch?.experimentLabel || null,
     linkStatus: region.templateMatch?.linkStatus || "none",
     linkedExperimentId: region.linkedExperimentId || null,
+    matchStatus: region.templateMatch?.status || entry.status || null,
+    // Typed-over formulas are prefilled but must be confirmed one at a time.
+    needsIndividualConfirm: region.templateMatch?.status === "formula_mismatch",
+    warning: asArray(region.warnings).find((item) => item?.code === "template_formula_mismatch")?.message || "",
     confirmed: region.reviewStatus === "accepted",
     error: entry.warning?.message || "",
   };
@@ -223,14 +230,18 @@ export function useWorkbookBatchActions({
     }
   }, [matchingBatchId, update]);
 
-  const applyTemplate = useCallback(async (batch, sourceDocumentIds) => {
+  const applyTemplate = useCallback(async (batch, sourceDocumentIds, { onlyStatuses = null } = {}) => {
     const batchId = batch?.batchId;
     const templateVersionId = batch?.match?.templateVersionId;
     if (!batchId || !templateVersionId || applyingBatchId || !asArray(sourceDocumentIds).length) return;
     setApplyingBatchId(batchId);
     try {
       const [response, knownExperiments] = await Promise.all([
-        applyServerRegionExtractionTemplate(templateVersionId, { sourceDocumentIds, idempotencyKey: `apply_template_${uid()}` }),
+        applyServerRegionExtractionTemplate(templateVersionId, {
+          sourceDocumentIds,
+          idempotencyKey: `apply_template_${uid()}`,
+          ...(asArray(onlyStatuses).length ? { onlyStatuses: asArray(onlyStatuses) } : {}),
+        }),
         fetchExperiments(),
       ]);
       setExperiments(knownExperiments);
@@ -238,10 +249,21 @@ export function useWorkbookBatchActions({
         ...asArray(response?.applied).map((entry) => appliedRowFromEntry(entry, batch)),
         ...asArray(response?.skipped).filter((entry) => entry.region?.id).map((entry) => appliedRowFromEntry(entry, batch)),
       ];
-      update(batchId, (current) => ({
-        ...current,
-        apply: { templateVersionId, templateName: response?.templateName || batch.match?.templateName || "", items: rows, error: "" },
-      }), "apply");
+      // A second apply (for example the typed-over files after the clean ones)
+      // adds rows rather than replacing the list.
+      update(batchId, (current) => {
+        const previous = current?.apply?.templateVersionId === templateVersionId ? asArray(current?.apply?.items) : [];
+        const incoming = new Set(rows.map((row) => row.sourceDocumentId));
+        return {
+          ...current,
+          apply: {
+            templateVersionId,
+            templateName: response?.templateName || batch.match?.templateName || "",
+            items: [...previous.filter((row) => !incoming.has(row.sourceDocumentId)), ...rows],
+            error: "",
+          },
+        };
+      }, "apply");
       await reload();
     } catch (error) {
       update(batchId, (current) => ({

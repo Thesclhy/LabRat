@@ -10554,8 +10554,54 @@ tbody tr:hover {
   margin-top: 13px;
 }
 
-.project-onboarding-actions .project-onboarding-secondary {
+.project-onboarding-actions .project-onboarding-secondary,
+.project-onboarding-actions .project-onboarding-primary {
   margin-top: 0;
+}
+
+.project-onboarding-batch-actions {
+  align-items: center;
+}
+
+.project-onboarding-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.project-onboarding-leftovers li {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 8px 0;
+  border-top: 1px solid var(--color-border-soft);
+}
+
+.project-onboarding-leftovers li:first-child {
+  border-top: 0;
+}
+
+.project-onboarding-leftover-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.agent-workbook-batch-warning,
+.agent-workbook-batch-match-note {
+  display: block;
+  color: var(--color-amber-800);
+  font-size: 12px;
+}
+
+.agent-workbook-batch-confirm-status.is-individual {
+  color: var(--color-amber-800);
 }
 
 .project-onboarding-plan-recovery {

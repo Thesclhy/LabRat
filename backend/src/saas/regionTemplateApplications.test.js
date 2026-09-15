@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { MemorySaasStore } from "./memoryStore.js";
+import { confirmWorkbookReviewRegion } from "./workbookReviewRegions.js";
 import { buildRegionExtractionTemplateVersion, matchTemplateVersionToDocument } from "./regionExtractionTemplates.js";
 import {
   applyTemplateMatch,
@@ -152,8 +153,8 @@ test("applyTemplateMatch skips non-eligible reports and existing manual regions 
   const { template, version } = templateFixture();
   const other = documentFixture("doc_33", "Exp33", "Calculation Exp33.xlsx");
   const report = matchTemplateVersionToDocument({ templateVersion: version, sourceDocument: other.sourceDocument, indexBlobs: other.indexBlobs });
-  const notEligible = await applyTemplateMatch({ store, project, template, templateVersion: version, sourceDocument: other.sourceDocument, indexBlobs: other.indexBlobs, report: { ...report, status: "formula_mismatch" } });
-  assert.deepEqual(notEligible, { skipped: true, reason: "not_eligible", status: "formula_mismatch", sourceDocumentId: "doc_33" });
+  const notEligible = await applyTemplateMatch({ store, project, template, templateVersion: version, sourceDocument: other.sourceDocument, indexBlobs: other.indexBlobs, report: { ...report, status: "header_mismatch" } });
+  assert.deepEqual(notEligible, { skipped: true, reason: "not_eligible", status: "header_mismatch", sourceDocumentId: "doc_33" });
 
   const session = await store.createWorkbookReviewSession({ labId: "lab_1", projectId: "project_1", sourceDocumentId: "doc_33", workbookSummary: { workbookName: "Calculation Exp33.xlsx" }, status: "needs_user_review", createdBy: "user_1" });
   const manual = await store.createWorkbookReviewRegion({ labId: "lab_1", projectId: "project_1", workbookReviewSessionId: session.id, sourceDocumentId: "doc_33", sheetName: "Sheet1", rangeRef: "P31:U32", selectionMethod: "manual", disposition: "active", reviewStatus: "awaiting_review", createdBy: "user_1" });
@@ -161,6 +162,41 @@ test("applyTemplateMatch skips non-eligible reports and existing manual regions 
   assert.equal(collides.skipped, true);
   assert.equal(collides.reason, "region_exists");
   assert.equal(collides.region.id, manual.id);
+});
+
+test("applyTemplateMatch prefills a formula-mismatch file with a warning, a link, and no batch eligibility", async () => {
+  const store = new MemorySaasStore();
+  const { template, version } = templateFixture();
+  const other = documentFixture("doc_36", "Exp36", "Calculation Exp36.xlsx");
+  const identities = [{ id: "identity_36", projectId: "project_1", labId: "lab_1", canonicalLabel: "Exp36", aliases: [] }];
+  const clean = matchTemplateVersionToDocument({ templateVersion: version, sourceDocument: other.sourceDocument, indexBlobs: other.indexBlobs });
+  const report = { ...clean, status: "formula_mismatch", eligibleForBatchConfirm: false, formulaMismatches: [{ address: "R32", expected: "formula", found: "typed_number" }] };
+
+  const outcome = await applyTemplateMatch({
+    store, project, actorUserId: "user_1", template, templateVersion: version,
+    sourceDocument: other.sourceDocument, indexBlobs: other.indexBlobs, report, identities, idempotencyKey: "apply_mismatch",
+  });
+  assert.equal(outcome.created, true);
+  assert.equal(outcome.region.templateMatch.status, "formula_mismatch");
+  assert.equal(outcome.region.linkedExperimentId, "identity_36");
+  assert.equal(outcome.region.dataKind, "Carbon distribution");
+  assert.equal(outcome.region.reviewStatus, "awaiting_review");
+  const warning = outcome.region.warnings.find((item) => item.code === "template_formula_mismatch");
+  assert.match(warning.message, /typed values where the template expects formulas at R32/);
+  assert.match(warning.message, /confirm this file individually/);
+  assert.equal(outcome.revision.warnings.some((item) => item.code === "template_formula_mismatch"), true);
+  assert.match(outcome.revision.summary[1], /typed values where the template expects formulas; confirm this file individually/);
+
+  const batch = await confirmTemplateRegionsBatch({
+    store, project, actorUserId: "user_2", identities,
+    items: [{ regionId: outcome.region.id, revisionId: outcome.revision.id, expectedRegionVersion: outcome.region.version }],
+  });
+  assert.equal(batch.results[0].ok, false);
+  assert.equal(batch.results[0].code, "batch_confirm_requires_individual_review");
+
+  const confirmed = await confirmWorkbookReviewRegion({ store, region: outcome.region, revisionId: outcome.revision.id, expectedRegionVersion: outcome.region.version, actorUserId: "user_2" });
+  assert.equal(confirmed.region.reviewStatus, "accepted");
+  assert.equal(confirmed.region.linkedExperimentId, "identity_36");
 });
 
 test("confirmTemplateRegionsBatch confirms only template-matched regions, applies chosen links, and isolates failures", async () => {

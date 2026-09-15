@@ -81,7 +81,8 @@ function batchUploadedItems(batch) {
 // Files linked through the template plus the teaching file itself, which
 // was confirmed by hand before the template existed.
 function batchLinkedCount(batch) {
-  const viaTemplate = asArray(batch?.apply?.items).filter((row) => row.confirmed).length;
+  const viaTemplate = asArray(batch?.apply?.items).filter((row) => row.confirmed).length
+    + asArray(batch?.handLinkedDocs).length;
   if (batch?.templateSource === "chosen") {
     // A saved template's own source file, if it is in this batch, was linked
     // when the template was taught.
@@ -95,7 +96,10 @@ function batchLinkedCount(batch) {
 // Files still needing attention after apply and confirm: uploaded, not the
 // teaching file, not confirmed through the batch list, not a template source.
 function batchLeftovers(batch) {
-  const confirmedDocs = new Set(asArray(batch?.apply?.items).filter((row) => row.confirmed).map((row) => row.sourceDocumentId));
+  const confirmedDocs = new Set([
+    ...asArray(batch?.apply?.items).filter((row) => row.confirmed).map((row) => row.sourceDocumentId),
+    ...asArray(batch?.handLinkedDocs),
+  ]);
   const resultsByDoc = new Map(asArray(batch?.match?.results).map((result) => [result.sourceDocumentId, result]));
   // With a saved template applied, the first file is an ordinary file too.
   const teachDoc = batch?.templateSource === "chosen" ? "" : (batch?.teach?.sourceDocumentId || "");
@@ -105,7 +109,15 @@ function batchLeftovers(batch) {
       if (!docId || docId === teachDoc || confirmedDocs.has(docId)) return false;
       return !resultsByDoc.get(docId)?.isTemplateSource;
     })
-    .map((item) => ({ item, result: resultsByDoc.get(item.workbookReviewLink?.sourceDocumentId) || null }));
+    .map((item) => ({
+      item,
+      result: resultsByDoc.get(item.workbookReviewLink?.sourceDocumentId) || null,
+      row: asArray(batch?.apply?.items).find((row) => row.sourceDocumentId === item.workbookReviewLink?.sourceDocumentId && !row.confirmed) || null,
+    }));
+}
+
+function batchLinkFor(item) {
+  return item?.workbookReviewLink || null;
 }
 
 function templateSummaryFrom(response) {
@@ -690,8 +702,22 @@ export function ProjectOnboarding({
   const batchRunning = batchSummary.pending > 0 || batchSummary.uploading > 0;
   const batchNameMatches = batchUploadedItems(state.batch).filter((item) => item.suggestedExperiment?.status === "matched").length;
   const batchNameUnresolved = Math.max(0, batchSummary.uploaded - batchNameMatches);
-  const batchEligibleMatches = asArray(state.batch?.match?.results).filter((result) => result.eligibleForBatchConfirm && !result.isTemplateSource).length;
-  const batchNonMatches = asArray(state.batch?.match?.results).filter((result) => !result.eligibleForBatchConfirm && !result.isTemplateSource).length;
+  const batchMatchResults = asArray(state.batch?.match?.results);
+  const batchEligibleMatches = batchMatchResults.filter((result) => result.eligibleForBatchConfirm && !result.isTemplateSource).length;
+  // Typed-over files can be prefilled for individual confirmation; anything
+  // else without a one-click match has a different layout.
+  const batchPrefillableResults = batchMatchResults.filter((result) => result.status === "formula_mismatch" && result.matchedRange && !result.isTemplateSource);
+  const batchAppliedDocs = new Set(asArray(state.batch?.apply?.items).map((row) => row.sourceDocumentId));
+  const batchPrefillPending = batchPrefillableResults.filter((result) => !batchAppliedDocs.has(result.sourceDocumentId));
+  const batchUnmatched = batchMatchResults.filter((result) => (
+    !result.eligibleForBatchConfirm && !result.isTemplateSource && !(result.status === "formula_mismatch" && result.matchedRange)
+  )).length;
+  const batchTeachLink = state.batch?.teach?.sessionId
+    ? { workbookReviewSessionId: state.batch.teach.sessionId, sourceDocumentId: state.batch.teach.sourceDocumentId, workbookName: state.batch.teach.fileName }
+    : null;
+  const batchOpenFileName = state.batch?.openFileName
+    || batchUploadedItems(state.batch).find((item) => item.workbookReviewLink?.workbookReviewSessionId === state.batch?.openSessionId)?.fileName
+    || "this file";
   const batchLeftoverEntries = batchLeftovers(state.batch);
   const contextRoundActive = roundNumber === 1;
   const contextQuestionsAfterPlan = contextRoundActive
@@ -1036,6 +1062,129 @@ export function ProjectOnboarding({
     return saved;
   };
 
+  const goBackToTemplateChoice = () => {
+    updateState((current) => ({
+      batch: { ...current.batch, openSessionId: "", redrawSessionId: "", linkNotice: null },
+      step: savedTemplates.length ? "batch_template_choice" : "batch_teach",
+    }));
+  };
+
+  const teachNewTemplateFromFile = (link) => {
+    const sessionId = link?.workbookReviewSessionId || "";
+    if (!sessionId) return;
+    updateState((current) => ({
+      batch: {
+        ...current.batch,
+        teach: { sessionId, sourceDocumentId: link.sourceDocumentId || "", fileName: link.workbookName || "" },
+        template: null,
+        templateSource: "",
+        match: null,
+        apply: null,
+        openSessionId: sessionId,
+        redrawSessionId: "",
+        linkNotice: null,
+      },
+      step: "batch_teach",
+    }));
+  };
+
+  // Prefill the typed-over files at their matched range. They land in the
+  // confirm list as "needs individual confirmation".
+  const prefillMismatchedFiles = async ({ thenReview = false } = {}) => {
+    const batch = stateRef.current.batch;
+    const applied = new Set(asArray(batch?.apply?.items).map((row) => row.sourceDocumentId));
+    const docs = asArray(batch?.match?.results)
+      .filter((result) => result.status === "formula_mismatch" && result.matchedRange && !result.isTemplateSource && !applied.has(result.sourceDocumentId))
+      .map((result) => result.sourceDocumentId);
+    if (docs.length) await batchActions.applyTemplate(batch, docs, { onlyStatuses: ["formula_mismatch"] });
+    if (thenReview) updateState((current) => ({ batch: { ...current.batch, openSessionId: "" }, step: "batch_leftovers" }));
+  };
+
+  const redrawBlockInFile = (link) => {
+    const sessionId = link?.workbookReviewSessionId || "";
+    if (!sessionId) return;
+    updateState((current) => ({
+      batch: { ...current.batch, openSessionId: sessionId, openFileName: link.workbookName || "", redrawSessionId: sessionId, linkNotice: null },
+    }));
+  };
+
+  // A redrawn block is linked by adding a version to the batch's template:
+  // the backend gives the source region the template's data kind and the
+  // experiment from its label or file name, so charts treat it as the same
+  // kind of data as the applied matches.
+  const linkRedrawnRegion = async (region) => {
+    const batch = stateRef.current.batch;
+    const template = savedTemplates.find((item) => item.id === batch?.template?.id) || batch?.template;
+    if (!region?.id || !template?.id) return;
+    try {
+      const saved = await onUpdateExtractionTemplate?.(region, template);
+      const link = saved?.sourceRegionLink || null;
+      const updated = templateSummaryFrom(saved);
+      const dataKind = link?.dataKind || template.name;
+      updateState((current) => ({
+        batch: {
+          ...current.batch,
+          template: updated ? { ...current.batch?.template, ...updated } : current.batch?.template,
+          handLinkedDocs: [...new Set([...asArray(current.batch?.handLinkedDocs), region.sourceDocumentId])],
+          redrawSessionId: "",
+          linkNotice: {
+            kind: "linked",
+            text: `Confirmed and linked${link?.experimentLabel ? ` to ${link.experimentLabel}` : ""} as “${dataKind}”.${link && link.linkStatus === "unresolved" ? " No experiment matched the file name; pick it in the Experiment Browser later." : ""}`,
+          },
+        },
+      }));
+    } catch (error) {
+      updateState((current) => ({
+        batch: { ...current.batch, linkNotice: { kind: "error", text: `Linking failed: ${error?.message || String(error)}` } },
+      }));
+    }
+  };
+
+  const confirmBatchRegion = async (regionId, request) => {
+    const response = await onConfirmRegion?.(regionId, request);
+    const region = response?.region || asArray(reviewRegions).find((item) => item.id === regionId) || null;
+    const batch = stateRef.current.batch;
+    if (!region?.id || !batch) return response;
+    if (region.selectionMethod === "template_match") {
+      const fileName = batchUploadedItems(batch).find((item) => item.workbookReviewLink?.sourceDocumentId === region.sourceDocumentId)?.fileName || "the file";
+      updateState((current) => ({
+        batch: {
+          ...current.batch,
+          apply: current.batch?.apply
+            ? {
+              ...current.batch.apply,
+              items: asArray(current.batch.apply.items).map((row) => (
+                row.regionId === region.id || row.sourceDocumentId === region.sourceDocumentId ? { ...row, confirmed: true, error: "" } : row
+              )),
+            }
+            : current.batch?.apply,
+          linkNotice: { kind: "confirmed", text: `Confirmed ${fileName}${region.templateMatch?.experimentLabel ? ` · ${region.templateMatch.experimentLabel}` : ""}.` },
+        },
+      }));
+      return response;
+    }
+    if (batch.template && !region.dataKind && batch.redrawSessionId && batch.redrawSessionId === region.workbookReviewSessionId) {
+      const template = savedTemplates.find((item) => item.id === batch.template.id) || batch.template;
+      const regionSeries = asArray(region.currentRevision?.interpretation?.series).length;
+      const expected = Number.isInteger(template?.seriesCount) ? template.seriesCount : null;
+      if (expected !== null && regionSeries !== expected) {
+        updateState((current) => ({
+          batch: {
+            ...current.batch,
+            linkNotice: {
+              kind: "series_mismatch",
+              regionId: region.id,
+              text: `“${template.name}” expects ${expected} ${expected === 1 ? "series" : "series"} but this block has ${regionSeries}. Correct the interpretation before linking, or link it anyway.`,
+            },
+          },
+        }));
+        return response;
+      }
+      await linkRedrawnRegion(region);
+    }
+    return response;
+  };
+
   const continueAfterBatchApply = () => {
     const leftovers = batchLeftovers(state.batch);
     updateState((current) => ({
@@ -1141,7 +1290,7 @@ export function ProjectOnboarding({
       activeRegionId={activeRegionId}
       onActiveRegionChange={onActiveRegionChange}
       onReviseRegion={onReviseRegion}
-      onConfirmRegion={onConfirmRegion}
+      onConfirmRegion={confirmBatchRegion}
       onRetryRegion={onRetryRegion}
       onIgnoreRegion={onIgnoreRegion}
       onDeleteRegion={onDeleteRegion}
@@ -1608,39 +1757,125 @@ export function ProjectOnboarding({
                     : `Saved as “${state.batch.template?.name || "template"}”. I’ll look for this same block in the other ${Math.max(0, batchSummary.uploaded - 1)} ${batchSummary.uploaded - 1 === 1 ? "file" : "files"}.`}
                 </p>
                 {state.batch.match && !state.batch.match.error && (
-                  <p>
-                    {batchEligibleMatches} {batchEligibleMatches === 1 ? "file matches" : "files match"}. Apply the template, review the list, and confirm them in one click.
-                    {batchNonMatches ? ` ${batchNonMatches} ${batchNonMatches === 1 ? "file has" : "files have"} a different layout; we’ll handle those next.` : ""}
-                  </p>
+                  batchEligibleMatches > 0 ? (
+                    <p>
+                      {batchEligibleMatches} {batchEligibleMatches === 1 ? "file matches" : "files match"}. Apply the template, review the list, and confirm them in one click.
+                      {batchPrefillableResults.length ? ` ${batchPrefillableResults.length} more ${batchPrefillableResults.length === 1 ? "has" : "have"} typed numbers where the template expects formulas; I can fill those in for individual confirmation.` : ""}
+                      {batchUnmatched ? ` ${batchUnmatched} ${batchUnmatched === 1 ? "file has" : "files have"} a different layout; we’ll handle those next.` : ""}
+                    </p>
+                  ) : batchPrefillableResults.length > 0 ? (
+                    <p>
+                      {batchPrefillableResults.length} {batchPrefillableResults.length === 1 ? "file has" : "files have"} typed numbers where the template expects formulas. I can still fill in the block; confirm each one after checking the typed cells.
+                      {batchUnmatched ? ` ${batchUnmatched} ${batchUnmatched === 1 ? "file has" : "files have"} a different layout; we’ll handle those next.` : ""}
+                    </p>
+                  ) : (
+                    <p>I couldn’t find this template’s block in these files. Review them, use a different template, or teach a new one.</p>
+                  )
                 )}
               </OnboardingMessage>
               {batchCardBlock}
-              <button type="button" className="project-onboarding-primary" onClick={continueAfterBatchApply} disabled={!state.batch.match}>
-                Continue
-              </button>
+              {state.batch.match && !state.batch.match.error && (
+                <div className="project-onboarding-actions project-onboarding-batch-actions">
+                  {batchEligibleMatches > 0 && (
+                    <button type="button" className="project-onboarding-primary" onClick={continueAfterBatchApply}>Continue</button>
+                  )}
+                  {batchEligibleMatches === 0 && batchPrefillableResults.length > 0 && (
+                    <button type="button" className="project-onboarding-primary" disabled={Boolean(batchActions.applyingBatchId)} onClick={() => prefillMismatchedFiles({ thenReview: true })}>
+                      Apply and review each file
+                    </button>
+                  )}
+                  {batchEligibleMatches > 0 && batchPrefillPending.length > 0 && (
+                    <button type="button" className="project-onboarding-secondary" disabled={Boolean(batchActions.applyingBatchId)} onClick={() => prefillMismatchedFiles()}>
+                      Prefill {batchPrefillPending.length} typed-over {batchPrefillPending.length === 1 ? "file" : "files"}
+                    </button>
+                  )}
+                  {batchEligibleMatches === 0 && batchPrefillableResults.length === 0 && (
+                    <button type="button" className="project-onboarding-primary" onClick={continueAfterBatchApply}>Review the files</button>
+                  )}
+                  {savedTemplates.length > 1 && (
+                    <button type="button" className="project-onboarding-secondary" onClick={goBackToTemplateChoice}>Use a different template</button>
+                  )}
+                  {batchTeachLink && (
+                    <button type="button" className="project-onboarding-secondary" onClick={() => teachNewTemplateFromFile(batchTeachLink)}>Teach a new template on one file</button>
+                  )}
+                  <button type="button" className="project-onboarding-link" onClick={goBackToTemplateChoice}>Go back</button>
+                </div>
+              )}
             </>
           )}
 
           {batchVisible && state.step === "batch_leftovers" && (
             <>
               <OnboardingMessage>
-                <p>
-                  {batchLeftoverEntries.length} {batchLeftoverEntries.length === 1 ? "file" : "files"} did not match or {batchLeftoverEntries.length === 1 ? "was" : "were"} not confirmed.
-                  Open a file to mark the block by hand and update the template, re-match after updating, or skip the rest.
-                </p>
-                <ul className="project-onboarding-leftovers">
-                  {batchLeftoverEntries.map(({ item, result }) => (
-                    <li key={item.workbookReviewLink?.sourceDocumentId || item.fileName}>
-                      <button type="button" onClick={() => openBatchFile(item.workbookReviewLink)}>{item.fileName}</button>
-                      <span>{result ? templateMatchDetail(result) || result.status : "not matched"}</span>
-                    </li>
-                  ))}
-                </ul>
+                {batchLeftoverEntries.length ? (
+                  <>
+                    <p>
+                      {batchLeftoverEntries.length} {batchLeftoverEntries.length === 1 ? "file still needs" : "files still need"} attention.
+                      Confirm a prefilled block, redraw the block by hand, or teach a new template from a file.
+                    </p>
+                    <ul className="project-onboarding-leftovers">
+                      {batchLeftoverEntries.map(({ item, result, row }) => {
+                        const link = batchLinkFor(item);
+                        return (
+                          <li key={link?.sourceDocumentId || item.fileName}>
+                            <strong>{item.fileName}</strong>
+                            <span>
+                              {row
+                                ? `Needs individual confirmation${row.experimentLabel ? ` · ${row.experimentLabel}` : ""}.${row.warning ? ` ${row.warning}` : ""}`
+                                : result
+                                  ? templateMatchDetail(result) || result.status
+                                  : "not matched"}
+                            </span>
+                            <div className="project-onboarding-leftover-actions">
+                              {row && <button type="button" onClick={() => openBatchFile(link)}>Confirm the prefilled block</button>}
+                              <button type="button" onClick={() => redrawBlockInFile(link)}>Redraw the block in this file</button>
+                              <button type="button" onClick={() => teachNewTemplateFromFile(link)}>Teach a new template from this file</button>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </>
+                ) : (
+                  <p>Every file in this batch is linked.</p>
+                )}
                 <div className="project-onboarding-actions">
+                  {!batchLeftoverEntries.length && (
+                    <button type="button" className="project-onboarding-primary" onClick={() => updateState((current) => ({ batch: { ...current.batch, openSessionId: "", redrawSessionId: "" }, step: "batch_repeat" }))}>Continue</button>
+                  )}
+                  {batchPrefillPending.length > 0 && (
+                    <button type="button" className="project-onboarding-secondary" disabled={Boolean(batchActions.applyingBatchId)} onClick={() => prefillMismatchedFiles()}>
+                      Prefill {batchPrefillPending.length} typed-over {batchPrefillPending.length === 1 ? "file" : "files"}
+                    </button>
+                  )}
                   <button type="button" className="project-onboarding-secondary" onClick={() => rematchBatch()}>Re-match with the current template</button>
-                  <button type="button" className="project-onboarding-secondary" onClick={() => updateState((current) => ({ batch: { ...current.batch, openSessionId: "" }, step: "batch_repeat" }))}>Skip the rest</button>
+                  {savedTemplates.length > 1 && (
+                    <button type="button" className="project-onboarding-secondary" onClick={goBackToTemplateChoice}>Use a different template</button>
+                  )}
+                  {batchLeftoverEntries.length > 0 && (
+                    <button type="button" className="project-onboarding-secondary" onClick={() => updateState((current) => ({ batch: { ...current.batch, openSessionId: "", redrawSessionId: "" }, step: "batch_repeat" }))}>Skip the rest</button>
+                  )}
                 </div>
               </OnboardingMessage>
+              {state.batch.redrawSessionId && state.batch.openSessionId === state.batch.redrawSessionId && (
+                <OnboardingMessage>
+                  <p>Draw a box around the block in {batchOpenFileName}, confirm my interpretation, and I’ll link it as “{state.batch.template?.name || "the template"}”.</p>
+                </OnboardingMessage>
+              )}
+              {state.batch.linkNotice && (
+                <OnboardingMessage>
+                  <p>{state.batch.linkNotice.text}</p>
+                  {state.batch.linkNotice.kind === "series_mismatch" && (
+                    <button
+                      type="button"
+                      className="project-onboarding-secondary"
+                      onClick={() => linkRedrawnRegion(asArray(reviewRegions).find((item) => item.id === state.batch.linkNotice.regionId))}
+                    >
+                      Link anyway
+                    </button>
+                  )}
+                </OnboardingMessage>
+              )}
               {batchCardBlock}
               {state.batch.openSessionId && batchGridBlock}
             </>

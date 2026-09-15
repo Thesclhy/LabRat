@@ -1070,6 +1070,232 @@ describe("ProjectOnboarding", () => {
     expect(screen.getByText("Linked 2 of 2 files to experiments as “Reaction rate data”.")).toBeTruthy();
   });
 
+  const mismatchBatchState = (overrides = {}) => ({
+    ...INITIAL_PROJECT_ONBOARDING,
+    step: "batch_apply",
+    projectStage: "established",
+    masterTableStatus: "yes",
+    workbookRounds: [{ number: 1, workbookFileName: "Master.xlsx", workbookReviewSessionId: "session_master", publishedCount: 3 }],
+    publishedCountAtRoundStart: 3,
+    batch: {
+      batchId: "batch_1",
+      items: [
+        { index: 0, fileName: "Reaction_Rate_Exp29.xlsx", status: "uploaded", error: "", workbookReviewLink: { workbookReviewSessionId: "session_29", sourceDocumentId: "sd_29", workbookName: "Reaction_Rate_Exp29.xlsx", regionCount: 1 }, suggestedExperiment: { status: "matched", label: "Exp29" } },
+        { index: 1, fileName: "Reaction_Rate_Exp32.xlsx", status: "uploaded", error: "", workbookReviewLink: { workbookReviewSessionId: "session_32", sourceDocumentId: "sd_32", workbookName: "Reaction_Rate_Exp32.xlsx", regionCount: 1 }, suggestedExperiment: { status: "matched", label: "Exp32" } },
+      ],
+      teach: { sessionId: "session_29", sourceDocumentId: "sd_29", fileName: "Reaction_Rate_Exp29.xlsx" },
+      template: { id: "tpl_1", name: "reaction rate", currentVersionId: "tplv_1", currentVersion: 1 },
+      templateSource: "saved",
+      match: {
+        templateId: "tpl_1",
+        templateName: "reaction rate",
+        templateVersionId: "tplv_1",
+        templateVersion: 1,
+        summary: { exact: 1, formula_mismatch: 1 },
+        results: [
+          { sourceDocumentId: "sd_29", status: "exact", isTemplateSource: true, eligibleForBatchConfirm: false, eligibleForPrefill: true, sheetName: "Exp29", matchedRange: "A1:D69" },
+          { sourceDocumentId: "sd_32", status: "formula_mismatch", isTemplateSource: false, eligibleForBatchConfirm: false, eligibleForPrefill: true, experimentLabel: "Exp32", labelSource: "filename", sheetName: "Exp32", matchedRange: "A1:D69", formulaMismatches: [{ address: "A10", found: "typed_number" }, { address: "B10", found: "typed_number" }] },
+        ],
+        error: "",
+      },
+      apply: null,
+      openSessionId: "",
+    },
+    ...overrides,
+  });
+  const templateSummary = { id: "tpl_1", name: "reaction rate", status: "active", currentVersionId: "tplv_1", currentVersion: 1, sheetName: "Exp29", anchorRange: "A1:D69", seriesCount: 1 };
+
+  it("prefills typed-over files for individual confirmation and marks them linked once confirmed", async () => {
+    writeProjectOnboarding("project_1", mismatchBatchState());
+    listExperimentBrowserRows.mockResolvedValue({ rows: [{ experimentId: "exp_32", label: "Exp32" }] });
+    applyServerRegionExtractionTemplate.mockResolvedValue({
+      templateName: "reaction rate",
+      applied: [{
+        sourceDocumentId: "sd_32",
+        workbookReviewSessionId: "session_32",
+        status: "formula_mismatch",
+        region: {
+          id: "region_32",
+          version: 1,
+          sheetName: "Exp32",
+          rangeRef: "A1:D69",
+          reviewStatus: "awaiting_review",
+          linkedExperimentId: "exp_32",
+          templateMatch: { status: "formula_mismatch", linkStatus: "resolved", experimentLabel: "Exp32" },
+          warnings: [{ code: "template_formula_mismatch", message: "This file has typed values where the template expects formulas at A10, B10. The values are readable; confirm this file individually." }],
+        },
+        revision: { id: "rev_32" },
+      }],
+      skipped: [],
+    });
+    const prefilledRegion = {
+      id: "region_32",
+      workbookReviewSessionId: "session_32",
+      sourceDocumentId: "sd_32",
+      sheetName: "Exp32",
+      rangeRef: "A1:D69",
+      selectionMethod: "template_match",
+      disposition: "active",
+      reviewStatus: "awaiting_review",
+      version: 1,
+      currentRevisionId: "rev_32",
+      acceptedRevisionId: null,
+      templateMatch: { status: "formula_mismatch", linkStatus: "resolved", experimentLabel: "Exp32" },
+      currentRevision: { id: "rev_32", summary: ["Prefilled from extraction template reaction rate v1."], validation: {} },
+    };
+    const onConfirmRegion = vi.fn(async () => ({ region: { ...prefilledRegion, reviewStatus: "accepted", acceptedRevisionId: "rev_32", version: 2 } }));
+
+    render(
+      <ProjectOnboarding
+        projectId="project_1"
+        projectState={{ ...baseProjectState, experimentSnapshotHeads: [{ id: "a" }, { id: "b" }, { id: "c" }] }}
+        reviewState={{ session: { id: "session_32" }, sourceDocument: { id: "sd_32", metadata: { workbookName: "Reaction_Rate_Exp32.xlsx" } } }}
+        reviewRegions={[prefilledRegion]}
+        activeRegionId="region_32"
+        onConfirmRegion={onConfirmRegion}
+        onHydrateWorkbookReview={vi.fn(async () => ({}))}
+        onRefreshProject={vi.fn(async () => ({}))}
+        extractionTemplates={[templateSummary]}
+        renderWorkbookGrid={(dock) => <div data-testid="onboarding-grid">{dock}</div>}
+      />,
+    );
+
+    expect(screen.getByText(/1 file has typed numbers where the template expects formulas\. I can still fill in the block/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Continue" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Go back" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Apply and review each file" }));
+    await waitFor(() => expect(applyServerRegionExtractionTemplate).toHaveBeenCalledWith("tplv_1", expect.objectContaining({ sourceDocumentIds: ["sd_32"], onlyStatuses: ["formula_mismatch"] })));
+
+    expect(await screen.findByText(/1 file still needs attention/)).toBeTruthy();
+    expect(readProjectOnboarding("project_1").step).toBe("batch_leftovers");
+    expect(screen.getByText(/Needs individual confirmation · Exp32\. This file has typed values/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm the prefilled block" }));
+
+    const grid = await screen.findByTestId("onboarding-grid");
+    fireEvent.click(within(grid).getByRole("button", { name: "Confirm interpretation of Exp32!A1:D69" }));
+    await waitFor(() => expect(onConfirmRegion).toHaveBeenCalledWith("region_32", expect.objectContaining({ revisionId: "rev_32" })));
+    expect(await screen.findByText("Confirmed Reaction_Rate_Exp32.xlsx · Exp32.")).toBeTruthy();
+    expect(await screen.findByText("Every file in this batch is linked.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText(/2 of 2 files are linked to experiments as “reaction rate”/)).toBeTruthy();
+  });
+
+  it("links a redrawn block through a new template version so it shares the data kind", async () => {
+    writeProjectOnboarding("project_1", mismatchBatchState({
+      step: "batch_leftovers",
+      batch: {
+        ...mismatchBatchState().batch,
+        match: {
+          ...mismatchBatchState().batch.match,
+          results: [
+            mismatchBatchState().batch.match.results[0],
+            { sourceDocumentId: "sd_32", status: "header_mismatch", isTemplateSource: false, eligibleForBatchConfirm: false, eligibleForPrefill: false, sheetName: "Exp32", matchedRange: "A1:D69", headerRuns: [{ expectedCount: 4, foundCount: 2, ok: false }] },
+          ],
+        },
+      },
+    }));
+    const manualRegion = {
+      id: "region_manual",
+      workbookReviewSessionId: "session_32",
+      sourceDocumentId: "sd_32",
+      sheetName: "Exp32",
+      rangeRef: "A3:D70",
+      selectionMethod: "manual",
+      disposition: "active",
+      reviewStatus: "awaiting_review",
+      version: 1,
+      currentRevisionId: "rev_manual",
+      acceptedRevisionId: null,
+      currentRevision: { id: "rev_manual", summary: ["Reaction rate over time."], validation: {}, interpretation: { series: [{ seriesKey: "reaction_rate" }] } },
+    };
+    const onConfirmRegion = vi.fn(async () => ({ region: { ...manualRegion, reviewStatus: "accepted", acceptedRevisionId: "rev_manual", version: 2 } }));
+    const onUpdateExtractionTemplate = vi.fn(async () => ({
+      regionExtractionTemplate: { id: "tpl_1", name: "reaction rate", currentVersionId: "tplv_2" },
+      versions: [{ id: "tplv_1" }, { id: "tplv_2" }],
+      sourceRegionLink: { regionId: "region_manual", linkedExperimentId: "exp_32", experimentLabel: "Exp32", linkStatus: "resolved", dataKind: "reaction rate", changed: true },
+    }));
+
+    render(
+      <ProjectOnboarding
+        projectId="project_1"
+        projectState={{ ...baseProjectState, experimentSnapshotHeads: [{ id: "a" }, { id: "b" }, { id: "c" }] }}
+        reviewState={{ session: { id: "session_32" }, sourceDocument: { id: "sd_32", metadata: { workbookName: "Reaction_Rate_Exp32.xlsx" } } }}
+        reviewRegions={[manualRegion]}
+        activeRegionId="region_manual"
+        onConfirmRegion={onConfirmRegion}
+        onUpdateExtractionTemplate={onUpdateExtractionTemplate}
+        onHydrateWorkbookReview={vi.fn(async () => ({}))}
+        onRefreshProject={vi.fn(async () => ({}))}
+        extractionTemplates={[templateSummary]}
+        renderWorkbookGrid={(dock) => <div data-testid="onboarding-grid">{dock}</div>}
+      />,
+    );
+
+    expect(screen.getAllByText(/2 of 4 header cells found/).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Redraw the block in this file" }));
+    expect(await screen.findByText(/Draw a box around the block in Reaction_Rate_Exp32.xlsx, confirm my interpretation, and I’ll link it as “reaction rate”/)).toBeTruthy();
+    const grid = screen.getByTestId("onboarding-grid");
+    fireEvent.click(within(grid).getByRole("button", { name: "Confirm interpretation of Exp32!A3:D70" }));
+
+    await waitFor(() => expect(onUpdateExtractionTemplate).toHaveBeenCalledWith(expect.objectContaining({ id: "region_manual" }), expect.objectContaining({ id: "tpl_1" })));
+    expect(await screen.findByText("Confirmed and linked to Exp32 as “reaction rate”.")).toBeTruthy();
+    expect(screen.getByText("Every file in this batch is linked.")).toBeTruthy();
+    expect(readProjectOnboarding("project_1").batch).toMatchObject({ handLinkedDocs: ["sd_32"], template: { currentVersionId: "tplv_2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText(/2 of 2 files are linked to experiments as “reaction rate”/)).toBeTruthy();
+  });
+
+  it("holds a redrawn block whose series differ from the template until the user links it anyway", async () => {
+    writeProjectOnboarding("project_1", mismatchBatchState({
+      step: "batch_leftovers",
+      batch: { ...mismatchBatchState().batch, redrawSessionId: "session_32", openSessionId: "session_32", openFileName: "Reaction_Rate_Exp32.xlsx" },
+    }));
+    const manualRegion = {
+      id: "region_manual",
+      workbookReviewSessionId: "session_32",
+      sourceDocumentId: "sd_32",
+      sheetName: "Exp32",
+      rangeRef: "A3:D70",
+      selectionMethod: "manual",
+      disposition: "active",
+      reviewStatus: "awaiting_review",
+      version: 1,
+      currentRevisionId: "rev_manual",
+      acceptedRevisionId: null,
+      currentRevision: { id: "rev_manual", summary: ["Two series."], validation: {}, interpretation: { series: [{ seriesKey: "a" }, { seriesKey: "b" }] } },
+    };
+    const onConfirmRegion = vi.fn(async () => ({ region: { ...manualRegion, reviewStatus: "accepted", acceptedRevisionId: "rev_manual", version: 2 } }));
+    const onUpdateExtractionTemplate = vi.fn(async () => ({
+      regionExtractionTemplate: { id: "tpl_1", name: "reaction rate", currentVersionId: "tplv_2" },
+      versions: [{}, {}],
+      sourceRegionLink: { linkedExperimentId: "exp_32", experimentLabel: "Exp32", linkStatus: "resolved", dataKind: "reaction rate" },
+    }));
+
+    render(
+      <ProjectOnboarding
+        projectId="project_1"
+        projectState={{ ...baseProjectState, experimentSnapshotHeads: [{ id: "a" }, { id: "b" }, { id: "c" }] }}
+        reviewState={{ session: { id: "session_32" }, sourceDocument: { id: "sd_32", metadata: { workbookName: "Reaction_Rate_Exp32.xlsx" } } }}
+        reviewRegions={[manualRegion]}
+        activeRegionId="region_manual"
+        onConfirmRegion={onConfirmRegion}
+        onUpdateExtractionTemplate={onUpdateExtractionTemplate}
+        onHydrateWorkbookReview={vi.fn(async () => ({}))}
+        onRefreshProject={vi.fn(async () => ({}))}
+        extractionTemplates={[templateSummary]}
+        renderWorkbookGrid={(dock) => <div data-testid="onboarding-grid">{dock}</div>}
+      />,
+    );
+
+    const grid = screen.getByTestId("onboarding-grid");
+    fireEvent.click(within(grid).getByRole("button", { name: "Confirm interpretation of Exp32!A3:D70" }));
+    expect(await screen.findByText(/“reaction rate” expects 1 series but this block has 2/)).toBeTruthy();
+    expect(onUpdateExtractionTemplate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Link anyway" }));
+    await waitFor(() => expect(onUpdateExtractionTemplate).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("Confirmed and linked to Exp32 as “reaction rate”.")).toBeTruthy();
+  });
+
   it("offers the published Experiment Browser as an explicit destination", () => {
     writeProjectOnboarding("project_1", {
       ...INITIAL_PROJECT_ONBOARDING,

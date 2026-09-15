@@ -97,7 +97,8 @@ export function WorkbookBatchCard({
   const [selectionOverrides, setSelectionOverrides] = useState({});
   const [chosenLinks, setChosenLinks] = useState({});
   const eligibleMatches = asArray(match?.results).filter((result) => result.eligibleForBatchConfirm && !result.isTemplateSource);
-  const confirmableRows = appliedRows.filter((row) => !row.confirmed && row.regionId);
+  const confirmableRows = appliedRows.filter((row) => !row.confirmed && row.regionId && !row.needsIndividualConfirm);
+  const individualRows = appliedRows.filter((row) => !row.confirmed && row.regionId && row.needsIndividualConfirm);
   const rowLink = (row) => (chosenLinks[row.regionId] !== undefined ? chosenLinks[row.regionId] : row.linkedExperimentId || "");
   // Rows that arrived already linked are selected by default; the user can
   // untick them, and rows that needed a manual link are ticked explicitly.
@@ -186,7 +187,10 @@ export function WorkbookBatchCard({
       {appliedRows.length > 0 && (
         <div className="agent-workbook-batch-confirm" aria-label="Confirm prefilled regions">
           <div className="agent-workbook-batch-confirm-head">
-            <strong>{appliedRows.filter((row) => row.confirmed).length}/{appliedRows.length} prefilled regions confirmed</strong>
+            <strong>
+              {appliedRows.filter((row) => row.confirmed).length}/{appliedRows.length} prefilled regions confirmed
+              {individualRows.length ? ` · ${individualRows.length} need${individualRows.length === 1 ? "s" : ""} individual confirmation` : ""}
+            </strong>
             {confirmableRows.length > 0 && (
               <>
                 <button type="button" disabled={confirming} onClick={selectAll}>Select all linked</button>
@@ -212,7 +216,7 @@ export function WorkbookBatchCard({
                     type="checkbox"
                     aria-label={`Select ${row.fileName} for confirmation`}
                     checked={isRowSelected(row)}
-                    disabled={row.confirmed || confirming || !link}
+                    disabled={row.confirmed || confirming || !link || row.needsIndividualConfirm}
                     onChange={(event) => toggleRow(row.regionId, event.target.checked)}
                   />
                   <label htmlFor={checkboxId} className="agent-workbook-batch-confirm-file">
@@ -233,6 +237,8 @@ export function WorkbookBatchCard({
                   </label>
                   {row.confirmed ? (
                     <span className="agent-workbook-batch-confirm-status is-confirmed">Confirmed{row.experimentLabel ? ` · ${row.experimentLabel}` : ""}</span>
+                  ) : row.needsIndividualConfirm ? (
+                    <span className="agent-workbook-batch-confirm-status is-individual">Needs individual confirmation{row.experimentLabel ? ` · ${row.experimentLabel}` : ""}</span>
                   ) : row.linkStatus === "resolved" && row.linkedExperimentId && chosenLinks[row.regionId] === undefined ? (
                     <span className="agent-workbook-batch-confirm-status">{row.experimentLabel || "linked"}</span>
                   ) : (
@@ -248,6 +254,7 @@ export function WorkbookBatchCard({
                       ))}
                     </select>
                   )}
+                  {row.warning && !row.confirmed && <small className="agent-workbook-batch-warning">{row.warning}</small>}
                   {row.error && <small className="agent-workbook-batch-error">{row.error}</small>}
                 </li>
               );
@@ -289,6 +296,11 @@ export function WorkbookBatchCard({
                     <span className={`agent-workbook-batch-match-status is-${result.status}`}>{TEMPLATE_MATCH_LABELS[result.status] || result.status}</span>
                     {result.isTemplateSource && <span className="agent-workbook-batch-match-source">template source</span>}
                     <span>{templateMatchDetail(result)}</span>
+                    {result.status === "formula_mismatch" && (
+                      <small className="agent-workbook-batch-match-note">
+                        Typed numbers where the template expects formulas. The values are readable; this file is confirmed individually.
+                      </small>
+                    )}
                     {!result.eligibleForBatchConfirm && result.matchedRange && link && (
                       <button
                         type="button"

@@ -8,7 +8,24 @@ import { sourceRegionSummary } from "./sourceDocuments.js";
 
 export const TEMPLATE_MATCH_SELECTION_METHOD = "template_match";
 export const TEMPLATE_MATCH_TRIGGER = "template_match";
+// One-click batch confirmation is limited to structurally identical matches.
 export const APPLY_ELIGIBLE_STATUSES = Object.freeze(["exact", "shifted"]);
+// A formula mismatch (typed values where the template expects formulas) can
+// still be prefilled at the matched range; it carries a warning and must be
+// confirmed individually. Decision 1 of the batch-linking plan.
+export const APPLY_PREFILL_STATUSES = Object.freeze(["exact", "shifted", "formula_mismatch"]);
+
+function formulaMismatchWarning(report) {
+  const typed = asArray(report?.formulaMismatches).map((item) => item.address).filter(Boolean);
+  const broken = asArray(report?.brokenCells).map((item) => item.address).filter(Boolean);
+  const parts = [];
+  if (typed.length) parts.push(`typed values where the template expects formulas at ${typed.slice(0, 8).join(", ")}${typed.length > 8 ? ` and ${typed.length - 8} more` : ""}`);
+  if (broken.length) parts.push(`typed constants upstream of the block at ${broken.slice(0, 8).join(", ")}${broken.length > 8 ? ` and ${broken.length - 8} more` : ""}`);
+  return {
+    code: "template_formula_mismatch",
+    message: `This file has ${parts.join(" and ") || "a formula layout that differs from the template"}. The values are readable; confirm this file individually.`,
+  };
+}
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -173,9 +190,10 @@ export async function applyTemplateMatch({
   identities = [],
   idempotencyKey = null,
 } = {}) {
-  if (!APPLY_ELIGIBLE_STATUSES.includes(report?.status)) {
+  if (!APPLY_PREFILL_STATUSES.includes(report?.status)) {
     return { skipped: true, reason: "not_eligible", status: report?.status || "no_match", sourceDocumentId: sourceDocument.id };
   }
+  const formulaMismatch = report.status === "formula_mismatch";
   const sheetName = text(report.sheetName);
   const range = text(report.matchedRange);
   if (!sheetName || !range) return { skipped: true, reason: "match_incomplete", status: report.status, sourceDocumentId: sourceDocument.id };
@@ -275,10 +293,16 @@ export async function applyTemplateMatch({
     ...previewRegion.interpretation,
     ...(provenance ? { provenance } : {}),
   };
-  const warnings = [...asArray(preview.warnings), ...asArray(provenance?.warnings)];
+  const warnings = [
+    ...(formulaMismatch ? [formulaMismatchWarning(report)] : []),
+    ...asArray(preview.warnings),
+    ...asArray(provenance?.warnings),
+  ];
   const summary = [
     `Prefilled from extraction template ${template?.name || "template"} v${templateVersion.version}.`,
-    `Matched ${report.status === "exact" ? "exactly" : "with an offset"} at ${sheetName}!${range}${offsetText(report.offset)}.`,
+    formulaMismatch
+      ? `Matched at ${sheetName}!${range}${offsetText(report.offset)} with typed values where the template expects formulas; confirm this file individually.`
+      : `Matched ${report.status === "exact" ? "exactly" : "with an offset"} at ${sheetName}!${range}${offsetText(report.offset)}.`,
     link.linkStatus === "resolved"
       ? `Linked to experiment ${link.candidates[0]?.label || report.experimentLabel}.`
       : report.experimentLabel

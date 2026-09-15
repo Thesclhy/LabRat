@@ -220,6 +220,9 @@ test("typed numbers where the template expects formulas are a formula mismatch",
   });
   assert.equal(report.status, "formula_mismatch");
   assert.deepEqual(report.formulaMismatches.map((item) => [item.address, item.found]), [["R32", "typed_number"], ["S32", "typed_number"]]);
+  assert.equal(report.eligibleForBatchConfirm, false);
+  assert.equal(report.eligibleForPrefill, true);
+  assert.equal(report.experimentLabel, "Exp36");
 });
 
 test("a typed constant upstream of an otherwise matching block is a formula mismatch with broken cells", () => {
