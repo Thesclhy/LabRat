@@ -326,6 +326,36 @@ describe("WorkbookReviewDock", () => {
     expect(screen.queryByLabelText(/Calculation provenance/)).toBeNull();
   });
 
+  it("offers to link a confirmed region as the batch data kind and shows an existing link", async () => {
+    const onLinkRegion = vi.fn(async () => ({}));
+    const { rerender } = render(
+      <WorkbookReviewDock
+        reviewState={reviewState()}
+        reviewRegions={reviewRegions}
+        activeRegionId="region_2"
+        onLinkRegion={onLinkRegion}
+        linkDataKind="reaction rate"
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Link Runs!A1:D3 as reaction rate" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Link Runs!F1:H5 as reaction rate" }));
+    await waitFor(() => expect(onLinkRegion).toHaveBeenCalledWith(expect.objectContaining({ id: "region_2" })));
+
+    rerender(
+      <WorkbookReviewDock
+        reviewState={reviewState()}
+        reviewRegions={[reviewRegions[0], { ...reviewRegions[1], dataKind: "reaction rate", linkedExperimentId: "exp_32" }]}
+        activeRegionId="region_2"
+        onLinkRegion={onLinkRegion}
+        linkDataKind="reaction rate"
+      />,
+    );
+    const confirmedCard = screen.getByRole("article", { name: "Region Runs!F1:H5" });
+    expect(within(confirmedCard).getByText(/Linked as/).textContent).toMatch(/reaction rate · experiment linked/);
+    expect(within(confirmedCard).queryByRole("button", { name: /^Link Runs!F1:H5/ })).toBeNull();
+  });
+
   it("saves a confirmed region as an extraction template and shows an existing template name", async () => {
     const onSaveExtractionTemplate = vi.fn().mockResolvedValue({ regionExtractionTemplate: { id: "template_1", name: "Carbon distribution" } });
     const { rerender } = render(

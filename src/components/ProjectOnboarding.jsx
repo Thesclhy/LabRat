@@ -1163,7 +1163,8 @@ export function ProjectOnboarding({
       }));
       return response;
     }
-    if (batch.template && !region.dataKind && onLinkRegion && batch.redrawSessionId && batch.redrawSessionId === region.workbookReviewSessionId) {
+    const batchSessions = new Set(batchUploadedItems(batch).map((item) => item.workbookReviewLink?.workbookReviewSessionId));
+    if (batch.template && !region.dataKind && onLinkRegion && batchSessions.has(region.workbookReviewSessionId)) {
       const template = savedTemplates.find((item) => item.id === batch.template.id) || batch.template;
       const regionSeriesKeys = asArray(region.currentRevision?.interpretation?.series)
         .map((series) => String(series?.seriesKey || series?.label || "").trim().toLowerCase())
@@ -1302,6 +1303,8 @@ export function ProjectOnboarding({
       onDeleteRegion={onDeleteRegion}
       onSaveExtractionTemplate={saveBatchTemplate}
       onUpdateExtractionTemplate={updateBatchTemplate}
+      onLinkRegion={state.batch?.template?.name && onLinkRegion ? linkRedrawnRegion : undefined}
+      linkDataKind={state.batch?.template?.name || ""}
       extractionTemplates={extractionTemplates}
     />
   );

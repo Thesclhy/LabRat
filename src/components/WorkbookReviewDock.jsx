@@ -57,6 +57,8 @@ function RegionReviewCard({
   onToggleCalculationOverlay,
   onSaveExtractionTemplate,
   onUpdateExtractionTemplate,
+  onLinkRegion,
+  linkDataKind = "",
   existingTemplate = null,
   updatableTemplates = [],
 }) {
@@ -257,6 +259,27 @@ function RegionReviewCard({
               </div>
             </>
           )}
+          {confirmed && (region.dataKind || (onLinkRegion && linkDataKind)) && (
+            <div className="workbook-region-link" aria-label={`Data link for ${label}`}>
+              {region.dataKind ? (
+                <p className="workbook-region-template-note">
+                  Linked as <strong>{region.dataKind}</strong>
+                  {region.templateMatch?.experimentLabel
+                    ? ` · ${region.templateMatch.experimentLabel}`
+                    : region.linkedExperimentId ? " · experiment linked" : " · no experiment matched yet"}
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  aria-label={`Link ${label} as ${linkDataKind}`}
+                  disabled={busy}
+                  onClick={() => run("link", () => onLinkRegion(region))}
+                >
+                  {pendingAction === "link" ? "Linking..." : `Link as “${linkDataKind}”`}
+                </button>
+              )}
+            </div>
+          )}
           {confirmed && onSaveExtractionTemplate && (
             <div className="workbook-region-template" aria-label={`Extraction template for ${label}`}>
               {existingTemplate || savedTemplateName ? (
@@ -376,6 +399,8 @@ export function WorkbookReviewDock({
   onToggleCalculationOverlay,
   onSaveExtractionTemplate,
   onUpdateExtractionTemplate,
+  onLinkRegion,
+  linkDataKind = "",
   extractionTemplates = [],
   onReviewExtractedExperiments,
 }) {
@@ -426,6 +451,8 @@ export function WorkbookReviewDock({
             onToggleCalculationOverlay={onToggleCalculationOverlay}
             onSaveExtractionTemplate={onSaveExtractionTemplate}
             onUpdateExtractionTemplate={onUpdateExtractionTemplate}
+            onLinkRegion={onLinkRegion}
+            linkDataKind={linkDataKind}
             existingTemplate={activeTemplates.find((template) => template?.sourceRegionId === region.id) || null}
             updatableTemplates={activeTemplates}
           />

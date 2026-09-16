@@ -74,6 +74,9 @@ export function migrateProjectOnboarding(stored) {
     next.contextIndex = indexOfChainStart("analysis") + (contextAnswers[firstQuestionOfChain("analysis")] ? 1 : 0);
   }
   if (!Number.isInteger(next.contextIndex)) next.contextIndex = 0;
+  // A session saved after publication cannot still be generating its preview.
+  const pastPublication = typeof next.step === "string" && (next.step.startsWith("batch_") || ["more_workbooks", "preview", "correction", "complete"].includes(next.step));
+  if (pastPublication && next.generationStatus === "working") next.generationStatus = "idle";
   next.schemaVersion = SCHEMA_VERSION;
   return next;
 }
