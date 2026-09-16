@@ -5,6 +5,7 @@ import { buildWorkbookUnderstandingPreview } from "./workbookUnderstandingPrevie
 import { buildWorkbookReviewSessionDraft } from "./workbookReviewSessions.js";
 import { confirmWorkbookReviewRegion, createWorkbookReviewRegionRecord } from "./workbookReviewRegions.js";
 import { sourceRegionSummary } from "./sourceDocuments.js";
+import { describeCellDifferences } from "./regionExtractionTemplates.js";
 
 export const TEMPLATE_MATCH_SELECTION_METHOD = "template_match";
 export const TEMPLATE_MATCH_TRIGGER = "template_match";
@@ -16,22 +17,14 @@ export const APPLY_ELIGIBLE_STATUSES = Object.freeze(["exact", "shifted"]);
 export const APPLY_PREFILL_STATUSES = Object.freeze(["exact", "shifted", "formula_mismatch"]);
 
 function formulaMismatchWarning(report, { individual }) {
-  const typed = [...new Set([
-    ...asArray(report?.typedOverCells).filter((item) => item.found !== "typed_upstream").map((item) => item.address),
-    ...asArray(report?.formulaMismatches).filter((item) => item.found === "typed_number").map((item) => item.address),
-  ].filter(Boolean))];
-  const upstream = [...new Set([
-    ...asArray(report?.typedOverCells).filter((item) => item.found === "typed_upstream").map((item) => item.address),
-    ...asArray(report?.brokenCells).map((item) => item.address),
-  ].filter(Boolean))];
-  const hard = asArray(report?.formulaMismatches).filter((item) => item.found !== "typed_number").map((item) => item.address).filter(Boolean);
+  const soft = describeCellDifferences(asArray(report?.typedOverCells));
+  const hard = asArray(report?.formulaMismatches).map((item) => item.address).filter(Boolean);
   const parts = [];
-  if (typed.length) parts.push(`typed values where the template expects formulas at ${typed.slice(0, 8).join(", ")}${typed.length > 8 ? ` and ${typed.length - 8} more` : ""}`);
-  if (upstream.length) parts.push(`typed constants upstream of the block at ${upstream.slice(0, 8).join(", ")}${upstream.length > 8 ? ` and ${upstream.length - 8} more` : ""}`);
-  if (hard.length) parts.push(`a different formula layout at ${hard.slice(0, 8).join(", ")}`);
+  if (soft) parts.push(soft);
+  if (hard.length) parts.push(`text or labels where the template expects values at ${hard.slice(0, 8).join(", ")}`);
   return {
     code: "template_formula_mismatch",
-    message: `This file has ${parts.join(" and ") || "a formula layout that differs from the template"}. The values are readable; ${individual ? "confirm this file individually" : "check them before confirming"}.`,
+    message: `This file has ${parts.join("; ") || "a layout that differs from the template"}. The values are readable; ${individual ? "confirm this file individually" : "check them before confirming"}.`,
   };
 }
 
@@ -307,13 +300,11 @@ export async function applyTemplateMatch({
     ...asArray(preview.warnings),
     ...asArray(provenance?.warnings),
   ];
-  const typedOverText = typedOver
-    ? `; typed values where the template expects formulas at ${asArray(report.typedOverCells).slice(0, 6).map((item) => item.address).join(", ")}`
-    : "";
+  const typedOverText = typedOver ? `; ${describeCellDifferences(asArray(report.typedOverCells))}` : "";
   const summary = [
     `Prefilled from extraction template ${template?.name || "template"} v${templateVersion.version}.`,
     formulaMismatch
-      ? `Matched at ${sheetName}!${range}${offsetText(report.offset)} with a formula layout that differs from the template; confirm this file individually.`
+      ? `Matched at ${sheetName}!${range}${offsetText(report.offset)} with text where the template expects values; confirm this file individually.`
       : `Matched ${report.status === "exact" ? "exactly" : "with an offset"} at ${sheetName}!${range}${offsetText(report.offset)}${typedOverText}.`,
     link.linkStatus === "resolved"
       ? `Linked to experiment ${link.candidates[0]?.label || report.experimentLabel}.`

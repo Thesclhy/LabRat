@@ -1160,7 +1160,7 @@ describe("ProjectOnboarding", () => {
       />,
     );
 
-    expect(screen.getByText(/1 file has typed numbers where the template expects formulas\. I can still fill in the block/)).toBeTruthy();
+    expect(screen.getByText(/1 file has text where the template expects values\. I can still fill in the block/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Continue" })).toBeNull();
     expect(screen.getByRole("button", { name: "Go back" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Apply and review each file" }));

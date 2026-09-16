@@ -1769,13 +1769,13 @@ export function ProjectOnboarding({
                   batchEligibleMatches > 0 ? (
                     <p>
                       {batchEligibleMatches} {batchEligibleMatches === 1 ? "file matches" : "files match"}. Apply the template, review the list, and confirm them in one click.
-                      {batchTypedOverMatches ? ` ${batchTypedOverMatches} of them ${batchTypedOverMatches === 1 ? "has" : "have"} typed values where the template expects formulas; ${batchTypedOverMatches === 1 ? "it stays" : "they stay"} unticked until you check ${batchTypedOverMatches === 1 ? "it" : "them"}.` : ""}
+                      {batchTypedOverMatches ? ` ${batchTypedOverMatches} of them ${batchTypedOverMatches === 1 ? "has" : "have"} cells that differ from the template (typed values, blank rows, or formulas built differently); ${batchTypedOverMatches === 1 ? "it stays" : "they stay"} unticked until you check ${batchTypedOverMatches === 1 ? "it" : "them"}.` : ""}
                       {batchPrefillableResults.length ? ` ${batchPrefillableResults.length} more ${batchPrefillableResults.length === 1 ? "has" : "have"} typed numbers where the template expects formulas; I can fill those in for individual confirmation.` : ""}
                       {batchUnmatched ? ` ${batchUnmatched} ${batchUnmatched === 1 ? "file has" : "files have"} a different layout; we’ll handle those next.` : ""}
                     </p>
                   ) : batchPrefillableResults.length > 0 ? (
                     <p>
-                      {batchPrefillableResults.length} {batchPrefillableResults.length === 1 ? "file has" : "files have"} typed numbers where the template expects formulas. I can still fill in the block; confirm each one after checking the typed cells.
+                      {batchPrefillableResults.length} {batchPrefillableResults.length === 1 ? "file has" : "files have"} text where the template expects values. I can still fill in the block; confirm each one after checking those cells.
                       {batchUnmatched ? ` ${batchUnmatched} ${batchUnmatched === 1 ? "file has" : "files have"} a different layout; we’ll handle those next.` : ""}
                     </p>
                   ) : (

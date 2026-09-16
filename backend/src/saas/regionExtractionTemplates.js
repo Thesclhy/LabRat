@@ -396,38 +396,40 @@ function evaluateCandidate({ signature, cells, origin, sheetName, indexBlobs, gr
     return isTextCell(cell) ? fuzzyTextMatch(anchor.text, cell.rawValue) : 0;
   });
   const textScore = anchors.length ? anchorScores.reduce((sum, score) => sum + score, 0) / anchors.length : 1;
-  // Hard mismatches (a different formula, text, or a blank where a formula
-  // belongs) break the match. A typed number where a formula belongs is a
-  // soft mismatch: the block still matches and the cells are reported so the
-  // user sees them before confirming.
+  // The layout is decided by the header runs and by cells holding text
+  // where the template expects a value (a hard mismatch). Everything else a
+  // file can vary per experiment is a soft difference that keeps the match
+  // and is reported so the user sees it before confirming: a typed number
+  // where a formula belongs, a blank cell (a shorter measurement block), or
+  // a formula built differently in some rows.
   const formulaMismatches = [];
   const typedOverCells = [];
   let formulaExpected = 0;
   let formulaOk = 0;
+  const isBlank = (cell) => !cell || ((cell.rawValue == null || cell.rawValue === "") && !cell.formula);
+  const noteDifference = (address, expected, found) => {
+    if (typedOverCells.length < MAX_MISMATCH_DETAILS) typedOverCells.push({ address, expected, found });
+  };
   for (const expectation of asArray(signature.cellExpectations)) {
     const cell = cellAt(cells, origin.r + expectation.relRow, origin.c + expectation.relCol);
+    const address = XLSX.utils.encode_cell({ r: origin.r + expectation.relRow, c: origin.c + expectation.relCol });
     if (expectation.kind === "formula") {
       formulaExpected += 1;
-      const address = XLSX.utils.encode_cell({ r: origin.r + expectation.relRow, c: origin.c + expectation.relCol });
       if (cell?.formula && formulaShape(cell.formula, cell.address) === expectation.formulaShape) {
         formulaOk += 1;
-      } else if (!cell?.formula && isNumericCell(cell)) {
-        if (typedOverCells.length < MAX_MISMATCH_DETAILS) typedOverCells.push({ address, expected: "formula", found: "typed_number" });
+      } else if (isBlank(cell)) {
+        noteDifference(address, "formula", "blank");
+      } else if (cell?.formula) {
+        noteDifference(address, "formula", "different_formula");
+      } else if (isNumericCell(cell)) {
+        noteDifference(address, "formula", "typed_number");
       } else if (formulaMismatches.length < MAX_MISMATCH_DETAILS) {
-        formulaMismatches.push({
-          address,
-          expected: "formula",
-          found: cell?.formula ? "different_formula" : cell ? "other_value" : "blank",
-        });
+        formulaMismatches.push({ address, expected: "formula", found: "other_value" });
       }
     } else if (expectation.kind === "number") {
-      if (!(isNumericCell(cell) || cell?.formula) && formulaMismatches.length < MAX_MISMATCH_DETAILS) {
-        formulaMismatches.push({
-          address: XLSX.utils.encode_cell({ r: origin.r + expectation.relRow, c: origin.c + expectation.relCol }),
-          expected: "number",
-          found: cell ? "other_value" : "blank",
-        });
-      }
+      if (isNumericCell(cell) || cell?.formula) continue;
+      if (isBlank(cell)) noteDifference(address, "number", "blank");
+      else if (formulaMismatches.length < MAX_MISMATCH_DETAILS) formulaMismatches.push({ address, expected: "number", found: "other_value" });
     }
   }
   const matchedRange = XLSX.utils.encode_range({
@@ -479,6 +481,21 @@ function evaluateCandidate({ signature, cells, origin, sheetName, indexBlobs, gr
 export function experimentLabelFromWorkbookName(workbookName) {
   const match = EXPERIMENT_PATTERN.exec(text(workbookName));
   return match ? `Exp${Number(match[1])}` : null;
+}
+
+export function describeCellDifferences(differences) {
+  const groups = [
+    ["typed_number", "typed values where the template expects formulas at"],
+    ["typed_upstream", "typed constants upstream of the block at"],
+    ["blank", "blank cells where the template has values at"],
+    ["different_formula", "formulas built differently at"],
+  ];
+  const parts = [];
+  for (const [found, label] of groups) {
+    const addresses = asArray(differences).filter((item) => item?.found === found).map((item) => item.address).filter(Boolean);
+    if (addresses.length) parts.push(`${label} ${addresses.slice(0, 8).join(", ")}${addresses.length > 8 ? ` and ${addresses.length - 8} more` : ""}`);
+  }
+  return parts.join("; ");
 }
 
 function resolveExperimentLabel({ signature, cells, sourceDocument }) {
@@ -557,7 +574,7 @@ function matchSheet({ signature, sheet, sourceDocument, indexBlobs, graph, origi
     warnings: asArray(chosen?.typedOverCells).length
       ? [{
         code: "template_typed_over_formulas",
-        message: `Typed values where the template expects formulas at ${chosen.typedOverCells.slice(0, 8).map((item) => item.address).join(", ")}${chosen.typedOverCells.length > 8 ? ` and ${chosen.typedOverCells.length - 8} more` : ""}. The values are readable; check them before confirming.`,
+        message: `${describeCellDifferences(chosen.typedOverCells)}. The values are readable; check them before confirming.`,
       }]
       : [],
   };

@@ -51,13 +51,11 @@ export function templateMatchDetail(result) {
   }
   if (result.status === "formula_mismatch") {
     const mismatches = asArray(result.formulaMismatches);
-    const typed = mismatches.filter((item) => item.found === "typed_number").map((item) => item.address);
-    const different = mismatches.filter((item) => item.found === "different_formula").map((item) => item.address);
-    const missing = mismatches.filter((item) => !["typed_number", "different_formula"].includes(item.found)).map((item) => item.address);
+    const text = mismatches.filter((item) => item.found === "other_value").map((item) => item.address);
+    const other = mismatches.filter((item) => item.found !== "other_value").map((item) => item.address);
+    if (text.length) parts.push(`text where values are expected at ${text.slice(0, 6).join(", ")}`);
+    if (other.length) parts.push(`layout differs at ${other.slice(0, 6).join(", ")}`);
     const broken = asArray(result.brokenCells).map((item) => item.address);
-    if (typed.length) parts.push(`typed values at ${typed.slice(0, 6).join(", ")}`);
-    if (different.length) parts.push(`different formulas at ${different.slice(0, 6).join(", ")}`);
-    if (missing.length) parts.push(`no formula at ${missing.slice(0, 6).join(", ")}`);
     if (broken.length) parts.push(`typed over upstream: ${broken.slice(0, 6).join(", ")}`);
   }
   if (result.status === "header_mismatch") {
@@ -66,8 +64,11 @@ export function templateMatchDetail(result) {
   }
   if (result.status === "label_missing") parts.push("no experiment label in the sheet or file name");
   if (["exact", "shifted"].includes(result.status) && asArray(result.typedOverCells).length) {
-    const typed = asArray(result.typedOverCells).map((item) => item.address);
-    parts.push(`typed values at ${typed.slice(0, 6).join(", ")}${typed.length > 6 ? ` and ${typed.length - 6} more` : ""}`);
+    const groups = [["typed_number", "typed values at"], ["typed_upstream", "typed inputs at"], ["blank", "blank at"], ["different_formula", "different formulas at"]];
+    for (const [found, label] of groups) {
+      const addresses = asArray(result.typedOverCells).filter((item) => item.found === found).map((item) => item.address);
+      if (addresses.length) parts.push(`${label} ${addresses.slice(0, 6).join(", ")}${addresses.length > 6 ? ` and ${addresses.length - 6} more` : ""}`);
+    }
   }
   return parts.join(" · ");
 }
@@ -308,9 +309,7 @@ export function WorkbookBatchCard({
                     <span>{templateMatchDetail(result)}</span>
                     {result.status === "formula_mismatch" && (
                       <small className="agent-workbook-batch-match-note">
-                        {asArray(result.formulaMismatches).some((item) => item.found === "different_formula")
-                          ? "The formulas here are built differently from the template's, so the block is not treated as the same layout. Confirm this file individually, or link it as this data kind by hand."
-                          : "Typed numbers where the template expects formulas. The values are readable; this file is confirmed individually."}
+                        This file has text or labels where the template expects values, so the block is not treated as the same layout. Confirm it individually, or draw the block by hand and link it as this data kind.
                       </small>
                     )}
                     {!result.eligibleForBatchConfirm && result.matchedRange && link && (

@@ -234,7 +234,7 @@ test("typed numbers where the template expects formulas still match, with the ce
   assert.match(report.warnings[0].message, /R32, S32/);
 });
 
-test("a different formula where the template expects one is still a formula mismatch", () => {
+test("a formula built differently in one row still matches and is reported", () => {
   const cells = calculationCells({ label: "Exp39" }).map((item) => (
     item.address === "R32" ? { ...item, formula: "F14+1", rawValue: 0.2 } : item
   ));
@@ -243,9 +243,33 @@ test("a different formula where the template expects one is still a formula mism
     sourceDocument: sourceDocument("doc_39", "Calculation Exp39.xlsx"),
     indexBlobs: blobs("Sheet1", cells),
   });
-  assert.equal(report.status, "formula_mismatch");
-  assert.deepEqual(report.formulaMismatches.map((item) => [item.address, item.found]), [["R32", "different_formula"]]);
-  assert.equal(report.eligibleForBatchConfirm, false);
+  assert.equal(report.status, "exact");
+  assert.deepEqual(report.typedOverCells.map((item) => [item.address, item.found]), [["R32", "different_formula"]]);
+  assert.match(report.warnings[0].message, /formulas built differently at R32/);
+  assert.equal(report.eligibleForBatchConfirm, true);
+});
+
+test("a blank cell where the template has a formula still matches; text there is a mismatch", () => {
+  const blank = calculationCells({ label: "Exp43" }).filter((item) => item.address !== "R32");
+  const blankReport = matchTemplateVersionToDocument({
+    templateVersion: templateVersion(),
+    sourceDocument: sourceDocument("doc_43", "Calculation Exp43.xlsx"),
+    indexBlobs: blobs("Sheet1", blank),
+  });
+  assert.equal(blankReport.status, "exact");
+  assert.deepEqual(blankReport.typedOverCells.map((item) => [item.address, item.found]), [["R32", "blank"]]);
+  assert.match(blankReport.warnings[0].message, /blank cells where the template has values at R32/);
+
+  const texty = calculationCells({ label: "Exp44" }).map((item) => (
+    item.address === "R32" ? { address: "R32", rawValue: "n/a", formattedValue: "n/a", type: "string" } : item
+  ));
+  const textReport = matchTemplateVersionToDocument({
+    templateVersion: templateVersion(),
+    sourceDocument: sourceDocument("doc_44", "Calculation Exp44.xlsx"),
+    indexBlobs: blobs("Sheet1", texty),
+  });
+  assert.equal(textReport.status, "formula_mismatch");
+  assert.deepEqual(textReport.formulaMismatches.map((item) => [item.address, item.found]), [["R32", "other_value"]]);
 });
 
 test("a typed constant upstream of an otherwise matching block still matches and lists the broken cells", () => {
