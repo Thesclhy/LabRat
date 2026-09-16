@@ -165,6 +165,11 @@ function RegionReviewCard({
         )}
       </div>
 
+      {revision && !interpreting && asArray(revision?.interpretation?.series).length === 0 && (region.dataKind || linkDataKind) && (
+        <p className="workbook-region-series-note" aria-label={`Series note for ${label}`}>
+          This block defines no series yet. If it is one measurement across a header row or a time column, say so in the correction box; charts built from it can then be saved as templates.
+        </p>
+      )}
       {!!headerRowSeries.length && (
         <div className="workbook-region-series" aria-label={`Series in ${label}`}>
           {headerRowSeries.map((series, index) => (

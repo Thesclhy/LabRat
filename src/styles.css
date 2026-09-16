@@ -11477,6 +11477,11 @@ tbody tr:hover {
   font-size: 12px;
   color: #0f4c4c;
 }
+.workbook-region-series-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-amber-800);
+}
 .workbook-region-template-form {
   display: grid;
   gap: 6px;

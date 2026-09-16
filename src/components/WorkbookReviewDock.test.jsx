@@ -326,6 +326,23 @@ describe("WorkbookReviewDock", () => {
     expect(screen.queryByLabelText(/Calculation provenance/)).toBeNull();
   });
 
+  it("notes when a linked block defines no series", () => {
+    render(
+      <WorkbookReviewDock
+        reviewState={reviewState()}
+        reviewRegions={[
+          { ...reviewRegions[0], dataKind: "liquid product distribution" },
+          { ...reviewRegions[1], currentRevision: { ...reviewRegions[1].currentRevision, interpretation: { series: [{ seriesKey: "distribution", orientation: "header_row_categories", label: "Distribution" }] } } },
+        ]}
+        activeRegionId="region_1"
+      />,
+    );
+    const noSeries = screen.getByRole("article", { name: "Region Runs!A1:D3" });
+    expect(within(noSeries).getByLabelText("Series note for Runs!A1:D3").textContent).toMatch(/defines no series yet/);
+    const withSeries = screen.getByRole("article", { name: "Region Runs!F1:H5" });
+    expect(within(withSeries).queryByLabelText("Series note for Runs!F1:H5")).toBeNull();
+  });
+
   it("offers to link a confirmed region as the batch data kind and shows an existing link", async () => {
     const onLinkRegion = vi.fn(async () => ({}));
     const { rerender } = render(
