@@ -369,7 +369,10 @@ export function ProjectOnboarding({
   const analysisHydrationTimerRef = useRef(null);
   const analysisFlowRef = useRef(analysisFlow);
   analysisFlowRef.current = analysisFlow;
-  const publishedCount = asArray(projectState?.experimentSnapshotHeads).length;
+  const explicitPublishedCount = Number(projectState?.publishedExperimentCount);
+  const publishedCount = Number.isInteger(explicitPublishedCount) && explicitPublishedCount >= 0
+    ? explicitPublishedCount
+    : asArray(projectState?.experimentSnapshotHeads).length;
   const currentSession = useMemo(() => {
     const activeSessions = asArray(projectState?.workbookReviewSessions)
       .filter((session) => session?.status !== "deleted");

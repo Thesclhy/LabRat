@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useWorkspacePermissions } from "./WorkspacePermissions.jsx";
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -63,6 +64,7 @@ function RegionReviewCard({
   updatableTemplates = [],
 }) {
   const revision = region.currentRevision || null;
+  const { canEdit, canApprove } = useWorkspacePermissions();
   const label = regionLabel(region);
   const [feedback, setFeedback] = useState("");
   const [pendingAction, setPendingAction] = useState("");
@@ -91,6 +93,7 @@ function RegionReviewCard({
   }, [revision?.id, region.version]);
 
   const run = async (action, callback) => {
+    if (["confirm", "save_template", "update_template"].includes(action) ? !canApprove : !canEdit) return;
     if (busy || !callback) return;
     setPendingAction(action);
     setActionError("");
@@ -231,6 +234,7 @@ function RegionReviewCard({
               <textarea
                 className="workbook-region-feedback"
                 value={feedback}
+                disabled={!canEdit || busy}
                 onChange={(event) => setFeedback(event.target.value)}
                 placeholder="Correct the interpretation or describe what should change..."
                 aria-label={`Feedback for ${label}`}
@@ -240,7 +244,7 @@ function RegionReviewCard({
                 <button
                   type="button"
                   aria-label={`Submit revision for ${label}`}
-                  disabled={busy || !feedback.trim() || !onRevise}
+                  disabled={!canEdit || busy || !feedback.trim() || !onRevise}
                   onClick={() => run("revise", () => onRevise(region.id, {
                     feedback: feedback.trim(),
                     previousRevisionId: revision?.id || null,
@@ -253,7 +257,7 @@ function RegionReviewCard({
                   type="button"
                   className="primary"
                   aria-label={confirmed ? `Interpretation of ${label} confirmed` : `Confirm interpretation of ${label}`}
-                  disabled={busy || confirmed || !revision || blockers.length > 0 || !onConfirm}
+                  disabled={!canApprove || busy || confirmed || !revision || blockers.length > 0 || !onConfirm}
                   onClick={() => run("confirm", () => onConfirm(region.id, {
                     revisionId: revision.id,
                     expectedRegionVersion: region.version,
@@ -285,7 +289,7 @@ function RegionReviewCard({
               )}
             </div>
           )}
-          {confirmed && onSaveExtractionTemplate && (
+          {confirmed && canApprove && onSaveExtractionTemplate && (
             <div className="workbook-region-template" aria-label={`Extraction template for ${label}`}>
               {existingTemplate || savedTemplateName ? (
                 <p className="workbook-region-template-note">
@@ -360,7 +364,7 @@ function RegionReviewCard({
               <button
                 type="button"
                 aria-label={`Retry AI for ${label}`}
-                disabled={busy || !onRetry}
+                disabled={!canEdit || busy || !onRetry}
                 onClick={() => run("retry", () => onRetry?.(region.id))}
               >
                 {pendingAction === "retry" ? "Retrying..." : "Retry AI"}
@@ -369,7 +373,7 @@ function RegionReviewCard({
             <button
               type="button"
               aria-label={`Ignore region ${label}`}
-              disabled={busy || !onIgnore}
+              disabled={!canEdit || busy || !onIgnore}
               onClick={() => run("ignore", () => onIgnore(region.id, {
                 expectedRegionVersion: region.version,
                 reason: "Excluded during workbook review.",
@@ -377,7 +381,7 @@ function RegionReviewCard({
             >
               Ignore
             </button>
-            <button type="button" aria-label={`Delete region ${label}`} disabled={busy || !onDelete} onClick={deleteRegion}>
+            <button type="button" aria-label={`Delete region ${label}`} disabled={!canEdit || busy || !onDelete} onClick={deleteRegion}>
               {pendingAction === "delete" ? "Deleting..." : "Delete"}
             </button>
           </div>

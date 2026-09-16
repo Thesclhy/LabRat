@@ -62,11 +62,23 @@ function requestBody({ config, system, prompt, maxTokens, outputSchema, tools, m
 }
 
 function usageFrom(body) {
-  return {
+  const usage = {
     inputTokens: Number(body?.usage?.prompt_tokens) || 0,
     outputTokens: Number(body?.usage?.completion_tokens) || 0,
-    reasoningTokens: Number(body?.usage?.completion_tokens_details?.reasoning_tokens) || 0,
   };
+  if (body?.usage?.completion_tokens_details?.reasoning_tokens != null) {
+    usage.reasoningTokens = Number(body.usage.completion_tokens_details.reasoning_tokens) || 0;
+  }
+  return usage;
+}
+
+function addUsage(target, source) {
+  target.inputTokens += Number(source?.inputTokens) || 0;
+  target.outputTokens += Number(source?.outputTokens) || 0;
+  if (Object.hasOwn(source || {}, "reasoningTokens")) {
+    target.reasoningTokens = (Number(target.reasoningTokens) || 0)
+      + (Number(source?.reasoningTokens) || 0);
+  }
 }
 
 async function sendRequest({ config, fetchImpl, body, signal }) {
@@ -133,6 +145,7 @@ export async function requestDeepSeekJson({
         ok: false,
         warning: warning("ai_output_truncated", "Model provider output reached the token limit."),
         usage: response.usage,
+        stopReason: choice.finish_reason,
       };
     }
     const text = String(choice.message.content || "").trim();
@@ -141,6 +154,7 @@ export async function requestDeepSeekJson({
         ok: false,
         warning: warning("ai_empty_response", "Model provider returned no proposal text."),
         usage: response.usage,
+        stopReason: choice.finish_reason || null,
       };
     }
     return {
@@ -188,16 +202,16 @@ export async function requestDeepSeekJsonWithTools({
         body: requestBody({ config, maxTokens, outputSchema, tools, messages, thinking }),
         signal,
       });
-      if (!response.ok) return response;
-      usage.inputTokens += response.usage.inputTokens;
-      usage.outputTokens += response.usage.outputTokens;
-      usage.reasoningTokens += response.usage.reasoningTokens;
+      if (!response.ok) return { ...response, usage, toolRounds: round };
+      addUsage(usage, response.usage);
       const { choice } = response;
       if (choice.finish_reason === "length") {
         return {
           ok: false,
           warning: warning("ai_output_truncated", "Model provider output reached the token limit."),
           usage,
+          stopReason: choice.finish_reason,
+          toolRounds: round,
         };
       }
       const message = choice.message;
@@ -209,6 +223,8 @@ export async function requestDeepSeekJsonWithTools({
             ok: false,
             warning: warning("ai_empty_response", "Model provider returned no proposal text."),
             usage,
+            stopReason: choice.finish_reason || null,
+            toolRounds: round,
           };
         }
         return {
@@ -224,6 +240,8 @@ export async function requestDeepSeekJsonWithTools({
           ok: false,
           warning: warning("ai_tool_round_limit", "Model provider exceeded the allowed inspection rounds."),
           usage,
+          stopReason: choice.finish_reason || null,
+          toolRounds: round,
         };
       }
 
@@ -289,6 +307,7 @@ export async function requestDeepSeekJsonWithTools({
       ok: false,
       warning: warning("ai_tool_round_limit", "Model provider exceeded the allowed inspection rounds."),
       usage,
+      toolRounds: maxToolRounds,
     };
   } catch (error) {
     if (error?.name === "AbortError") throw error;

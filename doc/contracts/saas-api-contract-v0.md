@@ -1,9 +1,15 @@
 # SaaS API Contract v0
 
-Status: active
-Last reviewed: 2026-08-18
+Status: rollback-only legacy reference
+Last reviewed: 2026-08-23
 
-This contract describes the server-first API that is implemented by `backend/src/saas/routes/saasRoutes.js`. The authoritative scientific path is:
+This contract describes the unversioned JavaScript backend retained for one
+stable release rollback window. New code and the current React client must use
+`doc/contracts/backend-api-v1.openapi.yaml`; do not add features or callers to
+this surface.
+
+The legacy API is implemented by `backend/src/saas/routes/saasRoutes.js`. Its
+scientific path is:
 
 ```text
 FileObject -> SourceDocument -> WorkbookReviewSession
@@ -102,38 +108,14 @@ Upload creates a project-owned `FileObject`. Starting an import run scans the wo
 GET  /api/source-documents/:sourceDocumentId/regions
 POST /api/source-documents/:sourceDocumentId/query
 POST /api/source-documents/:sourceDocumentId/range
-GET  /api/source-documents/:sourceDocumentId/cell-classes?sheetName=&range=
 ```
 
 Rules:
 
 - Reads are bounded and project-authorized.
-- Range responses preserve sheet, A1 range, row/column coordinates, values, formulas, merged-cell membership/ranges, and source refs when available. A formula whose Excel result is an error (`#DIV/0!`, `#REF!`, ...) has `type: "error"`, `rawValue: null`, its formula text, and the error string as `formattedValue`; the Excel error code is never exposed as a number.
+- Range responses preserve sheet, A1 range, row/column coordinates, values, formulas, merged-cell membership/ranges, and source refs when available.
 - Query and range endpoints are read-only and cannot create accepted data.
 - Oversized requests return an explicit validation error instead of silently truncating scientific evidence.
-
-Cell classes are derived deterministically from the stored formula text of the
-whole workbook without evaluating any formula. The response is
-`labrat.sourceCellClasses.v1`:
-
-```json
-{
-  "sheetName": "Sheet1",
-  "range": "P31:BA32",
-  "cells": [
-    { "address": "Q32", "row": 32, "col": 17, "cellClass": "terminal", "formula": "F14", "formattedValue": "0.5237", "precedentCount": 1, "dependentCount": 0 }
-  ],
-  "summary": { "terminal": 37, "intermediate": 0, "input": 0, "constant": 38, "blank": 1 },
-  "provenance": { "schemaVersion": "labrat.regionProvenance.v1" }
-}
-```
-
-Class meanings: `terminal` is a formula cell nothing else references (a final
-result), `intermediate` is a formula cell that feeds other formulas, `input`
-is a typed value used by formulas, `constant` is a typed value or label used by
-nothing, and `blank` is empty. The range is limited to the same 500-cell bound
-as `/range`. Workbooks above 250,000 indexed cells skip the graph and return
-`graphTruncated: true` with a `formula_graph_skipped` warning.
 
 ## Workbook Region Review And Understanding
 
@@ -209,20 +191,6 @@ Rules:
   its initial semantic type and description so pending work can resume after a
   refresh without relying on browser memory.
 - Creating or revising one region sends the backend model only that bounded range, limited neighboring cells, and a workbook manifest. The complete workbook is never model context.
-- Each inspection cell sent to the model carries its deterministic
-  `cellClass`, and the request carries a bounded `region.provenance` (class
-  summary, one-level derivation text, shared upstream inputs, typed-over
-  cells, warning codes). The model may return `seriesPatches` beside
-  `fieldPatches`; the backend validates each patch against the selected
-  range and merges it into `interpretation.series` with `orientation:
-  "header_row_categories"` (one header row of categories above one value row,
-  `xHeaderRange`/`yValueRange`, `pointCount`) or `"column_pair"`.
-- Every stored revision carries `interpretation.provenance`
-  (`labrat.regionProvenance.v1`) computed by the backend, and its warnings
-  (`region_mostly_intermediate_cells`, `region_mostly_input_cells`,
-  `formula_chain_broken`, `formula_graph_skipped`) are appended to the
-  revision and region warnings. Provenance never blocks confirmation; the
-  values are the cached formula results as stored in the workbook.
 - Deferred creation makes the exact sheet/range and version available before the model call so the UI can show an immediate pending card and permit version-checked Ignore/Delete. A late interpretation is discarded when the region changed or became inactive while the model was running.
 - Workbook Review schedules active pending regions with at most three
   concurrent model requests. The active region is first, individual failures
@@ -236,145 +204,6 @@ Rules:
   accepted DataSnapshots, ChartSpecs, and audit history are retained.
 - The retired aggregate session revision/confirm and project `workbook-understandings` routes return `404`.
 - Region confirmation does not publish Browser rows or create output artifacts.
-
-## Region Extraction Templates
-
-```text
-GET  /api/projects/:projectId/region-extraction-templates?includeArchived=
-POST /api/projects/:projectId/region-extraction-templates
-GET  /api/region-extraction-templates/:templateId
-POST /api/region-extraction-templates/:templateId/versions
-POST /api/region-extraction-templates/:templateId/archive
-POST /api/region-extraction-template-versions/:versionId/matches
-```
-
-A RegionExtractionTemplate is a project-owned container with immutable
-accepted versions. Each version is compiled from one confirmed
-WorkbookReviewRegion and its accepted RegionUnderstandingRevision:
-
-```json
-{ "name": "Carbon distribution from LDPE sheet", "description": "", "regionId": "workbook_review_region_1" }
-```
-
-The version stores `labrat.layoutSignature.v1` (sheet name, companion sheet
-names, anchor range, range shape, header runs such as `C1..C37`, text anchors
-inside the region, label anchors within three cells around it, one relative
-R1C1 formula shape per formula cell, and an experiment-label rule that reads a
-fixed cell such as `A2` and falls back to the filename) plus relative
-`semantics` copied from the accepted interpretation (axis, fields, series with
-relative ranges, inclusion). Content is hashed; duplicate names or identical
-content return `409`.
-
-Saving a template (or a new version) also links its source region the way an
-applied match is linked: `dataKind` is the template name and
-`linkedExperimentId` comes from the region's label cell or the workbook
-filename, resolved against the project's experiment identities. An existing
-link is never overwritten. The response adds `sourceRegionLink`
-(`regionId`, `linkedExperimentId`, `experimentLabel`, `linkStatus` in
-`resolved`, `ambiguous`, `unresolved`, `none`, or `already_linked`,
-`dataKind`).
-
-Matching is read-only and side-effect free. The request lists up to 100
-project source documents; the response has one `labrat.regionTemplateMatchReport.v1`
-per document with `status` in `exact`, `shifted`, `ambiguous`,
-`label_missing`, `formula_mismatch`, `header_mismatch`, or `no_match`, plus
-`matchedRange`, `offset`, `experimentLabel` and `labelSource`, header-run
-counts, typed-over `formulaMismatches`, upstream `brokenCells`, alternative
-blocks, and `eligibleForBatchConfirm` (true only for `exact` and `shifted`).
-The template's original position wins when it still matches; other matching
-blocks are listed as alternatives. Only shifted candidates in two places is
-`ambiguous`. Rules:
-
-- Creating a version requires an active region whose accepted revision is
-  current; unconfirmed regions return `409`.
-- Editors create, version, archive, and apply; viewers read and match.
-- Matching creates no regions, revisions, or sessions.
-- Bounded: template regions have at most 600 cells; sheets above 50,000
-  indexed cells are skipped with a warning.
-
-Linking a region by hand:
-
-```text
-POST /api/workbook-review-sessions/:sessionId/regions/:regionId/link
-```
-
-Body `{ dataKind, linkedExperimentId?, experimentLabel? }`. The region must be
-confirmed (`409 region_not_confirmed` otherwise). It sets `dataKind` and, when
-the experiment resolves, `linkedExperimentId`: from `linkedExperimentId` when
-given (`404 experiment_identity_not_found` if it is not in the project),
-otherwise from `experimentLabel` or the workbook file name through the same
-label resolution as template apply. An existing experiment link is never
-overwritten by an unresolved label. Returns `{ region, link }` where `link`
-carries `dataKind`, `linkedExperimentId`, `experimentLabel`, `linkStatus`
-(`resolved`, `already_linked`, `ambiguous`, `unresolved`, `none`) and
-`candidates`. No template, version, or revision is created; the region then
-counts as linked data of that kind for the Experiment Browser and charts,
-exactly like an applied template match.
-
-Applying and batch confirmation:
-
-```text
-POST /api/region-extraction-template-versions/:versionId/apply        (Idempotency-Key)
-POST /api/projects/:projectId/workbook-review-regions/confirm-batch
-```
-
-`apply` re-matches each listed source document and, for `exact` and `shifted`
-results (or the subset in `onlyStatuses`), reuses or creates the workbook's
-WorkbookReviewSession, creates one region at the matched range with
-`selectionMethod: "template_match"`, `reviewStatus: "awaiting_review"`,
-`dataKind` (the template name), `regionExtractionTemplateVersionId`,
-`templateMatch` (status, offset, experiment label, link status and candidates),
-and `linkedExperimentId` when the label matches exactly one ExperimentIdentity.
-It writes revision 1 with `trigger: "template_match"` by rebasing the
-template's stored semantics onto the matched range and running it through the
-same interpretation validation as a model or user patch, plus backend
-provenance. No provider call. The response lists `applied` and `skipped`
-entries; a document whose range already holds a template-match region returns
-that region with `reason: "already_applied"`, and a manual or confirmed region
-at the same range is skipped, so replays are safe.
-
-`confirm-batch` takes `items: [{ regionId, revisionId, expectedRegionVersion,
-linkedExperimentId? }]`. Each item is validated on its own: the region must be
-a `template_match` region whose report was `exact` or `shifted`, otherwise it
-is rejected with `batch_confirm_requires_individual_review`; a supplied
-`linkedExperimentId` must belong to the project and is written before the
-version-checked confirmation. Each confirmed region gets its own accepted
-revision pointer, actor, and audit event, plus one batch audit event.
-Failures are reported per item and do not stop the rest.
-
-Region summaries expose `linkedExperimentId`, `dataKind`,
-`regionExtractionTemplateVersionId`, and `templateMatch`.
-
-## Linked Data Comparisons
-
-```text
-GET  /api/projects/:projectId/linked-data-kinds
-POST /api/projects/:projectId/linked-data-comparisons
-```
-
-`linked-data-kinds` (viewer) groups accepted, experiment-linked regions by
-`dataKind` with per-experiment regions (workbook, sheet, range, template
-version, series metadata) plus the project's experiment list, so a picker can
-show which experiments still lack a data kind.
-
-`linked-data-comparisons` (editor) takes `{ dataKind, experimentIds,
-chartType?, dryRun? }`. The backend deterministically selects, for each
-experiment, its most recently confirmed region of that kind and builds an
-ordinary workbook-mode chart plan: one exact `sourceSelection` per experiment,
-a readable `reviewPlan` whose processing steps describe the header-row or
-column-pair series shape recorded on the regions, a `displayPlan` that names
-the workbooks and the experiments left out, and a `linkedDataComparison`
-block for lineage. Chart type defaults to `grouped_bar` for header-row
-category series and `scatter` for column-pair series; any supported chart
-type may be requested. With `dryRun: true` the response only previews the
-comparison. Otherwise it creates an AnalysisThread (`outputTarget: chart`,
-`inputMode: workbook`) and an awaiting-review AnalysisPlanRevision through the
-normal validation, then returns both; acceptance, Python generation against
-the real materialized tables, result review, and ChartSpec creation follow the
-existing reviewed path. No provider call is made for the selection step and
-no DataSnapshot is read or written. Unknown kinds return `404`; a request in
-which no chosen experiment has linked data returns `422
-linked_data_comparison_empty`.
 
 ## Evidence Retrieval And Historical Data
 
@@ -416,22 +245,6 @@ starredOnly (boolean; current user's annotations only)
 ```
 
 The list response contains one bounded row per active experiment snapshot head, a stable field catalog, recommended columns, and an opaque next cursor. Series point arrays are excluded.
-
-Linked workbook data: every accepted, active WorkbookReviewRegion with a
-`linkedExperimentId` and `dataKind` contributes to one shared column per data
-kind, `linked:<data-kind-slug>` (`role: "linked_data"`, `isLinkedData: true`,
-`valueType: "string"`). The cell value is a readable
-`"<workbook> · <sheet>!<range>"` list, so search, `contains`, `is_empty`,
-`not_empty`, and sort work unchanged, and the cell carries `linkedRegions`
-(region id, session id, source document id, workbook name, sheet, range,
-template version, series labels). Rows also carry `linkedRegionCount`.
-Experiment detail adds `linkedRegions` for that experiment. No DataSnapshot or
-head changes: linked data is evidence metadata, and charts read the confirmed
-regions directly through the workbook chart input mode. The analysis source
-catalogue given to the chart planner carries `linkedExperimentId`,
-`linkedExperimentLabel`, `dataKind`, and header-row series
-(`orientation`, `xHeaderRange`, `yValueRange`, `pointCount`) per confirmed
-region.
 
 The detail endpoint lazily returns the complete active experiment record, scalar values, series inventory/points, warnings, and exact source refs. Cross-project and inactive identities return not found.
 
@@ -501,37 +314,24 @@ GET  /api/agent-runs/:agentRunId
 POST /api/agent-runs/:agentRunId/cancel
 ```
 
-Agent requests pass through the backend intent router and have four product
+Agent requests pass through the backend intent router and have three product
 dispositions: workbook upload/region review, read-only project question
-answering, read-only commentary on an already accepted chart, and reviewed
-analysis planning for new charts or Experiment Browser data publication.
-`selectedContext.tab` and `selectedContext.activeSurface` may carry
+answering, and reviewed analysis planning for charts or Experiment Browser data
+publication. `selectedContext.tab` and `selectedContext.activeSurface` may carry
 the current workspace surface, while `selectedContext.analysisOutputTarget`
 marks an explicit workflow entry. Surface context alone never authorizes a
 write: Browser publication requires a data-change intent and still creates a
 reviewed `AnalysisThread` with `outputTarget: experiment_browser`. Explicit
 Browser navigation may return a deterministic navigation reply, but it is not
-a fallback for project questions. Requests to create charts remain chart
-analysis even when sent from Browser, and display-only show/hide/filter/sort
-requests do not create a DataSnapshot. Except for the explicit existing-chart
-commentary workflow below, every new chart, trend calculation, comparison,
-derived calculation, and explicit Excel-range chart request returns
-`mode: "analysis_planning"`, creates a durable AnalysisThread, and selects only
-active confirmed workbook regions.
+a fallback for project questions. Chart requests remain chart analysis even
+when sent from Browser, and display-only show/hide/filter/sort requests do not
+create a DataSnapshot. Every chart, trend, comparison, derived calculation, and
+explicit Excel-range chart request returns `mode: "analysis_planning"`, creates
+a durable AnalysisThread, and selects only active confirmed workbook regions.
 Publishing a DataSnapshot is not required for chart planning. Unknown requests
 return clarification.
 
-The manuscript chart-assist controls send
-`selectedContext.requestedWorkflow: "chart_commentary"` with an accepted
-`selectedChartSpecId`, a bounded commentary mode (`analysis`, `trend`, or
-`caption`), and the placement-local `selectedChartView`. The backend resolves
-the project-owned accepted ChartSpec, supplies only its visible plotted traces
-to the selected provider, and returns `mode: "chart_commentary"` prose. This
-read-only path creates no AnalysisThread, AnalysisRun, AnalysisResult, or new
-ChartSpec. Missing, cross-project, stale, or zero-visible-trace selections fail
-closed with a bounded AgentRun warning.
-
-`POST /api/projects/:projectId/agent/runs` returns user-facing text in the top-level `reply` field plus nullable `analysisThread` and `currentPlanRevision` fields. Provider configuration and credentials are backend-only. AgentRun usage stores provider, model, token, and latency metadata while planning records visible workflow steps rather than hidden chain-of-thought.
+`POST /api/projects/:projectId/agent/runs` returns user-facing text in the top-level `reply` field plus nullable `analysisThread` and `currentPlanRevision` fields. Provider configuration and credentials are backend-only. AgentRun usage stores provider, model, token, and latency metadata while planning records visible workflow steps rather than hidden chain-of-thought. Successful or failed planning may add `usage.planning` with bounded provider/model, initial/final/retry output budgets, attempt/repair/tool-round counts, stop reason, latency, and token counts. This additive JSON metadata never contains provider request bodies, credentials, authorization headers, or reasoning text.
 
 For `analysis_planning`, the backend owns drafting after the AnalysisThread has
 been durably created. Closing, refreshing, timing out, or cancelling the browser
@@ -540,6 +340,8 @@ The completed PlanRevision remains discoverable through the thread list/detail
 routes. A failed draft moves the thread to `plan_failed`; thread detail returns
 the persisted bounded `planFailure` copied from the owning AgentRun warning, so
 the UI can distinguish a provider/validation failure from an in-progress draft.
+When available, `planFailure.details.diagnostics` contains the same whitelisted
+numeric planning diagnostics and bounded provider/model/stop-reason strings.
 
 The planning provider receives bounded catalogs of active confirmed
 RegionUnderstandingRevisions and active experiment fields as ordered readable
@@ -802,20 +604,6 @@ the deterministic accepted PlanRevision plus queued
 `executionStrategy: chart_template_v1` AnalysisRun. Existing run execution,
 result-preview, revise, and accept-and-create-chart routes remain authoritative.
 Preview creates no ChartSpec.
-
-When the template version's slot has `sourceKind: "linked_region"`, the same
-route resolves each experiment's most recently confirmed region of the slot's
-`linkedDataKind` instead of a snapshot column, reads the series once to
-report shape, unit, and missing points, and returns a compatibility with
-`sourceKind`, `linkedDataKind`, `excludedExperiments`, `alignment`,
-`sourceSelections`, and `frozenRegionRefs` (see the workbook section of
-`doc/contracts/reusable-chart-template-contract-v1.md`). `bindings` must be
-empty for such templates. The accepted PlanRevision is `inputMode:
-"workbook"` with one source selection per ready experiment; snapshots and
-heads are untouched. Executing the run reads the frozen region revisions
-and renders one trace per experiment deterministically (no provider, no
-Python); a frozen revision that disappeared fails closed with
-`chart_template_inputs_stale`.
 
 The implemented v1 fast path uses accepted active Experiment Browser scalar
 fields only. It interprets the accepted scalar-selection recipe without a

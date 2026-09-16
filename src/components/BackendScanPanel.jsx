@@ -1,4 +1,5 @@
 import React from "react";
+import { useWorkspacePermissions } from "./WorkspacePermissions.jsx";
 import { makeChartSpecPreview } from "../charts/chartSpecPreview.js";
 import { Plot } from "../charts/Plot.jsx";
 import {
@@ -16,6 +17,15 @@ import { ExperimentDetailDrawer } from "./ExperimentDetailDrawer.jsx";
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
+}
+
+function useRequestScope(projectId, canEdit) {
+  const generation = React.useRef(0);
+  React.useEffect(() => {
+    generation.current += 1;
+    return () => { generation.current += 1; };
+  }, [projectId, canEdit]);
+  return generation;
 }
 
 const experimentLabelCollator = new Intl.Collator(undefined, {
@@ -141,6 +151,7 @@ function chartSpecNeedsDetail(chartSpec) {
 }
 
 function ApprovedChartSpecReview({ chartSpecs, onLoadChartSpecDetail, onInsertChartSpec }) {
+  const { canEdit } = useWorkspacePermissions();
   const specs = asArray(chartSpecs);
   const [selectedId, setSelectedId] = React.useState(specs[0]?.id || "");
   const [details, setDetails] = React.useState({});
@@ -230,7 +241,7 @@ function ApprovedChartSpecReview({ chartSpecs, onLoadChartSpecDetail, onInsertCh
               <div className="import-review-actions">
                 <button
                   type="button"
-                  disabled={chartSpecNeedsDetail(selected) || detailState.loadingId === selected.id}
+                  disabled={!canEdit || chartSpecNeedsDetail(selected) || detailState.loadingId === selected.id}
                   onClick={() => onInsertChartSpec?.(selected.id)}
                 >
                   Insert in Manuscript
@@ -335,7 +346,9 @@ export function ReusableChartTemplateReview({
   loadDataKinds = listServerLinkedDataKinds,
 }) {
   const activeTemplates = asArray(templates).filter((template) => template?.status !== "archived");
+  const { canEdit } = useWorkspacePermissions();
   const [selectedTemplateId, setSelectedTemplateId] = React.useState(activeTemplates[0]?.id || "");
+  const requestScope = useRequestScope(projectId, canEdit);
   const [detailState, setDetailState] = React.useState({ loading: false, value: null, error: "" });
   const [experimentState, setExperimentState] = React.useState({ loading: false, rows: [], columns: [], error: "", nextCursor: null });
   const [selectedExperimentIds, setSelectedExperimentIds] = React.useState([]);
@@ -465,7 +478,7 @@ export function ReusableChartTemplateReview({
   const hardBlockers = blockers.filter((blocker) => !asArray(blocker?.candidates).length);
   const unresolvedCandidates = candidateBlockers.filter((blocker) => !bindings[blocker.slotId]);
   const selectionCountValid = selectedExperimentIds.length >= minimum && selectedExperimentIds.length <= hardMaximum;
-  const canPreview = Boolean(version?.id)
+  const canPreview = canEdit && Boolean(version?.id)
     && selectionCountValid
     && !applicationState.loading
     && (!compatibility || compatibility.status === "ready" || (!hardBlockers.length && !unresolvedCandidates.length));
@@ -517,6 +530,7 @@ export function ReusableChartTemplateReview({
 
   const previewTemplate = async () => {
     if (!canPreview) return;
+    const generation = requestScope.current;
     setApplicationState((current) => ({ ...current, loading: true, error: "" }));
     try {
       const response = await applyTemplate(version.id, {
@@ -524,11 +538,13 @@ export function ReusableChartTemplateReview({
         bindings: linkedMode ? [] : Object.entries(bindings).map(([slotId, columnId]) => ({ slotId, columnId })),
         idempotencyKey: applicationKey(),
       });
+      if (generation !== requestScope.current) return;
       setApplicationState({ loading: false, response, error: "" });
       if (response?.compatibility?.status === "ready" && response?.analysisThread?.id && response?.analysisPlanRevision?.id) {
         onApplicationReady?.(response);
       }
     } catch (error) {
+      if (generation !== requestScope.current) return;
       setApplicationState({ loading: false, response: null, error: error?.message || String(error) });
     }
   };
@@ -857,6 +873,8 @@ export function LinkedDataComparisonReview({
   loadDataKinds = listServerLinkedDataKinds,
   createComparison = createServerLinkedDataComparison,
 }) {
+  const { canEdit } = useWorkspacePermissions();
+  const requestScope = useRequestScope(projectId, canEdit);
   const [kindsState, setKindsState] = React.useState({ loading: false, value: null, error: "" });
   const [selectedKind, setSelectedKind] = React.useState("");
   const [chartType, setChartType] = React.useState("grouped_bar");
@@ -908,26 +926,32 @@ export function LinkedDataComparisonReview({
   };
   const preview = async () => {
     if (!kind || !selectedLinked.length) return;
+    const generation = requestScope.current;
     setPreviewState({ loading: true, value: null, error: "" });
     try {
       const response = await createComparison(projectId, { dataKind: kind.dataKind, experimentIds: selectedExperimentIds, chartType, dryRun: true });
+      if (generation !== requestScope.current) return;
       setPreviewState({ loading: false, value: response?.comparison || null, error: "" });
     } catch (error) {
+      if (generation !== requestScope.current) return;
       setPreviewState({ loading: false, value: null, error: error?.message || String(error) });
     }
   };
   const create = async () => {
-    if (!kind || !selectedLinked.length || creating) return;
+    if (!canEdit || !kind || !selectedLinked.length || creating) return;
+    const generation = requestScope.current;
     setCreating(true);
     setPreviewState((current) => ({ ...current, error: "" }));
     try {
       const response = await createComparison(projectId, { dataKind: kind.dataKind, experimentIds: selectedExperimentIds, chartType });
+      if (generation !== requestScope.current) return;
       setPreviewState({ loading: false, value: response?.comparison || null, error: "" });
       if (response?.analysisThread?.id && response?.analysisPlanRevision?.id) onComparisonReady?.(response);
     } catch (error) {
+      if (generation !== requestScope.current) return;
       setPreviewState((current) => ({ ...current, loading: false, error: error?.message || String(error) }));
     } finally {
-      setCreating(false);
+      if (generation === requestScope.current) setCreating(false);
     }
   };
 
@@ -1001,7 +1025,7 @@ export function LinkedDataComparisonReview({
         <button type="button" disabled={!selectedLinked.length || previewState.loading || creating} onClick={preview}>
           {previewState.loading ? "Previewing..." : "Preview selections"}
         </button>
-        <button type="button" className="primary" disabled={!selectedLinked.length || creating} onClick={create}>
+        <button type="button" className="primary" disabled={!canEdit || !selectedLinked.length || creating} onClick={create}>
           {creating ? "Preparing plan..." : `Create comparison plan (${selectedLinked.length})`}
         </button>
       </div>

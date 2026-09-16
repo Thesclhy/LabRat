@@ -6,6 +6,22 @@ Last reviewed: 2026-08-19
 
 Durable decisions for LabRat architecture, product workflow, and Codex execution belong here. Keep entries newest first. Each entry should explain the decision, the context, the consequences, and any follow-up.
 
+## 2026-09-11 — Invitation Onboarding Reuses Lab Roles
+
+- Use isSuperAdmin only for platform issuance, lab_owner/lab_admin for lab
+  administration, and default-deny lab_member for employees. No new global data
+  administrator or role-selection field is introduced.
+- Invite codes are single-use, seven-day credentials stored only as hashes.
+  Registration is transactional across identity, membership, session and audit.
+- Project presets replace direct grants atomically using expectedGrantId; inherited
+  and experimental access is shown separately and never silently erased.
+- Removing a member clears only the target lab's grants/group memberships; rejoining
+  starts without old access. Historical scientific records and authors remain.
+- Scientific review and accepted-data versioning are unchanged. The single-instance
+  rate limiter and loopback-only proxy trust must be revisited before scaling out.
+- See `doc/contracts/invitation-onboarding-v1.md`. Real PostgreSQL and browser
+  validation remain release gates; no production rollout is authorized here.
+
 ## 2026-08-19 — Primitive Stored Type Is Provider-Independent
 
 - Decision: deterministic source evidence owns primitive Browser type, while

@@ -35,9 +35,9 @@ describe("analysisApi", () => {
     await getAnalysisThread("analysis/thread 1", { fetch: fetchImpl });
     await getAnalysisPlanSelection("revision 1", { offset: 50, limit: 100, fetch: fetchImpl });
 
-    expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects/project%201/analysis-threads?offset=10&limit=25");
-    expect(fetchImpl.mock.calls[1][0]).toBe("/api/analysis-threads/analysis%2Fthread%201");
-    expect(fetchImpl.mock.calls[2][0]).toBe("/api/analysis-plan-revisions/revision%201/selection?offset=50&limit=100");
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/v1/projects/project%201/analysis-threads?cursor=eyJvZmZzZXQiOjEwfQ&limit=25");
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/v1/analysis-threads/analysis%2Fthread%201");
+    expect(fetchImpl.mock.calls[2][0]).toBe("/api/v1/analysis-plan-revisions/revision%201/selection?cursor=eyJvZmZzZXQiOjUwfQ&limit=100");
   });
 
   it("reads public project analysis capabilities and retries with an idempotency key", async () => {
@@ -58,11 +58,11 @@ describe("analysisApi", () => {
       idempotencyKey: "retry_thread_1",
     });
 
-    expect(fetchImpl.mock.calls[0][0]).toBe("/api/projects/project%201/analysis-capabilities");
-    expect(fetchImpl.mock.calls[1][0]).toBe("/api/analysis-threads/thread_1/retry");
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/v1/projects/project%201/analysis-capabilities");
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/v1/analysis-threads/thread_1/retry");
     expect(fetchImpl.mock.calls[1][1].method).toBe("POST");
     expect(fetchImpl.mock.calls[1][1].headers["idempotency-key"]).toBe("retry_thread_1");
-    expect(JSON.parse(fetchImpl.mock.calls[1][1].body)).toEqual({});
+    expect(fetchImpl.mock.calls[1][1].body).toBeUndefined();
   });
 
   it("creates feedback revisions and accepts a revision by idempotent revision id", async () => {
@@ -78,13 +78,13 @@ describe("analysisApi", () => {
       idempotencyKey: "accept_revision_2",
     });
 
-    expect(fetchImpl.mock.calls[0][0]).toBe("/api/analysis-threads/thread_1/plan-revisions");
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/v1/analysis-threads/thread_1/plan-revisions");
     expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
       feedback: "Treat missing Liquid as zero.",
     });
-    expect(fetchImpl.mock.calls[1][0]).toBe("/api/analysis-plan-revisions/revision_2/accept");
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/v1/analysis-plan-revisions/revision_2/accept");
     expect(fetchImpl.mock.calls[1][1].headers["idempotency-key"]).toBe("accept_revision_2");
-    expect(JSON.parse(fetchImpl.mock.calls[1][1].body)).toEqual({});
+    expect(fetchImpl.mock.calls[1][1].body).toBeUndefined();
   });
 
   it("executes accepted runs and loads the complete Plotly result", async () => {
@@ -114,11 +114,11 @@ describe("analysisApi", () => {
       fetch: fetchImpl,
     });
 
-    expect(fetchImpl.mock.calls[0][0]).toBe("/api/analysis-runs/analysis%2Frun%201");
-    expect(fetchImpl.mock.calls[1][0]).toBe("/api/analysis-runs/analysis%2Frun%201/execute");
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/v1/analysis-runs/analysis%2Frun%201");
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/v1/analysis-runs/analysis%2Frun%201/execute");
     expect(fetchImpl.mock.calls[1][1].method).toBe("POST");
     expect(fetchImpl.mock.calls[2][0]).toBe(
-      "/api/analysis-runs/analysis%2Frun%201/result-preview?offset=25&limit=100",
+      "/api/v1/analysis-runs/analysis%2Frun%201/result-preview?cursor=eyJvZmZzZXQiOjI1fQ&limit=100&traceCursor=eyJvZmZzZXQiOjEwfQ&sourceCursor=eyJvZmZzZXQiOjUwfQ",
     );
   });
 
@@ -129,7 +129,7 @@ describe("analysisApi", () => {
       fetch: fetchImpl,
     });
     expect(fetchImpl).toHaveBeenCalledWith(
-      "/api/analysis-runs/run%201/retry",
+      "/api/v1/analysis-runs/run%201/retry",
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({ "idempotency-key": "retry_1" }),
@@ -151,7 +151,7 @@ describe("analysisApi", () => {
       feedback: "Keep all experiments but use reaction time on x.",
     }, { fetch: fetchImpl });
 
-    expect(fetchImpl.mock.calls[0][0]).toBe("/api/analysis-runs/analysis_run_1/revise");
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/v1/analysis-runs/analysis_run_1/revise");
     expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
       feedback: "Keep all experiments but use reaction time on x.",
     });
@@ -172,7 +172,7 @@ describe("analysisApi", () => {
     });
 
     expect(fetchImpl.mock.calls[0][0]).toBe(
-      "/api/analysis-runs/analysis%2Frun%201/accept-and-create-chart",
+      "/api/v1/analysis-runs/analysis%2Frun%201/accept-and-create-chart",
     );
     expect(fetchImpl.mock.calls[0][1].headers["idempotency-key"]).toBe("publish_result_1");
     expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
@@ -201,7 +201,7 @@ describe("analysisApi", () => {
     });
 
     expect(fetchImpl.mock.calls[0][0]).toBe(
-      "/api/analysis-runs/analysis%2Frun%202/accept-and-publish-experiments",
+      "/api/v1/analysis-runs/analysis%2Frun%202/accept-and-publish-experiments",
     );
     expect(fetchImpl.mock.calls[0][1].headers["idempotency-key"])
       .toBe("publish_experiment_result_2");

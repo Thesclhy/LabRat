@@ -640,9 +640,9 @@ describe("project state refresh helpers", () => {
 describe("WorkbookReviewWorkspace", () => {
   function makeWorkbookReviewFetch() {
     return vi.fn(async (url, init = {}) => {
-      if (url === "/api/projects/project_1/source-documents") {
+      if (url === "/api/v1/projects/project_1/source-documents") {
         return jsonResponse({
-          sourceDocuments: [{
+          items: [{
             id: "source_doc_1",
             metadata: {
               workbookName: "Master.xlsx",
@@ -652,10 +652,10 @@ describe("WorkbookReviewWorkspace", () => {
           }],
         });
       }
-      if (url === "/api/source-documents/source_doc_1/regions") {
+      if (url === "/api/v1/source-documents/source_doc_1/regions") {
         return jsonResponse({ regions: [] });
       }
-      if (url === "/api/source-documents/source_doc_1/range") {
+      if (url === "/api/v1/source-documents/source_doc_1/range") {
         const body = JSON.parse(init.body || "{}");
         return jsonResponse({
           sheetName: body.sheetName,
@@ -693,7 +693,7 @@ describe("WorkbookReviewWorkspace", () => {
 
   function workbookRangeRequests(fetchMock, sheetName = "") {
     return fetchMock.mock.calls
-      .filter(([url]) => url === "/api/source-documents/source_doc_1/range")
+      .filter(([url]) => url === "/api/v1/source-documents/source_doc_1/range")
       .map(([, init]) => JSON.parse(init.body || "{}"))
       .filter((body) => !sheetName || body.sheetName === sheetName);
   }
@@ -717,15 +717,15 @@ describe("WorkbookReviewWorkspace", () => {
   } = {}) {
     const attempts = new Map();
     const fetchMock = vi.fn(async (url, init = {}) => {
-      if (url === "/api/projects/project_1/source-documents") {
+      if (url === "/api/v1/projects/project_1/source-documents") {
         return jsonResponse({
-          sourceDocuments: [{
+          items: [{
             id: "source_doc_1",
             metadata: { workbookName: "Large.xlsx", sheets },
           }],
         });
       }
-      if (url === "/api/source-documents/source_doc_1/range") {
+      if (url === "/api/v1/source-documents/source_doc_1/range") {
         const body = JSON.parse(init.body || "{}");
         const key = `${body.sheetName}!${body.range}`;
         attempts.set(key, (attempts.get(key) || 0) + 1);
@@ -1228,7 +1228,7 @@ describe("WorkbookReviewWorkspace", () => {
       await screen.findByText("Label", {}, { timeout: 10_000 });
       await waitFor(() => {
         const rangeRequests = fetchMock.mock.calls
-          .filter(([url]) => url === "/api/source-documents/source_doc_1/range")
+          .filter(([url]) => url === "/api/v1/source-documents/source_doc_1/range")
           .map(([, init]) => JSON.parse(init.body || "{}").range);
         expect(rangeRequests).toContain("A1:D5");
       });
@@ -1266,7 +1266,7 @@ describe("WorkbookReviewWorkspace", () => {
       await waitFor(() => expect(screen.getByLabelText("Sheet range").value).toBe("A1:D5"));
 
       const rangeRequests = fetchMock.mock.calls
-        .filter(([url]) => url === "/api/source-documents/source_doc_1/range")
+        .filter(([url]) => url === "/api/v1/source-documents/source_doc_1/range")
         .map(([, init]) => JSON.parse(init.body || "{}").range);
       expect(rangeRequests.filter((range) => range === "A1:D5")).toHaveLength(1);
       expect(rangeRequests).toEqual(["A1:D5"]);
@@ -1277,8 +1277,8 @@ describe("WorkbookReviewWorkspace", () => {
 
   it("locks sheet selection and new regions to the next review session SourceDocument", async () => {
     const fetchMock = vi.fn(async (url, init = {}) => {
-      if (url === "/api/source-documents/source_doc_1/range"
-        || url === "/api/source-documents/source_doc_2/range") {
+      if (url === "/api/v1/source-documents/source_doc_1/range"
+        || url === "/api/v1/source-documents/source_doc_2/range") {
         const body = JSON.parse(init.body || "{}");
         return jsonResponse({
           sheetName: body.sheetName,
@@ -1350,7 +1350,7 @@ describe("WorkbookReviewWorkspace", () => {
       expect(grid.scrollLeft).toBe(0);
       await waitFor(() => {
         const secondWorkbookRequests = fetchMock.mock.calls
-          .filter(([url]) => url === "/api/source-documents/source_doc_2/range")
+          .filter(([url]) => url === "/api/v1/source-documents/source_doc_2/range")
           .map(([, init]) => JSON.parse(init.body || "{}"));
         expect(secondWorkbookRequests).toContainEqual({ sheetName: "Results", range: "C3:D4" });
       });
@@ -1373,9 +1373,9 @@ describe("WorkbookReviewWorkspace", () => {
 
   it("uses stable cached workbook tiles while dragging the scrollbar and returning to loaded rows", async () => {
     const fetchMock = vi.fn(async (url, init = {}) => {
-      if (url === "/api/projects/project_1/source-documents") {
+      if (url === "/api/v1/projects/project_1/source-documents") {
         return jsonResponse({
-          sourceDocuments: [{
+          items: [{
             id: "source_doc_1",
             metadata: {
               workbookName: "Master.xlsx",
@@ -1385,7 +1385,7 @@ describe("WorkbookReviewWorkspace", () => {
           }],
         });
       }
-      if (url === "/api/source-documents/source_doc_1/range") {
+      if (url === "/api/v1/source-documents/source_doc_1/range") {
         const body = JSON.parse(init.body || "{}");
         const startRow = Number(body.range.match(/^[A-Z]+(\d+):/)?.[1] || 1);
         return jsonResponse({
@@ -1440,7 +1440,7 @@ describe("WorkbookReviewWorkspace", () => {
 
       await waitFor(() => {
         const loadedRanges = fetchMock.mock.calls
-          .filter(([url]) => url === "/api/source-documents/source_doc_1/range");
+          .filter(([url]) => url === "/api/v1/source-documents/source_doc_1/range");
         expect(loadedRanges.length).toBeGreaterThan(1);
       });
 
@@ -1453,7 +1453,7 @@ describe("WorkbookReviewWorkspace", () => {
       });
 
       const rangeRequests = fetchMock.mock.calls
-        .filter(([url]) => url === "/api/source-documents/source_doc_1/range")
+        .filter(([url]) => url === "/api/v1/source-documents/source_doc_1/range")
         .map(([, init]) => JSON.parse(init.body || "{}").range);
       const startRows = rangeRequests.map((range) => Number(range.match(/^[A-Z]+(\d+):/)?.[1] || 0));
       expect(startRows.every((row) => (row - 1) % 40 === 0)).toBe(true);
@@ -1523,15 +1523,15 @@ describe("WorkbookReviewWorkspace", () => {
     let inFlight = 0;
     let maxInFlight = 0;
     const fetchMock = vi.fn(async (url, init = {}) => {
-      if (url === "/api/projects/project_1/source-documents") {
+      if (url === "/api/v1/projects/project_1/source-documents") {
         return jsonResponse({
-          sourceDocuments: [{
+          items: [{
             id: "source_doc_1",
             metadata: { workbookName: "Large.xlsx", sheets },
           }],
         });
       }
-      if (url === "/api/source-documents/source_doc_1/range") {
+      if (url === "/api/v1/source-documents/source_doc_1/range") {
         const body = JSON.parse(init.body || "{}");
         requests.push(body.range);
         inFlight += 1;
@@ -1838,9 +1838,9 @@ describe("WorkbookReviewWorkspace", () => {
 
   it("auto-scrolls and extends drag selection when the pointer reaches the workbook edge", async () => {
     const fetchMock = vi.fn(async (url, init = {}) => {
-      if (url === "/api/projects/project_1/source-documents") {
+      if (url === "/api/v1/projects/project_1/source-documents") {
         return jsonResponse({
-          sourceDocuments: [{
+          items: [{
             id: "source_doc_1",
             metadata: {
               workbookName: "Master.xlsx",
@@ -1850,7 +1850,7 @@ describe("WorkbookReviewWorkspace", () => {
           }],
         });
       }
-      if (url === "/api/source-documents/source_doc_1/range") {
+      if (url === "/api/v1/source-documents/source_doc_1/range") {
         const body = JSON.parse(init.body || "{}");
         return jsonResponse({
           sheetName: body.sheetName,
@@ -1932,6 +1932,13 @@ describe("WorkbookReviewWorkspace", () => {
 
 
 describe("ChartReviewModal", () => {
+  it("keeps approved charts readable without proposal permission", () => {
+    render(<ChartReviewModal open projectId="project_1" statusFilter="active" chartSpecs={[]} onClose={() => {}} />);
+    expect(screen.getByText('No approved ChartSpecs yet.')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Create chart' }).disabled).toBe(true);
+    expect(screen.queryByText('Select a server project first')).toBeNull();
+  });
+
   it("shows reviewed analysis chart creation only in the chart review modal", () => {
     render(
       <ChartReviewModal
@@ -2117,14 +2124,14 @@ describe("AgentPanel", () => {
       plottedData: { traces: [{ name: "Catalyst A", x: [1, 2, 3], y: [35, 61, 78] }] },
     };
     const fetchMock = vi.fn(async (url, request = {}) => {
-      if (url === "/api/projects/project_1/analysis-capabilities") {
+      if (url === "/api/v1/projects/project_1/analysis-capabilities") {
         return jsonResponse({
           model: { provider: "anthropic", model: "claude-test", configured: true },
           executor: { configured: true, adapter: "local" },
           acceptedData: { acceptedSnapshotCount: 1, activeExperimentHeadCount: 1 },
         });
       }
-      if (url === "/api/projects/project_1/agent/runs") {
+      if (url === "/api/v1/projects/project_1/agent/runs") {
         const body = JSON.parse(request.body);
         expect(body.message).toBe("Write a manuscript-ready analysis of the selected chart.");
         expect(body.selectedContext).toMatchObject({
@@ -2203,14 +2210,14 @@ describe("AgentPanel", () => {
 
   it("sends the active Browser surface with ordinary LabRat chat requests", async () => {
     const fetchMock = vi.fn(async (url) => {
-      if (url === "/api/projects/project_1/analysis-capabilities") {
+      if (url === "/api/v1/projects/project_1/analysis-capabilities") {
         return jsonResponse({
           model: { configured: true },
           executor: { configured: true, adapter: "local_non_production" },
           acceptedData: { acceptedSnapshotCount: 1, activeExperimentHeadCount: 1 },
         });
       }
-      if (url === "/api/projects/project_1/agent/runs") {
+      if (url === "/api/v1/projects/project_1/agent/runs") {
         return jsonResponse({
           reply: "I prepared a Browser data plan.",
           agentRun: {
@@ -2251,7 +2258,7 @@ describe("AgentPanel", () => {
       fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
 
       expect(await screen.findByText("I prepared a Browser data plan.")).toBeTruthy();
-      const request = fetchMock.mock.calls.find(([url]) => url === "/api/projects/project_1/agent/runs");
+      const request = fetchMock.mock.calls.find(([url]) => url === "/api/v1/projects/project_1/agent/runs");
       const body = JSON.parse(request[1].body);
       expect(body.selectedContext.tab).toBe("browser");
       expect(body.selectedContext.activeSurface).toBe("browser");
@@ -2341,7 +2348,7 @@ describe("AgentPanel", () => {
       await waitFor(() => expect(screen.getByLabelText("Analysis runtime status").textContent).toContain("Model: anthropic / claude-test ready"));
       expect(screen.getByLabelText("Analysis runtime status").textContent).toContain("Python: local ready");
       expect(screen.getByLabelText("Analysis runtime status").textContent).toContain("Evidence: 0 confirmed regions, 3 snapshots, 2 active heads");
-      expect(fetchMock).toHaveBeenCalledWith("/api/projects/project_1/analysis-capabilities", expect.any(Object));
+      expect(fetchMock).toHaveBeenCalledWith("/api/v1/projects/project_1/analysis-capabilities", expect.any(Object));
     } finally {
       global.fetch = originalFetch;
     }
@@ -2547,14 +2554,14 @@ describe("AgentPanel", () => {
 
   it("shows request progress and cancels the active server AgentRun without falling back", async () => {
     const fetchMock = vi.fn((url, request = {}) => {
-      if (url === "/api/projects/project_1/analysis-capabilities") {
+      if (url === "/api/v1/projects/project_1/analysis-capabilities") {
         return Promise.resolve(jsonResponse({
           model: { provider: "anthropic", model: "claude-test", configured: true },
           executor: { adapter: "local", configured: true },
           acceptedData: { acceptedSnapshotCount: 1, activeExperimentHeadCount: 2 },
         }));
       }
-      if (url === "/api/projects/project_1/agent/runs") {
+      if (url === "/api/v1/projects/project_1/agent/runs") {
         return new Promise((_resolve, reject) => {
           request.signal.addEventListener("abort", () => {
             const error = new Error("The operation was aborted.");
@@ -2595,7 +2602,7 @@ describe("AgentPanel", () => {
       fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
       expect(await screen.findByText("Request cancelled.")).toBeTruthy();
-      expect(fetchMock.mock.calls.some(([url]) => url === "/api/projects/project_1/agent/plan")).toBe(false);
+      expect(fetchMock.mock.calls.some(([url]) => url === "/api/v1/projects/project_1/agent/plan")).toBe(false);
       expect(screen.queryByLabelText("LabRat request status")).toBeNull();
     } finally {
       global.fetch = originalFetch;
@@ -2604,14 +2611,14 @@ describe("AgentPanel", () => {
 
   it("reports an AgentRun failure without claiming that a compatibility plan was created", async () => {
     const fetchMock = vi.fn(async (url) => {
-      if (url === "/api/projects/project_1/analysis-capabilities") {
+      if (url === "/api/v1/projects/project_1/analysis-capabilities") {
         return jsonResponse({
           model: { provider: "anthropic", configured: true },
           executor: { adapter: "local", configured: true },
           acceptedData: { acceptedSnapshotCount: 1, activeExperimentHeadCount: 1 },
         });
       }
-      if (url === "/api/projects/project_1/agent/runs") {
+      if (url === "/api/v1/projects/project_1/agent/runs") {
         return jsonResponse({
           error: { code: "provider_unavailable", message: "Anthropic is unavailable." },
         }, { status: 503 });
@@ -2643,7 +2650,7 @@ describe("AgentPanel", () => {
       fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
 
       expect(await screen.findByText(/Anthropic is unavailable.*No plan or chart was created/)).toBeTruthy();
-      expect(fetchMock.mock.calls.some(([url]) => url === "/api/projects/project_1/agent/plan")).toBe(false);
+      expect(fetchMock.mock.calls.some(([url]) => url === "/api/v1/projects/project_1/agent/plan")).toBe(false);
       expect(screen.queryByText(/I will prepare a reviewed analysis plan/)).toBeNull();
     } finally {
       global.fetch = originalFetch;
@@ -2788,14 +2795,14 @@ describe("AgentPanel", () => {
       sourceRectangles: [],
     };
     const fetchMock = vi.fn(async (url, init = {}) => {
-      if (url === "/api/projects/project_1/analysis-capabilities") {
+      if (url === "/api/v1/projects/project_1/analysis-capabilities") {
         return jsonResponse({
           model: { configured: true },
           executor: { configured: true, adapter: "local_non_production" },
           acceptedData: { acceptedSnapshotCount: 1, activeExperimentHeadCount: 2 },
         });
       }
-      if (url === "/api/projects/project_1/agent/runs") {
+      if (url === "/api/v1/projects/project_1/agent/runs") {
         return jsonResponse({
           reply: "Accepted published experiment data is required before planning.",
           analysisThread,
@@ -2808,7 +2815,7 @@ describe("AgentPanel", () => {
           },
         }, { status: 201 });
       }
-      if (url === `/api/analysis-threads/${analysisThread.id}/retry`) {
+      if (url === `/api/v1/analysis-threads/${analysisThread.id}/retry`) {
         expect(init.method).toBe("POST");
         return jsonResponse({ analysisThread, analysisPlanRevision: retryRevision }, { status: 201 });
       }
@@ -2846,7 +2853,7 @@ describe("AgentPanel", () => {
         revision: retryRevision,
       }));
       expect(fetchMock).toHaveBeenCalledWith(
-        `/api/analysis-threads/${analysisThread.id}/retry`,
+        `/api/v1/analysis-threads/${analysisThread.id}/retry`,
         expect.objectContaining({ method: "POST" }),
       );
     } finally {
@@ -2873,7 +2880,7 @@ describe("AgentPanel", () => {
           acceptedData: { acceptedSnapshotCount: 1, activeExperimentHeadCount: 1 },
         });
       }
-      if (url === "/api/projects/project_1/agent/runs") {
+      if (url === "/api/v1/projects/project_1/agent/runs") {
         return jsonResponse({
           analysisThread,
           agentRun: {
@@ -2884,7 +2891,7 @@ describe("AgentPanel", () => {
           },
         }, { status: 201 });
       }
-      if (url === `/api/analysis-threads/${analysisThread.id}/retry`) return retryResponse;
+      if (url === `/api/v1/analysis-threads/${analysisThread.id}/retry`) return retryResponse;
       throw new Error(`Unexpected fetch ${url}`);
     });
     const originalFetch = global.fetch;
@@ -3132,7 +3139,7 @@ describe("AgentPanel", () => {
       chartSpec,
     });
     const fetchMock = vi.fn(async (url) => {
-      if (url === "/api/projects/project_1/analysis-capabilities") {
+      if (url === "/api/v1/projects/project_1/analysis-capabilities") {
         return jsonResponse({
           model: { configured: true },
           executor: { configured: true, adapter: "golden_test_executor" },
@@ -3342,19 +3349,19 @@ describe("AgentPanel", () => {
       resolveProjectState = resolve;
     });
     const fetchMock = vi.fn(async (url, init = {}) => {
-      if (url === "/api/projects/project_1/analysis-capabilities") {
+      if (url === "/api/v1/projects/project_1/analysis-capabilities") {
         return jsonResponse({
           model: { configured: true },
           executor: { configured: true, adapter: "local" },
           acceptedData: { acceptedSnapshotCount: 0, activeExperimentHeadCount: 0 },
         });
       }
-      if (url === "/api/projects/project_1/files") {
+      if (url === "/api/v1/projects/project_1/files" && init.method === "POST") {
         expect(init.method).toBe("POST");
         expect(init.body instanceof FormData).toBe(true);
         return jsonResponse({ fileObject: { id: "file_1", originalName: "Master.xlsx" } }, { status: 201 });
       }
-      if (url === "/api/projects/project_1/workbook-review-sessions") {
+      if (url === "/api/v1/projects/project_1/workbook-review-sessions" && init.method === "POST") {
         expect(JSON.parse(init.body)).toMatchObject({ fileObjectId: "file_1" });
         return jsonResponse({
           workbookReviewSession: {
@@ -3392,8 +3399,11 @@ describe("AgentPanel", () => {
           interpretationDeferred: true,
         }, { status: 201 });
       }
-      if (url === "/api/projects/project_1/state") {
+      if (url === "/api/v1/projects/project_1") {
         return projectStateResponse;
+      }
+      if (url === "/api/v1/projects/project_1/experiment-browser?limit=1") {
+        return jsonResponse({ columns: [], rows: [], totalCount: 0, nextCursor: null });
       }
       return jsonResponse({});
     });
@@ -3425,7 +3435,7 @@ describe("AgentPanel", () => {
       fireEvent.change(fileInput, { target: { files: [file] } });
 
       expect(screen.getByText("Master.xlsx")).toBeTruthy();
-      expect(fetchMock.mock.calls.some(([url]) => url === "/api/projects/project_1/files")).toBe(false);
+      expect(fetchMock.mock.calls.some(([url, init]) => url === "/api/v1/projects/project_1/files" && init.method === "POST")).toBe(false);
 
       const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
       fireEvent.change(promptInput, { target: { value: "Please help me understand this workbook" } });
@@ -3437,13 +3447,9 @@ describe("AgentPanel", () => {
         reviewStatus: "interpreting",
       });
       expect(onProjectStateLoaded).not.toHaveBeenCalled();
-      resolveProjectState(jsonResponse({
-        project: { id: "project_1" },
-        sourceDocuments: [],
-        workbookReviewSessions: [],
-      }));
-      expect(fetchMock).toHaveBeenCalledWith("/api/projects/project_1/files", expect.objectContaining({ method: "POST" }));
-      expect(fetchMock).toHaveBeenCalledWith("/api/projects/project_1/workbook-review-sessions", expect.objectContaining({ method: "POST" }));
+      resolveProjectState(jsonResponse({ project: { id: "project_1", shellOnly: true } }));
+      expect(fetchMock).toHaveBeenCalledWith("/api/v1/projects/project_1/files", expect.objectContaining({ method: "POST" }));
+      expect(fetchMock).toHaveBeenCalledWith("/api/v1/projects/project_1/workbook-review-sessions", expect.objectContaining({ method: "POST" }));
       expect(await screen.findByText(/AI is understanding them in Workbook Review/)).toBeTruthy();
       expect(onProjectStateLoaded).toHaveBeenCalled();
 
@@ -3490,18 +3496,18 @@ describe("AgentPanel", () => {
       interpretationDeferred: true,
     });
     const fetchMock = vi.fn(async (url, init = {}) => {
-      if (url === "/api/projects/project_1/analysis-capabilities") {
+      if (url === "/api/v1/projects/project_1/analysis-capabilities") {
         return jsonResponse({ model: { configured: true }, executor: { configured: true, adapter: "local" }, acceptedData: {} });
       }
-      if (url.startsWith("/api/projects/project_1/experiment-browser")) {
+      if (url.startsWith("/api/v1/projects/project_1/experiment-browser")) {
         return jsonResponse({ rows: [{ experimentId: "identity_31", label: "Exp31" }], columns: [] });
       }
-      if (url === "/api/projects/project_1/files") {
+      if (url === "/api/v1/projects/project_1/files" && init.method === "POST") {
         const uploaded = init.body.get("file");
         const fileId = uploaded.name.includes("Exp31") ? "exp31" : "exp32";
         return jsonResponse({ fileObject: { id: `file_${fileId}`, originalName: uploaded.name } }, { status: 201 });
       }
-      if (url === "/api/projects/project_1/workbook-review-sessions") {
+      if (url === "/api/v1/projects/project_1/workbook-review-sessions" && init.method === "POST") {
         const { fileObjectId } = JSON.parse(init.body);
         if (fileObjectId === "file_exp31") return jsonResponse(sessionResponse("Calculation Exp31.xlsx", "exp31"), { status: 201 });
         exp32SessionAttempts += 1;
@@ -3510,7 +3516,7 @@ describe("AgentPanel", () => {
         }
         return jsonResponse(sessionResponse("Calculation Exp32.xlsx", "exp32"), { status: 201 });
       }
-      if (url === "/api/projects/project_1/state") {
+      if (url === "/api/v1/projects/project_1") {
         return jsonResponse({ project: { id: "project_1" }, sourceDocuments: [], workbookReviewSessions: [] });
       }
       return jsonResponse({});
@@ -3547,7 +3553,7 @@ describe("AgentPanel", () => {
 
       expect(screen.getByText("2 workbooks attached. Send to upload them as one batch.")).toBeTruthy();
       expect(screen.getByRole("button", { name: "Remove attached spreadsheet Calculation Exp32.xlsx" })).toBeTruthy();
-      expect(fetchMock.mock.calls.some(([url]) => url === "/api/projects/project_1/files")).toBe(false);
+      expect(fetchMock.mock.calls.some(([url, init]) => url === "/api/v1/projects/project_1/files" && init.method === "POST")).toBe(false);
 
       const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
       fireEvent.change(promptInput, { target: { value: "Upload these calculation workbooks" } });
@@ -3570,13 +3576,13 @@ describe("AgentPanel", () => {
           regions: [expect.objectContaining({ id: "region_exp31", reviewStatus: "interpreting" })],
         }),
       ]);
-      expect(fetchMock.mock.calls.filter(([url]) => url === "/api/projects/project_1/state")).toHaveLength(1);
+      expect(fetchMock.mock.calls.filter(([url]) => url === "/api/v1/projects/project_1")).toHaveLength(1);
       await waitFor(() => expect(onProjectStateLoaded).toHaveBeenCalledTimes(1));
 
       fireEvent.click(screen.getByRole("button", { name: "Retry 1 failed" }));
       expect(await screen.findByText("2/2 workbooks indexed")).toBeTruthy();
       expect(screen.queryByRole("button", { name: /Retry/ })).toBeNull();
-      expect(fetchMock.mock.calls.filter(([url]) => url === "/api/projects/project_1/files")).toHaveLength(3);
+      expect(fetchMock.mock.calls.filter(([url, init]) => url === "/api/v1/projects/project_1/files" && init.method === "POST")).toHaveLength(3);
       expect(onWorkbookBatchUploaded).toHaveBeenCalledTimes(2);
       expect(onWorkbookBatchUploaded.mock.calls[1][0].map((entry) => entry.sessionId)).toEqual(["session_exp32"]);
 
@@ -3600,15 +3606,15 @@ describe("AgentPanel", () => {
     const onRequestedWorkbookFilesHandled = vi.fn();
     const onWorkbookBatchUploaded = vi.fn();
     const fetchMock = vi.fn(async (url, init = {}) => {
-      if (url === "/api/projects/project_1/analysis-capabilities") {
+      if (url === "/api/v1/projects/project_1/analysis-capabilities") {
         return jsonResponse({ model: { configured: true }, executor: { configured: true }, acceptedData: {} });
       }
-      if (url.startsWith("/api/projects/project_1/experiment-browser")) return jsonResponse({ rows: [] });
-      if (url === "/api/projects/project_1/files") {
+      if (url.startsWith("/api/v1/projects/project_1/experiment-browser")) return jsonResponse({ rows: [] });
+      if (url === "/api/v1/projects/project_1/files" && init.method === "POST") {
         const uploaded = init.body.get("file");
         return jsonResponse({ fileObject: { id: `file_${uploaded.name}`, originalName: uploaded.name } }, { status: 201 });
       }
-      if (url === "/api/projects/project_1/workbook-review-sessions") {
+      if (url === "/api/v1/projects/project_1/workbook-review-sessions" && init.method === "POST") {
         const { fileObjectId } = JSON.parse(init.body);
         const name = fileObjectId.replace(/^file_/, "");
         return jsonResponse({
@@ -3618,7 +3624,7 @@ describe("AgentPanel", () => {
           reviewRegions: [],
         }, { status: 201 });
       }
-      if (url === "/api/projects/project_1/state") return jsonResponse({ project: { id: "project_1" } });
+      if (url === "/api/v1/projects/project_1") return jsonResponse({ project: { id: "project_1" } });
       return jsonResponse({});
     });
     const originalFetch = global.fetch;
@@ -3652,7 +3658,7 @@ describe("AgentPanel", () => {
         "session_Calculation Exp31.xlsx",
         "session_Calculation Exp32.xlsx",
       ]);
-      expect(fetchMock.mock.calls.filter(([url]) => url === "/api/projects/project_1/files")).toHaveLength(2);
+      expect(fetchMock.mock.calls.filter(([url, init]) => url === "/api/v1/projects/project_1/files" && init.method === "POST")).toHaveLength(2);
     } finally {
       global.fetch = originalFetch;
     }
@@ -3673,10 +3679,10 @@ describe("AgentPanel", () => {
       },
     }]));
     const fetchMock = vi.fn(async (url, init = {}) => {
-      if (url === "/api/projects/project_1/analysis-capabilities") {
+      if (url === "/api/v1/projects/project_1/analysis-capabilities") {
         return jsonResponse({ model: { configured: true }, executor: { configured: true }, acceptedData: {} });
       }
-      if (url === "/api/region-extraction-template-versions/template_version_1/matches") {
+      if (url === "/api/v1/region-extraction-template-versions/template_version_1/matches") {
         expect(JSON.parse(init.body)).toEqual({ sourceDocumentIds: ["doc_31", "doc_32", "doc_33"] });
         return jsonResponse({
           templateName: "Carbon distribution",
@@ -3767,14 +3773,14 @@ describe("AgentPanel", () => {
     }]));
     const onWorkbookReviewLinkOpen = vi.fn().mockResolvedValue(undefined);
     const fetchMock = vi.fn(async (url, init = {}) => {
-      if (url === "/api/projects/project_1/analysis-capabilities") {
+      if (url === "/api/v1/projects/project_1/analysis-capabilities") {
         return jsonResponse({ model: { configured: true }, executor: { configured: true }, acceptedData: {} });
       }
-      if (url.startsWith("/api/projects/project_1/experiment-browser")) {
+      if (url.startsWith("/api/v1/projects/project_1/experiment-browser")) {
         return jsonResponse({ rows: [{ experimentId: "identity_32", label: "Exp32" }, { experimentId: "identity_99", label: "Exp99" }] });
       }
-      if (url === "/api/region-extraction-template-versions/template_version_1/apply") {
-        expect(init.headers["Idempotency-Key"]).toBeTruthy();
+      if (url === "/api/v1/region-extraction-template-versions/template_version_1/apply") {
+        expect(new Headers(init.headers).get("Idempotency-Key")).toBeTruthy();
         expect(JSON.parse(init.body)).toEqual({ sourceDocumentIds: ["doc_32", "doc_99"] });
         return jsonResponse({
           templateName: "Carbon distribution",
@@ -3785,7 +3791,7 @@ describe("AgentPanel", () => {
           skipped: [],
         });
       }
-      if (url === "/api/projects/project_1/workbook-review-regions/confirm-batch") {
+      if (url === "/api/v1/projects/project_1/workbook-review-regions/confirm-batch") {
         const body = JSON.parse(init.body);
         expect(body.items).toEqual([
           { regionId: "region_32", revisionId: "revision_32", expectedRegionVersion: 2 },
@@ -3800,7 +3806,7 @@ describe("AgentPanel", () => {
           ],
         });
       }
-      if (url === "/api/projects/project_1/state") return jsonResponse({ project: { id: "project_1" } });
+      if (url === "/api/v1/projects/project_1") return jsonResponse({ project: { id: "project_1" } });
       return jsonResponse({});
     });
     const originalFetch = global.fetch;

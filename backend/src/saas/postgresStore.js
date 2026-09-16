@@ -1666,14 +1666,15 @@ export class PostgresSaasStore {
            deleted_at = coalesce($12, deleted_at),
            deleted_by = coalesce($13, deleted_by),
            deleted_reason = coalesce($14, deleted_reason),
-           linked_experiment_id = case when $16::boolean then $17 else linked_experiment_id end,
-           data_kind = case when $18::boolean then $19 else data_kind end,
-           region_extraction_template_version_id = case when $20::boolean then $21 else region_extraction_template_version_id end,
-           template_match = case when $22::boolean then $23::jsonb else template_match end,
+           linked_experiment_id = case when $17::boolean then $18 else linked_experiment_id end,
+           data_kind = case when $19::boolean then $20 else data_kind end,
+           region_extraction_template_version_id = case when $21::boolean then $22 else region_extraction_template_version_id end,
+           template_match = case when $23::boolean then $24::jsonb else template_match end,
            version = version + 1,
            updated_at = now(),
            updated_by = coalesce($15, updated_by)
        where id = $1
+         and ($16::integer is null or version = $16)
        returning *`,
       [
         id,
@@ -1691,6 +1692,7 @@ export class PostgresSaasStore {
         patch.deletedBy ?? null,
         patch.deletedReason ?? null,
         patch.updatedBy ?? null,
+        patch.expectedVersion === undefined ? null : Number(patch.expectedVersion),
         patch.linkedExperimentId !== undefined,
         patch.linkedExperimentId ?? null,
         patch.dataKind !== undefined,
@@ -1701,6 +1703,19 @@ export class PostgresSaasStore {
         patch.templateMatch === undefined || patch.templateMatch === null ? null : jsonb(patch.templateMatch),
       ],
     );
+    if (!result.rows[0] && patch.expectedVersion !== undefined) {
+      const current = await this.findWorkbookReviewRegionById(id);
+      if (current) {
+        throw Object.assign(new Error("Workbook review region changed; reload before submitting this action."), {
+          statusCode: 409,
+          code: "stale_workbook_review_region",
+          details: {
+            expectedRegionVersion: Number(patch.expectedVersion),
+            currentRegionVersion: Number(current.version) || null,
+          },
+        });
+      }
+    }
     return workbookReviewRegionFromRow(result.rows[0]);
   }
 
@@ -4312,10 +4327,11 @@ export class PostgresSaasStore {
           `insert into analysis_threads
            (id, lab_id, project_id, schema_version, status, original_request, messages,
             plan_revision_ids, analysis_run_ids, accepted_analysis_result_ids, chart_spec_ids,
-            output_target, data_snapshot_ids, browser_view_ids, created_at, updated_at, created_by, updated_by)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+            output_target, input_mode, data_snapshot_ids, browser_view_ids,
+            created_at, updated_at, created_by, updated_by)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
            returning *`,
-          [input.analysisThread.id, input.analysisThread.labId, input.analysisThread.projectId, input.analysisThread.schemaVersion, input.analysisThread.status, input.analysisThread.originalRequest, jsonb(input.analysisThread.messages, []), jsonb(input.analysisThread.planRevisionIds, []), jsonb(input.analysisThread.analysisRunIds, []), jsonb(input.analysisThread.acceptedAnalysisResultIds, []), jsonb(input.analysisThread.chartSpecIds, []), input.analysisThread.outputTarget, jsonb(input.analysisThread.dataSnapshotIds, []), jsonb(input.analysisThread.browserViewIds, []), input.analysisThread.createdAt, input.analysisThread.updatedAt, input.analysisThread.createdBy, input.analysisThread.updatedBy],
+          [input.analysisThread.id, input.analysisThread.labId, input.analysisThread.projectId, input.analysisThread.schemaVersion, input.analysisThread.status, input.analysisThread.originalRequest, jsonb(input.analysisThread.messages, []), jsonb(input.analysisThread.planRevisionIds, []), jsonb(input.analysisThread.analysisRunIds, []), jsonb(input.analysisThread.acceptedAnalysisResultIds, []), jsonb(input.analysisThread.chartSpecIds, []), input.analysisThread.outputTarget, input.analysisThread.inputMode || null, jsonb(input.analysisThread.dataSnapshotIds, []), jsonb(input.analysisThread.browserViewIds, []), input.analysisThread.createdAt, input.analysisThread.updatedAt, input.analysisThread.createdBy, input.analysisThread.updatedBy],
         );
         analysisThread = analysisThreadFromRow(threadResult.rows[0]);
         analysisPlanRevision = await insertAnalysisPlanRevisionRow(client, input.analysisPlanRevision);

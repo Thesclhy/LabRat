@@ -17,6 +17,17 @@ import {
 import { ANALYSIS_PLAN_REVISION_VERSION, ANALYSIS_RUNTIME_VERSION } from "./analysisSchemas.js";
 import { MemorySaasStore } from "./memoryStore.js";
 
+test("plan summaries preserve linked-template frozen lineage without exposing executor internals", () => {
+  const templateLineage = { linkedDataKind: "Rates", frozenRegionRefs: [{ regionUnderstandingRevisionId: "revision_1", range: "C2:D11" }] };
+  const linkedDataComparison = { dataKind: "Rates", experiments: [{ experimentId: "exp_1" }] };
+  const summary = analysisPlanRevisionSummary({ plan: { templateLineage, linkedDataComparison, pythonCode: "private executor source" } });
+  assert.deepEqual(summary.templateLineage, templateLineage);
+  assert.deepEqual(summary.linkedDataComparison, linkedDataComparison);
+  assert.equal(summary.pythonCode, undefined);
+  summary.templateLineage.frozenRegionRefs[0].range = "A1";
+  assert.equal(templateLineage.frozenRegionRefs[0].range, "C2:D11");
+});
+
 function plan(range = "A1:C3") {
   return {
     schemaVersion: ANALYSIS_PLAN_REVISION_VERSION,

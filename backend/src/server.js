@@ -67,5 +67,14 @@ export function startServer(options = {}) {
 const isCli = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 
 if (isCli) {
-  startServer();
+  if (process.env.NODE_ENV === "production") {
+    import("../dist-v1/v1/main.js")
+      .then(({ startV1Server }) => startV1Server())
+      .catch((error) => {
+        console.error(error instanceof Error ? error.message : error);
+        process.exitCode = 1;
+      });
+  } else {
+    startServer();
+  }
 }

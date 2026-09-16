@@ -6,6 +6,7 @@ original/
 extra data/
 .vitest/
 backend/.labrat-files/
+backend/dist-v1/
 **/.labrat-files/
 backend/src/import/fixtures/real-workbooks/
 public/labratData.json

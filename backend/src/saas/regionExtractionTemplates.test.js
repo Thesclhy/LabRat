@@ -3,10 +3,10 @@ import test from "node:test";
 import * as XLSX from "xlsx";
 
 import { formulaShape } from "./formulaGraph.js";
-import { experimentLabelFromWorkbookName } from "./regionExtractionTemplates.js";
 import {
   buildRegionExtractionTemplateVersion,
   compileLayoutSignature,
+  experimentLabelFromWorkbookName,
   fuzzyTextMatch,
   matchTemplateVersionToDocument,
   regionExtractionTemplateSummary,
@@ -16,6 +16,12 @@ function cell(address, rawValue, extra = {}) {
   const type = extra.formula ? "formula" : typeof rawValue === "number" ? "number" : "string";
   return { address, rawValue, formattedValue: rawValue == null ? null : String(rawValue), type, formula: null, ...extra };
 }
+
+test("filename experiment hints support underscore separators without matching embedded words", () => {
+  assert.equal(experimentLabelFromWorkbookName("Reaction_Rate_Exp33.xlsx"), "Exp33");
+  assert.equal(experimentLabelFromWorkbookName("Reaction_Exp049_results.xlsx"), "Exp49");
+  assert.equal(experimentLabelFromWorkbookName("UnexpectedExp33a.xlsx"), null);
+});
 
 // A compact LDPE-style calculation sheet. Row 32 is the terminal "Overall
 // tots" row over C1..C5 headers in row 31; row 14 holds intermediate yields.

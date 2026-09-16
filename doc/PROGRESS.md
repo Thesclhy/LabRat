@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-09-12
+Last reviewed: 2026-09-15
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -13,296 +13,292 @@ Keep entries concise, newest first, and include:
 - verification
 - follow-ups or residual risk
 
+## 2026-09-15 — Public Guest preparation
+
+- Request: prepare a Guest account and push. Scope is a dedicated public demo
+  project, not access to existing research data. Existing normal accounts and
+  scientific workflows retain their permissions and review boundaries.
+- Added migration 030 and a server-owned Guest project restriction, readonly
+  request guard, invitation/AI/write rejection, bounded login/read limits and
+  short sessions. The operator helper creates the account, lab, grant and audit
+  atomically and refuses collisions or reuse of the operator password.
+- Full verification passes: frontend 368, Nest 64, legacy 331 with five
+  conditional skips, generated API types, both builds and production-entry
+  smoke. PostgreSQL passes 16/16, including Guest rollback/concurrency,
+  accidental elevated-role isolation and revocation. Additional HTTP login
+  limits/body size and logout after read exhaustion also pass.
+- Browser discovery confirms the isolated project and disabled create/upload/
+  AI/profile controls. An initial empty list was transient asynchronous loading,
+  not a missing membership; acceptance now waits for the rendered project.
+  The requested Playwright browser cache was absent, so existing Chrome is used.
+  Final Chrome acceptance passes login, only the demo lab/project, inert canvas
+  and disabled Save, HTTP mutation/invitation/admin denial, refresh and logout.
+  No unintended UI writes, legacy requests or runtime errors occur. The browser
+  harness and synthetic schema clean up their own services/data after each run.
+  Hosted provisioning remains pending deployment of this enforcement build.
+- Prior local operational notes and private files remain outside publication.
+  README public demo credentials are prepared; the account must be provisioned
+  only after this enforcement build is deployed. Hosted verification and the
+  requested main push are still required before completion.
+
+## 2026-09-15 — README publication
+
+- Request: the user explicitly approved pushing the README update to main,
+  including the existing automatic Lightsail deployment, migration step and
+  service restart. They also asked for Guest credentials; no Guest account has
+  been created or provisioned, so no credentials are available.
+- Publication scope is `README.md`, `backend/README.md`, `postman/README.md`
+  and these README-related progress entries only. Earlier local cloud-operation
+  notes, `doc/current-milestone.md` changes and all private/untracked files stay
+  outside this commit. No application, account, permission, secret or deployment
+  configuration changes are included.
+- Pre-push checks: local and remote main both start at `ed02131`; ordinary
+  fast-forward publication is possible. Documentation preflight, all 28 local
+  links/anchors, homepage credential/access checks and diff checks pass. Full
+  application suites are not rerun for Markdown-only changes; the existing
+  hosted workflow performs its own test/build gates before deployment.
+- This is the pre-publication record. Remote commit and workflow status are
+  checked after pushing; no manual deployment dispatch or Guest creation is
+  authorized by this documentation update.
+
+## 2026-09-15 — README refresh and historical guidance cleanup
+
+- Request: update the README after the hosted-access/Guest discussion and
+  remove confusing historical README material. Replaced the root homepage's
+  old blank-copy setup, retired workflow and milestone narrative with current
+  features, Nest v1 architecture, hosted link, invitation roles, local startup,
+  verification and focused documentation links.
+- Removed public development passwords from the homepage. The backend README
+  now explicitly scopes its existing fixtures to isolated local development;
+  they are not verified server credentials. No public Guest is advertised as
+  available; runtime hardening and an isolated demo remain separate work.
+- Inventory found one root README and four distinct backend/tool/fixture
+  READMEs, not a standalone duplicate historical homepage. Retained these
+  purpose-specific files; marked the old Postman collection's README as an
+  archived unversioned-API reference, not current v1 verification. No files or
+  Git history were deleted; previous homepage text remains recoverable in Git.
+- Verification: `npm run codex:preflight`, all 28 local documentation links and
+  anchors, homepage credential/access checks and `git diff --check` passed.
+  Tracked differences are Markdown only; existing LF/CRLF notices remain.
+  Full application suites and browser/server probes were not run because this
+  changes documentation only, not behavior or runtime configuration.
+- Preserved the existing local operational notes and current-milestone edits.
+  No account, invitation, permission, code, dependency, environment, server,
+  commit, push or deployment changes. A future main push can still trigger
+  deployment even when the changes are documentation-only.
+
+## 2026-09-13 — Confirmed main publication
+
+- Request: publish the Claude v1 integration to `main`. After being told that
+  this triggers the active Lightsail production workflow, including migrations,
+  the user explicitly confirmed that side effect. Actual historical-backup
+  rehearsal and live-provider end-to-end validation are still unperformed;
+  this approval does not turn those outstanding checks into passing evidence.
+- Remote preflight: `origin/main` and the integration branch both start at
+  `474c1bb`; promotion can use an ordinary fast-forward, never a force push.
+  The GitHub deployment workflow is active. Publishing does not modify its
+  configuration, provider selection, secrets or the server environment file.
+- Publication scope is the reviewed source, tests, migrations, generated types,
+  lockfile repair and docs only. `.env*`, `postman/cookies.txt`, `.codex/`,
+  `.superpowers/`, `.tmp/` and private `test excel/` files are excluded.
+- Publication-time `codex:preflight` and `codex:verify` passed: frontend
+  368/368, Nest 60/60, legacy 331 passed / 5 conditional skips, generated API
+  types, backend/frontend builds and production-entry smoke. No application
+  code changed during this publication turn; prior Linux clean-install,
+  PostgreSQL 15/15 and browser evidence remains the verified implementation
+  checkpoint below. Hosted CI repeats PostgreSQL before deployment.
+- All 111 reviewed files passed staged diff and private-path/key-pattern checks.
+  Remote publication and production activation must be reported separately.
+
+## 2026-09-13 — Claude v1 integration (locally verified)
+
+- Request: integrate Claude `06ecf87` features with main `474c1bb` on
+  `codex/claude-v1-integration`; no publication, deployment or live database edits.
+  Pre-existing local documentation and private files are retained.
+- Implemented: deterministic formula/region/linked-series helpers,
+  historical Claude migrations plus apply receipts, Nest region-template and
+  batch-confirm transactions, linked comparison and frozen-chart adapters,
+  eleven OpenAPI operations, generated client, and Claude UI integration with
+  invitation-aware welcome/login. See `doc/plans/claude-v1-integration-plan.md`.
+- Final verification: Linux Node 22.23.2/npm 10.9.8 clean root/backend installs
+  and full codex verification passed: frontend 368, Nest 60, legacy 332 passed /
+  4 conditional skips. Windows full verification passed with the same frontend
+  and Nest totals and legacy 331/5. Generated types, builds, production-entry
+  smoke and diff checks pass. Lock repair adds missing esbuild entries without
+  upgrading existing versions. Separate PostgreSQL suites pass (v1 13, legacy
+  2), including empty/main/Claude fixture upgrades, concurrency/rollback,
+  async revocation and frozen-source publication.
+- Real Chromium: all six supplied workbooks upload/reload; extraction versions,
+  formula-mismatch individual review, three-item batch confirmation, linked
+  Browser jumps, comparison plans and deterministic template/approval/save
+  flows pass. All 51 valid chart points and source coordinates equal actual
+  workbook cached values. Invitation signup, no-lab platform management and
+  owner/read/edit/approve gates pass. Manuscript insertion, drag/resize/keyboard,
+  save/reload and PPTX export pass with no final runtime errors or old API calls.
+- QA fixes include multipart boundaries, filename hints, scoped linked Browser
+  metadata, page bounds, plan lineage, readonly chart inspection, late-response
+  isolation, Plotly cleanup and accepted axis labels. Existing compact actions
+  and state feedback follow `ui-design`; scientific history is not rewritten.
+- Uncommitted local branch only. Controlled interpretation and historical SQL
+  fixtures do not replace live-model QA or actual backup restoration. Those,
+  hosted CI and separately authorized deployment remain release gates. Exact
+  coverage/limitations: `doc/qa/claude-v1-integration-acceptance.md` and
+  `doc/plans/claude-v1-database-upgrade.md`. Prior user notes remain below.
+
 ## 2026-09-12
 
-- Workbook chart templates, Milestone E of
-  `doc/plans/workbook-chart-template-plan.md` (lifecycle and docs); the plan
-  is complete. Added a lifecycle test proving that re-confirming a linked
-  region leaves an existing application executing against its frozen
-  revision while the next application picks the new one (with a
-  multiple-regions warning), that deleting a workbook session makes later
-  applications report `chart_template_session_deleted`, and that accepted
-  ChartSpecs and finished applications survive both. Added viewer-role
-  checks: viewers cannot create templates or applications but can read them.
-  Documentation: data dictionary (application `frozenRegionRefs`,
-  extraction-template/chart-template coupling through the data kind string,
-  lifecycle rules), database schema note (no migration; refs live in the
-  compatibility JSON), architecture and START_HERE, and a new "Workbook
-  Series Templates" section in the QA matrix. Verification: `npm run
-  codex:verify`. Follow-up: the in-app Exp31/Exp32 to Exp33 to Exp40 run
-  remains a manual check.
-- Workbook chart templates, Milestone D of
-  `doc/plans/workbook-chart-template-plan.md` (frontend). The "Use template"
-  picker in Chart Review handles templates with a `linked_region` slot:
-  coverage comes from the linked-data-kinds listing instead of Browser
-  columns, the slot column shows each experiment's workbook · sheet!range,
-  experiments without the data kind are disabled with "no linked <kind>",
-  a "Select all with data" shortcut selects covered rows, the field-binding
-  UI never appears, and after preview the panel lists the regions read per
-  experiment with missing-point counts plus the excluded experiments and
-  warnings the backend reported. Result review adds a "Workbook lineage"
-  block for template runs (from `templateLineage.frozenRegionRefs`) and
-  marks an experiment stale when its region has a newer accepted revision
-  than the one the chart was built from. Verification: frontend tests for
-  the linked picker and the lineage block, `npm run build`.
-- Template source regions are linked. Saving a confirmed region as an
-  extraction template left that region without an experiment link or data
-  kind, so the experiment the user selected by hand (Exp48 in project 2-1)
-  was the one experiment missing from Experiment Browser, linked-data
-  comparisons, and chart templates while the applied matches (Exp49, Exp50)
-  were linked. `POST .../region-extraction-templates` and
-  `POST .../versions` now link the source region the same way an applied
-  match is linked: data kind from the template name, experiment from the
-  label cell or the workbook filename, never overwriting an existing link.
-  The response adds `sourceRegionLink` (region id, experiment, label, link
-  status, data kind). Verification: route test asserts the source region is
-  linked after creation. Existing unlinked source regions were repaired by
-  hand in the dev database.
-- Workbook templates from multi-series regions. Saving the "Gas Product
-  Distribution: Exp35 vs Exp45" chart as a template was refused because each
-  linked region defines two series (C-Response and Area) and eligibility
-  required exactly one. `selectPlottedSeries` now picks the series the
-  accepted plan names (label, key, value range, or row mentions across the
-  reviewed plan text); a clear winner is stored on the slot as
-  `seriesContract.seriesSelector`, and only genuine ambiguity is refused with
-  the new `reusable_chart_template_series_ambiguous` blocker that lists the
-  series. Application and execution select the series through the same
-  selector (`selectRegionSeries`), exclude regions that lack it, and freeze
-  the chosen `seriesKey` in `frozenRegionRefs`. Verification: backend suite
-  with new eligibility and application tests for the two-row case.
-- Workbook chart templates, Milestone C of
-  `doc/plans/workbook-chart-template-plan.md` (deterministic series
-  execution). `chart_template_v1` runs for linked-region templates now
-  materialize `inputs.linkedSeries` from the application's frozen region
-  revisions (`materializeLinkedSeriesInputs`; a re-confirmed region is not
-  swapped in, a vanished revision or workbook fails closed with
-  `chart_template_inputs_stale`) and render through the new
-  `executeLinkedSeriesTemplate` branch: one trace per experiment, x from the
-  category union in source order (`union_with_gaps`, `intersection`, `exact`),
-  gaps preserved as nulls or omitted (`preserve_gap`, `omit_point`), grouped
-  bars or overlay points, geometry from the existing policy with category
-  labels as x labels, `excel_cell` source refs per plotted point plus region
-  ranges, gap list in `result.exclusions`, and an `inputHash` over the read
-  points. Stacked and computed recipes are refused. The Milestone B
-  execution guard is removed. Contract, API, and plan docs updated.
-  Verification: backend suite; the route test applies a workbook template
-  and executes it to `awaiting_result_review` with no Python program.
-  Follow-up: Milestone D adds the frontend apply flow for workbook
-  templates.
-- Workbook chart templates, Milestone B of
-  `doc/plans/workbook-chart-template-plan.md` (series reader and application
-  resolution). New `backend/src/saas/linkedRegionSeries.js`:
-  `resolveLinkedRegionsForExperiments` picks each experiment's most recently
-  confirmed region of a data kind and reports `missing_data_kind`,
-  `session_deleted`, and unknown experiments; `readLinkedRegionSeries` reads
-  a header-row or column-pair series from the workbook index with cached
-  formula values, turning blanks, Excel errors, and text into missing points
-  with reasons, bounded by the analysis range limit and the confirmed region.
-  `linkedDataComparisons.js` now shares that resolver.
-  `prepareReusableChartTemplateApplication` routes linked-region templates to
-  `prepareLinkedSeriesTemplateApplication`: binding by data kind only,
-  orientation/unit/scale checks against the slot contract, exclusions per
-  `missingDataPolicy.missingSeries`, category union for alignment, exact
-  region `sourceSelections`, and `frozenRegionRefs` in place of snapshot
-  heads. Application artifacts build a `workbook` plan with source
-  rectangles and linked lineage; the Postgres row mapper exposes
-  `frozenRegionRefs` from the compatibility JSON (no migration). Execution
-  was guarded until Milestone C landed the same day. Contract and API docs
-  updated. Verification: backend
-  suite, including new `linkedRegionSeries.test.js`,
-  `reusableChartTemplateApplications.linked.test.js`, and a route test that
-  applies a workbook template end to end without touching snapshots.
-  Follow-up: Milestone C renders the series; Milestone D adds the frontend
-  apply flow.
-- Workbook chart templates, Milestone A of
-  `doc/plans/workbook-chart-template-plan.md` (contract, eligibility,
-  definition). Reusable input slots accept `sourceKind: "linked_region"` with
-  `linkedDataKind` and a validated `seriesContract`; the default stays
-  `snapshot`, so stored templates are unchanged and no migration is needed.
-  `inspectReusableChartTemplateEligibility` routes charts built only from
-  source selections to `inspectLinkedSeriesTemplateEligibility`, which
-  accepts a chart only when every region is linked to an experiment under one
-  data kind, each defines exactly one series with the same orientation, unit,
-  and scale, the chart type is grouped bars, bars, or points, the accepted
-  plan only selected and aligned (recomputation steps are refused with
-  `reusable_chart_template_workbook_recomputation`), and there is one trace
-  per experiment. `deriveLinkedSeriesTemplateDefinition` builds the
-  data-kind-bound series slot, the `select_series`/`align_x`/`filter_missing`
-  recipe, grouped or overlay encoding, and the missing-data policy. Contract
-  addendum added. Verification: backend suite. Follow-up: Milestones B and C
-  make such templates applicable and executable; until then the version
-  saves but cannot run.
+- Request: publish the new architecture and invitation/member-management
+  implementation to `main`. The user explicitly confirmed that the push may
+  trigger the active Lightsail production deployment workflow.
+- Remote preflight: `origin/main@7e6d729` is an ancestor of
+  `codex/backend-v1-architecture@d35017b`; no divergent main changes need
+  replacement. Promotion will retain the existing migration/reconciliation
+  commits and use an ordinary fast-forward push, not a force push.
+- Publication-time `npm run codex:preflight` and `npm run codex:verify` passed:
+  frontend 324/324, Nest 56/56, legacy 269 passed / 5 conditional skips,
+  generated types, backend compilation, production-entry smoke and Vite build.
+  PostgreSQL and real browser acceptance remain the passing 2026-09-11 results
+  below; no application code changed in this publication turn. CI repeats the
+  PostgreSQL suite before deploying.
+- Commit scope excludes local environment/credential files, `postman/cookies.txt`,
+  `.codex/`, `.superpowers/`, `.tmp/` and private `test excel/` fixtures.
+  The existing repository provider selection is `anthropic`; no provider
+  variable, secret or deployment configuration is being changed.
+- Publication result: committed the 56 reviewed files as
+  `474c1bb35b41d7da1bb33cc9cd6e5f5a8df87f87` and fast-forwarded local/remote
+  `main` to that SHA. The architecture migration commits are retained;
+  `origin/main...main` reports zero commits on either side. Excluded private
+  files remain untracked locally.
+- Deployment [run 34705610377](https://github.com/Thesclhy/LabRat/actions/runs/34705610377)
+  was triggered by the push and failed at `Install backend dependencies`:
+  `npm --prefix backend ci` reports a lockfile mismatch, missing
+  `esbuild@0.28.2` and its platform packages. SSH preparation, release upload,
+  migrations and deployment were not reached. No production change was made by
+  this run; Git push success is not deployment success.
+- Follow-up: reconcile the backend lockfile and verify a clean installation
+  using the CI runtime before retrying deployment. No dependency repair or
+  automatic rerun was performed in this publication-only task. The failure
+  record is a local post-push documentation update, not a second deployment.
+  Existing conditional skips and Vite size warning remain.
+
+## 2026-09-11
+
+- Request: implement invitation-only registration and lab member management on
+  `codex/backend-v1-architecture`; no changes to `main` and no deployment.
+- Implemented: migration 028, transactional invitation registration/redemption,
+  authentication-entry limits, atomic project-access presets, removal/rejoin
+  cleanup, OpenAPI/client types, management screens, readonly workspaces and
+  request-scope invalidation. Mixed full-project/selected-experiment grants no
+  longer widen experiment-only approval. Scientific values/history are unchanged.
+  See `doc/plans/invitation-onboarding-plan.md` and
+  `doc/contracts/invitation-onboarding-v1.md` for QA and usage.
+- Verification: preflight and final `npm run codex:verify` passed — frontend
+  324/324, Nest 56/56, legacy backend 269 passed / 5 conditional skips,
+  generated types, TypeScript build, production entry smoke and frontend build.
+  PostgreSQL passed: legacy 2/2 and Nest 9/9, including 028 fresh/upgrade/restart,
+  concurrent redemption, final audit-write failure rolling back the entire
+  registration, optimistic grant conflict and lab-specific removal/rejoining.
+- Real headless Chromium acceptance with separate platform/owner/employee
+  sessions passed: no-lab platform management, owner lab/project creation,
+  employee registration, refreshed sessions, view/edit/approve presets,
+  readonly denial, saved draft persistence, next-request revocation and
+  existing-account rejoin without old access. Screenshots were reviewed; no
+  JavaScript errors or invitation/password persistence were observed. Compact
+  tables and adjacent actions follow the existing `ui-design` guidance.
+- An initial dashboard layout regression and browser-script asynchronous
+  waits were corrected. Docker Desktop failed at dockerInference initialization;
+  PostgreSQL verification instead used an isolated temporary 16.14 cluster
+  on loopback. No Docker reset, volume deletion or real database migration.
+  Test-only runtimes/screenshots remain under untracked `.tmp`; project
+  dependency manifests and lockfiles were not changed.
+- Cleanup: browser, HTTP and PostgreSQL test processes are stopped and test
+  ports are released. The temporary cluster stalled at its shutdown checkpoint;
+  only its verified test-only processes were terminated, with files retained.
+  Use a fresh disposable cluster for future QA; no existing database was touched.
+- Handoff: no feature commit/push, main merge, remote CI dispatch or deployment.
+  Existing conditional skips and Vite chunk warning remain. Public rollout,
+  remote CI and manual password-reset operations are separate work.
+
+- Request: upload the completed new backend architecture to a separate branch.
+- Created `codex/backend-v1-architecture` from `codex/v1-main-reconcile` for
+  publication to `origin`. The checkpoint includes the reconciled NestJS API,
+  generated React client, tests, migration history, and implementation docs.
+  Neither `main` nor `codex/onboarding-chat` is changed.
+- Commit scope excludes local environment/credential files, `postman/cookies.txt`,
+  `.codex/`, `.superpowers/`, `.tmp/`, and private `test excel/` fixtures.
+- Verification: upload-time `npm run codex:verify` passed, including generated
+  client freshness, frontend/backend suites, TypeScript compilation, production
+  entry smoke, and the frontend build. Existing conditional skips and the Vite
+  large-chunk warning remain. The separate PostgreSQL suites were not rerun for
+  this upload-only request; their 2026-09-10 passing results remain below.
+  The common credential-signature scan, exact 37-file staging check, and
+  `git diff --cached --check` passed.
+- Release boundary: the existing Lightsail workflow runs only on `main` pushes
+  or explicit manual dispatch. This dedicated-branch upload does not trigger
+  deployment or that CI pipeline. Independent remote CI and separately
+  authorized production canary/rollback validation remain pending.
+- Publication authorization: the initial push was blocked before execution
+  pending confirmation of the concrete remote destination. The user then
+  explicitly approved uploading implementation commit `66cc02c` and its
+  architecture documentation to `git@github.com:Thesclhy/LabRat.git`, branch
+  `codex/backend-v1-architecture`. This confirmation changes documentation only;
+  the implementation and recorded verification results are unchanged.
 
 ## 2026-09-10
 
-- Excel error results are no longer numbers. The workbook scanner typed a
-  formula cell that evaluated to an Excel error (`#DIV/0!`, `#REF!`, ...) as
-  `formula` with the raw error code as its value (7 for `#DIV/0!`), so
-  downstream numeric reads could mistake it for a value. Error results are
-  now typed `error` with a null raw value, keeping the formula text and the
-  displayed error string. Region provenance adds a `region_formula_errors`
-  warning when at least half of a region's calculated cells are errors, which
-  is what a blank calculation-template sheet looks like. Existing indexes
-  keep their stored shape until a workbook is re-indexed. Verification:
-  backend suite. Follow-up: `doc/plans/workbook-chart-template-plan.md`
-  proposes reusable templates for workbook-backed comparison charts.
+- Request: implement the confirmed main/NestJS API reconciliation plan.
+- Created `codex/v1-main-reconcile` from `origin/main@7e6d729` and replayed the
+  two migration commits as `e5ce047` and `4d85b0f`. Kept
+  `codex/onboarding-chat@8c2cdaf` unchanged and retained the backup of pre-existing
+  planning documents.
+- Added `ReusableChartsModule` with all twelve v1 operations, bounded Drizzle
+  collection reads, full-project permissions, immutable version transactions,
+  audit events, and application idempotency. Reconciled OpenAPI, generated types,
+  React template helpers, and explicit project-state collections.
+- Preserved main's product/scientific behavior while adapting input mode,
+  workflow counts, result geometry, and lineage. A full Nest regression exposed
+  dropped percentage-scale metadata during experiment materialization; retaining
+  that metadata restores deterministic fraction-to-percentage rendering without
+  changing accepted snapshots.
+- Renumbered unpublished authorization migration to 027. Disposable PostgreSQL
+  tests execute the real migration/checksum runner from all three starting
+  states, retain the former 024 authorization ledger row, and verify repeat-run
+  idempotency. The twelve-operation HTTP test covers permissions, cross-project
+  concealment, application replay/conflict, no AI/Python calls, explicit approval,
+  immutable ChartSpec lineage/geometry, and stale-head rejection.
+- Fixed local runtime: both Compose services restore stale dependency volumes
+  from their lockfile, and backend development compiles before starting Nest.
+  Runtime verification found and addressed missing backend dependencies, missing
+  Nest injection metadata, and a missing frontend `openapi-fetch` dependency.
+- Verification: `npm run codex:verify` passed: frontend 312/312, legacy backend
+  269 passed / 5 conditional or retired skips, and Nest v1 51/51; generated types,
+  TypeScript build, production entry smoke, and Vite build passed. Separate
+  PostgreSQL suites passed (legacy 2/2, Nest v1 8/8). Skip details are recorded in
+  `doc/current-milestone.md`. Vite retains the existing large-chunk warning.
+  The first full gate exposed a dev-entry assertion tied to the former `tsx`
+  command; it was corrected for compiled startup before the successful rerun.
+- Local runtime: all three Compose services are healthy after restarting the
+  backend with final code; health, frontend page, and API client modules return
+  HTTP 200. `git diff --check` and new-file whitespace checks passed.
+- Follow-up: repeat verification in GitHub CI, then separately authorize
+  production canary/rollback checks. No remote push or production deployment;
+  unrelated worktree files remain untouched.
 
-## 2026-09-09
+## 2026-09-07
 
-- Cross-experiment charts from linked workbook data (Milestone 6 of
-  `doc/plans/batch-workbook-experiment-linking-plan.md`). New
-  `backend/src/saas/linkedDataComparisons.js`: `GET
-  /api/projects/:id/linked-data-kinds` groups experiment-linked accepted
-  regions by data kind with coverage, and `POST
-  /api/projects/:id/linked-data-comparisons` deterministically selects each
-  chosen experiment's most recently confirmed region, builds a workbook-mode
-  chart plan (exact source selections, readable processing steps derived
-  from the recorded series shape, display plan naming files and omitted
-  experiments), and creates the AnalysisThread plus awaiting-review revision
-  through the ordinary validation; `dryRun` previews without side effects.
-  Chart Review gains a `Compare linked data` mode with a data-kind picker,
-  experiment coverage, chart type, preview, and hand-off into the existing
-  plan/result review. No provider call for selection; Python generation and
-  ChartSpec creation stay on the reviewed path. Series-slot reusable template
-  authoring is deferred with reasons recorded in the plan. Verification:
-  backend suite, frontend suite, production build.
-
-- Linked workbook data in Experiment Browser (Milestone 5 of
-  `doc/plans/batch-workbook-experiment-linking-plan.md`). Accepted regions
-  linked to an experiment now project as one shared Browser column per data
-  kind (`linked:<data-kind>`), with a readable cell value for search, filter,
-  and sort and a `linkedRegions` payload for the UI; experiment detail lists
-  them. Cells render as chips that open Workbook Review on the right session
-  and region. The chart planner's source catalogue now carries
-  `linkedExperimentId`, `linkedExperimentLabel`, `dataKind`, and header-row
-  series ranges, so "reaction rate for Exp10-Exp40" can select the linked
-  regions directly. No DataSnapshot writes, no migration, no provider call.
-  Verification: backend suite, frontend suite, production build.
-  Follow-ups: Milestone 6 builds the data-kind chart picker and lifts the
-  series-slot template restriction.
-
-- Template apply and one-click batch confirmation (Milestone 4 of
-  `doc/plans/batch-workbook-experiment-linking-plan.md`). New
-  `backend/src/saas/regionTemplateApplications.js` and migration 028. `POST
-  /api/region-extraction-template-versions/:id/apply` re-matches each listed
-  workbook and, for exact or shifted matches, reuses or creates its review
-  session and creates a `template_match` region at the matched range with a
-  prefilled `template_match` revision built by rebasing the template's stored
-  semantics and validating them through the ordinary interpretation path
-  plus provenance. Each region records `dataKind` (template name),
-  `regionExtractionTemplateVersionId`, a bounded `templateMatch`, and
-  `linkedExperimentId` when the experiment label resolves to exactly one
-  identity. `POST /api/projects/:id/workbook-review-regions/confirm-batch`
-  confirms template-matched exact/shifted regions individually in one
-  request, applying user-chosen experiment links first and rejecting anything
-  else with `batch_confirm_requires_individual_review`. Frontend: the batch
-  card gains `Apply to N matched files`, a confirmation checklist with
-  select-all, experiment pickers for unresolved links, per-row results, and
-  `Review in workbook` links that open the matched range; confirmed region
-  cards can save a new version of an existing template. No provider call
-  anywhere in this path. Verification: backend suite, frontend suite,
-  production build. Follow-ups: Milestone 5 shows linked workbook data in
-  Experiment Browser; Milestone 6 charts from linked regions.
-
-- Region extraction templates (Milestone 3 of
-  `doc/plans/batch-workbook-experiment-linking-plan.md`). A confirmed region
-  can be saved as a named, versioned `RegionExtractionTemplate` (migration
-  027, memory/Postgres parity, create/list/detail/version/archive routes,
-  audit). `backend/src/saas/regionExtractionTemplates.js` compiles a
-  `labrat.layoutSignature.v1` from the region: header runs, text and border
-  anchors, relative R1C1 formula shapes (`formulaShape` in `formulaGraph.js`),
-  and an experiment-label rule. `POST
-  /api/region-extraction-template-versions/:id/matches` deterministically
-  matches the template against uploaded workbooks with no side effects and
-  reports `exact`, `shifted`, `ambiguous`, `label_missing`,
-  `formula_mismatch`, `header_mismatch`, or `no_match` with offsets,
-  typed-over cells, upstream broken cells, alternative blocks, and the
-  resolved experiment label. Frontend: `Save as extraction template` on
-  confirmed region cards, and a template picker plus per-file match report on
-  the batch upload card. No provider call anywhere in this path.
-  Verification: backend suite, frontend suite, production build.
-  Follow-ups: Milestone 4 applies matches (prefilled regions linked to an
-  experiment and data kind, one-click confirm); Milestone 5 surfaces linked
-  workbook data as Experiment Browser chips without publishing snapshots;
-  Milestone 6 builds cross-experiment charts directly from the linked
-  regions.
-
-- Formula-aware region understanding (Milestone 2 of
-  `doc/plans/batch-workbook-experiment-linking-plan.md`). New
-  `backend/src/saas/formulaGraph.js` builds a workbook-wide precedent graph
-  from stored formula text without evaluating anything and classifies every
-  cell as terminal, intermediate, input, constant, or blank. Region
-  interpretation now sends each inspection cell's class plus a bounded
-  provenance block to the model, stores `interpretation.provenance` on every
-  revision (class summary, one-level derivation, shared upstream inputs,
-  typed-over cells), and appends deterministic warnings:
-  `region_mostly_intermediate_cells`, `region_mostly_input_cells`, and
-  `formula_chain_broken`. The model may return `seriesPatches`; the backend
-  validates them against the selected range and merges header-row category
-  series (for example C1...C37 over one value row) into
-  `interpretation.series`. New read-only route
-  `GET /api/source-documents/:id/cell-classes`. The region card shows class
-  chips, the derivation, typed-over cells, a header-row series preview, and a
-  `Show calculation` toggle that overlays classes on the sheet grid with a
-  legend. No migration: provenance lives inside the existing interpretation
-  JSON. Verification: backend suite, frontend suite, production build.
-  Follow-ups: Milestone 3 (extraction templates) builds on the stored formula
-  shapes; the two-block ambiguity in Exp31 remains a template-level concern.
-
-- Batch workbook upload (Milestone 1 of
-  `doc/plans/batch-workbook-experiment-linking-plan.md`, frontend only). The
-  LabRat chat attach input now accepts several `.xlsx/.xls` files. One file
-  uploads exactly as before; two or more upload as a batch with concurrency
-  2 over the unchanged upload and session-create routes, per-file status,
-  isolated failures, and retry of only the failed files. The assistant posts
-  one batch card listing each workbook, its region count, an opener for its
-  Workbook Review session, and a display-only experiment suggestion parsed
-  from the filename and matched against Experiment Browser labels. The
-  region interpretation queue now accepts background sessions so every
-  uploaded workbook's pending regions are interpreted without opening each
-  file, sharing the existing three-request limit with the active session.
-  The Overview `Workbook review` card gained a direct `Upload workbooks`
-  entrance that opens the same multi-file picker and hands the files to chat.
-  Uploading still publishes nothing and never leaves chat. No backend files
-  changed. Verification: new helper, hook, and AgentPanel regressions; full
-  frontend suite; production build with the existing Plotly chunk warning.
-  Follow-ups: Milestones 2-6 need backend routes and schema fields first;
-  the onboarding upload stays single-file until a batch has a next step
-  there.
-
-## 2026-09-03
-
-- Fixed manuscript chart assistance creating another reviewed chart plan instead
-  of prose. The chart bubble and LabRat Analysis/Trend/Caption controls now send
-  an explicit read-only `chart_commentary` AgentRun request. The backend
-  resolves the project-owned accepted ChartSpec, honors placement-local visible
-  traces, sends bounded plotted values to the selected backend provider, and
-  returns plain text without creating an AnalysisThread, AnalysisRun,
-  AnalysisResult, or ChartSpec. Commentary remains insertable through the
-  existing explicit `Insert as text box` action; missing charts, stale traces,
-  and zero-visible-trace views fail closed. Added frontend handoff/insertion,
-  backend route/no-artifact, fail-closed, and provider-schema regressions.
-  Verification passed the complete `npm run codex:verify` suite: 315/315
-  frontend tests, 268/272 backend tests with four expected skips, and the
-  production build with the existing Plotly chunk-size warning.
-
-## 2026-09-02
-
-- Added a welcome page before sign-in. `WelcomeScreen` now renders the real
-  LabRat logo with a gentle idle float, a small bubbling Erlenmeyer flask tucked
-  beside the head, the slogan `Hi, I'm LabRat, your scientific research pet` in
-  a speech bubble, and a `Log in` button. The background drifts detailed lab
-  motifs (flasks, test tubes, beakers, benzene rings, atoms, DNA, molecules)
-  upward in pure CSS with no new dependencies. Pressing `Log in` swaps the
-  hero for the existing sign-in panel on the same page with the background
-  still animating and a `Back` link; `ServerLogin` gained an `embedded` mode
-  for this and is otherwise unchanged. Logging out returns to the welcome page.
-  All welcome animations stop under `prefers-reduced-motion`. Added four
-  `WelcomeScreen` regressions covering the hero, embedded sign-in submission,
-  back navigation, and error display. Verification passed 314/314 frontend
-  tests and the production build with the existing Plotly chunk-size warning;
-  local browser QA against the Docker backend confirmed the desktop and mobile
-  layouts and the sign-in handoff.
+- Request: preserve the confirmed remote `main` and NestJS `/api/v1` reconciliation
+  approach as documentation only, without beginning implementation.
+- Added `doc/plans/main-v1-api-reconciliation-plan.md`, fixing the integration
+  baseline at `origin/main@7e6d729`, retaining
+  `codex/onboarding-chat@8c2cdaf` as the migration source, and recording merge base
+  `1e3740c`.
+- The plan inventories 12 new API operations, the existing API adaptation matrix,
+  migration 024-027 collision handling, backend/frontend sequencing, verification,
+  and release gates.
+- Updated `doc/plan.md` and `doc/START_HERE.md` with concise routing links. No branch,
+  code, dependency, database, runtime, test, or deployment change was made.
+- Verification: `git diff --check`; only the four intended Markdown documents are
+  changed.
 
 ## 2026-08-30
 
@@ -373,8 +369,141 @@ Keep entries concise, newest first, and include:
   build passed with the existing Plotly chunk-size warning. The first
   sandboxed backend run was interrupted after local HTTP test servers could not
   progress; the authorized rerun completed successfully.
+## 2026-08-23
+
+- Completed the contract-first `/api/v1` migration implementation across all
+  NestJS/Fastify/TypeScript modules and the React caller. Added generated
+  OpenAPI path types plus a typed `openapi-fetch` boundary; rewired project,
+  evidence, Workbook Review, Experiment Browser, analysis, ChartSpec, and
+  Manuscript helpers to v1; and added a guard that rejects any return to
+  unversioned first-party request literals. React now composes a transient
+  workspace from explicit scoped resources instead of calling the legacy
+  project-state aggregate. Shell-only access avoids project-wide enumeration,
+  published counts come from the authorized Browser projection, and all
+  ChartSpec/Manuscript cursor pages are retained.
+- Finalized atomic cutover wiring: Compose starts Nest v1, production's existing
+  service entry imports the compiled Nest backend on port 8787, deployment
+  archives include `dist-v1`, and release/provider rollback stays one
+  transaction. Added a production-mode entry smoke that proves `/health` is
+  served by v1, corrected login/logout status codes and project archival after
+  active-list removal, removed the final planned `/api/v1/.../state` contract
+  placeholder, and aligned active/rollback architecture contracts.
+- Verification: generated API type check passed; frontend passed 291/291;
+  legacy backend passed 238 with 5 intentional skips; v1 passed 41/41; strict
+  TypeScript, Nest build, production entry smoke, frontend production build,
+  deployment shell syntax, provider/release rollback tests, and
+  `git diff --check` passed. Docker-backed PostgreSQL then passed 2/2 legacy
+  checks and 6/6 v1 scenarios. The real database run exposed a missing `$16`
+  optimistic-version predicate in the WorkbookReviewRegion update; adding the
+  exact version condition fixed the parameter mismatch and made the intended
+  stale-write protection effective. One Evidence test was also corrected to
+  assert the complete 2x2 range instead of requiring a one-element array.
+  `.env.example` and `backend/README.md` now document the Compose database URL
+  and repeatable local PostgreSQL test command.
+  Dependency installation reports six high-severity npm audit findings; they
+  were not auto-fixed during this architecture migration.
+
+- Completed the Nest-owned ChartSpec and Manuscript slice. `/api/v1` now lists
+  only accepted analysis-result ChartSpec v3 artifacts, removes Plotly point
+  arrays and source payloads from cursor list summaries, and returns the exact
+  immutable artifact from the direct detail endpoint. Manuscript cursor reads,
+  creation, partial JSONB updates, and audit writes preserve blocks, pages,
+  canvas state, and references under closed DTOs. Both artifact families
+  require full-project scope, and direct ids are concealed from
+  selected-experiment shells.
+- Added nine focused artifact tests and a disposable PostgreSQL scenario for
+  permission separation, bounded ChartSpec reads, complete detail hydration,
+  manuscript JSONB round-trip, partial-update preservation, and audit events.
+  Backend verification passed 238 legacy tests plus 40 v1 tests with 5
+  intentional legacy skips, strict TypeScript, OpenAPI 3.1 validation, and the
+  v1 build. Six PostgreSQL scenarios are now authored but remain skipped
+  locally because `LABRAT_TEST_DATABASE_URL` is unavailable.
+
+- Completed the Nest-owned Analysis/AI/Worker slice. `/api/v1` now owns safe
+  provider/executor capabilities, AgentRun creation/list/detail/cancel,
+  AnalysisThread and immutable PlanRevision review, approval-gated AnalysisRun
+  creation, execution/retry/revision, bounded result preview, and atomic
+  ChartSpec or Experiment Browser publication. Ordinary reads and simple
+  writes use the Drizzle repository; existing explicit PostgreSQL advisory
+  locks, row locks, retry receipts, run leases, idempotency checks, and
+  publication transactions remain behind the Nest application service without
+  a legacy HTTP bridge. Analysis artifacts require full-project access, direct
+  ids are concealed from experiment-only shells, and public diagnostics omit
+  credentials, hidden prompts, programs, materialized inputs, and claim tokens.
+- Replaced every Analysis migration placeholder in OpenAPI with closed DTOs
+  and authoritative operations. Added six service boundary tests plus a
+  disposable PostgreSQL scenario for propose-versus-approve authorization,
+  hidden direct ids, atomic plan acceptance, immutable status advancement, and
+  idempotent replay. Strict TypeScript and OpenAPI validation passed; backend
+  passed 238 legacy tests plus 31 v1 tests with 5 intentional legacy skips,
+  and both backend v1 and production frontend builds passed. The new database
+  scenario is discovered but skipped locally with the other four PostgreSQL
+  scenarios because `LABRAT_TEST_DATABASE_URL` is unavailable; CI remains the
+  database-verification gate.
+
+- Completed the Nest-owned Evidence/Workbook Review slice. `/api/v1` now owns
+  project FileObject upload/reuse, import scanning, SourceDocument indexing and
+  bounded query/range access, accepted-evidence retrieval, review-session
+  lifecycle, review-region interpretation/revision/ignore/delete, and
+  approval-gated RegionUnderstandingRevision confirmation. Public FileObject
+  DTOs omit storage keys; shell-only experiment access cannot enumerate direct
+  SourceDocument or review-session ids; immutable revision history is retained
+  when review containers are deleted.
+- Added optimistic concurrency to every shared workbook-review region mutation,
+  including late provider responses, so ignore/delete/revise/confirm races
+  cannot silently overwrite a newer decision. Added focused service,
+  repository, legacy-store, OpenAPI, and disposable-PostgreSQL coverage. Strict
+  v1 TypeScript checking passed; backend passed 238 legacy tests plus 25 v1
+  tests with 5 intentional legacy skips; frontend passed 289 tests; both builds
+  and `git diff --check` passed. Four v1 PostgreSQL scenarios are authored but
+  skipped locally because `LABRAT_TEST_DATABASE_URL` is unavailable; CI remains
+  the database-verification gate before cutover.
+
+- Started the contract-first backend migration in parallel with the rollback
+  server. Added the OpenAPI 3.1 `/api/v1` contract, authorization and scientific
+  invariant contracts, the route migration inventory, NestJS/Fastify/TypeScript
+  shell, Drizzle declarations, bounded request-id errors, session-cookie auth,
+  platform/Lab/User administration, Lab groups, explicit Project/Experiment
+  grants, and SQL-filtered Project shells. Migration 027 is additive, preserves
+  legacy membership roles, and backfills equivalent viewer/editor grants; the
+  pre-ledger migration baseline now stops at migration 019 instead of silently
+  marking future migrations applied.
+- Completed the first scientific v1 slice: DataPlan and scoped DataSnapshot
+  summaries, active Experiment detail and Browser projection, personal
+  annotations/views, shared Browser configuration, and versioned custom
+  documentation columns/values. Selected-experiment access reads only the
+  authorized snapshot record via PostgreSQL JSON extraction and cannot modify
+  Project-wide metadata/configuration. The OpenAPI contract now treats this
+  slice as closed rather than planned, and passes a standard OpenAPI parser.
+- Verification passed 237 legacy backend tests with 5 intentional skips, 18 v1
+  tests, all 289 frontend tests, the TypeScript v1 build, and the production
+  frontend build with the existing Plotly chunk warning. Three disposable real
+  PostgreSQL tests cover migration backfill/idempotency, exact full-schema
+  Drizzle drift, and permission/revocation plus hidden-record non-disclosure;
+  they are skipped locally because Docker Desktop/PostgreSQL is unavailable and
+  must run in CI before database verification is complete. React remains on
+  legacy `/api`; Evidence, Analysis, ChartSpec, Manuscript, deployment cutover,
+  and frontend-generated v1 client work remain pending.
 
 ## 2026-08-20
+
+- Hardened Experiment Browser plan drafting against provider output truncation.
+  Its initial output budget is now 16,000 tokens, with one 32,000-token retry
+  only after an explicit Anthropic/DeepSeek length stop; empty, malformed, and
+  schema-invalid repair stays at 16,000, and every other model task retains its
+  prior limit. Gateway and durable AgentRun/`plan_failed` diagnostics now retain
+  whitelisted budgets, attempt counts, input/output/reasoning token counts,
+  tool rounds, latency, and stop reason without request bodies, credentials, or
+  reasoning text. Added an independent real-provider `A1:Y63` smoke command
+  that intentionally preserves the current `cells` plus `rows` representation.
+- Verification passed 22 focused gateway/provider tests, the durable failure
+  route regression, the complete backend suite (235 passed, 5 existing skips),
+  all 289 frontend tests, production build, and `npm run codex:verify`. The real
+  DeepSeek V4 Pro smoke passed in one 16,000-token attempt and one tool round:
+  145,419 input tokens, 3,471 output tokens, and 2,435 reasoning tokens. The
+  3,150 serialized cell-object occurrences for 1,575 unique cells confirm that
+  source-inspection input deduplication/compaction remains the next optimization
+  if planning cost or latency is addressed.
 
 - Diagnosed Project 15's duplicate template blockers without changing its
   artifacts. The accepted plan had three valid scalar indexes per experiment,

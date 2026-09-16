@@ -1,247 +1,207 @@
-# LabRat Blank
+# LabRat
 
-LabRat Blank is the new-user LabRat workspace. The long-term product goal is a reproducibility-first research command center: LabRat turns scattered lab files into reviewed source understanding, then uses that evidence to create versioned data snapshots, charts, manuscript figures, and PPTX output.
+LabRat is an invitation-only, multi-lab research workspace for reviewing Excel
+evidence, comparing experiments, creating traceable charts, and preparing
+manuscript figures and PPTX exports.
 
-The current blank app starts with an empty project and is moving to a Workbook Understanding First workflow: uploaded Excel workbooks become indexed SourceDocuments, users review LabRat's understanding through chat and red boxes, and later chart/data actions use that accepted evidence only after human confirmation.
+## Online Access
 
-This folder is intentionally separate from `D:\project\labrat`, which remains the research/demo project. This blank copy does not include `public/labratData.json`, does not preload HDPE research data, and does not import example templates automatically.
+[Open LabRat](https://labrat.100.50.25.194.nip.io/LabRat/)
 
-## Quick Start
+- **New lab owners:** request a private invitation from the platform administrator.
+- **Lab members:** request a private invitation from your lab owner, who assigns
+  project access after registration.
+- **Existing accounts:** sign in normally; use **Use invitation** to join another
+  lab without creating a second account.
+- **Guest access:** use the public, read-only demo account below.
 
-Start the full local development stack with Docker:
+Do not publish real-user or administrator passwords, API keys, or live invitation
+codes in this repository. Only the dedicated demo credential below is intentionally
+public. Production runtime hardening remains separate work.
+See [current status and outstanding checks](doc/current-milestone.md).
+
+### Public Guest Demo
+
+- Username: `guest`
+- Password: `Guest-uWCJn5ZC-Demo!`
+- Sign in at [LabRat](https://labrat.100.50.25.194.nip.io/LabRat/) and open
+  **Guest Workspace** in **LabRat Public Demo**.
+
+This dedicated workspace currently starts empty: no real lab data, workbooks or
+scientific results are copied into it. Guest can explore the read-only interface,
+but cannot upload, edit, run AI, create projects or redeem invitations. The session
+expires after 30 minutes. Request a private invitation and use a personal account
+for actual research work.
+
+Never add confidential information to this public demo project. See the
+[Guest isolation and operating contract](doc/contracts/public-guest-v1.md).
+
+## Current Capabilities
+
+- Batch workbook upload, progress and retry, with source indexing and exact
+  sheet/cell references.
+- Independent region review: inspect suggested meanings, formula dependencies,
+  warnings and series; correct or confirm each region explicitly.
+- Versioned region-extraction templates, matching reports and per-region batch
+  confirmation.
+- Experiment Browser, linked workbook data, source navigation and cross-experiment
+  comparisons.
+- Reviewed analysis and reusable chart templates, with frozen input versions,
+  deterministic compatible-template runs and explicit result acceptance.
+- Manuscript chart placement, independent trace visibility, drag/resize, saved
+  layouts and PPTX export.
+- Invitation registration, multiple labs, member management and project-level
+  View, Edit or Approve permissions.
+
+Uploading a workbook does not automatically accept scientific values or publish
+charts. AI suggestions pass through validation and human review. Accepted
+results retain their source references and immutable history; re-confirming a
+region does not silently rewrite an accepted chart. Browser scalar records come
+from accepted DataSnapshots, while linked workbook data remains separately
+traceable to confirmed regions.
+
+Projects start empty. Workbooks under [public/templates](public/templates/) are
+examples only and are never imported automatically.
+
+## Roles And Access
+
+- **Platform administrator:** manages lab-owner invitations and platform
+  administration; this identity does not automatically grant scientific-data access.
+- **Lab owner / lab administrator:** manages their lab, members and project access.
+- **Lab member:** starts without project access and waits for an explicit grant.
+  The View preset includes viewing and exporting; Edit adds proposals and draft
+  changes; Approve also permits scientific approval/publication.
+- **Public Guest:** fixed to the separate demo project, with a server-enforced
+  read-only restriction in addition to its View grant.
+
+Read-only access is not a substitute for an isolated public-demo dataset. See
+[invitation and member-management usage](doc/contracts/invitation-onboarding-v1.md)
+and the [authorization contract](doc/contracts/authorization-v1.md).
+
+## Architecture
+
+- **Frontend:** React 19 / JSX, Vite and Plotly.
+- **Backend:** NestJS + Fastify + TypeScript, with first-party APIs under
+  `/api/v1` and a generated OpenAPI client.
+- **Persistence:** PostgreSQL, Drizzle and versioned SQL migrations; durable
+  uploaded-file storage and server-backed project state.
+- **AI:** one deployment-selected backend provider, Anthropic or DeepSeek.
+  Provider keys stay on the backend, never in browser settings.
+
+The previous unversioned `/api` dispatcher is a rollback reference, not the
+current frontend's API. Detailed contracts are linked below.
+
+## Local Development
+
+Docker Compose is the default local development environment. Install Docker with
+Compose and Node.js compatible with [package.json](package.json); the repository
+Node baseline is recorded in [.nvmrc](.nvmrc).
+
+1. Copy [.env.example](.env.example) to the Git-ignored root `.env` if it does
+   not already exist. Do not overwrite existing local settings.
+2. Select `LABRAT_AI_PROVIDER=anthropic` or `deepseek` and configure the
+   matching model/key variables from the example. A development instance may
+   start without a provider key, but AI-dependent actions remain unavailable.
+3. Start the stack from the repository root:
 
 ```bash
 npm run dev:docker
 ```
 
-This starts:
+Local services:
 
-- Postgres at `127.0.0.1:5433` by default (override with
-  `LABRAT_POSTGRES_PORT`)
-- backend API at `http://127.0.0.1:8787`
-- frontend at `http://127.0.0.1:5173/LabRat/`
-- the development-only local Python analysis executor inside the backend
-  container
+- [Frontend](http://127.0.0.1:5173/LabRat/)
+- Backend: `http://127.0.0.1:8787`, API prefix `/api/v1`
+- PostgreSQL: `127.0.0.1:5433` by default; configurable with
+  `LABRAT_POSTGRES_PORT`
 
-Docker Compose is the default local development runtime. It keeps project
-state in the Postgres volume, uploaded files in a separate backend volume, and
-restarts unhealthy frontend/backend processes without relying on temporary
-terminal sessions.
+Compose restores dependencies from the root and backend lockfiles, applies
+migrations, and starts the compiled Nest service. Database and uploaded files
+persist in separate volumes. Restart the backend after backend code edits.
 
-Seeded development accounts:
+[Local-only test accounts](backend/README.md#local-only-test-accounts) are
+development fixtures, not instructions for signing in to the hosted site. Never
+reuse their passwords or enable development seeding on a public server. Removing
+credentials from this page does not reset existing accounts.
 
-```text
-admin / LabRatAdmin123!
-labuser / LabRatLab123!
-```
-
-Stop the stack with:
+Stop the stack without removing its persistent volumes:
 
 ```bash
 npm run dev:docker:down
 ```
 
-If you only want to run the frontend locally against an already-running backend:
+When using an already-running backend, the frontend can also run on the host:
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
-`npm run dev` starts blank mode by default in this copy. Vite will print the local URL, usually `http://localhost:5173`.
-
-Build the blank-mode production bundle with:
-
-```bash
-npm run build
-```
-
-The explicit aliases also remain available:
-
-```bash
-npm run dev:blank
-npm run build:blank
-```
-
-Run the backend import service separately when not using Docker Compose:
-
-```bash
-npm run dev:postgres
-npm --prefix backend run dev
-```
-
-For local development, copy `.env.example` to the Git-ignored repository-root
-`.env`. The backend `dev` command loads root `.env` and then optional
-`.env.local` overrides; enable
-`LABRAT_SEED_DEV_ACCOUNTS=true` only for local development. Production users
-and passwords belong in the database, not in an environment file.
-
-Docker Compose reads provider settings from the Git-ignored repository-root
-`.env`. LabRat supports one deployment-selected backend provider at a time:
-
-```env
-LABRAT_AI_PROVIDER=deepseek
-DEEPSEEK_API_KEY=replace-with-a-local-key
-DEEPSEEK_MODEL=deepseek-v4-pro
-DEEPSEEK_BASE_URL=https://api.deepseek.com
-```
-
-Set `LABRAT_AI_PROVIDER=anthropic` to use the existing
-`ANTHROPIC_API_KEY`/`ANTHROPIC_MODEL` settings instead. Provider selection is
-required in every environment and is read only at backend startup. A selected
-key may be empty in development, where capability reports `configured: false`;
-production refuses to start without it. LabRat does not automatically fail
-over or send the same scientific context to multiple providers. Recreate the
-backend container after changing Compose environment values:
+Skip installation if dependencies already match the lockfile. For backend-only
+startup and PostgreSQL checks, see the [backend guide](backend/README.md).
+Compose reads provider settings from root `.env`; the host backend development
+command additionally loads optional `.env.local` overrides. After changing
+Compose provider settings, recreate the backend:
 
 ```bash
 docker compose up -d --force-recreate backend
 ```
 
-When a real DeepSeek key is configured, the disposable smoke test verifies an
-authenticated capability read, the Browser-surface chart-intent case, and one
-synthetic reviewed plan with a read-only tool call:
+The Compose Python executor is for trusted local development only and is not a
+security sandbox. Production analysis execution must remain disabled unless a
+hardened external worker is configured.
+
+## Verification
+
+Run from the repository root:
 
 ```bash
-npm --prefix backend run smoke:ai
+npm run codex:preflight
+npm run codex:verify
 ```
 
-## Blank Project Behavior
+The full verification command checks generated API types, frontend/backend
+tests and builds. PostgreSQL scenarios also need an explicitly configured
+`LABRAT_TEST_DATABASE_URL`; see the [backend guide](backend/README.md).
 
-- Starts from an empty dataset when no saved blank project exists.
-- Does not fetch `public/labratData.json`.
-- Does not create sample experiments, accepted snapshots, or charts.
-- Uses blank-specific browser storage so it does not read saved projects from the demo/research app on the same origin.
-- Uses the server-backed Upload workbook flow as the active path; old local `MasterTable.xlsx` folder import behavior is not a product path.
-
-## Current Workflow
-
-The intended product path is now server-first for logged-in lab workspaces:
-
-```text
-Upload workbook
-  -> SourceDocument / deterministic workbook index
-  -> WorkbookReviewSession
-  -> independently reviewed WorkbookReviewRegions
-  -> accepted RegionUnderstandingRevisions
-  -> Tool-Governed Evidence Retrieval
-  -> reviewed DataPlan / immutable accepted DataSnapshot
-  -> ExperimentIdentity / active snapshot heads
-  -> Experiment Browser
-  -> source-backed chart specs
-  -> manuscript canvas
-  -> PPTX export
-```
-
-The current app supports server login, lab/project selection, project profile editing, workbook source indexing, independent region review with immutable accepted revisions, tool-governed evidence retrieval, deterministic experiment-record previews, transactional accepted snapshot publish, a cursor-paginated Experiment Browser with shared layout, personal annotations, and detail provenance, backend-owned durable analysis threads and reviewed immutable calculation plans, accepted-run execution with validated immutable result previews, separate result acceptance into trace-complete analysis-result ChartSpecs, source-backed chart review, Manuscript placement-local trace visibility, persistence, and PPTX export.
-
-Pristine projects begin with a full-page conversational onboarding flow. LabRat
-indexes the workbook, interprets and confirms regions inline, and drafts the
-reviewed Experiment Browser plan without opening the side assistant. After the
-user accepts that plan, the real source materialization, built-in source
-mapping, execution, and validation continue in the background while onboarding asks
-about the experimental and analysis workflows. The validated preview and final
-Publish to Browser action remain explicit review boundaries. Onboarding answers
-and display progress are project-scoped browser state for now; they do not alter
-backend analysis. This onboarding-only mapper consumes the already confirmed
-row/field interpretation, preserves exact source cells, and makes no provider
-call. General Experiment Browser changes, calculations, and future linked-file
-workflows retain the reviewed model-generated Python path.
-
-Analysis execution is disabled by default. For local non-production development only:
-
-```bash
-$env:LABRAT_ANALYSIS_EXECUTOR="local"
-$env:LABRAT_ANALYSIS_PYTHON_COMMAND="python"
-npm --prefix backend run dev
-```
-
-The Docker Compose stack configures the equivalent local executor with
-`python3` inside `backend/Dockerfile.dev`; no host Python configuration is
-required.
-
-Production must use `LABRAT_ANALYSIS_EXECUTOR=worker` plus an HTTPS `LABRAT_ANALYSIS_WORKER_ENDPOINT` backed by an isolated no-network worker. The local subprocess adapter is rejected in production.
-
-The active chart-creation program adds reusable, versioned chart styles and
-scientific templates beside the existing reviewed natural-language workflow.
-New chart meaning still uses reviewed planning and result acceptance. The
-versioned style/template persistence, lifecycle APIs, reviewed slot bindings,
-and idempotent applications are implemented. Compatible accepted Browser
-experiments now use the Milestone 3 deterministic no-provider/no-Python path
-and the same immutable ChartSpec boundary. Adaptive geometry and
-provider-independent stored-type/percentage-scale handling and the fast
-template-picker UI are complete; remaining template management and style-only
-fallback are next. See
-`doc/plans/reusable-chart-creation-plan.md`.
-
-Production operationalization of reviewed analysis execution remains an
-engineering priority: deploy the hardened no-network worker, configure provider
-secrets outside the browser, run the Postgres integration suite in CI, and add
-cost/latency/audit telemetry. The local Compose stack is the development
-runtime; it is not the production executor architecture. New server-mode work
-does not need compatibility migrations for old IndexedDB, `.labrat.json`, or
-previous local project shapes.
-
-## Example Templates
-
-Example-only workbook templates are available under `public/templates/` and from the blank onboarding UI:
-
-- `public/templates/generic-import-template.xlsx`
-- `public/templates/block-import-template.xlsx`
-
-These templates contain placeholder example rows only. They are formatting references, not active project data, and they are never imported automatically.
-
-## Development Checks
-
-```bash
-npm test
-npm --prefix backend test
-npm run build
-```
-
-The backend workbook scan/source indexing, accepted snapshot publication, Experiment Browser, and source-backed chart endpoints are active. Old normalize/apply, aggregate dataset, mapping, analysis-view, observation-series, and unscoped chart endpoints are removed.
+Build the frontend alone with `npm run build`. Verification evidence and
+unperformed checks belong in the [current milestone](doc/current-milestone.md)
+and [progress log](doc/PROGRESS.md), not in a duplicate README history.
 
 ## Deployment
 
-The low-cost production path is one AWS Lightsail Ubuntu instance running
-Caddy, the Node backend, Postgres, and durable uploaded-file storage. GitHub
-Actions can deploy every pushed `main` commit after tests and build pass.
+The hosted stack uses AWS Lightsail, Caddy, PostgreSQL and durable file storage.
+A push to `main` can trigger the GitHub Actions deployment workflow, including
+database migrations; documentation-only pushes are not exempt.
 
-Production provider secrets live only in `/etc/labrat/backend.env`. The
-required GitHub Repository Variable `LABRAT_AI_PROVIDER` selects `anthropic` or
-`deepseek` for the next `main`/manual deployment; GitHub Actions does not
-receive or copy either provider key. The deployment updates only the provider
-line atomically and restores both the old environment file and old release if
-startup or health verification fails. An unsupported provider or a missing
-selected key fails before release activation.
+Production provider secrets belong in the server's protected
+`/etc/labrat/backend.env`, not in Git or the browser. The GitHub Repository
+Variable `LABRAT_AI_PROVIDER` selects the provider, not its secret key.
+The development Compose stack is not a production deployment configuration.
 
-See `doc/deployment/lightsail.md` for provisioning, GitHub secrets, first-admin
-bootstrap, backup, rollback, and acceptance checks.
+Read the [deployment guide](doc/deployment/lightsail.md) together with the
+[current runtime status](doc/current-milestone.md) before deploying or rolling
+back. A successful HTTP response alone is not proof that the expected API
+version is running.
 
-## Documentation Map
+## Documentation
 
-- `AGENTS.md`: working instructions for AI coding agents.
-- `doc/START_HERE.md`: AI-agent reading guide and doc status rules.
-- `doc/plan.md`: short active development plan.
-- `doc/current-milestone.md`: active execution milestone, next slice, verification target, and immediate risks.
-- `doc/PROGRESS.md`: recent progress log.
-- `doc/task-checklist.md`: reusable execution checklist for long Codex milestones.
-- `doc/contracts/saas-api-contract-v0.md`: authenticated SaaS API contract.
-- `doc/contracts/saas-database-schema-v0.md`: Postgres schema target.
-- `doc/contracts/server-project-state-plan.md`: server project source-of-truth notes; old local-data migration is not in scope.
-- `doc/contracts/backend-api-contract.md`: backend endpoint contracts.
-- `doc/contracts/canonical-data-dictionary.md`: shared data terminology.
-- `doc/arch/architecture.md`: current server-first architecture and compatibility boundaries.
-- `doc/arch/ai-boundaries.md`: AI safety and review rules.
-- `doc/plans/roadmap.md`: product roadmap led by the Agent-first evidence workflow.
-- `doc/plans/agent-first-evidence-workflow.md`: long-form active workflow plan.
-- `doc/plans/source-understanding-long-term-plan.md`: long-term source-aware workbook/document understanding architecture.
-- `doc/plans/reusable-chart-creation-plan.md`: milestone sequence for reusable
-  styles, templates, deterministic comparison, and fast chart reuse.
-- `doc/contracts/reusable-chart-template-contract-v1.md`: reusable chart style,
-  input-slot, recipe, geometry, API, and lineage contract.
-- `doc/qa/manual-qa-agent-first-workflow.md`: manual QA checklist for the Agent-first evidence workflow branch.
-- `doc/qa/code-review.md`: standing review checklist for scientific workflow changes.
-- `doc/reports/decisions.md`: durable product and architecture decisions.
-- `doc/reports/doc-inventory.md`: categorized documentation inventory.
-- `doc/reports/progress-archive-2026-06.md`: archived progress history.
+- [Start here](doc/START_HERE.md) — architecture, contracts and task-specific
+  reading paths.
+- [Development plan](doc/plan.md) and [current milestone](doc/current-milestone.md)
+  — priorities, verified work and remaining gates.
+- [Backend guide](backend/README.md) and
+  [OpenAPI v1 contract](doc/contracts/backend-api-v1.openapi.yaml) — local backend
+  usage and current API definitions.
+- [Scientific data dictionary](doc/contracts/canonical-data-dictionary.md) and
+  [AI boundaries](doc/arch/ai-boundaries.md) — evidence and review rules.
+- [Reusable chart templates](doc/contracts/reusable-chart-template-contract-v1.md)
+  — input bindings, recipes, versions and provenance.
+- [Integration acceptance record](doc/qa/claude-v1-integration-acceptance.md) —
+  tested workflows and limits.
+- [Progress log](doc/PROGRESS.md) — implementation and operational history.
+- [Agent instructions](AGENTS.md) and [task checklist](doc/task-checklist.md) —
+  repository contribution workflow.
+
+Previous README revisions remain available in Git history. Subdirectory READMEs
+document their own tools or fixtures; they are not duplicate project homepages.

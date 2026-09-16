@@ -129,7 +129,7 @@ function BubblingFlask() {
   );
 }
 
-export function WelcomeScreen({ loading, error, onLogin }) {
+export function WelcomeScreen({ loading, error, onLogin, onRegistered }) {
   const [showLogin, setShowLogin] = useState(false);
   const logoSrc = `${import.meta.env.BASE_URL}labrat-logo.png`;
 
@@ -143,6 +143,7 @@ export function WelcomeScreen({ loading, error, onLogin }) {
             loading={loading}
             error={error}
             onLogin={onLogin}
+            onRegistered={onRegistered}
             onBack={() => setShowLogin(false)}
           />
         </div>

@@ -655,6 +655,28 @@ export function buildReusableChartTemplateApplicationArtifacts({
  * was prepared. The frozen revision is used even when the region has since
  * been re-confirmed; a missing revision or workbook fails closed as stale.
  */
+export async function loadFrozenLinkedTemplateInputs({ store, projectId, run, planRevision, sourceSelections = [] } = {}) {
+  if (!asArray(sourceSelections).length) return null;
+  const lineage = planRevision?.plan?.templateLineage || {};
+  const applicationId = run?.payload?.reusableChartTemplateApplicationId || lineage.reusableChartTemplateApplicationId;
+  if (!applicationId || (run?.payload?.executionStrategy || lineage.executionStrategy) !== CHART_TEMPLATE_EXECUTION_STRATEGY) return null;
+  const application = await store.findReusableChartTemplateApplicationById(applicationId);
+  const templateVersion = await store.findReusableChartTemplateVersionById(run.payload?.reusableChartTemplateVersionId || lineage.reusableChartTemplateVersionId);
+  if (!application || application.projectId !== projectId || application.analysisRunId !== run.id
+    || application.analysisPlanRevisionId !== run.acceptedPlanRevisionId
+    || application.reusableChartTemplateVersionId !== templateVersion?.id || templateVersion.projectId !== projectId) {
+    applicationError("chart_template_application_conflict", "The run does not belong to this saved template application.", 409);
+  }
+  if (!isLinkedSeriesTemplate(templateVersion)) return null;
+  const refs = asArray(application.frozenRegionRefs);
+  const sameSource = (ref, selection) => ["sourceDocumentId", "regionUnderstandingRevisionId", "sheetName", "range"]
+    .every((field) => ref[field] === selection?.[field]);
+  if (!refs.length || refs.length !== sourceSelections.length || refs.some((ref, i) => !sameSource(ref, sourceSelections[i]))) {
+    applicationError("chart_template_application_conflict", "The plan does not match its frozen workbook sources.", 409);
+  }
+  return materializeLinkedSeriesInputs({ store, projectId, application, templateVersion });
+}
+
 export async function materializeLinkedSeriesInputs({ store, projectId, application, templateVersion = null } = {}) {
   const refs = asArray(application?.frozenRegionRefs);
   const slotSelector = linkedSlotsOf(templateVersion)[0]?.seriesContract?.seriesSelector || null;

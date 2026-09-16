@@ -34,6 +34,7 @@ import {
   executeReusableChartTemplate,
   isLinkedSeriesTemplate,
   materializeLinkedSeriesInputs,
+  loadFrozenLinkedTemplateInputs,
 } from "./reusableChartTemplateApplications.js";
 
 const THREAD_LIST_LIMIT = 100;
@@ -158,14 +159,17 @@ function publicExecution(payload = {}) {
 }
 
 export function analysisThreadSummary(thread) {
+  const outputTarget = thread.outputTarget || ANALYSIS_OUTPUT_TARGETS.CHART;
   return {
     id: thread.id,
     labId: thread.labId,
     projectId: thread.projectId,
     schemaVersion: thread.schemaVersion,
     status: thread.status,
-    outputTarget: thread.outputTarget || ANALYSIS_OUTPUT_TARGETS.CHART,
-    inputMode: thread.inputMode || null,
+    outputTarget,
+    inputMode: outputTarget === ANALYSIS_OUTPUT_TARGETS.CHART
+      ? thread.inputMode || ANALYSIS_INPUT_MODES.WORKBOOK
+      : null,
     originalRequest: thread.originalRequest,
     messageCount: asArray(thread.messages).length,
     planRevisionIds: asArray(thread.planRevisionIds),
@@ -183,6 +187,7 @@ export function analysisThreadSummary(thread) {
 
 export function analysisPlanRevisionSummary(revision) {
   const plan = revision.plan || {};
+  const outputTarget = revision.outputTarget || plan.outputTarget || ANALYSIS_OUTPUT_TARGETS.CHART;
   return {
     id: revision.id,
     labId: revision.labId,
@@ -191,13 +196,17 @@ export function analysisPlanRevisionSummary(revision) {
     schemaVersion: revision.schemaVersion,
     revision: revision.revision,
     status: revision.status,
-    outputTarget: revision.outputTarget || plan.outputTarget || ANALYSIS_OUTPUT_TARGETS.CHART,
-    inputMode: plan.inputMode || null,
+    outputTarget,
+    inputMode: outputTarget === ANALYSIS_OUTPUT_TARGETS.CHART
+      ? plan.inputMode || ANALYSIS_INPUT_MODES.WORKBOOK
+      : null,
     requestSummary: revision.requestSummary,
     sourceSelections: revision.sourceSelections || plan.sourceSelections || [],
     experimentSelections: revision.experimentSelections || plan.experimentSelections || [],
     reviewPlan: revision.reviewPlan || plan.reviewPlan || {},
     displayPlan: revision.displayPlan || plan.displayPlan || [],
+    ...(plan.templateLineage ? { templateLineage: structuredClone(plan.templateLineage) } : {}),
+    ...(plan.linkedDataComparison ? { linkedDataComparison: structuredClone(plan.linkedDataComparison) } : {}),
     sourceRectangles: revision.sourceRectangles || [],
     feedback: revision.feedback || null,
     warnings: revision.warnings || [],
@@ -1303,7 +1312,9 @@ export async function executeAnalysisRun({
   let deterministicSourceRefs = null;
   const programAttempts = [];
   try {
-    const workbookInputs = await materializeAnalysisInputs({
+    const frozenInputs = await loadFrozenLinkedTemplateInputs({ store, projectId: project.id, run, planRevision: revision,
+      sourceSelections: revision.plan?.sourceSelections });
+    const workbookInputs = frozenInputs ? { projectId: project.id, tables: [], warnings: [], ...frozenInputs } : await materializeAnalysisInputs({
       store,
       projectId: project.id,
       sourceSelections: revision.plan?.sourceSelections,
@@ -1371,7 +1382,7 @@ export async function executeAnalysisRun({
         throw analysisError("chart_template_application_conflict", "The reusable chart application is unavailable.", 409);
       }
       if (isLinkedSeriesTemplate(templateVersion)) {
-        const linkedInputs = await materializeLinkedSeriesInputs({ store, projectId: project.id, application, templateVersion });
+        const linkedInputs = inputs.linkedSeries ? { linkedSeries: inputs.linkedSeries } : await materializeLinkedSeriesInputs({ store, projectId: project.id, application, templateVersion });
         inputs = { ...inputs, linkedSeries: linkedInputs.linkedSeries };
       }
       const rendered = executeReusableChartTemplate({
@@ -1654,6 +1665,10 @@ export async function executeAnalysisRun({
       startedAt: run.payload?.startedAt || startedAt,
       completedAt,
       phase: "result_ready",
+      ...(resolvedExecutionStrategy === CHART_TEMPLATE_EXECUTION_STRATEGY ? {
+        reusableChartTemplateApplicationId: run.payload?.reusableChartTemplateApplicationId,
+        reusableChartTemplateVersionId: run.payload?.reusableChartTemplateVersionId,
+      } : {}),
       inputManifest: inputManifest(inputs),
       executionStrategy: resolvedExecutionStrategy,
       inputHash: runPackage.inputHash,
@@ -1768,6 +1783,7 @@ export async function getAnalysisResultPreview({
             ...cell,
             storedType: field.valueType || "string",
             unit: field.unit || null,
+            numericScale: field.numericScale || null,
             sourceRefs: asArray(field.sourceRefs).slice(0, 8),
           }];
         })),
@@ -1809,6 +1825,7 @@ export async function getAnalysisResultPreview({
     analysisThreadId: detail.analysisRun.analysisThreadId,
     analysisRunId: detail.analysisRun.id,
     analysisResultId: detail.analysisResult.id,
+    resolvedGeometry: detail.analysisResult.result?.resolvedGeometry || null,
     plotly,
     traces,
     summary: detail.analysisResult.result?.summary || {},

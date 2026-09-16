@@ -12,6 +12,22 @@ function fileNamed(name) {
   return new File(["placeholder"], name, { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 }
 
+it("stops queued uploads and discards late updates after the workspace is cancelled", async () => {
+  const controller = new AbortController();
+  const pending = [];
+  const uploadFile = vi.fn(() => new Promise((resolve) => pending.push(resolve)));
+  const onUpdate = vi.fn();
+  const run = runWorkbookBatchUpload({files:[1,2,3,4].map((n)=>fileNamed(`Exp${n}.xlsx`)),uploadFile,onUpdate,signal:controller.signal});
+  expect(uploadFile).toHaveBeenCalledTimes(2);
+  const rejected = expect(run).rejects.toMatchObject({name:"AbortError"});
+  controller.abort();
+  const updates = onUpdate.mock.calls.length;
+  pending.forEach((resolve)=>resolve({workbookReviewLink:{sourceDocumentId:"late"}}));
+  await rejected;
+  expect(uploadFile).toHaveBeenCalledTimes(2);
+  expect(onUpdate).toHaveBeenCalledTimes(updates);
+});
+
 describe("parseExperimentNumberFromFileName", () => {
   it("reads experiment numbers from common lab file names", () => {
     expect(parseExperimentNumberFromFileName("Calculation Exp31.xlsx")).toBe(31);
@@ -19,6 +35,9 @@ describe("parseExperimentNumberFromFileName", () => {
     expect(parseExperimentNumberFromFileName("Experiment-12 carbon.xlsx")).toBe(12);
     expect(parseExperimentNumberFromFileName("Reaction_Rate_Exp29.xlsx")).toBe(29);
     expect(parseExperimentNumberFromFileName("Exp29_rate.xlsx")).toBe(29);
+    expect(parseExperimentNumberFromFileName("Reaction_Rate_Exp33.xlsx")).toBe(33);
+    expect(parseExperimentNumberFromFileName("Reaction_Exp049_results.xlsx")).toBe(49);
+    expect(parseExperimentNumberFromFileName("UnexpectedExp33a.xlsx")).toBeNull();
   });
 
   it("returns null when no experiment number is present", () => {

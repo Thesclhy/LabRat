@@ -2,6 +2,7 @@ import React from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ChartReviewPanel, LinkedDataComparisonReview, ReusableChartTemplateReview } from "./BackendScanPanel.jsx";
+import { WorkspacePermissions } from "./WorkspacePermissions.jsx";
 
 vi.mock("../charts/Plot.jsx", () => ({
   Plot: () => <div data-testid="plot" />,
@@ -389,6 +390,33 @@ describe("LinkedDataComparisonReview", () => {
     fireEvent.change(kindSelect, { target: { value: "Reaction rate data" } });
     expect(screen.getByLabelText("Include Exp32").disabled).toBe(true);
     expect(screen.getByRole("button", { name: "Create comparison plan (0)" }).disabled).toBe(true);
+  });
+
+  it("lets readonly users preview selections but never create a plan", async () => {
+    const createComparison = vi.fn(async () => ({ comparison: { requestSummary: 'Readonly preview', experiments: [] } }));
+    render(<WorkspacePermissions.Provider value={{ canEdit: false }}>
+      <LinkedDataComparisonReview projectId="project_1" loadDataKinds={async () => kinds} createComparison={createComparison} />
+    </WorkspacePermissions.Provider>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Select all with data' }));
+    expect(screen.getByRole('button', { name: 'Create comparison plan (2)' }).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Preview selections' }));
+    expect(await screen.findByText('Readonly preview')).toBeTruthy();
+    expect(createComparison).toHaveBeenCalledTimes(1);
+    expect(createComparison.mock.calls[0][1].dryRun).toBe(true);
+  });
+
+  it("does not reopen an old project's analysis after the picker unmounts", async () => {
+    let finish;
+    const pending = new Promise((resolve) => { finish = resolve; });
+    const ready = vi.fn();
+    const { unmount } = render(<LinkedDataComparisonReview projectId="project_1" loadDataKinds={async () => kinds}
+      createComparison={() => pending} onComparisonReady={ready} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Select all with data' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create comparison plan (2)' }));
+    unmount();
+    finish({ analysisThread: { id: 'old_thread' }, analysisPlanRevision: { id: 'old_revision' } });
+    await pending;
+    expect(ready).not.toHaveBeenCalled();
   });
 
   it("explains how to get linked data when none exists", async () => {

@@ -2,11 +2,56 @@
 
 Status: active
 Read when: deciding what LabRat should build next.
-Last reviewed: 2026-08-19
+Last reviewed: 2026-09-13
 
 This is the short active plan. Current execution status lives in `doc/current-milestone.md`; detailed implementation plans live under `doc/plans/`.
 
 ## Current Focus
+
+The requested public Guest is being prepared as an isolated read-only demo
+identity with one fixed project, no AI/write/invitation actions and explicit
+operator provisioning. Account creation, browser/HTTP checks and the requested
+main publication must all complete before credentials are advertised as ready.
+See `doc/contracts/public-guest-v1.md` and `doc/current-milestone.md`.
+
+Claude `06ecf87` workbook and chart features are integrated and locally verified
+on main's Nest v1 architecture, preserving explicit permissions and invitations.
+Implementation is retained on `codex/claude-v1-integration`. On 2026-09-13 the
+user explicitly confirmed promotion to main and its automatic production
+deployment. Publication and activation status live in `doc/PROGRESS.md`;
+actual-backup rehearsal and real-provider validation remain unperformed. See
+`doc/plans/claude-v1-integration-plan.md` for the feature matrix and acceptance
+gates, and `doc/current-milestone.md` for verified versus outstanding work.
+
+Invitation-only account creation and lab membership/project-access
+administration are implemented and locally verified on
+`codex/backend-v1-architecture`. See `doc/plans/invitation-onboarding-plan.md`
+for scope, verification and handoff. Scientific review/version semantics remain
+unchanged. On 2026-09-12 the user authorized promotion to `main` and its
+automatic Lightsail deployment; successful activation still requires a green
+pipeline and production health check.
+
+The active engineering milestone is a contract-first backend migration to a
+NestJS + Fastify + TypeScript modular monolith. New first-party endpoints live
+under `/api/v1`, use Drizzle for typed PostgreSQL access, and preserve the
+scientific evidence/review/publication boundaries below. Existing numbered SQL
+migrations remain the database-history source of truth. See
+`doc/plans/backend-v1-contract-first-migration.md` and
+`doc/current-milestone.md`.
+
+The reconciliation of remote `main` chart-template work with NestJS `/api/v1`
+is implemented locally on `codex/v1-main-reconcile`, with
+`codex/backend-v1-architecture` as the independent publication/review branch.
+The twelve template/style operations, existing analysis adaptations, React
+helpers, migration 027, and
+Compose startup are recorded in `doc/plans/main-v1-api-reconciliation-plan.md`.
+Current verification and release status lives in `doc/current-milestone.md`.
+
+All backend slices, the generated React `/api/v1` client, explicit workspace
+resource composition, atomic production entry wiring, and Docker-backed
+PostgreSQL scenarios are implemented and locally verified. GitHub CI will
+repeat the complete suite before production canary validation; the old
+JavaScript release is rollback-only during that window.
 
 LabRat's product direction remains Workbook Understanding First:
 
@@ -97,6 +142,22 @@ Use this split when deciding what to build:
 
 ## Recently Completed
 
+- Contract-first backend v1 migration: NestJS/Fastify/TypeScript now owns every
+  documented route with closed OpenAPI DTOs and Drizzle-backed repositories,
+  while explicit SQL transactions retain lock/idempotency/publication
+  guarantees. React uses generated v1 path types and no longer calls the legacy
+  project-state aggregate. Compose starts v1, production switches the matching
+  frontend and compiled Nest backend as one release, and production health plus
+  release/provider rollback have automated smoke coverage. Local verification
+  includes PostgreSQL 16; CI repetition and production canary checks remain the
+  release gate.
+- Experiment Browser planning output hardening: this stage now receives 16,000
+  output tokens and only an explicit provider length stop triggers its single
+  32,000-token same-provider retry. Durable safe diagnostics retain budgets,
+  attempts, token counts, tool rounds, latency, and stop reason without hidden
+  reasoning or credentials. A real DeepSeek synthetic `A1:Y63` smoke completed
+  in the first attempt; source-inspection input compaction remains a separate
+  follow-up.
 - Deployment provider gate: local backend/Compose and production now require an
   explicit `LABRAT_AI_PROVIDER`. GitHub supplies only the validated provider
   name; both real keys remain in Lightsail's root-owned environment file. The

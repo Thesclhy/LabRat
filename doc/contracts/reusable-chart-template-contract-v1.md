@@ -644,9 +644,10 @@ responses remain bounded and omit large artifacts.
 
 - Project viewers may list/read profiles, templates, compatibility, and
   accepted ChartSpecs.
-- Editors, lab admins, and lab owners may create versions, applications, and
-  accepted charts.
-- Archive is editor-authorized and logical.
+- In Nest v1, `propose` permits chart-template versions, applications and
+  logical archive. Creating an accepted ChartSpec requires `approve`.
+- Saving an extraction template/version also associates accepted evidence and
+  requires `approve`; see `doc/contracts/claude-features-v1.md`.
 - Cross-project ids return not found without revealing ownership.
 - Create/version/application/publication operations are audited.
 - Application and publication writes require idempotency keys; conflicting key

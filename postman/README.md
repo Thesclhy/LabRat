@@ -1,11 +1,20 @@
 # LabRat Postman Collection
 
-Use these files to smoke-test the local LabRat API from Postman:
+Status: archived legacy API reference; not a smoke test for the current backend.
+
+This collection targets the retired unversioned `/api` routes, including old
+source-extract/chart-proposal flows. Do not run it against the hosted site or
+treat its results as `/api/v1` verification. The current API is defined by the
+[OpenAPI v1 contract](../doc/contracts/backend-api-v1.openapi.yaml); use the
+[backend guide](../backend/README.md) for current verification commands.
+
+The files and historical instructions below are retained as reference only,
+not as a second project README or supported onboarding path:
 
 - `labrat-workbook-review.postman_collection.json`
 - `labrat-workbook-review.postman_environment.json`
 
-## Prerequisites
+## Historical Prerequisites (Legacy Backend Only)
 
 Start the local stack:
 

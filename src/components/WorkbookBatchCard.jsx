@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { summarizeWorkbookBatch } from "../data/workbookBatchUpload.js";
+import { useWorkspacePermissions } from "./WorkspacePermissions.jsx";
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -98,6 +99,7 @@ export function WorkbookBatchCard({
   onApplyTemplate,
   onConfirmApplied,
 }) {
+  const { canApprove } = useWorkspacePermissions();
   const items = asArray(batch?.items);
   const summary = summarizeWorkbookBatch(items);
   const running = summary.pending > 0 || summary.uploading > 0;
@@ -130,7 +132,7 @@ export function WorkbookBatchCard({
         expectedRegionVersion: row.regionVersion,
         ...(rowLink(row) !== (row.linkedExperimentId || "") ? { linkedExperimentId: rowLink(row) } : {}),
       }));
-    if (selection.length) onConfirmApplied?.(batch, selection);
+    if (canApprove && selection.length) onConfirmApplied?.(batch, selection);
   };
   const activeTemplates = asArray(templates).filter((template) => template?.status !== "archived" && template?.currentVersionId);
   const [selectedTemplateId, setSelectedTemplateId] = useState(match?.templateId || activeTemplates[0]?.id || "");
@@ -202,7 +204,7 @@ export function WorkbookBatchCard({
               {individualRows.length ? ` · ${individualRows.length} need${individualRows.length === 1 ? "s" : ""} individual confirmation` : ""}
               {confirmableRows.filter((row) => row.typedOver).length ? ` · ${confirmableRows.filter((row) => row.typedOver).length} with typed values to check` : ""}
             </strong>
-            {confirmableRows.length > 0 && (
+            {canApprove && confirmableRows.length > 0 && (
               <>
                 <button type="button" disabled={confirming} onClick={selectAll}>Select all linked</button>
                 <button
@@ -227,7 +229,7 @@ export function WorkbookBatchCard({
                     type="checkbox"
                     aria-label={`Select ${row.fileName} for confirmation`}
                     checked={isRowSelected(row)}
-                    disabled={row.confirmed || confirming || !link || row.needsIndividualConfirm}
+                    disabled={!canApprove || row.confirmed || confirming || !link || row.needsIndividualConfirm}
                     onChange={(event) => toggleRow(row.regionId, event.target.checked)}
                   />
                   <label htmlFor={checkboxId} className="agent-workbook-batch-confirm-file">
@@ -256,7 +258,7 @@ export function WorkbookBatchCard({
                     <select
                       aria-label={`Experiment for ${row.fileName}`}
                       value={link}
-                      disabled={confirming}
+                      disabled={!canApprove || confirming}
                       onChange={(event) => setChosenLinks((current) => ({ ...current, [row.regionId]: event.target.value }))}
                     >
                       <option value="">Choose experiment{row.experimentLabel ? ` for ${row.experimentLabel}` : ""}</option>

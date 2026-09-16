@@ -1,50 +1,46 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
+import { InvitationForm } from "./InvitationForm.jsx";
 
-export function ServerLogin({ loading, error, onLogin, embedded = false, onBack }) {
+export function ServerLogin({ loading, error, onLogin, onRegistered, embedded = false, onBack }) {
+  const [registering, setRegistering] = useState(false);
+  const submitting = useRef(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
-    onLogin?.({ username, password });
+    if (loading || submitting.current) return;
+    submitting.current = true;
+    try { await onLogin?.({ username, password }); }
+    finally { submitting.current = false; }
   };
 
   const panel = (
-    <section className="server-login-panel">
-      <div className="server-login-brand">
-        <img src={`${import.meta.env.BASE_URL}labrat-logo.png`} alt="" />
-        <div>
-          <h1>LabRat</h1>
-          <p>Sign in to your lab workspace.</p>
+      <section className="server-login-panel">
+        <div className="server-login-brand">
+          <img src={`${import.meta.env.BASE_URL}labrat-logo.png`} alt="" />
+          <div>
+            <h1>LabRat</h1>
+            <p>Sign in to your lab workspace.</p>
+          </div>
         </div>
-      </div>
-      <form className="server-login-form" onSubmit={submit}>
-        <label>
-          <span>Username</span>
-          <input
-            value={username}
-            onChange={(event) => setUsername(event.target.value)}
-            autoComplete="username"
-            autoFocus={embedded}
-          />
-        </label>
-        <label>
-          <span>Password</span>
-          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" />
-        </label>
-        {error && <p className="import-review-error">{error}</p>}
-        <button className="primary" type="submit" disabled={loading || !username.trim() || !password}>
-          {loading ? "Signing in..." : "Sign in"}
-        </button>
-        {onBack && (
-          <button type="button" className="server-login-back" onClick={onBack}>
-            Back
+        {registering ? <InvitationForm onComplete={onRegistered} onCancel={() => setRegistering(false)} /> : <form className="server-login-form" onSubmit={submit}>
+          <label>
+            <span>Username</span>
+            <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" autoFocus={embedded} />
+          </label>
+          <label>
+            <span>Password</span>
+            <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" />
+          </label>
+          {error && <p className="import-review-error">{error}</p>}
+          <button className="primary" type="submit" disabled={loading || !username.trim() || !password}>
+            {loading ? "Signing in..." : "Sign in"}
           </button>
-        )}
-      </form>
-    </section>
+          <button type="button" disabled={loading} onClick={() => { setPassword(""); setRegistering(true); }}>Register with invitation</button>
+          {onBack && <button type="button" className="server-login-back" disabled={loading} onClick={onBack}>Back</button>}
+        </form>}
+      </section>
   );
-
-  if (embedded) return panel;
-  return <main className="server-login">{panel}</main>;
+  return embedded ? panel : <main className="server-login">{panel}</main>;
 }

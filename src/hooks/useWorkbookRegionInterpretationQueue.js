@@ -42,6 +42,7 @@ export function useWorkbookRegionInterpretationQueue({
   regions = [],
   activeRegionId = "",
   backgroundSessions = [],
+  scopeKey = "default",
   concurrency = WORKBOOK_REGION_INTERPRETATION_CONCURRENCY,
   interpretRegion,
   onRegionResult,
@@ -73,6 +74,14 @@ export function useWorkbookRegionInterpretationQueue({
   ), []);
 
   useEffect(() => {
+    return () => {
+      for (const task of inFlightRef.current.values()) task.controller?.abort();
+      inFlightRef.current.clear();
+      attemptedBySessionRef.current.clear();
+    };
+  }, [scopeKey]);
+
+  useEffect(() => {
     for (const [taskKey, task] of inFlightRef.current) {
       if (task.sessionId === sessionId || isBackgroundSession(task.sessionId)) continue;
       task.controller?.abort();
@@ -92,7 +101,7 @@ export function useWorkbookRegionInterpretationQueue({
   }, []);
 
   const startRegion = useCallback((targetSessionId, region, { retry = false } = {}) => {
-    if (!targetSessionId || !region?.id || typeof callbacksRef.current.interpretRegion !== "function") {
+    if (!scopeKey || !targetSessionId || !region?.id || typeof callbacksRef.current.interpretRegion !== "function") {
       return false;
     }
     const taskKey = `${targetSessionId}:${region.id}`;
@@ -117,6 +126,7 @@ export function useWorkbookRegionInterpretationQueue({
       signal: controller?.signal,
     }))
       .then((response) => {
+        if (!mountedRef.current || controller?.signal.aborted) return;
         if (currentSessionIdRef.current === targetSessionId) {
           callbacksRef.current.onRegionResult?.(response, context);
         } else if (isBackgroundSession(targetSessionId)) {
@@ -132,11 +142,11 @@ export function useWorkbookRegionInterpretationQueue({
         }
       })
       .finally(() => {
-        inFlightRef.current.delete(taskKey);
+        if (inFlightRef.current.get(taskKey)?.controller === controller) inFlightRef.current.delete(taskKey);
         wakeQueue();
       });
     return true;
-  }, [isBackgroundSession, wakeQueue]);
+  }, [isBackgroundSession, scopeKey, wakeQueue]);
 
   const backgroundQueueKey = backgroundSessionsRef.current
     .map((entry) => `${entry.sessionId}:${prioritizedPendingWorkbookRegions(entry.regions).map((region) => region.id).join(",")}`)

@@ -2,11 +2,26 @@
 
 Status: active
 Read when: starting any non-trivial LabRat coding or documentation task.
-Last reviewed: 2026-08-18
+Last reviewed: 2026-09-10
 
 This file is the routing guide for AI agents. It tells you which docs are current source of truth, which docs are long-term plans, and which docs are historical reports.
 
 ## Current Direction
+
+For Claude workbook feature integration into Nest v1, read
+`doc/plans/claude-v1-integration-plan.md`, `doc/contracts/claude-features-v1.md`,
+`doc/qa/claude-v1-integration-acceptance.md` and
+`doc/plans/claude-v1-database-upgrade.md`. The v1 capability addendum takes
+precedence over old role/path descriptions in the Claude feature plans.
+
+For invitation registration, lab owners/employees, or project-access management,
+read `doc/plans/invitation-onboarding-plan.md`,
+`doc/contracts/invitation-onboarding-v1.md`, and
+`doc/contracts/authorization-v1.md` alongside the OpenAPI contract.
+
+For public Guest/demo account work, also read
+`doc/contracts/public-guest-v1.md`; normal View membership alone is not the
+shared-account restriction. Never add real research data to the public demo.
 
 LabRat is a server-first, multi-lab research workflow app for messy workbook ingestion, source-backed evidence review, chart specs, manuscript figures, and controlled conversational agent actions.
 
@@ -19,8 +34,8 @@ Upload workbook
   -> backend-LLM-drafted + backend-validated region revisions
   -> user independently confirms/corrects/ignores/deletes each region
   -> accepted RegionUnderstandingRevisions
-  -> later DataPlan / DataSnapshot
-  -> reviewed ChartSpec
+  -> reviewed AnalysisPlanRevision and accepted AnalysisRun/AnalysisResult
+  -> explicit DataSnapshot or ChartSpec publication
   -> manuscript figure placement
 ```
 
@@ -53,7 +68,13 @@ Always read:
 
 For backend routes, auth, persistence, project state, migrations, or frontend API helpers, also read:
 
-- `doc/contracts/saas-api-contract-v0.md`
+- `doc/plans/backend-v1-contract-first-migration.md` while the `/api/v1` migration is active
+- `doc/plans/main-v1-api-reconciliation-plan.md` when reconciling remote `main` API and chart-template work with NestJS `/api/v1`
+- `doc/contracts/backend-api-v1.openapi.yaml`
+- `doc/contracts/authorization-v1.md`
+- `doc/contracts/scientific-invariants-v1.md`
+- `doc/reports/backend-api-v1-migration-inventory.md`
+- `doc/contracts/saas-api-contract-v0.md` only when checking rollback parity
 - `doc/contracts/saas-database-schema-v0.md`
 - `doc/contracts/server-project-state-plan.md`
 - `doc/contracts/backend-api-contract.md`

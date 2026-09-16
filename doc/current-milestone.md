@@ -1,10 +1,218 @@
 # Current Milestone
 
-Status: active
+Status: Public Guest locally verified; hosted publication in progress
 Read when: checking what the next implementation slice should be.
-Last reviewed: 2026-08-30
+Last reviewed: 2026-09-15
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
+
+## Public Guest Access
+
+Request: prepare and publish a public Guest account. Scope is one isolated,
+read-only demo project using existing lab membership and View grants, with an
+additional server-owned scope that blocks writes, AI and invitation redemption.
+No real project data is copied and no administrator password is reused.
+See `doc/contracts/public-guest-v1.md` for limits and release prerequisites.
+
+The guard, scope restriction, migration 030 and transactional operator helper
+are implemented. Full verification passes: frontend 368, Nest 64, legacy 331
+with five conditional skips; PostgreSQL passes 16/16 (14 Nest and two legacy).
+The additional HTTP login-limit/body-limit and logout-after-limit checks pass.
+Real Chrome acceptance passes login, readonly controls/canvas, refresh/logout
+and rejection of writes, AI, invitations and admin access, with no unintended
+UI writes or legacy API calls. Hosted provisioning and publication remain.
+Do not report Guest credentials as usable until the deployed enforcement and
+actual login have been checked. Existing production-hardening work is separate.
+
+## Claude Feature Parity On v1
+
+Active branch: `codex/claude-v1-integration`, based on main `474c1bb`;
+feature and interaction reference: Claude `06ecf87`. Locked scope and gates:
+`doc/plans/claude-v1-integration-plan.md`. On 2026-09-13 the user explicitly
+confirmed promotion to main and its automatic Lightsail deployment/migrations.
+
+Domain, eleven new Nest operations, migrations and React adapters are complete.
+Final Linux clean installation and Windows full codex verification passed:
+frontend 368, Nest 60, legacy Linux 332 passed/4 conditional skips and Windows
+331/5. PostgreSQL passed 15/15, including empty/main/Claude historical fixtures,
+restarts, checksum rejection, concurrency, rollback and frozen-source history.
+Real six-file Chromium acceptance covers region/template/batch review, linked
+Browser sources/comparison, chart templates, invitation signup, four roles,
+manuscript drag/resize/keyboard/save/reload and PPTX export. All 51 valid plotted
+values and source coordinates equal their workbook cache. No old API calls or
+runtime errors remain in the final browser runs.
+
+The integration is being committed and promoted through the existing guarded
+pipeline. See `doc/PROGRESS.md` for publication results and
+`doc/qa/claude-v1-integration-acceptance.md` for test-fixture boundaries. Actual
+database backup rehearsal and live-provider comparison remain unperformed;
+hosted CI and production health must still be checked. The confirmed approval
+does not replace those tests. The prior deployment failure below is historical.
+
+## Invitation Onboarding And Lab Management
+
+Completed locally: invitation-only owner registration, member onboarding, and
+project-level permission management on `codex/backend-v1-architecture`.
+Migration 028, invitation/session/audit transactions, request limits, atomic
+presets, inherited-access display, membership cleanup, generated API types and
+compact management screens are implemented. Readonly workspaces are immutable;
+scope changes cancel pending requests and discard late results.
+
+Verification: `npm run codex:verify` passed (frontend 324/324, Nest 56/56,
+legacy 269 passed / 5 conditional skips), including generated types and builds.
+PostgreSQL suites passed (legacy 2/2, Nest 9/9), as did real separate-account
+Chromium acceptance. Registration rollback, concurrent one-use redemption,
+grant conflicts and removal/rejoin isolation are covered. Local Docker startup
+failed; disposable loopback PostgreSQL 16.14 provided independent verification
+without modifying existing volumes. Existing Vite chunk warning remains.
+
+Execution checklist: `doc/task-checklist.md`; implementation, QA commands and
+handoff: `doc/plans/invitation-onboarding-plan.md`. On 2026-09-12 the user
+authorized promotion to `main` and explicitly confirmed the automatic Lightsail
+deployment side effect. Publication-time full verification passed again.
+Local and remote `main` now point to `474c1bb`. Automatic deployment run
+`34705610377` failed during clean backend dependency installation because the
+lockfile lacks `esbuild@0.28.2` and its platform packages. Upload, migrations
+and production activation were not reached. The missing lock entries are now
+repaired and clean-install verified on the Claude integration branch, without
+dependency upgrades. No deployment retry is authorized by that local repair.
+See `doc/PROGRESS.md` for the run link and verified stage details.
+
+## Main And v1 Reconciliation — Local Implementation
+
+The approved reconciliation is implemented on `codex/v1-main-reconcile` from
+`origin/main@7e6d729`. The migration source `codex/onboarding-chat@8c2cdaf` is
+unchanged. The independent publication/review branch is now
+`codex/backend-v1-architecture`. Detailed scope and the twelve new operations are in
+`doc/plans/main-v1-api-reconciliation-plan.md`.
+
+Nest now owns style/template lifecycle, eligibility, and deterministic
+applications directly. React composes the new collections through its generated
+`/api/v1` client. Analysis preserves input mode, accepted percentage scale,
+geometry, and template lineage; final ChartSpec publication still requires
+`approve` and rejects stale accepted experiment heads.
+
+The migration runner supports fresh, main-024-to-026, and former-local-024-auth
+databases, including checksum-ledger restart checks. Both Compose dependency
+volumes now track their lockfile; development starts the compiled Nest entry.
+This fixes missing `tsx`/`openapi-fetch` dependencies and missing Nest runtime
+metadata without replacing PostgreSQL or uploaded-file volumes.
+
+Verification: `npm run codex:verify` passed, including frontend 312/312, legacy
+backend 269 passed / 5 skipped, Nest v1 51/51, generated client freshness,
+TypeScript compilation, production Nest entry smoke, and the Vite production
+build. Separate PostgreSQL suites passed (legacy 2/2 and Nest v1 8/8), including
+the full template lifecycle and all three migration starting states.
+
+The Windows default gate skips three retired workflows, the Linux-only Python
+check, and the environment-gated PostgreSQL test; PostgreSQL was exercised
+separately. Vite retains the existing large-chunk warning. After loading the
+final code, backend, frontend, and PostgreSQL are healthy; the backend health
+endpoint, frontend page, and API client modules return HTTP 200.
+
+Remaining release work is independent GitHub CI repetition and separately
+authorized production canary/rollback validation. The existing Lightsail
+workflow runs on `main` pushes or explicit manual dispatch, so uploading the
+dedicated architecture branch does not run that pipeline or deploy production.
+No production deployment has been performed.
+
+## Backend v1 Architecture Migration
+
+LabRat is migrating from the single JavaScript HTTP route dispatcher to a
+NestJS + Fastify + TypeScript modular monolith under `/api/v1`. The migration is
+contract-first: approved scientific, authorization, transaction, and
+idempotency behavior is written down and tested before an endpoint moves.
+
+Locked decisions:
+
+- `/api/v1` is the new first-party API; the current unversioned `/api` surface
+  is a migration reference and rollback implementation only.
+- Drizzle provides typed PostgreSQL access. Existing numbered SQL migrations
+  remain authoritative; Drizzle must not push production schema changes.
+- Development may run legacy port 8787 and v1 port 8788 independently. There
+  is no request fan-out, shared-database dual write, cross-provider fallback,
+  or long-lived production dual-backend topology.
+- Server sessions and HTTP-only cookies remain. Authorization evolves from a
+  Lab-role rank to explicit Lab/Project/Experiment capabilities and groups.
+- SourceDocument, accepted RegionUnderstandingRevision, immutable
+  DataSnapshot, ExperimentSnapshotHead, AnalysisResult, and ChartSpec semantics
+  remain stable through the migration.
+- The duplicated `cells` plus `rows` model context is a known legacy behavior,
+  not a compatibility requirement. Its compaction remains a separate change.
+
+Current slice:
+
+1. Completed the active/retired route inventory, OpenAPI 3.1 contract,
+   authorization contract, and scientific-invariant contract.
+2. Established the parallel Nest/Fastify/TypeScript service, bounded errors,
+   session-cookie authentication, Drizzle schema, and disposable-PostgreSQL
+   test harness.
+3. Completed Nest ownership for Identity/Tenancy, Lab/Project/Experiment
+   authorization, Project shell, DataSnapshot summaries, active Experiment
+   projection, Browser configuration, personal annotations/views, and custom
+   documentation columns/values.
+4. Completed Nest ownership for FileObject upload/reuse, import scanning,
+   SourceDocument indexing/query/range reads, Evidence retrieval,
+   WorkbookReviewSession lifecycle, independently versioned review regions,
+   immutable RegionUnderstandingRevisions, and approval-gated confirmation.
+   Direct evidence ids are non-disclosing for shell-only access, and every
+   region mutation now uses optimistic version checks.
+5. Completed Nest ownership for AgentRun, AnalysisThread,
+   AnalysisPlanRevision, AnalysisRun and AnalysisResult workflows, including
+   the selected provider and Python executor boundaries. Plan approval and
+   result publication require `approve`; direct artifact ids are concealed
+   from experiment-only shells; high-risk run, retry and publication writes
+   retain their existing PostgreSQL lock/idempotency transactions behind the
+   typed application service.
+6. Completed Nest ownership for immutable accepted ChartSpec list/detail and
+   mutable Manuscript list/create/update. Project lists are cursor-bounded,
+   ChartSpec summaries omit Plotly point arrays, full details are loaded by id,
+   JSONB manuscript content round-trips without exposing storage column names,
+   and both artifact families require full-project access.
+7. Completed the React cutover to a generated OpenAPI path map and typed v1
+   request boundary. All first-party helpers now call `/api/v1`; a guard test
+   rejects unversioned request literals. The old project-state aggregate is
+   replaced by explicit authorization-scoped reads, shell-only users receive
+   no project-wide lists, ChartSpec/Manuscript cursor pages are collected, and
+   published experiment counts come from the scoped Browser projection rather
+   than fabricated snapshot-head ids.
+8. Completed the atomic release wiring. Development Compose starts Nest v1;
+   production's existing port-8787 service wrapper imports the compiled Nest
+   entry, the release archive carries `dist-v1`, and a failed restart/health
+   check restores both the prior release symlink and provider environment.
+   The previous JavaScript release remains rollback-only for one stable window.
+9. Completed local Docker-backed PostgreSQL verification: both legacy checks
+   and all six v1 scenarios pass against PostgreSQL 16, including migration
+   backfill/idempotency, full-schema Drizzle drift, authorization/revocation,
+   Evidence, Analysis publication, and ChartSpec/Manuscript persistence.
+10. Next: repeat the full suite in GitHub CI, then perform production activation
+    and canary checks. Do not remove the rollback implementation before that
+    stable release window completes.
+
+Verification target for this slice:
+
+```bash
+npm --prefix backend test
+npm --prefix backend run test:v1
+npm --prefix backend run build:v1
+npm --prefix backend run test:postgres
+npm test
+npm run build
+npm run codex:verify
+git diff --check
+```
+
+Pre-reconciliation checkpoint: `npm run codex:verify` passed with 291 frontend tests,
+238 legacy backend tests plus 5 intentional skips, and 41 v1 tests. Generated
+OpenAPI types are current; strict v1 TypeScript, the compiled Nest backend,
+production Nest entry smoke, and production frontend build all passed. Shell
+syntax plus provider/release rollback tests passed under Git Bash, and
+`git diff --check` passed. After Docker access was enabled, the PostgreSQL suite
+also passed with 2/2 legacy checks and 6/6 v1 scenarios. That run exposed and
+fixed a missing `$16` optimistic-version predicate in the
+WorkbookReviewRegion SQL update; it also corrected one test that treated a
+complete 2x2 range response as an array-length mismatch. GitHub CI remains the
+independent release gate rather than the first database execution.
 
 ## Strategic Split
 
@@ -157,6 +365,18 @@ Template eligibility now names string-typed blockers, pins numeric scale, and
 renders accepted fraction percentages as percent points. Existing snapshots
 remain immutable and require a newly reviewed publication to gain corrected
 metadata.
+
+## Completed Output-Budget Milestone
+
+Experiment Browser plan drafting now starts with a 16,000-token output budget
+and retries once at 32,000 only after an explicit provider length stop. Empty,
+malformed, and schema-invalid output keeps the original budget; all other model
+tasks retain their prior limits. Durable AgentRun and `plan_failed` diagnostics
+record bounded provider/model, budget, attempt, usage, tool-round, latency, and
+stop-reason fields without credentials or reasoning text. A real DeepSeek smoke
+with the current duplicated `cells` plus `rows` representation for synthetic
+`A1:Y63` data completed in one 16,000-token attempt and one tool round. Input
+compaction remains a separate follow-up.
 
 ## Completed Milestone
 

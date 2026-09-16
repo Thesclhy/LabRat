@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { loadSaasConfig } from "./config.js";
 
 const MIGRATIONS_TABLE = "labrat_schema_migrations";
+export const LAST_PRE_LEDGER_MIGRATION = "019_experiment_browser_analysis.sql";
 
 function checksumMigration(sql) {
   return crypto.createHash("sha256").update(sql).digest("hex");
@@ -18,7 +19,7 @@ async function loadMigrations(migrationsDir) {
   }));
 }
 
-async function ensureMigrationLedger(client, migrations) {
+export async function ensureMigrationLedger(client, migrations) {
   const state = await client.query(`
     select
       to_regclass(current_schema() || '.${MIGRATIONS_TABLE}') is not null as has_ledger,
@@ -54,13 +55,16 @@ async function ensureMigrationLedger(client, migrations) {
       );
     }
 
-    for (const migration of migrations) {
+    const baselineMigrations = migrations.filter(
+      (migration) => migration.file <= LAST_PRE_LEDGER_MIGRATION,
+    );
+    for (const migration of baselineMigrations) {
       await client.query(
         `insert into ${MIGRATIONS_TABLE} (filename, checksum) values ($1, $2)`,
         [migration.file, migration.checksum],
       );
     }
-    console.log(`Baselined ${migrations.length} existing migrations.`);
+    console.log(`Baselined ${baselineMigrations.length} existing migrations.`);
   }
 }
 

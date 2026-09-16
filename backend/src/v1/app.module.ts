@@ -1,0 +1,31 @@
+import { Module } from "@nestjs/common";
+import { AnalysisModule } from "./analysis/analysis.module.js";
+import { AuthorizationModule } from "./authorization/authorization.module.js";
+import { ChartModule } from "./charts/chart.module.js";
+import { IdentityModule } from "./identity/identity.module.js";
+import { ExperimentModule } from "./experiment/experiment.module.js";
+import { EvidenceModule } from "./evidence/evidence.module.js";
+import { ManuscriptModule } from "./manuscripts/manuscript.module.js";
+import { PlatformModule } from "./platform/platform.module.js";
+import { ReusableChartsModule } from "./reusable-charts/reusable-charts.module.js";
+import { WorkspaceModule } from "./workspace/workspace.module.js";
+import { InvitationsModule } from "./invitations/invitations.module.js";
+import { RegionTemplatesModule } from "./region-templates/region-templates.module.js";
+
+@Module({
+  imports: [
+    PlatformModule,
+    IdentityModule,
+    InvitationsModule,
+    RegionTemplatesModule,
+    AuthorizationModule,
+    WorkspaceModule,
+    ExperimentModule,
+    EvidenceModule,
+    AnalysisModule,
+    ChartModule,
+    ReusableChartsModule,
+    ManuscriptModule,
+  ],
+})
+export class AppModule {}

@@ -1,6 +1,6 @@
 export const WORKBOOK_BATCH_UPLOAD_CONCURRENCY = 2;
 
-const EXPERIMENT_NUMBER_PATTERN = /(?<![a-z0-9])exp(?:eriment)?[\s_-]*0*(\d{1,5})(?![0-9])/i;
+const EXPERIMENT_NUMBER_PATTERN = /(?:^|[^a-z0-9])exp(?:eriment)?[\s_-]*0*(\d{1,5})(?=$|[^a-z0-9])/i;
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
@@ -80,6 +80,7 @@ export async function runWorkbookBatchUpload({
   concurrency = WORKBOOK_BATCH_UPLOAD_CONCURRENCY,
   onUpdate,
   onlyIndexes = null,
+  signal,
 } = {}) {
   if (typeof uploadFile !== "function") throw new Error("A workbook upload function is required.");
   const fileList = asArray(files);
@@ -89,6 +90,7 @@ export async function runWorkbookBatchUpload({
   const limit = Math.max(1, Number(concurrency) || WORKBOOK_BATCH_UPLOAD_CONCURRENCY);
 
   const publish = () => {
+    signal?.throwIfAborted();
     onUpdate?.(current.map((item) => ({ ...item })));
   };
   const setItem = (index, patch) => {
@@ -103,13 +105,15 @@ export async function runWorkbookBatchUpload({
   let cursor = 0;
   const worker = async () => {
     while (cursor < queue.length) {
+      signal?.throwIfAborted();
       const item = queue[cursor];
       cursor += 1;
       const file = fileList[item.index];
       setItem(item.index, { status: "uploading", error: "" });
       publish();
       try {
-        const result = await uploadFile(file, item);
+        const result = await uploadFile(file, item, { signal });
+        signal?.throwIfAborted();
         setItem(item.index, {
           status: "uploaded",
           error: "",
@@ -117,6 +121,7 @@ export async function runWorkbookBatchUpload({
           result: result || null,
         });
       } catch (error) {
+        if (signal?.aborted || error?.name === "AbortError") throw error;
         setItem(item.index, {
           status: "failed",
           error: error?.message || String(error),

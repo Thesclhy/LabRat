@@ -24,6 +24,25 @@ async function flush() {
 }
 
 describe("useWorkbookRegionInterpretationQueue", () => {
+  it("cancels all sessions on workspace change, ignores late results and disables readonly work", async () => {
+    const pending = [];
+    const interpretRegion = vi.fn(() => { const task=deferred(); pending.push(task); return task.promise; });
+    const onRegionResult=vi.fn(), onBackgroundRegionResult=vi.fn();
+    const initial={scopeKey:"projectA",sessionId:"sameSession",regions:[pendingRegion("r")],
+      backgroundSessions:[{sessionId:"background",regions:[pendingRegion("b")]}],interpretRegion,onRegionResult,onBackgroundRegionResult};
+    const {rerender}=renderHook((props)=>useWorkbookRegionInterpretationQueue(props),{initialProps:initial});
+    expect(interpretRegion).toHaveBeenCalledTimes(2);
+    rerender({...initial,scopeKey:""});
+    expect(interpretRegion.mock.calls.every(([x])=>x.signal.aborted)).toBe(true);
+    pending.forEach((x)=>x.resolve({region:{id:"late"}}));
+    await flush();
+    expect(onRegionResult).not.toHaveBeenCalled();
+    expect(onBackgroundRegionResult).not.toHaveBeenCalled();
+    expect(interpretRegion).toHaveBeenCalledTimes(2);
+    rerender({...initial,scopeKey:"projectB",backgroundSessions:[]});
+    expect(interpretRegion).toHaveBeenCalledTimes(3);
+  });
+
   it("interprets background session regions with one shared limit, active session first", async () => {
     const pending = new Map();
     const interpretRegion = vi.fn(({ sessionId, region }) => {

@@ -17,8 +17,22 @@ The executable source of truth is `backend/migrations/`. This document records o
 
 ### Identity And Access
 
+Migration 028 adds `invitations`: hash-only single-use credentials, immutable
+issuer/target kind, seven-day expiry and redemption/revocation receipts. User,
+Lab/membership, session, redemption and audit writes share a registration transaction.
+The v1 lifecycle and project preset contract is
+`doc/contracts/invitation-onboarding-v1.md`. Scientific table shapes are unchanged.
+
+Migration 030 adds `public_guest_accounts` with one user primary key, a fixed
+project foreign key and operator/timestamp provenance. It restricts public
+shared identities in addition to their normal memberships/grants; it grants no
+access by itself. Provisioning creates the dedicated empty lab/project, member,
+View grant and audit atomically. It never adopts or copies existing research
+data. See `doc/contracts/public-guest-v1.md`.
+
 ```text
 users
+public_guest_accounts
 labs
 lab_memberships
 sessions

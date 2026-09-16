@@ -132,6 +132,14 @@ test("analysis migrations and Postgres store expose retry receipt persistence pa
     assert.match(reusableChartApplicationMigration, new RegExp(`create table if not exists ${table}`));
   }
   assert.match(reusableChartApplicationMigration, /unique \(project_id, idempotency_key\)/);
+  const authorizationMigration = await fs.readFile(
+    path.resolve(here, "..", "..", "..", "migrations", "027_authorization_v1.sql"),
+    "utf8",
+  );
+  assert.match(authorizationMigration, /create table if not exists lab_groups/);
+  assert.match(authorizationMigration, /create table if not exists project_access_grants/);
+  assert.match(authorizationMigration, /create table if not exists experiment_access_grants/);
+  assert.match(authorizationMigration, /membership\.role in \('viewer', 'editor'\)/);
   const store = new PostgresSaasStore({ databaseUrl: "" });
   for (const method of [
     "createAnalysisThread",
@@ -438,8 +446,12 @@ test("Postgres SaaS routes preserve workbook review, source documents, and suppo
         },
       },
     );
-    assert.equal(interpretedUnderstanding.status, 201);
     const interpretedUnderstandingBody = await interpretedUnderstanding.json();
+    assert.equal(
+      interpretedUnderstanding.status,
+      201,
+      JSON.stringify(interpretedUnderstandingBody),
+    );
     assert.equal(
       interpretedUnderstandingBody.currentRevision.interpretation.semanticType,
       "component_distribution",

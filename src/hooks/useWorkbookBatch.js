@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   applyServerRegionExtractionTemplate,
   confirmServerWorkbookReviewRegionsBatch,
@@ -119,6 +119,11 @@ export function useWorkbookBatchActions({
   const optionsRef = useRef({});
   optionsRef.current = { projectId, uploadFile, reloadProject, onBatchUpdate, onUploaded, loadExperiments };
 
+  // Retry files belong to the project they were picked for.
+  useEffect(() => () => {
+    filesRef.current.clear();
+  }, [projectId]);
+
   const update = useCallback((batchId, updater, phase) => {
     optionsRef.current.onBatchUpdate?.(batchId, updater, { phase });
   }, []);
@@ -149,7 +154,7 @@ export function useWorkbookBatchActions({
 
   const hasFiles = useCallback((batchId) => filesRef.current.has(batchId), []);
 
-  const runBatch = useCallback(async (batchId, files, { items = null, onlyIndexes = null } = {}) => {
+  const runBatch = useCallback(async (batchId, files, { items = null, onlyIndexes = null, signal = null } = {}) => {
     const { uploadFile: upload, onUploaded: uploaded } = optionsRef.current;
     if (typeof upload !== "function") throw new Error("A workbook upload function is required.");
     const knownExperiments = await fetchExperiments();
@@ -161,7 +166,8 @@ export function useWorkbookBatchActions({
       files,
       items: seededItems,
       onlyIndexes,
-      uploadFile: (file) => upload(file),
+      ...(signal ? { signal } : {}),
+      uploadFile: (file, item, extra) => upload(file, item, extra),
       onUpdate: (nextItems) => update(batchId, (batch) => ({
         ...batch,
         items: nextItems.map(workbookBatchItemForStorage),

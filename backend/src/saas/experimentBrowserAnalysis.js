@@ -332,6 +332,7 @@ export async function materializeExperimentInputs({
         displayName: text(field.displayName || field.fieldKey) || `Column ${columnIndex + 1}`,
         valueType: normalizedType(field.valueType),
         unit: field.unit || null,
+        numericScale: field.numericScale || null,
         sourceSummary: fieldSourceSummary(field.sourceRefs),
         value: field.value ?? null,
         formattedValue: field.formattedValue ?? null,

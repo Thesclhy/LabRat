@@ -54,7 +54,15 @@ function providerSettings(config) {
 function addUsage(target, usage) {
   target.inputTokens += Number(usage?.inputTokens) || 0;
   target.outputTokens += Number(usage?.outputTokens) || 0;
-  target.reasoningTokens += Number(usage?.reasoningTokens) || 0;
+  if (Object.hasOwn(usage || {}, "reasoningTokens")) {
+    target.reasoningTokens = (Number(target.reasoningTokens) || 0)
+      + (Number(usage?.reasoningTokens) || 0);
+  }
+}
+
+function tokenBudget(value, fallback) {
+  const parsed = Math.floor(Number(value));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function repairPrompt(prompt, previousText, errors) {
@@ -131,6 +139,7 @@ export function createAiGateway({ config = {}, fetchImpl = globalThis.fetch, now
     system,
     payload,
     maxTokens = 1200,
+    truncationRetryMaxTokens = undefined,
     outputSchema = null,
     tools = [],
     toolHandlers = {},
@@ -150,18 +159,49 @@ export function createAiGateway({ config = {}, fetchImpl = globalThis.fetch, now
     if (!settings.apiKey) return { ok: false, warning: unavailableWarning() };
 
     const startedAt = now();
-    const usage = { inputTokens: 0, outputTokens: 0, reasoningTokens: 0 };
+    const requestedMaxTokens = tokenBudget(maxTokens, 1200);
+    const hasTruncationRetryBudget = truncationRetryMaxTokens !== undefined
+      && truncationRetryMaxTokens !== null;
+    const normalizedTruncationRetryMaxTokens = hasTruncationRetryBudget
+      ? Math.max(
+        requestedMaxTokens,
+        tokenBudget(truncationRetryMaxTokens, requestedMaxTokens),
+      )
+      : requestedMaxTokens;
+    const usage = { inputTokens: 0, outputTokens: 0 };
     let totalToolRounds = 0;
     let prompt = JSON.stringify(payload);
     let repairAttempts = 0;
+    let nextRequestMaxTokens = requestedMaxTokens;
+    let finalRequestedMaxTokens = requestedMaxTokens;
     let attemptThinking = thinking;
 
+    const metadata = ({ attemptCount, stopReason = null } = {}) => ({
+      ...responseMetadata({
+        settings,
+        startedAt,
+        now,
+        usage,
+        withTools,
+        totalToolRounds,
+        repairAttempts,
+      }),
+      requestedMaxTokens,
+      finalRequestedMaxTokens,
+      ...(hasTruncationRetryBudget ? {
+        truncationRetryMaxTokens: normalizedTruncationRetryMaxTokens,
+      } : {}),
+      attemptCount,
+      ...(stopReason ? { stopReason } : {}),
+    });
+
     for (let attempt = 0; attempt < 2; attempt += 1) {
+      finalRequestedMaxTokens = nextRequestMaxTokens;
       const response = await invoke({
         withTools,
         system,
         prompt,
-        maxTokens,
+        maxTokens: finalRequestedMaxTokens,
         outputSchema,
         tools,
         toolHandlers,
@@ -176,6 +216,7 @@ export function createAiGateway({ config = {}, fetchImpl = globalThis.fetch, now
         if (attempt === 0 && REPAIRABLE_WARNING_CODES.has(response.warning?.code)) {
           repairAttempts = 1;
           if (response.warning?.code === "ai_output_truncated") {
+            nextRequestMaxTokens = normalizedTruncationRetryMaxTokens;
             prompt = truncationRepairPrompt(prompt);
             attemptThinking = { enabled: false };
           } else {
@@ -185,14 +226,9 @@ export function createAiGateway({ config = {}, fetchImpl = globalThis.fetch, now
         }
         return {
           ...response,
-          metadata: responseMetadata({
-            settings,
-            startedAt,
-            now,
-            usage,
-            withTools,
-            totalToolRounds,
-            repairAttempts,
+          metadata: metadata({
+            attemptCount: attempt + 1,
+            stopReason: response.stopReason || null,
           }),
         };
       }
@@ -205,18 +241,10 @@ export function createAiGateway({ config = {}, fetchImpl = globalThis.fetch, now
         return {
           ok: true,
           ...parsed,
-          metadata: {
-            ...responseMetadata({
-              settings,
-              startedAt,
-              now,
-              usage,
-              withTools,
-              totalToolRounds,
-              repairAttempts,
-            }),
-            ...(response.stopReason ? { stopReason: response.stopReason } : {}),
-          },
+          metadata: metadata({
+            attemptCount: attempt + 1,
+            stopReason: response.stopReason || null,
+          }),
         };
       }
 
@@ -232,14 +260,9 @@ export function createAiGateway({ config = {}, fetchImpl = globalThis.fetch, now
           "Backend model returned invalid structured JSON.",
           validation.errors.join("; ").slice(0, 1000),
         ),
-        metadata: responseMetadata({
-          settings,
-          startedAt,
-          now,
-          usage,
-          withTools,
-          totalToolRounds,
-          repairAttempts,
+        metadata: metadata({
+          attemptCount: attempt + 1,
+          stopReason: response.stopReason || null,
         }),
       };
     }
@@ -247,15 +270,7 @@ export function createAiGateway({ config = {}, fetchImpl = globalThis.fetch, now
     return {
       ok: false,
       warning: unavailableWarning("ai_invalid_response", "Backend model returned invalid structured JSON."),
-      metadata: responseMetadata({
-        settings,
-        startedAt,
-        now,
-        usage,
-        withTools,
-        totalToolRounds,
-        repairAttempts,
-      }),
+      metadata: metadata({ attemptCount: 2 }),
     };
   };
 

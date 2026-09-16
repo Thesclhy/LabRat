@@ -30,6 +30,7 @@ test("DeepSeek structured requests use Chat Completions JSON mode without exposi
       assert.equal(JSON.stringify({ url, request }).includes("unselected-anthropic-secret"), false);
       const body = JSON.parse(request.body);
       assert.equal(body.model, "deepseek-v4-pro");
+      assert.equal(body.max_tokens, 16000);
       assert.deepEqual(body.response_format, { type: "json_object" });
       assert.deepEqual(body.thinking, { type: "disabled" });
       assert.equal(body.reasoning_effort, undefined);
@@ -61,6 +62,7 @@ test("DeepSeek structured requests use Chat Completions JSON mode without exposi
   const result = await gateway.requestStructured({
     system: "Return JSON.",
     payload: { question: "status" },
+    maxTokens: 16000,
     outputSchema: {
       type: "object",
       properties: { answer: { type: "string" } },
@@ -77,6 +79,9 @@ test("DeepSeek structured requests use Chat Completions JSON mode without exposi
     model: "deepseek-v4-pro",
     latencyMs: 5,
     usage: { inputTokens: 12, outputTokens: 4 },
+    requestedMaxTokens: 16000,
+    finalRequestedMaxTokens: 16000,
+    attemptCount: 1,
     stopReason: "stop",
   });
   assert.equal("apiKey" in gateway.publicConfig(), false);
@@ -96,6 +101,7 @@ test("Anthropic selection never sends the unselected DeepSeek key", async () => 
       assert.equal(request.headers["x-api-key"], "anthropic-secret");
       assert.equal("authorization" in request.headers, false);
       assert.equal(JSON.stringify({ url, request }).includes("unselected-deepseek-secret"), false);
+      assert.equal(JSON.parse(request.body).max_tokens, 16000);
       return jsonResponse({
         usage: { input_tokens: 3, output_tokens: 2 },
         stop_reason: "end_turn",
@@ -107,6 +113,7 @@ test("Anthropic selection never sends the unselected DeepSeek key", async () => 
   const result = await gateway.requestStructured({
     system: "Return JSON.",
     payload: { question: "status" },
+    maxTokens: 16000,
     outputSchema: {
       type: "object",
       properties: { answer: { type: "string" } },
@@ -124,6 +131,51 @@ test("Anthropic selection never sends the unselected DeepSeek key", async () => 
   assert.equal("apiKey" in gateway.publicConfig(), false);
 });
 
+test("Anthropic length stops use the larger truncation budget only once", async () => {
+  const requestedBudgets = [];
+  const gateway = createAiGateway({
+    config: {
+      aiProvider: "anthropic",
+      anthropicApiKey: "anthropic-secret",
+      anthropicModel: "claude-test",
+    },
+    fetchImpl: async (_url, request) => {
+      requestedBudgets.push(JSON.parse(request.body).max_tokens);
+      if (requestedBudgets.length === 1) {
+        return jsonResponse({
+          usage: { input_tokens: 10, output_tokens: 16000 },
+          stop_reason: "max_tokens",
+          content: [{ type: "text", text: "{" }],
+        });
+      }
+      return jsonResponse({
+        usage: { input_tokens: 12, output_tokens: 4 },
+        stop_reason: "end_turn",
+        content: [{ type: "text", text: JSON.stringify({ answer: "ready" }) }],
+      });
+    },
+  });
+
+  const result = await gateway.requestStructured({
+    system: "Return JSON.",
+    payload: {},
+    maxTokens: 16000,
+    truncationRetryMaxTokens: 32000,
+    outputSchema: {
+      type: "object",
+      properties: { answer: { type: "string" } },
+      required: ["answer"],
+      additionalProperties: false,
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(requestedBudgets, [16000, 32000]);
+  assert.equal(result.metadata.attemptCount, 2);
+  assert.equal(result.metadata.finalRequestedMaxTokens, 32000);
+  assert.deepEqual(result.metadata.usage, { inputTokens: 22, outputTokens: 16004 });
+});
+
 test("DeepSeek thinking tool loops preserve reasoning only in transient request context", async () => {
   let requestCount = 0;
   const handlerInputs = [];
@@ -138,7 +190,11 @@ test("DeepSeek thinking tool loops preserve reasoning only in transient request 
       assert.equal(body.tools[0].function.name, "inspect_source_range");
       if (requestCount === 1) {
         return jsonResponse({
-          usage: { prompt_tokens: 20, completion_tokens: 5 },
+          usage: {
+            prompt_tokens: 20,
+            completion_tokens: 5,
+            completion_tokens_details: { reasoning_tokens: 4 },
+          },
           choices: [{
             finish_reason: "tool_calls",
             message: {
@@ -171,7 +227,11 @@ test("DeepSeek thinking tool loops preserve reasoning only in transient request 
       assert.equal(body.messages[4].tool_call_id, "call_2");
       assert.deepEqual(JSON.parse(body.messages[4].content), { range: "C1:D2" });
       return jsonResponse({
-        usage: { prompt_tokens: 30, completion_tokens: 6 },
+        usage: {
+          prompt_tokens: 30,
+          completion_tokens: 6,
+          completion_tokens_details: { reasoning_tokens: 3 },
+        },
         choices: [{
           finish_reason: "stop",
           message: { role: "assistant", content: JSON.stringify({ selected: true }) },
@@ -212,7 +272,11 @@ test("DeepSeek thinking tool loops preserve reasoning only in transient request 
   assert.equal(result.ok, true);
   assert.equal(result.selected, true);
   assert.equal(result.metadata.toolRounds, 1);
-  assert.deepEqual(result.metadata.usage, { inputTokens: 50, outputTokens: 11 });
+  assert.deepEqual(result.metadata.usage, {
+    inputTokens: 50,
+    outputTokens: 11,
+    reasoningTokens: 7,
+  });
   assert.equal("reasoning_content" in result, false);
   assert.equal("reasoningContent" in result.metadata, false);
 });
@@ -290,11 +354,13 @@ test("DeepSeek invalid tool arguments are returned to the model without calling 
 test("structured output is repaired once after malformed JSON or schema mismatch", async () => {
   for (const firstOutput of ["not-json", JSON.stringify({ answer: 3 })]) {
     let requestCount = 0;
+    const requestedBudgets = [];
     const gateway = createAiGateway({
       config: DEEPSEEK_CONFIG,
       fetchImpl: async (_url, request) => {
         requestCount += 1;
         const body = JSON.parse(request.body);
+        requestedBudgets.push(body.max_tokens);
         if (requestCount === 1) {
           return jsonResponse({
             usage: { prompt_tokens: 5, completion_tokens: 2 },
@@ -318,6 +384,8 @@ test("structured output is repaired once after malformed JSON or schema mismatch
     const result = await gateway.requestStructured({
       system: "Return JSON.",
       payload: {},
+      maxTokens: 16000,
+      truncationRetryMaxTokens: 32000,
       outputSchema: {
         type: "object",
         properties: { answer: { type: "string" } },
@@ -331,6 +399,8 @@ test("structured output is repaired once after malformed JSON or schema mismatch
     assert.equal(result.metadata.repairAttempts, 1);
     assert.deepEqual(result.metadata.usage, { inputTokens: 12, outputTokens: 5 });
     assert.equal(requestCount, 2);
+    assert.deepEqual(requestedBudgets, [16000, 16000]);
+    assert.equal(result.metadata.finalRequestedMaxTokens, 16000);
   }
 });
 
@@ -340,16 +410,27 @@ test("empty and truncated DeepSeek responses receive at most one repair request"
     { finish_reason: "length", message: { role: "assistant", content: "{" } },
   ]) {
     let requestCount = 0;
+    const requestedBudgets = [];
     const gateway = createAiGateway({
       config: DEEPSEEK_CONFIG,
-      fetchImpl: async () => {
+      fetchImpl: async (_url, request) => {
         requestCount += 1;
-        return jsonResponse({ choices: [requestCount === 1 ? firstChoice : firstChoice] });
+        requestedBudgets.push(JSON.parse(request.body).max_tokens);
+        return jsonResponse({
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 4,
+            completion_tokens_details: { reasoning_tokens: 2 },
+          },
+          choices: [firstChoice],
+        });
       },
     });
     const result = await gateway.requestStructured({
       system: "Return JSON.",
       payload: {},
+      maxTokens: 16000,
+      truncationRetryMaxTokens: 32000,
       outputSchema: {
         type: "object",
         properties: { ok: { type: "boolean" } },
@@ -361,6 +442,20 @@ test("empty and truncated DeepSeek responses receive at most one repair request"
     assert.equal(result.ok, false);
     assert.equal(requestCount, 2);
     assert.equal(["ai_empty_response", "ai_output_truncated"].includes(result.warning.code), true);
+    assert.deepEqual(
+      requestedBudgets,
+      firstChoice.finish_reason === "length" ? [16000, 32000] : [16000, 16000],
+    );
+    assert.deepEqual(result.metadata.usage, {
+      inputTokens: 20,
+      outputTokens: 8,
+      reasoningTokens: 4,
+    });
+    assert.equal(result.metadata.requestedMaxTokens, 16000);
+    assert.equal(result.metadata.finalRequestedMaxTokens, requestedBudgets[1]);
+    assert.equal(result.metadata.truncationRetryMaxTokens, 32000);
+    assert.equal(result.metadata.attemptCount, 2);
+    assert.equal(result.metadata.repairAttempts, 1);
   }
 });
 

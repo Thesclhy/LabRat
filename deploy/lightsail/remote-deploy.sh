@@ -78,6 +78,7 @@ mkdir -p "$RELEASE_DIR"
 tar -xzf "$ARCHIVE_PATH" -C "$RELEASE_DIR"
 test -f "$RELEASE_DIR/dist/index.html" || fail "release archive is missing dist/index.html"
 test -f "$RELEASE_DIR/backend/package.json" || fail "release archive is missing backend/package.json"
+test -f "$RELEASE_DIR/backend/dist-v1/v1/main.js" || fail "release archive is missing the compiled NestJS backend"
 test -d "$RELEASE_DIR/backend/migrations" || fail "release archive is missing backend/migrations"
 test -f "$RELEASE_DIR/deploy/lightsail/provider-env.sh" \
   || fail "release archive is missing provider-env.sh"
