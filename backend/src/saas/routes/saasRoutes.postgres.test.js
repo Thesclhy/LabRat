@@ -432,7 +432,7 @@ test("Postgres SaaS routes preserve workbook review, source documents, and suppo
     const reviewRegion = reviewBody.reviewRegions.find((region) => region.rangeRef === "A1:E3")
       || reviewBody.reviewRegions[0];
     assert.equal(reviewBody.interpretationDeferred, true);
-    assert.equal(reviewRegion.reviewStatus, "interpreting");
+    assert.equal(reviewRegion.reviewStatus, "suggested");
     assert.equal(reviewRegion.currentRevision, null);
     assert.equal(reviewRegion.interpretationHint.semanticType, "experiment_table");
 

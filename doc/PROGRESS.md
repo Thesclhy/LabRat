@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-09-15
+Last reviewed: 2026-09-18
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -12,6 +12,33 @@ Keep entries concise, newest first, and include:
 - meaningful changes
 - verification
 - follow-ups or residual risk
+
+## 2026-09-18 — Draw-first workbook review; detected regions stay idle
+
+- Request: make per-experiment onboarding and Experiment Browser import direct
+  the user to drag the data they want, keep auto-interpretation behind a
+  button, and stop spending model calls on regions nobody asked for. Also
+  removed the dead "Refs" top-bar tab and fixed the squeezed Manage charts
+  dialog (tab bar and approved-chart preview).
+- Backend: detected candidate regions are created with the new idle
+  `reviewStatus: "suggested"` instead of `interpreting`; the interpret route
+  accepts `suggested`. Drawn regions are unchanged. Migration 031 widens the
+  `workbook_review_regions` status check; OpenAPI enum and generated types
+  updated. No review boundary changes: nothing is confirmed or published
+  without the existing explicit steps.
+- Frontend: the review card on the right opens with a three-step draw guide
+  plus "Auto-detect regions for me" and "Auto-interpret all N"; the sheet
+  toolbar has a Full screen toggle (Esc exits) and the onboarding sheet and
+  card use a wider, taller layout; idle suggestions are hidden from the
+  sheet and dock until requested and get an "Interpret this region" action.
+  The master-table onboarding review has no sheet, so it still interprets
+  every detected region automatically.
+- Verification: `npm run codex:verify` passes (frontend 385, legacy 339 with
+  four skips, Nest 66, builds, smoke); Postgres suites pass 2/2 and 14/14
+  with migration 031.
+- Follow-up: not yet walked through in a logged-in browser. Multi-file chat
+  uploads no longer interpret every file in the background; each workbook
+  waits for the user to draw or press "Auto-interpret all".
 
 ## 2026-09-15 — Public Guest preparation
 

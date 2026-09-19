@@ -11,6 +11,7 @@ function regionLabel(region) {
 
 function statusLabel(region) {
   if (region?.disposition === "ignored") return "Ignored";
+  if (region?.reviewStatus === "suggested") return "Suggestion";
   if (region?.reviewStatus === "interpreting") return "Interpreting";
   if (region?.reviewStatus === "interpretation_failed") return "Needs retry";
   if (region?.acceptedRevisionId === region?.currentRevisionId && region?.acceptedRevisionId) return "Interpretation confirmed";
@@ -81,6 +82,7 @@ function RegionReviewCard({
   const confirmed = Boolean(hasAcceptedRevision && region.acceptedRevisionId === revision?.id);
   const activeDisposition = region.disposition === "active";
   const interpreting = region.reviewStatus === "interpreting";
+  const suggested = region.reviewStatus === "suggested";
   const busy = Boolean(pendingAction);
   const provenance = revision?.interpretation?.provenance || null;
   const classChips = cellClassSummaryChips(provenance?.cellClassSummary);
@@ -163,7 +165,9 @@ function RegionReviewCard({
           </div>
         ) : asArray(revision?.summary).length ? asArray(revision.summary).map((sentence, index) => (
           <p key={`${revision.id}-summary-${index}`}>{sentence}</p>
-        )) : (
+        )) : suggested ? (
+          <p>LabRat spotted this block but has not interpreted it. Interpret it only if you want to store this data.</p>
+        ) : (
           <p>{region.reviewStatus === "interpretation_failed" ? "The backend model could not interpret this region." : "Interpretation is pending."}</p>
         )}
       </div>
@@ -216,7 +220,7 @@ function RegionReviewCard({
 
       <div className="workbook-region-meta">
         {revision?.confidence != null && <span>{Math.round(Number(revision.confidence) * 100)}% structure confidence</span>}
-        <span>{interpreting ? "AI interpretation pending" : revision ? `Revision ${revision.revisionNumber || 1}` : "No revision"}</span>
+        <span>{suggested ? "Not interpreted" : interpreting ? "AI interpretation pending" : revision ? `Revision ${revision.revisionNumber || 1}` : "No revision"}</span>
       </div>
 
       {!![...blockers, ...warnings].length && (
@@ -229,7 +233,20 @@ function RegionReviewCard({
 
       {activeDisposition && (
         <>
-          {!interpreting && (
+          {suggested && (
+            <div className="workbook-region-primary-actions">
+              <button
+                type="button"
+                className="primary"
+                aria-label={`Interpret region ${label}`}
+                disabled={!canEdit || busy || !onRetry}
+                onClick={() => run("retry", () => onRetry?.(region.id))}
+              >
+                Interpret this region
+              </button>
+            </div>
+          )}
+          {!interpreting && !suggested && (
             <>
               <textarea
                 className="workbook-region-feedback"
@@ -412,15 +429,37 @@ export function WorkbookReviewDock({
   linkDataKind = "",
   extractionTemplates = [],
   onReviewExtractedExperiments,
+  suggestionsVisible = false,
+  onSuggestionsVisibleChange,
+  onInterpretAllSuggestions,
+  showDrawGuide = false,
 }) {
   const session = reviewState.session || reviewState.workbookReviewSession || null;
   const activeTemplates = asArray(extractionTemplates).filter((template) => template?.status !== "archived");
-  const regions = asArray(reviewRegions).filter((region) => region?.disposition !== "deleted");
+  const allRegions = asArray(reviewRegions).filter((region) => region?.disposition !== "deleted");
+  // Detected candidates the user has not asked for stay out of the list until
+  // suggestions are switched on from the sheet banner.
+  const isIdleSuggestion = (region) => region?.reviewStatus === "suggested" && region?.disposition === "active";
+  const suggestionCount = allRegions.filter(isIdleSuggestion).length;
+  // With the draw guide, the region the user picked last sits right under the
+  // directions; idle suggestions follow the chosen regions.
+  const chosenRegions = allRegions.filter((region) => !isIdleSuggestion(region));
+  const orderedChosen = showDrawGuide
+    ? chosenRegions
+      .map((region, index) => ({ region, index }))
+      .sort((a, b) => (Date.parse(b.region.createdAt) || 0) - (Date.parse(a.region.createdAt) || 0) || b.index - a.index)
+      .map((entry) => entry.region)
+    : chosenRegions;
+  const regions = suggestionsVisible
+    ? (showDrawGuide ? [...orderedChosen, ...allRegions.filter(isIdleSuggestion)] : allRegions)
+    : orderedChosen;
+  const chosenCount = allRegions.length - suggestionCount;
   const fallbackActiveId = regions.find((region) => region.disposition === "active")?.id || regions[0]?.id || "";
   const resolvedActiveId = regions.some((region) => region.id === activeRegionId) ? activeRegionId : fallbackActiveId;
   const acceptedCount = useMemo(() => regions.filter((region) => (
     region.disposition === "active" && Boolean(region.acceptedRevisionId)
   )).length, [regions]);
+  const guideStep = acceptedCount > 0 ? 3 : chosenCount > 0 ? 2 : 1;
   const workbookName = reviewState.sourceDocument?.metadata?.workbookName
     || session?.workbookSummary?.workbookName
     || "Workbook review";
@@ -430,16 +469,56 @@ export function WorkbookReviewDock({
       <header className="workbook-review-chat-head">
         <div>
           <h3>{workbookName}</h3>
-          <small>{regions.length} regions / {acceptedCount} confirmed</small>
+          <small>{chosenCount} region{chosenCount === 1 ? "" : "s"} / {acceptedCount} confirmed</small>
         </div>
       </header>
 
-      <div className="workbook-review-messages" aria-label="Workbook review conversation">
-        <article className="chat-msg">
-          <span>LabRat</span>
-          <p>I identified {regions.length} source region{regions.length === 1 ? "" : "s"} in this workbook.</p>
-        </article>
-      </div>
+      {showDrawGuide ? (
+        <section className="workbook-draw-guide" aria-label="How to choose data">
+          <ol className="workbook-draw-guide-steps">
+            <li className={guideStep === 1 ? "is-current" : "is-done"}>
+              <b>1</b>
+              <span>Drag a box on the sheet around the data you want LabRat to store</span>
+            </li>
+            <li className={guideStep === 2 ? "is-current" : guideStep > 2 ? "is-done" : ""}>
+              <b>2</b>
+              <span>Confirm what it means in the card below</span>
+            </li>
+            <li className={guideStep === 3 ? "is-current" : ""}>
+              <b>3</b>
+              <span>Save it, or drag again to choose another region</span>
+            </li>
+          </ol>
+          {suggestionCount > 0 && (
+            <div className="workbook-draw-guide-actions">
+              <span>
+                {suggestionsVisible
+                  ? `${suggestionCount} suggestion${suggestionCount === 1 ? "" : "s"} shown in grey on the sheet and listed below. Nothing is interpreted until you ask.`
+                  : "Not sure where your data is?"}
+              </span>
+              <div>
+                {onSuggestionsVisibleChange && (
+                  <button type="button" onClick={() => onSuggestionsVisibleChange(!suggestionsVisible)}>
+                    {suggestionsVisible ? "Hide suggestions" : `Auto-detect regions for me (${suggestionCount})`}
+                  </button>
+                )}
+                {onInterpretAllSuggestions && (
+                  <button type="button" title="Each region uses one AI call" onClick={onInterpretAllSuggestions}>
+                    Auto-interpret all {suggestionCount}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </section>
+      ) : (
+        <div className="workbook-review-messages" aria-label="Workbook review conversation">
+          <article className="chat-msg">
+            <span>LabRat</span>
+            <p>I identified {regions.length} source region{regions.length === 1 ? "" : "s"} in this workbook.</p>
+          </article>
+        </div>
+      )}
 
       {reviewState.revisionError && <p className="workbook-region-error" role="alert">{reviewState.revisionError}</p>}
 
@@ -466,12 +545,12 @@ export function WorkbookReviewDock({
             updatableTemplates={activeTemplates}
           />
         ))}
-        {!regions.length && <p className="workbook-region-empty">No source regions are available.</p>}
+        {!regions.length && <p className="workbook-region-empty">No regions chosen yet. Drag over cells on the sheet to choose one.</p>}
       </section>
 
       {acceptedCount > 0 && onReviewExtractedExperiments && (
         <div className="workbook-review-next-step">
-          <span>{acceptedCount} of {regions.length} interpretation{regions.length === 1 ? "" : "s"} confirmed</span>
+          <span>{acceptedCount} of {chosenCount} interpretation{chosenCount === 1 ? "" : "s"} confirmed</span>
           <button type="button" className="primary" onClick={onReviewExtractedExperiments}>
             Draft Experiment Browser plan
           </button>

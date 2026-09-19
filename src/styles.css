@@ -1899,9 +1899,10 @@ td button {
 }
 .chart-review-mode-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   gap: 4px;
-  width: min(100%, 390px);
+  width: 100%;
   margin: 0 0 14px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -1911,7 +1912,7 @@ td button {
 .chart-review-mode-tabs button {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   min-width: 0;
   min-height: 32px;
   border: 0;
@@ -1922,7 +1923,7 @@ td button {
   font: inherit;
   font-size: 12px;
   line-height: 1.25;
-  text-align: left;
+  text-align: center;
   cursor: pointer;
 }
 .chart-review-mode-tabs button.active {
@@ -6997,6 +6998,30 @@ tbody tr:hover {
   min-width: 0;
 }
 
+/* Both primary actions share one compact size so neither wraps or towers. */
+.workbook-region-primary-actions button {
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.workbook-region-primary-actions button.primary {
+  border-color: var(--accent);
+}
+
+.workbook-region-primary-actions button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
 .workbook-region-secondary-actions {
   justify-content: flex-end;
 }
@@ -8035,6 +8060,16 @@ tbody tr:hover {
 
 .approved-chart-detail {
   min-width: 0;
+}
+
+.approved-chart-detail .generic-chart-preview {
+  grid-column: 1;
+  grid-row: auto;
+  min-height: 420px;
+}
+
+.approved-chart-detail .generic-chart-preview-plot {
+  min-height: 420px;
 }
 
 .reusable-chart-review {
@@ -11503,7 +11538,36 @@ tbody tr:hover {
 }
 .workbook-region-template-form-actions {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
+}
+/* Same compact size as the Submit revision / Confirm pair above. */
+.workbook-region-template-form-actions button {
+  flex: 0 0 auto;
+  min-height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.workbook-region-template-form-actions button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--color-white);
+}
+.workbook-region-template-form-actions button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.workbook-region-template-form-actions select {
+  flex: 1 1 auto;
+  height: 30px;
 }
 .agent-workbook-batch-template {
   display: flex;
@@ -11895,4 +11959,172 @@ tbody tr:hover {
 
 .analysis-template-lineage li.stale > small {
   color: var(--warning-text, #8a5a00);
+}
+
+/* Draw-first guide at the top of the workbook review card */
+.workbook-draw-guide {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  padding: 12px;
+}
+
+.workbook-draw-guide-steps {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.workbook-draw-guide-steps li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+
+.workbook-draw-guide-steps b {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #dbe3ef;
+  color: var(--text);
+  font-size: 11px;
+}
+
+.workbook-draw-guide-steps li.is-current {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.workbook-draw-guide-steps li.is-current b {
+  background: #2563eb;
+  color: #fff;
+}
+
+.workbook-draw-guide-steps li.is-done b {
+  background: #bbf7d0;
+}
+
+.workbook-draw-guide-actions {
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid #bfdbfe;
+  padding-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.workbook-draw-guide-actions > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.workbook-draw-guide-actions button {
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  padding: 5px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.workbook-draw-guide-actions button:hover {
+  border-color: #2563eb;
+}
+
+/* Full-screen toggle at the top right of the sheet toolbar */
+.workbook-sheet-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 6px;
+}
+
+.workbook-fullscreen-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  padding: 0 10px;
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.workbook-fullscreen-toggle:hover,
+.workbook-fullscreen-toggle[aria-pressed="true"] {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.workbook-review-workspace.is-fullscreen,
+.project-onboarding-grid .workbook-review-workspace.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  min-height: 0;
+  padding: 12px 16px;
+  background: var(--color-surface-subtle, #f6f8fb);
+}
+
+.workbook-review-workspace.is-fullscreen .workbook-excel-viewport,
+.project-onboarding-grid .workbook-review-workspace.is-fullscreen .workbook-excel-viewport {
+  height: calc(100dvh - 118px);
+}
+
+.workbook-review-workspace.is-fullscreen .workbook-review-chat {
+  max-height: calc(100dvh - 84px);
+}
+
+/* Onboarding: the sheet and its card get the full stream width and more
+   height than the chat column gives ordinary messages. */
+.project-onboarding-messages:has(> .project-onboarding-grid) {
+  width: min(100%, 1720px);
+  padding-left: clamp(12px, 2vw, 28px);
+  padding-right: clamp(12px, 2vw, 28px);
+}
+
+.project-onboarding-grid .workbook-excel-viewport {
+  height: min(760px, calc(100dvh - 150px));
+}
+
+.project-onboarding-grid .workbook-review-chat {
+  max-height: min(760px, calc(100dvh - 150px));
+}
+
+.project-onboarding-grid .workbook-review-layout.has-review-dock {
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 400px);
+  gap: 12px;
+}
+
+@media (max-width: 1100px) {
+  .project-onboarding-grid .workbook-review-layout.has-review-dock {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.workbook-review-suggestion-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Suggestions are a hint, not a selection: keep them faint. */
+.workbook-data-grid .is-detected {
+  background: rgba(100, 116, 139, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(100, 116, 139, 0.28);
 }

@@ -330,6 +330,9 @@ export function ProjectOnboarding({
   onUploadBatchFile,
   onRefreshProject,
   renderWorkbookGrid,
+  workbookSuggestionsVisible = false,
+  onWorkbookSuggestionsVisibleChange,
+  onInterpretAllWorkbookSuggestions,
   onSaveExtractionTemplate,
   onUpdateExtractionTemplate,
   onLinkRegion,
@@ -658,7 +661,7 @@ export function ProjectOnboarding({
     if (!currentSession?.id || reviewState?.session?.id === currentSession.id) return;
     if (hydratedSessionRef.current === currentSession.id || !onHydrateWorkbookReview) return;
     hydratedSessionRef.current = currentSession.id;
-    Promise.resolve(onHydrateWorkbookReview(currentSession)).catch(() => {
+    Promise.resolve(onHydrateWorkbookReview(currentSession, { autoInterpret: true })).catch(() => {
       hydratedSessionRef.current = "";
     });
   }, [currentSession, onHydrateWorkbookReview, reviewState?.session?.id, state.step]);
@@ -1309,6 +1312,10 @@ export function ProjectOnboarding({
       onLinkRegion={state.batch?.template?.name && onLinkRegion ? linkRedrawnRegion : undefined}
       linkDataKind={state.batch?.template?.name || ""}
       extractionTemplates={extractionTemplates}
+      suggestionsVisible={workbookSuggestionsVisible}
+      onSuggestionsVisibleChange={onWorkbookSuggestionsVisibleChange}
+      onInterpretAllSuggestions={onInterpretAllWorkbookSuggestions}
+      showDrawGuide
     />
   );
   const batchCardBlock = batchVisible ? (
@@ -1481,6 +1488,7 @@ export function ProjectOnboarding({
                 onIgnoreRegion={onIgnoreRegion}
                 onDeleteRegion={onDeleteRegion}
                 onReviewExtractedExperiments={acceptedRegionCount > 0 ? createExperimentPlan : null}
+                suggestionsVisible
               />
               {analysisFlow.error && (
                 <div className="project-onboarding-error" role="alert">
@@ -1755,6 +1763,7 @@ export function ProjectOnboarding({
             <>
               <OnboardingMessage>
                 <p>Let’s start with {state.batch.teach?.fileName || "the first file"}. Draw a box around the result you want me to extract from every file, confirm my interpretation of it, then save it as a template.</p>
+                <p>The sheet below starts empty on purpose: drag across the cells you want. If you’d rather pick from what I spotted, use “Auto-detect regions for me” above the sheet.</p>
               </OnboardingMessage>
               {batchGridBlock}
             </>

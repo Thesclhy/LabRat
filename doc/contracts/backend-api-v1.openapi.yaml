@@ -4592,7 +4592,7 @@ components:
         selectionMethod: { type: string }
         interpretationHint: { $ref: "#/components/schemas/JsonObject" }
         disposition: { type: string, enum: [active, ignored, deleted] }
-        reviewStatus: { type: string, enum: [interpreting, interpretation_failed, awaiting_review, accepted] }
+        reviewStatus: { type: string, enum: [suggested, interpreting, interpretation_failed, awaiting_review, accepted] }
         currentRevisionId: { $ref: "#/components/schemas/NullableOpaqueId" }
         acceptedRevisionId: { $ref: "#/components/schemas/NullableOpaqueId" }
         version: { type: integer, minimum: 1 }

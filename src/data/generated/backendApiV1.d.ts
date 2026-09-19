@@ -2740,7 +2740,7 @@ export interface components {
             /** @enum {string} */
             readonly disposition: "active" | "ignored" | "deleted";
             /** @enum {string} */
-            readonly reviewStatus: "interpreting" | "interpretation_failed" | "awaiting_review" | "accepted";
+            readonly reviewStatus: "suggested" | "interpreting" | "interpretation_failed" | "awaiting_review" | "accepted";
             readonly currentRevisionId: components["schemas"]["NullableOpaqueId"];
             readonly acceptedRevisionId: components["schemas"]["NullableOpaqueId"];
             readonly version: number;

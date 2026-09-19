@@ -522,7 +522,7 @@ export function Topbar({
     <header className="topbar">
       <div className="brand"><img className="brand-logo" src={`${import.meta.env.BASE_URL}labrat-logo.png`} alt="LabRat" /><span className="brand-word">LabRat</span><span className="sub">&middot; Your AI Research Assistant</span></div>
       <nav className="tabs">
-        {showProjectTabs && [["overview", "Overview"], ["browser", "Browser"], ["manuscript", "Manuscript"], ["reference", "Refs"]].map(([k, label]) => (
+        {showProjectTabs && [["overview", "Overview"], ["browser", "Browser"], ["manuscript", "Manuscript"]].map(([k, label]) => (
           <button key={k} className={tab === k ? "active" : ""} onClick={() => setTab(k)}>{label}</button>
         ))}
       </nav>
@@ -1154,8 +1154,10 @@ export function WorkbookReviewWorkspace({
   focusSelection = null,
   cellClassOverlay = null,
   reviewDock = null,
+  suggestionsVisible = false,
 }) {
   const session = reviewState?.session || reviewState?.workbookReviewSession || null;
+  const [fullscreen, setFullscreen] = useState(false);
   const { canEdit } = useWorkspacePermissions();
   const initialSourceDocument = reviewState?.sourceDocument || null;
   const [resolvedSourceDocument, setResolvedSourceDocument] = useState(initialSourceDocument);
@@ -1187,7 +1189,16 @@ export function WorkbookReviewWorkspace({
     || "Workbook";
   const sheets = asArray(sourceDocument?.metadata?.sheets);
   const activeSheet = sheets.find((sheet) => sheet.name === activeSheetName) || sheets[0] || null;
+  // Detected candidates the user has not picked stay off the sheet until they
+  // ask for suggestions, so an empty sheet reads as "draw what you want".
+  const idleSuggestions = asArray(draftRegions).filter((region) => (
+    region.sourceDocumentId === sourceDocument?.id
+    && region.reviewStatus === "suggested"
+    && region.disposition === "active"
+  ));
+  const idleSuggestionSourceIds = new Set(idleSuggestions.map((region) => region.sourceRegionId).filter(Boolean));
   const regionsForSheet = asArray(reviewState?.regions)
+    .filter((region) => suggestionsVisible || !idleSuggestionSourceIds.has(region.id))
     .filter((region) => (region.sourceDocumentId || sourceDocument?.id) === sourceDocument?.id)
     .filter((region) => !activeSheetName || workbookSuggestionSheet(region) === activeSheetName)
     .map((region) => ({
@@ -1571,6 +1582,20 @@ export function WorkbookReviewWorkspace({
     dragSelectionRef.current = nextSelection;
     setDragSelection(nextSelection);
   };
+  // The grid only measures itself on scroll, so re-measure after the sheet
+  // grows to full screen or shrinks back; Escape leaves full screen.
+  useEffect(() => {
+    const frame = window.requestAnimationFrame?.(() => syncWorkbookScrollState(workbookGridScrollElement()));
+    if (!fullscreen) return () => window.cancelAnimationFrame?.(frame);
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") setFullscreen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.cancelAnimationFrame?.(frame);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [fullscreen]);
   const workbookGridScrollElement = () => (
     gridScrollRef.current?.getBoundingClientRect
       ? gridScrollRef.current
@@ -1806,7 +1831,7 @@ export function WorkbookReviewWorkspace({
       : `Loading sheet: ${completedTileCount}/${totalTileCount} ranges`;
 
   return (
-    <main className="workbook-review-workspace">
+    <main className={`workbook-review-workspace${fullscreen ? " is-fullscreen" : ""}`}>
       <section className="workbook-excel-toolbar" aria-label="Workbook controls">
         <strong>{workbookName}</strong>
         {overlayClasses && (
@@ -1853,6 +1878,20 @@ export function WorkbookReviewWorkspace({
           {rangeState.error && <p className="import-review-error">{rangeState.error}</p>}
           {!sourceDocument && (
             <div className="import-review-empty">Open Ask LabRat and attach a spreadsheet to start workbook review.</div>
+          )}
+          {sourceDocument && (
+            <div className="workbook-sheet-actions">
+              <button
+                type="button"
+                className="workbook-fullscreen-toggle"
+                aria-pressed={fullscreen}
+                title={fullscreen ? "Exit full screen (Esc)" : "Expand the sheet to full screen to draw a box"}
+                onClick={() => setFullscreen((value) => !value)}
+              >
+                <span aria-hidden="true">{fullscreen ? "\u2921" : "\u2922"}</span>
+                {fullscreen ? "Exit full screen" : "Full screen"}
+              </button>
+            </div>
           )}
           {sourceDocument && (
             <div
@@ -2882,6 +2921,8 @@ function App() {
   const [chartLaunchContext, setChartLaunchContext] = useState(null);
   const [workbookReviewState, setWorkbookReviewState] = useState({ loading: false, error: "", revisionLoading: false, confirmLoading: false, revisionError: "", clarification: null, session: null, sourceDocument: null, regions: [] });
   const [workbookReviewDraftRegions, setWorkbookReviewDraftRegions] = useState([]);
+  const [workbookSuggestionsVisible, setWorkbookSuggestionsVisible] = useState(false);
+  const [autoInterpretSessionIds, setAutoInterpretSessionIds] = useState([]);
   const [activeWorkbookReviewDraftRegionId, setActiveWorkbookReviewDraftRegionId] = useState("");
   const [backgroundWorkbookSessions, setBackgroundWorkbookSessions] = useState([]);
   const [calculationOverlay, setCalculationOverlay] = useState(null);
@@ -2913,7 +2954,8 @@ function App() {
   };
   const workbookBatchInterpretation = useMemo(() => Object.fromEntries(
     backgroundWorkbookSessions.map((entry) => {
-      const active = asArray(entry.regions).filter((region) => region.disposition === "active");
+      // Idle suggestions were never sent to the model, so they are not progress.
+      const active = asArray(entry.regions).filter((region) => region.disposition === "active" && region.reviewStatus !== "suggested");
       return [entry.sessionId, {
         total: active.length,
         pending: active.filter((region) => region.reviewStatus === "interpreting").length,
@@ -3307,6 +3349,9 @@ function App() {
     const response = await createServerWorkbookReviewSession(activeProjectId, { fileObjectId });
     const state = await getServerProjectState(activeProjectId);
     applyProjectWorkspaceRefresh(state);
+    // The master-table review has no sheet to draw on, so every detected
+    // region is interpreted as before.
+    requestAutoInterpretSession((response.workbookReviewSession || response.session)?.id);
     handleWorkbookReviewReadyFromAgent({ response, navigate: false });
     return {
       ...response,
@@ -3445,9 +3490,10 @@ function App() {
       }));
     }
   };
-  const hydrateOnboardingWorkbookReview = async (requestedSession) => {
+  const hydrateOnboardingWorkbookReview = async (requestedSession, { autoInterpret = false } = {}) => {
     if (!requestedSession?.id) return null;
     const response = await getServerWorkbookReviewSession(requestedSession.id);
+    if (autoInterpret) requestAutoInterpretSession(requestedSession.id);
     handleWorkbookReviewReadyFromAgent({ response, navigate: false });
     return response;
   };
@@ -3611,7 +3657,30 @@ function App() {
     || "";
   useEffect(() => {
     setCalculationOverlay(null);
+    setWorkbookSuggestionsVisible(false);
   }, [workbookReviewSessionId]);
+  // Sessions where the user asked LabRat to interpret every detected region.
+  // Suggested regions of those sessions are promoted locally so the bounded
+  // interpretation queue picks them up; the server accepts "suggested" regions.
+  useEffect(() => {
+    if (!canEditProject || !workbookReviewSessionId || !autoInterpretSessionIds.includes(workbookReviewSessionId)) return;
+    const pending = (region) => region.reviewStatus === "suggested"
+      && region.disposition === "active"
+      && (!region.workbookReviewSessionId || region.workbookReviewSessionId === workbookReviewSessionId);
+    if (!asArray(workbookReviewDraftRegions).some(pending)) return;
+    setWorkbookReviewDraftRegions((currentRegions) => asArray(currentRegions).map((region) => (
+      pending(region) ? { ...region, reviewStatus: "interpreting" } : region
+    )));
+  }, [autoInterpretSessionIds, canEditProject, workbookReviewDraftRegions, workbookReviewSessionId]);
+  const requestAutoInterpretSession = (sessionId) => {
+    if (!sessionId) return;
+    setAutoInterpretSessionIds((current) => (current.includes(sessionId) ? current : [...current, sessionId]));
+  };
+  const interpretAllWorkbookSuggestions = () => {
+    if (!canEditProject || !workbookReviewSessionId) return;
+    setWorkbookSuggestionsVisible(true);
+    requestAutoInterpretSession(workbookReviewSessionId);
+  };
   const saveRegionExtractionTemplate = async (region, { name } = {}) => {
     if (!permissions.canApprove) throw new Error("Approval permission is required to save an extraction template.");
     if (!activeProjectId) throw new Error("Select a project before saving an extraction template.");
@@ -4077,6 +4146,9 @@ function App() {
         onUpdateExtractionTemplate={updateRegionExtractionTemplate}
         onLinkRegion={linkWorkbookReviewRegion}
         extractionTemplates={asArray(projectState?.regionExtractionTemplates)}
+        workbookSuggestionsVisible={workbookSuggestionsVisible}
+        onWorkbookSuggestionsVisibleChange={setWorkbookSuggestionsVisible}
+        onInterpretAllWorkbookSuggestions={interpretAllWorkbookSuggestions}
         renderWorkbookGrid={(reviewDock) => (
           <WorkbookReviewWorkspace
             projectId={activeProjectId}
@@ -4089,6 +4161,7 @@ function App() {
             focusSelection={workbookReviewFocusSelection}
             cellClassOverlay={calculationOverlay}
             reviewDock={reviewDock}
+            suggestionsVisible={workbookSuggestionsVisible}
           />
         )}
         onRequestCorrection={(correction) => {
@@ -4162,8 +4235,13 @@ function App() {
           onCreateRegion={createWorkbookReviewRegion}
           focusSelection={workbookReviewFocusSelection}
           cellClassOverlay={calculationOverlay}
+          suggestionsVisible={workbookSuggestionsVisible}
           reviewDock={(
             <WorkbookReviewDock
+              suggestionsVisible={workbookSuggestionsVisible}
+              onSuggestionsVisibleChange={setWorkbookSuggestionsVisible}
+              onInterpretAllSuggestions={interpretAllWorkbookSuggestions}
+              showDrawGuide
               reviewState={workbookReviewState}
               reviewRegions={workbookReviewDraftRegions}
               activeRegionId={activeWorkbookReviewDraftRegionId}
@@ -4185,7 +4263,6 @@ function App() {
         />
       )}
       {tab === "manuscript" && <ManuscriptCanvas blocks={blocks} setBlocks={setBlocks} staged={staged} setStaged={setStaged} references={references} chartTemplates={chartTemplates} setChartTemplates={setChartTemplates} chartSpecs={activeChartSpecsForProject(projectState)} pages={pages} setPages={setPages} canvasHeight={canvasHeight} setCanvasHeight={setCanvasHeight} pageOrientationPreference={pageOrientationPreference} setPageOrientationPreference={setPageOrientationPreference} chartSpecInsertRequest={chartSpecInsertRequest} onChartSpecInsertRequestHandled={clearChartSpecManuscriptInsertRequest} onLoadChartSpecDetail={loadChartSpecDetailForManuscript} onSelectedChartContextChange={setSelectedChartContext} onRequestChartAnalysis={requestChartAnalysis} onRequestChartWorkflow={(mode, point) => openChartReview({ initialMode: mode, launchContext: { origin: "manuscript", point } })} onSaveProject={save} />}
-      {tab === "reference" && <fieldset className="permission-fieldset" disabled={!canEditProject}><ReferenceLibrary references={references} setReferences={canEditProject ? setReferences : () => {}} /></fieldset>}
       {analysisReviewState?.thread?.id && (
         <AnalysisReviewWorkspace
           projectId={activeProjectId}

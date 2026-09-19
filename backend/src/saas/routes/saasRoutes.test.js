@@ -669,7 +669,7 @@ test("workbook review region APIs independently revise confirm ignore and delete
   assert.equal(sessionBody.interpretationDeferred, true);
   assert.equal(testModelProvider.workbookInterpretCalls.length, interpretationCallCountBeforeCreate);
   assert.ok(sessionBody.reviewRegions.every((region) => (
-    region.reviewStatus === "interpreting" && region.currentRevision === null
+    region.reviewStatus === "suggested" && region.currentRevision === null
   )));
 
   const createdResponse = await jsonFetch(`/api/workbook-review-sessions/${sessionId}/regions`, {
@@ -828,7 +828,7 @@ test("workbook review sessions summarize detected source regions and reuse index
   assert.equal(createBody.importRun.status, "source_review_ready");
   assert.equal(createBody.interpretationDeferred, true);
   assert.equal(createBody.regions.length > 0, true);
-  assert.ok(createBody.reviewRegions.every((region) => region.reviewStatus === "interpreting"));
+  assert.ok(createBody.reviewRegions.every((region) => region.reviewStatus === "suggested"));
   assert.equal(createBody.workbookReviewSession.messages.some((message) => message.role === "assistant"), true);
 
   const list = await jsonFetch(`/api/projects/${project.id}/workbook-review-sessions`);

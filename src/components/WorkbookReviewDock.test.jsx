@@ -441,4 +441,45 @@ describe("WorkbookReviewDock", () => {
     ));
     expect(await within(card).findByText("Carbon distribution updated to v2")).toBeTruthy();
   });
+  it("keeps uninterpreted suggestions out of the list until they are requested", async () => {
+    const suggestion = {
+      id: "region_suggested",
+      sourceDocumentId: "source_doc_1",
+      sheetName: "Runs",
+      rangeRef: "J1:L9",
+      disposition: "active",
+      reviewStatus: "suggested",
+      version: 1,
+      currentRevisionId: null,
+      acceptedRevisionId: null,
+      currentRevision: null,
+    };
+    const onRetryRegion = vi.fn(() => true);
+    const onSuggestionsVisibleChange = vi.fn();
+    const { rerender } = render(
+      <WorkbookReviewDock reviewState={reviewState()} reviewRegions={[suggestion]} onRetryRegion={onRetryRegion} showDrawGuide onSuggestionsVisibleChange={onSuggestionsVisibleChange} />,
+    );
+
+    expect(screen.queryByRole("article", { name: "Region Runs!J1:L9" })).toBeNull();
+    expect(screen.getByText(/Drag a box on the sheet around the data you want LabRat to store/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Auto-detect regions for me (1)" }));
+    expect(onSuggestionsVisibleChange).toHaveBeenCalledWith(true);
+
+    rerender(
+      <WorkbookReviewDock reviewState={reviewState()} reviewRegions={[suggestion]} onRetryRegion={onRetryRegion} showDrawGuide suggestionsVisible />,
+    );
+    const card = screen.getByRole("article", { name: "Region Runs!J1:L9" });
+    expect(within(card).getByText("Suggestion")).toBeTruthy();
+    expect(within(card).queryByRole("button", { name: "Confirm interpretation of Runs!J1:L9" })).toBeNull();
+    fireEvent.click(within(card).getByRole("button", { name: "Interpret region Runs!J1:L9" }));
+    await waitFor(() => expect(onRetryRegion).toHaveBeenCalledWith("region_suggested"));
+  });
+  it("lists the most recently chosen region first under the draw guide", () => {
+    const older = { ...reviewRegions[0], createdAt: "2026-09-18T10:00:00.000Z" };
+    const newer = { ...reviewRegions[1], createdAt: "2026-09-18T10:05:00.000Z" };
+    render(<WorkbookReviewDock reviewState={reviewState()} reviewRegions={[older, newer]} showDrawGuide />);
+
+    const labels = screen.getAllByRole("article").map((card) => card.getAttribute("aria-label"));
+    expect(labels).toEqual(["Region Runs!F1:H5", "Region Runs!A1:D3"]);
+  });
 });

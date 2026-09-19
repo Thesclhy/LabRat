@@ -419,7 +419,9 @@ export async function createWorkbookReviewRegionRecord({
       description: text(input.description).slice(0, 2000),
     },
     disposition: "active",
-    reviewStatus: "interpreting",
+    // Detected candidates stay idle until the user picks one; only regions the
+    // user drew or asked for are sent to the model.
+    reviewStatus: text(input.selectionMethod) === "detected_region" ? "suggested" : "interpreting",
     warnings: [],
     createdBy: actorUserId,
   });
@@ -442,7 +444,7 @@ export async function interpretWorkbookReviewRegion({
   if (loaded.disposition !== "active") {
     fail("workbook_review_region_inactive", "Only an active workbook review region can be interpreted.", 409);
   }
-  if (!["interpreting", "interpretation_failed"].includes(loaded.reviewStatus)) {
+  if (!["suggested", "interpreting", "interpretation_failed"].includes(loaded.reviewStatus)) {
     fail("workbook_review_region_not_pending", "This workbook review region already has an interpretation.", 409);
   }
   const priorRevision = loaded.currentRevisionId
