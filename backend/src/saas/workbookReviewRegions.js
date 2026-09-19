@@ -231,11 +231,20 @@ async function draftRevision({
     semanticType: semanticType(initialSemanticType),
     description: text(userFeedback),
   };
-  const baseline = buildWorkbookUnderstandingPreview({
-    sourceDocument,
-    indexBlobs,
-    draftRegions: [draftRegion],
-  });
+  let baseline;
+  try {
+    baseline = buildWorkbookUnderstandingPreview({
+      sourceDocument,
+      indexBlobs,
+      draftRegions: [draftRegion],
+    });
+  } catch (error) {
+    const warning = { code: error?.code || "field_catalog_incomplete", message: error?.message || "Source fields could not be read completely. Retry region review." };
+    const failedRegion = await store.updateWorkbookReviewRegion(region.id, {
+      expectedVersion: region.version, reviewStatus: "interpretation_failed", warnings: [warning], updatedBy: actorUserId,
+    });
+    return { region: failedRegion, revision: null, warning };
+  }
   const baselineRegion = baseline.regions[0];
   const baselineIdentityEvidence = identityEvidenceFor({
     sourceDocument,
@@ -344,6 +353,8 @@ async function draftRevision({
     sheetName: region.sheetName,
     range: region.rangeRef,
     inspection: previewRegion.inspection,
+    fieldCatalogEvidence: previewRegion.catalogEvidence,
+    initialFieldCatalogEvidence: baselineRegion.catalogEvidence,
     identityEvidence,
   }));
   const storedInterpretation = {

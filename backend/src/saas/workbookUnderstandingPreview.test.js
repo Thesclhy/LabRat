@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { readSourceDocumentRange } from "./sourceDocuments.js";
+import { decodeRange } from "../import/utils/excelAddress.js";
 import { buildWorkbookUnderstandingPreview } from "./workbookUnderstandingPreview.js";
 
 function columnName(index) {
@@ -491,4 +493,69 @@ test("re-reads a bounded source window when the corrected header is outside the 
     ["C30", "Yield (%)"],
   ]);
   assert.equal(region.interpretation.inclusion.startRow, 31);
+});
+
+for (const width of [24, 25, 26, 52]) {
+  for (const offset of [0, 3]) {
+    test(`catalog covers ${width} columns starting at ${columnName(offset)} with bounded reads`, () => {
+      const end = columnName(offset + width - 1);
+      const headers = Array.from({ length: width }, (_, i) => i === 0 ? "Experiment" : i === width - 1 ? "Comments" : `Field ${i}`);
+      const rows = [headers, ...Array.from({ length: 29 }, (_, r) => Array.from({ length: width }, (_, c) => c === 0 ? `Exp${r + 1}` : c === width - 1 ? (r % 2 ? null : "source note") : r + c))];
+      const fixture = sourceFixture({ sheetName: "Wide", rows: rows.map(row => [...Array(offset).fill(null), ...row]) });
+      const reads = [];
+      const preview = buildWorkbookUnderstandingPreview({
+        ...fixture,
+        draftRegions: [draftRegion({ sheetName: "Wide", range: `${columnName(offset)}1:${end}30`, semanticType: "experiment_table" })],
+        interpretationPatches: [{ draftRegionId: "draft_region_1", decisionSource: "backend_model", fields: [{ column: columnName(offset + 1), role: "condition" }] }],
+        readRange: (args) => { reads.push(args.range); return readSourceDocumentRange(args); },
+      });
+      const region = preview.regions[0];
+      assert.equal(region.interpretation.fields.length, width - 1);
+      assert.equal(region.interpretation.fields.at(-1).column, end);
+      assert.equal(region.interpretation.fields.at(-1).valueType, "string");
+      assert.equal(region.interpretation.fields.at(-1).sourceRefs[0].cell, end + "1");
+      assert.equal(region.catalogEvidence.rows.length, 25);
+      assert.equal(region.catalogEvidence.rows[2].at(-1).rawValue, null);
+      assert.ok(region.inspection.cellCount <= 500);
+      assert.ok(reads.every(range => { const d = decodeRange(range); return (d.e.r - d.s.r + 1) * (d.e.c - d.s.c + 1) <= 500; }));
+      assert.equal(preview.blockers.length, 0);
+    });
+  }
+}
+
+test("combines merged headers across catalog pages and preserves right-side numeric scale", () => {
+  const rows = Array.from({ length: 30 }, (_, r) => Array.from({ length: 26 }, (_, c) => r === 0 ? (c === 0 ? "Experiment" : c === 18 ? "Yield (%)" : c > 18 ? null : `Field ${c}`) : r === 1 ? (c >= 18 ? `Fraction ${c}` : null) : c === 0 ? `Exp${r}` : 0.25));
+  const fixture = sourceFixture({ sheetName: "Wide", rows, cellDetails: { S1: { merged: true, mergedRange: "S1:Z1" }, Z3: { formattedValue: "25%", numberFormat: "0%" } } });
+  const region = buildWorkbookUnderstandingPreview({ ...fixture, draftRegions: [draftRegion({ sheetName: "Wide", range: "A1:Z30", semanticType: "experiment_table" })] }).regions[0];
+  const last = region.interpretation.fields.at(-1);
+  assert.equal(region.interpretation.headerRow, 2);
+  assert.equal(last.valueType, "number");
+  assert.deepEqual(last.sourceRefs.map(ref => ref.cell), ["S1", "Z2"]);
+  assert.equal(last.unit, "percent");
+  assert.equal(last.numericScale, "fraction");
+});
+
+test("corrected headers beyond the initial sample rebuild all columns", () => {
+  const rows = Array.from({ length: 60 }, (_, r) => Array.from({ length: 52 }, (_, c) => r === 30 ? (c === 0 ? "Experiment" : `Field ${c}`) : r > 30 ? (c === 0 ? `Exp${r}` : c) : null));
+  const fixture = sourceFixture({ sheetName: "Wide", rows });
+  const region = buildWorkbookUnderstandingPreview({ ...fixture, draftRegions: [draftRegion({ sheetName: "Wide", range: "A1:AZ60", semanticType: "experiment_table" })], interpretationPatches: [{ draftRegionId: "draft_region_1", headerRow: 31 }] }).regions[0];
+  assert.equal(region.interpretation.fields.length, 51);
+  assert.equal(region.interpretation.fields.at(-1).sourceRefs[0].cell, "AZ31");
+  assert.equal(region.catalogEvidence.range, "A30:AZ54");
+});
+
+test("unlabelled populated columns require review and incomplete pages fail closed", () => {
+  const fixture = sourceFixture({ sheetName: "Runs", rows: [["Experiment", "Value", null], ["Exp1", 4, "note"]] });
+  const args = { ...fixture, draftRegions: [draftRegion({ sheetName: "Runs", range: "A1:C2", semanticType: "experiment_table" })] };
+  assert.ok(buildWorkbookUnderstandingPreview(args).blockers.some(item => item.code === "field_header_required" && item.column === "C"));
+  assert.equal(buildWorkbookUnderstandingPreview({ ...args, interpretationPatches: [{ draftRegionId: "draft_region_1", fieldPatches: [{ column: "C", displayName: "Observation" }] }] }).blockers.length, 0);
+  assert.throws(() => buildWorkbookUnderstandingPreview({ ...args, readRange: (input) => ({ ...readSourceDocumentRange(input), rows: [] }) }), { code: "field_catalog_incomplete" });
+});
+
+test("a populated unlabelled column below the structure window cannot disappear", () => {
+  const rows = [["Experiment", "Value", null], ...Array.from({ length: 30 }, (_, i) => [`Exp${i}`, i, i === 29 ? "late note" : null])];
+  const fixture = sourceFixture({ sheetName: "Runs", rows });
+  const preview = buildWorkbookUnderstandingPreview({ ...fixture, draftRegions: [draftRegion({ sheetName: "Runs", range: "A1:C31", semanticType: "experiment_table" })] });
+  assert.ok(preview.blockers.some(item => item.code === "field_header_required" && item.column === "C"));
+  assert.equal(preview.regions[0].catalogEvidence.sparseColumnEvidence[0].address, "C31");
 });

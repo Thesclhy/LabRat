@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { test } from "node:test";
@@ -7,7 +8,11 @@ import { ANALYSIS_PLAN_REVISION_VERSION } from "./analysisSchemas.js";
 import { deterministicExperimentBrowserProgram } from "./deterministicExperimentBrowserProgram.js";
 import { validatePythonPolicy } from "./pythonPolicy.js";
 
-function directSourcePackage() {
+const pythonCommand = process.env.LABRAT_TEST_PYTHON_COMMAND || "/usr/bin/python3";
+// Isolated Python ignores PYTHONIOENCODING; make this offline harness UTF-8 on Windows too.
+const spawnUtf8 = (command, args, options) => spawn(command, ["-X", "utf8", ...args], options);
+
+function directSourcePackage(inputsOverride = null) {
   return buildAnalysisRunPackage({
     run: {
       id: "run_direct",
@@ -24,7 +29,7 @@ function directSourcePackage() {
       outputTarget: "experiment_browser",
       reviewPlan: {},
     },
-    inputs: {
+    inputs: inputsOverride || {
       schemaVersion: "labrat.analysisInputs.v5",
       tables: [{
         tableId: "table_1",
@@ -95,12 +100,13 @@ test("built-in source mapper is concise and passes the Python policy", () => {
 });
 
 test("built-in source mapper preserves values, placeholders, and exact cell offsets", {
-  skip: !existsSync("/usr/bin/python3"),
+  skip: !existsSync(pythonCommand),
 }, async () => {
   const executor = createAnalysisExecutor({
     mode: "local",
     nodeEnv: "development",
-    pythonCommand: "/usr/bin/python3",
+    pythonCommand,
+    spawnImpl: spawnUtf8,
   });
   const executed = await executor.executeAcceptedRun(directSourcePackage());
   assert.equal(executed.ok, true, JSON.stringify(executed.error || {}));
@@ -115,3 +121,26 @@ test("built-in source mapper preserves values, placeholders, and exact cell offs
   assert.equal(executed.result.recordPatches[1].values[1].value, null);
   assert.equal(executed.result.recordPatches[1].values[1].missingReason, "source_placeholder");
 });
+
+for (const width of [24, 25, 26, 52]) {
+  test(`maps every column of a synthetic ${width}-column table with text/null/percent provenance`, { skip: !existsSync(pythonCommand) }, async () => {
+    const columns = Array.from({ length: width }, (_, columnIndex) => ({ columnIndex, excelColumn: columnIndex === 0 ? "D" : "field" + columnIndex }));
+    const fieldMappings = columns.slice(1).map(column => ({ sourceColumnIndex: column.columnIndex, displayName: "Field " + column.columnIndex, valueType: column.columnIndex === width - 1 ? "string" : "number", numericScale: column.columnIndex === width - 3 ? "fraction" : null, unit: column.columnIndex === width - 3 ? "percent" : null }));
+    const inputs = { tables: [{ tableId: "wide", startRow: 5, startColumn: 4, rowCount: 3, columnCount: width, columns,
+      structure: { experimentAxis: "rows", experimentIdColumn: "D", headerRow: 5, inclusion: { startRow: 6, endRow: 7 }, requiredFieldColumnIndices: columns.slice(1).map(c => c.columnIndex), fieldMappings },
+      values: [columns.map(c => "Column " + c.columnIndex), columns.map((c, i) => i === 0 ? "Exp1" : i === width - 1 ? "Right-side note" : 0.25), columns.map((c, i) => i === 0 ? "Exp2" : null)],
+    }], experiments: [] };
+    const executor = createAnalysisExecutor({ mode: "local", nodeEnv: "development", pythonCommand, spawnImpl: spawnUtf8 });
+    const output = await executor.executeAcceptedRun(directSourcePackage(inputs));
+    assert.equal(output.ok, true, JSON.stringify(output.error));
+    assert.equal(output.result.columns.length, width - 1);
+    assert.equal(output.result.columns.at(-3).numericScale, "fraction");
+    assert.equal(output.result.recordPatches[0].values.at(-1).value, "Right-side note");
+    assert.deepEqual(output.result.recordPatches[0].values.at(-1).sources, [{ tableId: "wide", rowOffset: 1, columnOffset: width - 1 }]);
+    assert.equal(output.result.recordPatches[1].values.at(-1).value, null);
+    inputs.tables[0].structure.fieldMappings.pop();
+    const incomplete = await executor.executeAcceptedRun(directSourcePackage(inputs));
+    assert.equal(incomplete.ok, false);
+    assert.match(JSON.stringify(incomplete), /not completely mapped/);
+  });
+}

@@ -385,8 +385,11 @@ async function materializeSelection({ store, projectId, selection, region }) {
       experimentIdColumn: region?.experimentIdColumn || null,
       headerRow: region?.headerRow || null,
       inclusion: region?.inclusion || null,
+      requiredFieldColumnIndices: columnMetadata.filter((column) => asArray(region?.fields).some((field) => (
+        text(field.column).toUpperCase() === column.excelColumn && field.role !== "identifier"
+      ))).map((column) => column.columnIndex),
       fieldMappings: asArray(region?.fields).flatMap((field) => {
-        const column = columnMetadata.find((item) => item.excelColumn === field.column);
+        const column = columnMetadata.find((item) => item.excelColumn === text(field.column).toUpperCase());
         if (!column || field.role === "identifier") return [];
         return [{
           sourceColumnIndex: column.columnIndex,

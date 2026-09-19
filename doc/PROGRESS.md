@@ -13,6 +13,24 @@ Keep entries concise, newest first, and include:
 - verification
 - follow-ups or residual risk
 
+## 2026-09-19 — Wide master-table field catalog, stage 1
+
+- Request: implement the approved missing-column and onboarding-version fixes,
+  preserving existing permission work and using offline synthetic verification only.
+- Full-width deterministic field catalog is separate from the bounded provider
+  sample; merged headers are inferred after page merge, corrected headers reread
+  the full width, sparse model patches preserve omitted fields, and missing headers
+  or incomplete reads block confirmation. New revision hashes include catalog
+  evidence; frozen input mappings include completeness requirements.
+- Targeted offline regression: 42 passed, 1 existing Linux-Python-only skip;
+  frontend production build passed (existing bundle-size warning). Coverage includes
+  24/25/26/52 columns, non-A starts, merged headers, corrected rows, right-side
+  text/null/percent values, exact references and immutable prior revisions/inputs.
+- Contract and manual recovery: doc/contracts/canonical-data-dictionary.md.
+  No real upload, external model call, live database concurrency or publication.
+
+
+
 ## 2026-09-18 — Draw-first workbook review; detected regions stay idle
 
 - Request: make per-experiment onboarding and Experiment Browser import direct

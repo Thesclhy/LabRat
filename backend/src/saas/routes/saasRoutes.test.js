@@ -100,6 +100,7 @@ function makeOversizedCalculationWorkbookBlob() {
   rows[0][1] = "C1";
   rows[1][0] = "Overall tots";
   rows[1][1] = 12.5;
+  rows[0][82] = "Boundary note";
   rows[106][82] = "Used range boundary";
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), "LDPE TEMPLATE");
   return new Blob([XLSX.write(workbook, { type: "buffer", bookType: "xlsx" })], {
