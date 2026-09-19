@@ -170,6 +170,20 @@ a:hover {
   gap: 5px;
   min-width: 300px;
 }
+.brand-home {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.brand-home:focus-visible {
+  outline: 2px solid var(--color-accent, #2563eb);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
 .brand-word {
   font-size: var(--brand-word-size);
   font-weight: 800;
@@ -217,6 +231,9 @@ a:hover {
   border-radius: var(--radius-lg);
   padding: 6px 10px;
   font-weight: 400;
+}
+.tabs button.tab-home {
+  margin-right: var(--space-3);
 }
 .tabs button.active {
   background: var(--yellow);

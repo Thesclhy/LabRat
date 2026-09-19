@@ -58,7 +58,7 @@ function jsonResponse(body, init = {}) {
 }
 
 describe("Topbar", () => {
-  it("moves Projects into the File menu and keeps lab/project context readonly", () => {
+  it("opens the Projects dashboard from the brand Home button and keeps lab/project context readonly", () => {
     const onOpenDashboard = vi.fn();
     render(
       <Topbar
@@ -90,18 +90,28 @@ describe("Topbar", () => {
     expect(screen.getByRole("button", { name: "Overview" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "File menu" }));
-    fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+    expect(screen.queryByRole("button", { name: "Projects" })).toBeNull();
+    expect(screen.getByRole("button", { name: "New project" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Home: all projects" }));
 
     expect(onOpenDashboard).toHaveBeenCalledTimes(1);
+
+    const tabLabels = Array.from(document.querySelectorAll(".tabs button")).map((button) => button.textContent);
+    expect(tabLabels).toEqual(["Home", "Overview", "Browser", "Manuscript"]);
+    fireEvent.click(screen.getByRole("button", { name: "Home" }));
+
+    expect(onOpenDashboard).toHaveBeenCalledTimes(2);
   });
 
   it("hides project workspace tabs and file context while viewing the Projects dashboard", () => {
+    const onOpenDashboard = vi.fn();
     render(
       <Topbar
         tab="overview"
         setTab={() => {}}
         workspaceMode="dashboard"
-        onOpenDashboard={() => {}}
+        onOpenDashboard={onOpenDashboard}
         onAgent={() => {}}
         sourceError=""
         onOpenImportReview={() => {}}
@@ -119,12 +129,16 @@ describe("Topbar", () => {
       />,
     );
 
+    expect(screen.queryByRole("button", { name: "Home" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Overview" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Browser" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Manuscript" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Refs" })).toBeNull();
     expect(screen.queryByRole("button", { name: "File menu" })).toBeNull();
     expect(screen.queryByLabelText("Current lab and project")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Home: all projects" }));
+    expect(onOpenDashboard).not.toHaveBeenCalled();
   });
 });
 describe("ProjectDashboard", () => {

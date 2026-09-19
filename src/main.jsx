@@ -406,7 +406,6 @@ function ProjectSwitcher({
   projects,
   activeProjectId,
   onProjectChange,
-  onOpenDashboard,
   onCreateProject,
   onOpenProfile,
   onOpenImportReview,
@@ -473,7 +472,6 @@ function ProjectSwitcher({
             </select>
           </label>
           <div className="project-switcher-actions">
-            <button type="button" onClick={() => { close(); onOpenDashboard?.(); }}>Projects</button>
             <button type="button" disabled={!canCreateProject} onClick={() => { close(); onCreateProject?.(); }}>New project</button>
             <button type="button" disabled={!activeProjectId || !canEditProject} onClick={() => { close(); onOpenProfile?.(); }}>Profile</button>
             <button type="button" disabled={!hasImportReview || !activeProjectId} onClick={() => { close(); onOpenImportReview?.(); }}>Import workbook</button>
@@ -520,8 +518,17 @@ export function Topbar({
   const showProjectSwitcher = workspaceMode !== "dashboard";
   return (
     <header className="topbar">
-      <div className="brand"><img className="brand-logo" src={`${import.meta.env.BASE_URL}labrat-logo.png`} alt="LabRat" /><span className="brand-word">LabRat</span><span className="sub">&middot; Your AI Research Assistant</span></div>
+      <button
+        type="button"
+        className="brand brand-home"
+        aria-label="Home: all projects"
+        title="Home: all projects"
+        onClick={() => { if (workspaceMode !== "dashboard") onOpenDashboard?.(); }}
+      >
+        <img className="brand-logo" src={`${import.meta.env.BASE_URL}labrat-logo.png`} alt="" /><span className="brand-word">LabRat</span><span className="sub">&middot; Your AI Research Assistant</span>
+      </button>
       <nav className="tabs">
+        {showProjectTabs && <button type="button" className="tab-home" onClick={() => onOpenDashboard?.()}>Home</button>}
         {showProjectTabs && [["overview", "Overview"], ["browser", "Browser"], ["manuscript", "Manuscript"]].map(([k, label]) => (
           <button key={k} className={tab === k ? "active" : ""} onClick={() => setTab(k)}>{label}</button>
         ))}
@@ -543,7 +550,6 @@ export function Topbar({
             projects={projects}
             activeProjectId={activeProjectId}
             onProjectChange={onProjectChange}
-            onOpenDashboard={onOpenDashboard}
             onCreateProject={onCreateProject}
             onOpenProfile={onOpenProfile}
             onOpenImportReview={onOpenImportReview}
