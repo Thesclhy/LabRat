@@ -1662,7 +1662,7 @@ export function ProjectOnboarding({
                   {
                     value: "per_experiment",
                     label: "Per-experiment workbooks",
-                    detail: "One file per experiment, such as calculation sheets. I’ll learn the layout from one file and apply it to the rest.",
+                    detail: "Upload a batch of same-layout files, one per experiment, such as calculation sheets. I’ll interpret and store them all at once.",
                   },
                   {
                     value: "master_table",
@@ -1686,10 +1686,12 @@ export function ProjectOnboarding({
 
           {state.step === "batch_pick" && (
             <OnboardingMessage>
-              <p>Per-experiment workbooks work like this: I learn where the result sits in one file, save that as a template, and apply it to every other file with the same layout.</p>
-              <p>Upload all files that share a layout together, and name each file with its experiment number, for example “Calculation Exp31.xlsx”, so I can link it to the right experiment.</p>
+              <p>Upload a whole batch of per-experiment files at once, and I can interpret and store them all together.</p>
+              <p>This works best when the files in a batch share the same layout, with the data sitting in the same place. You show me the data you want in one file, and I’ll save that as a template and apply it to the rest for you.</p>
+              <p>If some files look different, no problem: we can do those as another batch afterwards.</p>
+              <p>One small tip: if each file name includes its experiment number, like “Calculation Exp31.xlsx”, I can link every file to the right experiment on my own.</p>
               <button type="button" className="project-onboarding-upload" onClick={() => batchInputRef.current?.click()}>
-                Choose workbook files
+                Choose a batch of workbook files
               </button>
             </OnboardingMessage>
           )}

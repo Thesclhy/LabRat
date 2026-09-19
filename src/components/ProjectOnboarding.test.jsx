@@ -862,8 +862,8 @@ describe("ProjectOnboarding", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /^Per-experiment workbooks/ }));
-    expect(await screen.findByRole("button", { name: "Choose workbook files" })).toBeTruthy();
-    expect(screen.getByText(/Upload all files that share a layout together/)).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Choose a batch of workbook files" })).toBeTruthy();
+    expect(screen.getByText(/Upload a whole batch of per-experiment files at once/)).toBeTruthy();
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(readProjectOnboarding("project_1").step).toBe("batch_pick");
     expect(screen.queryByText("Do you have other workbooks to upload?")).toBeNull();
@@ -1022,7 +1022,7 @@ describe("ProjectOnboarding", () => {
       />,
     );
 
-    expect(screen.getByText(/Upload all files that share a layout together/)).toBeTruthy();
+    expect(screen.getByText(/Upload a whole batch of per-experiment files at once/)).toBeTruthy();
     const files = [
       new File(["a"], "Calculation Exp31.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
       new File(["b"], "Calculation Exp32.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
