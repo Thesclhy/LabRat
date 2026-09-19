@@ -1,3 +1,4 @@
+import { orderedPlanRevisions } from "./analysisOrdering.js";
 import {
   ANALYSIS_INPUT_MODES,
   ANALYSIS_PLAN_REVISION_VERSION,
@@ -441,7 +442,7 @@ export async function draftAnalysisPlanRevision({
     inputMode,
     feedback: text(feedback) || null,
     reviewContext: reviewContext || null,
-    priorRevisions: priorRevisions.slice(-5).map((revision) => ({
+    priorRevisions: orderedPlanRevisions(priorRevisions).slice(-5).map((revision) => ({
       id: revision.id,
       revision: revision.revision,
       status: revision.status,

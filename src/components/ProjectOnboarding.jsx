@@ -1,3 +1,4 @@
+import { currentPlanRevision } from "../data/analysisOrdering.js";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnalysisReviewWorkspace } from "./AnalysisReviewWorkspace.jsx";
 import { WorkbookReviewDock } from "./WorkbookReviewDock.jsx";
@@ -196,6 +197,9 @@ function planArrivalPatch(current, threadId, revisionId, { hold = true } = {}) {
     step: questionOpen ? "plan_generating" : "plan_review",
     analysisThreadId: threadId,
     analysisPlanRevisionId: revisionId,
+    ...(current.analysisPlanRevisionId !== revisionId ? {
+      analysisRunId: "", analysisResultId: "", generationError: "",
+    } : {}),
     generationStatus: "idle",
     ...(questionOpen ? {} : {
       contextIndexAtPlanReview: Number.isInteger(current.contextIndexAtPlanReview)
@@ -513,10 +517,7 @@ export function ProjectOnboarding({
       .then((response) => {
         if (cancelled) return;
         const revisions = asArray(response?.planRevisions);
-        const revision = revisions.find((item) => item.id === state.analysisPlanRevisionId)
-          || revisions.findLast((item) => ["awaiting_review", "accepted"].includes(item.status))
-          || revisions.at(-1)
-          || null;
+        const revision = currentPlanRevision(revisions);
         const thread = response?.analysisThread || null;
         if (!thread?.id) {
           throw new Error("The saved analysis thread did not include a reviewable plan.");
@@ -595,9 +596,7 @@ export function ProjectOnboarding({
       .then((response) => {
         if (cancelled) return;
         const thread = response?.analysisThread || null;
-        const revision = response?.currentPlanRevision
-          || asArray(response?.planRevisions).findLast((item) => ["awaiting_review", "accepted"].includes(item.status))
-          || null;
+        const revision = currentPlanRevision([...(asArray(response?.planRevisions)), ...(response?.currentPlanRevision ? [response.currentPlanRevision] : [])]);
         if (thread?.id && !revision?.id && PLAN_DRAFTING_STATUSES.has(thread.status)) {
           setPlanRecoveryChecking(false);
           setAnalysisFlow({ loading: true, error: "", thread, revision: null });
@@ -825,9 +824,7 @@ export function ProjectOnboarding({
       if (onRecoverExperimentPlan) {
         const recovered = await onRecoverExperimentPlan({ request: planRequest });
         const recoveredThread = recovered?.analysisThread || null;
-        const recoveredRevision = recovered?.currentPlanRevision
-          || asArray(recovered?.planRevisions).findLast((item) => ["awaiting_review", "accepted"].includes(item.status))
-          || null;
+        const recoveredRevision = currentPlanRevision([...(asArray(recovered?.planRevisions)), ...(recovered?.currentPlanRevision ? [recovered.currentPlanRevision] : [])]);
         if (recoveredThread?.id && !recoveredRevision?.id && PLAN_DRAFTING_STATUSES.has(recoveredThread.status)) {
           setAnalysisFlow({ loading: true, error: "", thread: recoveredThread, revision: null });
           updateState({
@@ -858,9 +855,7 @@ export function ProjectOnboarding({
         try {
           const recovered = await onRecoverExperimentPlan({ request: planRequest });
           const recoveredThread = recovered?.analysisThread || null;
-          const recoveredRevision = recovered?.currentPlanRevision
-            || asArray(recovered?.planRevisions).findLast((item) => ["awaiting_review", "accepted"].includes(item.status))
-            || null;
+          const recoveredRevision = currentPlanRevision([...(asArray(recovered?.planRevisions)), ...(recovered?.currentPlanRevision ? [recovered.currentPlanRevision] : [])]);
           if (recoveredThread?.id && !recoveredRevision?.id && PLAN_DRAFTING_STATUSES.has(recoveredThread.status)) {
             setAnalysisFlow({ loading: true, error: "", thread: recoveredThread, revision: null });
             updateState({
@@ -922,6 +917,7 @@ export function ProjectOnboarding({
   };
 
   const handleAnalysisWorkflowState = useCallback((workflow) => {
+    if (workflow?.isHistoryView) return;
     if (workflow?.thread || workflow?.revision) {
       setAnalysisFlow((current) => {
         const nextThread = workflow.thread || current.thread;
@@ -945,6 +941,16 @@ export function ProjectOnboarding({
       if (workflow?.revision?.id && current.analysisPlanRevisionId !== workflow.revision.id) patch.analysisPlanRevisionId = workflow.revision.id;
       if (workflow?.run?.id && current.analysisRunId !== workflow.run.id) patch.analysisRunId = workflow.run.id;
       if (workflow?.result?.id && current.analysisResultId !== workflow.result.id) patch.analysisResultId = workflow.result.id;
+      if (workflow?.revision?.status === "awaiting_review") {
+        patch.analysisRunId = "";
+        patch.analysisResultId = "";
+        patch.generationStatus = "idle";
+        patch.generationError = "";
+        patch.step = "plan_review";
+      } else if (workflow?.revision?.id && current.analysisPlanRevisionId !== workflow.revision.id) {
+        patch.analysisRunId = workflow.run?.id || "";
+        patch.analysisResultId = workflow.result?.id || "";
+      }
       if (workflow?.revision?.status === "accepted" && workflow?.run?.id) {
         if (current.generationStatus !== "ready") patch.generationStatus = workflow.previewReady ? "ready" : "working";
         if (["queued", "running"].includes(workflow?.run?.status)) patch.generationError = "";
@@ -954,9 +960,9 @@ export function ProjectOnboarding({
       }
       if (workflow?.previewReady) {
         patch.generationStatus = "ready";
-        if (current.step === "waiting_result") patch.step = "result_review";
+        if (current.step === "waiting_result" || patch.step === "waiting_result") patch.step = "result_review";
       }
-      if (workflow?.error && (workflow?.run?.id || current.generationStatus === "working")) {
+      if (workflow?.revision?.status !== "awaiting_review" && workflow?.error && (workflow?.run?.id || current.generationStatus === "working")) {
         patch.generationStatus = "error";
         patch.generationError = typeof workflow.error === "string"
           ? workflow.error

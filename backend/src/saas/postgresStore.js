@@ -1,3 +1,4 @@
+import { assertCurrentAnalysisPublication } from "./analysisPublicationState.js";
 import { hashPassword } from "./passwords.js";
 import { makeId } from "./ids.js";
 
@@ -3416,6 +3417,15 @@ export class PostgresSaasStore {
       const revision = analysisPlanRevisionFromRow(revisionResult.rows[0]);
       const run = analysisRunFromRow(runResult.rows[0]);
       const storedResult = analysisResultFromRow(storedResultQuery.rows[0]);
+      // The thread lock serializes revision/run creation with this publication.
+      const currentRevisions = await client.query("select * from analysis_plan_revisions where analysis_thread_id = $1 order by revision desc, id desc limit 1", [thread?.id]);
+      const currentRuns = await client.query(`select * from analysis_runs where analysis_thread_id = $1 and accepted_plan_revision_id = $2
+         order by array_position($3::text[], id) desc nulls last, created_at desc, id desc limit 1`,
+        [thread?.id, currentRevisions.rows[0]?.id, thread?.analysisRunIds || []]);
+      assertCurrentAnalysisPublication({ thread, revision, run, result: storedResult,
+        revisions: currentRevisions.rows.map(analysisPlanRevisionFromRow),
+        runs: currentRuns.rows.map(analysisRunFromRow),
+      });
       const resultPackage = input.analysisResult;
       const chart = input.chartSpec;
       if (
@@ -3660,6 +3670,15 @@ export class PostgresSaasStore {
       const revision = analysisPlanRevisionFromRow(revisionResult.rows[0]);
       const run = analysisRunFromRow(runResult.rows[0]);
       const storedResult = analysisResultFromRow(storedResultQuery.rows[0]);
+      // The thread lock serializes revision/run creation with this publication.
+      const currentRevisions = await client.query("select * from analysis_plan_revisions where analysis_thread_id = $1 order by revision desc, id desc limit 1", [thread?.id]);
+      const currentRuns = await client.query(`select * from analysis_runs where analysis_thread_id = $1 and accepted_plan_revision_id = $2
+         order by array_position($3::text[], id) desc nulls last, created_at desc, id desc limit 1`,
+        [thread?.id, currentRevisions.rows[0]?.id, thread?.analysisRunIds || []]);
+      assertCurrentAnalysisPublication({ thread, revision, run, result: storedResult,
+        revisions: currentRevisions.rows.map(analysisPlanRevisionFromRow),
+        runs: currentRuns.rows.map(analysisRunFromRow),
+      });
       const snapshot = input.dataSnapshot;
       const browserView = input.browserView;
       const records = Array.isArray(snapshot?.experimentRecords) ? snapshot.experimentRecords : [];
@@ -3679,6 +3698,7 @@ export class PostgresSaasStore {
         || storedResult.status !== "awaiting_review"
         || storedResult.outputTarget !== "experiment_browser"
         || storedResult.validation?.ok !== true
+        || (storedResult.validation?.errors || []).length
         || input.analysisResult.status !== "accepted"
         || input.analysisRun.status !== "completed"
         || !snapshot?.id

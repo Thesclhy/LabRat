@@ -1,4 +1,5 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from "react";
+﻿import { currentPlanRevision as selectCurrentPlanRevision, latestRevisionRun } from "./data/analysisOrdering.js";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { useCallback } from "react";
 import { DataGrid } from "react-data-grid";
@@ -3432,9 +3433,7 @@ function App() {
       .sort((left, right) => String(right.updatedAt || "").localeCompare(String(left.updatedAt || "")))[0];
     if (!candidate?.id) return null;
     const threadResponse = await getAnalysisThread(candidate.id);
-    const currentPlanRevision = asArray(threadResponse?.planRevisions)
-      .findLast((revision) => ["awaiting_review", "accepted"].includes(revision?.status))
-      || null;
+    const currentPlanRevision = selectCurrentPlanRevision(threadResponse?.planRevisions);
     if (!threadResponse?.analysisThread?.id) return null;
     return {
       ...threadResponse,
@@ -3968,9 +3967,23 @@ function App() {
       setSourceError(err.message || String(err));
     }
   };
-  const openAnalysisReview = ({ thread, revision, run = null, result = null, executionStrategy = "model_generated_python" }) => {
-    if (!thread?.id || !revision?.id) return;
+  const openAnalysisReview = async ({ thread, revision, run = null, result = null, executionStrategy = "model_generated_python" }) => {
+    if (!thread?.id) return;
     if (thread.projectId && thread.projectId !== currentWorkspaceProjectRef.current) return;
+    const requestedProjectId = currentWorkspaceProjectRef.current;
+    if (!revision?.id) {
+      try {
+        const detail = await getAnalysisThread(thread.id);
+        if (requestedProjectId !== currentWorkspaceProjectRef.current) return;
+        revision = selectCurrentPlanRevision(detail.planRevisions);
+        run = latestRevisionRun(detail.analysisRuns, revision?.id, detail.analysisThread);
+        if (!revision) throw new Error("This analysis does not have a reviewable plan yet.");
+        thread = detail.analysisThread || thread;
+      } catch (error) {
+        if (requestedProjectId === currentWorkspaceProjectRef.current) setSourceError(error.message);
+        return;
+      }
+    }
     closeChartReview({ preserveLaunchContext: true });
     setAnalysisReviewState({ thread, revision, run, result, executionStrategy });
     setAgentOpen(false);

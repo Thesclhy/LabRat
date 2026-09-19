@@ -888,3 +888,16 @@ test("chart planning selects duplicate Browser columns by ordered index and sour
   assert.equal(executed.analysisRun.status, "awaiting_result_review");
   assert.deepEqual(executed.analysisResult.result.plotly.data[0].y, [20]);
 });
+
+test("model receives the five latest revisions in numeric order regardless of repository response order", async () => {
+  const { store, project, thread } = await setup();
+  for (let i = 0; i < 7; i += 1) await createAnalysisPlanRevision({ store, project, analysisThreadId: thread.id, actorUserId: "user_1", plan: plan() });
+  const list = store.listAnalysisPlanRevisions.bind(store);
+  store.listAnalysisPlanRevisions = async args => (await list(args)).reverse();
+  await draftAnalysisPlanRevision({ store, project, analysisThreadId: thread.id, actorUserId: "user_1", modelProvider: {
+    draftAnalysisPlan: async request => {
+      assert.deepEqual(request.priorRevisions.map(item => item.revision), [3, 4, 5, 6, 7]);
+      return { ok: true, ...plan() };
+    },
+  } });
+});

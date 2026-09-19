@@ -1,10 +1,28 @@
 # Current Milestone
 
-Status: Public Guest locally verified; hosted publication in progress
+Status: Master-table field and onboarding review fixes verified locally; main publication in progress
 Read when: checking what the next implementation slice should be.
-Last reviewed: 2026-09-15
+Last reviewed: 2026-09-19
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
+
+## Master-table Columns And Onboarding Review Recovery
+
+The approved two-stage repair is complete locally. Region understanding now
+builds the full selected-column catalog using bounded reads; model sampling stays
+bounded, sparse patches retain fields and new hashes cover the full identification
+evidence. Feedback opens the newest plan and clears old onboarding result IDs;
+history cannot execute or publish, and both publication transactions recheck the
+current plan/run/result association.
+
+The isolated delivery branch passes complete frontend 403/403, backend 365
+with four expected skips, Nest 66/66, generated API types, both builds and
+isolated entry smoke. The user requested main publication; unrelated local
+permission work is excluded. The existing main deployment workflow is unchanged. Real browser uploads, model calls, live database concurrency, deployment
+and online publication were not performed. Existing data needs manual region
+re-review and, for published experiments, supplemental missing-column publication
+with reused identities. Contracts and detailed verification: doc/PROGRESS.md.
+
 
 ## Public Guest Access
 

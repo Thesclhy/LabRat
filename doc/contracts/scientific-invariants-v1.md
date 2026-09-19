@@ -1,7 +1,7 @@
 # Scientific Invariants v1
 
 Status: contract
-Last reviewed: 2026-08-23
+Last reviewed: 2026-09-19
 
 ## Stable Meanings
 
@@ -62,6 +62,27 @@ The current source-inspection payload containing both `cells` and derived
 `rows` is a documented legacy implementation detail, not an invariant and not
 a v1 compatibility requirement. Any later compaction must retain values,
 types, formula/display distinctions, ordering and exact cell addresses.
+
+## Current analysis review
+
+The current plan is the maximum numeric revision, independent of API list order.
+For that plan the current run follows the server's append-ordered analysisRunIds;
+createdAt and id provide a deterministic fallback when no sequence is supplied.
+Recent model context contains the five largest revisions in ascending order.
+Public API response ordering is unchanged.
+
+Feedback clears the visible and onboarding-saved run/result/preview and opens the
+new plan for review. Historical viewing cannot replace onboarding's current IDs,
+automatically execute a run, or publish a superseded result. Restoration failure
+keeps publication disabled and offers retry. Late responses from a prior review
+request cannot replace the current workflow.
+
+Publication requires the current accepted plan, its latest run, an exactly
+associated result and preview, explicit successful validation without errors,
+and the server's awaiting_result_review state. Both publishers and their atomic
+store transactions verify the association; database transactions do so after
+locking the thread. Existing authorization, source/head freshness and idempotent
+replay semantics remain in force. This changes no API, table or snapshot shape.
 
 ## Atomicity And Idempotency
 

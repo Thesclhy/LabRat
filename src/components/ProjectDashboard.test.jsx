@@ -3136,11 +3136,17 @@ describe("AgentPanel", () => {
     const createRevision = vi.fn().mockResolvedValue({
       analysisPlanRevision: revision2,
     });
+    const loadThread = vi.fn().mockResolvedValue({
+      analysisThread: { ...analysisThread, status: "awaiting_plan_review" },
+      planRevisions: [revision2, { ...revision1, status: "superseded" }],
+      analysisRuns: [],
+    });
     const acceptPlan = vi.fn().mockResolvedValue({
       analysisPlanRevision: { ...revision2, status: "accepted" },
       analysisRun: { ...run, status: "queued" },
     });
     const executeRun = vi.fn().mockResolvedValue({
+      analysisThread: { ...analysisThread, status: "awaiting_result_review" },
       analysisRun: run,
       analysisResult: result,
     });
@@ -3261,6 +3267,7 @@ describe("AgentPanel", () => {
               PlotComponent={({ traces: previewTraces }) => (
                 <div aria-label="Golden analysis preview">{previewTraces.length} traces</div>
               )}
+              loadThread={loadThread}
               createRevision={createRevision}
               acceptPlan={acceptPlan}
               executeRun={executeRun}
@@ -3304,6 +3311,7 @@ describe("AgentPanel", () => {
       expect(screen.getByText("Revision 2")).toBeTruthy();
       expect(acceptPlan).not.toHaveBeenCalled();
 
+      await waitFor(() => expect(screen.getByRole("button", { name: "Accept plan" }).disabled).toBe(false));
       fireEvent.click(screen.getByRole("button", { name: "Accept plan" }));
       await waitFor(() => expect(acceptPlan).toHaveBeenCalledWith(
         revision2.id,
@@ -3753,8 +3761,10 @@ describe("AgentPanel", () => {
       expect(within(exp33).getByText("Sheet1!P31:BA32 · typed over upstream: F43, G43")).toBeTruthy();
       expect(screen.getByRole("button", { name: "Match again" })).toBeTruthy();
 
-      const stored = JSON.parse(localStorage.getItem(historyKey) || "[]");
-      expect(stored[0].workbookBatch.match.results.map((result) => result.status)).toEqual(["exact", "exact", "formula_mismatch"]);
+      await waitFor(() => {
+        const stored = JSON.parse(localStorage.getItem(historyKey) || "[]");
+        expect(stored[0].workbookBatch.match.results.map((result) => result.status)).toEqual(["exact", "exact", "formula_mismatch"]);
+      });
     } finally {
       global.fetch = originalFetch;
       localStorage.removeItem(historyKey);

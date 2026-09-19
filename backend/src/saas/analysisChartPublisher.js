@@ -1,3 +1,4 @@
+import { assertCurrentAnalysisPublication } from "./analysisPublicationState.js";
 import { validateChartSpecProposal } from "./chartSpecValidation.js";
 import { resolveAnalysisSourceSelections } from "./analysisSourceSelections.js";
 import { resolveExperimentSelections } from "./experimentBrowserAnalysis.js";
@@ -214,6 +215,11 @@ export async function publishAcceptedAnalysisChart({
       409,
     );
   }
+  const [currentRevisions, currentRuns] = await Promise.all([
+    store.listAnalysisPlanRevisions({ projectId: project.id, analysisThreadId: thread.id }),
+    store.listAnalysisRuns({ projectId: project.id, analysisThreadId: thread.id }),
+  ]);
+  assertCurrentAnalysisPublication({ thread, revision: planRevision, run, result, revisions: currentRevisions, runs: currentRuns });
   const sourceSelections = asArray(planRevision.plan?.sourceSelections);
   const experimentSelections = asArray(planRevision.plan?.experimentSelections);
   const frozenInputs = await loadFrozenLinkedTemplateInputs({ store, projectId: project.id, run, planRevision, sourceSelections });
