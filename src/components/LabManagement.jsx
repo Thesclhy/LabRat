@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { createInvitation, listInvitations, revokeInvitation, listLabMembers, removeLabMember, listMemberAccess, setMemberAccess } from "../data/invitationsApi.js";
+import { createInvitation, listInvitations, revokeInvitation, listLabMembers, setLabMemberRole, removeLabMember, listMemberAccess, setMemberAccess } from "../data/invitationsApi.js";
 import { InvitationForm } from "./InvitationForm.jsx";
 
 const roleName = (role) => ({ lab_owner: "Owner", lab_admin: "Administrator", lab_member: "Employee" }[role] || role);
@@ -43,7 +43,7 @@ function InvitationTable({ labId = "" }) {
   </section>;
 }
 
-function MembersTable({ labId }) {
+function MembersTable({ labId, canAppointAdmins = false }) {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [target, setTarget] = useState("");
@@ -62,11 +62,21 @@ function MembersTable({ labId }) {
     catch (err) { setError(err.message); }
     finally { setBusy(false); }
   };
-  return <section><h2>Lab members</h2><p>Removing a member revokes this lab only. Rejoining does not restore old project or group access.</p>
+  const changeRole = async (userId, role) => {
+    if (busy) return;
+    setBusy(true); setError("");
+    try { await setLabMemberRole(labId, userId, role); setMembers((rows) => rows.map((row) => row.user.id === userId ? { ...row, role } : row)); }
+    catch (err) { setError(err.message); }
+    finally { setBusy(false); }
+  };
+  return <section><h2>Lab members</h2><p>Administrators can create projects and manage members, invitations and project access. Removing a member revokes this lab only. Rejoining does not restore old project or group access.</p>
     {error && <p role="alert" className="import-review-error">{error}</p>}
     {loading ? <p>Loading members...</p> : <table className="management-table"><thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Action</th></tr></thead><tbody>
       {members.map(({ user, role }) => <tr key={user.id}><td>{user.displayName}{!user.isActive && " · Disabled"}</td><td>{user.username}</td><td>{roleName(role)}</td><td>
-        {role === "lab_owner" ? "Owner protected" : target === user.id ? <div className="management-actions"><span>End lab access?</span><button disabled={busy} onClick={() => remove(user.id)}>Confirm removal</button><button disabled={busy} onClick={() => setTarget("")}>Cancel</button></div> : <button disabled={busy} onClick={() => setTarget(user.id)}>Remove member</button>}
+        {role === "lab_owner" ? "Owner protected" : target === user.id ? <div className="management-actions"><span>End lab access?</span><button disabled={busy} onClick={() => remove(user.id)}>Confirm removal</button><button disabled={busy} onClick={() => setTarget("")}>Cancel</button></div> : <div className="management-actions">
+          {canAppointAdmins && user.isActive && <button disabled={busy} onClick={() => changeRole(user.id, role === "lab_admin" ? "lab_member" : "lab_admin")}>{role === "lab_admin" ? "Make employee" : "Make administrator"}</button>}
+          <button disabled={busy} onClick={() => setTarget(user.id)}>Remove member</button>
+        </div>}
       </td></tr>)}
     </tbody></table>}
   </section>;
@@ -124,7 +134,7 @@ export function LabManagement({ mode, lab, projects, onClose, onInvitationComple
     <p>{mode === "platform" ? "Platform administration does not grant access to scientific data." : "Access and membership"}</p></div><button onClick={onClose}>Back to projects</button></header>
     {mode === "platform" ? <InvitationTable /> : mode === "invitation" ? <InvitationForm signedIn onComplete={onInvitationComplete} onCancel={onClose} /> : <>
       <nav className="management-tabs" aria-label="Lab management sections">{[["members", "Members"], ["invitations", "Invitations"], ["access", "Project permissions"]].map(([id, label]) => <button key={id} className={section === id ? "active" : ""} onClick={() => setSection(id)}>{label}</button>)}</nav>
-      {section === "members" && <MembersTable labId={lab.id} />}
+      {section === "members" && <MembersTable labId={lab.id} canAppointAdmins={lab.role === "lab_owner"} />}
       {section === "invitations" && <InvitationTable labId={lab.id} />}
       {section === "access" && <ProjectAccess projects={projects} />}
     </>}

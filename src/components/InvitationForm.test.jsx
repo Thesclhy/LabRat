@@ -7,7 +7,7 @@ import * as api from "../data/invitationsApi.js";
 vi.mock("../data/invitationsApi.js", () => ({
   previewInvitation: vi.fn(), registerWithInvitation: vi.fn(), redeemInvitation: vi.fn(),
   createInvitation: vi.fn(), listInvitations: vi.fn(), revokeInvitation: vi.fn(),
-  listLabMembers: vi.fn(), removeLabMember: vi.fn(), listMemberAccess: vi.fn(), setMemberAccess: vi.fn(),
+  listLabMembers: vi.fn(), setLabMemberRole: vi.fn(), removeLabMember: vi.fn(), listMemberAccess: vi.fn(), setMemberAccess: vi.fn(),
 }));
 const code = "x".repeat(43);
 beforeEach(() => { vi.clearAllMocks(); });
@@ -72,4 +72,26 @@ test("platform management works without a lab and only shows a fresh code until 
   expect(await screen.findByLabelText("New invitation code")).toHaveProperty("value", code);
   fireEvent.click(screen.getByRole("button", { name: "Hide code" }));
   expect(screen.queryByLabelText("New invitation code")).toBeNull();
+});
+
+describe("lab member roles", () => {
+  const members = { items: [
+    { user: { id: "u_owner", username: "owner", displayName: "Owner", isActive: true }, role: "lab_owner" },
+    { user: { id: "u_emp", username: "emp", displayName: "Emp", isActive: true }, role: "lab_member" },
+  ] };
+  test("owner promotes an employee to administrator and can demote again", async () => {
+    api.listLabMembers.mockResolvedValue(members);
+    api.setLabMemberRole.mockResolvedValue({ membership: { userId: "u_emp", role: "lab_admin", status: "active" } });
+    render(<LabManagement mode="lab" lab={{ id: "lab_1", name: "Lab", role: "lab_owner" }} projects={[]} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Make administrator" }));
+    await screen.findByRole("button", { name: "Make employee" });
+    expect(api.setLabMemberRole).toHaveBeenCalledWith("lab_1", "u_emp", "lab_admin");
+    expect(screen.getByText("Administrator")).toBeTruthy();
+  });
+  test("administrators are not offered role changes", async () => {
+    api.listLabMembers.mockResolvedValue(members);
+    render(<LabManagement mode="lab" lab={{ id: "lab_1", name: "Lab", role: "lab_admin" }} projects={[]} />);
+    await screen.findByRole("button", { name: "Remove member" });
+    expect(screen.queryByRole("button", { name: "Make administrator" })).toBeNull();
+  });
 });

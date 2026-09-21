@@ -114,6 +114,10 @@ authorization loss clears the workspace. Backend checks remain authoritative.
    create a second account or reset their password. **Members → Remove
    member** ends lab access. Revoking an already used code cannot remove
    its recipient.
+6. To let an employee create projects, the owner uses **Members → Make
+   administrator** (PUT `/labs/{labId}/members/{userId}` with `role`). Only the
+   owner sees this control; **Make employee** reverses it. The promoted user
+   sees the change on their next sign-in or page reload.
 
 Code disclosure is once-only: if it is lost before redemption, revoke it and
 issue another code. Verification and reproducible local acceptance are recorded

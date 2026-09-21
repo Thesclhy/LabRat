@@ -13,7 +13,8 @@ export const revokeInvitation = (labId, invitationId) => labId
   ? apiV1Request("post", "/api/v1/labs/{labId}/invitations/{invitationId}/revoke", { pathParams: { labId, invitationId } })
   : apiV1Request("post", "/api/v1/admin/invitations/{invitationId}/revoke", { pathParams: { invitationId } });
 export const listLabMembers = (labId) => apiV1Request("get", "/api/v1/labs/{labId}/members", { pathParams: { labId } });
-export const removeLabMember = (labId, userId) => apiV1Request("delete", "/api/v1/labs/{labId}/members/{userId}", { pathParams: { labId, userId } });
+export const setLabMemberRole = (labId, userId, role) => apiV1Request("put", "/api/v1/labs/{labId}/members/{userId}", { pathParams: { labId, userId }, body: { role } });
+export const removeLabMember =(labId, userId) => apiV1Request("delete", "/api/v1/labs/{labId}/members/{userId}", { pathParams: { labId, userId } });
 export const listMemberAccess = (projectId, cursor = "") => apiV1Request("get", "/api/v1/projects/{projectId}/member-access", {
   pathParams: { projectId }, query: { limit: 30, ...(cursor ? { cursor } : {}) },
 });
