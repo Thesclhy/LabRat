@@ -342,7 +342,7 @@ function summarizedRange(sourceRef) {
   };
 }
 
-function buildRows(entries, columns, annotationsByExperimentId = new Map(), customValues = [], linkedRegions = []) {
+function buildRows(entries, columns, annotationsByExperimentId = new Map(), customValues = [], linkedRegions = [], manualExperiments = [], manualValues = []) {
   const fieldColumnIds = new Set(columns.slice(1).map((column) => column.id));
   const customValuesByCell = new Map(asArray(customValues).map((value) => [`${value.experimentId}:${value.customColumnId}`, value]));
   const linkedByExperimentAndColumn = new Map();
@@ -351,7 +351,92 @@ function buildRows(entries, columns, annotationsByExperimentId = new Map(), cust
     if (!linkedByExperimentAndColumn.has(key)) linkedByExperimentAndColumn.set(key, []);
     linkedByExperimentAndColumn.get(key).push(linked);
   });
-  return entries.map(({ head, snapshot, identity, record }) => {
+  // Linked-data and documentation cells are keyed by experiment identity, so
+  // accepted rows and manually logged rows fill them the same way.
+  const fillIdentityCells = (cells, experimentId) => {
+    columns.filter((column) => column.isLinkedData).forEach((column) => {
+      const linked = linkedByExperimentAndColumn.get(`${experimentId}:${column.id}`) || [];
+      cells[column.id] = linked.length ? {
+        value: linked.map(linkedRegionCellText).join("; "),
+        formattedValue: linked.map(linkedRegionCellText).join("; "),
+        isLinkedData: true,
+        linkedRegions: linked.map((item) => clone(item)),
+      } : null;
+    });
+    columns.filter((column) => column.isCustom).forEach((column) => {
+      const customValue = customValuesByCell.get(`${experimentId}:${column.customColumnId}`);
+      cells[column.id] = customValue ? {
+        value: customValue.value,
+        formattedValue: customValue.value,
+        version: customValue.version,
+        isCustom: true,
+      } : { value: "", formattedValue: "", version: 0, isCustom: true };
+    });
+  };
+  const rowAnnotation = (experimentId) => {
+    const annotation = annotationsByExperimentId.get(experimentId) || null;
+    return annotation ? {
+      note: annotation.note || "",
+      color: annotation.color || "amber",
+      updatedAt: annotation.updatedAt || null,
+    } : null;
+  };
+  const acceptedExperimentIds = new Set(entries.map(({ identity }) => identity.id));
+  // A manually logged row has no DataSnapshot head: every accepted-data cell
+  // stays empty and only identity-keyed cells carry values. Once accepted data
+  // publishes the same identity, the accepted row replaces it.
+  const columnsById = new Map(columns.map((column) => [column.id, column]));
+  const manualValuesByExperiment = new Map();
+  asArray(manualValues).forEach((manualValue) => {
+    if (!manualValuesByExperiment.has(manualValue.experimentId)) manualValuesByExperiment.set(manualValue.experimentId, []);
+    manualValuesByExperiment.get(manualValue.experimentId).push(manualValue);
+  });
+  const manualRows = asArray(manualExperiments)
+    .filter((manual) => manual?.experimentId && !acceptedExperimentIds.has(manual.experimentId))
+    .map((manual) => {
+      const cells = Object.fromEntries([...fieldColumnIds].map((columnId) => [columnId, null]));
+      // Hand-typed text for accepted-data columns. It is shown as typed and
+      // flagged isManual; it is never a snapshot field.
+      asArray(manualValuesByExperiment.get(manual.experimentId)).forEach((manualValue) => {
+        const column = columnsById.get(manualValue.columnId);
+        if (!column || column.isCustom || column.isLinkedData || column.id === "experiment") return;
+        cells[column.id] = {
+          value: manualValue.value,
+          formattedValue: manualValue.value,
+          missingReason: null,
+          confidence: null,
+          warningCount: 0,
+          version: manualValue.version,
+          isManual: true,
+        };
+      });
+      fillIdentityCells(cells, manual.experimentId);
+      return {
+        experimentId: manual.experimentId,
+        label: manual.label || manual.experimentId,
+        sourceLabel: manual.label || manual.experimentId,
+        aliases: [...new Set(asArray(manual.aliases).filter(Boolean))],
+        origin: "manual",
+        manualEntry: {
+          id: manual.id,
+          note: manual.note || "",
+          version: manual.version || 1,
+          createdAt: manual.createdAt || null,
+          createdBy: manual.createdBy || null,
+          createdByName: manual.createdByName || null,
+        },
+        dataSnapshotId: null,
+        acceptedAt: null,
+        cells,
+        seriesInventory: [],
+        linkedRegionCount: asArray(linkedRegions).filter((linked) => linked.linkedExperimentId === manual.experimentId).length,
+        warningCount: 0,
+        sourceRanges: [],
+        headId: null,
+        annotation: rowAnnotation(manual.experimentId),
+      };
+    });
+  const acceptedRows = entries.map(({ head, snapshot, identity, record }) => {
     const cells = Object.fromEntries([...fieldColumnIds].map((columnId) => [columnId, null]));
     asArray(record.fields).forEach((field) => {
       const columnId = experimentFieldColumnId(field);
@@ -367,30 +452,14 @@ function buildRows(entries, columns, annotationsByExperimentId = new Map(), cust
         numericScale: field.numericScale || null,
       };
     });
-    columns.filter((column) => column.isLinkedData).forEach((column) => {
-      const linked = linkedByExperimentAndColumn.get(`${identity.id}:${column.id}`) || [];
-      cells[column.id] = linked.length ? {
-        value: linked.map(linkedRegionCellText).join("; "),
-        formattedValue: linked.map(linkedRegionCellText).join("; "),
-        isLinkedData: true,
-        linkedRegions: linked.map((item) => clone(item)),
-      } : null;
-    });
-    columns.filter((column) => column.isCustom).forEach((column) => {
-      const customValue = customValuesByCell.get(`${identity.id}:${column.customColumnId}`);
-      cells[column.id] = customValue ? {
-        value: customValue.value,
-        formattedValue: customValue.value,
-        version: customValue.version,
-        isCustom: true,
-      } : { value: "", formattedValue: "", version: 0, isCustom: true };
-    });
-    const annotation = annotationsByExperimentId.get(identity.id) || null;
+    fillIdentityCells(cells, identity.id);
     return {
       experimentId: identity.id,
       label: identity.canonicalLabel || record.label || identity.id,
       sourceLabel: record.label || identity.canonicalLabel || identity.id,
       aliases: [...new Set([...asArray(identity.aliases), ...asArray(record.aliases)].filter(Boolean))],
+      origin: "snapshot",
+      manualEntry: null,
       dataSnapshotId: snapshot.id,
       acceptedAt: snapshot.acceptedAt,
       cells,
@@ -401,13 +470,10 @@ function buildRows(entries, columns, annotationsByExperimentId = new Map(), cust
         + asArray(record.series).reduce((total, series) => total + asArray(series.warnings).length, 0),
       sourceRanges: asArray(record.sourceRefs).map(summarizedRange),
       headId: head.id,
-      annotation: annotation ? {
-        note: annotation.note || "",
-        color: annotation.color || "amber",
-        updatedAt: annotation.updatedAt || null,
-      } : null,
+      annotation: rowAnnotation(identity.id),
     };
   });
+  return [...acceptedRows, ...manualRows];
 }
 
 function cellValue(row, columnId) {
@@ -469,6 +535,8 @@ export function buildExperimentProjection({
   experimentCustomColumns = [],
   experimentCustomValues = [],
   experimentLinkedRegions = [],
+  manualExperiments = [],
+  manualExperimentValues = [],
   starredOnly = false,
   cursor = null,
   limit = DEFAULT_LIMIT,
@@ -476,7 +544,7 @@ export function buildExperimentProjection({
   const entries = resolveActiveExperimentRecords({ projectId, dataSnapshots, experimentIdentities, experimentSnapshotHeads });
   const columns = buildColumns(entries, experimentCustomColumns, experimentLinkedRegions);
   const annotationsByExperimentId = new Map(asArray(experimentAnnotations).map((annotation) => [annotation.experimentId, annotation]));
-  const allRows = buildRows(entries, columns, annotationsByExperimentId, experimentCustomValues, experimentLinkedRegions);
+  const allRows = buildRows(entries, columns, annotationsByExperimentId, experimentCustomValues, experimentLinkedRegions, manualExperiments, manualExperimentValues);
   const normalizedSearch = text(search).toLowerCase();
   const normalizedFilters = asArray(filters).map(canonicalFilter).filter((filter) => filter.columnId);
   const normalizedSort = asArray(sort).map(canonicalSort).slice(0, 3);

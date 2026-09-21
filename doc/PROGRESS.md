@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-09-19
+Last reviewed: 2026-09-20
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -12,6 +12,26 @@ Keep entries concise, newest first, and include:
 - meaningful changes
 - verification
 - follow-ups or residual risk
+
+## 2026-09-20 — Experiment Browser manual rows (Add row)
+
+- User requested an Add row action so a new experiment can be logged by hand,
+  explicitly not for chart creation. Added migration 032 `manual_experiments`,
+  POST/PATCH/DELETE `/projects/{projectId}/experiments` (full-project propose),
+  projection rows with `origin`/`manualEntry`, the Add row form, a Manual badge
+  and a manual-row drawer. Contract: `doc/contracts/manual-experiment-rows-v1.md`.
+- Manual rows have no snapshot head, so analysis, data plans and charts never
+  load them; accepted data published under the same name replaces the manual row
+  and keeps its custom values. Implemented in API v1 only, following the
+  invitation work; the legacy rollback server does not expose these routes.
+- Follow-up the same session: the add-row form was hidden by the three-row grid
+  layout (moved into the toolbar), and the user asked to type into every cell, so
+  migration 033 `manual_experiment_values` and PUT `.../manual-values` store
+  display-only text for accepted-data columns on manual rows, single-click to edit.
+- Also fixed the Browser API client reading `experimentCustomColumn` /
+  `experimentCustomValue` while v1 returns `customColumn` / `customValue`.
+- Same day: lab owners can promote members to administrator from Lab management.
+- Verification is recorded in the delivery summary of this change.
 
 ## 2026-09-19 — Main delivery of master-table and onboarding fixes
 

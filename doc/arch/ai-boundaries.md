@@ -136,6 +136,11 @@ inputs; it does not authorize ChartSpec publication.
   source pointers, identity decisions, and stale heads before writes.
 - Only explicit result acceptance can atomically publish DataSnapshot v4 and a
   BrowserView.
+- Manually logged Browser rows (`doc/contracts/manual-experiment-rows-v1.md`)
+  are entered by people through the authenticated API only. AI must not create,
+  edit or delete them. They are not published data: they have no DataSnapshot or
+  head, are excluded from every DataPlan, analysis and chart input, and must not
+  be presented as accepted experiment records.
 
 ## Analysis Planning Rules
 

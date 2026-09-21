@@ -1,19 +1,24 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createExperimentCustomColumn,
+  createManualExperiment,
   deleteExperimentCustomColumn,
+  deleteManualExperiment,
   deleteExperimentAnnotation,
   getExperimentBrowserDetail,
   getProjectBrowserConfig,
   listExperimentBrowserRows,
   saveExperimentAnnotation,
   saveExperimentCustomValue,
+  saveManualExperimentValue,
   updateExperimentCustomColumn,
+  updateManualExperiment,
   updateProjectBrowserConfig,
 } from "../data/experimentBrowserApi.js";
 import { ExperimentAnnotationStar } from "./ExperimentAnnotationStar.jsx";
 import { ExperimentDetailDrawer } from "./ExperimentDetailDrawer.jsx";
 import { ExperimentGridHeaderCell } from "./ExperimentGridHeaderCell.jsx";
+import { ManualExperimentDrawer } from "./ManualExperimentDrawer.jsx";
 
 const PAGE_LIMIT = 200;
 const ROW_HEIGHT = 42;
@@ -95,7 +100,7 @@ function HighlightedSearchText({ value, search }) {
   return parts;
 }
 
-function EditableCustomCell({ row, column, search, editable, onSave }) {
+function EditableCustomCell({ row, column, search, editable, onSave, singleClick = false, unit = "" }) {
   const cell = row.cells?.[column.id];
   const value = String(cell?.formattedValue ?? cell?.value ?? "");
   const [editing, setEditing] = useState(false);
@@ -124,11 +129,17 @@ function EditableCustomCell({ row, column, search, editable, onSave }) {
       if (event.key === "Escape") { event.preventDefault(); cancelledRef.current = true; setDraft(value); setEditing(false); }
     }}
   />;
+  const startEditing = (event) => { if (!editable) return; event.stopPropagation(); cancelledRef.current = false; setDraft(value); setEditing(true); };
+  // Manually added rows edit on one click; every cell is theirs to fill in.
   return <span
-    className="experiment-grid-cell-value experiment-custom-cell-value"
-    onClick={(event) => event.stopPropagation()}
-    onDoubleClick={(event) => { if (!editable) return; event.stopPropagation(); cancelledRef.current = false; setDraft(value); setEditing(true); }}
-  ><HighlightedSearchText value={value} search={search} /></span>;
+    className={`experiment-grid-cell-value experiment-custom-cell-value ${singleClick && editable ? "is-click-to-edit" : ""}`}
+    role={singleClick && editable ? "button" : undefined}
+    tabIndex={singleClick && editable ? 0 : undefined}
+    aria-label={singleClick && editable ? `Edit ${column.label} for ${row.label}` : undefined}
+    onClick={(event) => { event.stopPropagation(); if (singleClick) startEditing(event); }}
+    onKeyDown={(event) => { if (singleClick && event.key === "Enter") startEditing(event); }}
+    onDoubleClick={startEditing}
+  >{value ? <><HighlightedSearchText value={value} search={search} />{unit ? ` ${unit}` : ""}</> : singleClick && editable ? <span className="experiment-cell-placeholder">Click to add</span> : null}</span>;
 }
 
 function filterValue(column, value) {
@@ -198,6 +209,10 @@ export function ExperimentBrowser({
   updateCustomColumn = updateExperimentCustomColumn,
   deleteCustomColumn = deleteExperimentCustomColumn,
   saveCustomValue = saveExperimentCustomValue,
+  createManualRow = createManualExperiment,
+  updateManualRow = updateManualExperiment,
+  deleteManualRow = deleteManualExperiment,
+  saveManualValue = saveManualExperimentValue,
 }) {
   const [columns, setColumns] = useState([]);
   const [columnSettings, setColumnSettings] = useState([]);
@@ -227,6 +242,10 @@ export function ExperimentBrowser({
   const [sharedConfigVersion, setSharedConfigVersion] = useState(0);
   const [sharedConfigLoaded, setSharedConfigLoaded] = useState(false);
   const [canEditSharedConfig, setCanEditSharedConfig] = useState(false);
+  const [addingRow, setAddingRow] = useState(false);
+  const [newRowLabel, setNewRowLabel] = useState("");
+  const [newRowBusy, setNewRowBusy] = useState(false);
+  const [newRowError, setNewRowError] = useState("");
   const [dragColumnId, setDragColumnId] = useState("");
   const [dropTarget, setDropTarget] = useState(null);
   const [viewportHeight, setViewportHeight] = useState(DEFAULT_VIEWPORT_HEIGHT);
@@ -327,8 +346,11 @@ export function ExperimentBrowser({
     return () => controller.abort();
   }, [fetchPage, projectId, sharedConfigLoaded]);
 
+  const detailRow = detailId ? rows.find((row) => row.experimentId === detailId) || null : null;
+  const detailIsManual = detailRow?.origin === "manual";
+
   useEffect(() => {
-    if (!detailId || !projectId) return undefined;
+    if (!detailId || !projectId || detailIsManual) return undefined;
     const cached = detailCache.get(detailId);
     if (cached) {
       setDetail(cached);
@@ -350,7 +372,7 @@ export function ExperimentBrowser({
       })
       .finally(() => setDetailLoading(false));
     return () => controller.abort();
-  }, [detailCache, detailId, loadDetail, projectId]);
+  }, [detailCache, detailId, detailIsManual, loadDetail, projectId]);
 
   const displayColumns = useMemo(() => {
     const settingsById = new Map(columnSettings.map((setting) => [setting.columnId, setting]));
@@ -504,6 +526,75 @@ export function ExperimentBrowser({
       setRows((current) => current.map((item) => item.experimentId === row.experimentId ? { ...item, cells: { ...item.cells, [column.id]: { value: saved?.value ?? value, formattedValue: saved?.value ?? value, version: saved?.version || 1, isCustom: true } } } : item));
       if (search || filters.length || sort.length) await fetchPage(null, false);
     } catch (requestError) { setError(errorMessage(requestError, "Custom cell could not be saved.")); }
+  };
+
+  const closeAddRow = () => { setAddingRow(false); setNewRowLabel(""); setNewRowError(""); };
+
+  const addManualRow = async () => {
+    const label = newRowLabel.trim();
+    if (!canEditSharedConfig || !label || newRowBusy) return;
+    setNewRowBusy(true);
+    setNewRowError("");
+    try {
+      const manual = await createManualRow(projectId, { label });
+      if (!manual) return;
+      // A manual row has no accepted data, so its data cells start empty until someone types into them.
+      const cells = Object.fromEntries(columns.filter((column) => column.id !== "experiment")
+        .map((column) => [column.id, column.isCustom ? { value: "", formattedValue: "", version: 0, isCustom: true } : null]));
+      setRows((current) => [{
+        experimentId: manual.experimentId,
+        label: manual.label,
+        sourceLabel: manual.label,
+        aliases: [manual.label],
+        origin: "manual",
+        manualEntry: { id: manual.id, note: manual.note || "", version: manual.version, createdAt: manual.createdAt, createdBy: manual.createdBy, createdByName: manual.createdByName || null },
+        dataSnapshotId: null,
+        acceptedAt: null,
+        cells,
+        seriesInventory: [],
+        linkedRegionCount: 0,
+        warningCount: 0,
+        sourceRanges: [],
+        headId: null,
+        annotation: null,
+      }, ...current.filter((row) => row.experimentId !== manual.experimentId)]);
+      setTotalCount((count) => count + 1);
+      closeAddRow();
+      if (gridViewportRef.current) gridViewportRef.current.scrollTop = 0;
+    } catch (requestError) { setNewRowError(errorMessage(requestError, "The row could not be added.")); }
+    finally { setNewRowBusy(false); }
+  };
+
+  const saveManualRow = async (row, changes) => {
+    const manual = await updateManualRow(projectId, row.experimentId, {
+      ...(changes.label !== row.label ? { label: changes.label } : {}),
+      ...(changes.note !== (row.manualEntry?.note || "") ? { note: changes.note } : {}),
+      expectedVersion: row.manualEntry?.version || 1,
+    });
+    if (!manual) return;
+    setRows((current) => current.map((item) => item.experimentId === row.experimentId ? {
+      ...item,
+      label: manual.label,
+      sourceLabel: manual.label,
+      aliases: [manual.label],
+      manualEntry: { ...item.manualEntry, note: manual.note || "", version: manual.version },
+    } : item));
+  };
+
+  const removeManualRow = async (row) => {
+    await deleteManualRow(projectId, row.experimentId);
+    setRows((current) => current.filter((item) => item.experimentId !== row.experimentId));
+    setTotalCount((count) => Math.max(0, count - 1));
+    setDetailId(null);
+  };
+
+  const saveManualCell = async (row, column, value) => {
+    try {
+      const currentCell = row.cells?.[column.id];
+      const saved = await saveManualValue(projectId, row.experimentId, column.id, { value, expectedVersion: currentCell?.version || 0 });
+      setRows((current) => current.map((item) => item.experimentId === row.experimentId ? { ...item, cells: { ...item.cells, [column.id]: { value: saved?.value ?? value, formattedValue: saved?.value ?? value, version: saved?.version || (currentCell?.version || 0) + 1, isManual: true } } } : item));
+      if (search || filters.length || sort.length) await fetchPage(null, false);
+    } catch (requestError) { setError(errorMessage(requestError, "The cell could not be saved.")); }
   };
 
   const applyFilter = () => {
@@ -660,7 +751,7 @@ export function ExperimentBrowser({
         <header className="experiment-browser-toolbar">
           <div>
             <h1>Experiment Browser</h1>
-            <p>{rows.length} loaded of {totalCount} accepted experiment records. Click a row for source-backed detail.</p>
+            <p>{rows.length} loaded of {totalCount} experiment records. Click a row for detail.</p>
           </div>
           <div className="experiment-browser-toolbar-actions">
             {onOpenImportReview ? <button type="button" onClick={onOpenImportReview}>Import workbook</button> : null}
@@ -669,16 +760,44 @@ export function ExperimentBrowser({
                 Add or update data
               </button>
             ) : null}
+            <button type="button" disabled={!canEditSharedConfig || addingRow} title={canEditSharedConfig ? "Log an experiment by hand" : viewError ? "Edit access could not be checked. Reload the page." : "You need Edit or Approve access to this project to add rows."} onClick={() => setAddingRow(true)}>Add row</button>
             <button type="button" disabled={!canEditSharedConfig} onClick={addCustomColumn}>Add column</button>
           </div>
+          {addingRow && (
+            <form
+              className="experiment-add-row"
+              aria-label="Add experiment row"
+              onSubmit={(event) => { event.preventDefault(); addManualRow(); }}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") closeAddRow();
+                if (event.key === "Enter" && event.target.tagName === "INPUT") { event.preventDefault(); addManualRow(); }
+              }}
+            >
+              <label htmlFor="experiment-add-row-name">New experiment name</label>
+              <input
+                id="experiment-add-row-name"
+                autoFocus
+                value={newRowLabel}
+                maxLength={200}
+                placeholder="e.g. Exp 24 pilot"
+                disabled={newRowBusy}
+                onChange={(event) => { setNewRowLabel(event.target.value); setNewRowError(""); }}
+              />
+              <button type="submit" className="primary" disabled={newRowBusy || !newRowLabel.trim()}>{newRowBusy ? "Adding..." : "Add"}</button>
+              <button type="button" disabled={newRowBusy} onClick={closeAddRow}>Cancel</button>
+              <small>Manual rows are a lab log: click any cell to fill it in. They are not used for charts or analysis.</small>
+              {newRowError && <p className="browser-error" role="alert">{newRowError}</p>}
+            </form>
+          )}
         </header>
+
 
         {error && <div className="browser-error" role="alert">{error}</div>}
         {(loading || viewLoading) && !rows.length && <div className="browser-status">Loading experiments...</div>}
         {!loading && !viewLoading && !error && !rows.length && (
           <div className="experiment-browser-empty">
-            <h2>No published experiments</h2>
-            <p>Confirm workbook semantics and publish reviewed experiment records to populate this table.</p>
+            <h2>No experiments yet</h2>
+            <p>Confirm workbook semantics and publish reviewed experiment records to populate this table{canEditSharedConfig ? ", or use Add row to log an experiment by hand" : ""}.</p>
           </div>
         )}
         {!viewLoading && !error && rows.length > 0 && (
@@ -733,7 +852,7 @@ export function ExperimentBrowser({
                   return (
                     <div
                       role="row"
-                      className={`experiment-grid-row ${row.annotation ? `has-annotation annotation-${row.annotation.color || "amber"}` : ""}`}
+                      className={`experiment-grid-row ${row.origin === "manual" ? "is-manual" : ""} ${row.annotation ? `has-annotation annotation-${row.annotation.color || "amber"}` : ""}`}
                       key={row.experimentId}
                       tabIndex={0}
                       style={{ gridTemplateColumns, height: ROW_HEIGHT, transform: `translateY(${rowIndex * ROW_HEIGHT}px)` }}
@@ -752,11 +871,13 @@ export function ExperimentBrowser({
                       {visibleColumns.map((column) => (
                         <div role="cell" key={column.id} title={column.isCustom ? String(row.cells?.[column.id]?.value ?? "") : displayCell(row, column)}>
                           {column.id === "experiment" ? (
-                            <button type="button" className="experiment-row-link" aria-label={`Open ${row.label}`} onClick={(event) => { event.stopPropagation(); setDetailId(row.experimentId); }}><HighlightedSearchText value={row.label} search={search} /></button>
+                            <button type="button" className="experiment-row-link" aria-label={`Open ${row.label}`} onClick={(event) => { event.stopPropagation(); setDetailId(row.experimentId); }}><HighlightedSearchText value={row.label} search={search} />{row.origin === "manual" && <span className="experiment-manual-badge" title="Manually added row. Not used for charts or analysis.">Manual</span>}</button>
                           ) : column.isCustom ? (
-                            <EditableCustomCell row={row} column={column} search={search} editable={canEditSharedConfig} onSave={(value) => saveCustomCell(row, column, value)} />
+                            <EditableCustomCell row={row} column={column} search={search} editable={canEditSharedConfig} singleClick={row.origin === "manual"} onSave={(value) => saveCustomCell(row, column, value)} />
                           ) : column.isLinkedData ? (
                             <LinkedDataCell row={row} column={column} onOpenSourceRange={onOpenSourceRange} />
+                          ) : row.origin === "manual" ? (
+                            <EditableCustomCell row={row} column={column} search={search} editable={canEditSharedConfig} singleClick unit={column.unit || ""} onSave={(value) => saveManualCell(row, column, value)} />
                           ) : <span className="experiment-grid-cell-value"><HighlightedSearchText value={displayCell(row, column)} search={search} /></span>}
                         </div>
                       ))}
@@ -774,7 +895,16 @@ export function ExperimentBrowser({
         )}
       </main>
 
-      {detailId && (
+      {detailId && detailIsManual && (
+        <ManualExperimentDrawer
+          row={detailRow}
+          editable={canEditSharedConfig}
+          onSave={(changes) => saveManualRow(detailRow, changes)}
+          onDelete={() => removeManualRow(detailRow)}
+          onClose={() => setDetailId(null)}
+        />
+      )}
+      {detailId && !detailIsManual && (
         <ExperimentDetailDrawer
           detail={detail}
           loading={detailLoading}

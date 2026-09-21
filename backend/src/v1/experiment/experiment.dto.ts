@@ -50,6 +50,23 @@ export class SaveExperimentCustomValueDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) expectedVersion?: number;
 }
 
+export class CreateManualExperimentDto {
+  @IsString() @IsNotEmpty() @MaxLength(200) label!: string;
+  @IsOptional() @IsString() @MaxLength(2000) note?: string;
+}
+
+export class UpdateManualExperimentDto {
+  @IsOptional() @IsString() @IsNotEmpty() @MaxLength(200) label?: string;
+  @IsOptional() @IsString() @MaxLength(2000) note?: string;
+  @Type(() => Number) @IsInt() @Min(1) expectedVersion!: number;
+}
+
+export class SaveManualExperimentValueDto {
+  @IsString() @IsNotEmpty() @MaxLength(400) columnId!: string;
+  @IsString() @MaxLength(2000) value!: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) expectedVersion?: number;
+}
+
 export class ProjectBrowserConfigDto {
   @Type(() => Number) @IsInt() @Min(0) expectedVersion!: number;
   @IsObject() payload!: Record<string, unknown>;

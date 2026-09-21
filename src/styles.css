@@ -9878,6 +9878,84 @@ tbody tr:hover {
   white-space: nowrap;
   font-weight: 600;
 }
+.experiment-custom-cell-value.is-click-to-edit {
+  display: block;
+  width: 100%;
+  min-height: 20px;
+  cursor: text;
+}
+.experiment-cell-placeholder {
+  color: var(--muted);
+  font-size: 11px;
+  opacity: 0;
+}
+.experiment-grid-row:hover .experiment-cell-placeholder,
+.experiment-custom-cell-value.is-click-to-edit:focus .experiment-cell-placeholder {
+  opacity: 0.8;
+}
+.experiment-manual-badge {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  background: var(--color-surface-muted, var(--panel));
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+.experiment-browser-toolbar {
+  flex-wrap: wrap;
+}
+.experiment-add-row {
+  display: flex;
+  flex: 1 0 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+}
+.experiment-add-row label {
+  font-size: 12px;
+  font-weight: 600;
+}
+.experiment-add-row input {
+  flex: 1 1 220px;
+  min-width: 160px;
+}
+.experiment-add-row small {
+  flex: 1 0 100%;
+  color: var(--muted);
+  font-size: 11px;
+}
+.experiment-add-row .browser-error {
+  flex: 1 0 100%;
+  margin: 0;
+  padding: 8px 10px;
+}
+.manual-experiment-form {
+  display: grid;
+  gap: 12px;
+}
+.manual-experiment-form label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.manual-experiment-form textarea {
+  resize: vertical;
+}
+.manual-experiment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
 .experiment-load-more {
   display: block;
   margin: 12px auto 0;

@@ -849,6 +849,80 @@ paths:
               schema: { $ref: "#/components/schemas/ExperimentDetail" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Experiment]
+      operationId: updateManualExperiment
+      x-labrat-capability: propose_full_project
+      description: Rename a manually logged row or edit its note. Accepted-data rows return 409 experiment_not_manual.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateManualExperimentRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/ManualExperimentObject" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      tags: [Experiment]
+      operationId: deleteManualExperiment
+      x-labrat-capability: propose_full_project
+      description: Delete a manually logged row with its documentation values and annotations. Accepted-data rows return 409 experiment_not_manual.
+      responses:
+        "200": { $ref: "#/components/responses/DeletedResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/projects/{projectId}/experiments/{experimentId}/manual-values:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectId" }
+      - { $ref: "#/components/parameters/ExperimentId" }
+    put:
+      tags: [Experiment]
+      operationId: saveManualExperimentValue
+      x-labrat-capability: propose_full_project
+      description: >-
+        Type a value into an accepted-data column of a manually logged row. The
+        value is display-only text, never part of a DataSnapshot, and never an
+        analysis or chart input. Accepted-data rows return 409 experiment_not_manual.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SaveManualExperimentValueRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/ManualExperimentValueObject" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/projects/{projectId}/experiments:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+    post:
+      tags: [Experiment]
+      operationId: createManualExperiment
+      x-labrat-capability: propose_full_project
+      description: >-
+        Log an Experiment Browser row by hand. The row has no DataSnapshot and is
+        never an analysis or chart input. A name that already identifies an
+        experiment returns 409 experiment_label_conflict.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateManualExperimentRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/ManualExperimentObject" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
   /api/v1/projects/{projectId}/experiment-annotations:
     parameters: [{ $ref: "#/components/parameters/ProjectId" }]
     get:
@@ -2815,6 +2889,26 @@ components:
             required: [customColumn]
             properties:
               customColumn: { $ref: "#/components/schemas/ExperimentCustomColumn" }
+    ManualExperimentValueObject:
+      description: Versioned hand-typed value for one column of a manually logged row.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [manualValue]
+            properties:
+              manualValue: { $ref: "#/components/schemas/ManualExperimentValue" }
+    ManualExperimentObject:
+      description: Manually logged Experiment Browser row.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [manualExperiment]
+            properties:
+              manualExperiment: { $ref: "#/components/schemas/ManualExperiment" }
     ExperimentCustomValueObject:
       description: Versioned custom value for one Experiment and custom column.
       content:
@@ -3925,6 +4019,9 @@ components:
         warningCount: { type: integer, minimum: 0 }
         version: { type: integer, minimum: 0 }
         isCustom: { type: boolean }
+        isManual:
+          type: boolean
+          description: Hand-typed text on a manually logged row; not snapshot data.
     SeriesInventoryItem:
       type: object
       additionalProperties: false
@@ -3958,14 +4055,22 @@ components:
     ExperimentProjectionRow:
       type: object
       additionalProperties: false
-      required: [experimentId, label, sourceLabel, aliases, dataSnapshotId, acceptedAt, cells, seriesInventory, warningCount, sourceRanges, headId, annotation]
+      required: [experimentId, label, sourceLabel, aliases, origin, manualEntry, dataSnapshotId, acceptedAt, cells, seriesInventory, warningCount, sourceRanges, headId, annotation]
       properties:
         experimentId: { $ref: "#/components/schemas/OpaqueId" }
         label: { type: string }
         sourceLabel: { type: string }
         aliases: { type: array, items: { type: string }, uniqueItems: true }
-        dataSnapshotId: { $ref: "#/components/schemas/OpaqueId" }
-        acceptedAt: { $ref: "#/components/schemas/Timestamp" }
+        origin:
+          type: string
+          enum: [snapshot, manual]
+          description: manual rows were logged by hand; dataSnapshotId, acceptedAt and headId are null for them.
+        manualEntry:
+          oneOf:
+            - { $ref: "#/components/schemas/ManualExperimentEntry" }
+            - type: "null"
+        dataSnapshotId: { $ref: "#/components/schemas/NullableOpaqueId" }
+        acceptedAt: { $ref: "#/components/schemas/NullableTimestamp" }
         cells:
           type: object
           additionalProperties:
@@ -3975,7 +4080,8 @@ components:
         seriesInventory: { type: array, items: { $ref: "#/components/schemas/SeriesInventoryItem" } }
         warningCount: { type: integer, minimum: 0 }
         sourceRanges: { type: array, items: { $ref: "#/components/schemas/SourceRangeSummary" } }
-        headId: { $ref: "#/components/schemas/OpaqueId" }
+        linkedRegionCount: { type: integer, minimum: 0 }
+        headId: { $ref: "#/components/schemas/NullableOpaqueId" }
         annotation:
           oneOf:
             - { $ref: "#/components/schemas/ExperimentRowAnnotation" }
@@ -4126,6 +4232,69 @@ components:
         updatedAt: { $ref: "#/components/schemas/Timestamp" }
         createdBy: { $ref: "#/components/schemas/NullableOpaqueId" }
         updatedBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+    ManualExperimentEntry:
+      type: object
+      additionalProperties: false
+      required: [id, note, version, createdAt, createdBy, createdByName]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        note: { type: string, maxLength: 2000 }
+        version: { type: integer, minimum: 1 }
+        createdAt: { $ref: "#/components/schemas/NullableTimestamp" }
+        createdBy: { $ref: "#/components/schemas/NullableOpaqueId" }
+        createdByName: { $ref: "#/components/schemas/NullableString" }
+    ManualExperiment:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, experimentId, schemaVersion, label, note, version, createdAt, updatedAt, createdBy, createdByName]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        experimentId: { $ref: "#/components/schemas/OpaqueId" }
+        schemaVersion: { type: string, const: labrat.manualExperiment.v1 }
+        label: { type: string, minLength: 1, maxLength: 200 }
+        note: { type: string, maxLength: 2000 }
+        version: { type: integer, minimum: 1 }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+        createdBy: { $ref: "#/components/schemas/OpaqueId" }
+        createdByName: { $ref: "#/components/schemas/NullableString" }
+    ManualExperimentValue:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, experimentId, columnId, schemaVersion, value, version, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        experimentId: { $ref: "#/components/schemas/OpaqueId" }
+        columnId: { type: string, minLength: 1, maxLength: 400 }
+        schemaVersion: { type: string, const: labrat.manualExperimentValue.v1 }
+        value: { type: string, maxLength: 2000 }
+        version: { type: integer, minimum: 1 }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    SaveManualExperimentValueRequest:
+      type: object
+      additionalProperties: false
+      required: [columnId, value]
+      properties:
+        columnId: { type: string, minLength: 1, maxLength: 400 }
+        value: { type: string, maxLength: 2000 }
+        expectedVersion: { type: integer, minimum: 0 }
+    CreateManualExperimentRequest:
+      type: object
+      additionalProperties: false
+      required: [label]
+      properties:
+        label: { type: string, minLength: 1, maxLength: 200 }
+        note: { type: string, maxLength: 2000 }
+    UpdateManualExperimentRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      properties:
+        label: { type: string, minLength: 1, maxLength: 200 }
+        note: { type: string, maxLength: 2000 }
+        expectedVersion: { type: integer, minimum: 1 }
     CreateExperimentCustomColumnRequest:
       type: object
       additionalProperties: false

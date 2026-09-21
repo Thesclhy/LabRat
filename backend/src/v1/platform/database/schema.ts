@@ -213,6 +213,35 @@ export const experimentCustomValues = pgTable("experiment_custom_values", {
   updatedBy: text("updated_by"),
 });
 
+export const manualExperiments = pgTable("manual_experiments", {
+  id: text("id").primaryKey(),
+  labId: text("lab_id").notNull(),
+  projectId: text("project_id").notNull(),
+  experimentId: text("experiment_id").notNull(),
+  schemaVersion: text("schema_version").notNull().default("labrat.manualExperiment.v1"),
+  note: text("note").notNull().default(""),
+  version: integer("version").notNull().default(1),
+  createdAt: utcTimestamp("created_at").notNull(),
+  updatedAt: utcTimestamp("updated_at").notNull(),
+  createdBy: text("created_by").notNull(),
+  updatedBy: text("updated_by"),
+});
+
+export const manualExperimentValues = pgTable("manual_experiment_values", {
+  id: text("id").primaryKey(),
+  labId: text("lab_id").notNull(),
+  projectId: text("project_id").notNull(),
+  experimentId: text("experiment_id").notNull(),
+  columnId: text("column_id").notNull(),
+  schemaVersion: text("schema_version").notNull().default("labrat.manualExperimentValue.v1"),
+  value: text("value").notNull().default(""),
+  version: integer("version").notNull().default(1),
+  createdAt: utcTimestamp("created_at").notNull(),
+  updatedAt: utcTimestamp("updated_at").notNull(),
+  createdBy: text("created_by"),
+  updatedBy: text("updated_by"),
+});
+
 export const fileObjects = pgTable("file_objects", {
   id: text("id").primaryKey(),
   labId: text("lab_id").notNull(),
@@ -861,6 +890,8 @@ export const v1Schema = {
   experimentAnnotations,
   experimentCustomColumns,
   experimentCustomValues,
+  manualExperiments,
+  manualExperimentValues,
   experimentSnapshotPublishes,
   analysisThreads,
   analysisPlanRevisions,

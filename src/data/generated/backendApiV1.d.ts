@@ -612,6 +612,47 @@ export interface paths {
         readonly get: operations["getExperimentDetail"];
         readonly put?: never;
         readonly post?: never;
+        /** @description Delete a manually logged row with its documentation values and annotations. Accepted-data rows return 409 experiment_not_manual. */
+        readonly delete: operations["deleteManualExperiment"];
+        readonly options?: never;
+        readonly head?: never;
+        /** @description Rename a manually logged row or edit its note. Accepted-data rows return 409 experiment_not_manual. */
+        readonly patch: operations["updateManualExperiment"];
+        readonly trace?: never;
+    };
+    readonly "/api/v1/projects/{projectId}/experiments/{experimentId}/manual-values": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly experimentId: components["parameters"]["ExperimentId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        /** @description Type a value into an accepted-data column of a manually logged row. The value is display-only text, never part of a DataSnapshot, and never an analysis or chart input. Accepted-data rows return 409 experiment_not_manual. */
+        readonly put: operations["saveManualExperimentValue"];
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/projects/{projectId}/experiments": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /** @description Log an Experiment Browser row by hand. The row has no DataSnapshot and is never an analysis or chart input. A name that already identifies an experiment returns 409 experiment_label_conflict. */
+        readonly post: operations["createManualExperiment"];
         readonly delete?: never;
         readonly options?: never;
         readonly head?: never;
@@ -2262,6 +2303,8 @@ export interface components {
             readonly warningCount?: number;
             readonly version?: number;
             readonly isCustom?: boolean;
+            /** @description Hand-typed text on a manually logged row; not snapshot data. */
+            readonly isManual?: boolean;
         };
         readonly SeriesInventoryItem: {
             readonly seriesKey: string;
@@ -2290,15 +2333,22 @@ export interface components {
             readonly label: string;
             readonly sourceLabel: string;
             readonly aliases: readonly string[];
-            readonly dataSnapshotId: components["schemas"]["OpaqueId"];
-            readonly acceptedAt: components["schemas"]["Timestamp"];
+            /**
+             * @description manual rows were logged by hand; dataSnapshotId, acceptedAt and headId are null for them.
+             * @enum {string}
+             */
+            readonly origin: "snapshot" | "manual";
+            readonly manualEntry: components["schemas"]["ManualExperimentEntry"] | null;
+            readonly dataSnapshotId: components["schemas"]["NullableOpaqueId"];
+            readonly acceptedAt: components["schemas"]["NullableTimestamp"];
             readonly cells: {
                 readonly [key: string]: components["schemas"]["ExperimentCell"] | null;
             };
             readonly seriesInventory: readonly components["schemas"]["SeriesInventoryItem"][];
             readonly warningCount: number;
             readonly sourceRanges: readonly components["schemas"]["SourceRangeSummary"][];
-            readonly headId: components["schemas"]["OpaqueId"];
+            readonly linkedRegionCount?: number;
+            readonly headId: components["schemas"]["NullableOpaqueId"];
             readonly annotation: components["schemas"]["ExperimentRowAnnotation"] | null;
         };
         readonly ExperimentProjection: {
@@ -2411,6 +2461,53 @@ export interface components {
             readonly updatedAt: components["schemas"]["Timestamp"];
             readonly createdBy: components["schemas"]["NullableOpaqueId"];
             readonly updatedBy: components["schemas"]["NullableOpaqueId"];
+        };
+        readonly ManualExperimentEntry: {
+            readonly id: components["schemas"]["OpaqueId"];
+            readonly note: string;
+            readonly version: number;
+            readonly createdAt: components["schemas"]["NullableTimestamp"];
+            readonly createdBy: components["schemas"]["NullableOpaqueId"];
+            readonly createdByName: components["schemas"]["NullableString"];
+        };
+        readonly ManualExperiment: {
+            readonly id: components["schemas"]["OpaqueId"];
+            readonly projectId: components["schemas"]["OpaqueId"];
+            readonly experimentId: components["schemas"]["OpaqueId"];
+            /** @constant */
+            readonly schemaVersion: "labrat.manualExperiment.v1";
+            readonly label: string;
+            readonly note: string;
+            readonly version: number;
+            readonly createdAt: components["schemas"]["Timestamp"];
+            readonly updatedAt: components["schemas"]["Timestamp"];
+            readonly createdBy: components["schemas"]["OpaqueId"];
+            readonly createdByName: components["schemas"]["NullableString"];
+        };
+        readonly ManualExperimentValue: {
+            readonly id: components["schemas"]["OpaqueId"];
+            readonly projectId: components["schemas"]["OpaqueId"];
+            readonly experimentId: components["schemas"]["OpaqueId"];
+            readonly columnId: string;
+            /** @constant */
+            readonly schemaVersion: "labrat.manualExperimentValue.v1";
+            readonly value: string;
+            readonly version: number;
+            readonly updatedAt: components["schemas"]["Timestamp"];
+        };
+        readonly SaveManualExperimentValueRequest: {
+            readonly columnId: string;
+            readonly value: string;
+            readonly expectedVersion?: number;
+        };
+        readonly CreateManualExperimentRequest: {
+            readonly label: string;
+            readonly note?: string;
+        };
+        readonly UpdateManualExperimentRequest: {
+            readonly label?: string;
+            readonly note?: string;
+            readonly expectedVersion: number;
         };
         readonly CreateExperimentCustomColumnRequest: {
             readonly label: string;
@@ -3846,6 +3943,28 @@ export interface components {
                 };
             };
         };
+        /** @description Versioned hand-typed value for one column of a manually logged row. */
+        readonly ManualExperimentValueObject: {
+            headers: {
+                readonly [name: string]: unknown;
+            };
+            content: {
+                readonly "application/json": {
+                    readonly manualValue: components["schemas"]["ManualExperimentValue"];
+                };
+            };
+        };
+        /** @description Manually logged Experiment Browser row. */
+        readonly ManualExperimentObject: {
+            headers: {
+                readonly [name: string]: unknown;
+            };
+            content: {
+                readonly "application/json": {
+                    readonly manualExperiment: components["schemas"]["ManualExperiment"];
+                };
+            };
+        };
         /** @description Versioned custom value for one Experiment and custom column. */
         readonly ExperimentCustomValueObject: {
             headers: {
@@ -4190,6 +4309,12 @@ export type SchemaExperimentDetail = components['schemas']['ExperimentDetail'];
 export type SchemaExperimentAnnotation = components['schemas']['ExperimentAnnotation'];
 export type SchemaSaveExperimentAnnotationRequest = components['schemas']['SaveExperimentAnnotationRequest'];
 export type SchemaExperimentCustomColumn = components['schemas']['ExperimentCustomColumn'];
+export type SchemaManualExperimentEntry = components['schemas']['ManualExperimentEntry'];
+export type SchemaManualExperiment = components['schemas']['ManualExperiment'];
+export type SchemaManualExperimentValue = components['schemas']['ManualExperimentValue'];
+export type SchemaSaveManualExperimentValueRequest = components['schemas']['SaveManualExperimentValueRequest'];
+export type SchemaCreateManualExperimentRequest = components['schemas']['CreateManualExperimentRequest'];
+export type SchemaUpdateManualExperimentRequest = components['schemas']['UpdateManualExperimentRequest'];
 export type SchemaCreateExperimentCustomColumnRequest = components['schemas']['CreateExperimentCustomColumnRequest'];
 export type SchemaUpdateExperimentCustomColumnRequest = components['schemas']['UpdateExperimentCustomColumnRequest'];
 export type SchemaExperimentCustomValue = components['schemas']['ExperimentCustomValue'];
@@ -4350,6 +4475,8 @@ export type ResponseExperimentAnnotationPage = components['responses']['Experime
 export type ResponseExperimentAnnotationObject = components['responses']['ExperimentAnnotationObject'];
 export type ResponseExperimentCustomColumnPage = components['responses']['ExperimentCustomColumnPage'];
 export type ResponseExperimentCustomColumnObject = components['responses']['ExperimentCustomColumnObject'];
+export type ResponseManualExperimentValueObject = components['responses']['ManualExperimentValueObject'];
+export type ResponseManualExperimentObject = components['responses']['ManualExperimentObject'];
 export type ResponseExperimentCustomValueObject = components['responses']['ExperimentCustomValueObject'];
 export type ResponseProjectBrowserConfigObject = components['responses']['ProjectBrowserConfigObject'];
 export type ResponseBrowserViewPage = components['responses']['BrowserViewPage'];
@@ -5867,6 +5994,96 @@ export interface operations {
             };
             readonly 401: components["responses"]["Unauthorized"];
             readonly 404: components["responses"]["NotFound"];
+        };
+    };
+    readonly deleteManualExperiment: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly experimentId: components["parameters"]["ExperimentId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            readonly 200: components["responses"]["DeletedResponse"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+        };
+    };
+    readonly updateManualExperiment: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly experimentId: components["parameters"]["ExperimentId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["UpdateManualExperimentRequest"];
+            };
+        };
+        readonly responses: {
+            readonly 200: components["responses"]["ManualExperimentObject"];
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+        };
+    };
+    readonly saveManualExperimentValue: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly experimentId: components["parameters"]["ExperimentId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["SaveManualExperimentValueRequest"];
+            };
+        };
+        readonly responses: {
+            readonly 200: components["responses"]["ManualExperimentValueObject"];
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+        };
+    };
+    readonly createManualExperiment: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["CreateManualExperimentRequest"];
+            };
+        };
+        readonly responses: {
+            readonly 201: components["responses"]["ManualExperimentObject"];
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
         };
     };
     readonly listExperimentAnnotations: {

@@ -488,7 +488,7 @@ describe("ExperimentBrowser", () => {
     const { rerender } = render(
       <ExperimentBrowser projectId="project_1" loadProjection={loadProjection} loadDetail={loadDetail} onOpenImportReview={onOpenImportReview} {...api} />,
     );
-    expect(await screen.findByText("No published experiments")).toBeTruthy();
+    expect(await screen.findByText("No experiments yet")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Import workbook" }));
     expect(onOpenImportReview).toHaveBeenCalledTimes(1);
 
@@ -515,6 +515,7 @@ describe("ExperimentBrowser", () => {
     expect(within(actions).getAllByRole("button").map((button) => button.textContent)).toEqual([
       "Import workbook",
       "Add or update data",
+      "Add row",
       "Add column",
     ]);
     within(actions).getAllByRole("button").forEach((button) => expect(button.className).not.toContain("primary-action"));
@@ -551,6 +552,86 @@ describe("ExperimentBrowser", () => {
       expectedVersion: 4,
       payload: expect.objectContaining({ sort: [] }),
     })));
+  });
+
+  it("adds a manual row, badges it, edits it in its own drawer, and deletes it", async () => {
+    const manual = { id: "manual_1", experimentId: "exp_manual", label: "Pilot run", note: "", version: 1, createdAt: "2026-09-20T10:00:00.000Z", createdBy: "user_1", createdByName: "Alice" };
+    const loadDetail = vi.fn();
+    const api = viewApi({
+      createManualRow: vi.fn(async () => manual),
+      updateManualRow: vi.fn(async (_projectId, _experimentId, changes) => ({ ...manual, label: changes.label || manual.label, note: changes.note ?? manual.note, version: 2 })),
+      deleteManualRow: vi.fn(async () => ({ deleted: true })),
+    });
+    render(<ExperimentBrowser projectId="project_1" loadProjection={vi.fn(async () => projection())} loadDetail={loadDetail} {...api} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Add row" }));
+    const form = screen.getByRole("form", { name: "Add experiment row" });
+    expect(within(form).getByRole("button", { name: "Add" }).disabled).toBe(true);
+    fireEvent.change(within(form).getByLabelText("New experiment name"), { target: { value: " Pilot run " } });
+    fireEvent.click(within(form).getByRole("button", { name: "Add" }));
+
+    const rowLink = await screen.findByRole("button", { name: "Open Pilot run" });
+    expect(api.createManualRow).toHaveBeenCalledWith("project_1", { label: "Pilot run" });
+    expect(within(rowLink).getByText("Manual")).toBeTruthy();
+    expect(screen.queryByRole("form", { name: "Add experiment row" })).toBeNull();
+    expect(screen.getByText(/1 loaded of 2 experiment records|2 loaded of 2 experiment records/)).toBeTruthy();
+
+    fireEvent.click(rowLink);
+    const drawer = await screen.findByRole("complementary", { name: "Manually added experiment" });
+    expect(loadDetail).not.toHaveBeenCalled();
+    expect(within(drawer).getByText(/Manually logged by Alice/)).toBeTruthy();
+    fireEvent.change(within(drawer).getByLabelText("Note"), { target: { value: "Repeat at 48h" } });
+    fireEvent.click(within(drawer).getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(api.updateManualRow).toHaveBeenCalledWith("project_1", "exp_manual", { note: "Repeat at 48h", expectedVersion: 1 }));
+
+    fireEvent.click(within(drawer).getByRole("button", { name: "Delete row" }));
+    fireEvent.click(within(drawer).getByRole("button", { name: "Confirm delete" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Open Pilot run" })).toBeNull());
+    expect(api.deleteManualRow).toHaveBeenCalledWith("project_1", "exp_manual");
+    expect(screen.getByRole("button", { name: "Open Exp 1" })).toBeTruthy();
+  });
+
+  it("shows a name conflict inline and keeps Add row disabled for viewers", async () => {
+    const api = viewApi({ createManualRow: vi.fn(async () => { throw new Error("An experiment named “Exp 1” already exists in this project."); }) });
+    const { unmount } = render(<ExperimentBrowser projectId="project_1" loadProjection={vi.fn(async () => projection())} loadDetail={vi.fn()} {...api} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Add row" }));
+    fireEvent.change(screen.getByLabelText("New experiment name"), { target: { value: "Exp 1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("already exists");
+    expect(screen.getByRole("form", { name: "Add experiment row" })).toBeTruthy();
+    unmount();
+
+    const viewer = viewApi({ loadSharedConfig: vi.fn(async () => ({ projectBrowserConfig: null, canEdit: false })) });
+    render(<ExperimentBrowser projectId="project_1" loadProjection={vi.fn(async () => projection())} loadDetail={vi.fn()} {...viewer} />);
+    await screen.findByRole("button", { name: "Open Exp 1" });
+    expect(screen.getByRole("button", { name: "Add row" }).disabled).toBe(true);
+  });
+
+  it("lets an editor click any data cell of a manual row and type a value, but never an accepted row", async () => {
+    const manualRow = {
+      experimentId: "exp_manual", label: "Pilot run", origin: "manual",
+      manualEntry: { id: "manual_1", note: "", version: 1, createdAt: null, createdBy: "user_1", createdByName: "Alice" },
+      cells: { "field:temperature:degC:number": null, "field:yield:percent:number": { value: "12", formattedValue: "12", version: 2, isManual: true } },
+      seriesInventory: [], warningCount: 0, sourceRanges: [], annotation: null,
+    };
+    const api = viewApi({ saveManualValue: vi.fn(async (_projectId, experimentId, columnId, changes) => ({ experimentId, columnId, value: changes.value, version: (changes.expectedVersion || 0) + 1 })) });
+    render(<ExperimentBrowser projectId="project_1" loadProjection={vi.fn(async () => projection({ rows: [...rows, manualRow], totalCount: 2 }))} loadDetail={vi.fn()} {...api} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Temperature (degC) for Pilot run" }));
+    const input = screen.getByRole("textbox", { name: "Edit Temperature (degC) for Pilot run" });
+    fireEvent.change(input, { target: { value: "275" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(api.saveManualValue).toHaveBeenCalledWith("project_1", "exp_manual", "field:temperature:degC:number", { value: "275", expectedVersion: 0 }));
+    expect((await screen.findByRole("button", { name: "Edit Temperature (degC) for Pilot run" })).textContent).toBe("275 degC");
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Yield (percent) for Pilot run" }));
+    const yieldInput = screen.getByRole("textbox", { name: "Edit Yield (percent) for Pilot run" });
+    fireEvent.change(yieldInput, { target: { value: "14" } });
+    fireEvent.blur(yieldInput);
+    await waitFor(() => expect(api.saveManualValue).toHaveBeenLastCalledWith("project_1", "exp_manual", "field:yield:percent:number", { value: "14", expectedVersion: 2 }));
+
+    expect(screen.queryByRole("button", { name: "Edit Temperature (degC) for Exp 1" })).toBeNull();
+    expect(screen.queryByRole("complementary", { name: "Manually added experiment" })).toBeNull();
   });
 
 });

@@ -11,7 +11,12 @@ import {
   experimentAnnotations,
   experimentCustomColumns,
   experimentCustomValues,
+  experimentIdentities,
+  experimentSnapshotHeads,
+  manualExperimentValues,
+  manualExperiments,
   projectBrowserConfigs,
+  users,
 } from "../platform/database/schema.js";
 
 interface ProjectionRow {
@@ -51,6 +56,25 @@ interface ProjectionRow {
   snapshot_created_at: string;
   snapshot_created_by: string;
   active_record: Record<string, unknown> | null;
+}
+
+type IdentityReader = Pick<DatabaseService["db"], "select">;
+
+/** True when another experiment in the project already answers to this normalized label. */
+async function labelTaken(tx: IdentityReader, projectId: string, normalizedLabel: string, exceptExperimentId: string | null) {
+  const identities = await tx.select({
+    id: experimentIdentities.id,
+    normalizedLabel: experimentIdentities.normalizedLabel,
+    aliases: experimentIdentities.aliases,
+  }).from(experimentIdentities).where(eq(experimentIdentities.projectId, projectId));
+  return identities.some((identity) => identity.id !== exceptExperimentId && (
+    identity.normalizedLabel === normalizedLabel
+    || (identity.aliases || []).some((alias) => normalizeExperimentLabel(alias) === normalizedLabel)
+  ));
+}
+
+export function normalizeExperimentLabel(value: unknown) {
+  return String(value ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
 @Injectable()
@@ -411,6 +435,202 @@ export class ExperimentRepository {
       eq(experimentCustomValues.version, input.expectedVersion),
     )).returning();
     return updated;
+  }
+
+  /**
+   * Manually logged rows that no accepted snapshot has taken over. A manual
+   * experiment with an active head is shown as the snapshot row instead.
+   */
+  async listManualExperiments(projectId: string, experimentIds: string[] | null) {
+    if (experimentIds?.length === 0) return [];
+    const rows = await this.database.db
+      .select({ manual: manualExperiments, identity: experimentIdentities, createdByName: users.displayName })
+      .from(manualExperiments)
+      .innerJoin(experimentIdentities, and(
+        eq(experimentIdentities.id, manualExperiments.experimentId),
+        eq(experimentIdentities.projectId, manualExperiments.projectId),
+      ))
+      .leftJoin(users, eq(users.id, manualExperiments.createdBy))
+      .leftJoin(experimentSnapshotHeads, and(
+        eq(experimentSnapshotHeads.projectId, manualExperiments.projectId),
+        eq(experimentSnapshotHeads.experimentId, manualExperiments.experimentId),
+      ))
+      .where(and(
+        eq(manualExperiments.projectId, projectId),
+        sql`${experimentSnapshotHeads.id} is null`,
+        ...(experimentIds ? [inArray(manualExperiments.experimentId, experimentIds)] : []),
+      ))
+      .orderBy(asc(manualExperiments.createdAt), asc(manualExperiments.id));
+    return rows.map(({ manual, identity, createdByName }) => ({
+      ...manual,
+      label: identity.canonicalLabel,
+      aliases: identity.aliases || [],
+      createdByName: createdByName || null,
+    }));
+  }
+
+  async findManualExperiment(projectId: string, experimentId: string) {
+    const [row] = await this.listManualExperiments(projectId, [experimentId]);
+    return row || null;
+  }
+
+  /**
+   * Creates the identity and its manual entry together. Returns
+   * `{ conflict: true }` when the normalized label already names an experiment.
+   */
+  async createManualExperiment(input: {
+    labId: string;
+    projectId: string;
+    label: string;
+    normalizedLabel: string;
+    note: string;
+    actorUserId: string;
+  }) {
+    const now = new Date().toISOString();
+    return this.database.db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${"labrat_experiment_identity:" + input.projectId}))`);
+      if (await labelTaken(tx, input.projectId, input.normalizedLabel, null)) return { conflict: true as const };
+      const experimentId = makeId("experiment_identity");
+      await tx.insert(experimentIdentities).values({
+        id: experimentId,
+        labId: input.labId,
+        projectId: input.projectId,
+        canonicalLabel: input.label,
+        normalizedLabel: input.normalizedLabel,
+        aliases: [input.label],
+        createdAt: now,
+        updatedAt: now,
+        createdBy: input.actorUserId,
+        updatedBy: input.actorUserId,
+      });
+      const [manual] = await tx.insert(manualExperiments).values({
+        id: makeId("manual_experiment"),
+        labId: input.labId,
+        projectId: input.projectId,
+        experimentId,
+        schemaVersion: "labrat.manualExperiment.v1",
+        note: input.note,
+        version: 1,
+        createdAt: now,
+        updatedAt: now,
+        createdBy: input.actorUserId,
+        updatedBy: input.actorUserId,
+      }).returning();
+      return { manual: manual! };
+    });
+  }
+
+  /** Returns `{ conflict }`, `{ stale }`, or `{ manual }`. Only head-less manual rows are editable. */
+  async updateManualExperiment(input: {
+    projectId: string;
+    experimentId: string;
+    expectedVersion: number;
+    label?: string;
+    normalizedLabel?: string;
+    note?: string;
+    actorUserId: string;
+  }) {
+    const now = new Date().toISOString();
+    return this.database.db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${"labrat_experiment_identity:" + input.projectId}))`);
+      if (input.label !== undefined
+        && await labelTaken(tx, input.projectId, input.normalizedLabel || "", input.experimentId)) {
+        return { conflict: true as const };
+      }
+      const [manual] = await tx.update(manualExperiments).set({
+        ...(input.note !== undefined ? { note: input.note } : {}),
+        version: sql`${manualExperiments.version} + 1`,
+        updatedAt: now,
+        updatedBy: input.actorUserId,
+      }).where(and(
+        eq(manualExperiments.projectId, input.projectId),
+        eq(manualExperiments.experimentId, input.experimentId),
+        eq(manualExperiments.version, input.expectedVersion),
+      )).returning();
+      if (!manual) return { stale: true as const };
+      if (input.label !== undefined) {
+        await tx.update(experimentIdentities).set({
+          canonicalLabel: input.label,
+          normalizedLabel: input.normalizedLabel || "",
+          aliases: [input.label],
+          updatedAt: now,
+          updatedBy: input.actorUserId,
+        }).where(and(
+          eq(experimentIdentities.projectId, input.projectId),
+          eq(experimentIdentities.id, input.experimentId),
+        ));
+      }
+      return { manual };
+    });
+  }
+
+  listManualValues(projectId: string, experimentIds: string[] | null) {
+    if (experimentIds?.length === 0) return Promise.resolve([]);
+    return this.database.db.select().from(manualExperimentValues).where(and(
+      eq(manualExperimentValues.projectId, projectId),
+      ...(experimentIds ? [inArray(manualExperimentValues.experimentId, experimentIds)] : []),
+    ));
+  }
+
+  /** Same optimistic contract as custom values: version 0 inserts, otherwise the version must match. */
+  async saveManualValue(input: {
+    labId: string;
+    projectId: string;
+    experimentId: string;
+    columnId: string;
+    value: string;
+    expectedVersion: number;
+    actorUserId: string;
+  }) {
+    const now = new Date().toISOString();
+    if (input.expectedVersion === 0) {
+      const [created] = await this.database.db.insert(manualExperimentValues).values({
+        id: makeId("manual_experiment_value"),
+        labId: input.labId,
+        projectId: input.projectId,
+        experimentId: input.experimentId,
+        columnId: input.columnId,
+        schemaVersion: "labrat.manualExperimentValue.v1",
+        value: input.value,
+        version: 1,
+        createdAt: now,
+        updatedAt: now,
+        createdBy: input.actorUserId,
+        updatedBy: input.actorUserId,
+      }).onConflictDoNothing({
+        target: [
+          manualExperimentValues.projectId,
+          manualExperimentValues.experimentId,
+          manualExperimentValues.columnId,
+        ],
+      }).returning();
+      return created;
+    }
+    const [updated] = await this.database.db.update(manualExperimentValues).set({
+      value: input.value,
+      version: sql`${manualExperimentValues.version} + 1`,
+      updatedAt: now,
+      updatedBy: input.actorUserId,
+    }).where(and(
+      eq(manualExperimentValues.projectId, input.projectId),
+      eq(manualExperimentValues.experimentId, input.experimentId),
+      eq(manualExperimentValues.columnId, input.columnId),
+      eq(manualExperimentValues.version, input.expectedVersion),
+    )).returning();
+    return updated;
+  }
+
+  /** Deleting the identity cascades to the manual entry, its typed values, custom values and annotations. */
+  async deleteManualExperiment(projectId: string, experimentId: string) {
+    const rows = await this.database.db.delete(experimentIdentities).where(and(
+      eq(experimentIdentities.projectId, projectId),
+      eq(experimentIdentities.id, experimentId),
+      sql`exists (select 1 from manual_experiments manual
+        where manual.project_id = ${projectId} and manual.experiment_id = ${experimentId})`,
+      sql`not exists (select 1 from experiment_snapshot_heads head
+        where head.project_id = ${projectId} and head.experiment_id = ${experimentId})`,
+    )).returning({ id: experimentIdentities.id });
+    return rows.length > 0;
   }
 
   async saveAnnotation(input: {

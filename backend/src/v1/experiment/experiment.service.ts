@@ -10,13 +10,16 @@ import type { AuthContext } from "../identity/identity.types.js";
 import { ApiError } from "../platform/http/api-error.js";
 import type {
   CreateBrowserViewDto,
+  CreateManualExperimentDto,
   ExperimentAnnotationDto,
   ExperimentBrowserQueryDto,
   ProjectBrowserConfigDto,
   SaveExperimentCustomValueDto,
+  SaveManualExperimentValueDto,
   UpdateBrowserViewDto,
+  UpdateManualExperimentDto,
 } from "./experiment.dto.js";
-import { ExperimentRepository } from "./experiment.repository.js";
+import { ExperimentRepository, normalizeExperimentLabel } from "./experiment.repository.js";
 
 const projectExperimentRows = buildExperimentProjection as unknown as (
   input: Record<string, unknown>,
@@ -203,11 +206,13 @@ export class ExperimentService {
 
   async getBrowser(auth: AuthContext, projectId: string, query: ExperimentBrowserQueryDto) {
     const scope = await this.scope(auth, projectId, "read");
-    const [state, annotations, customColumns, customValues] = await Promise.all([
+    const [state, annotations, customColumns, customValues, manualExperiments, manualValues] = await Promise.all([
       this.repository.loadProjectionState(projectId, scope.experimentIds),
       this.repository.listAnnotations(projectId, auth.user.id, scope.experimentIds),
       this.repository.listCustomColumns(projectId, scope.experimentIds),
       this.repository.listCustomValues(projectId, scope.experimentIds),
+      this.repository.listManualExperiments(projectId, scope.experimentIds),
+      this.repository.listManualValues(projectId, scope.experimentIds),
     ]);
     return projectExperimentRows({
       projectId,
@@ -218,6 +223,8 @@ export class ExperimentService {
       experimentAnnotations: annotations,
       experimentCustomColumns: customColumns,
       experimentCustomValues: customValues,
+      manualExperiments,
+      manualExperimentValues: manualValues,
       starredOnly: query.starredOnly === "true",
       cursor: query.cursor || null,
       limit: query.limit,
@@ -341,6 +348,109 @@ export class ExperimentService {
     return value;
   }
 
+  /**
+   * Manual rows are human logbook entries. They own an identity but no
+   * DataSnapshot head, so analysis and chart inputs never see them.
+   */
+  async createManualExperiment(auth: AuthContext, projectId: string, input: CreateManualExperimentDto) {
+    const { project } = await this.authorization.requireFullProjectCapability(auth, projectId, "propose");
+    const label = text(input.label);
+    const normalizedLabel = this.requireNormalizedLabel(label);
+    const result = await this.repository.createManualExperiment({
+      labId: project.labId,
+      projectId,
+      label,
+      normalizedLabel,
+      note: text(input.note),
+      actorUserId: auth.user.id,
+    });
+    if ("conflict" in result) throw this.labelConflict(label);
+    await this.audit(auth, project.labId, projectId, "manual_experiment.create", result.manual.experimentId);
+    return this.publicManualExperiment(projectId, result.manual.experimentId);
+  }
+
+  async updateManualExperiment(
+    auth: AuthContext,
+    projectId: string,
+    experimentId: string,
+    input: UpdateManualExperimentDto,
+  ) {
+    const { project } = await this.authorization.requireFullProjectCapability(auth, projectId, "propose");
+    if (input.label === undefined && input.note === undefined) {
+      throw new ApiError(400, "manual_experiment_no_changes", "Provide a label or a note to update.");
+    }
+    await this.requireManualExperiment(projectId, experimentId);
+    const label = input.label === undefined ? undefined : text(input.label);
+    const result = await this.repository.updateManualExperiment({
+      projectId,
+      experimentId,
+      expectedVersion: input.expectedVersion,
+      ...(label !== undefined ? { label, normalizedLabel: this.requireNormalizedLabel(label) } : {}),
+      ...(input.note !== undefined ? { note: text(input.note) } : {}),
+      actorUserId: auth.user.id,
+    });
+    if ("conflict" in result) throw this.labelConflict(label || "");
+    if ("stale" in result) {
+      throw new ApiError(409, "manual_experiment_conflict", "This row changed. Reload and try again.");
+    }
+    await this.audit(auth, project.labId, projectId, "manual_experiment.update", experimentId);
+    return this.publicManualExperiment(projectId, experimentId);
+  }
+
+  /**
+   * Types a value into an accepted-data column of a manually logged row. The
+   * value is display-only text and never enters a DataSnapshot.
+   */
+  async saveManualValue(
+    auth: AuthContext,
+    projectId: string,
+    experimentId: string,
+    input: SaveManualExperimentValueDto,
+  ) {
+    const { project } = await this.authorization.requireFullProjectCapability(auth, projectId, "propose");
+    await this.requireManualExperiment(projectId, experimentId);
+    const columnId = text(input.columnId);
+    const state = await this.repository.loadProjectionState(projectId, null, false);
+    const columns = (projectExperimentRows({ projectId, ...state, limit: 1 }).columns || []) as Array<Record<string, unknown>>;
+    const column = columns.find((item) => item.id === columnId);
+    if (!column || columnId === "experiment" || column.isCustom || column.isLinkedData) {
+      throw new ApiError(404, "experiment_column_not_found", "This column cannot hold a manually typed value.");
+    }
+    const value = await this.repository.saveManualValue({
+      labId: project.labId,
+      projectId,
+      experimentId,
+      columnId,
+      value: input.value,
+      expectedVersion: input.expectedVersion ?? 0,
+      actorUserId: auth.user.id,
+    });
+    if (!value) {
+      throw new ApiError(409, "manual_experiment_value_conflict", "This cell changed. Reload and try again.");
+    }
+    await this.audit(auth, project.labId, projectId, "manual_experiment_value.update", value.id);
+    return {
+      id: value.id,
+      projectId: value.projectId,
+      experimentId: value.experimentId,
+      columnId: value.columnId,
+      schemaVersion: value.schemaVersion,
+      value: value.value,
+      version: value.version,
+      updatedAt: value.updatedAt,
+    };
+  }
+
+  async deleteManualExperiment(auth: AuthContext, projectId: string, experimentId: string) {
+    const { project } = await this.authorization.requireFullProjectCapability(auth, projectId, "propose");
+    await this.requireManualExperiment(projectId, experimentId);
+    if (!await this.repository.deleteManualExperiment(projectId, experimentId)) {
+      throw new ApiError(409, "experiment_not_manual", "Only manually logged rows can be deleted here.");
+    }
+    await this.audit(auth, project.labId, projectId, "manual_experiment.delete", experimentId);
+    return true;
+  }
+
   async getBrowserConfig(auth: AuthContext, projectId: string) {
     const resolved = await this.authorization.requireFullProjectCapability(auth, projectId, "read");
     return {
@@ -424,11 +534,52 @@ export class ExperimentService {
     return { ...resolved, experimentIds };
   }
 
+  /** Annotations and custom values apply to accepted rows and to manually logged rows alike. */
   private async requireActiveExperiment(projectId: string, experimentId: string) {
     const state = await this.repository.loadProjectionState(projectId, [experimentId]);
-    if (!state.experimentSnapshotHeads.length) {
-      throw new ApiError(404, "experiment_not_found", "Experiment not found.");
+    if (state.experimentSnapshotHeads.length) return;
+    if (await this.repository.findManualExperiment(projectId, experimentId)) return;
+    throw new ApiError(404, "experiment_not_found", "Experiment not found.");
+  }
+
+  /** 404 when the experiment does not exist, 409 when it is (or has become) an accepted-data row. */
+  private async requireManualExperiment(projectId: string, experimentId: string) {
+    if (await this.repository.findManualExperiment(projectId, experimentId)) return;
+    const state = await this.repository.loadProjectionState(projectId, [experimentId]);
+    if (state.experimentSnapshotHeads.length) {
+      throw new ApiError(409, "experiment_not_manual", "This row comes from accepted data and cannot be edited or deleted here.");
     }
+    throw new ApiError(404, "experiment_not_found", "Experiment not found.");
+  }
+
+  private requireNormalizedLabel(label: string) {
+    const normalized = normalizeExperimentLabel(label);
+    if (!normalized) {
+      throw new ApiError(400, "invalid_experiment_label", "The experiment name needs at least one letter or number.");
+    }
+    return normalized;
+  }
+
+  private labelConflict(label: string) {
+    return new ApiError(409, "experiment_label_conflict", `An experiment named “${label}” already exists in this project.`);
+  }
+
+  private async publicManualExperiment(projectId: string, experimentId: string) {
+    const manual = await this.repository.findManualExperiment(projectId, experimentId);
+    if (!manual) throw new ApiError(404, "experiment_not_found", "Experiment not found.");
+    return {
+      id: manual.id,
+      projectId: manual.projectId,
+      experimentId: manual.experimentId,
+      schemaVersion: manual.schemaVersion,
+      label: manual.label,
+      note: manual.note,
+      version: manual.version,
+      createdAt: manual.createdAt,
+      updatedAt: manual.updatedAt,
+      createdBy: manual.createdBy,
+      createdByName: manual.createdByName,
+    };
   }
 
   private async audit(

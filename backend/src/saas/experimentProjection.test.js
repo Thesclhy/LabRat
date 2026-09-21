@@ -6,6 +6,7 @@ import {
   experimentFieldColumnId,
   getExperimentProjectionDetail,
   linkedRegionSummaries,
+  resolveActiveExperimentRecords,
 } from "./experimentProjection.js";
 
 function field(fieldKey, value, {
@@ -242,6 +243,82 @@ test("projects custom documentation columns into search, filter, and sort withou
   assert.equal(result.totalCount, 1);
   assert.equal(result.rows[0].cells["custom:custom_notes"].value, "Repeat 48");
   assert.equal(result.rows[0].cells["custom:custom_notes"].version, 1);
+});
+
+test("appends manually logged rows with only documentation cells and lets accepted data take them over", () => {
+  const state = fixture();
+  const customColumn = { id: "custom_notes", label: "Decision", version: 1 };
+  const manualExperiments = [
+    { id: "manual_1", experimentId: "exp_manual", label: "Pilot run", aliases: ["Pilot run"], note: "No workbook yet", version: 2, createdAt: "2026-09-20T10:00:00.000Z", createdBy: "user_1", createdByName: "Member" },
+    // Accepted data already publishes exp_1, so this manual entry must not produce a second row.
+    { id: "manual_2", experimentId: "exp_1", label: "Shadowed", aliases: [], note: "", version: 1 },
+  ];
+  const result = buildExperimentProjection({
+    projectId: "project_1",
+    ...state,
+    experimentCustomColumns: [customColumn],
+    experimentCustomValues: [{ customColumnId: "custom_notes", experimentId: "exp_manual", value: "Plan repeat", version: 1 }],
+    manualExperiments,
+  });
+  const accepted = buildExperimentProjection({ projectId: "project_1", ...state });
+  assert.equal(result.totalCount, accepted.totalCount + 1);
+  assert.equal(result.rows.filter((row) => row.experimentId === "exp_1").length, 1);
+  assert.equal(result.rows.find((row) => row.experimentId === "exp_1").origin, "snapshot");
+  const manual = result.rows.find((row) => row.experimentId === "exp_manual");
+  assert.equal(manual.origin, "manual");
+  assert.equal(manual.label, "Pilot run");
+  assert.equal(manual.dataSnapshotId, null);
+  assert.equal(manual.headId, null);
+  assert.deepEqual(manual.seriesInventory, []);
+  assert.deepEqual(manual.sourceRanges, []);
+  assert.deepEqual(manual.manualEntry, { id: "manual_1", note: "No workbook yet", version: 2, createdAt: "2026-09-20T10:00:00.000Z", createdBy: "user_1", createdByName: "Member" });
+  assert.equal(manual.cells["custom:custom_notes"].value, "Plan repeat");
+  Object.entries(manual.cells).filter(([columnId]) => !columnId.startsWith("custom:")).forEach(([, cell]) => assert.equal(cell, null));
+  // Accepted-data columns are derived from snapshots only; a manual row adds none.
+  assert.deepEqual(
+    result.columns.filter((column) => !column.isCustom).map((column) => column.id),
+    accepted.columns.map((column) => column.id),
+  );
+  const searched = buildExperimentProjection({ projectId: "project_1", ...state, manualExperiments, search: "pilot" });
+  assert.deepEqual(searched.rows.map((row) => row.experimentId), ["exp_manual"]);
+});
+
+test("shows hand-typed values on manual rows only, flagged as manual, and ignores unknown or non-data columns", () => {
+  const state = fixture();
+  const accepted = buildExperimentProjection({ projectId: "project_1", ...state });
+  const dataColumn = accepted.columns.find((column) => column.id !== "experiment");
+  const manualExperiments = [{ id: "manual_1", experimentId: "exp_manual", label: "Pilot run", aliases: [], note: "", version: 1 }];
+  const result = buildExperimentProjection({
+    projectId: "project_1",
+    ...state,
+    experimentCustomColumns: [{ id: "custom_notes", label: "Decision", version: 1 }],
+    manualExperiments,
+    manualExperimentValues: [
+      { experimentId: "exp_manual", columnId: dataColumn.id, value: "275", version: 3 },
+      { experimentId: "exp_manual", columnId: "field:unknown", value: "ignored", version: 1 },
+      { experimentId: "exp_manual", columnId: "custom:custom_notes", value: "not via this path", version: 1 },
+      // A typed value must never override accepted data.
+      { experimentId: "exp_1", columnId: dataColumn.id, value: "999", version: 1 },
+    ],
+    sort: [{ columnId: dataColumn.id, direction: "desc" }],
+  });
+  const manual = result.rows.find((row) => row.experimentId === "exp_manual");
+  assert.deepEqual(manual.cells[dataColumn.id], { value: "275", formattedValue: "275", missingReason: null, confidence: null, warningCount: 0, version: 3, isManual: true });
+  assert.equal(manual.cells["custom:custom_notes"].value, "");
+  assert.equal("field:unknown" in manual.cells, false);
+  const acceptedRow = result.rows.find((row) => row.experimentId === "exp_1");
+  assert.notEqual(acceptedRow.cells[dataColumn.id]?.value, "999");
+  assert.equal(acceptedRow.cells[dataColumn.id]?.isManual, undefined);
+});
+
+test("manually logged rows never become active experiment records for analysis inputs", () => {
+  const state = fixture();
+  const entries = resolveActiveExperimentRecords({
+    projectId: "project_1",
+    ...state,
+    experimentIdentities: [...state.experimentIdentities, { id: "exp_manual", projectId: "project_1", canonicalLabel: "Pilot run", aliases: [] }],
+  });
+  assert.equal(entries.some(({ identity }) => identity.id === "exp_manual"), false);
 });
 
 test("projects experiment-linked workbook regions as one shared column per data kind without touching snapshots", () => {

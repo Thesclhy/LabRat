@@ -43,22 +43,24 @@ export function deleteExperimentAnnotation(projectId, experimentId, options = {}
   });
 }
 
-export function createExperimentCustomColumn(projectId, label = "Untitled column", options = {}) {
+export async function createExperimentCustomColumn(projectId, label = "Untitled column", options = {}) {
   if (!projectId) throw new ServerApiError("Select a project before adding a custom column.");
-  return apiV1Request("post", "/api/v1/projects/{projectId}/experiment-custom-columns", {
+  const response = await apiV1Request("post", "/api/v1/projects/{projectId}/experiment-custom-columns", {
     pathParams: { projectId },
     body: { label },
     ...transport(options),
   });
+  return { experimentCustomColumn: response?.customColumn || null };
 }
 
-export function updateExperimentCustomColumn(projectId, customColumnId, changes, options = {}) {
+export async function updateExperimentCustomColumn(projectId, customColumnId, changes, options = {}) {
   if (!projectId || !customColumnId) throw new ServerApiError("Select a custom column before updating it.");
-  return apiV1Request("patch", "/api/v1/projects/{projectId}/experiment-custom-columns/{columnId}", {
+  const response = await apiV1Request("patch", "/api/v1/projects/{projectId}/experiment-custom-columns/{columnId}", {
     pathParams: { projectId, columnId: customColumnId },
     body: changes || {},
     ...transport(options),
   });
+  return { experimentCustomColumn: response?.customColumn || null };
 }
 
 export function deleteExperimentCustomColumn(projectId, customColumnId, options = {}) {
@@ -69,11 +71,52 @@ export function deleteExperimentCustomColumn(projectId, customColumnId, options 
   });
 }
 
-export function saveExperimentCustomValue(projectId, customColumnId, experimentId, changes, options = {}) {
+export async function saveExperimentCustomValue(projectId, customColumnId, experimentId, changes, options = {}) {
   if (!projectId || !customColumnId || !experimentId) throw new ServerApiError("Select a custom cell before updating it.");
-  return apiV1Request("put", "/api/v1/projects/{projectId}/experiment-custom-columns/{columnId}/experiments/{experimentId}", {
+  const response = await apiV1Request("put", "/api/v1/projects/{projectId}/experiment-custom-columns/{columnId}/experiments/{experimentId}", {
     pathParams: { projectId, columnId: customColumnId, experimentId },
     body: changes || {},
+    ...transport(options),
+  });
+  return { experimentCustomValue: response?.customValue || null };
+}
+
+/** Logs an Experiment Browser row by hand. Manual rows are never analysis or chart inputs. */
+export async function createManualExperiment(projectId, entry, options = {}) {
+  if (!projectId) throw new ServerApiError("Select a project before adding a row.");
+  const response = await apiV1Request("post", "/api/v1/projects/{projectId}/experiments", {
+    pathParams: { projectId },
+    body: { label: String(entry?.label || "").trim(), ...(entry?.note ? { note: String(entry.note) } : {}) },
+    ...transport(options),
+  });
+  return response?.manualExperiment || null;
+}
+
+export async function updateManualExperiment(projectId, experimentId, changes, options = {}) {
+  if (!projectId || !experimentId) throw new ServerApiError("Select a manually added row before updating it.");
+  const response = await apiV1Request("patch", "/api/v1/projects/{projectId}/experiments/{experimentId}", {
+    pathParams: { projectId, experimentId },
+    body: changes || {},
+    ...transport(options),
+  });
+  return response?.manualExperiment || null;
+}
+
+/** Types display-only text into an accepted-data column of a manually logged row. */
+export async function saveManualExperimentValue(projectId, experimentId, columnId, changes, options = {}) {
+  if (!projectId || !experimentId || !columnId) throw new ServerApiError("Select a cell on a manually added row before updating it.");
+  const response = await apiV1Request("put", "/api/v1/projects/{projectId}/experiments/{experimentId}/manual-values", {
+    pathParams: { projectId, experimentId },
+    body: { columnId, ...(changes || {}) },
+    ...transport(options),
+  });
+  return response?.manualValue || null;
+}
+
+export function deleteManualExperiment(projectId, experimentId, options = {}) {
+  if (!projectId || !experimentId) throw new ServerApiError("Select a manually added row before deleting it.");
+  return apiV1Request("delete", "/api/v1/projects/{projectId}/experiments/{experimentId}", {
+    pathParams: { projectId, experimentId },
     ...transport(options),
   });
 }

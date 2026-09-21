@@ -15,12 +15,15 @@ import type { AuthContext } from "../identity/identity.types.js";
 import {
   CreateBrowserViewDto,
   CreateExperimentCustomColumnDto,
+  CreateManualExperimentDto,
   ExperimentAnnotationDto,
   ExperimentBrowserQueryDto,
   ProjectBrowserConfigDto,
   SaveExperimentCustomValueDto,
+  SaveManualExperimentValueDto,
   UpdateBrowserViewDto,
   UpdateExperimentCustomColumnDto,
+  UpdateManualExperimentDto,
 } from "./experiment.dto.js";
 import { ExperimentService } from "./experiment.service.js";
 
@@ -54,6 +57,45 @@ export class ExperimentController {
     @Param("experimentId") experimentId: string,
   ) {
     return this.experimentService.getExperiment(auth, projectId, experimentId);
+  }
+
+  @Post("experiments")
+  async createManualExperiment(
+    @CurrentAuth() auth: AuthContext,
+    @Param("projectId") projectId: string,
+    @Body() body: CreateManualExperimentDto,
+  ) {
+    return { manualExperiment: await this.experimentService.createManualExperiment(auth, projectId, body) };
+  }
+
+  @Patch("experiments/:experimentId")
+  async updateManualExperiment(
+    @CurrentAuth() auth: AuthContext,
+    @Param("projectId") projectId: string,
+    @Param("experimentId") experimentId: string,
+    @Body() body: UpdateManualExperimentDto,
+  ) {
+    return { manualExperiment: await this.experimentService.updateManualExperiment(auth, projectId, experimentId, body) };
+  }
+
+  @Put("experiments/:experimentId/manual-values")
+  async saveManualValue(
+    @CurrentAuth() auth: AuthContext,
+    @Param("projectId") projectId: string,
+    @Param("experimentId") experimentId: string,
+    @Body() body: SaveManualExperimentValueDto,
+  ) {
+    return { manualValue: await this.experimentService.saveManualValue(auth, projectId, experimentId, body) };
+  }
+
+  @Delete("experiments/:experimentId")
+  @HttpCode(200)
+  async deleteManualExperiment(
+    @CurrentAuth() auth: AuthContext,
+    @Param("projectId") projectId: string,
+    @Param("experimentId") experimentId: string,
+  ) {
+    return { deleted: await this.experimentService.deleteManualExperiment(auth, projectId, experimentId) };
   }
 
   @Get("experiment-annotations")

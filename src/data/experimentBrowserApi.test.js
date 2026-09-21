@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createExperimentCustomColumn,
+  createManualExperiment,
   deleteExperimentCustomColumn,
+  deleteManualExperiment,
   createExperimentBrowserView,
   deleteExperimentAnnotation,
   deleteExperimentBrowserView,
@@ -12,7 +14,9 @@ import {
   listExperimentAnnotations,
   saveExperimentAnnotation,
   saveExperimentCustomValue,
+  saveManualExperimentValue,
   updateExperimentCustomColumn,
+  updateManualExperiment,
   updateExperimentBrowserView,
   updateProjectBrowserConfig,
 } from "./experimentBrowserApi.js";
@@ -92,6 +96,38 @@ describe("experimentBrowserApi", () => {
       "/api/v1/projects/project%20%2F%201/experiment-custom-columns/column%20%2F%201",
     ]);
     expect(fetch.mock.calls.map(([, options]) => options.method || "GET")).toEqual(["POST", "PATCH", "PUT", "DELETE"]);
+  });
+
+  it("maps the v1 custom column and value envelopes onto the keys the Browser reads", async () => {
+    const column = { id: "column_1", label: "Follow-up", version: 1 };
+    const value = { id: "value_1", value: "Repeat", version: 3 };
+    const fetch = vi.fn(async (endpoint) => ok(endpoint.includes("/experiments/") ? { customValue: value } : { customColumn: column }));
+    expect(await createExperimentCustomColumn("project_1", "Follow-up", { fetch })).toEqual({ experimentCustomColumn: column });
+    expect(await updateExperimentCustomColumn("project_1", "column_1", { label: "Follow-up", expectedVersion: 1 }, { fetch })).toEqual({ experimentCustomColumn: column });
+    expect(await saveExperimentCustomValue("project_1", "column_1", "exp_1", { value: "Repeat", expectedVersion: 2 }, { fetch })).toEqual({ experimentCustomValue: value });
+  });
+
+  it("creates, updates, and deletes manually logged rows", async () => {
+    const manual = { id: "manual_1", experimentId: "experiment / 1", label: "Pilot run", note: "", version: 1 };
+    const fetch = vi.fn(async () => ok({ manualExperiment: manual }));
+    expect(await createManualExperiment("project / 1", { label: "  Pilot run " }, { fetch })).toEqual(manual);
+    expect(await updateManualExperiment("project / 1", "experiment / 1", { note: "Repeat", expectedVersion: 1 }, { fetch })).toEqual(manual);
+    await deleteManualExperiment("project / 1", "experiment / 1", { fetch });
+
+    expect(fetch.mock.calls.map(([endpoint]) => endpoint)).toEqual([
+      "/api/v1/projects/project%20%2F%201/experiments",
+      "/api/v1/projects/project%20%2F%201/experiments/experiment%20%2F%201",
+      "/api/v1/projects/project%20%2F%201/experiments/experiment%20%2F%201",
+    ]);
+    expect(fetch.mock.calls.map(([, options]) => options.method || "GET")).toEqual(["POST", "PATCH", "DELETE"]);
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ label: "Pilot run" });
+    await expect(createManualExperiment("", { label: "x" })).rejects.toThrow("Select a project");
+
+    const valueFetch = vi.fn(async () => ok({ manualValue: { columnId: "field:temp", value: "275", version: 1 } }));
+    expect(await saveManualExperimentValue("project / 1", "experiment / 1", "field:temp", { value: "275", expectedVersion: 0 }, { fetch: valueFetch }))
+      .toEqual({ columnId: "field:temp", value: "275", version: 1 });
+    expect(valueFetch.mock.calls[0][0]).toBe("/api/v1/projects/project%20%2F%201/experiments/experiment%20%2F%201/manual-values");
+    expect(JSON.parse(valueFetch.mock.calls[0][1].body)).toEqual({ columnId: "field:temp", value: "275", expectedVersion: 0 });
   });
 
   it("requires project and experiment identifiers", async () => {
