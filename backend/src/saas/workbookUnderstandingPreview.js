@@ -265,6 +265,59 @@ function sourceCellRef({ sourceDocument, sheetName, cell }) {
   };
 }
 
+function readFieldCatalog({ sourceDocument, indexBlobs, region, startRow, readRange }) {
+  const full = decodeRange(region.range);
+  const start = Math.max(full.s.r, startRow - 1);
+  const end = Math.min(full.e.r, start + MAX_INSPECTION_ROWS - 1);
+  const rowCount = end - start + 1;
+  const pageWidth = Math.floor(MAX_INSPECTION_CELLS / rowCount);
+  const rows = Array.from({ length: rowCount }, () => []);
+  const readRanges = [];
+  for (let col = full.s.c; col <= full.e.c; col += pageWidth) {
+    const lastColumn = Math.min(full.e.c, col + pageWidth - 1);
+    const range = encodeRange({ s: { r: start, c: col }, e: { r: end, c: lastColumn } });
+    const page = readRange({ sourceDocument, indexBlobs, sheetName: region.sheetName, range, maxCells: MAX_INSPECTION_CELLS });
+    const width = lastColumn - col + 1;
+    if (page.rows?.length !== rowCount || page.rows.some((row, offset) => (
+      row.length !== width || row.some((cell, index) => cell.address !== encodeRange({
+        s: { r: start + offset, c: col + index }, e: { r: start + offset, c: col + index },
+      }))
+    ))) {
+      patchError("field_catalog_incomplete", `Cannot confirm this region: source cells for ${region.sheetName}!${range} could not be read completely. Retry region review.`);
+    }
+    page.rows.forEach((row, index) => rows[index].push(...row));
+    readRanges.push(range);
+  }
+  // A sparse column may have its first value below the structure window.
+  const populatedColumns = new Set(rows.flat().filter(cell => !isBlank(cellValue(cell))).map(cell => cell.col));
+  const witnesses = new Map();
+  for (const sheet of asArray(indexBlobs).flatMap(blob => asArray(blob.payload?.sheets))) {
+    if (text(sheet.name).toLowerCase() !== text(region.sheetName).toLowerCase()) continue;
+    for (const indexedCell of asArray(sheet.cellGrid?.cells)) {
+      const position = indexedCell.address ? decodeRange(indexedCell.address).s : { r: indexedCell.row, c: indexedCell.col };
+      const cell = { ...indexedCell, row: position.r, col: position.c };
+      if (cell.row <= end || cell.row > full.e.r || cell.col < full.s.c || cell.col > full.e.c
+        || populatedColumns.has(cell.col) || isBlank(cellValue(cell))) continue;
+      if (!witnesses.has(cell.col) || witnesses.get(cell.col).row > cell.row) witnesses.set(cell.col, cell);
+    }
+  }
+  const sparseColumnEvidence = [...witnesses.values()].sort((a, b) => a.col - b.col).map(cell => {
+    const range = encodeRange({ s: { r: cell.row, c: cell.col }, e: { r: cell.row, c: cell.col } });
+    const page = readRange({ sourceDocument, indexBlobs, sheetName: region.sheetName, range, maxCells: MAX_INSPECTION_CELLS });
+    if (page.rows?.[0]?.[0]?.address !== range) patchError("field_catalog_incomplete", `Source evidence for ${region.sheetName}!${range} is incomplete. Retry region review.`);
+    readRanges.push(range);
+    return page.rows[0][0];
+  });
+  return {
+    sparseColumnEvidence,
+    sheetName: region.sheetName,
+    range: encodeRange({ s: { r: start, c: full.s.c }, e: { r: end, c: full.e.c } }),
+    rows,
+    cellCount: rowCount * (full.e.c - full.s.c + 1),
+    readRanges,
+  };
+}
+
 function headersFrom({ sourceDocument, rangeResult, header }) {
   const decoded = decodeRange(rangeResult.range);
   const headerRows = asArray(header.rows).length ? header.rows : [header.row];
@@ -278,20 +331,21 @@ function headersFrom({ sourceDocument, rangeResult, header }) {
       .map((cell) => text(cellValue(cell)))
       .filter(Boolean)
       .filter((part, index, parts) => parts.findIndex((candidate) => normalized(candidate) === normalized(part)) === index);
-    if (!headerParts.length) continue;
-    const displayName = combinedHeaderDisplayName(headerParts);
     const column = columnName(columnIndex);
     const dataCells = asArray(rangeResult.rows)
       .filter((row) => rowNumber(asArray(row)[0]) > header.rowNumber)
       .map((row) => asArray(row).find((candidate) => columnFromAddress(candidate.address) === column))
-      .filter(Boolean);
+      .filter(Boolean)
+      .concat(asArray(rangeResult.sparseColumnEvidence).filter(cell => cell.col === columnIndex));
+    if (!headerParts.length && !dataCells.some((cell) => !isBlank(cellValue(cell)))) continue;
+    const displayName = headerParts.length ? combinedHeaderDisplayName(headerParts) : `Column ${column}`;
     const semanticKey = semanticKeyFor(displayName);
     const leafCell = [...pathCells].reverse().find((cell) => columnFromAddress(cell.address) === column)
       || pathCells[pathCells.length - 1];
     const valueType = valueTypeFor(dataCells);
     fields.push({
       column,
-      headerCell: leafCell.address,
+      headerCell: leafCell?.address || null,
       displayName,
       semanticKey,
       role: roleFor(semanticKey),
@@ -443,7 +497,7 @@ function fieldFromPatch({ sourceDocument, sheetName, patch, proposedFields, full
   const valueType = text(patch.valueType || proposed.valueType || "string");
   if (!FIELD_ROLES.has(role)) patchError("invalid_field_role", `Unsupported field role: ${role}.`);
   if (!VALUE_TYPES.has(valueType)) patchError("invalid_field_value_type", `Unsupported field value type: ${valueType}.`);
-  const headerCell = proposed.headerCell || `${column}${headerRow}`;
+  const headerCell = Object.hasOwn(proposed, "headerCell") ? proposed.headerCell : `${column}${headerRow}`;
   return {
     column,
     headerCell,
@@ -454,7 +508,7 @@ function fieldFromPatch({ sourceDocument, sheetName, patch, proposedFields, full
     numericScale: valueType === "number" ? proposed.numericScale || null : null,
     unit: patch.unit === null ? null : text(patch.unit ?? proposed.unit) || null,
     confidence: 0.98,
-    sourceRefs: asArray(proposed.sourceRefs).length
+    sourceRefs: Array.isArray(proposed.sourceRefs)
       ? proposed.sourceRefs
       : [{
         sourceType: "excel_cell",
@@ -579,7 +633,11 @@ function applyPatch({ sourceDocument, region, rangeResult, proposal, patch, full
   const selectedHeaderRow = asArray(rangeResult.rows).find((row) => rowNumber(asArray(row)[0]) === headerRow) || [];
   const inferredHeader = headerRow === proposal.headerRow
     ? inferHeader({ rows: rangeResult.rows })
-    : null;
+    : (() => {
+      const previous = asArray(rangeResult.rows).find(row => rowNumber(row[0]) === headerRow - 1);
+      return { row: selectedHeaderRow, rowNumber: headerRow,
+        rows: hasChildHeaders(previous, selectedHeaderRow) ? [previous, selectedHeaderRow] : [selectedHeaderRow] };
+    })();
   const headerFields = headersFrom({
     sourceDocument,
     rangeResult,
@@ -611,17 +669,13 @@ function applyPatch({ sourceDocument, region, rangeResult, proposal, patch, full
       numericScale: proposedField.numericScale || null,
     };
   };
-  let fields = source.fields
-    ? asArray(source.fields).map((field) => fieldFromPatch({
-      sourceDocument,
-      sheetName: region.sheetName,
-      patch: providerSafeField(field),
-      proposedFields,
-      fullRange,
-      headerRow,
-    }))
-    : proposedFields;
-  for (const fieldPatch of asArray(source.fieldPatches)) {
+  const explicitFields = source.decisionSource !== "backend_model" && Array.isArray(source.fields);
+  let fields = explicitFields ? source.fields.map((field) => fieldFromPatch({
+    sourceDocument, sheetName: region.sheetName, patch: field, proposedFields, fullRange, headerRow,
+  })) : proposedFields;
+  const patches = [...(explicitFields ? [] : asArray(source.fields)), ...asArray(source.fieldPatches)];
+  for (const rawPatch of patches) {
+    const fieldPatch = providerSafeField(rawPatch);
     const column = text(fieldPatch?.column).toUpperCase();
     const existingIndex = fields.findIndex((field) => field.column === column);
     const proposedField = proposedFields.find((field) => field.column === column);
@@ -722,6 +776,14 @@ function blockersFor(region, interpretation) {
   }
   const unitsBySemanticKey = new Map();
   asArray(interpretation.fields).forEach((field) => {
+    if (field.displayName === `Column ${field.column}` && !asArray(field.sourceRefs).length) {
+      blockers.push({
+        code: "field_header_required",
+        message: `Column ${field.column} contains data but has no recognized header. Review its field name before confirming.`,
+        draftRegionId: region.draftRegionId,
+        column: field.column,
+      });
+    }
     const units = unitsBySemanticKey.get(field.semanticKey) || new Set();
     if (field.unit) units.add(field.unit);
     unitsBySemanticKey.set(field.semanticKey, units);
@@ -787,6 +849,7 @@ export function buildWorkbookUnderstandingPreview({
   interpretationPatches = [],
   message = "",
   messageTargetDraftRegionIds = [],
+  readRange = readSourceDocumentRange,
 } = {}) {
   const draftRegionIds = new Set(asArray(draftRegions).map((region) => text(region?.draftRegionId)).filter(Boolean));
   const explicitPatches = new Map(asArray(interpretationPatches).map((patch) => {
@@ -813,21 +876,25 @@ export function buildWorkbookUnderstandingPreview({
     const bounded = correctedHeaderOutsideInitialWindow
       ? boundedInspectionRange(region.range, { startRow: correctedHeaderRow })
       : initialBounded;
-    const rangeResult = readSourceDocumentRange({
+    const rangeResult = readRange({
       sourceDocument,
       indexBlobs,
       sheetName: region.sheetName,
       range: bounded.range,
       maxCells: MAX_INSPECTION_CELLS,
     });
+    const catalogEvidence = readFieldCatalog({
+      sourceDocument, indexBlobs, region, readRange,
+      startRow: correctedHeaderOutsideInitialWindow ? Math.max(initialBounded.full.s.r + 1, correctedHeaderRow - 1) : initialBounded.full.s.r + 1,
+    });
     const proposal = proposalFor({
       sourceDocument,
       region,
-      rangeResult,
+      rangeResult: catalogEvidence,
       fullRange: bounded.full,
       inspectionTruncated: bounded.truncated,
     });
-    const interpretation = applyPatch({ sourceDocument, region, rangeResult, proposal, patch, fullRange: bounded.full });
+    const interpretation = applyPatch({ sourceDocument, region, rangeResult: catalogEvidence, proposal, patch, fullRange: bounded.full });
     const blockers = blockersFor(region, interpretation);
     return {
       draftRegionId: region.draftRegionId,
@@ -839,6 +906,7 @@ export function buildWorkbookUnderstandingPreview({
         sourceRef: rangeResult.sourceRef,
       },
       inspection: rangeResult,
+      catalogEvidence,
       interpretation,
       warnings: [...asArray(region.warnings), ...asArray(interpretation.warnings)],
       blockers,

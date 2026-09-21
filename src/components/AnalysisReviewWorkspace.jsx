@@ -1,3 +1,4 @@
+import { currentPlanRevision, orderedPlanRevisions, latestRevisionRun } from "../data/analysisOrdering.js";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useWorkspacePermissions } from "./WorkspacePermissions.jsx";
@@ -322,7 +323,9 @@ function resultReady(run, result, preview) {
     run?.status === "awaiting_result_review"
     && result?.status === "awaiting_review"
     && previewIdentityMatches(run, result, preview)
-    && validation?.ok !== false
+    && result.validation?.ok === true
+    && validationErrors(result.validation).length === 0
+    && validation?.ok === true
     && validationErrors(validation).length === 0
   );
 }
@@ -330,7 +333,10 @@ function resultReady(run, result, preview) {
 function previewIdentityMatches(run, result, preview) {
   if (!run?.id || !result?.id || !preview) return false;
   return preview.analysisRunId === run.id
-    && preview.analysisResultId === result.id;
+    && preview.analysisResultId === result.id
+    && result.analysisRunId === run.id
+    && (!run.resultPreviewHash || run.resultPreviewHash === result.resultPreviewHash)
+    && (!preview.resultPreviewHash || preview.resultPreviewHash === result.resultPreviewHash);
 }
 
 function previewIdentityError(run, result, preview) {
@@ -824,12 +830,14 @@ export function AnalysisReviewWorkspace({
   executionStrategy = "model_generated_python",
   runRefreshIntervalMs = 1000,
 }) {
+  const initialCurrentRevision = currentPlanRevision([...(initialPlanRevisions || []), ...(initialRevision ? [initialRevision] : [])]);
+  const matchingInitialRun = initialRun?.acceptedPlanRevisionId === initialCurrentRevision?.id ? initialRun : null;
   const [thread, setThread] = useState(initialThread || null);
   const { canEdit, canApprove } = useWorkspacePermissions();
   const [revisions, setRevisions] = useState(() => (
     initialPlanRevisions || (initialRevision ? [initialRevision] : [])
   ));
-  const [revision, setRevision] = useState(initialRevision || null);
+  const [revision, setRevision] = useState(initialCurrentRevision || null);
   const [selectionState, setSelectionState] = useState({
     loading: !controlledSelection,
     error: "",
@@ -840,14 +848,14 @@ export function AnalysisReviewWorkspace({
   const [pendingAction, setPendingAction] = useState("");
   const [actionError, setActionError] = useState(null);
   const [activeTab, setActiveTab] = useState(
-    initialRun || initialResult || initialResultPreview ? "result" : "source",
+    matchingInitialRun ? "result" : "source",
   );
-  const [run, setRun] = useState(initialRun);
-  const [result, setResult] = useState(initialResult);
+  const [run, setRun] = useState(matchingInitialRun);
+  const [result, setResult] = useState(matchingInitialRun ? initialResult : null);
   const [resultState, setResultState] = useState({
     loading: false,
     error: "",
-    value: initialResultPreview,
+    value: matchingInitialRun ? initialResultPreview : null,
   });
   const [defaultVisibleTraceIds, setDefaultVisibleTraceIds] = useState(
     () => previewTraces(initialResultPreview).map(traceIdentifier),
@@ -866,6 +874,13 @@ export function AnalysisReviewWorkspace({
     loading: !analysisCapabilities,
     value: analysisCapabilities,
   });
+  const [workflowLoading, setWorkflowLoading] = useState(false);
+  const [workflowError, setWorkflowError] = useState(null);
+  const initialThreadRef = useRef(null);
+  const initialEntitiesRef = useRef("");
+  const currentRevision = currentPlanRevision([...revisions, ...(revision ? [revision] : [])]);
+  const isHistoryView = Boolean(revision?.id && currentRevision?.id !== revision.id);
+  const latestRun = latestRevisionRun(runHistory.map(item => item.run), currentRevision?.id, thread);
   const automaticExecutionRef = useRef(new Set());
   const executorCapabilityReady = !capabilityState.loading
     && capabilityState.value?.executor?.configured === true;
@@ -879,13 +894,20 @@ export function AnalysisReviewWorkspace({
   );
 
   useEffect(() => {
+    if (initialThreadRef.current === initialThread?.id && Number(currentRevision?.revision) > Number(initialCurrentRevision?.revision)) return;
+    const entityKey = [initialRun?.id, initialResult?.id, initialResultPreview?.analysisResultId].join(":");
+    if (initialThreadRef.current === initialThread?.id && revision?.id === initialCurrentRevision?.id && initialEntitiesRef.current === entityKey) return;
+    initialThreadRef.current = initialThread?.id;
+    initialEntitiesRef.current = entityKey;
     previewRequestRef.current += 1;
+    setWorkflowError(null);
+    setWorkflowLoading(false);
     setThread(initialThread || null);
-    setRevision(initialRevision || null);
+    setRevision(initialCurrentRevision || null);
     setRevisions(initialPlanRevisions || (initialRevision ? [initialRevision] : []));
-    setRun(initialRun);
-    setResult(initialResult);
-    setResultState({ loading: false, error: "", value: initialResultPreview });
+    setRun(matchingInitialRun);
+    setResult(matchingInitialRun ? initialResult : null);
+    setResultState({ loading: false, error: "", value: matchingInitialRun ? initialResultPreview : null });
     setDefaultVisibleTraceIds(
       previewTraces(initialResultPreview).map(traceIdentifier),
     );
@@ -896,7 +918,7 @@ export function AnalysisReviewWorkspace({
     setSavedTemplate(null);
     setTemplateEligibility({ loading: false, value: null });
     setRunHistory(initialRun ? [{ run: initialRun, result: initialResult }] : []);
-    setActiveTab(initialRun || initialResult || initialResultPreview ? "result" : "source");
+    setActiveTab(matchingInitialRun ? "result" : "source");
     setActionError("");
     automaticExecutionRef.current.clear();
     setCapabilityState({ loading: !analysisCapabilities, value: analysisCapabilities });
@@ -924,49 +946,46 @@ export function AnalysisReviewWorkspace({
     };
   }, [analysisCapabilities, loadAnalysisCapabilities, projectId, requiresPythonExecutor]);
 
+  const refreshWorkflow = async (minimumRevision = currentRevision?.revision) => {
+    const requestToken = ++previewRequestRef.current;
+    setPendingAction("");
+    setWorkflowLoading(true);
+    setWorkflowError(null);
+    setRun(null);
+    setResult(null);
+    setResultState({ loading: false, error: "", value: null });
+    try {
+      const body = await loadThread(thread.id);
+      if (requestToken !== previewRequestRef.current) return;
+      const loadedRevisions = orderedPlanRevisions(body?.planRevisions);
+      const activeRevision = currentPlanRevision(loadedRevisions);
+      if (!body?.analysisThread?.id || !activeRevision?.id) throw new Error("The current analysis plan could not be restored. Retry loading the latest review.");
+      if (Number(activeRevision.revision) < Number(minimumRevision)) throw new Error("The server has not returned the new plan yet. Retry loading the latest review.");
+      const loadedRuns = asArray(body.analysisRuns);
+      const activeRun = latestRevisionRun(loadedRuns, activeRevision.id, body.analysisThread);
+      setThread(body.analysisThread);
+      setRevisions(loadedRevisions);
+      setRevision(activeRevision);
+      setRunHistory(loadedRuns.map(item => ({ run: item, result: null })));
+      setRun(activeRun);
+      setActiveTab(activeRun ? "result" : "source");
+      setActionError(null);
+    } catch (error) {
+      if (requestToken === previewRequestRef.current) setWorkflowError(error);
+    } finally {
+      if (requestToken === previewRequestRef.current) setWorkflowLoading(false);
+    }
+  };
+
   useEffect(() => {
     const needsAcceptedRunDiscovery = !initialRun?.id && initialRevision?.status === "accepted";
     if (!initialThread?.id || (initialPlanRevisions && !needsAcceptedRunDiscovery)) return undefined;
-    let cancelled = false;
-    loadThread(initialThread.id)
-      .then((body) => {
-        if (cancelled) return;
-        const loadedRevisions = asArray(body?.planRevisions);
-        const loadedRuns = asArray(body?.analysisRuns);
-        const activeRevision = loadedRevisions.findLast((item) => (
-          item.status === "awaiting_review" || item.status === "accepted"
-        ))
-          || loadedRevisions.find((item) => item.id === initialRevision?.id)
-          || loadedRevisions.at(-1)
-          || initialRevision;
-        setThread(body?.analysisThread || initialThread);
-        setRevisions(loadedRevisions);
-        setRevision(activeRevision);
-        const latestRun = loadedRuns.findLast((item) => (
-          item.acceptedPlanRevisionId === activeRevision?.id
-        )) || null;
-        setRunHistory(loadedRuns.map((item) => ({ run: item, result: null })));
-        if (!latestRun?.id) return;
-        setRun((current) => preferredRun(current, latestRun));
-        setActiveTab("result");
-      })
-      .catch((error) => {
-        if (!cancelled) setActionError(error);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    initialPlanRevisions,
-    initialRevision?.id,
-    initialRevision?.status,
-    initialRun?.id,
-    initialThread?.id,
-    loadThread,
-  ]);
+    refreshWorkflow();
+    return () => { previewRequestRef.current += 1; };
+  }, [initialThread?.id, loadThread]);
 
   useEffect(() => {
-    if (!run?.id) return undefined;
+    if (!run?.id || isHistoryView || workflowLoading || workflowError) return undefined;
     const needsResultHydration = ["awaiting_result_review", "completed"].includes(run.status)
       && (!result?.id || !previewIdentityMatches(run, result, resultState.value));
     if (!["queued", "running"].includes(run.status) && !needsResultHydration) return undefined;
@@ -977,10 +996,12 @@ export function AnalysisReviewWorkspace({
     let requestInFlight = false;
     let consecutiveRefreshFailures = 0;
     const runId = run.id;
+    const requestToken = previewRequestRef.current;
+    const obsolete = () => cancelled || requestToken !== previewRequestRef.current;
     const strategy = persistedExecutionStrategy(run, resolvedExecutionStrategy);
 
     const scheduleRefresh = () => {
-      if (cancelled || refreshTimer) return;
+      if (obsolete() || refreshTimer) return;
       refreshTimer = setTimeout(() => {
         refreshTimer = null;
         refreshRun();
@@ -1003,7 +1024,7 @@ export function AnalysisReviewWorkspace({
           previewError = error?.message || String(error);
         }
       }
-      if (cancelled) return refreshedRun;
+      if (obsolete()) return refreshedRun;
 
       if (response?.analysisThread) setThread(response.analysisThread);
       if (response?.analysisPlanRevision) setRevision(response.analysisPlanRevision);
@@ -1030,7 +1051,7 @@ export function AnalysisReviewWorkspace({
     };
 
     const refreshRun = async () => {
-      if (cancelled || requestInFlight) return;
+      if (obsolete() || requestInFlight) return;
       requestInFlight = true;
       let attemptedExecution = false;
       try {
@@ -1046,7 +1067,7 @@ export function AnalysisReviewWorkspace({
         consecutiveRefreshFailures = 0;
         if (["queued", "running"].includes(refreshedRun?.status)) scheduleRefresh();
       } catch (error) {
-        if (cancelled) return;
+        if (obsolete()) return;
         consecutiveRefreshFailures += 1;
         if (attemptedExecution) {
           try {
@@ -1079,6 +1100,9 @@ export function AnalysisReviewWorkspace({
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, [
+    isHistoryView,
+    workflowLoading,
+    workflowError,
     executorCapabilityReady,
     canEdit,
     executeRun,
@@ -1147,7 +1171,7 @@ export function AnalysisReviewWorkspace({
   const awaitingReview = revision?.status === "awaiting_review" && !run;
   const executorReady = !requiresPythonExecutor || executorCapabilityReady;
   const executorUnavailable = !executorReady;
-  const planAcceptanceDisabled = !canApprove || !awaitingReview || busy || !executorReady;
+  const planAcceptanceDisabled = !canApprove || !awaitingReview || busy || !executorReady || isHistoryView || workflowLoading || Boolean(workflowError);
   const preview = resultState.value;
   const declaredOutputTargets = [
     thread?.outputTarget,
@@ -1212,7 +1236,12 @@ export function AnalysisReviewWorkspace({
       return !resolution?.action
         || resolution.action === "reuse" && !resolution.experimentId;
     });
-  const canAcceptResult = canApprove && chartReady
+  const currentResult = !isHistoryView && !workflowLoading && !workflowError
+    && revision?.status === "accepted" && run?.acceptedPlanRevisionId === currentRevision?.id
+    && latestRun?.id === run?.id && thread?.status === "awaiting_result_review"
+    && (!asArray(thread?.planRevisionIds).length || thread.planRevisionIds.at(-1) === currentRevision?.id)
+    && (!asArray(thread?.analysisRunIds).length || thread.analysisRunIds.at(-1) === run?.id);
+  const canAcceptResult = canApprove && chartReady && currentResult
     && (browserMode
       ? hasBrowserStage && unresolvedIdentityConflicts.length === 0
       : hasChartStage && defaultVisibleTraceIds.length > 0)
@@ -1251,13 +1280,17 @@ export function AnalysisReviewWorkspace({
       run,
       result,
       preview,
+      isHistoryView,
       pendingAction,
-      previewReady: chartReady,
+      previewReady: chartReady && currentResult,
       published: chartFinalized,
-      error: actionError || resultState.error || generationFailure || null,
+      error: workflowError || actionError || resultState.error || generationFailure || null,
       generationFailure,
     });
   }, [
+    isHistoryView,
+    currentResult,
+    workflowError,
     actionError,
     chartFinalized,
     chartReady,
@@ -1272,45 +1305,55 @@ export function AnalysisReviewWorkspace({
     thread,
   ]);
 
+  const showNewRevision = async (nextRevision) => {
+    previewRequestRef.current += 1;
+    setRevisions(current => orderedPlanRevisions([...current.filter(item => item.id !== nextRevision.id), nextRevision]));
+    setRevision(nextRevision);
+    setThread(current => ({ ...current, status: "awaiting_plan_review" }));
+    setRun(null);
+    setResult(null);
+    setResultState({ loading: false, error: "", value: null });
+    setDefaultVisibleTraceIds([]);
+    setIdentityResolutions({});
+    setFeedback("");
+    setActiveRectangleId("");
+    setActiveTab("source");
+    await refreshWorkflow(nextRevision.revision);
+  };
+
   const submitFeedback = async () => {
     if (!canEdit) return;
     const nextFeedback = feedback.trim();
-    if (!nextFeedback || busy || !thread?.id || !awaitingReview) return;
+    if (!nextFeedback || busy || !thread?.id || !awaitingReview || isHistoryView || workflowLoading || workflowError) return;
+    const requestToken = ++previewRequestRef.current;
     setPendingAction("revision");
     setActionError("");
     try {
       const response = await createRevision(thread.id, { feedback: nextFeedback });
+      if (requestToken !== previewRequestRef.current) return;
       const nextRevision = response?.analysisPlanRevision;
       if (!nextRevision?.id) throw new Error("The backend did not return the revised analysis plan.");
-      setRevisions((current) => [
-        ...current.map((item) => (
-          item.id === revision.id && item.status === "awaiting_review"
-            ? { ...item, status: "superseded" }
-            : item
-        )),
-        nextRevision,
-      ]);
-      setRevision(nextRevision);
-      setFeedback("");
-      setActiveRectangleId("");
-      setIdentityResolutions({});
-      setActiveTab("source");
+      await showNewRevision(nextRevision);
     } catch (error) {
+      if (requestToken !== previewRequestRef.current) return;
       setActionError(error);
     } finally {
-      setPendingAction("");
+      if (requestToken === previewRequestRef.current) setPendingAction("");
     }
   };
 
   const acceptVisiblePlan = async () => {
     if (!canApprove) return;
-    if (!revision?.id || busy || !awaitingReview || executorUnavailable) return;
+    if (!revision?.id || planAcceptanceDisabled) return;
+    const requestToken = ++previewRequestRef.current;
     setPendingAction("accept");
     setActionError("");
     try {
       const response = await acceptPlan(revision.id, {}, {
         idempotencyKey: acceptanceKey(revision),
       });
+      if (requestToken !== previewRequestRef.current) return;
+      if (response?.analysisThread) setThread(response.analysisThread);
       const acceptedRevision = response?.analysisPlanRevision || { ...revision, status: "accepted" };
       setRevision(acceptedRevision);
       setRevisions((current) => current.map((item) => (
@@ -1323,22 +1366,25 @@ export function AnalysisReviewWorkspace({
       setActiveTab("result");
       onAccepted?.(response);
     } catch (error) {
+      if (requestToken !== previewRequestRef.current) return;
       setActionError(error);
     } finally {
-      setPendingAction("");
+      if (requestToken === previewRequestRef.current) setPendingAction("");
     }
   };
 
   const submitResultFeedback = async () => {
     if (!canEdit) return;
     const nextFeedback = feedback.trim();
-    if (!nextFeedback || busy || !run?.id || !resultReviewMode || chartFinalized) return;
+    if (!nextFeedback || busy || !run?.id || !resultReviewMode || chartFinalized || isHistoryView || workflowLoading || workflowError) return;
+    const requestToken = ++previewRequestRef.current;
     setPendingAction("result_revision");
     setActionError("");
     try {
       const response = await reviseRun(run.id, {
         feedback: nextFeedback,
       });
+      if (requestToken !== previewRequestRef.current) return;
       const nextRevision = response?.analysisPlanRevision;
       if (!nextRevision?.id) throw new Error("The backend did not return the revised analysis plan.");
       setRunHistory((current) => {
@@ -1347,27 +1393,19 @@ export function AnalysisReviewWorkspace({
           ? current.map((item) => item.run.id === run.id ? { run, result } : item)
           : [...current, { run, result }];
       });
-      setRevisions((current) => [...current, nextRevision]);
-      previewRequestRef.current += 1;
-      setRevision(nextRevision);
-      setRun(null);
-      setResult(null);
-      setResultState({ loading: false, error: "", value: null });
-      setDefaultVisibleTraceIds([]);
-      setIdentityResolutions({});
-      setFeedback("");
-      setActiveRectangleId("");
-      setActiveTab("source");
+      await showNewRevision(nextRevision);
     } catch (error) {
+      if (requestToken !== previewRequestRef.current) return;
       setActionError(error);
     } finally {
-      setPendingAction("");
+      if (requestToken === previewRequestRef.current) setPendingAction("");
     }
   };
 
   const retryFailedGeneration = async () => {
     if (!canEdit) return;
-    if (!run?.id || busy || !["failed", "validation_failed"].includes(run.status)) return;
+    if (!run?.id || busy || isHistoryView || workflowLoading || workflowError || !["failed", "validation_failed"].includes(run.status)) return;
+    const requestToken = ++previewRequestRef.current;
     setPendingAction("retry_generation");
     setActionError(null);
     setResult(null);
@@ -1377,20 +1415,23 @@ export function AnalysisReviewWorkspace({
       const retryResponse = await retryRun(run.id, {
         idempotencyKey: generationRetryKey(run),
       });
+      if (requestToken !== previewRequestRef.current) return;
       const queuedRun = retryResponse?.analysisRun;
       if (!queuedRun?.id) throw new Error("The backend did not return a new generation attempt.");
       setThread(retryResponse?.analysisThread || thread);
       setRun(queuedRun);
       setRunHistory((current) => [...current, { run: queuedRun, result: null }]);
     } catch (error) {
+      if (requestToken !== previewRequestRef.current) return;
       setActionError(error);
     } finally {
-      setPendingAction("");
+      if (requestToken === previewRequestRef.current) setPendingAction("");
     }
   };
 
   const acceptVisibleResult = async () => {
     if (!canAcceptResult || busy) return;
+    const requestToken = ++previewRequestRef.current;
     setPendingAction("accept_result");
     setActionError("");
     try {
@@ -1405,15 +1446,20 @@ export function AnalysisReviewWorkspace({
           })),
         } : {}),
       });
+      if (requestToken !== previewRequestRef.current) return;
       if (response?.analysisRun) setRun(response.analysisRun);
       if (response?.analysisResult) setResult(response.analysisResult);
       if (response?.analysisThread) setThread(response.analysisThread);
       if (response?.chartSpec) setAcceptedChartSpec(response.chartSpec);
       onAccepted?.(response);
     } catch (error) {
-      setActionError(error);
+      if (requestToken !== previewRequestRef.current) return;
+      if (["analysis_result_stale", "experiment_analysis_result_not_publishable", "analysis_result_state_conflict"].includes(error?.code) || error?.status === 409 || error?.statusCode === 409) {
+        await refreshWorkflow();
+        setActionError(new Error("A newer plan or result is available. Review the latest plan and result before publishing."));
+      } else setActionError(error);
     } finally {
-      setPendingAction("");
+      if (requestToken === previewRequestRef.current) setPendingAction("");
     }
   };
 
@@ -1448,10 +1494,11 @@ export function AnalysisReviewWorkspace({
 
   const openRevision = async (item) => {
     previewRequestRef.current += 1;
+    setPendingAction("");
+    setActionError(null);
     setRevision(item);
-    const historyItem = runHistory.find((entry) => (
-      entry.run.acceptedPlanRevisionId === item.id
-    ));
+    const historicalRun = latestRevisionRun(runHistory.map(entry => entry.run), item.id, thread);
+    const historyItem = runHistory.find(entry => entry.run.id === historicalRun?.id);
     setRun(historyItem?.run || null);
     setResult(historyItem?.result || null);
     setResultState({ loading: false, error: "", value: null });
@@ -1695,11 +1742,12 @@ export function AnalysisReviewWorkspace({
 
             {revisions.length > 1 && (
               <section className="analysis-revision-history" aria-label="Analysis revision history">
-                {revisions.map((item) => (
+                {orderedPlanRevisions(revisions).map((item) => (
                   <button
                     type="button"
                     className={item.id === revision?.id ? "active" : ""}
                     key={item.id}
+                    disabled={busy && pendingAction !== "load_history" || workflowLoading}
                     onClick={() => openRevision(item)}
                   >
                     <span>Revision {item.revision}</span>
@@ -1805,7 +1853,10 @@ export function AnalysisReviewWorkspace({
                 ))}
               </article>
             )}
-            <AnalysisActionError error={actionError} />
+            {isHistoryView && <p role="status">A newer version is available. Review the latest plan.</p>}
+            {workflowLoading && <p role="status">Loading the latest review...</p>}
+            <AnalysisActionError error={workflowError || actionError} />
+            {workflowError && <button type="button" onClick={() => refreshWorkflow()} disabled={workflowLoading}>Retry latest review</button>}
             {browserMode && browserPreviewUnavailable && (
               <button
                 type="button"
@@ -1918,7 +1969,7 @@ export function AnalysisReviewWorkspace({
                   placeholder={resultReviewMode
                     ? browserMode ? "Describe a data modification" : "Describe a chart modification"
                     : "Describe a modification"}
-                  disabled={!canEdit || (resultReviewMode ? (!run?.id || busy || chartFinalized) : (!awaitingReview || busy))}
+                  disabled={!canEdit || isHistoryView || workflowLoading || Boolean(workflowError) || (resultReviewMode ? (!run?.id || busy || chartFinalized) : (!awaitingReview || busy))}
                 />
                 <button
                   type="button"
@@ -1926,7 +1977,7 @@ export function AnalysisReviewWorkspace({
                     ? browserMode ? "Send data modification" : "Send chart modification"
                     : "Send modification"}
                   onClick={resultReviewMode ? submitResultFeedback : submitFeedback}
-                  disabled={!canEdit || !feedback.trim()
+                  disabled={!canEdit || isHistoryView || workflowLoading || Boolean(workflowError) || !feedback.trim()
                     || (resultReviewMode ? (!run?.id || chartFinalized) : !awaitingReview)
                     || busy}
                 >

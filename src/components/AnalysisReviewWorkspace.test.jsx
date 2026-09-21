@@ -22,7 +22,7 @@ const thread = {
   id: "analysis_thread_1",
   projectId: "project_1",
   originalRequest: "Normalize selectivity and compare every experiment.",
-  status: "planning",
+  status: "awaiting_result_review",
   messages: [
     { id: "message_1", role: "user", content: "Normalize selectivity and compare every experiment." },
     {
@@ -647,6 +647,7 @@ describe("AnalysisReviewWorkspace", () => {
         thread={thread}
         revision={{ ...revision2, status: "accepted" }}
         selection={selection}
+        planRevisions={[{ ...revision2, status: "accepted" }]}
         run={runningRun}
         loadRun={loadRun}
         loadResultPreview={loadResultPreview}
@@ -683,6 +684,7 @@ describe("AnalysisReviewWorkspace", () => {
         thread={thread}
         revision={{ ...revision2, status: "accepted" }}
         selection={selection}
+        planRevisions={[{ ...revision2, status: "accepted" }]}
         run={runningRun}
         loadRun={loadRun}
         loadResultPreview={loadResultPreview}
@@ -716,6 +718,7 @@ describe("AnalysisReviewWorkspace", () => {
       revision: { ...revision2, status: "accepted" },
       selection,
       run: runningRun,
+      planRevisions: [{ ...revision2, status: "accepted" }],
       loadRun,
       loadResultPreview,
       WorkbookWorkspaceComponent: WorkbookWorkspaceStub,

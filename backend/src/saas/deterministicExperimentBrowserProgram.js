@@ -44,7 +44,12 @@ const source = String.raw`def analyze(inputs, labrat):
         for source_column in table.get("columns", []):
             if normalized_text(source_column.get("excelColumn")).upper() == id_letter:
                 id_column = source_column.get("columnIndex")
-        for source_mapping in structure.get("fieldMappings", []):
+        source_mappings = structure.get("fieldMappings", [])
+        mapped_columns = {item.get("sourceColumnIndex") for item in source_mappings}
+        required_columns = set(structure.get("requiredFieldColumnIndices", []))
+        if not required_columns.issubset(mapped_columns) or len(mapped_columns) != len(source_mappings):
+            raise ValueError("The confirmed field catalog is not completely mapped. Review the source region again.")
+        for source_mapping in source_mappings:
             output_index = len(columns)
             value_type = normalized_text(source_mapping.get("valueType")).lower() or "string"
             if value_type not in {"number", "string", "date", "boolean"}:

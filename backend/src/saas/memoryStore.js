@@ -1,3 +1,4 @@
+import { assertCurrentAnalysisPublication } from "./analysisPublicationState.js";
 import { makeId, sha256Hex } from "./ids.js";
 import { hashPassword } from "./passwords.js";
 
@@ -1942,6 +1943,10 @@ export class MemorySaasStore {
     const revision = this.analysisPlanRevisions.get(input.analysisPlanRevision?.id);
     const run = this.analysisRuns.get(input.analysisRun?.id);
     const storedResult = this.analysisResults.get(input.analysisResult?.id);
+    assertCurrentAnalysisPublication({ thread, revision, run, result: storedResult,
+      revisions: [...this.analysisPlanRevisions.values()].filter(item => item.analysisThreadId === thread?.id),
+      runs: [...this.analysisRuns.values()].filter(item => item.analysisThreadId === thread?.id),
+    });
     const result = copy(input.analysisResult);
     const chartSpec = copy(input.chartSpec);
     if (
@@ -2118,6 +2123,10 @@ export class MemorySaasStore {
     const revision = this.analysisPlanRevisions.get(input.analysisPlanRevision?.id);
     const run = this.analysisRuns.get(input.analysisRun?.id);
     const storedResult = this.analysisResults.get(input.analysisResult?.id);
+    assertCurrentAnalysisPublication({ thread, revision, run, result: storedResult,
+      revisions: [...this.analysisPlanRevisions.values()].filter(item => item.analysisThreadId === thread?.id),
+      runs: [...this.analysisRuns.values()].filter(item => item.analysisThreadId === thread?.id),
+    });
     const snapshot = copy(input.dataSnapshot);
     const browserView = copy(input.browserView);
     const identities = asArray(input.experimentIdentities).map(copy);
@@ -2140,6 +2149,7 @@ export class MemorySaasStore {
       || storedResult.status !== "awaiting_review"
       || storedResult.outputTarget !== "experiment_browser"
       || storedResult.validation?.ok !== true
+      || (storedResult.validation?.errors || []).length
       || input.analysisResult.status !== "accepted"
       || input.analysisRun.status !== "completed"
       || !snapshot?.id

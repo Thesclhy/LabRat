@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { materializeAnalysisInputs, resolveAnalysisSourceSelections } from "./analysisSourceSelections.js";
 import { MemorySaasStore } from "./memoryStore.js";
 import {
   confirmWorkbookReviewRegion,
@@ -563,4 +564,51 @@ test("ignore and delete are version-checked dispositions without revision deleti
     }),
     (error) => error.code === "stale_workbook_review_region",
   );
+});
+
+ test("wide catalog reaches frozen analysis inputs and new hashes without rewriting an accepted revision", async () => {
+  const store = new MemorySaasStore();
+  const fixture = sourceFixture();
+  const sheet = fixture.indexBlobs[0].payload.sheets[0];
+  sheet.columnCount = sheet.cellGrid.columnCount = 26;
+  sheet.cellGrid.range = "A1:Z3";
+  for (let col = 3; col < 26; col += 1) {
+    for (let row = 0; row < 3; row += 1) {
+      const rawValue = row === 0 ? (col === 25 ? "Comments" : `Field ${col}`) : col === 25 ? (row === 1 ? "Right-side note" : null) : col;
+      sheet.cellGrid.cells.push({ address: String.fromCharCode(65 + col) + (row + 1), row, col, rawValue, formattedValue: rawValue == null ? null : String(rawValue) });
+    }
+  }
+  Object.assign(fixture.sourceDocument.metadata.sheets[0], { usedRange: "A1:Z3", columnCount: 26 });
+  store.sourceDocuments.set(fixture.sourceDocument.id, { ...fixture.sourceDocument, projectId: "project_1" });
+  store.sourceIndexBlobs.set("blob_wide", { ...fixture.indexBlobs[0], sourceDocumentId: fixture.sourceDocument.id });
+  const provider = modelProvider();
+  const created = await createWorkbookReviewRegionDraft({ store, ...fixture, modelProvider: provider, actorUserId: "user_1", input: { sheetName: "Runs", range: "A1:Z3", semanticType: "experiment_table", selectionMethod: "manual" } });
+  assert.equal(provider.calls[0].region.deterministicCandidate.fields.length, 25);
+  assert.ok(provider.calls[0].region.inspection.cellCount <= 500);
+  const confirmed = await confirmWorkbookReviewRegion({ store, region: created.region, revisionId: created.revision.id, expectedRegionVersion: created.region.version, actorUserId: "user_1" });
+  const selections = await resolveAnalysisSourceSelections({ store, projectId: "project_1", sourceSelections: [{ regionUnderstandingRevisionId: created.revision.id, sourceDocumentId: fixture.sourceDocument.id, sheetName: "Runs", range: "A1:Z3" }] });
+  const inputs = await materializeAnalysisInputs({ store, projectId: "project_1", sourceSelections: selections });
+  const table = inputs.tables[0];
+  assert.equal(table.structure.fieldMappings.length, 25);
+  assert.equal(table.structure.requiredFieldColumnIndices.length, 25);
+  assert.equal(table.structure.fieldMappings.at(-1).valueType, "string");
+  assert.equal(table.structure.fieldMappings.at(-1).headerSourceRefs[0].cell, "Z1");
+  assert.equal(table.values[1][25], "Right-side note");
+  assert.equal(table.values[2][25], null);
+  const original = structuredClone(created.revision);
+  sheet.cellGrid.cells.find(cell => cell.address === "Z2").rawValue = "Changed right-side evidence";
+  const revised = await reviseWorkbookReviewRegion({ store, region: confirmed.region, ...fixture, modelProvider: provider, actorUserId: "user_1", input: { feedback: "Review the right-side text", previousRevisionId: created.revision.id, expectedRegionVersion: confirmed.region.version } });
+  assert.notEqual(revised.revision.sourceContentHash, original.sourceContentHash);
+  assert.deepEqual(store.regionUnderstandingRevisions.get(original.id), original);
+  assert.equal(table.values[1][25], "Right-side note");
+ });
+
+test("unreadable field evidence remains retryable and cannot produce a confirmable revision", async () => {
+  const store = new MemorySaasStore();
+  const provider = modelProvider();
+  const created = await createWorkbookReviewRegionDraft({ store, ...sourceFixture(), indexBlobs: [], modelProvider: provider, actorUserId: "user_1", input: { sheetName: "Runs", range: "A1:C3", selectionMethod: "manual" } });
+  assert.equal(created.region.reviewStatus, "interpretation_failed");
+  assert.equal(created.revision, null);
+  assert.equal(provider.calls.length, 0);
+  assert.equal(created.warning.code, "source_sheet_not_found");
 });

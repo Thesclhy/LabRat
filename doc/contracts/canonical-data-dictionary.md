@@ -1,9 +1,27 @@
 # Canonical Data Dictionary
 
 Status: active
-Last reviewed: 2026-08-18
+Last reviewed: 2026-09-19
 
 This document defines the current scientific and workflow entities used by LabRat. Persisted JSON schema details live beside backend validators; this file defines meaning, ownership, and lineage.
+
+## Region field completeness
+
+New region revisions derive a deterministic field catalog across every selected
+column, using at most 25 structure rows and horizontal source reads of at most
+500 cells each. Pages are combined before grouped-header inference. Corrected
+headers rebuild the catalog by the same rule. The provider receives the bounded
+cell sample plus the complete field catalog and supplies sparse corrections;
+omission by the provider never removes a deterministic field. Populated columns
+without a recognized header require review. Incomplete source reads fail closed.
+New revision hashes cover the catalog evidence as well as the model sample;
+existing revisions, hashes and published snapshots remain immutable. Direct
+mapping checks that all recognized selected non-identity fields are mapped.
+
+Existing workbooks are repaired manually: re-review the original region, accept
+a new understanding, regenerate the preview, review and publish. For published
+experiments use the existing supplemental-data workflow to add missing columns
+and reuse the existing experiment identities. There is no automatic backfill.
 
 ## Canonical Flow
 

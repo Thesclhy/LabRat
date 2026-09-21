@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-09-18
+Last reviewed: 2026-09-19
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -12,6 +12,94 @@ Keep entries concise, newest first, and include:
 - meaningful changes
 - verification
 - follow-ups or residual risk
+
+## 2026-09-19 — Main delivery of master-table and onboarding fixes
+
+- User requested publishing the completed fixes to main. Prepared two independent
+  commits on latest origin/main aa8c3c8, retaining its draw-first review, batch
+  directions and Home navigation. Unrelated local permission work, temporary
+  artifacts and workbook files are excluded; the original workspace is retained.
+- Delivery verification: npm run codex:verify passes on this isolated branch:
+  frontend 403/403, legacy backend 365 passed/four expected skips, Nest 66/66,
+  generated API types, both builds and isolated production-entry smoke. The
+  first-stage synthetic field/mapping regression also passes 43/43. Counts differ
+  from the development-worktree checkpoint because permission work is excluded.
+- Corrected two preparation issues before delivery: Windows checkout line endings
+  required regenerating identical API types (no committed API difference), and
+  the golden UI fixture needed the already-implemented server-workflow mock and
+  effect wait. The final complete run is green; only the existing bundle warning
+  remains. git diff --check passes.
+- No real workbook upload, live model call, production scientific-data publication
+  or local database concurrency test was performed. Existing data recovery remains
+  manual as documented below. The requested main push invokes the existing
+  GitHub Actions deployment workflow; its hosted result must be checked separately.
+
+## 2026-09-19 — Onboarding current-version publication, stage 2
+
+- Implemented the approved second stage while preserving the independent
+  permission changes. Current plan selection uses the maximum revision;
+  latest runs follow server creation order. Onboarding restore, ordinary entry,
+  history selection and the five-revision model context share explicit ordering.
+  API list ordering is unchanged.
+- Feedback immediately clears prior run/result/preview state and saved onboarding
+  IDs, refreshes the server workflow and opens the new plan. Failed restore has
+  an explicit retry; request tokens ignore late workflow/action/preview responses.
+  History cannot overwrite current onboarding state, execute or publish.
+- Frontend publication requires current plan/latest run/exact result and preview,
+  explicit successful result validation and awaiting_result_review on the server.
+  Both Browser/chart publishers and memory/PostgreSQL transactions recheck current
+  associations. PostgreSQL rechecks under the thread lock; permissions, source
+  checks and idempotent replay remain in place. No API/table/migration/snapshot
+  format changes or automatic historical repair.
+- Offline coverage includes two feedback cycles, reentry, descending/ascending/
+  shuffled replies, retry after restore failure, late previews, queued history,
+  conflicting publication, latest-run choice, replay and an intervening revision
+  at the transaction boundary. Simulated PostgreSQL connection tests assert lock,
+  recheck and rollback order; these are not real database concurrency tests.
+- Field follow-up checks cover sparse populated columns below the 25-row window,
+  unreadable sources remaining retryable, full-width frozen inputs and ordinary
+  text/null publication without rewriting old revisions, inputs or snapshots.
+  Synthetic Python checks execute 24/25/26/52-column mappings and reject omissions.
+- Development-worktree verification: npm run codex:verify passed (generated types, frontend,
+  legacy/Nest tests, both builds and isolated production-entry smoke). The final
+  validation-gate refinement passed the complete frontend again: 418/418; backend
+  365 passed with four expected skips (three retired paths and optional PostgreSQL),
+  Nest 86/86; focused workspace/integration 47/47. git diff --check is clean.
+  Builds retain only the existing bundle-size warning.
+  Earlier failures were corrected: legacy fixtures now return current server
+  workflow state, the oversized fixture labels its populated boundary column,
+  persistence assertions wait for effects, and address-only indexed cells are
+  normalized before sparse-column evidence checks.
+- The optional synthetic Python tests accept LABRAT_TEST_PYTHON_COMMAND; their
+  harness explicitly enables UTF-8 because isolated Python ignores environment
+  encoding settings on this Windows host. Production executor configuration was
+  not changed or verified by that harness.
+- Not performed: real workbook/browser uploads, external model calls, live
+  database concurrency, production publishing or deployment. Existing uploaded
+  workbooks require manual region re-review -> accept new interpretation ->
+  regenerate preview -> review and publish. Already-published experiments use
+  supplemental data to add only missing fields and reuse identities.
+- Contracts: doc/contracts/canonical-data-dictionary.md and
+  doc/contracts/scientific-invariants-v1.md. Other uncommitted work is retained.
+
+
+## 2026-09-19 — Wide master-table field catalog, stage 1
+
+- Request: implement the approved missing-column and onboarding-version fixes,
+  preserving existing permission work and using offline synthetic verification only.
+- Full-width deterministic field catalog is separate from the bounded provider
+  sample; merged headers are inferred after page merge, corrected headers reread
+  the full width, sparse model patches preserve omitted fields, and missing headers
+  or incomplete reads block confirmation. New revision hashes include catalog
+  evidence; frozen input mappings include completeness requirements.
+- Targeted offline regression: 42 passed, 1 existing Linux-Python-only skip;
+  frontend production build passed (existing bundle-size warning). Coverage includes
+  24/25/26/52 columns, non-A starts, merged headers, corrected rows, right-side
+  text/null/percent values, exact references and immutable prior revisions/inputs.
+- Contract and manual recovery: doc/contracts/canonical-data-dictionary.md.
+  No real upload, external model call, live database concurrency or publication.
+
+
 
 ## 2026-09-18 — Draw-first workbook review; detected regions stay idle
 

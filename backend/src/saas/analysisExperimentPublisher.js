@@ -1,3 +1,4 @@
+import { assertCurrentAnalysisPublication } from "./analysisPublicationState.js";
 import {
   applyExperimentRecordPatches,
   loadActiveExperimentContext,
@@ -63,7 +64,7 @@ export async function publishAcceptedExperimentAnalysis({
     operation: "publish_experiment_analysis_v2",
     projectId: project.id,
     analysisRunId: run.id,
-    analysisResultId: result.id,
+    analysisResultId: result?.id || analysisResultId,
     identityResolutions: asArray(identityResolutions).map((item) => ({
       candidateId: text(item?.candidateId),
       action: text(item?.action),
@@ -104,6 +105,11 @@ export async function publishAcceptedExperimentAnalysis({
     );
   }
 
+  const [currentRevisions, currentRuns] = await Promise.all([
+    store.listAnalysisPlanRevisions({ projectId: project.id, analysisThreadId: thread.id }),
+    store.listAnalysisRuns({ projectId: project.id, analysisThreadId: thread.id }),
+  ]);
+  assertCurrentAnalysisPublication({ thread, revision: revision, run, result, revisions: currentRevisions, runs: currentRuns });
   const activeContext = await loadActiveExperimentContext({ store, projectId: project.id });
   const now = new Date().toISOString();
   const applied = applyExperimentRecordPatches({
