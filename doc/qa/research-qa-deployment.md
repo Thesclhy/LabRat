@@ -61,3 +61,14 @@ Pending hosted checks: Linux CI/deployment, deployed SHA/service and migration
 verification, public HTTPS health/assets, compiled parser smoke and the selected
 provider's synthetic citation check. Parser/provider smoke uses generated data
 only and does not create production research records.
+
+## First hosted attempt and installation repair
+
+Commit 30d7bc5 reached [workflow 36339754688](https://github.com/Thesclhy/LabRat/actions/runs/36339754688)
+but stopped at backend dependency installation, before any upload, migration or
+service switch. npm 10.9.8 required a nested esbuild 0.28.2 peer dependency for
+Vitest that the npm 11-generated lock omitted. Regenerating in a clean package
+directory with npm 10.9.8 supplied 27 missing development-only lock entries.
+Existing package versions, hashes and platform metadata remain unchanged.
+A real clean npm 10 installation passed; the corrected lock is checked again
+before publication. The hosted pipeline will rerun on the follow-up commit.

@@ -13,6 +13,15 @@ Keep entries concise, newest first, and include:
 - verification
 - follow-ups or residual risk
 
+## 2026-09-27 — Research Q&A deployment dependency repair
+
+- First hosted run 36339754688 stopped before deployment: npm 10 required
+  Vitest's nested esbuild peer entries missing from the npm 11 lock.
+- Added only the 27 required development lock entries. Application dependency
+  versions and platform metadata are unchanged; clean npm 10 installation passed.
+- Existing production release remains active. Re-publishing the correction and
+  tracking hosted and production checks in doc/qa/research-qa-deployment.md.
+
 ## 2026-09-27 — Research Q&A remote deployment authorized
 
 - User requested remote deployment after completed local acceptance. Prepared an
