@@ -1,0 +1,265 @@
+{
+  "schemaVersion": 1,
+  "completedAt": "2026-09-27T18:43:42.319Z",
+  "material": "Generated synthetic evidence only; no private research data or production research writes.",
+  "deployedCommit": "f31726520c3a07ba7d1005335daabc3e7374a07c",
+  "workflow": {
+    "runId": 36341375213,
+    "commit": "f31726520c3a07ba7d1005335daabc3e7374a07c",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/Thesclhy/LabRat/actions/runs/36341375213",
+    "updatedAt": "2026-09-27T18:41:03Z",
+    "checks": [
+      "Test Files  41 passed (41)",
+      "Tests  416 passed (416)",
+      "# tests 404",
+      "# pass 401",
+      "# fail 0",
+      "# skipped 3",
+      "Test Files  15 passed (15)",
+      "Tests  72 passed (72)",
+      "# tests 2",
+      "# pass 2",
+      "# fail 0",
+      "# skipped 0",
+      "Test Files  13 passed | 1 skipped (14)",
+      "Tests  20 passed | 1 skipped (21)",
+      "production NestJS entry smoke passed",
+      "Deployed f31726520c3a07ba7d1005335daabc3e7374a07c to Lightsail with AI provider anthropic"
+    ]
+  },
+  "checks": [
+    {
+      "check": "migration-ledger",
+      "passed": true,
+      "files": [
+        "034_research_documents.sql",
+        "035_research_answers.sql"
+      ]
+    },
+    {
+      "check": "live-health-assets-auth",
+      "passed": true,
+      "release": "/opt/labrat/releases/20260927184046-f31726520c3a/backend",
+      "assets": [
+        "/LabRat/assets/index-DMygeinj.js",
+        "/LabRat/assets/index-fZ87VlQY.css"
+      ],
+      "unauthenticatedQuestionStatus": 401
+    },
+    {
+      "check": "compiled-parser",
+      "passed": true,
+      "filename": "synthetic-notes.txt",
+      "status": "ready",
+      "passages": 1,
+      "methods": [
+        null
+      ]
+    },
+    {
+      "check": "compiled-parser",
+      "passed": true,
+      "filename": "synthetic-method.doc",
+      "status": "ready",
+      "passages": 3,
+      "methods": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "check": "compiled-parser",
+      "passed": true,
+      "filename": "synthetic-method.docx",
+      "status": "ready",
+      "passages": 3,
+      "methods": [
+        null
+      ]
+    },
+    {
+      "check": "compiled-parser",
+      "passed": true,
+      "filename": "synthetic-mixed.pdf",
+      "status": "partial",
+      "passages": 13,
+      "methods": [
+        "text",
+        "ocr",
+        "ocr"
+      ]
+    },
+    {
+      "check": "selected-provider-citation",
+      "passed": true,
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-5",
+      "kind": "document",
+      "trace": [
+        "read_document_passage"
+      ],
+      "answer": {
+        "status": "answered",
+        "claims": [
+          {
+            "text": "Protocol RQ-001 specifies a temperature of 80 °C for dry samples only, and it does not apply to wet samples.",
+            "citations": [
+              {
+                "evidenceId": "evidence_e4beae07d5d7fdc0ec7b0fcf",
+                "quote": "Protocol RQ-001 specifies 80 C for dry samples only. It does not apply to wet samples."
+              }
+            ],
+            "numericBindings": []
+          }
+        ],
+        "missingEvidence": []
+      },
+      "usage": {
+        "requests": 2,
+        "toolRounds": 1,
+        "toolCalls": 1,
+        "inputTokens": 7700,
+        "outputTokens": 200,
+        "unknownUsageRequests": 0,
+        "reservedTokens": 0,
+        "elapsedMs": 6176,
+        "knownCost": null,
+        "lastActiveAt": 1790534489767,
+        "failure": null
+      }
+    },
+    {
+      "check": "selected-provider-citation",
+      "passed": true,
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-5",
+      "kind": "experiment",
+      "trace": [
+        "find_experiments",
+        "read_experiment_evidence"
+      ],
+      "answer": {
+        "status": "answered",
+        "claims": [
+          {
+            "text": "Exp17 记录的 Temperature 是 82 C。",
+            "citations": [
+              {
+                "evidenceId": "evidence_9afd6f5e63e9b1fbbfc29d28",
+                "quote": "Temperature"
+              }
+            ],
+            "numericBindings": [
+              {
+                "evidenceId": "evidence_9afd6f5e63e9b1fbbfc29d28",
+                "path": "/data/fields/0/value",
+                "value": 82,
+                "unit": "C",
+                "numericScale": null
+              }
+            ]
+          }
+        ],
+        "missingEvidence": []
+      },
+      "usage": {
+        "requests": 3,
+        "toolRounds": 2,
+        "toolCalls": 2,
+        "inputTokens": 11632,
+        "outputTokens": 286,
+        "unknownUsageRequests": 0,
+        "reservedTokens": 0,
+        "elapsedMs": 6527,
+        "knownCost": null,
+        "lastActiveAt": 1790534496294,
+        "failure": null
+      }
+    }
+  ],
+  "sourceProvenance": {
+    "commit": "f31726520c3a07ba7d1005335daabc3e7374a07c",
+    "files": {
+      "src/research/citedAnswer.js": {
+        "acceptedHash": "8027c319dfbcd74485b9bb6d725a509748dc435636a2a5ad28335bd1868f2e12",
+        "publishedHash": "8027c319dfbcd74485b9bb6d725a509748dc435636a2a5ad28335bd1868f2e12",
+        "change": "identical"
+      },
+      "src/research/evidenceTools.js": {
+        "acceptedHash": "f8b07846ed7b91d28700de4d86cfe3190324be982bbcb0d438f82692754c9662",
+        "publishedHash": "f8b07846ed7b91d28700de4d86cfe3190324be982bbcb0d438f82692754c9662",
+        "change": "identical"
+      },
+      "src/research/qaBudget.js": {
+        "acceptedHash": "144deccd1b105b24c380055dbbf6b67094cc3013addcd45945ff139419ee659f",
+        "publishedHash": "144deccd1b105b24c380055dbbf6b67094cc3013addcd45945ff139419ee659f",
+        "change": "identical"
+      },
+      "src/research/testing/researchQaCorpus.js": {
+        "acceptedHash": "b8c9ec0d0a5a8425ed29082ac1a89049d8e5f0cbed939b6fc77fc1e3c83a82d6",
+        "publishedHash": "b8c9ec0d0a5a8425ed29082ac1a89049d8e5f0cbed939b6fc77fc1e3c83a82d6",
+        "change": "identical"
+      },
+      "src/research/testing/researchQaLabels.js": {
+        "acceptedHash": "5b3e5d19db8a2ced5bf71715d4762d8f35c9e0983ac1868bea00279c38136042",
+        "publishedHash": "5b3e5d19db8a2ced5bf71715d4762d8f35c9e0983ac1868bea00279c38136042",
+        "change": "identical"
+      },
+      "src/research/testing/researchQaSupplemental.js": {
+        "acceptedHash": "cf078b3fe0bc00f02bee8d79f239ccde5e5ed81fd7ce626203b0aee0ad772643",
+        "publishedHash": "cf078b3fe0bc00f02bee8d79f239ccde5e5ed81fd7ce626203b0aee0ad772643",
+        "change": "identical"
+      },
+      "src/research/testing/researchQaHoldout.js": {
+        "acceptedHash": "436ef42306fe396340e39e0ceaab64d3e4de587f45b43f40ac743054540e9e77",
+        "publishedHash": "436ef42306fe396340e39e0ceaab64d3e4de587f45b43f40ac743054540e9e77",
+        "change": "identical"
+      },
+      "src/v1/research-qa/provider-eval.postgres.test.ts": {
+        "acceptedHash": "f34051246cfbd8f00ab05da0201caf284708876128ae1a0be863b2951ddf505b",
+        "publishedHash": "f34051246cfbd8f00ab05da0201caf284708876128ae1a0be863b2951ddf505b",
+        "change": "identical"
+      },
+      "src/ai/gateway.js": {
+        "acceptedHash": "86d0906b2a72834e79f0cfb1b51b0020df3fcead433d3e7057f55685a9888d12",
+        "publishedHash": "9ae41b39332ae20e05104ba1957858c5d8937cebdd0df2fa044db0fb47399887",
+        "change": "CRLF-to-LF only"
+      },
+      "src/ai/deepseek.js": {
+        "acceptedHash": "1a2b94539c70af64c66fa1680694b59319782bb0f680857c7c3a38d00b6d01a4",
+        "publishedHash": "f0576c1f3a62cd65c715696a889484a8c0947539097bbea1ad7285efd08b4bf4",
+        "change": "CRLF-to-LF only"
+      },
+      "src/v1/research-qa/research-evidence.service.ts": {
+        "acceptedHash": "92d2eb90081bea2efbed47d388f0c9561577272752072596293c5218ac4fd411",
+        "publishedHash": "92d2eb90081bea2efbed47d388f0c9561577272752072596293c5218ac4fd411",
+        "change": "identical"
+      },
+      "src/v1/research-qa/research-evidence.repository.ts": {
+        "acceptedHash": "6b8c06b68d2eae5aeee281968b75ab1947d4b6530989be73cd9ff1a899cbf36f",
+        "publishedHash": "6b8c06b68d2eae5aeee281968b75ab1947d4b6530989be73cd9ff1a899cbf36f",
+        "change": "identical"
+      },
+      "src/v1/research-qa/research-questions.service.ts": {
+        "acceptedHash": "cb02a64a7cb3fa26d015f47e79ff38be7e76dea6750849ba0a368fe006607a60",
+        "publishedHash": "cb02a64a7cb3fa26d015f47e79ff38be7e76dea6750849ba0a368fe006607a60",
+        "change": "identical"
+      }
+    },
+    "anthropicAdapter": {
+      "sha256": "95f6642bac01de8a10d3fb8697e172fe7b31f46f957fb41fb4f20bed2abe5ad0",
+      "validation": "24 focused gateway/citation checks plus 2 real Anthropic candidate cases"
+    }
+  },
+  "limits": [
+    "Two live Anthropic component canaries are smoke coverage, not a full semantic benchmark.",
+    "Full original semantic evaluation used DeepSeek; local browser end-to-end used a labeled model substitute.",
+    "Historical failures and their fixes are retained in the deployment record."
+  ]
+}

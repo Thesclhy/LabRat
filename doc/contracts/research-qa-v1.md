@@ -1,6 +1,6 @@
 # Research Q&A v1 contract
 
-Status: implemented and verified locally — all v1 acceptance gates passed; not deployed
+Status: implemented; deployed and smoke-verified on 2026-09-27
 Last reviewed: 2026-09-27
 
 Scope: the confirmed research Q&A plan and acceptance matrix. This contract

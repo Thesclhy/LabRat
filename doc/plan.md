@@ -8,8 +8,11 @@ This is the short active plan. Current execution status lives in `doc/current-mi
 
 ## Current Focus
 
+Research Q&A remote deployment is complete at f317265; hosted and live verification
+passed. See `doc/qa/research-qa-deployment.md` for the current release and coverage.
+
 Research Q&A v1 completed its local implementation and semantic gates. The user
-now requested deployment through the existing main/Lightsail pipeline. The release
+requested and completed deployment through the existing main/Lightsail pipeline. The release
 contains uploaded PDF/OCR, Word/TXT/Excel evidence, full-project View Q&A, precise
 citations and existing reviewed-analysis handoff. See the research Q&A plan,
 contract and doc/qa/research-qa-deployment.md. Independent local permission-UI

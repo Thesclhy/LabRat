@@ -14,7 +14,7 @@ Research Q&A release (2026-09-27):
 - [x] Keep remote migrations 031–033; append Q&A migrations 034/035.
 - [x] Preserve the completed synthetic real-provider review and original transcripts.
 - [x] Complete the integrated release regression and browser/database checks.
-- [ ] Push the reviewed release and verify hosted deployment and production health.
+- [x] Push the reviewed release and verify hosted deployment and production health.
 
 Release evidence: doc/qa/research-qa-deployment.md.
 

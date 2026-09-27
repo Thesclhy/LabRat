@@ -13,6 +13,24 @@ Keep entries concise, newest first, and include:
 - verification
 - follow-ups or residual risk
 
+## 2026-09-27 — Research Q&A deployed and live-verified
+
+- User requested remote deployment. Published Q&A from remote base 834284d,
+  preserving its newer features and unrelated local work. Final live code is
+  f317265; GitHub workflow 36341375213 succeeded. Production uses migrations 034/035.
+- Resolved npm 10 lock compatibility, Linux fixture fonts and Anthropic wire-schema
+  limits; original scientific, citation and resource validation remains enforced.
+- Hosted checks passed: frontend 416, Node 401 (three retired skips), Nest 72,
+  PostgreSQL 2+20, API types/builds/entry. Live service, HTTPS hashes, migration
+  ledger and compiled TXT/Word/English-Chinese PDF parsing passed. Both real
+  Anthropic document and accepted-value citation canaries passed on final code.
+- Existing provider/model preserved; verified pre-deploy backups remain on server.
+  Smoke tests used generated data and made no production research writes.
+- Evidence and limits: doc/qa/research-qa-deployment.md and the linked structured
+  receipt. Full semantic evaluation remains DeepSeek-specific; Anthropic has two
+  live smoke cases. Future deployments must use current integrated main; the
+  original dirty checkout is not a standalone production migration source.
+
 ## 2026-09-27 — Live Anthropic format compatibility
 
 - Release 1cec67e passed hosted CI, migrated and served healthy pages/assets.

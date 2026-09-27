@@ -1,7 +1,40 @@
 # Research Q&A v1 deployment
 
 Date: 2026-09-27
-Status: integrated verification passed; remote publication pending
+Status: deployed and verified
+
+## Final deployed result
+
+Production code: f31726520c3a07ba7d1005335daabc3e7374a07c.
+[Successful hosted workflow](https://github.com/Thesclhy/LabRat/actions/runs/36341375213);
+[live application](https://labrat.100.50.25.194.nip.io/LabRat/).
+Actual release: /opt/labrat/releases/20260927184046-f31726520c3a.
+
+- Hosted frontend 416/416, Node 401 passed with three retired skips, Nest 72/72,
+  PostgreSQL 2 legacy + 20 Nest; API types, both builds and production entry passed.
+- Production service and HTTPS health passed. Public page and JS/CSS hashes
+  match the released files. Q&A rejects unauthenticated requests with HTTP 401.
+- Both additive migrations 034/035 match the live migration ledger checksums.
+- Actual compiled TXT, DOC, DOCX and a three-page PDF with English/Chinese scans
+  parsed successfully, preserving page locations and explicit OCR uncertainty.
+- Live Anthropic claude-sonnet-4-5 answered both synthetic questions with valid
+  source quotes, dry-only conditions, stored value 82 C and its exact numeric
+  binding. Existing provider/model settings were preserved. These are two
+  bounded component canaries, not a full Anthropic quality benchmark.
+- Database/files were backed up and checked before deployment. No production
+  research records or scientific results were created or modified by smoke tests.
+
+Structured evidence: [live verification receipt](research-qa-live-verification.json).
+Original source acceptance remains historical: eleven of thirteen core files
+have identical published hashes; two adapters differ only by Git CRLF-to-LF
+normalization. The new Anthropic-only compatibility adapter has its own hash,
+focused regression and live-provider evidence in the receipt. DeepSeek behavior
+and the original cited-answer schema are unchanged.
+
+The initial local checkout retains unrelated work and its earlier base/migration
+numbering. Future deployment work must use the integrated release checkout or
+integrate current main before applying migrations. Do not apply the old local
+031/032 Q&A filenames to the production database.
 
 The user explicitly requested remote deployment after local Q&A acceptance.
 This separately prepared release starts from origin/main
@@ -12,7 +45,7 @@ matrix/editor-reviewer work in the original checkout is not included.
 Q&A migrations are 034_research_documents.sql and 035_research_answers.sql;
 remote 031–033 remain unchanged. No existing scientific result is recalculated
 or overwritten. The thirteen Q&A implementation/label/harness files captured by
-the accepted provider evaluation have matching hashes in this release; the
+the accepted provider evaluation match after line-ending normalization; the
 migration-specific document test is updated for its new filename.
 
 [Local feature acceptance](research-qa-verification.md) records the earlier
@@ -57,7 +90,7 @@ The existing backup utility completed a fresh database and file backup in
 integrity and file-archive listing passed. Backup contents and credentials remain
 on the server. Private source files, cookies and credentials are not in Git.
 
-Pending hosted checks: Linux CI/deployment, deployed SHA/service and migration
+The initial release checklist required Linux CI/deployment, deployed SHA/service and migration
 verification, public HTTPS health/assets, compiled parser smoke and the selected
 provider's synthetic citation check. Parser/provider smoke uses generated data
 only and does not create production research records.
@@ -108,4 +141,4 @@ generated evidence and the existing protected configuration. Actual Anthropic
 claude-sonnet-4-5 document and accepted-value canaries both passed, including
 dry-only/wet-excluded conditions, the stored 82 C and its exact numeric binding.
 The follow-up deployment and another canary against its actual live release
-remain to be verified. No research records were created by these checks.
+were then verified on the final live release above. No research records were created by these checks.

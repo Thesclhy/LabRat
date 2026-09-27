@@ -1,12 +1,25 @@
 # Current Milestone
 
-Status: Research Q&A release — remote deployment authorized; integrated verification passed
+Status: Research Q&A v1 deployed — hosted and live verification passed
 Read when: checking what the next implementation slice should be.
 Last reviewed: 2026-09-27
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
 
-## Research Q&A v1 release
+## Research Q&A production checkpoint
+
+The remote deployment request is complete. Production code f317265 is served
+from /opt/labrat/releases/20260927184046-f31726520c3a. Hosted workflow 36341375213
+and actual live parser/provider checks passed. Anthropic remains selected;
+both document and accepted-value canaries have validated citations.
+See [deployment evidence](qa/research-qa-deployment.md) for exact results and limits.
+
+The integrated release uses migrations 034/035 after remote 031–033. The original
+dirty checkout and its independent permission/analysis edits were preserved.
+Use integrated current main for further deployment or database work; the older
+local Q&A 031/032 filenames describe the initial local-only checkpoint.
+
+## Research Q&A release preparation checkpoint
 
 The user authorized remote deployment on 2026-09-27 after local Q&A completion.
 The isolated release is based on origin/main 834284d, preserving its manual rows,
