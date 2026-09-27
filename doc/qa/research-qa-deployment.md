@@ -83,3 +83,29 @@ the existing Windows fallbacks. OCR assertions and production parser code are
 unchanged. This is a fixture rendering dependency, not an OCR language download;
 English and Chinese recognition data are already packaged with the application.
 No service switch occurred in either failed workflow.
+
+## First live canary and Anthropic compatibility repair
+
+Commit 1cec67e completed [hosted run 36340625296](https://github.com/Thesclhy/LabRat/actions/runs/36340625296)
+and activated /opt/labrat/releases/20260927182957-1cec67e16b42. Hosted checks
+passed: frontend 416, Node 399 with three retired skips, Nest 72, PostgreSQL
+2 legacy + 20 Nest (one optional provider evaluation skipped), builds and entry
+smoke. Live migration checksums, HTTPS page/asset hashes, service health,
+unauthenticated Q&A rejection and compiled TXT/DOC/DOCX/mixed English-Chinese
+PDF parsing all passed. The PDF correctly retains its partial/OCR warning state.
+
+The real Anthropic canary then returned HTTP 400 because maxItems is unsupported
+in its structured output schema. The adapter now moves unsupported length,
+numeric and array constraints into provider-facing descriptions. Both normal
+and tool requests retain original schema validation in the gateway; citation,
+number, unit and resource checks are unchanged. This follows the documented
+[Anthropic schema transformation](https://platform.claude.com/docs/en/build-with-claude/structured-outputs).
+No provider or model setting changed.
+
+All 24 gateway/citation checks and the backend build passed. The corrected
+compiled adapter was tested in an isolated server-side copy, using only
+generated evidence and the existing protected configuration. Actual Anthropic
+claude-sonnet-4-5 document and accepted-value canaries both passed, including
+dry-only/wet-excluded conditions, the stored 82 C and its exact numeric binding.
+The follow-up deployment and another canary against its actual live release
+remain to be verified. No research records were created by these checks.

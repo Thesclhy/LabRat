@@ -562,3 +562,61 @@ test("DeepSeek authentication failures are not retried and cancellation propagat
     { name: "AbortError" },
   );
 });
+
+test("Anthropic output constraints stay enforced locally after transport normalization", async () => {
+  const outputSchema = { type: "object", additionalProperties: false, required: ["maxItems", "values"],
+    properties: { maxItems: { type: "integer", minimum: 1, maximum: 3 },
+      values: { type: "array", minItems: 2, maxItems: 3, uniqueItems: true,
+        items: { type: "string", minLength: 1, maxLength: 5 } } } };
+  const original = structuredClone(outputSchema);
+  let response = { maxItems: 2, values: ["a", "b"] };
+  const gateway = createAiGateway({ config: { aiProvider: "anthropic", anthropicApiKey: "test-key" },
+    fetchImpl: async (_url, request) => {
+      const sent = JSON.parse(request.body).output_config.format.schema;
+      assert.equal(sent.properties.maxItems.type, "integer", "property names are not constraint keywords");
+      assert.equal(sent.properties.maxItems.minimum, undefined);
+      assert.match(sent.properties.maxItems.description, /minimum=1/);
+      assert.equal(sent.properties.values.maxItems, undefined);
+      assert.equal(sent.properties.values.minItems, undefined);
+      assert.match(sent.properties.values.description, /minItems=2/);
+      assert.equal(sent.properties.values.items.maxLength, undefined);
+      return jsonResponse({ content: [{ type: "text", text: JSON.stringify(response) }], stop_reason: "end_turn" });
+    } });
+  const request = { system: "Return JSON.", payload: {}, outputSchema, allowRepair: false };
+  assert.equal((await gateway.requestStructured(request)).ok, true);
+  for (const invalid of [{ maxItems: 0, values: ["a", "b"] }, { maxItems: 2, values: ["a"] },
+    { maxItems: 2, values: ["a", "a"] }, { maxItems: 2, values: ["too-long", "b"] }]) {
+    response = invalid;
+    const result = await gateway.requestStructured(request);
+    assert.equal(result.ok, false);
+    assert.equal(result.warning.code, "ai_invalid_response");
+  }
+  assert.deepEqual(outputSchema, original);
+});
+
+test("Anthropic Q&A tool requests preserve the original answer and citation limits", async () => {
+  const { researchQuestionRequest, CITED_ANSWER_SCHEMA } = await import("../research/citedAnswer.js");
+  const original = structuredClone(CITED_ANSWER_SCHEMA);
+  let calls = 0;
+  const gateway = createAiGateway({ config: { aiProvider: "anthropic", anthropicApiKey: "test-key" },
+    fetchImpl: async (_url, request) => {
+      calls++;
+      const sent = JSON.parse(request.body).output_config.format.schema;
+      assert.equal(sent.properties.claims.maxItems, undefined);
+      assert.match(sent.properties.claims.description, /maxItems=8/);
+      const claim = sent.properties.claims.items.properties;
+      assert.equal(claim.text.maxLength, undefined);
+      assert.equal(claim.citations.minItems, 1);
+      assert.equal(claim.citations.maxItems, undefined);
+      assert.deepEqual(claim.numericBindings.items.properties.unit.type, ["string", "null"]);
+      return jsonResponse({ content: [{ type: "text", text: JSON.stringify({ status: "answered",
+        claims: Array.from({length: 9}, () => ({ text: "Stored source statement.",
+          citations: [{evidenceId:"synthetic-evidence",quote:"Stored source statement."}],numericBindings:[] })),
+        missingEvidence: [] }) }], stop_reason: "end_turn" });
+    } });
+  const result = await gateway.requestStructuredWithTools(researchQuestionRequest({question:"Read the source."}, {}));
+  assert.equal(result.ok, false);
+  assert.equal(result.warning.code, "ai_invalid_response");
+  assert.equal(calls, 1, "Q&A keeps its service-owned repair boundary");
+  assert.deepEqual(CITED_ANSWER_SCHEMA, original);
+});

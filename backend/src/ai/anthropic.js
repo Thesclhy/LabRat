@@ -1,6 +1,36 @@
 import { validateJsonSchema } from "./schemaValidation.js";
 import { sanitizeProviderDetail } from "./providerDiagnostics.js";
 
+
+// The provider accepts a subset; the gateway still validates the original schema.
+function anthropicOutputSchema(schema) {
+  if (!schema || typeof schema !== "object" || Array.isArray(schema)) return schema;
+  const result = { ...schema };
+  const constraints = [];
+  for (const key of ["minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf",
+    "minLength", "maxLength", "maxItems", "uniqueItems"]) {
+    if (Object.hasOwn(result, key)) {
+      constraints.push(key + "=" + JSON.stringify(result[key]));
+      delete result[key];
+    }
+  }
+  if (Object.hasOwn(result, "minItems") && ![0, 1].includes(result.minItems)) {
+    constraints.push("minItems=" + result.minItems);
+    delete result.minItems;
+  }
+  if (constraints.length) result.description = [schema.description,
+    "Application constraints: " + constraints.join(", ") + "."].filter(Boolean).join(" ");
+  for (const key of ["properties", "$defs", "definitions"]) {
+    if (result[key]) result[key] = Object.fromEntries(Object.entries(result[key])
+      .map(([name, child]) => [name, anthropicOutputSchema(child)]));
+  }
+  if (result.items) result.items = anthropicOutputSchema(result.items);
+  for (const key of ["anyOf", "allOf", "oneOf"]) {
+    if (Array.isArray(result[key])) result[key] = result[key].map(anthropicOutputSchema);
+  }
+  return result;
+}
+
 export function anthropicConfig(env = process.env) {
   return {
     apiKey: env.ANTHROPIC_API_KEY || "",
@@ -73,7 +103,7 @@ export async function requestAnthropicJson({
         output_config: outputSchema ? {
           format: {
             type: "json_schema",
-            schema: outputSchema,
+            schema: anthropicOutputSchema(outputSchema),
           },
         } : undefined,
       }),
@@ -186,7 +216,7 @@ export async function requestAnthropicJsonWithTools({
           messages,
           tools: tools.length ? tools : undefined,
           output_config: outputSchema ? {
-            format: { type: "json_schema", schema: outputSchema },
+            format: { type: "json_schema", schema: anthropicOutputSchema(outputSchema) },
           } : undefined,
         }),
         signal,

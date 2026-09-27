@@ -13,6 +13,17 @@ Keep entries concise, newest first, and include:
 - verification
 - follow-ups or residual risk
 
+## 2026-09-27 — Live Anthropic format compatibility
+
+- Release 1cec67e passed hosted CI, migrated and served healthy pages/assets.
+  Live compiled parsing passed; actual Anthropic Q&A exposed HTTP 400 for
+  unsupported output-schema limits.
+- Adapted only the provider-facing schema; original local schema and citation
+  validation remain enforced. All 24 focused checks and backend build passed.
+- Real Anthropic document and accepted-snapshot canaries passed in an isolated
+  candidate copy on the server. Publishing the repair through the same workflow;
+  final live proof is recorded in doc/qa/research-qa-deployment.md.
+
 ## 2026-09-27 — Linux OCR fixture rendering repair
 
 - Hosted run 36340264429 passed installation and frontend checks, then failed

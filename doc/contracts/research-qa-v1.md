@@ -142,3 +142,12 @@ project member from reading a question or bypassing its cancellation lease.
 Newly generated workbook indexes preserve formula cells with no saved result as
 missing; a parser's blank-cell zero placeholder is not an experimental value.
 Existing immutable indexes and accepted results are not rewritten by this fix.
+
+## Provider schema compatibility
+
+Anthropic's wire schema omits unsupported numeric/string/array limits and keeps
+their values in field descriptions. The gateway validates returned data against
+the unchanged original schema, before service-owned citation repair and evidence
+validation. The eight-claim cap, quote lengths, per-claim citation/binding caps,
+units, source authorization and shared resource budgets remain enforced by LabRat.
+This transport adjustment does not select a provider or weaken acceptance rules.
