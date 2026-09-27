@@ -41,7 +41,7 @@ export function scanCanvas({ chinese = false, turns = 0, lowContrast = false, co
   ctx.fillStyle = "white"; ctx.fillRect(0, 0, base.width, base.height);
   ctx.translate(600, 800); ctx.rotate(skew); ctx.translate(-600, -800);
   ctx.fillStyle = lowContrast ? "#fdfdfd" : "black";
-  ctx.font = chinese ? '42px "Microsoft YaHei", "SimSun", sans-serif' : "40px Arial, sans-serif";
+  ctx.font = chinese ? '42px "Noto Sans CJK SC", "Microsoft YaHei", "SimSun", sans-serif' : "40px Arial, sans-serif";
   const lines = chinese ? ["实验方法 RQ-002", "温度 80 摄氏度", "反应时间 30 分钟", "样品编号 Exp17", "本文只描述方法，不代表实验结果。"]
     : ["Research protocol RQ-001", "Temperature: 80 C", "Duration: 30 minutes", "Sample: Exp17", "This procedure requires a dry sample."];
   lines.forEach((line, i) => ctx.fillText(line, 90, 140 + i * 90));

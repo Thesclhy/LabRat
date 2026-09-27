@@ -72,3 +72,14 @@ directory with npm 10.9.8 supplied 27 missing development-only lock entries.
 Existing package versions, hashes and platform metadata remain unchanged.
 A real clean npm 10 installation passed; the corrected lock is checked again
 before publication. The hosted pipeline will rerun on the follow-up commit.
+
+## Linux OCR fixture environment
+
+Commit 69419ea passed hosted installation and frontend tests. [Run 36340264429](https://github.com/Thesclhy/LabRat/actions/runs/36340264429)
+then failed the Chinese generated-image OCR check: the Linux runner had no CJK
+font, so the fixture rendered missing-glyph boxes. CI now installs fonts-noto-cjk
+before backend tests and the fixture explicitly prefers Noto Sans CJK SC with
+the existing Windows fallbacks. OCR assertions and production parser code are
+unchanged. This is a fixture rendering dependency, not an OCR language download;
+English and Chinese recognition data are already packaged with the application.
+No service switch occurred in either failed workflow.

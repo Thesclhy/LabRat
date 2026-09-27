@@ -13,6 +13,14 @@ Keep entries concise, newest first, and include:
 - verification
 - follow-ups or residual risk
 
+## 2026-09-27 — Linux OCR fixture rendering repair
+
+- Hosted run 36340264429 passed installation and frontend checks, then failed
+  Chinese OCR because its generated scan contained missing-font boxes.
+- CI now supplies Noto CJK fonts; synthetic scans explicitly use that family
+  with Windows fallbacks. Recognition assertions and application code stay intact.
+- Re-running the focused parser check and hosted pipeline before deployment.
+
 ## 2026-09-27 — Research Q&A deployment dependency repair
 
 - First hosted run 36339754688 stopped before deployment: npm 10 required
