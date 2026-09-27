@@ -1,0 +1,2805 @@
+{
+  "schemaVersion": "labrat.researchQaEvaluation.v1",
+  "material": "synthetic only",
+  "provider": {
+    "provider": "deepseek",
+    "model": "deepseek-v4-pro",
+    "configured": true
+  },
+  "evaluation": "supplemental",
+  "completed": true,
+  "records": [
+    {
+      "id": "S-D1",
+      "group": "documents",
+      "question": "RQ-DOSE 中记录的溶剂体积是多少？适用于哪种催化剂？请保留原单位。",
+      "expected": [
+        "8 mL",
+        "only catalyst K"
+      ],
+      "minimumSupport": [
+        {
+          "kind": "document",
+          "source": "legacy",
+          "text": "Solvent volume: 8 mL",
+          "locator": {
+            "paragraph": 3
+          }
+        },
+        {
+          "kind": "document",
+          "source": "legacy",
+          "text": "Only catalyst K is covered.",
+          "locator": {
+            "paragraph": 4
+          }
+        }
+      ],
+      "control": null,
+      "split": "fresh_supplemental",
+      "allowedScope": "project_analysis synthetic sources only",
+      "forbidden": [
+        "new scientific values",
+        "cross-project evidence",
+        "unqualified scope expansion"
+      ],
+      "request": {
+        "runId": "agent_run_e7e6ff67e79c4c2ebc93e0ae",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "eval-S-D1-1790526660655",
+        "question": "RQ-DOSE 中记录的溶剂体积是多少？适用于哪种催化剂？请保留原单位。",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 2,
+          "elapsedMs": 9176,
+          "knownCost": null,
+          "toolCalls": 3,
+          "toolRounds": 1,
+          "inputTokens": 11719,
+          "lastActiveAt": 1790526669849,
+          "outputTokens": 1012,
+          "reservedTokens": 0,
+          "visibleToolCalls": 4,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-27T16:31:00.664Z",
+        "updatedAt": "2026-09-27T16:31:09.854Z"
+      },
+      "artifact": {
+        "id": "answer_21a8ea951209415481f37e01",
+        "runId": "agent_run_e7e6ff67e79c4c2ebc93e0ae",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "RQ-DOSE 中记录的溶剂体积为 8 mL（原文：“Solvent volume: 8 mL”）。",
+              "citations": [
+                {
+                  "quote": "Solvent volume: 8 mL",
+                  "evidenceId": "evidence_20bbf50381f0644313b84b77"
+                }
+              ],
+              "numericBindings": []
+            },
+            {
+              "text": "该记录仅适用于催化剂 K（原文：“Only catalyst K is covered.”）。",
+              "citations": [
+                {
+                  "quote": "Only catalyst K is covered.",
+                  "evidenceId": "evidence_6b562cc5fdfa398ced2629d0"
+                }
+              ],
+              "numericBindings": []
+            }
+          ],
+          "status": "answered",
+          "limitations": [],
+          "missingEvidence": []
+        },
+        "evidence": [
+          {
+            "id": "evidence_20bbf50381f0644313b84b77",
+            "kind": "document_passage",
+            "label": "RQ-dose.doc",
+            "locator": {
+              "kind": "word",
+              "part": "body",
+              "charEnd": 20,
+              "charStart": 0,
+              "paragraph": 3
+            },
+            "version": {
+              "versionId": "document_version_5ed781e75fbf4351a0f5e0dd",
+              "documentId": "context_doc_fa99aa7bb89341c59e43c547",
+              "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 6,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "part": "body",
+                  "status": "ready"
+                },
+                "statusCounts": {
+                  "ready": 6
+                },
+                "warningParts": 0,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "ready",
+              "passageId": "passage_86b20e1f9def02069390b6f85d65423d",
+              "limitations": [
+                "legacy_word_table_and_page_layout_not_reconstructed",
+                "embedded_images_and_fields_not_interpreted"
+              ]
+            },
+            "warnings": []
+          },
+          {
+            "id": "evidence_6b562cc5fdfa398ced2629d0",
+            "kind": "document_passage",
+            "label": "RQ-dose.doc",
+            "locator": {
+              "kind": "word",
+              "part": "body",
+              "charEnd": 27,
+              "charStart": 0,
+              "paragraph": 4
+            },
+            "version": {
+              "versionId": "document_version_5ed781e75fbf4351a0f5e0dd",
+              "documentId": "context_doc_fa99aa7bb89341c59e43c547",
+              "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 6,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "part": "body",
+                  "status": "ready"
+                },
+                "statusCounts": {
+                  "ready": 6
+                },
+                "warningParts": 0,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "ready",
+              "passageId": "passage_58557d7c1ed9afbf1635c5f48fd789b7",
+              "limitations": [
+                "legacy_word_table_and_page_layout_not_reconstructed",
+                "embedded_images_and_fields_not_interpreted"
+              ]
+            },
+            "warnings": []
+          }
+        ],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "status": "ok",
+            "elapsedMs": 33
+          },
+          {
+            "tool": "read_document_passage",
+            "status": "ok",
+            "elapsedMs": 8
+          },
+          {
+            "tool": "read_document_passage",
+            "status": "ok",
+            "elapsedMs": 5
+          },
+          {
+            "tool": "read_document_passage",
+            "status": "ok",
+            "elapsedMs": 4
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 2,
+          "elapsedMs": 9176,
+          "knownCost": null,
+          "toolCalls": 3,
+          "toolRounds": 1,
+          "inputTokens": 11719,
+          "lastActiveAt": 1790526669849,
+          "outputTokens": 1012,
+          "reservedTokens": 0,
+          "visibleToolCalls": 4,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-27 12:31:09.850449-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_20bbf50381f0644313b84b77",
+          "data": {
+            "text": "Solvent volume: 8 mL"
+          },
+          "kind": "document_passage",
+          "label": "RQ-dose.doc",
+          "locator": {
+            "kind": "word",
+            "part": "body",
+            "charEnd": 20,
+            "charStart": 0,
+            "paragraph": 3
+          },
+          "version": {
+            "versionId": "document_version_5ed781e75fbf4351a0f5e0dd",
+            "documentId": "context_doc_fa99aa7bb89341c59e43c547",
+            "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 6,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "part": "body",
+                "status": "ready"
+              },
+              "statusCounts": {
+                "ready": 6
+              },
+              "warningParts": 0,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "ready",
+            "passageId": "passage_86b20e1f9def02069390b6f85d65423d",
+            "limitations": [
+              "legacy_word_table_and_page_layout_not_reconstructed",
+              "embedded_images_and_fields_not_interpreted"
+            ]
+          },
+          "warnings": []
+        },
+        {
+          "id": "evidence_6b562cc5fdfa398ced2629d0",
+          "data": {
+            "text": "Only catalyst K is covered."
+          },
+          "kind": "document_passage",
+          "label": "RQ-dose.doc",
+          "locator": {
+            "kind": "word",
+            "part": "body",
+            "charEnd": 27,
+            "charStart": 0,
+            "paragraph": 4
+          },
+          "version": {
+            "versionId": "document_version_5ed781e75fbf4351a0f5e0dd",
+            "documentId": "context_doc_fa99aa7bb89341c59e43c547",
+            "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 6,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "part": "body",
+                "status": "ready"
+              },
+              "statusCounts": {
+                "ready": 6
+              },
+              "warningParts": 0,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "ready",
+            "passageId": "passage_58557d7c1ed9afbf1635c5f48fd789b7",
+            "limitations": [
+              "legacy_word_table_and_page_layout_not_reconstructed",
+              "embedded_images_and_fields_not_interpreted"
+            ]
+          },
+          "warnings": []
+        }
+      ],
+      "toolExecutions": [
+        {
+          "tool": "read_document_passage",
+          "input": {
+            "versionId": "document_version_5ed781e75fbf4351a0f5e0dd",
+            "passageId": "passage_86b20e1f9def02069390b6f85d65423d"
+          },
+          "startedAt": "2026-09-27T16:31:05.487Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_20bbf50381f0644313b84b77",
+              "kind": "document_passage",
+              "label": "RQ-dose.doc",
+              "version": {
+                "documentId": "context_doc_fa99aa7bb89341c59e43c547",
+                "versionId": "document_version_5ed781e75fbf4351a0f5e0dd",
+                "versionNumber": 1,
+                "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+              },
+              "locator": {
+                "kind": "word",
+                "part": "body",
+                "charEnd": 20,
+                "charStart": 0,
+                "paragraph": 3
+              },
+              "data": {
+                "text": "Solvent volume: 8 mL"
+              },
+              "coverage": {
+                "scope": "one_passage",
+                "passageId": "passage_86b20e1f9def02069390b6f85d65423d",
+                "status": "ready",
+                "source": {
+                  "parts": 6,
+                  "statusCounts": {
+                    "ready": 6
+                  },
+                  "location": {
+                    "part": "body",
+                    "status": "ready"
+                  },
+                  "warningParts": 0,
+                  "scope": "summary_and_cited_location_only",
+                  "fullCoverageAvailableOnVersion": true
+                },
+                "limitations": [
+                  "legacy_word_table_and_page_layout_not_reconstructed",
+                  "embedded_images_and_fields_not_interpreted"
+                ]
+              },
+              "warnings": []
+            },
+            "contextEvidence": [
+              {
+                "id": "evidence_c427f8314eb419dfd6b12d5b",
+                "kind": "document_passage",
+                "label": "RQ-dose.doc",
+                "version": {
+                  "documentId": "context_doc_fa99aa7bb89341c59e43c547",
+                  "versionId": "document_version_5ed781e75fbf4351a0f5e0dd",
+                  "versionNumber": 1,
+                  "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                  "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+                },
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 21,
+                  "charStart": 0,
+                  "paragraph": 2
+                },
+                "data": {
+                  "text": "Catalyst mass: 0.10 g"
+                },
+                "coverage": {
+                  "scope": "one_passage",
+                  "passageId": "passage_87044a530934fc746781f7df519dc310",
+                  "status": "ready",
+                  "source": {
+                    "parts": 6,
+                    "statusCounts": {
+                      "ready": 6
+                    },
+                    "location": {
+                      "part": "body",
+                      "status": "ready"
+                    },
+                    "warningParts": 0,
+                    "scope": "summary_and_cited_location_only",
+                    "fullCoverageAvailableOnVersion": true
+                  },
+                  "limitations": [
+                    "legacy_word_table_and_page_layout_not_reconstructed",
+                    "embedded_images_and_fields_not_interpreted"
+                  ]
+                },
+                "warnings": []
+              },
+              {
+                "id": "evidence_6b562cc5fdfa398ced2629d0",
+                "kind": "document_passage",
+                "label": "RQ-dose.doc",
+                "version": {
+                  "documentId": "context_doc_fa99aa7bb89341c59e43c547",
+                  "versionId": "document_version_5ed781e75fbf4351a0f5e0dd",
+                  "versionNumber": 1,
+                  "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                  "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+                },
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 27,
+                  "charStart": 0,
+                  "paragraph": 4
+                },
+                "data": {
+                  "text": "Only catalyst K is covered."
+                },
+                "coverage": {
+                  "scope": "one_passage",
+                  "passageId": "passage_58557d7c1ed9afbf1635c5f48fd789b7",
+                  "status": "ready",
+                  "source": {
+                    "parts": 6,
+                    "statusCounts": {
+                      "ready": 6
+                    },
+                    "location": {
+                      "part": "body",
+                      "status": "ready"
+                    },
+                    "warningParts": 0,
+                    "scope": "summary_and_cited_location_only",
+                    "fullCoverageAvailableOnVersion": true
+                  },
+                  "limitations": [
+                    "legacy_word_table_and_page_layout_not_reconstructed",
+                    "embedded_images_and_fields_not_interpreted"
+                  ]
+                },
+                "warnings": []
+              }
+            ],
+            "neighbors": [
+              {
+                "id": "passage_87044a530934fc746781f7df519dc310",
+                "ordinal": 1,
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 21,
+                  "charStart": 0,
+                  "paragraph": 2
+                }
+              },
+              {
+                "id": "passage_58557d7c1ed9afbf1635c5f48fd789b7",
+                "ordinal": 3,
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 27,
+                  "charStart": 0,
+                  "paragraph": 4
+                }
+              }
+            ]
+          },
+          "completedAt": "2026-09-27T16:31:05.495Z"
+        },
+        {
+          "tool": "read_document_passage",
+          "input": {
+            "versionId": "document_version_5ed781e75fbf4351a0f5e0dd",
+            "passageId": "passage_58557d7c1ed9afbf1635c5f48fd789b7"
+          },
+          "startedAt": "2026-09-27T16:31:05.495Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_6b562cc5fdfa398ced2629d0",
+              "kind": "document_passage",
+              "label": "RQ-dose.doc",
+              "version": {
+                "documentId": "context_doc_fa99aa7bb89341c59e43c547",
+                "versionId": "document_version_5ed781e75fbf4351a0f5e0dd",
+                "versionNumber": 1,
+                "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+              },
+              "locator": {
+                "kind": "word",
+                "part": "body",
+                "charEnd": 27,
+                "charStart": 0,
+                "paragraph": 4
+              },
+              "data": {
+                "text": "Only catalyst K is covered."
+              },
+              "coverage": {
+                "scope": "one_passage",
+                "passageId": "passage_58557d7c1ed9afbf1635c5f48fd789b7",
+                "status": "ready",
+                "source": {
+                  "parts": 6,
+                  "statusCounts": {
+                    "ready": 6
+                  },
+                  "location": {
+                    "part": "body",
+                    "status": "ready"
+                  },
+                  "warningParts": 0,
+                  "scope": "summary_and_cited_location_only",
+                  "fullCoverageAvailableOnVersion": true
+                },
+                "limitations": [
+                  "legacy_word_table_and_page_layout_not_reconstructed",
+                  "embedded_images_and_fields_not_interpreted"
+                ]
+              },
+              "warnings": []
+            },
+            "contextEvidence": [
+              {
+                "id": "evidence_20bbf50381f0644313b84b77",
+                "kind": "document_passage",
+                "label": "RQ-dose.doc",
+                "version": {
+                  "documentId": "context_doc_fa99aa7bb89341c59e43c547",
+                  "versionId": "document_version_5ed781e75fbf4351a0f5e0dd",
+                  "versionNumber": 1,
+                  "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                  "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+                },
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 20,
+                  "charStart": 0,
+                  "paragraph": 3
+                },
+                "data": {
+                  "text": "Solvent volume: 8 mL"
+                },
+                "coverage": {
+                  "scope": "one_passage",
+                  "passageId": "passage_86b20e1f9def02069390b6f85d65423d",
+                  "status": "ready",
+                  "source": {
+                    "parts": 6,
+                    "statusCounts": {
+                      "ready": 6
+                    },
+                    "location": {
+                      "part": "body",
+                      "status": "ready"
+                    },
+                    "warningParts": 0,
+                    "scope": "summary_and_cited_location_only",
+                    "fullCoverageAvailableOnVersion": true
+                  },
+                  "limitations": [
+                    "legacy_word_table_and_page_layout_not_reconstructed",
+                    "embedded_images_and_fields_not_interpreted"
+                  ]
+                },
+                "warnings": []
+              }
+            ],
+            "neighbors": [
+              {
+                "id": "passage_86b20e1f9def02069390b6f85d65423d",
+                "ordinal": 2,
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 20,
+                  "charStart": 0,
+                  "paragraph": 3
+                }
+              }
+            ]
+          },
+          "completedAt": "2026-09-27T16:31:05.500Z"
+        },
+        {
+          "tool": "read_document_passage",
+          "input": {
+            "versionId": "document_version_5ed781e75fbf4351a0f5e0dd",
+            "passageId": "passage_889a91a245758d703aa86d2e1c3ae2f2"
+          },
+          "startedAt": "2026-09-27T16:31:05.500Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_4ebfa98d1efa998ca448deb2",
+              "kind": "document_passage",
+              "label": "RQ-dose.doc",
+              "version": {
+                "documentId": "context_doc_fa99aa7bb89341c59e43c547",
+                "versionId": "document_version_5ed781e75fbf4351a0f5e0dd",
+                "versionNumber": 1,
+                "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+              },
+              "locator": {
+                "kind": "word",
+                "part": "body",
+                "charEnd": 7,
+                "charStart": 0,
+                "paragraph": 1
+              },
+              "data": {
+                "text": "RQ-DOSE"
+              },
+              "coverage": {
+                "scope": "one_passage",
+                "passageId": "passage_889a91a245758d703aa86d2e1c3ae2f2",
+                "status": "ready",
+                "source": {
+                  "parts": 6,
+                  "statusCounts": {
+                    "ready": 6
+                  },
+                  "location": {
+                    "part": "body",
+                    "status": "ready"
+                  },
+                  "warningParts": 0,
+                  "scope": "summary_and_cited_location_only",
+                  "fullCoverageAvailableOnVersion": true
+                },
+                "limitations": [
+                  "legacy_word_table_and_page_layout_not_reconstructed",
+                  "embedded_images_and_fields_not_interpreted"
+                ]
+              },
+              "warnings": []
+            },
+            "contextEvidence": [
+              {
+                "id": "evidence_c427f8314eb419dfd6b12d5b",
+                "kind": "document_passage",
+                "label": "RQ-dose.doc",
+                "version": {
+                  "documentId": "context_doc_fa99aa7bb89341c59e43c547",
+                  "versionId": "document_version_5ed781e75fbf4351a0f5e0dd",
+                  "versionNumber": 1,
+                  "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                  "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+                },
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 21,
+                  "charStart": 0,
+                  "paragraph": 2
+                },
+                "data": {
+                  "text": "Catalyst mass: 0.10 g"
+                },
+                "coverage": {
+                  "scope": "one_passage",
+                  "passageId": "passage_87044a530934fc746781f7df519dc310",
+                  "status": "ready",
+                  "source": {
+                    "parts": 6,
+                    "statusCounts": {
+                      "ready": 6
+                    },
+                    "location": {
+                      "part": "body",
+                      "status": "ready"
+                    },
+                    "warningParts": 0,
+                    "scope": "summary_and_cited_location_only",
+                    "fullCoverageAvailableOnVersion": true
+                  },
+                  "limitations": [
+                    "legacy_word_table_and_page_layout_not_reconstructed",
+                    "embedded_images_and_fields_not_interpreted"
+                  ]
+                },
+                "warnings": []
+              }
+            ],
+            "neighbors": [
+              {
+                "id": "passage_87044a530934fc746781f7df519dc310",
+                "ordinal": 1,
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 21,
+                  "charStart": 0,
+                  "paragraph": 2
+                }
+              }
+            ]
+          },
+          "completedAt": "2026-09-27T16:31:05.504Z"
+        }
+      ],
+      "modelOutputs": [
+        {
+          "repairErrors": [],
+          "startedAt": "2026-09-27T16:31:00.709Z",
+          "result": {
+            "ok": true,
+            "status": "answered",
+            "claims": [
+              {
+                "text": "RQ-DOSE 中记录的溶剂体积为 8 mL（原文：“Solvent volume: 8 mL”）。",
+                "citations": [
+                  {
+                    "evidenceId": "evidence_20bbf50381f0644313b84b77",
+                    "quote": "Solvent volume: 8 mL"
+                  }
+                ],
+                "numericBindings": []
+              },
+              {
+                "text": "该记录仅适用于催化剂 K（原文：“Only catalyst K is covered.”）。",
+                "citations": [
+                  {
+                    "evidenceId": "evidence_6b562cc5fdfa398ced2629d0",
+                    "quote": "Only catalyst K is covered."
+                  }
+                ],
+                "numericBindings": []
+              }
+            ],
+            "missingEvidence": [],
+            "metadata": {
+              "provider": "deepseek",
+              "model": "deepseek-v4-pro",
+              "latencyMs": 9133,
+              "usage": {
+                "inputTokens": 11719,
+                "outputTokens": 1012,
+                "reasoningTokens": 582
+              },
+              "toolRounds": 1,
+              "requestedMaxTokens": 4000,
+              "finalRequestedMaxTokens": 4000,
+              "attemptCount": 1,
+              "stopReason": "stop"
+            }
+          },
+          "completedAt": "2026-09-27T16:31:09.842Z"
+        }
+      ],
+      "elapsedMs": 9405,
+      "semanticReview": "pending_independent_review"
+    },
+    {
+      "id": "S-R1",
+      "group": "data",
+      "question": "Read Exp17's accepted field with columnId aux_23, including its stored value and unit. Do not infer it from nearby fields.",
+      "expected": [
+        "123 mg",
+        "aux_23",
+        "accepted snapshot",
+        "read beyond first field window"
+      ],
+      "minimumSupport": [
+        {
+          "kind": "field",
+          "columnId": "aux_23",
+          "value": 123,
+          "unit": "mg"
+        }
+      ],
+      "control": null,
+      "split": "fresh_supplemental",
+      "allowedScope": "project_analysis synthetic sources only",
+      "forbidden": [
+        "new scientific values",
+        "cross-project evidence",
+        "unqualified scope expansion"
+      ],
+      "request": {
+        "runId": "agent_run_fb751f4388564f8db4699997",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "eval-S-R1-1790526670063",
+        "question": "Read Exp17's accepted field with columnId aux_23, including its stored value and unit. Do not infer it from nearby fields.",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 9183,
+          "knownCost": null,
+          "toolCalls": 2,
+          "toolRounds": 2,
+          "inputTokens": 13652,
+          "lastActiveAt": 1790526679263,
+          "outputTokens": 783,
+          "reservedTokens": 0,
+          "visibleToolCalls": 3,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-27T16:31:10.070Z",
+        "updatedAt": "2026-09-27T16:31:19.265Z"
+      },
+      "artifact": {
+        "id": "answer_42dfcddc7e7c4fc7948fed65",
+        "runId": "agent_run_fb751f4388564f8db4699997",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "In Exp17's accepted snapshot, the field with columnId aux_23 (display name \"Auxiliary 23\") stores value 123 with unit mg.",
+              "citations": [
+                {
+                  "quote": "Auxiliary 23",
+                  "evidenceId": "evidence_20b9dbece5536ab3552b22d7"
+                },
+                {
+                  "quote": "123",
+                  "evidenceId": "evidence_20b9dbece5536ab3552b22d7"
+                },
+                {
+                  "quote": "mg",
+                  "evidenceId": "evidence_20b9dbece5536ab3552b22d7"
+                }
+              ],
+              "numericBindings": [
+                {
+                  "path": "/data/fields/0/value",
+                  "unit": "mg",
+                  "value": 123,
+                  "evidenceId": "evidence_20b9dbece5536ab3552b22d7",
+                  "numericScale": null
+                }
+              ]
+            }
+          ],
+          "status": "answered",
+          "limitations": [
+            "Values retain their stored scale and unit; no conversion or new calculation was performed."
+          ],
+          "missingEvidence": []
+        },
+        "evidence": [
+          {
+            "id": "evidence_20b9dbece5536ab3552b22d7",
+            "kind": "experiment_snapshot",
+            "label": "Exp17",
+            "locator": {
+              "seriesKey": null,
+              "fieldOffset": 28,
+              "pointOffset": 0,
+              "seriesOffset": 0
+            },
+            "version": {
+              "headId": "head_experiment_17",
+              "snapshotId": "snapshot_experiment_17",
+              "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+              "recordIndex": 0,
+              "experimentId": "experiment_17",
+              "headUpdatedAt": "2026-09-27T16:31:00.646Z"
+            },
+            "coverage": {
+              "scope": "accepted_snapshot_window",
+              "fieldCount": 29,
+              "seriesCount": 1,
+              "nextFieldOffset": null,
+              "nextPointOffset": null,
+              "nextSeriesOffset": null
+            },
+            "warnings": [
+              "Values retain their stored scale and unit; no conversion or new calculation was performed."
+            ]
+          }
+        ],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "status": "ok",
+            "elapsedMs": 12
+          },
+          {
+            "tool": "find_experiments",
+            "status": "ok",
+            "elapsedMs": 6
+          },
+          {
+            "tool": "read_experiment_evidence",
+            "status": "ok",
+            "elapsedMs": 5
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 9183,
+          "knownCost": null,
+          "toolCalls": 2,
+          "toolRounds": 2,
+          "inputTokens": 13652,
+          "lastActiveAt": 1790526679263,
+          "outputTokens": 783,
+          "reservedTokens": 0,
+          "visibleToolCalls": 3,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-27 12:31:19.263918-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_20b9dbece5536ab3552b22d7",
+          "data": {
+            "fields": [
+              {
+                "unit": "mg",
+                "value": 123,
+                "columnId": "aux_23",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 23"
+              }
+            ],
+            "series": [
+              {
+                "label": "Temperature trace",
+                "xField": {
+                  "unit": "min",
+                  "fieldId": "time"
+                },
+                "yField": {
+                  "unit": "C",
+                  "fieldId": "temperature"
+                },
+                "seriesKey": "temperature_trace",
+                "pointCount": 121,
+                "sourceRefs": []
+              }
+            ],
+            "warnings": [],
+            "acceptedAt": "2026-09-27T16:31:00.644Z",
+            "fieldCount": 29,
+            "snapshotId": "snapshot_experiment_17",
+            "sourceRefs": [],
+            "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+            "seriesCount": 1,
+            "sourceAlias": "Exp17",
+            "experimentId": "experiment_17",
+            "seriesWindow": null,
+            "recordWarnings": []
+          },
+          "kind": "experiment_snapshot",
+          "label": "Exp17",
+          "locator": {
+            "seriesKey": null,
+            "fieldOffset": 28,
+            "pointOffset": 0,
+            "seriesOffset": 0
+          },
+          "version": {
+            "headId": "head_experiment_17",
+            "snapshotId": "snapshot_experiment_17",
+            "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+            "recordIndex": 0,
+            "experimentId": "experiment_17",
+            "headUpdatedAt": "2026-09-27T16:31:00.646Z"
+          },
+          "coverage": {
+            "scope": "accepted_snapshot_window",
+            "fieldCount": 29,
+            "seriesCount": 1,
+            "nextFieldOffset": null,
+            "nextPointOffset": null,
+            "nextSeriesOffset": null
+          },
+          "warnings": [
+            "Values retain their stored scale and unit; no conversion or new calculation was performed."
+          ]
+        }
+      ],
+      "toolExecutions": [
+        {
+          "tool": "find_experiments",
+          "input": {
+            "query": "Exp17"
+          },
+          "startedAt": "2026-09-27T16:31:12.731Z",
+          "result": {
+            "status": "matched",
+            "items": [
+              {
+                "id": "experiment_17",
+                "canonicalLabel": "Exp17",
+                "aliases": [
+                  "Batch-A"
+                ],
+                "headId": "head_experiment_17",
+                "headUpdatedAt": "2026-09-27T16:31:00.646Z",
+                "recordIndex": 0,
+                "snapshotId": "snapshot_experiment_17",
+                "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+                "confirmedRegions": [
+                  {
+                    "regionId": "review_region_analysis",
+                    "revisionId": "revision_analysis",
+                    "sheetName": "Carbon",
+                    "range": "A1:C2"
+                  }
+                ],
+                "moreConfirmedRegions": false
+              }
+            ],
+            "nextCursor": null,
+            "coverage": {
+              "exactNameOrAlias": true,
+              "complete": true,
+              "note": "Only active accepted snapshot heads are listed."
+            }
+          },
+          "completedAt": "2026-09-27T16:31:12.737Z"
+        },
+        {
+          "tool": "read_experiment_evidence",
+          "input": {
+            "experimentId": "experiment_17",
+            "snapshotId": "snapshot_experiment_17",
+            "fieldOffset": 28
+          },
+          "startedAt": "2026-09-27T16:31:14.242Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_20b9dbece5536ab3552b22d7",
+              "kind": "experiment_snapshot",
+              "label": "Exp17",
+              "version": {
+                "experimentId": "experiment_17",
+                "snapshotId": "snapshot_experiment_17",
+                "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+                "headId": "head_experiment_17",
+                "headUpdatedAt": "2026-09-27T16:31:00.646Z",
+                "recordIndex": 0
+              },
+              "locator": {
+                "fieldOffset": 28,
+                "seriesOffset": 0,
+                "seriesKey": null,
+                "pointOffset": 0
+              },
+              "data": {
+                "snapshotId": "snapshot_experiment_17",
+                "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+                "acceptedAt": "2026-09-27T16:31:00.644Z",
+                "warnings": [],
+                "experimentId": "experiment_17",
+                "sourceAlias": "Exp17",
+                "recordWarnings": [],
+                "sourceRefs": [],
+                "fieldCount": 29,
+                "seriesCount": 1,
+                "fields": [
+                  {
+                    "unit": "mg",
+                    "value": 123,
+                    "columnId": "aux_23",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 23"
+                  }
+                ],
+                "series": [
+                  {
+                    "label": "Temperature trace",
+                    "xField": {
+                      "unit": "min",
+                      "fieldId": "time"
+                    },
+                    "yField": {
+                      "unit": "C",
+                      "fieldId": "temperature"
+                    },
+                    "seriesKey": "temperature_trace",
+                    "pointCount": 121,
+                    "sourceRefs": []
+                  }
+                ],
+                "seriesWindow": null
+              },
+              "coverage": {
+                "scope": "accepted_snapshot_window",
+                "fieldCount": 29,
+                "seriesCount": 1,
+                "nextFieldOffset": null,
+                "nextSeriesOffset": null,
+                "nextPointOffset": null
+              },
+              "warnings": [
+                "Values retain their stored scale and unit; no conversion or new calculation was performed."
+              ]
+            }
+          },
+          "completedAt": "2026-09-27T16:31:14.247Z"
+        }
+      ],
+      "modelOutputs": [
+        {
+          "repairErrors": [],
+          "startedAt": "2026-09-27T16:31:10.094Z",
+          "result": {
+            "ok": true,
+            "status": "answered",
+            "claims": [
+              {
+                "text": "In Exp17's accepted snapshot, the field with columnId aux_23 (display name \"Auxiliary 23\") stores value 123 with unit mg.",
+                "citations": [
+                  {
+                    "evidenceId": "evidence_20b9dbece5536ab3552b22d7",
+                    "quote": "Auxiliary 23"
+                  },
+                  {
+                    "evidenceId": "evidence_20b9dbece5536ab3552b22d7",
+                    "quote": "123"
+                  },
+                  {
+                    "evidenceId": "evidence_20b9dbece5536ab3552b22d7",
+                    "quote": "mg"
+                  }
+                ],
+                "numericBindings": [
+                  {
+                    "evidenceId": "evidence_20b9dbece5536ab3552b22d7",
+                    "path": "/data/fields/0/value",
+                    "value": 123,
+                    "unit": "mg",
+                    "numericScale": null
+                  }
+                ]
+              }
+            ],
+            "missingEvidence": [],
+            "metadata": {
+              "provider": "deepseek",
+              "model": "deepseek-v4-pro",
+              "latencyMs": 9163,
+              "usage": {
+                "inputTokens": 13652,
+                "outputTokens": 783,
+                "reasoningTokens": 454
+              },
+              "toolRounds": 2,
+              "requestedMaxTokens": 4000,
+              "finalRequestedMaxTokens": 4000,
+              "attemptCount": 1,
+              "stopReason": "stop"
+            }
+          },
+          "completedAt": "2026-09-27T16:31:19.257Z"
+        }
+      ],
+      "elapsedMs": 9380,
+      "semanticReview": "pending_independent_review"
+    },
+    {
+      "id": "S-J1",
+      "group": "joint",
+      "question": "research.xlsx 的 Measurements!B2 原始单元格与 Exp17 已接受的 Temperature 分别是什么？分别引用，并保留表头和审核状态；不要计算差值。",
+      "expected": [
+        "raw B2 80",
+        "raw B1 Temperature (C)",
+        "accepted 82 C",
+        "separate evidence and review states"
+      ],
+      "minimumSupport": [
+        {
+          "kind": "cell",
+          "source": "workbook",
+          "sheet": "Measurements",
+          "address": "B1",
+          "rawValue": "Temperature (C)"
+        },
+        {
+          "kind": "cell",
+          "source": "workbook",
+          "sheet": "Measurements",
+          "address": "B2",
+          "rawValue": 80
+        },
+        {
+          "kind": "field",
+          "columnId": "temperature",
+          "value": 82,
+          "unit": "C"
+        }
+      ],
+      "control": null,
+      "split": "fresh_supplemental",
+      "allowedScope": "project_analysis synthetic sources only",
+      "forbidden": [
+        "new scientific values",
+        "cross-project evidence",
+        "unqualified scope expansion"
+      ],
+      "request": {
+        "runId": "agent_run_ad5070667b944de987d18c71",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "eval-S-J1-1790526679446",
+        "question": "research.xlsx 的 Measurements!B2 原始单元格与 Exp17 已接受的 Temperature 分别是什么？分别引用，并保留表头和审核状态；不要计算差值。",
+        "status": "failed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 5,
+          "elapsedMs": 92402,
+          "knownCost": null,
+          "toolCalls": 4,
+          "toolRounds": 3,
+          "inputTokens": 24704,
+          "lastActiveAt": 1790526771861,
+          "outputTokens": 9127,
+          "reservedTokens": 0,
+          "providerFailure": {
+            "code": "ai_output_truncated",
+            "httpStatus": null
+          },
+          "visibleToolCalls": 5,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": "ai_output_truncated",
+        "createdAt": "2026-09-27T16:31:19.452Z",
+        "updatedAt": "2026-09-27T16:32:51.862Z"
+      },
+      "artifact": null,
+      "evidence": [],
+      "toolExecutions": [
+        {
+          "tool": "read_workbook_source",
+          "input": {
+            "sourceDocumentId": "source_doc_483a2ae3565e49ec858e55a8",
+            "sheetName": "Measurements",
+            "range": "A1:B2"
+          },
+          "startedAt": "2026-09-27T16:31:24.255Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_b0c6198780a2351251f01cb2",
+              "kind": "workbook_raw",
+              "label": "research.xlsx",
+              "version": {
+                "sourceDocumentId": "source_doc_483a2ae3565e49ec858e55a8",
+                "indexVersion": "labrat.sourceIndex.v1",
+                "fileObjectId": "file_0db1460bd26443dbb96e5208",
+                "contentHash": "924044f8a0ed4e876b2fe4fc31004f37d5d5e555e864923cdfdafb742fe33d36"
+              },
+              "locator": {
+                "sheet": "Measurements",
+                "range": "A1:B2"
+              },
+              "data": {
+                "schemaVersion": "labrat.sourceRange.v1",
+                "sourceDocumentId": "source_doc_483a2ae3565e49ec858e55a8",
+                "sheetName": "Measurements",
+                "range": "A1:B2",
+                "rowCount": 2,
+                "columnCount": 2,
+                "cellCount": 4,
+                "cells": [
+                  {
+                    "address": "A1",
+                    "row": 0,
+                    "col": 0,
+                    "rawValue": "Experiment",
+                    "formattedValue": "Experiment",
+                    "type": "string",
+                    "formula": null,
+                    "merged": false,
+                    "mergedRange": null,
+                    "cacheMissing": false,
+                    "missing": false
+                  },
+                  {
+                    "address": "B1",
+                    "row": 0,
+                    "col": 1,
+                    "rawValue": "Temperature (C)",
+                    "formattedValue": "Temperature (C)",
+                    "type": "string",
+                    "formula": null,
+                    "merged": false,
+                    "mergedRange": null,
+                    "cacheMissing": false,
+                    "missing": false
+                  },
+                  {
+                    "address": "A2",
+                    "row": 1,
+                    "col": 0,
+                    "rawValue": "Exp17",
+                    "formattedValue": "Exp17",
+                    "type": "string",
+                    "formula": null,
+                    "merged": false,
+                    "mergedRange": null,
+                    "cacheMissing": false,
+                    "missing": false
+                  },
+                  {
+                    "address": "B2",
+                    "row": 1,
+                    "col": 1,
+                    "rawValue": 80,
+                    "formattedValue": "80",
+                    "type": "number",
+                    "formula": null,
+                    "merged": false,
+                    "mergedRange": null,
+                    "cacheMissing": false,
+                    "missing": false
+                  }
+                ],
+                "sourceRef": {
+                  "sourceType": "excel_range",
+                  "sourceDocumentId": "source_doc_483a2ae3565e49ec858e55a8",
+                  "fileObjectId": "file_0db1460bd26443dbb96e5208",
+                  "importRunId": null,
+                  "sheet": "Measurements",
+                  "range": "A1:B2"
+                },
+                "warnings": []
+              },
+              "coverage": {
+                "scope": "requested_range_only",
+                "cellCount": 4,
+                "semantics": "raw_unconfirmed"
+              },
+              "warnings": [
+                "Raw file evidence; no experimental meaning or units have been inferred."
+              ]
+            }
+          },
+          "completedAt": "2026-09-27T16:31:24.261Z"
+        },
+        {
+          "tool": "read_experiment_evidence",
+          "input": {
+            "experimentId": "experiment_17",
+            "snapshotId": "snapshot_experiment_17",
+            "fieldOffset": 0
+          },
+          "startedAt": "2026-09-27T16:31:24.261Z",
+          "error": {
+            "code": "evidence_not_found",
+            "message": "Evidence is not available in this project and scope."
+          },
+          "completedAt": "2026-09-27T16:31:24.263Z"
+        },
+        {
+          "tool": "find_experiments",
+          "input": {
+            "query": "Exp17"
+          },
+          "startedAt": "2026-09-27T16:31:26.671Z",
+          "result": {
+            "status": "matched",
+            "items": [
+              {
+                "id": "experiment_17",
+                "canonicalLabel": "Exp17",
+                "aliases": [
+                  "Batch-A"
+                ],
+                "headId": "head_experiment_17",
+                "headUpdatedAt": "2026-09-27T16:31:00.646Z",
+                "recordIndex": 0,
+                "snapshotId": "snapshot_experiment_17",
+                "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+                "confirmedRegions": [
+                  {
+                    "regionId": "review_region_analysis",
+                    "revisionId": "revision_analysis",
+                    "sheetName": "Carbon",
+                    "range": "A1:C2"
+                  }
+                ],
+                "moreConfirmedRegions": false
+              }
+            ],
+            "nextCursor": null,
+            "coverage": {
+              "exactNameOrAlias": true,
+              "complete": true,
+              "note": "Only active accepted snapshot heads are listed."
+            }
+          },
+          "completedAt": "2026-09-27T16:31:26.678Z"
+        },
+        {
+          "tool": "read_experiment_evidence",
+          "input": {
+            "experimentId": "experiment_17",
+            "fieldOffset": 0,
+            "snapshotId": "snapshot_experiment_17"
+          },
+          "startedAt": "2026-09-27T16:31:31.068Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_3d8dc8c45ff3d3461544205e",
+              "kind": "experiment_snapshot",
+              "label": "Exp17",
+              "version": {
+                "experimentId": "experiment_17",
+                "snapshotId": "snapshot_experiment_17",
+                "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+                "headId": "head_experiment_17",
+                "headUpdatedAt": "2026-09-27T16:31:00.646Z",
+                "recordIndex": 0
+              },
+              "locator": {
+                "fieldOffset": 0,
+                "seriesOffset": 0,
+                "seriesKey": null,
+                "pointOffset": 0
+              },
+              "data": {
+                "snapshotId": "snapshot_experiment_17",
+                "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+                "acceptedAt": "2026-09-27T16:31:00.644Z",
+                "warnings": [],
+                "experimentId": "experiment_17",
+                "sourceAlias": "Exp17",
+                "recordWarnings": [],
+                "sourceRefs": [],
+                "fieldCount": 29,
+                "seriesCount": 1,
+                "fields": [
+                  {
+                    "unit": "C",
+                    "value": 82,
+                    "columnId": "temperature",
+                    "valueType": "number",
+                    "sourceRefs": [
+                      {
+                        "cell": "B2",
+                        "sheet": "Measurements",
+                        "rawValue": 80
+                      }
+                    ],
+                    "displayName": "Temperature"
+                  },
+                  {
+                    "unit": "%",
+                    "value": 0.42,
+                    "columnId": "yield_fraction",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Yield",
+                    "numericScale": "fraction"
+                  },
+                  {
+                    "unit": "%",
+                    "value": 42,
+                    "columnId": "yield_points",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Yield",
+                    "numericScale": "percent_points"
+                  },
+                  {
+                    "unit": "bar",
+                    "value": null,
+                    "columnId": "pressure",
+                    "valueType": "number",
+                    "sourceRefs": [
+                      {
+                        "cell": "H2",
+                        "sheet": "Measurements",
+                        "rawValue": null
+                      }
+                    ],
+                    "displayName": "Pressure",
+                    "missingReason": "source_blank",
+                    "formattedValue": null
+                  },
+                  {
+                    "unit": "min",
+                    "value": 30,
+                    "columnId": "duration",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Duration"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 100,
+                    "columnId": "aux_0",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 0"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 101,
+                    "columnId": "aux_1",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 1"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 102,
+                    "columnId": "aux_2",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 2"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 103,
+                    "columnId": "aux_3",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 3"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 104,
+                    "columnId": "aux_4",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 4"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 105,
+                    "columnId": "aux_5",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 5"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 106,
+                    "columnId": "aux_6",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 6"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 107,
+                    "columnId": "aux_7",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 7"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 108,
+                    "columnId": "aux_8",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 8"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 109,
+                    "columnId": "aux_9",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 9"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 110,
+                    "columnId": "aux_10",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 10"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 111,
+                    "columnId": "aux_11",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 11"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 112,
+                    "columnId": "aux_12",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 12"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 113,
+                    "columnId": "aux_13",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 13"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 114,
+                    "columnId": "aux_14",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 14"
+                  }
+                ],
+                "series": [
+                  {
+                    "label": "Temperature trace",
+                    "xField": {
+                      "unit": "min",
+                      "fieldId": "time"
+                    },
+                    "yField": {
+                      "unit": "C",
+                      "fieldId": "temperature"
+                    },
+                    "seriesKey": "temperature_trace",
+                    "pointCount": 121,
+                    "sourceRefs": []
+                  }
+                ],
+                "seriesWindow": null
+              },
+              "coverage": {
+                "scope": "accepted_snapshot_window",
+                "fieldCount": 29,
+                "seriesCount": 1,
+                "nextFieldOffset": 20,
+                "nextSeriesOffset": null,
+                "nextPointOffset": null
+              },
+              "warnings": [
+                "Values retain their stored scale and unit; no conversion or new calculation was performed."
+              ]
+            }
+          },
+          "completedAt": "2026-09-27T16:31:31.072Z"
+        }
+      ],
+      "modelOutputs": [
+        {
+          "repairErrors": [],
+          "startedAt": "2026-09-27T16:31:19.473Z",
+          "result": {
+            "ok": false,
+            "warning": {
+              "code": "ai_output_truncated",
+              "message": "Model provider output reached the token limit.",
+              "severity": "warning"
+            },
+            "usage": {
+              "inputTokens": 21035,
+              "outputTokens": 5127,
+              "reasoningTokens": 4803
+            },
+            "stopReason": "length",
+            "toolRounds": 3,
+            "metadata": {
+              "provider": "deepseek",
+              "model": "deepseek-v4-pro",
+              "latencyMs": 47043,
+              "usage": {
+                "inputTokens": 21035,
+                "outputTokens": 5127,
+                "reasoningTokens": 4803
+              },
+              "toolRounds": 3,
+              "requestedMaxTokens": 4000,
+              "finalRequestedMaxTokens": 4000,
+              "attemptCount": 1,
+              "stopReason": "length"
+            }
+          },
+          "completedAt": "2026-09-27T16:32:06.516Z"
+        },
+        {
+          "repairErrors": [
+            "ai_output_truncated: Return a complete concise answer in the required JSON schema using the already-read evidence. Do not restart retrieval."
+          ],
+          "startedAt": "2026-09-27T16:32:06.518Z",
+          "result": {
+            "ok": false,
+            "warning": {
+              "code": "ai_output_truncated",
+              "message": "Model provider output reached the token limit.",
+              "severity": "warning"
+            },
+            "usage": {
+              "inputTokens": 3669,
+              "outputTokens": 4000,
+              "reasoningTokens": 4000
+            },
+            "stopReason": "length",
+            "toolRounds": 0,
+            "metadata": {
+              "provider": "deepseek",
+              "model": "deepseek-v4-pro",
+              "latencyMs": 45341,
+              "usage": {
+                "inputTokens": 3669,
+                "outputTokens": 4000,
+                "reasoningTokens": 4000
+              },
+              "toolRounds": 0,
+              "requestedMaxTokens": 4000,
+              "finalRequestedMaxTokens": 4000,
+              "attemptCount": 1,
+              "stopReason": "length"
+            }
+          },
+          "completedAt": "2026-09-27T16:32:51.859Z"
+        }
+      ],
+      "elapsedMs": 92633,
+      "semanticReview": "pending_independent_review"
+    },
+    {
+      "id": "S-C1",
+      "group": "controls",
+      "question": "What catalyst mass does RQ-DOSE establish for catalyst L?",
+      "expected": [
+        "insufficient_evidence",
+        "only catalyst K is covered",
+        "do not assign 0.10 g to catalyst L"
+      ],
+      "minimumSupport": [
+        {
+          "kind": "document",
+          "source": "legacy",
+          "text": "Only catalyst K is covered.",
+          "locator": {
+            "paragraph": 4
+          }
+        }
+      ],
+      "control": "insufficient_evidence",
+      "split": "fresh_supplemental",
+      "allowedScope": "project_analysis synthetic sources only",
+      "forbidden": [
+        "new scientific values",
+        "cross-project evidence",
+        "unqualified scope expansion"
+      ],
+      "request": {
+        "runId": "agent_run_95b5eb45caa04d10bec9df76",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "eval-S-C1-1790526772081",
+        "question": "What catalyst mass does RQ-DOSE establish for catalyst L?",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 2,
+          "elapsedMs": 7865,
+          "knownCost": null,
+          "toolCalls": 2,
+          "toolRounds": 1,
+          "inputTokens": 10777,
+          "lastActiveAt": 1790526779957,
+          "outputTokens": 745,
+          "reservedTokens": 0,
+          "visibleToolCalls": 3,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-27T16:32:52.087Z",
+        "updatedAt": "2026-09-27T16:32:59.966Z"
+      },
+      "artifact": {
+        "id": "answer_7e2ba44c59c140d9b48e15b6",
+        "runId": "agent_run_95b5eb45caa04d10bec9df76",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "RQ-DOSE (RQ-dose.doc) states a catalyst mass of 0.10 g, but the same document specifies \"Only catalyst K is covered.\" Therefore RQ-DOSE establishes no catalyst mass for catalyst L.",
+              "citations": [
+                {
+                  "quote": "Catalyst mass: 0.10 g",
+                  "evidenceId": "evidence_c427f8314eb419dfd6b12d5b"
+                },
+                {
+                  "quote": "Only catalyst K is covered.",
+                  "evidenceId": "evidence_6b562cc5fdfa398ced2629d0"
+                }
+              ],
+              "numericBindings": []
+            }
+          ],
+          "status": "insufficient_evidence",
+          "limitations": [],
+          "missingEvidence": [
+            "RQ-DOSE does not contain a catalyst mass for catalyst L; the document's catalyst mass (0.10 g) applies to catalyst K, not L."
+          ]
+        },
+        "evidence": [
+          {
+            "id": "evidence_6b562cc5fdfa398ced2629d0",
+            "kind": "document_passage",
+            "label": "RQ-dose.doc",
+            "locator": {
+              "kind": "word",
+              "part": "body",
+              "charEnd": 27,
+              "charStart": 0,
+              "paragraph": 4
+            },
+            "version": {
+              "versionId": "document_version_5ed781e75fbf4351a0f5e0dd",
+              "documentId": "context_doc_fa99aa7bb89341c59e43c547",
+              "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 6,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "part": "body",
+                  "status": "ready"
+                },
+                "statusCounts": {
+                  "ready": 6
+                },
+                "warningParts": 0,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "ready",
+              "passageId": "passage_58557d7c1ed9afbf1635c5f48fd789b7",
+              "limitations": [
+                "legacy_word_table_and_page_layout_not_reconstructed",
+                "embedded_images_and_fields_not_interpreted"
+              ]
+            },
+            "warnings": []
+          },
+          {
+            "id": "evidence_c427f8314eb419dfd6b12d5b",
+            "kind": "document_passage",
+            "label": "RQ-dose.doc",
+            "locator": {
+              "kind": "word",
+              "part": "body",
+              "charEnd": 21,
+              "charStart": 0,
+              "paragraph": 2
+            },
+            "version": {
+              "versionId": "document_version_5ed781e75fbf4351a0f5e0dd",
+              "documentId": "context_doc_fa99aa7bb89341c59e43c547",
+              "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 6,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "part": "body",
+                  "status": "ready"
+                },
+                "statusCounts": {
+                  "ready": 6
+                },
+                "warningParts": 0,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "ready",
+              "passageId": "passage_87044a530934fc746781f7df519dc310",
+              "limitations": [
+                "legacy_word_table_and_page_layout_not_reconstructed",
+                "embedded_images_and_fields_not_interpreted"
+              ]
+            },
+            "warnings": []
+          }
+        ],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "status": "ok",
+            "elapsedMs": 7
+          },
+          {
+            "tool": "read_document_passage",
+            "status": "ok",
+            "elapsedMs": 17
+          },
+          {
+            "tool": "read_document_passage",
+            "status": "ok",
+            "elapsedMs": 10
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 2,
+          "elapsedMs": 7865,
+          "knownCost": null,
+          "toolCalls": 2,
+          "toolRounds": 1,
+          "inputTokens": 10777,
+          "lastActiveAt": 1790526779957,
+          "outputTokens": 745,
+          "reservedTokens": 0,
+          "visibleToolCalls": 3,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-27 12:32:59.958417-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_6b562cc5fdfa398ced2629d0",
+          "data": {
+            "text": "Only catalyst K is covered."
+          },
+          "kind": "document_passage",
+          "label": "RQ-dose.doc",
+          "locator": {
+            "kind": "word",
+            "part": "body",
+            "charEnd": 27,
+            "charStart": 0,
+            "paragraph": 4
+          },
+          "version": {
+            "versionId": "document_version_5ed781e75fbf4351a0f5e0dd",
+            "documentId": "context_doc_fa99aa7bb89341c59e43c547",
+            "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 6,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "part": "body",
+                "status": "ready"
+              },
+              "statusCounts": {
+                "ready": 6
+              },
+              "warningParts": 0,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "ready",
+            "passageId": "passage_58557d7c1ed9afbf1635c5f48fd789b7",
+            "limitations": [
+              "legacy_word_table_and_page_layout_not_reconstructed",
+              "embedded_images_and_fields_not_interpreted"
+            ]
+          },
+          "warnings": []
+        },
+        {
+          "id": "evidence_c427f8314eb419dfd6b12d5b",
+          "data": {
+            "text": "Catalyst mass: 0.10 g"
+          },
+          "kind": "document_passage",
+          "label": "RQ-dose.doc",
+          "locator": {
+            "kind": "word",
+            "part": "body",
+            "charEnd": 21,
+            "charStart": 0,
+            "paragraph": 2
+          },
+          "version": {
+            "versionId": "document_version_5ed781e75fbf4351a0f5e0dd",
+            "documentId": "context_doc_fa99aa7bb89341c59e43c547",
+            "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 6,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "part": "body",
+                "status": "ready"
+              },
+              "statusCounts": {
+                "ready": 6
+              },
+              "warningParts": 0,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "ready",
+            "passageId": "passage_87044a530934fc746781f7df519dc310",
+            "limitations": [
+              "legacy_word_table_and_page_layout_not_reconstructed",
+              "embedded_images_and_fields_not_interpreted"
+            ]
+          },
+          "warnings": []
+        }
+      ],
+      "toolExecutions": [
+        {
+          "tool": "read_document_passage",
+          "input": {
+            "versionId": "document_version_5ed781e75fbf4351a0f5e0dd",
+            "passageId": "passage_58557d7c1ed9afbf1635c5f48fd789b7"
+          },
+          "startedAt": "2026-09-27T16:32:55.797Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_6b562cc5fdfa398ced2629d0",
+              "kind": "document_passage",
+              "label": "RQ-dose.doc",
+              "version": {
+                "documentId": "context_doc_fa99aa7bb89341c59e43c547",
+                "versionId": "document_version_5ed781e75fbf4351a0f5e0dd",
+                "versionNumber": 1,
+                "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+              },
+              "locator": {
+                "kind": "word",
+                "part": "body",
+                "charEnd": 27,
+                "charStart": 0,
+                "paragraph": 4
+              },
+              "data": {
+                "text": "Only catalyst K is covered."
+              },
+              "coverage": {
+                "scope": "one_passage",
+                "passageId": "passage_58557d7c1ed9afbf1635c5f48fd789b7",
+                "status": "ready",
+                "source": {
+                  "parts": 6,
+                  "statusCounts": {
+                    "ready": 6
+                  },
+                  "location": {
+                    "part": "body",
+                    "status": "ready"
+                  },
+                  "warningParts": 0,
+                  "scope": "summary_and_cited_location_only",
+                  "fullCoverageAvailableOnVersion": true
+                },
+                "limitations": [
+                  "legacy_word_table_and_page_layout_not_reconstructed",
+                  "embedded_images_and_fields_not_interpreted"
+                ]
+              },
+              "warnings": []
+            },
+            "contextEvidence": [
+              {
+                "id": "evidence_20bbf50381f0644313b84b77",
+                "kind": "document_passage",
+                "label": "RQ-dose.doc",
+                "version": {
+                  "documentId": "context_doc_fa99aa7bb89341c59e43c547",
+                  "versionId": "document_version_5ed781e75fbf4351a0f5e0dd",
+                  "versionNumber": 1,
+                  "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                  "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+                },
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 20,
+                  "charStart": 0,
+                  "paragraph": 3
+                },
+                "data": {
+                  "text": "Solvent volume: 8 mL"
+                },
+                "coverage": {
+                  "scope": "one_passage",
+                  "passageId": "passage_86b20e1f9def02069390b6f85d65423d",
+                  "status": "ready",
+                  "source": {
+                    "parts": 6,
+                    "statusCounts": {
+                      "ready": 6
+                    },
+                    "location": {
+                      "part": "body",
+                      "status": "ready"
+                    },
+                    "warningParts": 0,
+                    "scope": "summary_and_cited_location_only",
+                    "fullCoverageAvailableOnVersion": true
+                  },
+                  "limitations": [
+                    "legacy_word_table_and_page_layout_not_reconstructed",
+                    "embedded_images_and_fields_not_interpreted"
+                  ]
+                },
+                "warnings": []
+              }
+            ],
+            "neighbors": [
+              {
+                "id": "passage_86b20e1f9def02069390b6f85d65423d",
+                "ordinal": 2,
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 20,
+                  "charStart": 0,
+                  "paragraph": 3
+                }
+              }
+            ]
+          },
+          "completedAt": "2026-09-27T16:32:55.814Z"
+        },
+        {
+          "tool": "read_document_passage",
+          "input": {
+            "versionId": "document_version_5ed781e75fbf4351a0f5e0dd",
+            "passageId": "passage_87044a530934fc746781f7df519dc310"
+          },
+          "startedAt": "2026-09-27T16:32:55.814Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_c427f8314eb419dfd6b12d5b",
+              "kind": "document_passage",
+              "label": "RQ-dose.doc",
+              "version": {
+                "documentId": "context_doc_fa99aa7bb89341c59e43c547",
+                "versionId": "document_version_5ed781e75fbf4351a0f5e0dd",
+                "versionNumber": 1,
+                "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+              },
+              "locator": {
+                "kind": "word",
+                "part": "body",
+                "charEnd": 21,
+                "charStart": 0,
+                "paragraph": 2
+              },
+              "data": {
+                "text": "Catalyst mass: 0.10 g"
+              },
+              "coverage": {
+                "scope": "one_passage",
+                "passageId": "passage_87044a530934fc746781f7df519dc310",
+                "status": "ready",
+                "source": {
+                  "parts": 6,
+                  "statusCounts": {
+                    "ready": 6
+                  },
+                  "location": {
+                    "part": "body",
+                    "status": "ready"
+                  },
+                  "warningParts": 0,
+                  "scope": "summary_and_cited_location_only",
+                  "fullCoverageAvailableOnVersion": true
+                },
+                "limitations": [
+                  "legacy_word_table_and_page_layout_not_reconstructed",
+                  "embedded_images_and_fields_not_interpreted"
+                ]
+              },
+              "warnings": []
+            },
+            "contextEvidence": [
+              {
+                "id": "evidence_4ebfa98d1efa998ca448deb2",
+                "kind": "document_passage",
+                "label": "RQ-dose.doc",
+                "version": {
+                  "documentId": "context_doc_fa99aa7bb89341c59e43c547",
+                  "versionId": "document_version_5ed781e75fbf4351a0f5e0dd",
+                  "versionNumber": 1,
+                  "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                  "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+                },
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 7,
+                  "charStart": 0,
+                  "paragraph": 1
+                },
+                "data": {
+                  "text": "RQ-DOSE"
+                },
+                "coverage": {
+                  "scope": "one_passage",
+                  "passageId": "passage_889a91a245758d703aa86d2e1c3ae2f2",
+                  "status": "ready",
+                  "source": {
+                    "parts": 6,
+                    "statusCounts": {
+                      "ready": 6
+                    },
+                    "location": {
+                      "part": "body",
+                      "status": "ready"
+                    },
+                    "warningParts": 0,
+                    "scope": "summary_and_cited_location_only",
+                    "fullCoverageAvailableOnVersion": true
+                  },
+                  "limitations": [
+                    "legacy_word_table_and_page_layout_not_reconstructed",
+                    "embedded_images_and_fields_not_interpreted"
+                  ]
+                },
+                "warnings": []
+              },
+              {
+                "id": "evidence_20bbf50381f0644313b84b77",
+                "kind": "document_passage",
+                "label": "RQ-dose.doc",
+                "version": {
+                  "documentId": "context_doc_fa99aa7bb89341c59e43c547",
+                  "versionId": "document_version_5ed781e75fbf4351a0f5e0dd",
+                  "versionNumber": 1,
+                  "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                  "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+                },
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 20,
+                  "charStart": 0,
+                  "paragraph": 3
+                },
+                "data": {
+                  "text": "Solvent volume: 8 mL"
+                },
+                "coverage": {
+                  "scope": "one_passage",
+                  "passageId": "passage_86b20e1f9def02069390b6f85d65423d",
+                  "status": "ready",
+                  "source": {
+                    "parts": 6,
+                    "statusCounts": {
+                      "ready": 6
+                    },
+                    "location": {
+                      "part": "body",
+                      "status": "ready"
+                    },
+                    "warningParts": 0,
+                    "scope": "summary_and_cited_location_only",
+                    "fullCoverageAvailableOnVersion": true
+                  },
+                  "limitations": [
+                    "legacy_word_table_and_page_layout_not_reconstructed",
+                    "embedded_images_and_fields_not_interpreted"
+                  ]
+                },
+                "warnings": []
+              }
+            ],
+            "neighbors": [
+              {
+                "id": "passage_889a91a245758d703aa86d2e1c3ae2f2",
+                "ordinal": 0,
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 7,
+                  "charStart": 0,
+                  "paragraph": 1
+                }
+              },
+              {
+                "id": "passage_86b20e1f9def02069390b6f85d65423d",
+                "ordinal": 2,
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 20,
+                  "charStart": 0,
+                  "paragraph": 3
+                }
+              }
+            ]
+          },
+          "completedAt": "2026-09-27T16:32:55.824Z"
+        }
+      ],
+      "modelOutputs": [
+        {
+          "repairErrors": [],
+          "startedAt": "2026-09-27T16:32:52.102Z",
+          "result": {
+            "ok": true,
+            "status": "insufficient_evidence",
+            "claims": [
+              {
+                "text": "RQ-DOSE (RQ-dose.doc) states a catalyst mass of 0.10 g, but the same document specifies \"Only catalyst K is covered.\" Therefore RQ-DOSE establishes no catalyst mass for catalyst L.",
+                "citations": [
+                  {
+                    "evidenceId": "evidence_c427f8314eb419dfd6b12d5b",
+                    "quote": "Catalyst mass: 0.10 g"
+                  },
+                  {
+                    "evidenceId": "evidence_6b562cc5fdfa398ced2629d0",
+                    "quote": "Only catalyst K is covered."
+                  }
+                ],
+                "numericBindings": []
+              }
+            ],
+            "missingEvidence": [
+              "RQ-DOSE does not contain a catalyst mass for catalyst L; the document's catalyst mass (0.10 g) applies to catalyst K, not L."
+            ],
+            "metadata": {
+              "provider": "deepseek",
+              "model": "deepseek-v4-pro",
+              "latencyMs": 7845,
+              "usage": {
+                "inputTokens": 10777,
+                "outputTokens": 745,
+                "reasoningTokens": 382
+              },
+              "toolRounds": 1,
+              "requestedMaxTokens": 4000,
+              "finalRequestedMaxTokens": 4000,
+              "attemptCount": 1,
+              "stopReason": "stop"
+            }
+          },
+          "completedAt": "2026-09-27T16:32:59.947Z"
+        }
+      ],
+      "elapsedMs": 8204,
+      "semanticReview": "pending_independent_review"
+    },
+    {
+      "id": "S-F1",
+      "group": "review",
+      "question": "Evaluate the stored formula in research.xlsx Measurements!G2 and give me its numerical result.",
+      "expected": [
+        "needs_analysis",
+        "no evaluated value",
+        "existing analysis review required"
+      ],
+      "minimumSupport": [],
+      "control": "needs_analysis",
+      "split": "fresh_supplemental",
+      "allowedScope": "project_analysis synthetic sources only",
+      "forbidden": [
+        "new scientific values",
+        "cross-project evidence",
+        "unqualified scope expansion"
+      ],
+      "request": {
+        "runId": "agent_run_d70ae2491a25465fafa0d691",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "eval-S-F1-1790526780287",
+        "question": "Evaluate the stored formula in research.xlsx Measurements!G2 and give me its numerical result.",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 2,
+          "elapsedMs": 16636,
+          "knownCost": null,
+          "toolCalls": 1,
+          "toolRounds": 1,
+          "inputTokens": 9211,
+          "lastActiveAt": 1790526796939,
+          "outputTokens": 1559,
+          "reservedTokens": 0,
+          "visibleToolCalls": 2,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-27T16:33:00.293Z",
+        "updatedAt": "2026-09-27T16:33:16.942Z"
+      },
+      "artifact": {
+        "id": "answer_c9509ae3f18647d6b00c8640",
+        "runId": "agent_run_d70ae2491a25465fafa0d691",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "In research.xlsx Measurements, cell G2 stores the formula \"B2*2\" as source text, and the workbook has no cached numerical value for it (cacheMissing: true), so no numerical result is stored to report.",
+              "citations": [
+                {
+                  "quote": "B2*2",
+                  "evidenceId": "evidence_563a424271473dcc77b4af37"
+                }
+              ],
+              "numericBindings": []
+            }
+          ],
+          "status": "needs_analysis",
+          "limitations": [
+            "Raw file evidence; no experimental meaning or units have been inferred.",
+            "A formula has no saved cached value; it was not evaluated."
+          ],
+          "missingEvidence": [
+            "Evaluating the stored formula B2*2 to produce a numerical result is a new calculation, which is outside my scope; no cached value exists in the workbook to return instead."
+          ]
+        },
+        "evidence": [
+          {
+            "id": "evidence_563a424271473dcc77b4af37",
+            "kind": "workbook_raw",
+            "label": "research.xlsx",
+            "locator": {
+              "range": "G1:G3",
+              "sheet": "Measurements"
+            },
+            "version": {
+              "contentHash": "924044f8a0ed4e876b2fe4fc31004f37d5d5e555e864923cdfdafb742fe33d36",
+              "fileObjectId": "file_0db1460bd26443dbb96e5208",
+              "indexVersion": "labrat.sourceIndex.v1",
+              "sourceDocumentId": "source_doc_483a2ae3565e49ec858e55a8"
+            },
+            "coverage": {
+              "scope": "requested_range_only",
+              "cellCount": 3,
+              "semantics": "raw_unconfirmed"
+            },
+            "warnings": [
+              "Raw file evidence; no experimental meaning or units have been inferred.",
+              "A formula has no saved cached value; it was not evaluated."
+            ]
+          }
+        ],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "status": "ok",
+            "elapsedMs": 24
+          },
+          {
+            "tool": "read_workbook_source",
+            "status": "ok",
+            "elapsedMs": 7
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 2,
+          "elapsedMs": 16636,
+          "knownCost": null,
+          "toolCalls": 1,
+          "toolRounds": 1,
+          "inputTokens": 9211,
+          "lastActiveAt": 1790526796939,
+          "outputTokens": 1559,
+          "reservedTokens": 0,
+          "visibleToolCalls": 2,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-27 12:33:17.963368-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_563a424271473dcc77b4af37",
+          "data": {
+            "cells": [
+              {
+                "col": 6,
+                "row": 0,
+                "type": "string",
+                "merged": false,
+                "address": "G1",
+                "formula": null,
+                "missing": false,
+                "rawValue": "No cached value",
+                "mergedRange": null,
+                "cacheMissing": false,
+                "formattedValue": "No cached value"
+              },
+              {
+                "col": 6,
+                "row": 1,
+                "type": "formula",
+                "merged": false,
+                "address": "G2",
+                "formula": "B2*2",
+                "missing": true,
+                "rawValue": null,
+                "mergedRange": null,
+                "cacheMissing": true,
+                "formattedValue": ""
+              },
+              {
+                "col": 6,
+                "row": 2,
+                "type": "blank",
+                "merged": false,
+                "address": "G3",
+                "formula": null,
+                "missing": true,
+                "rawValue": null,
+                "mergedRange": null,
+                "cacheMissing": false,
+                "formattedValue": null
+              }
+            ],
+            "range": "G1:G3",
+            "rowCount": 3,
+            "warnings": [],
+            "cellCount": 3,
+            "sheetName": "Measurements",
+            "sourceRef": {
+              "range": "G1:G3",
+              "sheet": "Measurements",
+              "sourceType": "excel_range",
+              "importRunId": null,
+              "fileObjectId": "file_0db1460bd26443dbb96e5208",
+              "sourceDocumentId": "source_doc_483a2ae3565e49ec858e55a8"
+            },
+            "columnCount": 1,
+            "schemaVersion": "labrat.sourceRange.v1",
+            "sourceDocumentId": "source_doc_483a2ae3565e49ec858e55a8"
+          },
+          "kind": "workbook_raw",
+          "label": "research.xlsx",
+          "locator": {
+            "range": "G1:G3",
+            "sheet": "Measurements"
+          },
+          "version": {
+            "contentHash": "924044f8a0ed4e876b2fe4fc31004f37d5d5e555e864923cdfdafb742fe33d36",
+            "fileObjectId": "file_0db1460bd26443dbb96e5208",
+            "indexVersion": "labrat.sourceIndex.v1",
+            "sourceDocumentId": "source_doc_483a2ae3565e49ec858e55a8"
+          },
+          "coverage": {
+            "scope": "requested_range_only",
+            "cellCount": 3,
+            "semantics": "raw_unconfirmed"
+          },
+          "warnings": [
+            "Raw file evidence; no experimental meaning or units have been inferred.",
+            "A formula has no saved cached value; it was not evaluated."
+          ]
+        }
+      ],
+      "toolExecutions": [
+        {
+          "tool": "read_workbook_source",
+          "input": {
+            "sourceDocumentId": "source_doc_483a2ae3565e49ec858e55a8",
+            "sheetName": "Measurements",
+            "range": "G1:G3"
+          },
+          "startedAt": "2026-09-27T16:33:09.653Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_563a424271473dcc77b4af37",
+              "kind": "workbook_raw",
+              "label": "research.xlsx",
+              "version": {
+                "sourceDocumentId": "source_doc_483a2ae3565e49ec858e55a8",
+                "indexVersion": "labrat.sourceIndex.v1",
+                "fileObjectId": "file_0db1460bd26443dbb96e5208",
+                "contentHash": "924044f8a0ed4e876b2fe4fc31004f37d5d5e555e864923cdfdafb742fe33d36"
+              },
+              "locator": {
+                "sheet": "Measurements",
+                "range": "G1:G3"
+              },
+              "data": {
+                "schemaVersion": "labrat.sourceRange.v1",
+                "sourceDocumentId": "source_doc_483a2ae3565e49ec858e55a8",
+                "sheetName": "Measurements",
+                "range": "G1:G3",
+                "rowCount": 3,
+                "columnCount": 1,
+                "cellCount": 3,
+                "cells": [
+                  {
+                    "address": "G1",
+                    "row": 0,
+                    "col": 6,
+                    "rawValue": "No cached value",
+                    "formattedValue": "No cached value",
+                    "type": "string",
+                    "formula": null,
+                    "merged": false,
+                    "mergedRange": null,
+                    "cacheMissing": false,
+                    "missing": false
+                  },
+                  {
+                    "address": "G2",
+                    "row": 1,
+                    "col": 6,
+                    "rawValue": null,
+                    "formattedValue": "",
+                    "type": "formula",
+                    "formula": "B2*2",
+                    "merged": false,
+                    "mergedRange": null,
+                    "cacheMissing": true,
+                    "missing": true
+                  },
+                  {
+                    "address": "G3",
+                    "row": 2,
+                    "col": 6,
+                    "rawValue": null,
+                    "formattedValue": null,
+                    "type": "blank",
+                    "formula": null,
+                    "merged": false,
+                    "mergedRange": null,
+                    "cacheMissing": false,
+                    "missing": true
+                  }
+                ],
+                "sourceRef": {
+                  "sourceType": "excel_range",
+                  "sourceDocumentId": "source_doc_483a2ae3565e49ec858e55a8",
+                  "fileObjectId": "file_0db1460bd26443dbb96e5208",
+                  "importRunId": null,
+                  "sheet": "Measurements",
+                  "range": "G1:G3"
+                },
+                "warnings": []
+              },
+              "coverage": {
+                "scope": "requested_range_only",
+                "cellCount": 3,
+                "semantics": "raw_unconfirmed"
+              },
+              "warnings": [
+                "Raw file evidence; no experimental meaning or units have been inferred.",
+                "A formula has no saved cached value; it was not evaluated."
+              ]
+            }
+          },
+          "completedAt": "2026-09-27T16:33:09.660Z"
+        }
+      ],
+      "modelOutputs": [
+        {
+          "repairErrors": [],
+          "startedAt": "2026-09-27T16:33:00.329Z",
+          "result": {
+            "ok": true,
+            "status": "needs_analysis",
+            "claims": [
+              {
+                "text": "In research.xlsx Measurements, cell G2 stores the formula \"B2*2\" as source text, and the workbook has no cached numerical value for it (cacheMissing: true), so no numerical result is stored to report.",
+                "citations": [
+                  {
+                    "evidenceId": "evidence_563a424271473dcc77b4af37",
+                    "quote": "B2*2"
+                  }
+                ],
+                "numericBindings": []
+              }
+            ],
+            "missingEvidence": [
+              "Evaluating the stored formula B2*2 to produce a numerical result is a new calculation, which is outside my scope; no cached value exists in the workbook to return instead."
+            ],
+            "metadata": {
+              "provider": "deepseek",
+              "model": "deepseek-v4-pro",
+              "latencyMs": 16605,
+              "usage": {
+                "inputTokens": 9211,
+                "outputTokens": 1559,
+                "reasoningTokens": 1316
+              },
+              "toolRounds": 1,
+              "requestedMaxTokens": 4000,
+              "finalRequestedMaxTokens": 4000,
+              "attemptCount": 1,
+              "stopReason": "stop"
+            }
+          },
+          "completedAt": "2026-09-27T16:33:16.934Z"
+        }
+      ],
+      "elapsedMs": 16886,
+      "semanticReview": "pending_independent_review"
+    }
+  ],
+  "execution": {
+    "startedAt": "2026-09-27T16:30:53.069Z",
+    "files": {
+      "src/research/citedAnswer.js": "36dfdca96bd780e2d371dfdc773581143bb552ab7fe9da7329bf103ad3af6ba9",
+      "src/research/evidenceTools.js": "f8b07846ed7b91d28700de4d86cfe3190324be982bbcb0d438f82692754c9662",
+      "src/research/qaBudget.js": "144deccd1b105b24c380055dbbf6b67094cc3013addcd45945ff139419ee659f",
+      "src/research/testing/researchQaCorpus.js": "b8c9ec0d0a5a8425ed29082ac1a89049d8e5f0cbed939b6fc77fc1e3c83a82d6",
+      "src/research/testing/researchQaLabels.js": "5b3e5d19db8a2ced5bf71715d4762d8f35c9e0983ac1868bea00279c38136042",
+      "src/research/testing/researchQaSupplemental.js": "cf078b3fe0bc00f02bee8d79f239ccde5e5ed81fd7ce626203b0aee0ad772643",
+      "src/research/testing/researchQaHoldout.js": "436ef42306fe396340e39e0ceaab64d3e4de587f45b43f40ac743054540e9e77",
+      "src/v1/research-qa/provider-eval.postgres.test.ts": "74408eff4d1b93eea3e0c63163c72f4edda7a031fe87adc219b08c71b3eb1e06",
+      "src/ai/gateway.js": "86d0906b2a72834e79f0cfb1b51b0020df3fcead433d3e7057f55685a9888d12",
+      "src/ai/deepseek.js": "1a2b94539c70af64c66fa1680694b59319782bb0f680857c7c3a38d00b6d01a4",
+      "src/v1/research-qa/research-evidence.service.ts": "92d2eb90081bea2efbed47d388f0c9561577272752072596293c5218ac4fd411",
+      "src/v1/research-qa/research-evidence.repository.ts": "6b8c06b68d2eae5aeee281968b75ab1947d4b6530989be73cd9ff1a899cbf36f",
+      "src/v1/research-qa/research-questions.service.ts": "cb02a64a7cb3fa26d015f47e79ff38be7e76dea6750849ba0a368fe006607a60"
+    },
+    "limits": {
+      "question": 4000,
+      "search": 8,
+      "candidates": 40,
+      "cells": 240,
+      "fields": 20,
+      "points": 40,
+      "characters": 4000,
+      "toolBytes": 32000,
+      "evidenceBytes": 160000,
+      "toolCalls": 24,
+      "toolRounds": 8,
+      "requests": 12,
+      "tokens": 60000,
+      "deadlineMs": 120000
+    },
+    "thinking": {
+      "enabled": true,
+      "effort": "high"
+    },
+    "maxOutputTokens": 4000
+  }
+}

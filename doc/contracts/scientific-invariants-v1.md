@@ -43,11 +43,20 @@ approval at a later boundary.
   dependency/content hashes.
 - Missing, ambiguous or incompatible scientific values must remain missing or
   require clarification; they cannot be guessed, silently merged or converted.
-- AI receives only bounded, task-relevant accepted evidence. It never receives
+- Scientific analysis receives only bounded, task-relevant accepted evidence. It never receives
   credentials, private sessions, unrelated project history, full workbooks or
   entire accepted point collections.
 - Source selections must stay inside active accepted regions. Experiment
   selections must resolve through frozen active snapshot heads.
+
+Research Q&A additionally reads bounded uploaded document text and exact raw
+workbook cells immediately after indexing. These are distinct `document` and
+`workbook_raw` evidence, never accepted scientific values or legal analysis
+selections. Project background is a frozen user statement. References retain
+content/processing versions, page/paragraph/line/cell locations and uncertainty.
+An answer does not confirm meanings, update profiles, calculate new values or
+publish anything. New scientific calculations still require the analysis review
+workflow. See `research-qa-v1.md`.
 
 Prepared linked-region chart templates are a narrow current-pointer exception:
 execution/publication verify the persisted application, version, run and

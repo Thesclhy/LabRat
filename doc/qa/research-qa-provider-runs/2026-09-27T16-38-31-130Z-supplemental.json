@@ -1,0 +1,1106 @@
+{
+  "schemaVersion": "labrat.researchQaEvaluation.v1",
+  "material": "synthetic only",
+  "provider": {
+    "provider": "deepseek",
+    "model": "deepseek-v4-pro",
+    "configured": true
+  },
+  "evaluation": "supplemental",
+  "completed": true,
+  "records": [
+    {
+      "id": "S-J1",
+      "group": "joint",
+      "question": "research.xlsx 的 Measurements!B2 原始单元格与 Exp17 已接受的 Temperature 分别是什么？分别引用，并保留表头和审核状态；不要计算差值。",
+      "expected": [
+        "raw B2 80",
+        "raw B1 Temperature (C)",
+        "accepted 82 C",
+        "separate evidence and review states"
+      ],
+      "minimumSupport": [
+        {
+          "kind": "cell",
+          "source": "workbook",
+          "sheet": "Measurements",
+          "address": "B1",
+          "rawValue": "Temperature (C)"
+        },
+        {
+          "kind": "cell",
+          "source": "workbook",
+          "sheet": "Measurements",
+          "address": "B2",
+          "rawValue": 80
+        },
+        {
+          "kind": "field",
+          "columnId": "temperature",
+          "value": 82,
+          "unit": "C"
+        }
+      ],
+      "control": null,
+      "split": "fresh_supplemental",
+      "allowedScope": "project_analysis synthetic sources only",
+      "forbidden": [
+        "new scientific values",
+        "cross-project evidence",
+        "unqualified scope expansion"
+      ],
+      "request": {
+        "runId": "agent_run_8a08cba7d49041efbd5bd933",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "eval-S-J1-1790527118631",
+        "question": "research.xlsx 的 Measurements!B2 原始单元格与 Exp17 已接受的 Temperature 分别是什么？分别引用，并保留表头和审核状态；不要计算差值。",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 35307,
+          "knownCost": null,
+          "toolCalls": 3,
+          "toolRounds": 2,
+          "inputTokens": 15542,
+          "lastActiveAt": 1790527153953,
+          "outputTokens": 4016,
+          "reservedTokens": 0,
+          "visibleToolCalls": 4,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-27T16:38:38.639Z",
+        "updatedAt": "2026-09-27T16:39:13.958Z"
+      },
+      "artifact": {
+        "id": "answer_fb01ca93ff6e44aabb86741c",
+        "runId": "agent_run_8a08cba7d49041efbd5bd933",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "research.xlsx 的 Measurements!B2 原始单元格存储值为 80，单元格类型为数字（formula 为 null）；该列的表头 B1 为“Temperature (C)”。此为原始工作簿单元格证据，未推断单位或实验语义。",
+              "citations": [
+                {
+                  "quote": "80",
+                  "evidenceId": "evidence_f415c8fb057b13aeb5278e0b"
+                },
+                {
+                  "quote": "Temperature (C)",
+                  "evidenceId": "evidence_f415c8fb057b13aeb5278e0b"
+                }
+              ],
+              "numericBindings": [
+                {
+                  "path": "/data/cells/3/rawValue",
+                  "unit": null,
+                  "value": 80,
+                  "evidenceId": "evidence_f415c8fb057b13aeb5278e0b",
+                  "numericScale": null
+                }
+              ]
+            },
+            {
+              "text": "Exp17 当前已接受快照（snapshot_experiment_17）中，Temperature 字段的已接受值为 82，单位为 C（numericScale 为 null），字段 displayName 为“Temperature”、columnId 为“temperature”；该快照为已接受证据，接受时间（acceptedAt）为 2026-09-27T16:38:38.619Z。",
+              "citations": [
+                {
+                  "quote": "82",
+                  "evidenceId": "evidence_c4af2f6a15c13c89c26cf08d"
+                },
+                {
+                  "quote": "Temperature",
+                  "evidenceId": "evidence_c4af2f6a15c13c89c26cf08d"
+                },
+                {
+                  "quote": "C",
+                  "evidenceId": "evidence_c4af2f6a15c13c89c26cf08d"
+                },
+                {
+                  "quote": "2026-09-27T16:38:38.619Z",
+                  "evidenceId": "evidence_c4af2f6a15c13c89c26cf08d"
+                }
+              ],
+              "numericBindings": [
+                {
+                  "path": "/data/fields/0/value",
+                  "unit": "C",
+                  "value": 82,
+                  "evidenceId": "evidence_c4af2f6a15c13c89c26cf08d",
+                  "numericScale": null
+                }
+              ]
+            }
+          ],
+          "status": "answered",
+          "limitations": [
+            "Raw file evidence; no experimental meaning or units have been inferred.",
+            "Values retain their stored scale and unit; no conversion or new calculation was performed.",
+            "Only the cited window was read; additional records remain available."
+          ],
+          "missingEvidence": []
+        },
+        "evidence": [
+          {
+            "id": "evidence_f415c8fb057b13aeb5278e0b",
+            "kind": "workbook_raw",
+            "label": "research.xlsx",
+            "locator": {
+              "range": "A1:B2",
+              "sheet": "Measurements"
+            },
+            "version": {
+              "contentHash": "a3e9edb3c3b544c6511e0164898a047b13a6e1c01b9462d3bee0bafacf66b4e8",
+              "fileObjectId": "file_9eff6c6a59bf42d7b61ed2c5",
+              "indexVersion": "labrat.sourceIndex.v1",
+              "sourceDocumentId": "source_doc_35628bb99b944b1a93751585"
+            },
+            "coverage": {
+              "scope": "requested_range_only",
+              "cellCount": 4,
+              "semantics": "raw_unconfirmed"
+            },
+            "warnings": [
+              "Raw file evidence; no experimental meaning or units have been inferred."
+            ]
+          },
+          {
+            "id": "evidence_c4af2f6a15c13c89c26cf08d",
+            "kind": "experiment_snapshot",
+            "label": "Exp17",
+            "locator": {
+              "seriesKey": null,
+              "fieldOffset": 0,
+              "pointOffset": 0,
+              "seriesOffset": 0
+            },
+            "version": {
+              "headId": "head_experiment_17",
+              "snapshotId": "snapshot_experiment_17",
+              "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+              "recordIndex": 0,
+              "experimentId": "experiment_17",
+              "headUpdatedAt": "2026-09-27T16:38:38.622Z"
+            },
+            "coverage": {
+              "scope": "accepted_snapshot_window",
+              "fieldCount": 29,
+              "seriesCount": 1,
+              "nextFieldOffset": 20,
+              "nextPointOffset": null,
+              "nextSeriesOffset": null
+            },
+            "warnings": [
+              "Values retain their stored scale and unit; no conversion or new calculation was performed."
+            ]
+          }
+        ],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "status": "ok",
+            "elapsedMs": 33
+          },
+          {
+            "tool": "read_workbook_source",
+            "status": "ok",
+            "elapsedMs": 6
+          },
+          {
+            "tool": "find_experiments",
+            "status": "ok",
+            "elapsedMs": 8
+          },
+          {
+            "tool": "read_experiment_evidence",
+            "status": "ok",
+            "elapsedMs": 9
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 35307,
+          "knownCost": null,
+          "toolCalls": 3,
+          "toolRounds": 2,
+          "inputTokens": 15542,
+          "lastActiveAt": 1790527153953,
+          "outputTokens": 4016,
+          "reservedTokens": 0,
+          "visibleToolCalls": 4,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-27 12:39:13.954753-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_f415c8fb057b13aeb5278e0b",
+          "data": {
+            "cells": [
+              {
+                "col": 0,
+                "row": 0,
+                "type": "string",
+                "merged": false,
+                "address": "A1",
+                "formula": null,
+                "missing": false,
+                "rawValue": "Experiment",
+                "mergedRange": null,
+                "cacheMissing": false,
+                "formattedValue": "Experiment"
+              },
+              {
+                "col": 1,
+                "row": 0,
+                "type": "string",
+                "merged": false,
+                "address": "B1",
+                "formula": null,
+                "missing": false,
+                "rawValue": "Temperature (C)",
+                "mergedRange": null,
+                "cacheMissing": false,
+                "formattedValue": "Temperature (C)"
+              },
+              {
+                "col": 0,
+                "row": 1,
+                "type": "string",
+                "merged": false,
+                "address": "A2",
+                "formula": null,
+                "missing": false,
+                "rawValue": "Exp17",
+                "mergedRange": null,
+                "cacheMissing": false,
+                "formattedValue": "Exp17"
+              },
+              {
+                "col": 1,
+                "row": 1,
+                "type": "number",
+                "merged": false,
+                "address": "B2",
+                "formula": null,
+                "missing": false,
+                "rawValue": 80,
+                "mergedRange": null,
+                "cacheMissing": false,
+                "formattedValue": "80"
+              }
+            ],
+            "range": "A1:B2",
+            "rowCount": 2,
+            "warnings": [],
+            "cellCount": 4,
+            "sheetName": "Measurements",
+            "sourceRef": {
+              "range": "A1:B2",
+              "sheet": "Measurements",
+              "sourceType": "excel_range",
+              "importRunId": null,
+              "fileObjectId": "file_9eff6c6a59bf42d7b61ed2c5",
+              "sourceDocumentId": "source_doc_35628bb99b944b1a93751585"
+            },
+            "columnCount": 2,
+            "schemaVersion": "labrat.sourceRange.v1",
+            "sourceDocumentId": "source_doc_35628bb99b944b1a93751585"
+          },
+          "kind": "workbook_raw",
+          "label": "research.xlsx",
+          "locator": {
+            "range": "A1:B2",
+            "sheet": "Measurements"
+          },
+          "version": {
+            "contentHash": "a3e9edb3c3b544c6511e0164898a047b13a6e1c01b9462d3bee0bafacf66b4e8",
+            "fileObjectId": "file_9eff6c6a59bf42d7b61ed2c5",
+            "indexVersion": "labrat.sourceIndex.v1",
+            "sourceDocumentId": "source_doc_35628bb99b944b1a93751585"
+          },
+          "coverage": {
+            "scope": "requested_range_only",
+            "cellCount": 4,
+            "semantics": "raw_unconfirmed"
+          },
+          "warnings": [
+            "Raw file evidence; no experimental meaning or units have been inferred."
+          ]
+        },
+        {
+          "id": "evidence_c4af2f6a15c13c89c26cf08d",
+          "data": {
+            "fields": [
+              {
+                "unit": "C",
+                "value": 82,
+                "columnId": "temperature",
+                "valueType": "number",
+                "sourceRefs": [
+                  {
+                    "cell": "B2",
+                    "sheet": "Measurements",
+                    "rawValue": 80
+                  }
+                ],
+                "displayName": "Temperature"
+              },
+              {
+                "unit": "%",
+                "value": 0.42,
+                "columnId": "yield_fraction",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Yield",
+                "numericScale": "fraction"
+              },
+              {
+                "unit": "%",
+                "value": 42,
+                "columnId": "yield_points",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Yield",
+                "numericScale": "percent_points"
+              },
+              {
+                "unit": "bar",
+                "value": null,
+                "columnId": "pressure",
+                "valueType": "number",
+                "sourceRefs": [
+                  {
+                    "cell": "H2",
+                    "sheet": "Measurements",
+                    "rawValue": null
+                  }
+                ],
+                "displayName": "Pressure",
+                "missingReason": "source_blank",
+                "formattedValue": null
+              },
+              {
+                "unit": "min",
+                "value": 30,
+                "columnId": "duration",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Duration"
+              },
+              {
+                "unit": "mg",
+                "value": 100,
+                "columnId": "aux_0",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 0"
+              },
+              {
+                "unit": "mg",
+                "value": 101,
+                "columnId": "aux_1",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 1"
+              },
+              {
+                "unit": "mg",
+                "value": 102,
+                "columnId": "aux_2",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 2"
+              },
+              {
+                "unit": "mg",
+                "value": 103,
+                "columnId": "aux_3",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 3"
+              },
+              {
+                "unit": "mg",
+                "value": 104,
+                "columnId": "aux_4",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 4"
+              },
+              {
+                "unit": "mg",
+                "value": 105,
+                "columnId": "aux_5",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 5"
+              },
+              {
+                "unit": "mg",
+                "value": 106,
+                "columnId": "aux_6",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 6"
+              },
+              {
+                "unit": "mg",
+                "value": 107,
+                "columnId": "aux_7",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 7"
+              },
+              {
+                "unit": "mg",
+                "value": 108,
+                "columnId": "aux_8",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 8"
+              },
+              {
+                "unit": "mg",
+                "value": 109,
+                "columnId": "aux_9",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 9"
+              },
+              {
+                "unit": "mg",
+                "value": 110,
+                "columnId": "aux_10",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 10"
+              },
+              {
+                "unit": "mg",
+                "value": 111,
+                "columnId": "aux_11",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 11"
+              },
+              {
+                "unit": "mg",
+                "value": 112,
+                "columnId": "aux_12",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 12"
+              },
+              {
+                "unit": "mg",
+                "value": 113,
+                "columnId": "aux_13",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 13"
+              },
+              {
+                "unit": "mg",
+                "value": 114,
+                "columnId": "aux_14",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 14"
+              }
+            ],
+            "series": [
+              {
+                "label": "Temperature trace",
+                "xField": {
+                  "unit": "min",
+                  "fieldId": "time"
+                },
+                "yField": {
+                  "unit": "C",
+                  "fieldId": "temperature"
+                },
+                "seriesKey": "temperature_trace",
+                "pointCount": 121,
+                "sourceRefs": []
+              }
+            ],
+            "warnings": [],
+            "acceptedAt": "2026-09-27T16:38:38.619Z",
+            "fieldCount": 29,
+            "snapshotId": "snapshot_experiment_17",
+            "sourceRefs": [],
+            "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+            "seriesCount": 1,
+            "sourceAlias": "Exp17",
+            "experimentId": "experiment_17",
+            "seriesWindow": null,
+            "recordWarnings": []
+          },
+          "kind": "experiment_snapshot",
+          "label": "Exp17",
+          "locator": {
+            "seriesKey": null,
+            "fieldOffset": 0,
+            "pointOffset": 0,
+            "seriesOffset": 0
+          },
+          "version": {
+            "headId": "head_experiment_17",
+            "snapshotId": "snapshot_experiment_17",
+            "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+            "recordIndex": 0,
+            "experimentId": "experiment_17",
+            "headUpdatedAt": "2026-09-27T16:38:38.622Z"
+          },
+          "coverage": {
+            "scope": "accepted_snapshot_window",
+            "fieldCount": 29,
+            "seriesCount": 1,
+            "nextFieldOffset": 20,
+            "nextPointOffset": null,
+            "nextSeriesOffset": null
+          },
+          "warnings": [
+            "Values retain their stored scale and unit; no conversion or new calculation was performed."
+          ]
+        }
+      ],
+      "toolExecutions": [
+        {
+          "tool": "read_workbook_source",
+          "input": {
+            "sourceDocumentId": "source_doc_35628bb99b944b1a93751585",
+            "sheetName": "Measurements",
+            "range": "A1:B2"
+          },
+          "startedAt": "2026-09-27T16:38:43.584Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_f415c8fb057b13aeb5278e0b",
+              "kind": "workbook_raw",
+              "label": "research.xlsx",
+              "version": {
+                "sourceDocumentId": "source_doc_35628bb99b944b1a93751585",
+                "indexVersion": "labrat.sourceIndex.v1",
+                "fileObjectId": "file_9eff6c6a59bf42d7b61ed2c5",
+                "contentHash": "a3e9edb3c3b544c6511e0164898a047b13a6e1c01b9462d3bee0bafacf66b4e8"
+              },
+              "locator": {
+                "sheet": "Measurements",
+                "range": "A1:B2"
+              },
+              "data": {
+                "schemaVersion": "labrat.sourceRange.v1",
+                "sourceDocumentId": "source_doc_35628bb99b944b1a93751585",
+                "sheetName": "Measurements",
+                "range": "A1:B2",
+                "rowCount": 2,
+                "columnCount": 2,
+                "cellCount": 4,
+                "cells": [
+                  {
+                    "address": "A1",
+                    "row": 0,
+                    "col": 0,
+                    "rawValue": "Experiment",
+                    "formattedValue": "Experiment",
+                    "type": "string",
+                    "formula": null,
+                    "merged": false,
+                    "mergedRange": null,
+                    "cacheMissing": false,
+                    "missing": false
+                  },
+                  {
+                    "address": "B1",
+                    "row": 0,
+                    "col": 1,
+                    "rawValue": "Temperature (C)",
+                    "formattedValue": "Temperature (C)",
+                    "type": "string",
+                    "formula": null,
+                    "merged": false,
+                    "mergedRange": null,
+                    "cacheMissing": false,
+                    "missing": false
+                  },
+                  {
+                    "address": "A2",
+                    "row": 1,
+                    "col": 0,
+                    "rawValue": "Exp17",
+                    "formattedValue": "Exp17",
+                    "type": "string",
+                    "formula": null,
+                    "merged": false,
+                    "mergedRange": null,
+                    "cacheMissing": false,
+                    "missing": false
+                  },
+                  {
+                    "address": "B2",
+                    "row": 1,
+                    "col": 1,
+                    "rawValue": 80,
+                    "formattedValue": "80",
+                    "type": "number",
+                    "formula": null,
+                    "merged": false,
+                    "mergedRange": null,
+                    "cacheMissing": false,
+                    "missing": false
+                  }
+                ],
+                "sourceRef": {
+                  "sourceType": "excel_range",
+                  "sourceDocumentId": "source_doc_35628bb99b944b1a93751585",
+                  "fileObjectId": "file_9eff6c6a59bf42d7b61ed2c5",
+                  "importRunId": null,
+                  "sheet": "Measurements",
+                  "range": "A1:B2"
+                },
+                "warnings": []
+              },
+              "coverage": {
+                "scope": "requested_range_only",
+                "cellCount": 4,
+                "semantics": "raw_unconfirmed"
+              },
+              "warnings": [
+                "Raw file evidence; no experimental meaning or units have been inferred."
+              ]
+            }
+          },
+          "completedAt": "2026-09-27T16:38:43.590Z"
+        },
+        {
+          "tool": "find_experiments",
+          "input": {
+            "query": "Exp17"
+          },
+          "startedAt": "2026-09-27T16:38:43.591Z",
+          "result": {
+            "status": "matched",
+            "items": [
+              {
+                "id": "experiment_17",
+                "canonicalLabel": "Exp17",
+                "aliases": [
+                  "Batch-A"
+                ],
+                "headId": "head_experiment_17",
+                "headUpdatedAt": "2026-09-27T16:38:38.622Z",
+                "recordIndex": 0,
+                "snapshotId": "snapshot_experiment_17",
+                "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+                "confirmedRegions": [
+                  {
+                    "regionId": "review_region_analysis",
+                    "revisionId": "revision_analysis",
+                    "sheetName": "Carbon",
+                    "range": "A1:C2"
+                  }
+                ],
+                "moreConfirmedRegions": false
+              }
+            ],
+            "nextCursor": null,
+            "coverage": {
+              "exactNameOrAlias": true,
+              "complete": true,
+              "note": "Only active accepted snapshot heads are listed."
+            }
+          },
+          "completedAt": "2026-09-27T16:38:43.599Z"
+        },
+        {
+          "tool": "read_experiment_evidence",
+          "input": {
+            "experimentId": "experiment_17",
+            "snapshotId": "snapshot_experiment_17",
+            "fieldOffset": 0
+          },
+          "startedAt": "2026-09-27T16:38:45.540Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_c4af2f6a15c13c89c26cf08d",
+              "kind": "experiment_snapshot",
+              "label": "Exp17",
+              "version": {
+                "experimentId": "experiment_17",
+                "snapshotId": "snapshot_experiment_17",
+                "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+                "headId": "head_experiment_17",
+                "headUpdatedAt": "2026-09-27T16:38:38.622Z",
+                "recordIndex": 0
+              },
+              "locator": {
+                "fieldOffset": 0,
+                "seriesOffset": 0,
+                "seriesKey": null,
+                "pointOffset": 0
+              },
+              "data": {
+                "snapshotId": "snapshot_experiment_17",
+                "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+                "acceptedAt": "2026-09-27T16:38:38.619Z",
+                "warnings": [],
+                "experimentId": "experiment_17",
+                "sourceAlias": "Exp17",
+                "recordWarnings": [],
+                "sourceRefs": [],
+                "fieldCount": 29,
+                "seriesCount": 1,
+                "fields": [
+                  {
+                    "unit": "C",
+                    "value": 82,
+                    "columnId": "temperature",
+                    "valueType": "number",
+                    "sourceRefs": [
+                      {
+                        "cell": "B2",
+                        "sheet": "Measurements",
+                        "rawValue": 80
+                      }
+                    ],
+                    "displayName": "Temperature"
+                  },
+                  {
+                    "unit": "%",
+                    "value": 0.42,
+                    "columnId": "yield_fraction",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Yield",
+                    "numericScale": "fraction"
+                  },
+                  {
+                    "unit": "%",
+                    "value": 42,
+                    "columnId": "yield_points",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Yield",
+                    "numericScale": "percent_points"
+                  },
+                  {
+                    "unit": "bar",
+                    "value": null,
+                    "columnId": "pressure",
+                    "valueType": "number",
+                    "sourceRefs": [
+                      {
+                        "cell": "H2",
+                        "sheet": "Measurements",
+                        "rawValue": null
+                      }
+                    ],
+                    "displayName": "Pressure",
+                    "missingReason": "source_blank",
+                    "formattedValue": null
+                  },
+                  {
+                    "unit": "min",
+                    "value": 30,
+                    "columnId": "duration",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Duration"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 100,
+                    "columnId": "aux_0",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 0"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 101,
+                    "columnId": "aux_1",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 1"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 102,
+                    "columnId": "aux_2",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 2"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 103,
+                    "columnId": "aux_3",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 3"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 104,
+                    "columnId": "aux_4",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 4"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 105,
+                    "columnId": "aux_5",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 5"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 106,
+                    "columnId": "aux_6",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 6"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 107,
+                    "columnId": "aux_7",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 7"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 108,
+                    "columnId": "aux_8",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 8"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 109,
+                    "columnId": "aux_9",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 9"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 110,
+                    "columnId": "aux_10",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 10"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 111,
+                    "columnId": "aux_11",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 11"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 112,
+                    "columnId": "aux_12",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 12"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 113,
+                    "columnId": "aux_13",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 13"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 114,
+                    "columnId": "aux_14",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 14"
+                  }
+                ],
+                "series": [
+                  {
+                    "label": "Temperature trace",
+                    "xField": {
+                      "unit": "min",
+                      "fieldId": "time"
+                    },
+                    "yField": {
+                      "unit": "C",
+                      "fieldId": "temperature"
+                    },
+                    "seriesKey": "temperature_trace",
+                    "pointCount": 121,
+                    "sourceRefs": []
+                  }
+                ],
+                "seriesWindow": null
+              },
+              "coverage": {
+                "scope": "accepted_snapshot_window",
+                "fieldCount": 29,
+                "seriesCount": 1,
+                "nextFieldOffset": 20,
+                "nextSeriesOffset": null,
+                "nextPointOffset": null
+              },
+              "warnings": [
+                "Values retain their stored scale and unit; no conversion or new calculation was performed."
+              ]
+            }
+          },
+          "completedAt": "2026-09-27T16:38:45.549Z"
+        }
+      ],
+      "modelOutputs": [
+        {
+          "repairErrors": [],
+          "startedAt": "2026-09-27T16:38:38.682Z",
+          "result": {
+            "ok": true,
+            "status": "answered",
+            "claims": [
+              {
+                "text": "research.xlsx 的 Measurements!B2 原始单元格存储值为 80，单元格类型为数字（formula 为 null）；该列的表头 B1 为“Temperature (C)”。此为原始工作簿单元格证据，未推断单位或实验语义。",
+                "citations": [
+                  {
+                    "evidenceId": "evidence_f415c8fb057b13aeb5278e0b",
+                    "quote": "80"
+                  },
+                  {
+                    "evidenceId": "evidence_f415c8fb057b13aeb5278e0b",
+                    "quote": "Temperature (C)"
+                  }
+                ],
+                "numericBindings": [
+                  {
+                    "evidenceId": "evidence_f415c8fb057b13aeb5278e0b",
+                    "path": "/data/cells/3/rawValue",
+                    "value": 80,
+                    "unit": null,
+                    "numericScale": null
+                  }
+                ]
+              },
+              {
+                "text": "Exp17 当前已接受快照（snapshot_experiment_17）中，Temperature 字段的已接受值为 82，单位为 C（numericScale 为 null），字段 displayName 为“Temperature”、columnId 为“temperature”；该快照为已接受证据，接受时间（acceptedAt）为 2026-09-27T16:38:38.619Z。",
+                "citations": [
+                  {
+                    "evidenceId": "evidence_c4af2f6a15c13c89c26cf08d",
+                    "quote": "82"
+                  },
+                  {
+                    "evidenceId": "evidence_c4af2f6a15c13c89c26cf08d",
+                    "quote": "Temperature"
+                  },
+                  {
+                    "evidenceId": "evidence_c4af2f6a15c13c89c26cf08d",
+                    "quote": "C"
+                  },
+                  {
+                    "evidenceId": "evidence_c4af2f6a15c13c89c26cf08d",
+                    "quote": "2026-09-27T16:38:38.619Z"
+                  }
+                ],
+                "numericBindings": [
+                  {
+                    "evidenceId": "evidence_c4af2f6a15c13c89c26cf08d",
+                    "path": "/data/fields/0/value",
+                    "value": 82,
+                    "unit": "C",
+                    "numericScale": null
+                  }
+                ]
+              }
+            ],
+            "missingEvidence": [],
+            "metadata": {
+              "provider": "deepseek",
+              "model": "deepseek-v4-pro",
+              "latencyMs": 35265,
+              "usage": {
+                "inputTokens": 15542,
+                "outputTokens": 4016,
+                "reasoningTokens": 3340
+              },
+              "toolRounds": 2,
+              "requestedMaxTokens": 4000,
+              "finalRequestedMaxTokens": 4000,
+              "attemptCount": 1,
+              "stopReason": "stop"
+            }
+          },
+          "completedAt": "2026-09-27T16:39:13.947Z"
+        }
+      ],
+      "elapsedMs": 35593,
+      "semanticReview": "pending_independent_review"
+    }
+  ],
+  "execution": {
+    "startedAt": "2026-09-27T16:38:31.132Z",
+    "files": {
+      "src/research/citedAnswer.js": "2782aa2db857d373130538bce681b49eb91d7fe3d77206cb8e615abb6debd832",
+      "src/research/evidenceTools.js": "f8b07846ed7b91d28700de4d86cfe3190324be982bbcb0d438f82692754c9662",
+      "src/research/qaBudget.js": "144deccd1b105b24c380055dbbf6b67094cc3013addcd45945ff139419ee659f",
+      "src/research/testing/researchQaCorpus.js": "b8c9ec0d0a5a8425ed29082ac1a89049d8e5f0cbed939b6fc77fc1e3c83a82d6",
+      "src/research/testing/researchQaLabels.js": "5b3e5d19db8a2ced5bf71715d4762d8f35c9e0983ac1868bea00279c38136042",
+      "src/research/testing/researchQaSupplemental.js": "cf078b3fe0bc00f02bee8d79f239ccde5e5ed81fd7ce626203b0aee0ad772643",
+      "src/research/testing/researchQaHoldout.js": "436ef42306fe396340e39e0ceaab64d3e4de587f45b43f40ac743054540e9e77",
+      "src/v1/research-qa/provider-eval.postgres.test.ts": "f34051246cfbd8f00ab05da0201caf284708876128ae1a0be863b2951ddf505b",
+      "src/ai/gateway.js": "86d0906b2a72834e79f0cfb1b51b0020df3fcead433d3e7057f55685a9888d12",
+      "src/ai/deepseek.js": "1a2b94539c70af64c66fa1680694b59319782bb0f680857c7c3a38d00b6d01a4",
+      "src/v1/research-qa/research-evidence.service.ts": "92d2eb90081bea2efbed47d388f0c9561577272752072596293c5218ac4fd411",
+      "src/v1/research-qa/research-evidence.repository.ts": "6b8c06b68d2eae5aeee281968b75ab1947d4b6530989be73cd9ff1a899cbf36f",
+      "src/v1/research-qa/research-questions.service.ts": "cb02a64a7cb3fa26d015f47e79ff38be7e76dea6750849ba0a368fe006607a60"
+    },
+    "limits": {
+      "question": 4000,
+      "search": 8,
+      "candidates": 40,
+      "cells": 240,
+      "fields": 20,
+      "points": 40,
+      "characters": 4000,
+      "toolBytes": 32000,
+      "evidenceBytes": 160000,
+      "toolCalls": 24,
+      "toolRounds": 8,
+      "requests": 12,
+      "tokens": 60000,
+      "deadlineMs": 120000
+    },
+    "thinking": {
+      "enabled": true,
+      "effort": "high"
+    },
+    "repairThinking": {
+      "enabled": false
+    },
+    "maxOutputTokens": 4000
+  }
+}

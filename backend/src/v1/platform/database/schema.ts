@@ -511,6 +511,23 @@ export const sourceIndexBlobs = pgTable("source_index_blobs", {
   createdBy: text("created_by"),
 });
 
+export const researchQaRequests = pgTable("research_qa_requests", {
+  runId: text("run_id").primaryKey(), labId: text("lab_id").notNull(), projectId: text("project_id").notNull(),
+  actorUserId: text("actor_user_id").notNull(), requestKey: text("request_key").notNull(), requestHash: text("request_hash").notNull(),
+  question: text("question").notNull(), status: text("status").notNull().default("queued"), attempt: integer("attempt").notNull().default(0),
+  leaseToken: text("lease_token"), leaseExpiresAt: utcTimestamp("lease_expires_at"),
+  usage: jsonb("usage").$type<Record<string, any>>().notNull().default({}), failureCode: text("failure_code"),
+  createdAt: utcTimestamp("created_at").notNull().defaultNow(), updatedAt: utcTimestamp("updated_at").notNull().defaultNow(),
+});
+
+export const answerArtifacts = pgTable("answer_artifacts", {
+  id: text("id").primaryKey(), runId: text("run_id").notNull(), projectId: text("project_id").notNull(), createdBy: text("created_by").notNull(),
+  schemaVersion: text("schema_version").notNull().default("labrat.answerArtifact.v1"),
+  answer: jsonb("answer").$type<Record<string, any>>().notNull(), evidence: jsonb("evidence").$type<Array<Record<string, any>>>().notNull(),
+  trace: jsonb("trace").$type<Array<Record<string, any>>>().notNull(), usage: jsonb("usage").$type<Record<string, any>>().notNull(),
+  createdAt: utcTimestamp("created_at").notNull().defaultNow(),
+});
+
 export const agentRuns = pgTable("agent_runs", {
   id: text("id").primaryKey(),
   labId: text("lab_id").notNull(),
@@ -853,7 +870,58 @@ export const publicGuestAccounts = pgTable("public_guest_accounts", {
   createdBy: text("created_by").notNull(),
 });
 
+export const contextDocuments = pgTable("context_documents", {
+  id: text("id").primaryKey(),
+  labId: text("lab_id").notNull(),
+  projectId: text("project_id").notNull(),
+  originalName: text("original_name").notNull(),
+  status: text("status").notNull().default("active"),
+  currentVersionId: text("current_version_id"),
+  version: integer("version").notNull().default(1),
+  createdBy: text("created_by").notNull(),
+  createdAt: utcTimestamp("created_at").notNull(),
+  updatedAt: utcTimestamp("updated_at").notNull(),
+});
+
+export const contextDocumentVersions = pgTable("context_document_versions", {
+  id: text("id").primaryKey(),
+  documentId: text("document_id").notNull(),
+  projectId: text("project_id").notNull(),
+  fileObjectId: text("file_object_id").notNull(),
+  versionNumber: integer("version_number").notNull(),
+  contentHash: text("content_hash").notNull(),
+  processingVersion: text("processing_version").notNull(),
+  status: text("status").notNull().default("pending"),
+  metadata: jsonb("metadata").$type<Record<string, any>>().notNull().default({}),
+  failureCode: text("failure_code"),
+  leaseToken: text("lease_token"),
+  leaseExpiresAt: utcTimestamp("lease_expires_at"),
+  createdBy: text("created_by").notNull(),
+  createdAt: utcTimestamp("created_at").notNull(),
+  updatedAt: utcTimestamp("updated_at").notNull(),
+});
+
+export const contextDocumentPages = pgTable("context_document_pages", {
+  versionId: text("version_id").notNull(),
+  pageNumber: integer("page_number").notNull(),
+  body: jsonb("body").$type<Record<string, any>>().notNull(),
+}, (table) => [primaryKey({ columns: [table.versionId, table.pageNumber] })]);
+
+export const contextDocumentPassages = pgTable("context_document_passages", {
+  versionId: text("version_id").notNull(),
+  projectId: text("project_id").notNull(),
+  id: text("id").notNull(),
+  ordinal: integer("ordinal").notNull(),
+  text: text("text").notNull(),
+  locator: jsonb("locator").$type<Record<string, any>>().notNull(),
+  metadata: jsonb("metadata").$type<Record<string, any>>().notNull().default({}),
+}, (table) => [primaryKey({ columns: [table.versionId, table.id] })]);
+
 export const v1Schema = {
+  contextDocuments,
+  contextDocumentVersions,
+  contextDocumentPages,
+  contextDocumentPassages,
   publicGuestAccounts,
   invitations,
   users,
@@ -878,6 +946,8 @@ export const v1Schema = {
   sourceRegions,
   sourceIndexBlobs,
   agentRuns,
+  researchQaRequests,
+  answerArtifacts,
   workbookReviewSessions,
   workbookReviewRegions,
   regionUnderstandingRevisions,

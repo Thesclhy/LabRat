@@ -25,6 +25,12 @@ function parseContentDisposition(value) {
   return result;
 }
 
+function filenameFromHeader(value) {
+  const bytes = Buffer.from(value, "latin1");
+  try { return new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
+  catch { return value; }
+}
+
 function splitParts(body, boundary) {
   const delimiter = Buffer.from(`--${boundary}`);
   const parts = [];
@@ -63,7 +69,7 @@ export function parseMultipartFormData(contentType, body) {
     if (disposition.filename != null) {
       files.push({
         fieldName: disposition.name,
-        filename: disposition.filename,
+        filename: filenameFromHeader(disposition.filename),
         contentType: headers["content-type"] || "application/octet-stream",
         buffer: content,
         sizeBytes: content.length,

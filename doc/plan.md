@@ -2,11 +2,18 @@
 
 Status: active
 Read when: deciding what LabRat should build next.
-Last reviewed: 2026-09-13
+Last reviewed: 2026-09-27
 
 This is the short active plan. Current execution status lives in `doc/current-milestone.md`; detailed implementation plans live under `doc/plans/`.
 
 ## Current Focus
+
+Research Q&A v1 completed its local implementation and semantic gates. The user
+now requested deployment through the existing main/Lightsail pipeline. The release
+contains uploaded PDF/OCR, Word/TXT/Excel evidence, full-project View Q&A, precise
+citations and existing reviewed-analysis handoff. See the research Q&A plan,
+contract and doc/qa/research-qa-deployment.md. Independent local permission-UI
+work is excluded from this release.
 
 The requested public Guest is being prepared as an isolated read-only demo
 identity with one fixed project, no AI/write/invitation actions and explicit

@@ -1,6 +1,7 @@
 import { createAiGateway } from "../ai/gateway.js";
 import { SUPPORTED_CHART_TYPES } from "../charts/services/chartSpec.js";
 import { ANALYSIS_SOURCE_RANGE_MAX_CELLS } from "./sourceDocuments.js";
+import { researchQuestionRequest } from "../research/citedAnswer.js";
 
 const INSPECT_SOURCE_RANGE_DESCRIPTION = [
   `Read at most ${ANALYSIS_SOURCE_RANGE_MAX_CELLS} cells from one user-confirmed workbook region.`,
@@ -555,6 +556,9 @@ export function createBackendModelProvider({
 
   return {
     publicConfig,
+    answerResearchQuestion(input = {}, options = {}) {
+      return requestStructuredWithTools(researchQuestionRequest(input, options));
+    },
     classifyIntent(input = {}, options = {}) {
       return requestStructured({
         system: INTENT_SYSTEM,

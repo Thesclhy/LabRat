@@ -8,6 +8,6 @@
     "declarationMap": true,
     "noEmit": false
   },
-  "include": ["src/v1/**/*.ts"],
-  "exclude": ["src/v1/**/*.test.ts"]
+  "include": ["src/v1/**/*.ts", "src/research/**/*.js"],
+  "exclude": ["src/v1/**/*.test.ts", "src/research/**/*.test.js"]
 }

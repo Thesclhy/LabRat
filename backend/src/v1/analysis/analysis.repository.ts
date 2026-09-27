@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { makeId } from "../../saas/ids.js";
 import { PostgresSaasStore } from "../../saas/postgresStore.js";
 import { EvidenceRepository } from "../evidence/evidence.repository.js";
@@ -78,13 +78,14 @@ export class AnalysisRepository {
   }
 
   async findAgentRunById(id: string) {
-    const [row] = await this.database.db.select().from(agentRuns).where(eq(agentRuns.id, id)).limit(1);
+    const [row] = await this.database.db.select().from(agentRuns).where(and(eq(agentRuns.id, id),
+      sql`${agentRuns.mode} is distinct from 'research_qa'`)).limit(1);
     return row || null;
   }
 
   async listAgentRuns({ projectId }: { projectId: string }) {
     return this.database.db.select().from(agentRuns)
-      .where(eq(agentRuns.projectId, projectId))
+      .where(and(eq(agentRuns.projectId, projectId), sql`${agentRuns.mode} is distinct from 'research_qa'`))
       .orderBy(desc(agentRuns.updatedAt), desc(agentRuns.id));
   }
 

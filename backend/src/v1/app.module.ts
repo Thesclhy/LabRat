@@ -11,6 +11,7 @@ import { ReusableChartsModule } from "./reusable-charts/reusable-charts.module.j
 import { WorkspaceModule } from "./workspace/workspace.module.js";
 import { InvitationsModule } from "./invitations/invitations.module.js";
 import { RegionTemplatesModule } from "./region-templates/region-templates.module.js";
+import { ResearchQaModule } from "./research-qa/research-qa.module.js";
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { RegionTemplatesModule } from "./region-templates/region-templates.modul
     IdentityModule,
     InvitationsModule,
     RegionTemplatesModule,
+    ResearchQaModule,
     AuthorizationModule,
     WorkspaceModule,
     ExperimentModule,

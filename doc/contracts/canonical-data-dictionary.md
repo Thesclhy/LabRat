@@ -58,6 +58,18 @@ Required concepts:
 - storage provider/key
 - upload actor and timestamp
 
+## ContextDocument / DocumentVersion / DocumentPassage
+
+Uploaded PDF, DOC, DOCX and TXT evidence uses ContextDocument as a project-owned
+logical source, with immutable original FileObject/content hash and parser/OCR
+version on each DocumentVersion. Passages retain original page/region,
+part/paragraph/table or line/character positions and recognition uncertainty.
+Completed pages can be checkpointed; lifecycle state does not change their text.
+Archiving removes current retrieval eligibility and retains historical references.
+These are source statements available after parsing, not accepted experimental
+meanings, values or analysis inputs. Excel continues using SourceDocument and
+exact original cell/range positions. See `research-qa-v1.md`.
+
 ## ImportRun
 
 A workbook indexing attempt. It records scan status, structural scan result, warnings, errors, actor, and timestamps. It is not accepted scientific data.

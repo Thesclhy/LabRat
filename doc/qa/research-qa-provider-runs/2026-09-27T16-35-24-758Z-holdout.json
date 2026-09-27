@@ -1,0 +1,3771 @@
+{
+  "schemaVersion": "labrat.researchQaEvaluation.v1",
+  "material": "synthetic only",
+  "provider": {
+    "provider": "deepseek",
+    "model": "deepseek-v4-pro",
+    "configured": true
+  },
+  "evaluation": "holdout",
+  "completed": true,
+  "records": [
+    {
+      "id": "H-D1",
+      "group": "documents",
+      "question": "List both the catalyst mass and solvent volume specified by RQ-DOSE, with their original units and catalyst restriction. Do not calculate a ratio.",
+      "expected": [
+        "0.10 g",
+        "8 mL",
+        "only catalyst K",
+        "no ratio"
+      ],
+      "minimumSupport": [
+        {
+          "kind": "document",
+          "source": "legacy",
+          "text": "Catalyst mass: 0.10 g",
+          "locator": {
+            "paragraph": 2
+          }
+        },
+        {
+          "kind": "document",
+          "source": "legacy",
+          "text": "Solvent volume: 8 mL",
+          "locator": {
+            "paragraph": 3
+          }
+        },
+        {
+          "kind": "document",
+          "source": "legacy",
+          "text": "Only catalyst K is covered.",
+          "locator": {
+            "paragraph": 4
+          }
+        }
+      ],
+      "control": null,
+      "split": "final_holdout",
+      "allowedScope": "project_analysis synthetic sources only",
+      "forbidden": [
+        "new scientific values",
+        "cross-project evidence",
+        "unqualified scope expansion"
+      ],
+      "request": {
+        "runId": "agent_run_6a0bcb1b65214970809b4181",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "eval-H-D1-1790526932174",
+        "question": "List both the catalyst mass and solvent volume specified by RQ-DOSE, with their original units and catalyst restriction. Do not calculate a ratio.",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 2,
+          "elapsedMs": 10132,
+          "knownCost": null,
+          "toolCalls": 4,
+          "toolRounds": 1,
+          "inputTokens": 12876,
+          "lastActiveAt": 1790526942321,
+          "outputTokens": 1161,
+          "reservedTokens": 0,
+          "visibleToolCalls": 5,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-27T16:35:32.183Z",
+        "updatedAt": "2026-09-27T16:35:42.327Z"
+      },
+      "artifact": {
+        "id": "answer_1abfd0ae8ab342998793086e",
+        "runId": "agent_run_6a0bcb1b65214970809b4181",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "RQ-DOSE specifies a catalyst mass of 0.10 g (grams).",
+              "citations": [
+                {
+                  "quote": "Catalyst mass: 0.10 g",
+                  "evidenceId": "evidence_2603148f5f8f8d13bbd96559"
+                }
+              ],
+              "numericBindings": []
+            },
+            {
+              "text": "RQ-DOSE specifies a solvent volume of 8 mL (milliliters).",
+              "citations": [
+                {
+                  "quote": "Solvent volume: 8 mL",
+                  "evidenceId": "evidence_d3e2065f6f736346e63d0fd5"
+                }
+              ],
+              "numericBindings": []
+            },
+            {
+              "text": "RQ-DOSE's catalyst restriction is that only catalyst K is covered.",
+              "citations": [
+                {
+                  "quote": "Only catalyst K is covered.",
+                  "evidenceId": "evidence_dda8ad2a83470292cc0a2d58"
+                }
+              ],
+              "numericBindings": []
+            }
+          ],
+          "status": "answered",
+          "limitations": [],
+          "missingEvidence": []
+        },
+        "evidence": [
+          {
+            "id": "evidence_2603148f5f8f8d13bbd96559",
+            "kind": "document_passage",
+            "label": "RQ-dose.doc",
+            "locator": {
+              "kind": "word",
+              "part": "body",
+              "charEnd": 21,
+              "charStart": 0,
+              "paragraph": 2
+            },
+            "version": {
+              "versionId": "document_version_c274f9d91be2446b8820df6e",
+              "documentId": "context_doc_2f784475f77b401aa4773bf4",
+              "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 6,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "part": "body",
+                  "status": "ready"
+                },
+                "statusCounts": {
+                  "ready": 6
+                },
+                "warningParts": 0,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "ready",
+              "passageId": "passage_87044a530934fc746781f7df519dc310",
+              "limitations": [
+                "legacy_word_table_and_page_layout_not_reconstructed",
+                "embedded_images_and_fields_not_interpreted"
+              ]
+            },
+            "warnings": []
+          },
+          {
+            "id": "evidence_d3e2065f6f736346e63d0fd5",
+            "kind": "document_passage",
+            "label": "RQ-dose.doc",
+            "locator": {
+              "kind": "word",
+              "part": "body",
+              "charEnd": 20,
+              "charStart": 0,
+              "paragraph": 3
+            },
+            "version": {
+              "versionId": "document_version_c274f9d91be2446b8820df6e",
+              "documentId": "context_doc_2f784475f77b401aa4773bf4",
+              "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 6,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "part": "body",
+                  "status": "ready"
+                },
+                "statusCounts": {
+                  "ready": 6
+                },
+                "warningParts": 0,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "ready",
+              "passageId": "passage_86b20e1f9def02069390b6f85d65423d",
+              "limitations": [
+                "legacy_word_table_and_page_layout_not_reconstructed",
+                "embedded_images_and_fields_not_interpreted"
+              ]
+            },
+            "warnings": []
+          },
+          {
+            "id": "evidence_dda8ad2a83470292cc0a2d58",
+            "kind": "document_passage",
+            "label": "RQ-dose.doc",
+            "locator": {
+              "kind": "word",
+              "part": "body",
+              "charEnd": 27,
+              "charStart": 0,
+              "paragraph": 4
+            },
+            "version": {
+              "versionId": "document_version_c274f9d91be2446b8820df6e",
+              "documentId": "context_doc_2f784475f77b401aa4773bf4",
+              "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 6,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "part": "body",
+                  "status": "ready"
+                },
+                "statusCounts": {
+                  "ready": 6
+                },
+                "warningParts": 0,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "ready",
+              "passageId": "passage_58557d7c1ed9afbf1635c5f48fd789b7",
+              "limitations": [
+                "legacy_word_table_and_page_layout_not_reconstructed",
+                "embedded_images_and_fields_not_interpreted"
+              ]
+            },
+            "warnings": []
+          }
+        ],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "status": "ok",
+            "elapsedMs": 32
+          },
+          {
+            "tool": "read_document_passage",
+            "status": "ok",
+            "elapsedMs": 6
+          },
+          {
+            "tool": "read_document_passage",
+            "status": "ok",
+            "elapsedMs": 5
+          },
+          {
+            "tool": "read_document_passage",
+            "status": "ok",
+            "elapsedMs": 4
+          },
+          {
+            "tool": "read_document_passage",
+            "status": "ok",
+            "elapsedMs": 4
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 2,
+          "elapsedMs": 10132,
+          "knownCost": null,
+          "toolCalls": 4,
+          "toolRounds": 1,
+          "inputTokens": 12876,
+          "lastActiveAt": 1790526942321,
+          "outputTokens": 1161,
+          "reservedTokens": 0,
+          "visibleToolCalls": 5,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-27 12:35:42.322361-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_2603148f5f8f8d13bbd96559",
+          "data": {
+            "text": "Catalyst mass: 0.10 g"
+          },
+          "kind": "document_passage",
+          "label": "RQ-dose.doc",
+          "locator": {
+            "kind": "word",
+            "part": "body",
+            "charEnd": 21,
+            "charStart": 0,
+            "paragraph": 2
+          },
+          "version": {
+            "versionId": "document_version_c274f9d91be2446b8820df6e",
+            "documentId": "context_doc_2f784475f77b401aa4773bf4",
+            "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 6,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "part": "body",
+                "status": "ready"
+              },
+              "statusCounts": {
+                "ready": 6
+              },
+              "warningParts": 0,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "ready",
+            "passageId": "passage_87044a530934fc746781f7df519dc310",
+            "limitations": [
+              "legacy_word_table_and_page_layout_not_reconstructed",
+              "embedded_images_and_fields_not_interpreted"
+            ]
+          },
+          "warnings": []
+        },
+        {
+          "id": "evidence_d3e2065f6f736346e63d0fd5",
+          "data": {
+            "text": "Solvent volume: 8 mL"
+          },
+          "kind": "document_passage",
+          "label": "RQ-dose.doc",
+          "locator": {
+            "kind": "word",
+            "part": "body",
+            "charEnd": 20,
+            "charStart": 0,
+            "paragraph": 3
+          },
+          "version": {
+            "versionId": "document_version_c274f9d91be2446b8820df6e",
+            "documentId": "context_doc_2f784475f77b401aa4773bf4",
+            "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 6,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "part": "body",
+                "status": "ready"
+              },
+              "statusCounts": {
+                "ready": 6
+              },
+              "warningParts": 0,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "ready",
+            "passageId": "passage_86b20e1f9def02069390b6f85d65423d",
+            "limitations": [
+              "legacy_word_table_and_page_layout_not_reconstructed",
+              "embedded_images_and_fields_not_interpreted"
+            ]
+          },
+          "warnings": []
+        },
+        {
+          "id": "evidence_dda8ad2a83470292cc0a2d58",
+          "data": {
+            "text": "Only catalyst K is covered."
+          },
+          "kind": "document_passage",
+          "label": "RQ-dose.doc",
+          "locator": {
+            "kind": "word",
+            "part": "body",
+            "charEnd": 27,
+            "charStart": 0,
+            "paragraph": 4
+          },
+          "version": {
+            "versionId": "document_version_c274f9d91be2446b8820df6e",
+            "documentId": "context_doc_2f784475f77b401aa4773bf4",
+            "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 6,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "part": "body",
+                "status": "ready"
+              },
+              "statusCounts": {
+                "ready": 6
+              },
+              "warningParts": 0,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "ready",
+            "passageId": "passage_58557d7c1ed9afbf1635c5f48fd789b7",
+            "limitations": [
+              "legacy_word_table_and_page_layout_not_reconstructed",
+              "embedded_images_and_fields_not_interpreted"
+            ]
+          },
+          "warnings": []
+        }
+      ],
+      "toolExecutions": [
+        {
+          "tool": "read_document_passage",
+          "input": {
+            "versionId": "document_version_c274f9d91be2446b8820df6e",
+            "passageId": "passage_87044a530934fc746781f7df519dc310"
+          },
+          "startedAt": "2026-09-27T16:35:37.091Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_2603148f5f8f8d13bbd96559",
+              "kind": "document_passage",
+              "label": "RQ-dose.doc",
+              "version": {
+                "documentId": "context_doc_2f784475f77b401aa4773bf4",
+                "versionId": "document_version_c274f9d91be2446b8820df6e",
+                "versionNumber": 1,
+                "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+              },
+              "locator": {
+                "kind": "word",
+                "part": "body",
+                "charEnd": 21,
+                "charStart": 0,
+                "paragraph": 2
+              },
+              "data": {
+                "text": "Catalyst mass: 0.10 g"
+              },
+              "coverage": {
+                "scope": "one_passage",
+                "passageId": "passage_87044a530934fc746781f7df519dc310",
+                "status": "ready",
+                "source": {
+                  "parts": 6,
+                  "statusCounts": {
+                    "ready": 6
+                  },
+                  "location": {
+                    "part": "body",
+                    "status": "ready"
+                  },
+                  "warningParts": 0,
+                  "scope": "summary_and_cited_location_only",
+                  "fullCoverageAvailableOnVersion": true
+                },
+                "limitations": [
+                  "legacy_word_table_and_page_layout_not_reconstructed",
+                  "embedded_images_and_fields_not_interpreted"
+                ]
+              },
+              "warnings": []
+            },
+            "contextEvidence": [
+              {
+                "id": "evidence_74107c941938c10a009a0fef",
+                "kind": "document_passage",
+                "label": "RQ-dose.doc",
+                "version": {
+                  "documentId": "context_doc_2f784475f77b401aa4773bf4",
+                  "versionId": "document_version_c274f9d91be2446b8820df6e",
+                  "versionNumber": 1,
+                  "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                  "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+                },
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 7,
+                  "charStart": 0,
+                  "paragraph": 1
+                },
+                "data": {
+                  "text": "RQ-DOSE"
+                },
+                "coverage": {
+                  "scope": "one_passage",
+                  "passageId": "passage_889a91a245758d703aa86d2e1c3ae2f2",
+                  "status": "ready",
+                  "source": {
+                    "parts": 6,
+                    "statusCounts": {
+                      "ready": 6
+                    },
+                    "location": {
+                      "part": "body",
+                      "status": "ready"
+                    },
+                    "warningParts": 0,
+                    "scope": "summary_and_cited_location_only",
+                    "fullCoverageAvailableOnVersion": true
+                  },
+                  "limitations": [
+                    "legacy_word_table_and_page_layout_not_reconstructed",
+                    "embedded_images_and_fields_not_interpreted"
+                  ]
+                },
+                "warnings": []
+              },
+              {
+                "id": "evidence_d3e2065f6f736346e63d0fd5",
+                "kind": "document_passage",
+                "label": "RQ-dose.doc",
+                "version": {
+                  "documentId": "context_doc_2f784475f77b401aa4773bf4",
+                  "versionId": "document_version_c274f9d91be2446b8820df6e",
+                  "versionNumber": 1,
+                  "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                  "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+                },
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 20,
+                  "charStart": 0,
+                  "paragraph": 3
+                },
+                "data": {
+                  "text": "Solvent volume: 8 mL"
+                },
+                "coverage": {
+                  "scope": "one_passage",
+                  "passageId": "passage_86b20e1f9def02069390b6f85d65423d",
+                  "status": "ready",
+                  "source": {
+                    "parts": 6,
+                    "statusCounts": {
+                      "ready": 6
+                    },
+                    "location": {
+                      "part": "body",
+                      "status": "ready"
+                    },
+                    "warningParts": 0,
+                    "scope": "summary_and_cited_location_only",
+                    "fullCoverageAvailableOnVersion": true
+                  },
+                  "limitations": [
+                    "legacy_word_table_and_page_layout_not_reconstructed",
+                    "embedded_images_and_fields_not_interpreted"
+                  ]
+                },
+                "warnings": []
+              }
+            ],
+            "neighbors": [
+              {
+                "id": "passage_889a91a245758d703aa86d2e1c3ae2f2",
+                "ordinal": 0,
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 7,
+                  "charStart": 0,
+                  "paragraph": 1
+                }
+              },
+              {
+                "id": "passage_86b20e1f9def02069390b6f85d65423d",
+                "ordinal": 2,
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 20,
+                  "charStart": 0,
+                  "paragraph": 3
+                }
+              }
+            ]
+          },
+          "completedAt": "2026-09-27T16:35:37.097Z"
+        },
+        {
+          "tool": "read_document_passage",
+          "input": {
+            "versionId": "document_version_c274f9d91be2446b8820df6e",
+            "passageId": "passage_86b20e1f9def02069390b6f85d65423d"
+          },
+          "startedAt": "2026-09-27T16:35:37.097Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_d3e2065f6f736346e63d0fd5",
+              "kind": "document_passage",
+              "label": "RQ-dose.doc",
+              "version": {
+                "documentId": "context_doc_2f784475f77b401aa4773bf4",
+                "versionId": "document_version_c274f9d91be2446b8820df6e",
+                "versionNumber": 1,
+                "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+              },
+              "locator": {
+                "kind": "word",
+                "part": "body",
+                "charEnd": 20,
+                "charStart": 0,
+                "paragraph": 3
+              },
+              "data": {
+                "text": "Solvent volume: 8 mL"
+              },
+              "coverage": {
+                "scope": "one_passage",
+                "passageId": "passage_86b20e1f9def02069390b6f85d65423d",
+                "status": "ready",
+                "source": {
+                  "parts": 6,
+                  "statusCounts": {
+                    "ready": 6
+                  },
+                  "location": {
+                    "part": "body",
+                    "status": "ready"
+                  },
+                  "warningParts": 0,
+                  "scope": "summary_and_cited_location_only",
+                  "fullCoverageAvailableOnVersion": true
+                },
+                "limitations": [
+                  "legacy_word_table_and_page_layout_not_reconstructed",
+                  "embedded_images_and_fields_not_interpreted"
+                ]
+              },
+              "warnings": []
+            },
+            "contextEvidence": [
+              {
+                "id": "evidence_2603148f5f8f8d13bbd96559",
+                "kind": "document_passage",
+                "label": "RQ-dose.doc",
+                "version": {
+                  "documentId": "context_doc_2f784475f77b401aa4773bf4",
+                  "versionId": "document_version_c274f9d91be2446b8820df6e",
+                  "versionNumber": 1,
+                  "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                  "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+                },
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 21,
+                  "charStart": 0,
+                  "paragraph": 2
+                },
+                "data": {
+                  "text": "Catalyst mass: 0.10 g"
+                },
+                "coverage": {
+                  "scope": "one_passage",
+                  "passageId": "passage_87044a530934fc746781f7df519dc310",
+                  "status": "ready",
+                  "source": {
+                    "parts": 6,
+                    "statusCounts": {
+                      "ready": 6
+                    },
+                    "location": {
+                      "part": "body",
+                      "status": "ready"
+                    },
+                    "warningParts": 0,
+                    "scope": "summary_and_cited_location_only",
+                    "fullCoverageAvailableOnVersion": true
+                  },
+                  "limitations": [
+                    "legacy_word_table_and_page_layout_not_reconstructed",
+                    "embedded_images_and_fields_not_interpreted"
+                  ]
+                },
+                "warnings": []
+              },
+              {
+                "id": "evidence_dda8ad2a83470292cc0a2d58",
+                "kind": "document_passage",
+                "label": "RQ-dose.doc",
+                "version": {
+                  "documentId": "context_doc_2f784475f77b401aa4773bf4",
+                  "versionId": "document_version_c274f9d91be2446b8820df6e",
+                  "versionNumber": 1,
+                  "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                  "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+                },
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 27,
+                  "charStart": 0,
+                  "paragraph": 4
+                },
+                "data": {
+                  "text": "Only catalyst K is covered."
+                },
+                "coverage": {
+                  "scope": "one_passage",
+                  "passageId": "passage_58557d7c1ed9afbf1635c5f48fd789b7",
+                  "status": "ready",
+                  "source": {
+                    "parts": 6,
+                    "statusCounts": {
+                      "ready": 6
+                    },
+                    "location": {
+                      "part": "body",
+                      "status": "ready"
+                    },
+                    "warningParts": 0,
+                    "scope": "summary_and_cited_location_only",
+                    "fullCoverageAvailableOnVersion": true
+                  },
+                  "limitations": [
+                    "legacy_word_table_and_page_layout_not_reconstructed",
+                    "embedded_images_and_fields_not_interpreted"
+                  ]
+                },
+                "warnings": []
+              }
+            ],
+            "neighbors": [
+              {
+                "id": "passage_87044a530934fc746781f7df519dc310",
+                "ordinal": 1,
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 21,
+                  "charStart": 0,
+                  "paragraph": 2
+                }
+              },
+              {
+                "id": "passage_58557d7c1ed9afbf1635c5f48fd789b7",
+                "ordinal": 3,
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 27,
+                  "charStart": 0,
+                  "paragraph": 4
+                }
+              }
+            ]
+          },
+          "completedAt": "2026-09-27T16:35:37.102Z"
+        },
+        {
+          "tool": "read_document_passage",
+          "input": {
+            "versionId": "document_version_c274f9d91be2446b8820df6e",
+            "passageId": "passage_58557d7c1ed9afbf1635c5f48fd789b7"
+          },
+          "startedAt": "2026-09-27T16:35:37.102Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_dda8ad2a83470292cc0a2d58",
+              "kind": "document_passage",
+              "label": "RQ-dose.doc",
+              "version": {
+                "documentId": "context_doc_2f784475f77b401aa4773bf4",
+                "versionId": "document_version_c274f9d91be2446b8820df6e",
+                "versionNumber": 1,
+                "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+              },
+              "locator": {
+                "kind": "word",
+                "part": "body",
+                "charEnd": 27,
+                "charStart": 0,
+                "paragraph": 4
+              },
+              "data": {
+                "text": "Only catalyst K is covered."
+              },
+              "coverage": {
+                "scope": "one_passage",
+                "passageId": "passage_58557d7c1ed9afbf1635c5f48fd789b7",
+                "status": "ready",
+                "source": {
+                  "parts": 6,
+                  "statusCounts": {
+                    "ready": 6
+                  },
+                  "location": {
+                    "part": "body",
+                    "status": "ready"
+                  },
+                  "warningParts": 0,
+                  "scope": "summary_and_cited_location_only",
+                  "fullCoverageAvailableOnVersion": true
+                },
+                "limitations": [
+                  "legacy_word_table_and_page_layout_not_reconstructed",
+                  "embedded_images_and_fields_not_interpreted"
+                ]
+              },
+              "warnings": []
+            },
+            "contextEvidence": [
+              {
+                "id": "evidence_d3e2065f6f736346e63d0fd5",
+                "kind": "document_passage",
+                "label": "RQ-dose.doc",
+                "version": {
+                  "documentId": "context_doc_2f784475f77b401aa4773bf4",
+                  "versionId": "document_version_c274f9d91be2446b8820df6e",
+                  "versionNumber": 1,
+                  "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                  "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+                },
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 20,
+                  "charStart": 0,
+                  "paragraph": 3
+                },
+                "data": {
+                  "text": "Solvent volume: 8 mL"
+                },
+                "coverage": {
+                  "scope": "one_passage",
+                  "passageId": "passage_86b20e1f9def02069390b6f85d65423d",
+                  "status": "ready",
+                  "source": {
+                    "parts": 6,
+                    "statusCounts": {
+                      "ready": 6
+                    },
+                    "location": {
+                      "part": "body",
+                      "status": "ready"
+                    },
+                    "warningParts": 0,
+                    "scope": "summary_and_cited_location_only",
+                    "fullCoverageAvailableOnVersion": true
+                  },
+                  "limitations": [
+                    "legacy_word_table_and_page_layout_not_reconstructed",
+                    "embedded_images_and_fields_not_interpreted"
+                  ]
+                },
+                "warnings": []
+              }
+            ],
+            "neighbors": [
+              {
+                "id": "passage_86b20e1f9def02069390b6f85d65423d",
+                "ordinal": 2,
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 20,
+                  "charStart": 0,
+                  "paragraph": 3
+                }
+              }
+            ]
+          },
+          "completedAt": "2026-09-27T16:35:37.106Z"
+        },
+        {
+          "tool": "read_document_passage",
+          "input": {
+            "versionId": "document_version_c274f9d91be2446b8820df6e",
+            "passageId": "passage_889a91a245758d703aa86d2e1c3ae2f2"
+          },
+          "startedAt": "2026-09-27T16:35:37.106Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_74107c941938c10a009a0fef",
+              "kind": "document_passage",
+              "label": "RQ-dose.doc",
+              "version": {
+                "documentId": "context_doc_2f784475f77b401aa4773bf4",
+                "versionId": "document_version_c274f9d91be2446b8820df6e",
+                "versionNumber": 1,
+                "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+              },
+              "locator": {
+                "kind": "word",
+                "part": "body",
+                "charEnd": 7,
+                "charStart": 0,
+                "paragraph": 1
+              },
+              "data": {
+                "text": "RQ-DOSE"
+              },
+              "coverage": {
+                "scope": "one_passage",
+                "passageId": "passage_889a91a245758d703aa86d2e1c3ae2f2",
+                "status": "ready",
+                "source": {
+                  "parts": 6,
+                  "statusCounts": {
+                    "ready": 6
+                  },
+                  "location": {
+                    "part": "body",
+                    "status": "ready"
+                  },
+                  "warningParts": 0,
+                  "scope": "summary_and_cited_location_only",
+                  "fullCoverageAvailableOnVersion": true
+                },
+                "limitations": [
+                  "legacy_word_table_and_page_layout_not_reconstructed",
+                  "embedded_images_and_fields_not_interpreted"
+                ]
+              },
+              "warnings": []
+            },
+            "contextEvidence": [
+              {
+                "id": "evidence_2603148f5f8f8d13bbd96559",
+                "kind": "document_passage",
+                "label": "RQ-dose.doc",
+                "version": {
+                  "documentId": "context_doc_2f784475f77b401aa4773bf4",
+                  "versionId": "document_version_c274f9d91be2446b8820df6e",
+                  "versionNumber": 1,
+                  "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                  "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+                },
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 21,
+                  "charStart": 0,
+                  "paragraph": 2
+                },
+                "data": {
+                  "text": "Catalyst mass: 0.10 g"
+                },
+                "coverage": {
+                  "scope": "one_passage",
+                  "passageId": "passage_87044a530934fc746781f7df519dc310",
+                  "status": "ready",
+                  "source": {
+                    "parts": 6,
+                    "statusCounts": {
+                      "ready": 6
+                    },
+                    "location": {
+                      "part": "body",
+                      "status": "ready"
+                    },
+                    "warningParts": 0,
+                    "scope": "summary_and_cited_location_only",
+                    "fullCoverageAvailableOnVersion": true
+                  },
+                  "limitations": [
+                    "legacy_word_table_and_page_layout_not_reconstructed",
+                    "embedded_images_and_fields_not_interpreted"
+                  ]
+                },
+                "warnings": []
+              }
+            ],
+            "neighbors": [
+              {
+                "id": "passage_87044a530934fc746781f7df519dc310",
+                "ordinal": 1,
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 21,
+                  "charStart": 0,
+                  "paragraph": 2
+                }
+              }
+            ]
+          },
+          "completedAt": "2026-09-27T16:35:37.110Z"
+        }
+      ],
+      "modelOutputs": [
+        {
+          "repairErrors": [],
+          "startedAt": "2026-09-27T16:35:32.223Z",
+          "result": {
+            "ok": true,
+            "status": "answered",
+            "claims": [
+              {
+                "text": "RQ-DOSE specifies a catalyst mass of 0.10 g (grams).",
+                "citations": [
+                  {
+                    "evidenceId": "evidence_2603148f5f8f8d13bbd96559",
+                    "quote": "Catalyst mass: 0.10 g"
+                  }
+                ],
+                "numericBindings": []
+              },
+              {
+                "text": "RQ-DOSE specifies a solvent volume of 8 mL (milliliters).",
+                "citations": [
+                  {
+                    "evidenceId": "evidence_d3e2065f6f736346e63d0fd5",
+                    "quote": "Solvent volume: 8 mL"
+                  }
+                ],
+                "numericBindings": []
+              },
+              {
+                "text": "RQ-DOSE's catalyst restriction is that only catalyst K is covered.",
+                "citations": [
+                  {
+                    "evidenceId": "evidence_dda8ad2a83470292cc0a2d58",
+                    "quote": "Only catalyst K is covered."
+                  }
+                ],
+                "numericBindings": []
+              }
+            ],
+            "missingEvidence": [],
+            "metadata": {
+              "provider": "deepseek",
+              "model": "deepseek-v4-pro",
+              "latencyMs": 10092,
+              "usage": {
+                "inputTokens": 12876,
+                "outputTokens": 1161,
+                "reasoningTokens": 599
+              },
+              "toolRounds": 1,
+              "requestedMaxTokens": 4000,
+              "finalRequestedMaxTokens": 4000,
+              "attemptCount": 1,
+              "stopReason": "stop"
+            }
+          },
+          "completedAt": "2026-09-27T16:35:42.315Z"
+        }
+      ],
+      "elapsedMs": 10415,
+      "semanticReview": "pending_independent_review"
+    },
+    {
+      "id": "H-R1",
+      "group": "data",
+      "question": "Read the first stored point in Exp17's accepted temperature_trace. Include both axis units and keep the stored values unchanged.",
+      "expected": [
+        "first point x 0 min",
+        "y 82 C",
+        "accepted snapshot"
+      ],
+      "minimumSupport": [
+        {
+          "kind": "point",
+          "seriesKey": "temperature_trace",
+          "index": 0,
+          "x": 0,
+          "y": 82,
+          "xUnit": "min",
+          "yUnit": "C"
+        }
+      ],
+      "control": null,
+      "split": "final_holdout",
+      "allowedScope": "project_analysis synthetic sources only",
+      "forbidden": [
+        "new scientific values",
+        "cross-project evidence",
+        "unqualified scope expansion"
+      ],
+      "request": {
+        "runId": "agent_run_62051790377f48a9ab7e86cc",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "eval-H-R1-1790526942590",
+        "question": "Read the first stored point in Exp17's accepted temperature_trace. Include both axis units and keep the stored values unchanged.",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 4,
+          "elapsedMs": 27027,
+          "knownCost": null,
+          "toolCalls": 3,
+          "toolRounds": 3,
+          "inputTokens": 22177,
+          "lastActiveAt": 1790526969632,
+          "outputTokens": 2772,
+          "reservedTokens": 0,
+          "visibleToolCalls": 4,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-27T16:35:42.597Z",
+        "updatedAt": "2026-09-27T16:36:09.637Z"
+      },
+      "artifact": {
+        "id": "answer_da349fbc658d4cbc97084b98",
+        "runId": "agent_run_62051790377f48a9ab7e86cc",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "In Exp17's accepted temperature_trace series ('Temperature trace'), the first stored point is x=0, y=82. The x-axis is time with unit 'min' (minutes), and the y-axis is temperature with unit 'C' (degrees Celsius). Stored values are kept unchanged.",
+              "citations": [
+                {
+                  "quote": "unit\":\"min",
+                  "evidenceId": "evidence_e0467f96515993306835da63"
+                },
+                {
+                  "quote": "unit\":\"C",
+                  "evidenceId": "evidence_e0467f96515993306835da63"
+                },
+                {
+                  "quote": "x\":0",
+                  "evidenceId": "evidence_e0467f96515993306835da63"
+                },
+                {
+                  "quote": "y\":82",
+                  "evidenceId": "evidence_e0467f96515993306835da63"
+                }
+              ],
+              "numericBindings": [
+                {
+                  "path": "/data/seriesWindow/points/0/x",
+                  "unit": "min",
+                  "value": 0,
+                  "evidenceId": "evidence_e0467f96515993306835da63",
+                  "numericScale": null
+                },
+                {
+                  "path": "/data/seriesWindow/points/0/y",
+                  "unit": "C",
+                  "value": 82,
+                  "evidenceId": "evidence_e0467f96515993306835da63",
+                  "numericScale": null
+                }
+              ]
+            }
+          ],
+          "status": "answered",
+          "limitations": [
+            "Values retain their stored scale and unit; no conversion or new calculation was performed.",
+            "Only the cited window was read; additional records remain available."
+          ],
+          "missingEvidence": []
+        },
+        "evidence": [
+          {
+            "id": "evidence_e0467f96515993306835da63",
+            "kind": "experiment_snapshot",
+            "label": "Exp17",
+            "locator": {
+              "seriesKey": "temperature_trace",
+              "fieldOffset": 0,
+              "pointOffset": 0,
+              "seriesOffset": 0
+            },
+            "version": {
+              "headId": "head_experiment_17",
+              "snapshotId": "snapshot_experiment_17",
+              "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+              "recordIndex": 0,
+              "experimentId": "experiment_17",
+              "headUpdatedAt": "2026-09-27T16:35:32.165Z"
+            },
+            "coverage": {
+              "scope": "accepted_snapshot_window",
+              "fieldCount": 29,
+              "seriesCount": 1,
+              "nextFieldOffset": 20,
+              "nextPointOffset": 40,
+              "nextSeriesOffset": null
+            },
+            "warnings": [
+              "Values retain their stored scale and unit; no conversion or new calculation was performed."
+            ]
+          }
+        ],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "status": "ok",
+            "elapsedMs": 11
+          },
+          {
+            "tool": "find_experiments",
+            "status": "ok",
+            "elapsedMs": 5
+          },
+          {
+            "tool": "read_experiment_evidence",
+            "status": "ok",
+            "elapsedMs": 5
+          },
+          {
+            "tool": "read_experiment_evidence",
+            "status": "ok",
+            "elapsedMs": 6
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 4,
+          "elapsedMs": 27027,
+          "knownCost": null,
+          "toolCalls": 3,
+          "toolRounds": 3,
+          "inputTokens": 22177,
+          "lastActiveAt": 1790526969632,
+          "outputTokens": 2772,
+          "reservedTokens": 0,
+          "visibleToolCalls": 4,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-27 12:36:09.633659-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_e0467f96515993306835da63",
+          "data": {
+            "fields": [
+              {
+                "unit": "C",
+                "value": 82,
+                "columnId": "temperature",
+                "valueType": "number",
+                "sourceRefs": [
+                  {
+                    "cell": "B2",
+                    "sheet": "Measurements",
+                    "rawValue": 80
+                  }
+                ],
+                "displayName": "Temperature"
+              },
+              {
+                "unit": "%",
+                "value": 0.42,
+                "columnId": "yield_fraction",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Yield",
+                "numericScale": "fraction"
+              },
+              {
+                "unit": "%",
+                "value": 42,
+                "columnId": "yield_points",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Yield",
+                "numericScale": "percent_points"
+              },
+              {
+                "unit": "bar",
+                "value": null,
+                "columnId": "pressure",
+                "valueType": "number",
+                "sourceRefs": [
+                  {
+                    "cell": "H2",
+                    "sheet": "Measurements",
+                    "rawValue": null
+                  }
+                ],
+                "displayName": "Pressure",
+                "missingReason": "source_blank",
+                "formattedValue": null
+              },
+              {
+                "unit": "min",
+                "value": 30,
+                "columnId": "duration",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Duration"
+              },
+              {
+                "unit": "mg",
+                "value": 100,
+                "columnId": "aux_0",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 0"
+              },
+              {
+                "unit": "mg",
+                "value": 101,
+                "columnId": "aux_1",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 1"
+              },
+              {
+                "unit": "mg",
+                "value": 102,
+                "columnId": "aux_2",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 2"
+              },
+              {
+                "unit": "mg",
+                "value": 103,
+                "columnId": "aux_3",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 3"
+              },
+              {
+                "unit": "mg",
+                "value": 104,
+                "columnId": "aux_4",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 4"
+              },
+              {
+                "unit": "mg",
+                "value": 105,
+                "columnId": "aux_5",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 5"
+              },
+              {
+                "unit": "mg",
+                "value": 106,
+                "columnId": "aux_6",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 6"
+              },
+              {
+                "unit": "mg",
+                "value": 107,
+                "columnId": "aux_7",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 7"
+              },
+              {
+                "unit": "mg",
+                "value": 108,
+                "columnId": "aux_8",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 8"
+              },
+              {
+                "unit": "mg",
+                "value": 109,
+                "columnId": "aux_9",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 9"
+              },
+              {
+                "unit": "mg",
+                "value": 110,
+                "columnId": "aux_10",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 10"
+              },
+              {
+                "unit": "mg",
+                "value": 111,
+                "columnId": "aux_11",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 11"
+              },
+              {
+                "unit": "mg",
+                "value": 112,
+                "columnId": "aux_12",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 12"
+              },
+              {
+                "unit": "mg",
+                "value": 113,
+                "columnId": "aux_13",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 13"
+              },
+              {
+                "unit": "mg",
+                "value": 114,
+                "columnId": "aux_14",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 14"
+              }
+            ],
+            "series": [
+              {
+                "label": "Temperature trace",
+                "xField": {
+                  "unit": "min",
+                  "fieldId": "time"
+                },
+                "yField": {
+                  "unit": "C",
+                  "fieldId": "temperature"
+                },
+                "seriesKey": "temperature_trace",
+                "pointCount": 121,
+                "sourceRefs": []
+              }
+            ],
+            "warnings": [],
+            "acceptedAt": "2026-09-27T16:35:32.163Z",
+            "fieldCount": 29,
+            "snapshotId": "snapshot_experiment_17",
+            "sourceRefs": [],
+            "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+            "seriesCount": 1,
+            "sourceAlias": "Exp17",
+            "experimentId": "experiment_17",
+            "seriesWindow": {
+              "points": [
+                {
+                  "x": 0,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 1,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 2,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 3,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 4,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 5,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 6,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 7,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 8,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 9,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 10,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 11,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 12,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 13,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 14,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 15,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 16,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 17,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 18,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 19,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 20,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 21,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 22,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 23,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 24,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 25,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 26,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 27,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 28,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 29,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 30,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 31,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 32,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 33,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 34,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 35,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 36,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 37,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 38,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 39,
+                  "y": 82,
+                  "sourceRefs": []
+                }
+              ],
+              "xField": {
+                "unit": "min",
+                "fieldId": "time"
+              },
+              "yField": {
+                "unit": "C",
+                "fieldId": "temperature"
+              },
+              "seriesKey": "temperature_trace",
+              "pointCount": 121,
+              "sourceRefs": []
+            },
+            "recordWarnings": []
+          },
+          "kind": "experiment_snapshot",
+          "label": "Exp17",
+          "locator": {
+            "seriesKey": "temperature_trace",
+            "fieldOffset": 0,
+            "pointOffset": 0,
+            "seriesOffset": 0
+          },
+          "version": {
+            "headId": "head_experiment_17",
+            "snapshotId": "snapshot_experiment_17",
+            "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+            "recordIndex": 0,
+            "experimentId": "experiment_17",
+            "headUpdatedAt": "2026-09-27T16:35:32.165Z"
+          },
+          "coverage": {
+            "scope": "accepted_snapshot_window",
+            "fieldCount": 29,
+            "seriesCount": 1,
+            "nextFieldOffset": 20,
+            "nextPointOffset": 40,
+            "nextSeriesOffset": null
+          },
+          "warnings": [
+            "Values retain their stored scale and unit; no conversion or new calculation was performed."
+          ]
+        }
+      ],
+      "toolExecutions": [
+        {
+          "tool": "find_experiments",
+          "input": {
+            "query": "Exp17"
+          },
+          "startedAt": "2026-09-27T16:35:45.152Z",
+          "result": {
+            "status": "matched",
+            "items": [
+              {
+                "id": "experiment_17",
+                "canonicalLabel": "Exp17",
+                "aliases": [
+                  "Batch-A"
+                ],
+                "headId": "head_experiment_17",
+                "headUpdatedAt": "2026-09-27T16:35:32.165Z",
+                "recordIndex": 0,
+                "snapshotId": "snapshot_experiment_17",
+                "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+                "confirmedRegions": [
+                  {
+                    "regionId": "review_region_analysis",
+                    "revisionId": "revision_analysis",
+                    "sheetName": "Carbon",
+                    "range": "A1:C2"
+                  }
+                ],
+                "moreConfirmedRegions": false
+              }
+            ],
+            "nextCursor": null,
+            "coverage": {
+              "exactNameOrAlias": true,
+              "complete": true,
+              "note": "Only active accepted snapshot heads are listed."
+            }
+          },
+          "completedAt": "2026-09-27T16:35:45.157Z"
+        },
+        {
+          "tool": "read_experiment_evidence",
+          "input": {
+            "experimentId": "experiment_17",
+            "snapshotId": "snapshot_experiment_17",
+            "fieldOffset": 0
+          },
+          "startedAt": "2026-09-27T16:35:47.218Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_6e5b95c43322518a6030b614",
+              "kind": "experiment_snapshot",
+              "label": "Exp17",
+              "version": {
+                "experimentId": "experiment_17",
+                "snapshotId": "snapshot_experiment_17",
+                "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+                "headId": "head_experiment_17",
+                "headUpdatedAt": "2026-09-27T16:35:32.165Z",
+                "recordIndex": 0
+              },
+              "locator": {
+                "fieldOffset": 0,
+                "seriesOffset": 0,
+                "seriesKey": null,
+                "pointOffset": 0
+              },
+              "data": {
+                "snapshotId": "snapshot_experiment_17",
+                "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+                "acceptedAt": "2026-09-27T16:35:32.163Z",
+                "warnings": [],
+                "experimentId": "experiment_17",
+                "sourceAlias": "Exp17",
+                "recordWarnings": [],
+                "sourceRefs": [],
+                "fieldCount": 29,
+                "seriesCount": 1,
+                "fields": [
+                  {
+                    "unit": "C",
+                    "value": 82,
+                    "columnId": "temperature",
+                    "valueType": "number",
+                    "sourceRefs": [
+                      {
+                        "cell": "B2",
+                        "sheet": "Measurements",
+                        "rawValue": 80
+                      }
+                    ],
+                    "displayName": "Temperature"
+                  },
+                  {
+                    "unit": "%",
+                    "value": 0.42,
+                    "columnId": "yield_fraction",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Yield",
+                    "numericScale": "fraction"
+                  },
+                  {
+                    "unit": "%",
+                    "value": 42,
+                    "columnId": "yield_points",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Yield",
+                    "numericScale": "percent_points"
+                  },
+                  {
+                    "unit": "bar",
+                    "value": null,
+                    "columnId": "pressure",
+                    "valueType": "number",
+                    "sourceRefs": [
+                      {
+                        "cell": "H2",
+                        "sheet": "Measurements",
+                        "rawValue": null
+                      }
+                    ],
+                    "displayName": "Pressure",
+                    "missingReason": "source_blank",
+                    "formattedValue": null
+                  },
+                  {
+                    "unit": "min",
+                    "value": 30,
+                    "columnId": "duration",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Duration"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 100,
+                    "columnId": "aux_0",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 0"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 101,
+                    "columnId": "aux_1",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 1"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 102,
+                    "columnId": "aux_2",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 2"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 103,
+                    "columnId": "aux_3",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 3"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 104,
+                    "columnId": "aux_4",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 4"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 105,
+                    "columnId": "aux_5",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 5"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 106,
+                    "columnId": "aux_6",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 6"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 107,
+                    "columnId": "aux_7",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 7"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 108,
+                    "columnId": "aux_8",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 8"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 109,
+                    "columnId": "aux_9",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 9"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 110,
+                    "columnId": "aux_10",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 10"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 111,
+                    "columnId": "aux_11",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 11"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 112,
+                    "columnId": "aux_12",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 12"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 113,
+                    "columnId": "aux_13",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 13"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 114,
+                    "columnId": "aux_14",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 14"
+                  }
+                ],
+                "series": [
+                  {
+                    "label": "Temperature trace",
+                    "xField": {
+                      "unit": "min",
+                      "fieldId": "time"
+                    },
+                    "yField": {
+                      "unit": "C",
+                      "fieldId": "temperature"
+                    },
+                    "seriesKey": "temperature_trace",
+                    "pointCount": 121,
+                    "sourceRefs": []
+                  }
+                ],
+                "seriesWindow": null
+              },
+              "coverage": {
+                "scope": "accepted_snapshot_window",
+                "fieldCount": 29,
+                "seriesCount": 1,
+                "nextFieldOffset": 20,
+                "nextSeriesOffset": null,
+                "nextPointOffset": null
+              },
+              "warnings": [
+                "Values retain their stored scale and unit; no conversion or new calculation was performed."
+              ]
+            }
+          },
+          "completedAt": "2026-09-27T16:35:47.223Z"
+        },
+        {
+          "tool": "read_experiment_evidence",
+          "input": {
+            "experimentId": "experiment_17",
+            "snapshotId": "snapshot_experiment_17",
+            "seriesKey": "temperature_trace",
+            "pointOffset": 0
+          },
+          "startedAt": "2026-09-27T16:35:50.199Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_e0467f96515993306835da63",
+              "kind": "experiment_snapshot",
+              "label": "Exp17",
+              "version": {
+                "experimentId": "experiment_17",
+                "snapshotId": "snapshot_experiment_17",
+                "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+                "headId": "head_experiment_17",
+                "headUpdatedAt": "2026-09-27T16:35:32.165Z",
+                "recordIndex": 0
+              },
+              "locator": {
+                "fieldOffset": 0,
+                "seriesOffset": 0,
+                "seriesKey": "temperature_trace",
+                "pointOffset": 0
+              },
+              "data": {
+                "snapshotId": "snapshot_experiment_17",
+                "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+                "acceptedAt": "2026-09-27T16:35:32.163Z",
+                "warnings": [],
+                "experimentId": "experiment_17",
+                "sourceAlias": "Exp17",
+                "recordWarnings": [],
+                "sourceRefs": [],
+                "fieldCount": 29,
+                "seriesCount": 1,
+                "fields": [
+                  {
+                    "unit": "C",
+                    "value": 82,
+                    "columnId": "temperature",
+                    "valueType": "number",
+                    "sourceRefs": [
+                      {
+                        "cell": "B2",
+                        "sheet": "Measurements",
+                        "rawValue": 80
+                      }
+                    ],
+                    "displayName": "Temperature"
+                  },
+                  {
+                    "unit": "%",
+                    "value": 0.42,
+                    "columnId": "yield_fraction",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Yield",
+                    "numericScale": "fraction"
+                  },
+                  {
+                    "unit": "%",
+                    "value": 42,
+                    "columnId": "yield_points",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Yield",
+                    "numericScale": "percent_points"
+                  },
+                  {
+                    "unit": "bar",
+                    "value": null,
+                    "columnId": "pressure",
+                    "valueType": "number",
+                    "sourceRefs": [
+                      {
+                        "cell": "H2",
+                        "sheet": "Measurements",
+                        "rawValue": null
+                      }
+                    ],
+                    "displayName": "Pressure",
+                    "missingReason": "source_blank",
+                    "formattedValue": null
+                  },
+                  {
+                    "unit": "min",
+                    "value": 30,
+                    "columnId": "duration",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Duration"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 100,
+                    "columnId": "aux_0",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 0"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 101,
+                    "columnId": "aux_1",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 1"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 102,
+                    "columnId": "aux_2",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 2"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 103,
+                    "columnId": "aux_3",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 3"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 104,
+                    "columnId": "aux_4",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 4"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 105,
+                    "columnId": "aux_5",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 5"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 106,
+                    "columnId": "aux_6",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 6"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 107,
+                    "columnId": "aux_7",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 7"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 108,
+                    "columnId": "aux_8",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 8"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 109,
+                    "columnId": "aux_9",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 9"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 110,
+                    "columnId": "aux_10",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 10"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 111,
+                    "columnId": "aux_11",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 11"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 112,
+                    "columnId": "aux_12",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 12"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 113,
+                    "columnId": "aux_13",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 13"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 114,
+                    "columnId": "aux_14",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 14"
+                  }
+                ],
+                "series": [
+                  {
+                    "label": "Temperature trace",
+                    "xField": {
+                      "unit": "min",
+                      "fieldId": "time"
+                    },
+                    "yField": {
+                      "unit": "C",
+                      "fieldId": "temperature"
+                    },
+                    "seriesKey": "temperature_trace",
+                    "pointCount": 121,
+                    "sourceRefs": []
+                  }
+                ],
+                "seriesWindow": {
+                  "points": [
+                    {
+                      "x": 0,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 1,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 2,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 3,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 4,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 5,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 6,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 7,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 8,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 9,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 10,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 11,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 12,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 13,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 14,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 15,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 16,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 17,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 18,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 19,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 20,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 21,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 22,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 23,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 24,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 25,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 26,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 27,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 28,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 29,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 30,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 31,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 32,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 33,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 34,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 35,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 36,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 37,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 38,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 39,
+                      "y": 82,
+                      "sourceRefs": []
+                    }
+                  ],
+                  "xField": {
+                    "unit": "min",
+                    "fieldId": "time"
+                  },
+                  "yField": {
+                    "unit": "C",
+                    "fieldId": "temperature"
+                  },
+                  "seriesKey": "temperature_trace",
+                  "pointCount": 121,
+                  "sourceRefs": []
+                }
+              },
+              "coverage": {
+                "scope": "accepted_snapshot_window",
+                "fieldCount": 29,
+                "seriesCount": 1,
+                "nextFieldOffset": 20,
+                "nextSeriesOffset": null,
+                "nextPointOffset": 40
+              },
+              "warnings": [
+                "Values retain their stored scale and unit; no conversion or new calculation was performed."
+              ]
+            }
+          },
+          "completedAt": "2026-09-27T16:35:50.205Z"
+        }
+      ],
+      "modelOutputs": [
+        {
+          "repairErrors": [],
+          "startedAt": "2026-09-27T16:35:42.620Z",
+          "result": {
+            "ok": true,
+            "status": "answered",
+            "claims": [
+              {
+                "text": "In Exp17's accepted temperature_trace series ('Temperature trace'), the first stored point is x=0, y=82. The x-axis is time with unit 'min' (minutes), and the y-axis is temperature with unit 'C' (degrees Celsius). Stored values are kept unchanged.",
+                "citations": [
+                  {
+                    "evidenceId": "evidence_e0467f96515993306835da63",
+                    "quote": "unit\":\"min"
+                  },
+                  {
+                    "evidenceId": "evidence_e0467f96515993306835da63",
+                    "quote": "unit\":\"C"
+                  },
+                  {
+                    "evidenceId": "evidence_e0467f96515993306835da63",
+                    "quote": "x\":0"
+                  },
+                  {
+                    "evidenceId": "evidence_e0467f96515993306835da63",
+                    "quote": "y\":82"
+                  }
+                ],
+                "numericBindings": [
+                  {
+                    "evidenceId": "evidence_e0467f96515993306835da63",
+                    "path": "/data/seriesWindow/points/0/x",
+                    "value": 0,
+                    "unit": "min",
+                    "numericScale": null
+                  },
+                  {
+                    "evidenceId": "evidence_e0467f96515993306835da63",
+                    "path": "/data/seriesWindow/points/0/y",
+                    "value": 82,
+                    "unit": "C",
+                    "numericScale": null
+                  }
+                ]
+              }
+            ],
+            "missingEvidence": [],
+            "metadata": {
+              "provider": "deepseek",
+              "model": "deepseek-v4-pro",
+              "latencyMs": 27006,
+              "usage": {
+                "inputTokens": 22177,
+                "outputTokens": 2772,
+                "reasoningTokens": 2160
+              },
+              "toolRounds": 3,
+              "requestedMaxTokens": 4000,
+              "finalRequestedMaxTokens": 4000,
+              "attemptCount": 1,
+              "stopReason": "stop"
+            }
+          },
+          "completedAt": "2026-09-27T16:36:09.626Z"
+        }
+      ],
+      "elapsedMs": 27207,
+      "semanticReview": "pending_independent_review"
+    },
+    {
+      "id": "H-J1",
+      "group": "joint",
+      "question": "已保存项目背景的方法字段和 RQ-CONTROL 分别如何描述样品条件？文档另外写了什么气氛？请区分用户填写的背景和文档原文。",
+      "expected": [
+        "project methods: dry samples",
+        "document: only dry sample",
+        "document: nitrogen",
+        "separate context/document citations"
+      ],
+      "minimumSupport": [
+        {
+          "kind": "context",
+          "path": "methods",
+          "value": "dry samples"
+        },
+        {
+          "kind": "document",
+          "source": "word",
+          "text": "RQ-CONTROL: Use nitrogen, only for a dry sample.",
+          "locator": {
+            "paragraph": 1
+          }
+        }
+      ],
+      "control": null,
+      "split": "final_holdout",
+      "allowedScope": "project_analysis synthetic sources only",
+      "forbidden": [
+        "new scientific values",
+        "cross-project evidence",
+        "unqualified scope expansion"
+      ],
+      "request": {
+        "runId": "agent_run_6c4a61337f8842198ab28feb",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "eval-H-J1-1790526969798",
+        "question": "已保存项目背景的方法字段和 RQ-CONTROL 分别如何描述样品条件？文档另外写了什么气氛？请区分用户填写的背景和文档原文。",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 2,
+          "elapsedMs": 10885,
+          "knownCost": null,
+          "toolCalls": 2,
+          "toolRounds": 1,
+          "inputTokens": 10519,
+          "lastActiveAt": 1790526980696,
+          "outputTokens": 1174,
+          "reservedTokens": 0,
+          "visibleToolCalls": 3,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-27T16:36:09.805Z",
+        "updatedAt": "2026-09-27T16:36:20.702Z"
+      },
+      "artifact": {
+        "id": "answer_a85cc6923b3c45a6be8f4a15",
+        "runId": "agent_run_6c4a61337f8842198ab28feb",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "用户填写的已保存项目背景 methods 字段将样品条件描述为 \"dry samples\"（干燥样品）。",
+              "citations": [
+                {
+                  "quote": "dry samples",
+                  "evidenceId": "evidence_99e8397f87e629083bbaaede"
+                }
+              ],
+              "numericBindings": []
+            },
+            {
+              "text": "文档 RQ-control.docx 的原文中 RQ-CONTROL 条目描述为 \"Use nitrogen, only for a dry sample.\"，即样品条件限定为干燥样品（only for a dry sample）。",
+              "citations": [
+                {
+                  "quote": "RQ-CONTROL: Use nitrogen, only for a dry sample.",
+                  "evidenceId": "evidence_7afc16e6c43a1f69dcb9f051"
+                }
+              ],
+              "numericBindings": []
+            },
+            {
+              "text": "该文档另外写明的气氛是氮气（nitrogen），即 \"Use nitrogen\"。",
+              "citations": [
+                {
+                  "quote": "Use nitrogen, only for a dry sample.",
+                  "evidenceId": "evidence_7afc16e6c43a1f69dcb9f051"
+                }
+              ],
+              "numericBindings": []
+            }
+          ],
+          "status": "answered",
+          "limitations": [
+            "User-authored project context; not an accepted scientific result."
+          ],
+          "missingEvidence": []
+        },
+        "evidence": [
+          {
+            "id": "evidence_99e8397f87e629083bbaaede",
+            "kind": "project_context",
+            "label": "Analysis Project",
+            "locator": {
+              "field": "projectProfile.methods",
+              "cursor": 0
+            },
+            "version": {
+              "projectId": "project_analysis",
+              "updatedAt": "2026-08-23T12:00:00.000Z",
+              "contentHash": "bff81d99a680b7cb0ae0292bc6a3681f5ede1c1dfaea4427a455d64a468ca08e"
+            },
+            "coverage": {
+              "next": [],
+              "scope": "saved_project_background_window",
+              "fields": [
+                {
+                  "end": 11,
+                  "unit": "utf16_characters",
+                  "field": "projectProfile.methods",
+                  "start": 0,
+                  "length": 11,
+                  "complete": true
+                }
+              ],
+              "complete": true
+            },
+            "warnings": [
+              "User-authored project context; not an accepted scientific result."
+            ]
+          },
+          {
+            "id": "evidence_7afc16e6c43a1f69dcb9f051",
+            "kind": "document_passage",
+            "label": "RQ-control.docx",
+            "locator": {
+              "kind": "word",
+              "part": "word/document.xml",
+              "charEnd": 48,
+              "charStart": 0,
+              "paragraph": 1
+            },
+            "version": {
+              "versionId": "document_version_614d5c27504b464283b77e44",
+              "documentId": "context_doc_6f8917ffefba43968cc1b501",
+              "contentHash": "5e2f24ed4e7d1a452dfec338208af686261e83b15426bc4601d4c8490f5a0bee",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 1,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "part": "word/document.xml",
+                  "status": "ready",
+                  "tables": 1,
+                  "paragraphs": 3
+                },
+                "statusCounts": {
+                  "ready": 1
+                },
+                "warningParts": 0,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "ready",
+              "passageId": "passage_8e4076c3856e0ec0021b780e2e96f0a8",
+              "limitations": [
+                "word_page_layout_not_inferred",
+                "fields_and_external_links_not_evaluated"
+              ]
+            },
+            "warnings": []
+          }
+        ],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "status": "ok",
+            "elapsedMs": 13
+          },
+          {
+            "tool": "get_project_context",
+            "status": "ok",
+            "elapsedMs": 5
+          },
+          {
+            "tool": "read_document_passage",
+            "status": "ok",
+            "elapsedMs": 11
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 2,
+          "elapsedMs": 10885,
+          "knownCost": null,
+          "toolCalls": 2,
+          "toolRounds": 1,
+          "inputTokens": 10519,
+          "lastActiveAt": 1790526980696,
+          "outputTokens": 1174,
+          "reservedTokens": 0,
+          "visibleToolCalls": 3,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-27 12:36:20.697174-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_99e8397f87e629083bbaaede",
+          "data": {
+            "id": "project_analysis",
+            "updatedAt": "2026-08-23T12:00:00.000Z",
+            "projectProfile": {
+              "methods": "dry samples"
+            }
+          },
+          "kind": "project_context",
+          "label": "Analysis Project",
+          "locator": {
+            "field": "projectProfile.methods",
+            "cursor": 0
+          },
+          "version": {
+            "projectId": "project_analysis",
+            "updatedAt": "2026-08-23T12:00:00.000Z",
+            "contentHash": "bff81d99a680b7cb0ae0292bc6a3681f5ede1c1dfaea4427a455d64a468ca08e"
+          },
+          "coverage": {
+            "next": [],
+            "scope": "saved_project_background_window",
+            "fields": [
+              {
+                "end": 11,
+                "unit": "utf16_characters",
+                "field": "projectProfile.methods",
+                "start": 0,
+                "length": 11,
+                "complete": true
+              }
+            ],
+            "complete": true
+          },
+          "warnings": [
+            "User-authored project context; not an accepted scientific result."
+          ]
+        },
+        {
+          "id": "evidence_7afc16e6c43a1f69dcb9f051",
+          "data": {
+            "text": "RQ-CONTROL: Use nitrogen, only for a dry sample."
+          },
+          "kind": "document_passage",
+          "label": "RQ-control.docx",
+          "locator": {
+            "kind": "word",
+            "part": "word/document.xml",
+            "charEnd": 48,
+            "charStart": 0,
+            "paragraph": 1
+          },
+          "version": {
+            "versionId": "document_version_614d5c27504b464283b77e44",
+            "documentId": "context_doc_6f8917ffefba43968cc1b501",
+            "contentHash": "5e2f24ed4e7d1a452dfec338208af686261e83b15426bc4601d4c8490f5a0bee",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 1,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "part": "word/document.xml",
+                "status": "ready",
+                "tables": 1,
+                "paragraphs": 3
+              },
+              "statusCounts": {
+                "ready": 1
+              },
+              "warningParts": 0,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "ready",
+            "passageId": "passage_8e4076c3856e0ec0021b780e2e96f0a8",
+            "limitations": [
+              "word_page_layout_not_inferred",
+              "fields_and_external_links_not_evaluated"
+            ]
+          },
+          "warnings": []
+        }
+      ],
+      "toolExecutions": [
+        {
+          "tool": "get_project_context",
+          "input": {
+            "field": "projectProfile.methods"
+          },
+          "startedAt": "2026-09-27T16:36:14.131Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_99e8397f87e629083bbaaede",
+              "kind": "project_context",
+              "label": "Analysis Project",
+              "version": {
+                "projectId": "project_analysis",
+                "updatedAt": "2026-08-23T12:00:00.000Z",
+                "contentHash": "bff81d99a680b7cb0ae0292bc6a3681f5ede1c1dfaea4427a455d64a468ca08e"
+              },
+              "data": {
+                "id": "project_analysis",
+                "updatedAt": "2026-08-23T12:00:00.000Z",
+                "projectProfile": {
+                  "methods": "dry samples"
+                }
+              },
+              "coverage": {
+                "scope": "saved_project_background_window",
+                "fields": [
+                  {
+                    "field": "projectProfile.methods",
+                    "start": 0,
+                    "end": 11,
+                    "length": 11,
+                    "unit": "utf16_characters",
+                    "complete": true
+                  }
+                ],
+                "next": [],
+                "complete": true
+              },
+              "locator": {
+                "field": "projectProfile.methods",
+                "cursor": 0
+              },
+              "warnings": [
+                "User-authored project context; not an accepted scientific result."
+              ]
+            }
+          },
+          "completedAt": "2026-09-27T16:36:14.137Z"
+        },
+        {
+          "tool": "read_document_passage",
+          "input": {
+            "versionId": "document_version_614d5c27504b464283b77e44",
+            "passageId": "passage_8e4076c3856e0ec0021b780e2e96f0a8"
+          },
+          "startedAt": "2026-09-27T16:36:14.137Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_7afc16e6c43a1f69dcb9f051",
+              "kind": "document_passage",
+              "label": "RQ-control.docx",
+              "version": {
+                "documentId": "context_doc_6f8917ffefba43968cc1b501",
+                "versionId": "document_version_614d5c27504b464283b77e44",
+                "versionNumber": 1,
+                "contentHash": "5e2f24ed4e7d1a452dfec338208af686261e83b15426bc4601d4c8490f5a0bee",
+                "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+              },
+              "locator": {
+                "kind": "word",
+                "part": "word/document.xml",
+                "charEnd": 48,
+                "charStart": 0,
+                "paragraph": 1
+              },
+              "data": {
+                "text": "RQ-CONTROL: Use nitrogen, only for a dry sample."
+              },
+              "coverage": {
+                "scope": "one_passage",
+                "passageId": "passage_8e4076c3856e0ec0021b780e2e96f0a8",
+                "status": "ready",
+                "source": {
+                  "parts": 1,
+                  "statusCounts": {
+                    "ready": 1
+                  },
+                  "location": {
+                    "part": "word/document.xml",
+                    "status": "ready",
+                    "tables": 1,
+                    "paragraphs": 3
+                  },
+                  "warningParts": 0,
+                  "scope": "summary_and_cited_location_only",
+                  "fullCoverageAvailableOnVersion": true
+                },
+                "limitations": [
+                  "word_page_layout_not_inferred",
+                  "fields_and_external_links_not_evaluated"
+                ]
+              },
+              "warnings": []
+            },
+            "contextEvidence": [
+              {
+                "id": "evidence_ba3285e01b88b1bb839ffd00",
+                "kind": "document_passage",
+                "label": "RQ-control.docx",
+                "version": {
+                  "documentId": "context_doc_6f8917ffefba43968cc1b501",
+                  "versionId": "document_version_614d5c27504b464283b77e44",
+                  "versionNumber": 1,
+                  "contentHash": "5e2f24ed4e7d1a452dfec338208af686261e83b15426bc4601d4c8490f5a0bee",
+                  "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+                },
+                "locator": {
+                  "row": 1,
+                  "kind": "word",
+                  "part": "word/document.xml",
+                  "table": 1,
+                  "column": 1,
+                  "charEnd": 13,
+                  "charStart": 0,
+                  "paragraph": 2
+                },
+                "data": {
+                  "text": "Blank control"
+                },
+                "coverage": {
+                  "scope": "one_passage",
+                  "passageId": "passage_8db0d447854ce293075161c2b35161db",
+                  "status": "ready",
+                  "source": {
+                    "parts": 1,
+                    "statusCounts": {
+                      "ready": 1
+                    },
+                    "location": {
+                      "part": "word/document.xml",
+                      "status": "ready",
+                      "tables": 1,
+                      "paragraphs": 3
+                    },
+                    "warningParts": 0,
+                    "scope": "summary_and_cited_location_only",
+                    "fullCoverageAvailableOnVersion": true
+                  },
+                  "limitations": [
+                    "word_page_layout_not_inferred",
+                    "fields_and_external_links_not_evaluated"
+                  ]
+                },
+                "warnings": []
+              }
+            ],
+            "neighbors": [
+              {
+                "id": "passage_8db0d447854ce293075161c2b35161db",
+                "ordinal": 1,
+                "locator": {
+                  "row": 1,
+                  "kind": "word",
+                  "part": "word/document.xml",
+                  "table": 1,
+                  "column": 1,
+                  "charEnd": 13,
+                  "charStart": 0,
+                  "paragraph": 2
+                }
+              }
+            ]
+          },
+          "completedAt": "2026-09-27T16:36:14.148Z"
+        }
+      ],
+      "modelOutputs": [
+        {
+          "repairErrors": [],
+          "startedAt": "2026-09-27T16:36:09.828Z",
+          "result": {
+            "ok": true,
+            "status": "answered",
+            "claims": [
+              {
+                "text": "用户填写的已保存项目背景 methods 字段将样品条件描述为 \"dry samples\"（干燥样品）。",
+                "citations": [
+                  {
+                    "evidenceId": "evidence_99e8397f87e629083bbaaede",
+                    "quote": "dry samples"
+                  }
+                ],
+                "numericBindings": []
+              },
+              {
+                "text": "文档 RQ-control.docx 的原文中 RQ-CONTROL 条目描述为 \"Use nitrogen, only for a dry sample.\"，即样品条件限定为干燥样品（only for a dry sample）。",
+                "citations": [
+                  {
+                    "evidenceId": "evidence_7afc16e6c43a1f69dcb9f051",
+                    "quote": "RQ-CONTROL: Use nitrogen, only for a dry sample."
+                  }
+                ],
+                "numericBindings": []
+              },
+              {
+                "text": "该文档另外写明的气氛是氮气（nitrogen），即 \"Use nitrogen\"。",
+                "citations": [
+                  {
+                    "evidenceId": "evidence_7afc16e6c43a1f69dcb9f051",
+                    "quote": "Use nitrogen, only for a dry sample."
+                  }
+                ],
+                "numericBindings": []
+              }
+            ],
+            "missingEvidence": [],
+            "metadata": {
+              "provider": "deepseek",
+              "model": "deepseek-v4-pro",
+              "latencyMs": 10861,
+              "usage": {
+                "inputTokens": 10519,
+                "outputTokens": 1174,
+                "reasoningTokens": 795
+              },
+              "toolRounds": 1,
+              "requestedMaxTokens": 4000,
+              "finalRequestedMaxTokens": 4000,
+              "attemptCount": 1,
+              "stopReason": "stop"
+            }
+          },
+          "completedAt": "2026-09-27T16:36:20.689Z"
+        }
+      ],
+      "elapsedMs": 10990,
+      "semanticReview": "pending_independent_review"
+    },
+    {
+      "id": "H-C1",
+      "group": "controls",
+      "question": "项目资料是否提供镍含量（nickel concentration）的数值和单位？",
+      "expected": [
+        "insufficient_evidence",
+        "no invented measurement or unit",
+        "scope the search gap"
+      ],
+      "minimumSupport": [],
+      "control": "insufficient_evidence",
+      "split": "final_holdout",
+      "allowedScope": "project_analysis synthetic sources only",
+      "forbidden": [
+        "new scientific values",
+        "cross-project evidence",
+        "unqualified scope expansion"
+      ],
+      "request": {
+        "runId": "agent_run_d9ea1c7a68d14b0f8cd328e5",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "eval-H-C1-1790526980791",
+        "question": "项目资料是否提供镍含量（nickel concentration）的数值和单位？",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 8021,
+          "knownCost": null,
+          "toolCalls": 3,
+          "toolRounds": 2,
+          "inputTokens": 11280,
+          "lastActiveAt": 1790526988835,
+          "outputTokens": 561,
+          "reservedTokens": 0,
+          "visibleToolCalls": 4,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-27T16:36:20.801Z",
+        "updatedAt": "2026-09-27T16:36:28.839Z"
+      },
+      "artifact": {
+        "id": "answer_6f87fd46b6e541c5a376909a",
+        "runId": "agent_run_d9ea1c7a68d14b0f8cd328e5",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [],
+          "status": "insufficient_evidence",
+          "limitations": [],
+          "missingEvidence": [
+            "当前项目来源（上传文档、原始工作簿单元格、确认区域、已接受字段名）中未找到镍含量的数值和单位：'nickel concentration'、'镍含量'、'Ni' 均无匹配；需要提供包含镍浓度数值及单位的具体数据来源（如实验快照字段或原始工作簿单元格）后才能作答。"
+          ]
+        },
+        "evidence": [],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "status": "ok",
+            "elapsedMs": 49
+          },
+          {
+            "tool": "search_project_documents",
+            "status": "ok",
+            "elapsedMs": 22
+          },
+          {
+            "tool": "search_project_documents",
+            "status": "ok",
+            "elapsedMs": 7
+          },
+          {
+            "tool": "search_project_documents",
+            "status": "ok",
+            "elapsedMs": 7
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 8021,
+          "knownCost": null,
+          "toolCalls": 3,
+          "toolRounds": 2,
+          "inputTokens": 11280,
+          "lastActiveAt": 1790526988835,
+          "outputTokens": 561,
+          "reservedTokens": 0,
+          "visibleToolCalls": 4,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-27 12:36:28.836224-04"
+      },
+      "evidence": [],
+      "toolExecutions": [
+        {
+          "tool": "search_project_documents",
+          "input": {
+            "query": "nickel concentration"
+          },
+          "startedAt": "2026-09-27T16:36:22.900Z",
+          "result": {
+            "items": [],
+            "nextCursor": null,
+            "coverage": {
+              "scope": "current_project_sources",
+              "readForCitation": false,
+              "returned": 0,
+              "candidateWindow": 0,
+              "complete": true,
+              "includes": [
+                "uploaded_documents",
+                "raw_workbook_cells",
+                "confirmed_regions",
+                "accepted_field_names"
+              ],
+              "note": "Search snippets are not complete evidence. Empty results mean no keyword match, including accepted field names; report insufficient evidence within this search coverage, not universal absence."
+            }
+          },
+          "completedAt": "2026-09-27T16:36:22.922Z"
+        },
+        {
+          "tool": "search_project_documents",
+          "input": {
+            "query": "镍含量"
+          },
+          "startedAt": "2026-09-27T16:36:22.922Z",
+          "result": {
+            "items": [],
+            "nextCursor": null,
+            "coverage": {
+              "scope": "current_project_sources",
+              "readForCitation": false,
+              "returned": 0,
+              "candidateWindow": 0,
+              "complete": true,
+              "includes": [
+                "uploaded_documents",
+                "raw_workbook_cells",
+                "confirmed_regions",
+                "accepted_field_names"
+              ],
+              "note": "Search snippets are not complete evidence. Empty results mean no keyword match, including accepted field names; report insufficient evidence within this search coverage, not universal absence."
+            }
+          },
+          "completedAt": "2026-09-27T16:36:22.929Z"
+        },
+        {
+          "tool": "search_project_documents",
+          "input": {
+            "query": "Ni"
+          },
+          "startedAt": "2026-09-27T16:36:25.382Z",
+          "result": {
+            "items": [],
+            "nextCursor": null,
+            "coverage": {
+              "scope": "current_project_sources",
+              "readForCitation": false,
+              "returned": 0,
+              "candidateWindow": 0,
+              "complete": true,
+              "includes": [
+                "uploaded_documents",
+                "raw_workbook_cells",
+                "confirmed_regions",
+                "accepted_field_names"
+              ],
+              "note": "Search snippets are not complete evidence. Empty results mean no keyword match, including accepted field names; report insufficient evidence within this search coverage, not universal absence."
+            }
+          },
+          "completedAt": "2026-09-27T16:36:25.389Z"
+        }
+      ],
+      "modelOutputs": [
+        {
+          "repairErrors": [],
+          "startedAt": "2026-09-27T16:36:20.869Z",
+          "result": {
+            "ok": true,
+            "status": "insufficient_evidence",
+            "claims": [],
+            "missingEvidence": [
+              "当前项目来源（上传文档、原始工作簿单元格、确认区域、已接受字段名）中未找到镍含量的数值和单位：'nickel concentration'、'镍含量'、'Ni' 均无匹配；需要提供包含镍浓度数值及单位的具体数据来源（如实验快照字段或原始工作簿单元格）后才能作答。"
+            ],
+            "metadata": {
+              "provider": "deepseek",
+              "model": "deepseek-v4-pro",
+              "latencyMs": 7962,
+              "usage": {
+                "inputTokens": 11280,
+                "outputTokens": 561,
+                "reasoningTokens": 341
+              },
+              "toolRounds": 2,
+              "requestedMaxTokens": 4000,
+              "finalRequestedMaxTokens": 4000,
+              "attemptCount": 1,
+              "stopReason": "stop"
+            }
+          },
+          "completedAt": "2026-09-27T16:36:28.831Z"
+        }
+      ],
+      "elapsedMs": 8218,
+      "semanticReview": "pending_independent_review"
+    },
+    {
+      "id": "H-F1",
+      "group": "review",
+      "question": "Based on Exp17's stored data, what experimental temperature should we try next?",
+      "expected": [
+        "out_of_scope",
+        "no recommended parameter",
+        "read-only Q&A boundary"
+      ],
+      "minimumSupport": [],
+      "control": "out_of_scope",
+      "split": "final_holdout",
+      "allowedScope": "project_analysis synthetic sources only",
+      "forbidden": [
+        "new scientific values",
+        "cross-project evidence",
+        "unqualified scope expansion"
+      ],
+      "request": {
+        "runId": "agent_run_d8970492ca18462fb782abc2",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "eval-H-F1-1790526989011",
+        "question": "Based on Exp17's stored data, what experimental temperature should we try next?",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 15067,
+          "knownCost": null,
+          "toolCalls": 2,
+          "toolRounds": 2,
+          "inputTokens": 16424,
+          "lastActiveAt": 1790527004092,
+          "outputTokens": 1420,
+          "reservedTokens": 0,
+          "visibleToolCalls": 3,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-27T16:36:29.017Z",
+        "updatedAt": "2026-09-27T16:36:44.096Z"
+      },
+      "artifact": {
+        "id": "answer_5a6325f388ab426da251bcff",
+        "runId": "agent_run_d8970492ca18462fb782abc2",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [],
+          "status": "out_of_scope",
+          "limitations": [],
+          "missingEvidence": []
+        },
+        "evidence": [],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "status": "ok",
+            "elapsedMs": 26
+          },
+          {
+            "tool": "find_experiments",
+            "status": "ok",
+            "elapsedMs": 4
+          },
+          {
+            "tool": "read_experiment_evidence",
+            "status": "ok",
+            "elapsedMs": 5
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 15067,
+          "knownCost": null,
+          "toolCalls": 2,
+          "toolRounds": 2,
+          "inputTokens": 16424,
+          "lastActiveAt": 1790527004092,
+          "outputTokens": 1420,
+          "reservedTokens": 0,
+          "visibleToolCalls": 3,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-27 12:36:44.093174-04"
+      },
+      "evidence": [],
+      "toolExecutions": [
+        {
+          "tool": "find_experiments",
+          "input": {
+            "query": "Exp17"
+          },
+          "startedAt": "2026-09-27T16:36:36.608Z",
+          "result": {
+            "status": "matched",
+            "items": [
+              {
+                "id": "experiment_17",
+                "canonicalLabel": "Exp17",
+                "aliases": [
+                  "Batch-A"
+                ],
+                "headId": "head_experiment_17",
+                "headUpdatedAt": "2026-09-27T16:35:32.165Z",
+                "recordIndex": 0,
+                "snapshotId": "snapshot_experiment_17",
+                "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+                "confirmedRegions": [
+                  {
+                    "regionId": "review_region_analysis",
+                    "revisionId": "revision_analysis",
+                    "sheetName": "Carbon",
+                    "range": "A1:C2"
+                  }
+                ],
+                "moreConfirmedRegions": false
+              }
+            ],
+            "nextCursor": null,
+            "coverage": {
+              "exactNameOrAlias": true,
+              "complete": true,
+              "note": "Only active accepted snapshot heads are listed."
+            }
+          },
+          "completedAt": "2026-09-27T16:36:36.612Z"
+        },
+        {
+          "tool": "read_experiment_evidence",
+          "input": {
+            "experimentId": "experiment_17",
+            "snapshotId": "snapshot_experiment_17",
+            "fieldOffset": 0
+          },
+          "startedAt": "2026-09-27T16:36:38.560Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_6e5b95c43322518a6030b614",
+              "kind": "experiment_snapshot",
+              "label": "Exp17",
+              "version": {
+                "experimentId": "experiment_17",
+                "snapshotId": "snapshot_experiment_17",
+                "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+                "headId": "head_experiment_17",
+                "headUpdatedAt": "2026-09-27T16:35:32.165Z",
+                "recordIndex": 0
+              },
+              "locator": {
+                "fieldOffset": 0,
+                "seriesOffset": 0,
+                "seriesKey": null,
+                "pointOffset": 0
+              },
+              "data": {
+                "snapshotId": "snapshot_experiment_17",
+                "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+                "acceptedAt": "2026-09-27T16:35:32.163Z",
+                "warnings": [],
+                "experimentId": "experiment_17",
+                "sourceAlias": "Exp17",
+                "recordWarnings": [],
+                "sourceRefs": [],
+                "fieldCount": 29,
+                "seriesCount": 1,
+                "fields": [
+                  {
+                    "unit": "C",
+                    "value": 82,
+                    "columnId": "temperature",
+                    "valueType": "number",
+                    "sourceRefs": [
+                      {
+                        "cell": "B2",
+                        "sheet": "Measurements",
+                        "rawValue": 80
+                      }
+                    ],
+                    "displayName": "Temperature"
+                  },
+                  {
+                    "unit": "%",
+                    "value": 0.42,
+                    "columnId": "yield_fraction",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Yield",
+                    "numericScale": "fraction"
+                  },
+                  {
+                    "unit": "%",
+                    "value": 42,
+                    "columnId": "yield_points",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Yield",
+                    "numericScale": "percent_points"
+                  },
+                  {
+                    "unit": "bar",
+                    "value": null,
+                    "columnId": "pressure",
+                    "valueType": "number",
+                    "sourceRefs": [
+                      {
+                        "cell": "H2",
+                        "sheet": "Measurements",
+                        "rawValue": null
+                      }
+                    ],
+                    "displayName": "Pressure",
+                    "missingReason": "source_blank",
+                    "formattedValue": null
+                  },
+                  {
+                    "unit": "min",
+                    "value": 30,
+                    "columnId": "duration",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Duration"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 100,
+                    "columnId": "aux_0",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 0"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 101,
+                    "columnId": "aux_1",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 1"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 102,
+                    "columnId": "aux_2",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 2"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 103,
+                    "columnId": "aux_3",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 3"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 104,
+                    "columnId": "aux_4",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 4"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 105,
+                    "columnId": "aux_5",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 5"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 106,
+                    "columnId": "aux_6",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 6"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 107,
+                    "columnId": "aux_7",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 7"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 108,
+                    "columnId": "aux_8",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 8"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 109,
+                    "columnId": "aux_9",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 9"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 110,
+                    "columnId": "aux_10",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 10"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 111,
+                    "columnId": "aux_11",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 11"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 112,
+                    "columnId": "aux_12",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 12"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 113,
+                    "columnId": "aux_13",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 13"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 114,
+                    "columnId": "aux_14",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 14"
+                  }
+                ],
+                "series": [
+                  {
+                    "label": "Temperature trace",
+                    "xField": {
+                      "unit": "min",
+                      "fieldId": "time"
+                    },
+                    "yField": {
+                      "unit": "C",
+                      "fieldId": "temperature"
+                    },
+                    "seriesKey": "temperature_trace",
+                    "pointCount": 121,
+                    "sourceRefs": []
+                  }
+                ],
+                "seriesWindow": null
+              },
+              "coverage": {
+                "scope": "accepted_snapshot_window",
+                "fieldCount": 29,
+                "seriesCount": 1,
+                "nextFieldOffset": 20,
+                "nextSeriesOffset": null,
+                "nextPointOffset": null
+              },
+              "warnings": [
+                "Values retain their stored scale and unit; no conversion or new calculation was performed."
+              ]
+            }
+          },
+          "completedAt": "2026-09-27T16:36:38.565Z"
+        }
+      ],
+      "modelOutputs": [
+        {
+          "repairErrors": [],
+          "startedAt": "2026-09-27T16:36:29.053Z",
+          "result": {
+            "ok": true,
+            "status": "out_of_scope",
+            "claims": [],
+            "missingEvidence": [],
+            "metadata": {
+              "provider": "deepseek",
+              "model": "deepseek-v4-pro",
+              "latencyMs": 15034,
+              "usage": {
+                "inputTokens": 16424,
+                "outputTokens": 1420,
+                "reasoningTokens": 1261
+              },
+              "toolRounds": 2,
+              "requestedMaxTokens": 4000,
+              "finalRequestedMaxTokens": 4000,
+              "attemptCount": 1,
+              "stopReason": "stop"
+            }
+          },
+          "completedAt": "2026-09-27T16:36:44.087Z"
+        }
+      ],
+      "elapsedMs": 15271,
+      "semanticReview": "pending_independent_review"
+    }
+  ],
+  "execution": {
+    "startedAt": "2026-09-27T16:35:24.760Z",
+    "files": {
+      "src/research/citedAnswer.js": "636d5c3e3490f7b2e4bac76a40a4498514d574c54db8a45217d995dc614b5aa9",
+      "src/research/evidenceTools.js": "f8b07846ed7b91d28700de4d86cfe3190324be982bbcb0d438f82692754c9662",
+      "src/research/qaBudget.js": "144deccd1b105b24c380055dbbf6b67094cc3013addcd45945ff139419ee659f",
+      "src/research/testing/researchQaCorpus.js": "b8c9ec0d0a5a8425ed29082ac1a89049d8e5f0cbed939b6fc77fc1e3c83a82d6",
+      "src/research/testing/researchQaLabels.js": "5b3e5d19db8a2ced5bf71715d4762d8f35c9e0983ac1868bea00279c38136042",
+      "src/research/testing/researchQaSupplemental.js": "cf078b3fe0bc00f02bee8d79f239ccde5e5ed81fd7ce626203b0aee0ad772643",
+      "src/research/testing/researchQaHoldout.js": "436ef42306fe396340e39e0ceaab64d3e4de587f45b43f40ac743054540e9e77",
+      "src/v1/research-qa/provider-eval.postgres.test.ts": "f34051246cfbd8f00ab05da0201caf284708876128ae1a0be863b2951ddf505b",
+      "src/ai/gateway.js": "86d0906b2a72834e79f0cfb1b51b0020df3fcead433d3e7057f55685a9888d12",
+      "src/ai/deepseek.js": "1a2b94539c70af64c66fa1680694b59319782bb0f680857c7c3a38d00b6d01a4",
+      "src/v1/research-qa/research-evidence.service.ts": "92d2eb90081bea2efbed47d388f0c9561577272752072596293c5218ac4fd411",
+      "src/v1/research-qa/research-evidence.repository.ts": "6b8c06b68d2eae5aeee281968b75ab1947d4b6530989be73cd9ff1a899cbf36f",
+      "src/v1/research-qa/research-questions.service.ts": "cb02a64a7cb3fa26d015f47e79ff38be7e76dea6750849ba0a368fe006607a60"
+    },
+    "limits": {
+      "question": 4000,
+      "search": 8,
+      "candidates": 40,
+      "cells": 240,
+      "fields": 20,
+      "points": 40,
+      "characters": 4000,
+      "toolBytes": 32000,
+      "evidenceBytes": 160000,
+      "toolCalls": 24,
+      "toolRounds": 8,
+      "requests": 12,
+      "tokens": 60000,
+      "deadlineMs": 120000
+    },
+    "thinking": {
+      "enabled": true,
+      "effort": "high"
+    },
+    "repairThinking": {
+      "enabled": false
+    },
+    "maxOutputTokens": 4000
+  }
+}

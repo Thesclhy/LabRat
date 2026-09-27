@@ -808,6 +808,260 @@ export interface paths {
         readonly patch: operations["updateBrowserView"];
         readonly trace?: never;
     };
+    readonly "/api/v1/projects/{projectId}/research-questions": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+            };
+            readonly cookie?: never;
+        };
+        /** @description Personal project Q&A with narrow answer persistence. Public Guest is denied; no scientific mutation permission is granted. */
+        readonly get: operations["listResearchQuestions"];
+        readonly put?: never;
+        /** @description Personal project Q&A with narrow answer persistence. Public Guest is denied; no scientific mutation permission is granted. */
+        readonly post: operations["createResearchQuestion"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/projects/{projectId}/research-questions/{researchQuestionId}": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly researchQuestionId: string;
+            };
+            readonly cookie?: never;
+        };
+        /** @description Personal project Q&A with narrow answer persistence. Public Guest is denied; no scientific mutation permission is granted. */
+        readonly get: operations["getResearchQuestion"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/projects/{projectId}/research-questions/{researchQuestionId}/retry": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly researchQuestionId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /** @description Personal project Q&A with narrow answer persistence. Public Guest is denied; no scientific mutation permission is granted. */
+        readonly post: operations["retryResearchQuestion"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/projects/{projectId}/research-questions/{researchQuestionId}/cancel": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly researchQuestionId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /** @description Personal project Q&A with narrow answer persistence. Public Guest is denied; no scientific mutation permission is granted. */
+        readonly post: operations["cancelResearchQuestion"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/projects/{projectId}/research-questions/{researchQuestionId}/evidence/{researchEvidenceId}": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly researchQuestionId: string;
+                readonly researchEvidenceId: string;
+            };
+            readonly cookie?: never;
+        };
+        /** @description Personal project Q&A with narrow answer persistence. Public Guest is denied; no scientific mutation permission is granted. */
+        readonly get: operations["getResearchQuestionEvidence"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/projects/{projectId}/context-documents": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly get: operations["listContextDocuments"];
+        readonly put?: never;
+        readonly post: operations["registerContextDocument"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/projects/{projectId}/context-documents/{documentId}": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly documentId: components["parameters"]["ContextDocumentId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly get: operations["getContextDocument"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/projects/{projectId}/context-documents/{documentId}/archive": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly documentId: components["parameters"]["ContextDocumentId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        readonly post: operations["archiveContextDocument"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/projects/{projectId}/context-document-versions/{versionId}": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly versionId: components["parameters"]["ContextDocumentVersionId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly get: operations["getContextDocumentVersion"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/projects/{projectId}/context-document-versions/{versionId}/retry": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly versionId: components["parameters"]["ContextDocumentVersionId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        readonly post: operations["retryContextDocumentVersion"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/projects/{projectId}/context-document-versions/{versionId}/passages": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly versionId: components["parameters"]["ContextDocumentVersionId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly get: operations["listContextDocumentPassages"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/projects/{projectId}/context-document-versions/{versionId}/passages/{passageId}": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly versionId: components["parameters"]["ContextDocumentVersionId"];
+                readonly passageId: components["parameters"]["ContextDocumentPassageId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly get: operations["readContextDocumentPassage"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/projects/{projectId}/context-document-versions/{versionId}/pages/{pageNumber}": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly versionId: components["parameters"]["ContextDocumentVersionId"];
+                readonly pageNumber: number;
+            };
+            readonly cookie?: never;
+        };
+        readonly get: operations["renderContextDocumentPage"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/api/v1/projects/{projectId}/files": {
         readonly parameters: {
             readonly query?: never;
@@ -2143,6 +2397,8 @@ export interface components {
             readonly projectProfile?: components["schemas"]["ProjectProfile"];
             /** @default false */
             readonly shellOnly: boolean;
+            /** @description Full-project View member may use cited Q&A; false for public Guest and selected-experiments-only scope. */
+            readonly canAskResearchQuestions?: boolean;
             readonly capabilities?: readonly components["schemas"]["Capability"][];
             readonly workflowSummary?: components["schemas"]["ProjectWorkflowSummary"];
         };
@@ -2630,6 +2886,115 @@ export interface components {
             readonly results: readonly components["schemas"]["JsonObject"][];
             readonly suggestions: readonly components["schemas"]["JsonObject"][];
             readonly clarification: components["schemas"]["JsonObject"] | null;
+        };
+        readonly RegisterContextDocumentRequest: {
+            readonly fileObjectId: components["schemas"]["OpaqueId"];
+        };
+        readonly ArchiveContextDocumentRequest: {
+            readonly expectedVersion: number;
+        };
+        readonly ContextDocument: {
+            readonly id: components["schemas"]["OpaqueId"];
+            readonly labId: components["schemas"]["OpaqueId"];
+            readonly projectId: components["schemas"]["OpaqueId"];
+            readonly originalName: string;
+            /** @enum {string} */
+            readonly status: "active" | "archived";
+            readonly currentVersionId: string | null;
+            readonly version: number;
+            readonly createdBy: string;
+            readonly createdAt: string;
+            readonly updatedAt: string;
+        };
+        readonly CreateResearchQuestionRequest: {
+            readonly requestKey: string;
+            readonly question: string;
+        };
+        readonly ResearchQuestion: {
+            readonly runId: string;
+            readonly labId?: string;
+            readonly projectId: string;
+            readonly actorUserId: string;
+            readonly requestKey: string;
+            readonly question: string;
+            /** @enum {string} */
+            readonly status: "queued" | "running" | "interrupted" | "completed" | "failed" | "cancelled";
+            readonly attempt: number;
+            readonly usage: components["schemas"]["JsonObject"];
+            readonly failureCode?: string | null;
+            readonly createdAt?: string;
+            readonly updatedAt?: string;
+        };
+        readonly ResearchQuestionResponse: {
+            readonly request: components["schemas"]["ResearchQuestion"];
+            readonly artifact: components["schemas"]["JsonObject"] | null;
+            readonly reused?: boolean;
+        };
+        readonly ResearchQuestionPage: {
+            readonly items: readonly components["schemas"]["ResearchQuestion"][];
+            readonly nextCursor: string | null;
+        };
+        readonly ResearchEvidenceResponse: {
+            readonly evidence: components["schemas"]["JsonObject"];
+            readonly capturedAt: string;
+        };
+        readonly EmptyRequest: Record<string, never>;
+        readonly ContextDocumentVersion: {
+            readonly id: components["schemas"]["OpaqueId"];
+            readonly documentId: components["schemas"]["OpaqueId"];
+            readonly projectId: components["schemas"]["OpaqueId"];
+            readonly fileObjectId: components["schemas"]["OpaqueId"];
+            readonly versionNumber: number;
+            readonly contentHash: string;
+            readonly processingVersion: string;
+            /** @enum {string} */
+            readonly status: "pending" | "processing" | "ready" | "partial" | "failed" | "interrupted";
+            readonly metadata: components["schemas"]["JsonObject"];
+            readonly failureCode: components["schemas"]["NullableString"];
+            readonly createdBy: components["schemas"]["OpaqueId"];
+            readonly createdAt: components["schemas"]["Timestamp"];
+            readonly updatedAt: components["schemas"]["Timestamp"];
+        };
+        readonly ContextDocumentPassage: {
+            readonly versionId: components["schemas"]["OpaqueId"];
+            readonly projectId: components["schemas"]["OpaqueId"];
+            readonly id: components["schemas"]["OpaqueId"];
+            readonly ordinal: number;
+            readonly text: string;
+            readonly locator: components["schemas"]["JsonObject"];
+            readonly metadata: components["schemas"]["JsonObject"];
+        };
+        readonly RegisterContextDocumentResponse: {
+            readonly document: components["schemas"]["ContextDocument"];
+            readonly version: components["schemas"]["ContextDocumentVersion"];
+            readonly reused: boolean;
+        };
+        readonly ContextDocumentResponse: {
+            readonly document: components["schemas"]["ContextDocument"];
+        };
+        readonly ContextDocumentVersionResponse: {
+            readonly version: components["schemas"]["ContextDocumentVersion"];
+        };
+        readonly ContextDocumentPage: {
+            readonly items: readonly {
+                readonly document: components["schemas"]["ContextDocument"];
+                readonly currentVersion: components["schemas"]["ContextDocumentVersion"] | null;
+            }[];
+            readonly nextCursor: components["schemas"]["NullableString"];
+        };
+        readonly ContextDocumentDetail: {
+            readonly document: components["schemas"]["ContextDocument"];
+            readonly versions: readonly components["schemas"]["ContextDocumentVersion"][];
+            readonly nextCursor: components["schemas"]["NullableString"];
+        };
+        readonly ContextDocumentPassagePage: {
+            readonly items: readonly components["schemas"]["ContextDocumentPassage"][];
+            readonly nextCursor: components["schemas"]["NullableString"];
+        };
+        readonly ContextDocumentPassageResponse: {
+            readonly document: components["schemas"]["ContextDocument"];
+            readonly version: components["schemas"]["ContextDocumentVersion"];
+            readonly passage: components["schemas"]["ContextDocumentPassage"];
         };
         readonly FileObject: {
             readonly id: components["schemas"]["OpaqueId"];
@@ -4210,6 +4575,10 @@ export interface components {
         readonly ChartSpecId: components["schemas"]["OpaqueId"];
         readonly ManuscriptId: components["schemas"]["OpaqueId"];
         readonly IdempotencyKey: string;
+        readonly ContextDocumentId: components["schemas"]["OpaqueId"];
+        readonly ContextDocumentVersionId: components["schemas"]["OpaqueId"];
+        readonly ContextDocumentPassageId: components["schemas"]["OpaqueId"];
+        readonly DocumentPageLimit: number;
         readonly Cursor: string;
         readonly Limit: number;
         readonly PageLimit: number;
@@ -4332,6 +4701,24 @@ export type SchemaProjectBrowserConfigResponse = components['schemas']['ProjectB
 export type SchemaSaveProjectBrowserConfigRequest = components['schemas']['SaveProjectBrowserConfigRequest'];
 export type SchemaRetrieveEvidenceRequest = components['schemas']['RetrieveEvidenceRequest'];
 export type SchemaEvidenceRetrievalResponse = components['schemas']['EvidenceRetrievalResponse'];
+export type SchemaRegisterContextDocumentRequest = components['schemas']['RegisterContextDocumentRequest'];
+export type SchemaArchiveContextDocumentRequest = components['schemas']['ArchiveContextDocumentRequest'];
+export type SchemaContextDocument = components['schemas']['ContextDocument'];
+export type SchemaCreateResearchQuestionRequest = components['schemas']['CreateResearchQuestionRequest'];
+export type SchemaResearchQuestion = components['schemas']['ResearchQuestion'];
+export type SchemaResearchQuestionResponse = components['schemas']['ResearchQuestionResponse'];
+export type SchemaResearchQuestionPage = components['schemas']['ResearchQuestionPage'];
+export type SchemaResearchEvidenceResponse = components['schemas']['ResearchEvidenceResponse'];
+export type SchemaEmptyRequest = components['schemas']['EmptyRequest'];
+export type SchemaContextDocumentVersion = components['schemas']['ContextDocumentVersion'];
+export type SchemaContextDocumentPassage = components['schemas']['ContextDocumentPassage'];
+export type SchemaRegisterContextDocumentResponse = components['schemas']['RegisterContextDocumentResponse'];
+export type SchemaContextDocumentResponse = components['schemas']['ContextDocumentResponse'];
+export type SchemaContextDocumentVersionResponse = components['schemas']['ContextDocumentVersionResponse'];
+export type SchemaContextDocumentPage = components['schemas']['ContextDocumentPage'];
+export type SchemaContextDocumentDetail = components['schemas']['ContextDocumentDetail'];
+export type SchemaContextDocumentPassagePage = components['schemas']['ContextDocumentPassagePage'];
+export type SchemaContextDocumentPassageResponse = components['schemas']['ContextDocumentPassageResponse'];
 export type SchemaFileObject = components['schemas']['FileObject'];
 export type SchemaFileObjectPage = components['schemas']['FileObjectPage'];
 export type SchemaFileUploadResponse = components['schemas']['FileUploadResponse'];
@@ -4520,6 +4907,10 @@ export type ParameterRunId = components['parameters']['RunId'];
 export type ParameterChartSpecId = components['parameters']['ChartSpecId'];
 export type ParameterManuscriptId = components['parameters']['ManuscriptId'];
 export type ParameterIdempotencyKey = components['parameters']['IdempotencyKey'];
+export type ParameterContextDocumentId = components['parameters']['ContextDocumentId'];
+export type ParameterContextDocumentVersionId = components['parameters']['ContextDocumentVersionId'];
+export type ParameterContextDocumentPassageId = components['parameters']['ContextDocumentPassageId'];
+export type ParameterDocumentPageLimit = components['parameters']['DocumentPageLimit'];
 export type ParameterCursor = components['parameters']['Cursor'];
 export type ParameterLimit = components['parameters']['Limit'];
 export type ParameterPageLimit = components['parameters']['PageLimit'];
@@ -6362,6 +6753,542 @@ export interface operations {
             readonly 401: components["responses"]["Unauthorized"];
             readonly 403: components["responses"]["Forbidden"];
             readonly 404: components["responses"]["NotFound"];
+        };
+    };
+    readonly listResearchQuestions: {
+        readonly parameters: {
+            readonly query?: {
+                readonly cursor?: components["parameters"]["Cursor"];
+                readonly limit?: components["parameters"]["DocumentPageLimit"];
+            };
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Authorized question state or pinned evidence. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ResearchQuestionPage"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+            /** @description A bounded question or resource budget is already in use. */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    readonly createResearchQuestion: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["CreateResearchQuestionRequest"];
+            };
+        };
+        readonly responses: {
+            /** @description Authorized question state or pinned evidence. */
+            readonly 202: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ResearchQuestionResponse"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+            /** @description A bounded question or resource budget is already in use. */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    readonly getResearchQuestion: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly researchQuestionId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Authorized question state or pinned evidence. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ResearchQuestionResponse"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+            /** @description A bounded question or resource budget is already in use. */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    readonly retryResearchQuestion: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly researchQuestionId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["EmptyRequest"];
+            };
+        };
+        readonly responses: {
+            /** @description Authorized question state or pinned evidence. */
+            readonly 202: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ResearchQuestionResponse"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+            /** @description A bounded question or resource budget is already in use. */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    readonly cancelResearchQuestion: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly researchQuestionId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["EmptyRequest"];
+            };
+        };
+        readonly responses: {
+            /** @description Authorized question state or pinned evidence. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ResearchQuestionResponse"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+            /** @description A bounded question or resource budget is already in use. */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    readonly getResearchQuestionEvidence: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly researchQuestionId: string;
+                readonly researchEvidenceId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Authorized question state or pinned evidence. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ResearchEvidenceResponse"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+            /** @description A bounded question or resource budget is already in use. */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    readonly listContextDocuments: {
+        readonly parameters: {
+            readonly query?: {
+                readonly cursor?: components["parameters"]["Cursor"];
+                readonly limit?: components["parameters"]["DocumentPageLimit"];
+            };
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Active documents and their current versions. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ContextDocumentPage"];
+                };
+            };
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+        };
+    };
+    readonly registerContextDocument: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["RegisterContextDocumentRequest"];
+            };
+        };
+        readonly responses: {
+            /** @description Registered immutable source version; parsing starts immediately. */
+            readonly 201: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["RegisterContextDocumentResponse"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+            /** @description File exceeds the document size limit. */
+            readonly 413: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description File type, signature or declared MIME is unsupported. */
+            readonly 415: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description File cannot be decoded. */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bounded parser concurrency is exhausted; retry later. */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    readonly getContextDocument: {
+        readonly parameters: {
+            readonly query?: {
+                readonly cursor?: components["parameters"]["Cursor"];
+                readonly limit?: components["parameters"]["DocumentPageLimit"];
+            };
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly documentId: components["parameters"]["ContextDocumentId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Document and bounded immutable version history. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ContextDocumentDetail"];
+                };
+            };
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+        };
+    };
+    readonly archiveContextDocument: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly documentId: components["parameters"]["ContextDocumentId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["ArchiveContextDocumentRequest"];
+            };
+        };
+        readonly responses: {
+            /** @description Archived source; historical references remain readable when authorized. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ContextDocumentResponse"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+        };
+    };
+    readonly getContextDocumentVersion: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly versionId: components["parameters"]["ContextDocumentVersionId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Source processing state and bounded coverage. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ContextDocumentVersionResponse"];
+                };
+            };
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+        };
+    };
+    readonly retryContextDocumentVersion: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly versionId: components["parameters"]["ContextDocumentVersionId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": Record<string, never>;
+            };
+        };
+        readonly responses: {
+            /** @description Resumed bounded processing, reusing completed pages. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ContextDocumentVersionResponse"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+            /** @description Parser concurrency is exhausted. */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    readonly listContextDocumentPassages: {
+        readonly parameters: {
+            readonly query?: {
+                readonly cursor?: components["parameters"]["Cursor"];
+                readonly limit?: components["parameters"]["DocumentPageLimit"];
+            };
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly versionId: components["parameters"]["ContextDocumentVersionId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Bounded passages with exact source positions. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ContextDocumentPassagePage"];
+                };
+            };
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+        };
+    };
+    readonly readContextDocumentPassage: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly versionId: components["parameters"]["ContextDocumentVersionId"];
+                readonly passageId: components["parameters"]["ContextDocumentPassageId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description One source passage pinned to its original file and processing version. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ContextDocumentPassageResponse"];
+                };
+            };
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+        };
+    };
+    readonly renderContextDocumentPage: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly versionId: components["parameters"]["ContextDocumentVersionId"];
+                readonly pageNumber: number;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Original PDF page at its displayed rotation; private no-store. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "image/png": string;
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+            /** @description Source page cannot be rendered. */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Source rendering concurrency is exhausted. */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     readonly listFileObjects: {

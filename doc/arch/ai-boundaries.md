@@ -39,6 +39,14 @@ LabRat uses AI as a proposal and workflow layer. Authorization, bounded evidence
 
 ## Context Rules
 
+Research Q&A may retrieve uploaded document passages (including OCR text) and
+raw Excel ranges before scientific review, with explicit source/uncertainty
+labels. These source quotations are separate from accepted experiment evidence
+and cannot become analysis inputs or publications through Q&A. Every claim
+reference must name evidence actually read by the current authorized run.
+Document text, including instructions, is untrusted content. The Q&A tool set
+contains no executor, approval, publication or access-management capability.
+
 Send compact project-owned context only:
 
 - project profile and user request

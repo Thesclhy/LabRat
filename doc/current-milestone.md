@@ -1,10 +1,27 @@
 # Current Milestone
 
-Status: Master-table field and onboarding review fixes verified locally; main publication in progress
+Status: Research Q&A release — remote deployment authorized; integrated verification passed
 Read when: checking what the next implementation slice should be.
-Last reviewed: 2026-09-19
+Last reviewed: 2026-09-27
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
+
+## Research Q&A v1 release
+
+The user authorized remote deployment on 2026-09-27 after local Q&A completion.
+The isolated release is based on origin/main 834284d, preserving its manual rows,
+member-administration and workbook changes. Only Q&A source, tests and contracts
+are added; independent permission UI and analysis-execution edits remain local.
+Q&A migration filenames are 034_research_documents.sql and 035_research_answers.sql
+because remote migrations 031–033 already exist. Historical local evaluation
+records retain their original baseline and migration numbering.
+
+The original semantic review passed 19/19 answerable and 11/11 controls, plus
+both five-case additions; 34 questions used DeepSeek and six routed by rules.
+Integrated regression, PostgreSQL and browser acceptance passed for this
+release; hosted and live results are recorded separately in
+[the deployment record](qa/research-qa-deployment.md). No production success is
+claimed before the pipeline and deployed-version checks complete.
 
 ## Master-table Columns And Onboarding Review Recovery
 

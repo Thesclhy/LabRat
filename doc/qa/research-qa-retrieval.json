@@ -1,0 +1,1634 @@
+{
+  "schemaVersion": "labrat.researchQaRetrieval.v1",
+  "generatedAt": "2026-09-27T16:07:13.498Z",
+  "material": "synthetic only",
+  "k": 8,
+  "protocol": "Fixed predeclared tool queries; explicit structured lookups consume one slot each, then ranked search hits fill the remaining slots. No neighbor expansion or source-level credit. This tests retrieval, not model query choice.",
+  "questionCount": 19,
+  "recallAt8": 1,
+  "missed": [],
+  "records": [
+    {
+      "id": "D1",
+      "split": "development",
+      "question": "RQ-001 方法适用于干样还是湿样？请引用适用条件。",
+      "fixedQuery": "RQ-001 dry samples",
+      "structuredLookups": [],
+      "searchSlots": 8,
+      "searchHits": [
+        {
+          "kind": "document",
+          "label": "RQ-scope.txt",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "kind": "text",
+              "charEnd": 45,
+              "lineEnd": 4,
+              "charStart": 0,
+              "lineStart": 3
+            },
+            "ordinal": 1,
+            "snippet": "Protocol RQ-001 applies only to dry samples.\n",
+            "passageId": "passage_451472a91314f8ebac78610f6f90961b",
+            "versionId": "document_version_e3555a975e764d5fa92c6920",
+            "documentId": "context_doc_00b7d75791234233b456069d"
+          },
+          "score": "6"
+        },
+        {
+          "kind": "document",
+          "label": "RQ-duration.txt",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "kind": "text",
+              "charEnd": 78,
+              "lineEnd": 1,
+              "charStart": 0,
+              "lineStart": 1
+            },
+            "ordinal": 0,
+            "snippet": "RQ-DURATION revision 2: The documented duration is 40 minutes for dry samples.",
+            "passageId": "passage_a3b2acb6d2e110a7861c5c57fc90980f",
+            "versionId": "document_version_c0e1d5830ca0466d96312fe3",
+            "documentId": "context_doc_2f6b7c48d57246f29df708ba"
+          },
+          "score": "4"
+        },
+        {
+          "kind": "document",
+          "label": "RQ-mixed.pdf",
+          "target": {
+            "status": "partial",
+            "locator": {
+              "kind": "pdf",
+              "line": 1,
+              "page": 1,
+              "charEnd": 53,
+              "rotation": 0,
+              "charStart": 0,
+              "pageWidth": 600,
+              "pageHeight": 800,
+              "rectangles": [
+                {
+                  "top": 0.065,
+                  "left": 0.075,
+                  "width": 0.75696,
+                  "height": 0.022499999999999992
+                }
+              ],
+              "coordinateSystem": "display_normalized_top_left"
+            },
+            "ordinal": 0,
+            "snippet": "RQ-COOL: Cool the dry sample to 30 C before weighing.",
+            "passageId": "passage_7f0d2db04afe5ce9916ee17c5522d88d",
+            "versionId": "document_version_2c538ee985f9487a893ef16d",
+            "documentId": "context_doc_fb05f14cb0fc46758df8727a"
+          },
+          "score": "2"
+        },
+        {
+          "kind": "document",
+          "label": "RQ-scan.pdf",
+          "target": {
+            "status": "partial",
+            "locator": {
+              "kind": "pdf",
+              "line": 5,
+              "page": 1,
+              "charEnd": 38,
+              "rotation": 0,
+              "charStart": 0,
+              "pageWidth": 600,
+              "pageHeight": 800,
+              "rectangles": [
+                {
+                  "top": 0.2947794779477948,
+                  "left": 0.07563025210084033,
+                  "width": 0.5582232893157263,
+                  "height": 0.022502250225022502
+                }
+              ],
+              "coordinateSystem": "display_normalized_top_left"
+            },
+            "ordinal": 4,
+            "snippet": "This procedure requires a dry sample.\n",
+            "passageId": "passage_36a55424989a948b154db0fccfef7406",
+            "versionId": "document_version_4f7328d8cb3f49d29b1d7569",
+            "documentId": "context_doc_13879c4fd08842dcbe360409"
+          },
+          "score": "2"
+        },
+        {
+          "kind": "document",
+          "label": "RQ-scan.pdf",
+          "target": {
+            "status": "partial",
+            "locator": {
+              "kind": "pdf",
+              "line": 1,
+              "page": 1,
+              "charEnd": 25,
+              "rotation": 0,
+              "charStart": 0,
+              "pageWidth": 600,
+              "pageHeight": 800,
+              "rectangles": [
+                {
+                  "top": 0.0702070207020702,
+                  "left": 0.07743097238895558,
+                  "width": 0.3877551020408163,
+                  "height": 0.022502250225022502
+                }
+              ],
+              "coordinateSystem": "display_normalized_top_left"
+            },
+            "ordinal": 0,
+            "snippet": "Research protocol RQ-001\n",
+            "passageId": "passage_646e9b410b00bc0cdde69d54621e0522",
+            "versionId": "document_version_4f7328d8cb3f49d29b1d7569",
+            "documentId": "context_doc_13879c4fd08842dcbe360409"
+          },
+          "score": "2"
+        },
+        {
+          "kind": "document",
+          "label": "RQ-control.docx",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "kind": "word",
+              "part": "word/document.xml",
+              "charEnd": 48,
+              "charStart": 0,
+              "paragraph": 1
+            },
+            "ordinal": 0,
+            "snippet": "RQ-CONTROL: Use nitrogen, only for a dry sample.",
+            "passageId": "passage_8e4076c3856e0ec0021b780e2e96f0a8",
+            "versionId": "document_version_a013db9a491d4651bd4dd7e0",
+            "documentId": "context_doc_3ff1a10deaa94f59aa749b6f"
+          },
+          "score": "2"
+        },
+        {
+          "kind": "document",
+          "label": "RQ-scope.txt",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "kind": "text",
+              "charEnd": 74,
+              "lineEnd": 5,
+              "charStart": 0,
+              "lineStart": 5
+            },
+            "ordinal": 2,
+            "snippet": "Wet samples are excluded; the protocol provides no wet-sample temperature.",
+            "passageId": "passage_4291a6a1cef428f450b2c6ebde3d9594",
+            "versionId": "document_version_e3555a975e764d5fa92c6920",
+            "documentId": "context_doc_00b7d75791234233b456069d"
+          },
+          "score": "2"
+        },
+        {
+          "kind": "document",
+          "label": "RQ-conflict.txt",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "kind": "text",
+              "charEnd": 94,
+              "lineEnd": 3,
+              "charStart": 0,
+              "lineStart": 3
+            },
+            "ordinal": 1,
+            "snippet": "RQ-CONFLICT: Lab note B states 85 C for dry catalyst K. Neither note resolves the discrepancy.",
+            "passageId": "passage_20d9ec90bf21358a7314ce9d78b99a10",
+            "versionId": "document_version_fb0fe87e37e141f1a2018d37",
+            "documentId": "context_doc_0ee69c351f584aae9af12516"
+          },
+          "score": "2"
+        }
+      ],
+      "support": [
+        {
+          "kind": "document",
+          "source": "scope",
+          "text": "Protocol RQ-001 applies only to dry samples.",
+          "locator": {
+            "lineStart": 3
+          },
+          "expectedPassageId": "passage_451472a91314f8ebac78610f6f90961b",
+          "found": true
+        },
+        {
+          "kind": "document",
+          "source": "scope",
+          "text": "Wet samples are excluded",
+          "locator": {
+            "lineStart": 5
+          },
+          "expectedPassageId": "passage_4291a6a1cef428f450b2c6ebde3d9594",
+          "found": true
+        }
+      ],
+      "recallAt8": 1
+    },
+    {
+      "id": "D2",
+      "split": "development",
+      "question": "What catalyst mass does RQ-DOSE specify, and for which catalyst?",
+      "fixedQuery": "RQ-DOSE Catalyst",
+      "structuredLookups": [],
+      "searchSlots": 8,
+      "searchHits": [
+        {
+          "kind": "document",
+          "label": "RQ-dose.doc",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "kind": "word",
+              "part": "body",
+              "charEnd": 27,
+              "charStart": 0,
+              "paragraph": 4
+            },
+            "ordinal": 3,
+            "snippet": "Only catalyst K is covered.",
+            "passageId": "passage_58557d7c1ed9afbf1635c5f48fd789b7",
+            "versionId": "document_version_1a5734e3c8e5457f84a59341",
+            "documentId": "context_doc_89d646996297444ba298f21b"
+          },
+          "score": "3"
+        },
+        {
+          "kind": "document",
+          "label": "RQ-dose.doc",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "kind": "word",
+              "part": "body",
+              "charEnd": 21,
+              "charStart": 0,
+              "paragraph": 2
+            },
+            "ordinal": 1,
+            "snippet": "Catalyst mass: 0.10 g",
+            "passageId": "passage_87044a530934fc746781f7df519dc310",
+            "versionId": "document_version_1a5734e3c8e5457f84a59341",
+            "documentId": "context_doc_89d646996297444ba298f21b"
+          },
+          "score": "3"
+        },
+        {
+          "kind": "document",
+          "label": "RQ-dose.doc",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "kind": "word",
+              "part": "body",
+              "charEnd": 7,
+              "charStart": 0,
+              "paragraph": 1
+            },
+            "ordinal": 0,
+            "snippet": "RQ-DOSE",
+            "passageId": "passage_889a91a245758d703aa86d2e1c3ae2f2",
+            "versionId": "document_version_1a5734e3c8e5457f84a59341",
+            "documentId": "context_doc_89d646996297444ba298f21b"
+          },
+          "score": "3"
+        },
+        {
+          "kind": "document",
+          "label": "RQ-control.docx",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "row": 1,
+              "kind": "word",
+              "part": "word/document.xml",
+              "table": 1,
+              "column": 2,
+              "charEnd": 11,
+              "charStart": 0,
+              "paragraph": 3
+            },
+            "ordinal": 2,
+            "snippet": "No catalyst",
+            "passageId": "passage_c5c58250c6136c737e3baee5be1cb772",
+            "versionId": "document_version_a013db9a491d4651bd4dd7e0",
+            "documentId": "context_doc_3ff1a10deaa94f59aa749b6f"
+          },
+          "score": "2"
+        },
+        {
+          "kind": "document",
+          "label": "RQ-scope.txt",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "kind": "text",
+              "charEnd": 51,
+              "lineEnd": 2,
+              "charStart": 0,
+              "lineStart": 1
+            },
+            "ordinal": 0,
+            "snippet": "RQ-SCOPE: This project studies catalyst stability.\n",
+            "passageId": "passage_6e026f4a303eef1404367a4a1890efb5",
+            "versionId": "document_version_e3555a975e764d5fa92c6920",
+            "documentId": "context_doc_00b7d75791234233b456069d"
+          },
+          "score": "2"
+        },
+        {
+          "kind": "document",
+          "label": "RQ-conflict.txt",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "kind": "text",
+              "charEnd": 94,
+              "lineEnd": 3,
+              "charStart": 0,
+              "lineStart": 3
+            },
+            "ordinal": 1,
+            "snippet": "RQ-CONFLICT: Lab note B states 85 C for dry catalyst K. Neither note resolves the discrepancy.",
+            "passageId": "passage_20d9ec90bf21358a7314ce9d78b99a10",
+            "versionId": "document_version_fb0fe87e37e141f1a2018d37",
+            "documentId": "context_doc_0ee69c351f584aae9af12516"
+          },
+          "score": "2"
+        },
+        {
+          "kind": "document",
+          "label": "RQ-conflict.txt",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "kind": "text",
+              "charEnd": 56,
+              "lineEnd": 2,
+              "charStart": 0,
+              "lineStart": 1
+            },
+            "ordinal": 0,
+            "snippet": "RQ-CONFLICT: Lab note A states 80 C for dry catalyst K.\n",
+            "passageId": "passage_6e94166ad4dab75a079634523a21fc78",
+            "versionId": "document_version_fb0fe87e37e141f1a2018d37",
+            "documentId": "context_doc_0ee69c351f584aae9af12516"
+          },
+          "score": "2"
+        },
+        {
+          "kind": "workbook_raw",
+          "label": "research.xlsx / Measurements",
+          "target": {
+            "range": "C1",
+            "snippet": "Catalyst mass (g)",
+            "sheetName": "Measurements",
+            "sourceDocumentId": "source_doc_c92bc01fa31a4b74b2d6ebfe"
+          },
+          "score": "2"
+        }
+      ],
+      "support": [
+        {
+          "kind": "document",
+          "source": "legacy",
+          "text": "Catalyst mass: 0.10 g",
+          "locator": {
+            "paragraph": 2
+          },
+          "expectedPassageId": "passage_87044a530934fc746781f7df519dc310",
+          "found": true
+        },
+        {
+          "kind": "document",
+          "source": "legacy",
+          "text": "Only catalyst K is covered.",
+          "locator": {
+            "paragraph": 4
+          },
+          "expectedPassageId": "passage_58557d7c1ed9afbf1635c5f48fd789b7",
+          "found": true
+        }
+      ],
+      "recallAt8": 1
+    },
+    {
+      "id": "D3",
+      "split": "development",
+      "question": "RQ-CONTROL 要求什么气氛、什么样品条件？",
+      "fixedQuery": "RQ-CONTROL nitrogen",
+      "structuredLookups": [],
+      "searchSlots": 8,
+      "searchHits": [
+        {
+          "kind": "document",
+          "label": "RQ-control.docx",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "kind": "word",
+              "part": "word/document.xml",
+              "charEnd": 48,
+              "charStart": 0,
+              "paragraph": 1
+            },
+            "ordinal": 0,
+            "snippet": "RQ-CONTROL: Use nitrogen, only for a dry sample.",
+            "passageId": "passage_8e4076c3856e0ec0021b780e2e96f0a8",
+            "versionId": "document_version_a013db9a491d4651bd4dd7e0",
+            "documentId": "context_doc_3ff1a10deaa94f59aa749b6f"
+          },
+          "score": "5"
+        },
+        {
+          "kind": "document",
+          "label": "RQ-control.docx",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "row": 1,
+              "kind": "word",
+              "part": "word/document.xml",
+              "table": 1,
+              "column": 1,
+              "charEnd": 13,
+              "charStart": 0,
+              "paragraph": 2
+            },
+            "ordinal": 1,
+            "snippet": "Blank control",
+            "passageId": "passage_8db0d447854ce293075161c2b35161db",
+            "versionId": "document_version_a013db9a491d4651bd4dd7e0",
+            "documentId": "context_doc_3ff1a10deaa94f59aa749b6f"
+          },
+          "score": "1"
+        },
+        {
+          "kind": "document",
+          "label": "RQ-control.docx",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "row": 1,
+              "kind": "word",
+              "part": "word/document.xml",
+              "table": 1,
+              "column": 2,
+              "charEnd": 11,
+              "charStart": 0,
+              "paragraph": 3
+            },
+            "ordinal": 2,
+            "snippet": "No catalyst",
+            "passageId": "passage_c5c58250c6136c737e3baee5be1cb772",
+            "versionId": "document_version_a013db9a491d4651bd4dd7e0",
+            "documentId": "context_doc_3ff1a10deaa94f59aa749b6f"
+          },
+          "score": "1"
+        }
+      ],
+      "support": [
+        {
+          "kind": "document",
+          "source": "word",
+          "text": "RQ-CONTROL: Use nitrogen, only for a dry sample.",
+          "locator": {
+            "paragraph": 1
+          },
+          "expectedPassageId": "passage_8e4076c3856e0ec0021b780e2e96f0a8",
+          "found": true
+        }
+      ],
+      "recallAt8": 1
+    },
+    {
+      "id": "D4",
+      "split": "held_out",
+      "question": "What duration is printed in RQ-scan.pdf?",
+      "fixedQuery": "Duration minutes",
+      "structuredLookups": [],
+      "searchSlots": 8,
+      "searchHits": [
+        {
+          "kind": "document",
+          "label": "RQ-duration.txt",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "kind": "text",
+              "charEnd": 78,
+              "lineEnd": 1,
+              "charStart": 0,
+              "lineStart": 1
+            },
+            "ordinal": 0,
+            "snippet": "RQ-DURATION revision 2: The documented duration is 40 minutes for dry samples.",
+            "passageId": "passage_a3b2acb6d2e110a7861c5c57fc90980f",
+            "versionId": "document_version_c0e1d5830ca0466d96312fe3",
+            "documentId": "context_doc_2f6b7c48d57246f29df708ba"
+          },
+          "score": "5"
+        },
+        {
+          "kind": "document",
+          "label": "RQ-scan.pdf",
+          "target": {
+            "status": "partial",
+            "locator": {
+              "kind": "pdf",
+              "line": 3,
+              "page": 1,
+              "charEnd": 21,
+              "rotation": 0,
+              "charStart": 0,
+              "pageWidth": 600,
+              "pageHeight": 800,
+              "rectangles": [
+                {
+                  "top": 0.18271827182718273,
+                  "left": 0.07743097238895558,
+                  "width": 0.3037214885954382,
+                  "height": 0.01710171017101708
+                }
+              ],
+              "coordinateSystem": "display_normalized_top_left"
+            },
+            "ordinal": 2,
+            "snippet": "Duration: 30 minutes\n",
+            "passageId": "passage_e7b81fba968e85e0d1244559c3282b6e",
+            "versionId": "document_version_4f7328d8cb3f49d29b1d7569",
+            "documentId": "context_doc_13879c4fd08842dcbe360409"
+          },
+          "score": "4"
+        },
+        {
+          "kind": "experiment_field",
+          "label": "Exp17",
+          "target": {
+            "snippet": "Duration",
+            "columnId": "duration",
+            "snapshotId": "snapshot_experiment_17",
+            "fieldOffset": 4,
+            "experimentId": "experiment_17",
+            "canonicalLabel": "Exp17"
+          },
+          "score": "2"
+        },
+        {
+          "kind": "experiment_field",
+          "label": "Exp17B",
+          "target": {
+            "snippet": "Duration",
+            "columnId": "duration",
+            "snapshotId": "snapshot_experiment_17b",
+            "fieldOffset": 4,
+            "experimentId": "experiment_17b",
+            "canonicalLabel": "Exp17B"
+          },
+          "score": "2"
+        },
+        {
+          "kind": "workbook_raw",
+          "label": "research.xlsx / Measurements",
+          "target": {
+            "range": "D1",
+            "snippet": "Duration (min)",
+            "sheetName": "Measurements",
+            "sourceDocumentId": "source_doc_c92bc01fa31a4b74b2d6ebfe"
+          },
+          "score": "2"
+        },
+        {
+          "kind": "workbook_raw",
+          "label": "research.xls / Measurements",
+          "target": {
+            "range": "D1",
+            "snippet": "Duration (min)",
+            "sheetName": "Measurements",
+            "sourceDocumentId": "source_doc_f02af5e91ffc4a08af597a96"
+          },
+          "score": "2"
+        }
+      ],
+      "support": [
+        {
+          "kind": "document",
+          "source": "scan",
+          "text": "Duration: 30 minutes",
+          "locator": {
+            "page": 1
+          },
+          "expectedPassageId": "passage_e7b81fba968e85e0d1244559c3282b6e",
+          "found": true
+        }
+      ],
+      "recallAt8": 1
+    },
+    {
+      "id": "D5",
+      "split": "held_out",
+      "question": "RQ-COOL 要求称量前降到什么温度？",
+      "fixedQuery": "RQ-COOL weighing",
+      "structuredLookups": [],
+      "searchSlots": 8,
+      "searchHits": [
+        {
+          "kind": "document",
+          "label": "RQ-mixed.pdf",
+          "target": {
+            "status": "partial",
+            "locator": {
+              "kind": "pdf",
+              "line": 1,
+              "page": 1,
+              "charEnd": 53,
+              "rotation": 0,
+              "charStart": 0,
+              "pageWidth": 600,
+              "pageHeight": 800,
+              "rectangles": [
+                {
+                  "top": 0.065,
+                  "left": 0.075,
+                  "width": 0.75696,
+                  "height": 0.022499999999999992
+                }
+              ],
+              "coordinateSystem": "display_normalized_top_left"
+            },
+            "ordinal": 0,
+            "snippet": "RQ-COOL: Cool the dry sample to 30 C before weighing.",
+            "passageId": "passage_7f0d2db04afe5ce9916ee17c5522d88d",
+            "versionId": "document_version_2c538ee985f9487a893ef16d",
+            "documentId": "context_doc_fb05f14cb0fc46758df8727a"
+          },
+          "score": "4"
+        }
+      ],
+      "support": [
+        {
+          "kind": "document",
+          "source": "mixed",
+          "text": "RQ-COOL: Cool the dry sample to 30 C before weighing.",
+          "locator": {
+            "page": 1
+          },
+          "expectedPassageId": "passage_7f0d2db04afe5ce9916ee17c5522d88d",
+          "found": true
+        }
+      ],
+      "recallAt8": 1
+    },
+    {
+      "id": "D6",
+      "split": "held_out",
+      "question": "中文项目说明 RQ-CN 的研究目标是什么？",
+      "fixedQuery": "RQ-CN 催化剂稳定性",
+      "structuredLookups": [],
+      "searchSlots": 8,
+      "searchHits": [
+        {
+          "kind": "document",
+          "label": "RQ-中文.txt",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "kind": "text",
+              "charEnd": 24,
+              "lineEnd": 3,
+              "charStart": 0,
+              "lineStart": 1
+            },
+            "ordinal": 0,
+            "snippet": "项目说明 RQ-CN\n目标是研究催化剂稳定性。\n",
+            "passageId": "passage_e76f6c6b365cc51ee67f9e1803f8b848",
+            "versionId": "document_version_1495b0ce36df4c1b9f20a44e",
+            "documentId": "context_doc_6301f2e231f642f5a733dab1"
+          },
+          "score": "14"
+        }
+      ],
+      "support": [
+        {
+          "kind": "document",
+          "source": "chinese",
+          "text": "目标是研究催化剂稳定性。",
+          "locator": {
+            "lineStart": 1
+          },
+          "expectedPassageId": "passage_e76f6c6b365cc51ee67f9e1803f8b848",
+          "found": true
+        }
+      ],
+      "recallAt8": 1
+    },
+    {
+      "id": "R1",
+      "split": "development",
+      "question": "读取 research.xlsx 的 Measurements!A1:C2，温度单元格原文是什么？",
+      "fixedQuery": "",
+      "structuredLookups": [
+        {
+          "kind": "workbook",
+          "source": "workbook",
+          "sheetName": "Measurements",
+          "range": "A1:C2"
+        }
+      ],
+      "searchSlots": 7,
+      "searchHits": [],
+      "support": [
+        {
+          "kind": "cell",
+          "source": "workbook",
+          "sheet": "Measurements",
+          "address": "B1",
+          "rawValue": "Temperature (C)",
+          "expectedPassageId": null,
+          "found": true
+        },
+        {
+          "kind": "cell",
+          "source": "workbook",
+          "sheet": "Measurements",
+          "address": "B2",
+          "rawValue": 80,
+          "expectedPassageId": null,
+          "found": true
+        }
+      ],
+      "recallAt8": 1
+    },
+    {
+      "id": "R2",
+      "split": "development",
+      "question": "What is the accepted Temperature for Exp17?",
+      "fixedQuery": "",
+      "structuredLookups": [
+        {
+          "kind": "experiment",
+          "query": "Exp17"
+        }
+      ],
+      "searchSlots": 7,
+      "searchHits": [],
+      "support": [
+        {
+          "kind": "field",
+          "columnId": "temperature",
+          "value": 82,
+          "unit": "C",
+          "expectedPassageId": null,
+          "found": true
+        }
+      ],
+      "recallAt8": 1
+    },
+    {
+      "id": "R3",
+      "split": "development",
+      "question": "Exp17 两个 Yield 字段的存储值和 numericScale 分别是什么？不要换算。",
+      "fixedQuery": "",
+      "structuredLookups": [
+        {
+          "kind": "experiment",
+          "query": "Exp17"
+        }
+      ],
+      "searchSlots": 7,
+      "searchHits": [],
+      "support": [
+        {
+          "kind": "field",
+          "columnId": "yield_fraction",
+          "value": 0.42,
+          "unit": "%",
+          "numericScale": "fraction",
+          "expectedPassageId": null,
+          "found": true
+        },
+        {
+          "kind": "field",
+          "columnId": "yield_points",
+          "value": 42,
+          "unit": "%",
+          "numericScale": "percent_points",
+          "expectedPassageId": null,
+          "found": true
+        }
+      ],
+      "recallAt8": 1
+    },
+    {
+      "id": "R4",
+      "split": "held_out",
+      "question": "What is Exp17's accepted Pressure? If missing, say why.",
+      "fixedQuery": "",
+      "structuredLookups": [
+        {
+          "kind": "experiment",
+          "query": "Exp17"
+        }
+      ],
+      "searchSlots": 7,
+      "searchHits": [],
+      "support": [
+        {
+          "kind": "field",
+          "columnId": "pressure",
+          "value": null,
+          "unit": "bar",
+          "missingReason": "source_blank",
+          "expectedPassageId": null,
+          "found": true
+        }
+      ],
+      "recallAt8": 1
+    },
+    {
+      "id": "R5",
+      "split": "held_out",
+      "question": "Read the last stored point of Exp17 temperature_trace, including axis units; do not calculate.",
+      "fixedQuery": "",
+      "structuredLookups": [
+        {
+          "kind": "experiment",
+          "query": "Exp17",
+          "seriesKey": "temperature_trace",
+          "lastPoint": true
+        }
+      ],
+      "searchSlots": 7,
+      "searchHits": [],
+      "support": [
+        {
+          "kind": "point",
+          "seriesKey": "temperature_trace",
+          "index": 120,
+          "x": 120,
+          "y": 82,
+          "xUnit": "min",
+          "yUnit": "C",
+          "expectedPassageId": null,
+          "found": true
+        }
+      ],
+      "recallAt8": 1
+    },
+    {
+      "id": "R6",
+      "split": "held_out",
+      "question": "Read research.xlsx Measurements!F1:G2. What formulas and saved values exist? Do not evaluate them.",
+      "fixedQuery": "",
+      "structuredLookups": [
+        {
+          "kind": "workbook",
+          "source": "workbook",
+          "sheetName": "Measurements",
+          "range": "F1:G2"
+        }
+      ],
+      "searchSlots": 7,
+      "searchHits": [],
+      "support": [
+        {
+          "kind": "cell",
+          "source": "workbook",
+          "sheet": "Measurements",
+          "address": "F2",
+          "rawValue": 110,
+          "formula": "B2+D2",
+          "cacheMissing": false,
+          "expectedPassageId": null,
+          "found": true
+        },
+        {
+          "kind": "cell",
+          "source": "workbook",
+          "sheet": "Measurements",
+          "address": "G2",
+          "rawValue": null,
+          "formula": "B2*2",
+          "cacheMissing": true,
+          "expectedPassageId": null,
+          "found": true
+        }
+      ],
+      "recallAt8": 1
+    },
+    {
+      "id": "J1",
+      "split": "development",
+      "question": "分别列出 RQ-scan.pdf 的温度和 Exp17 已接受温度，保留各自来源。",
+      "fixedQuery": "Temperature",
+      "structuredLookups": [
+        {
+          "kind": "experiment",
+          "query": "Exp17"
+        }
+      ],
+      "searchSlots": 7,
+      "searchHits": [
+        {
+          "kind": "document",
+          "label": "RQ-scan.pdf",
+          "target": {
+            "status": "partial",
+            "locator": {
+              "kind": "pdf",
+              "line": 2,
+              "page": 1,
+              "charEnd": 18,
+              "rotation": 0,
+              "charStart": 0,
+              "pageWidth": 600,
+              "pageHeight": 800,
+              "rectangles": [
+                {
+                  "top": 0.12646264626462647,
+                  "left": 0.07563025210084033,
+                  "width": 0.2737094837935174,
+                  "height": 0.022502250225022502
+                }
+              ],
+              "coordinateSystem": "display_normalized_top_left"
+            },
+            "ordinal": 1,
+            "snippet": "Temperature: 80 C\n",
+            "passageId": "passage_41820a9174618a60aa29bcd7f4bde39e",
+            "versionId": "document_version_4f7328d8cb3f49d29b1d7569",
+            "documentId": "context_doc_13879c4fd08842dcbe360409"
+          },
+          "score": "2"
+        },
+        {
+          "kind": "document",
+          "label": "RQ-scope.txt",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "kind": "text",
+              "charEnd": 74,
+              "lineEnd": 5,
+              "charStart": 0,
+              "lineStart": 5
+            },
+            "ordinal": 2,
+            "snippet": "Wet samples are excluded; the protocol provides no wet-sample temperature.",
+            "passageId": "passage_4291a6a1cef428f450b2c6ebde3d9594",
+            "versionId": "document_version_e3555a975e764d5fa92c6920",
+            "documentId": "context_doc_00b7d75791234233b456069d"
+          },
+          "score": "2"
+        },
+        {
+          "kind": "experiment_field",
+          "label": "Exp17",
+          "target": {
+            "snippet": "Temperature",
+            "columnId": "temperature",
+            "snapshotId": "snapshot_experiment_17",
+            "fieldOffset": 0,
+            "experimentId": "experiment_17",
+            "canonicalLabel": "Exp17"
+          },
+          "score": "2"
+        },
+        {
+          "kind": "experiment_field",
+          "label": "Exp17B",
+          "target": {
+            "snippet": "Temperature",
+            "columnId": "temperature",
+            "snapshotId": "snapshot_experiment_17b",
+            "fieldOffset": 0,
+            "experimentId": "experiment_17b",
+            "canonicalLabel": "Exp17B"
+          },
+          "score": "2"
+        },
+        {
+          "kind": "workbook_raw",
+          "label": "research.xlsx / Measurements",
+          "target": {
+            "range": "B1",
+            "snippet": "Temperature (C)",
+            "sheetName": "Measurements",
+            "sourceDocumentId": "source_doc_c92bc01fa31a4b74b2d6ebfe"
+          },
+          "score": "2"
+        },
+        {
+          "kind": "workbook_raw",
+          "label": "research.xls / Measurements",
+          "target": {
+            "range": "B1",
+            "snippet": "Temperature (C)",
+            "sheetName": "Measurements",
+            "sourceDocumentId": "source_doc_f02af5e91ffc4a08af597a96"
+          },
+          "score": "2"
+        }
+      ],
+      "support": [
+        {
+          "kind": "document",
+          "source": "scan",
+          "text": "Temperature: 80 C",
+          "locator": {
+            "page": 1
+          },
+          "expectedPassageId": "passage_41820a9174618a60aa29bcd7f4bde39e",
+          "found": true
+        },
+        {
+          "kind": "field",
+          "columnId": "temperature",
+          "value": 82,
+          "unit": "C",
+          "expectedPassageId": null,
+          "found": true
+        }
+      ],
+      "recallAt8": 1
+    },
+    {
+      "id": "J2",
+      "split": "development",
+      "question": "List RQ-DOSE catalyst mass and research.xlsx Measurements!C2 with the header. Do not calculate the difference.",
+      "fixedQuery": "RQ-DOSE Catalyst mass",
+      "structuredLookups": [
+        {
+          "kind": "workbook",
+          "source": "workbook",
+          "sheetName": "Measurements",
+          "range": "C1:C2"
+        }
+      ],
+      "searchSlots": 7,
+      "searchHits": [
+        {
+          "kind": "document",
+          "label": "RQ-dose.doc",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "kind": "word",
+              "part": "body",
+              "charEnd": 21,
+              "charStart": 0,
+              "paragraph": 2
+            },
+            "ordinal": 1,
+            "snippet": "Catalyst mass: 0.10 g",
+            "passageId": "passage_87044a530934fc746781f7df519dc310",
+            "versionId": "document_version_1a5734e3c8e5457f84a59341",
+            "documentId": "context_doc_89d646996297444ba298f21b"
+          },
+          "score": "5"
+        },
+        {
+          "kind": "workbook_raw",
+          "label": "research.xlsx / Measurements",
+          "target": {
+            "range": "C1",
+            "snippet": "Catalyst mass (g)",
+            "sheetName": "Measurements",
+            "sourceDocumentId": "source_doc_c92bc01fa31a4b74b2d6ebfe"
+          },
+          "score": "4"
+        },
+        {
+          "kind": "workbook_raw",
+          "label": "research.xls / Measurements",
+          "target": {
+            "range": "C1",
+            "snippet": "Catalyst mass (g)",
+            "sheetName": "Measurements",
+            "sourceDocumentId": "source_doc_f02af5e91ffc4a08af597a96"
+          },
+          "score": "4"
+        },
+        {
+          "kind": "document",
+          "label": "RQ-dose.doc",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "kind": "word",
+              "part": "body",
+              "charEnd": 27,
+              "charStart": 0,
+              "paragraph": 4
+            },
+            "ordinal": 3,
+            "snippet": "Only catalyst K is covered.",
+            "passageId": "passage_58557d7c1ed9afbf1635c5f48fd789b7",
+            "versionId": "document_version_1a5734e3c8e5457f84a59341",
+            "documentId": "context_doc_89d646996297444ba298f21b"
+          },
+          "score": "3"
+        },
+        {
+          "kind": "document",
+          "label": "RQ-dose.doc",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "kind": "word",
+              "part": "body",
+              "charEnd": 7,
+              "charStart": 0,
+              "paragraph": 1
+            },
+            "ordinal": 0,
+            "snippet": "RQ-DOSE",
+            "passageId": "passage_889a91a245758d703aa86d2e1c3ae2f2",
+            "versionId": "document_version_1a5734e3c8e5457f84a59341",
+            "documentId": "context_doc_89d646996297444ba298f21b"
+          },
+          "score": "3"
+        },
+        {
+          "kind": "document",
+          "label": "RQ-control.docx",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "row": 1,
+              "kind": "word",
+              "part": "word/document.xml",
+              "table": 1,
+              "column": 2,
+              "charEnd": 11,
+              "charStart": 0,
+              "paragraph": 3
+            },
+            "ordinal": 2,
+            "snippet": "No catalyst",
+            "passageId": "passage_c5c58250c6136c737e3baee5be1cb772",
+            "versionId": "document_version_a013db9a491d4651bd4dd7e0",
+            "documentId": "context_doc_3ff1a10deaa94f59aa749b6f"
+          },
+          "score": "2"
+        },
+        {
+          "kind": "document",
+          "label": "RQ-scope.txt",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "kind": "text",
+              "charEnd": 51,
+              "lineEnd": 2,
+              "charStart": 0,
+              "lineStart": 1
+            },
+            "ordinal": 0,
+            "snippet": "RQ-SCOPE: This project studies catalyst stability.\n",
+            "passageId": "passage_6e026f4a303eef1404367a4a1890efb5",
+            "versionId": "document_version_e3555a975e764d5fa92c6920",
+            "documentId": "context_doc_00b7d75791234233b456069d"
+          },
+          "score": "2"
+        }
+      ],
+      "support": [
+        {
+          "kind": "document",
+          "source": "legacy",
+          "text": "Catalyst mass: 0.10 g",
+          "locator": {
+            "paragraph": 2
+          },
+          "expectedPassageId": "passage_87044a530934fc746781f7df519dc310",
+          "found": true
+        },
+        {
+          "kind": "cell",
+          "source": "workbook",
+          "sheet": "Measurements",
+          "address": "C1",
+          "rawValue": "Catalyst mass (g)",
+          "expectedPassageId": null,
+          "found": true
+        },
+        {
+          "kind": "cell",
+          "source": "workbook",
+          "sheet": "Measurements",
+          "address": "C2",
+          "rawValue": 0.12,
+          "expectedPassageId": null,
+          "found": true
+        }
+      ],
+      "recallAt8": 1
+    },
+    {
+      "id": "J3",
+      "split": "development",
+      "question": "已保存项目背景和 RQ-CN 各自写的研究目标是什么？",
+      "fixedQuery": "RQ-CN",
+      "structuredLookups": [
+        {
+          "kind": "context"
+        }
+      ],
+      "searchSlots": 7,
+      "searchHits": [
+        {
+          "kind": "document",
+          "label": "RQ-中文.txt",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "kind": "text",
+              "charEnd": 24,
+              "lineEnd": 3,
+              "charStart": 0,
+              "lineStart": 1
+            },
+            "ordinal": 0,
+            "snippet": "项目说明 RQ-CN\n目标是研究催化剂稳定性。\n",
+            "passageId": "passage_e76f6c6b365cc51ee67f9e1803f8b848",
+            "versionId": "document_version_1495b0ce36df4c1b9f20a44e",
+            "documentId": "context_doc_6301f2e231f642f5a733dab1"
+          },
+          "score": "2"
+        }
+      ],
+      "support": [
+        {
+          "kind": "context",
+          "path": "researchGoal",
+          "value": "Study catalyst stability",
+          "expectedPassageId": null,
+          "found": true
+        },
+        {
+          "kind": "document",
+          "source": "chinese",
+          "text": "目标是研究催化剂稳定性。",
+          "locator": {
+            "lineStart": 1
+          },
+          "expectedPassageId": "passage_e76f6c6b365cc51ee67f9e1803f8b848",
+          "found": true
+        }
+      ],
+      "recallAt8": 1
+    },
+    {
+      "id": "J4",
+      "split": "held_out",
+      "question": "What accepted interpretation describes Carbon!A1:C2, and what accepted Temperature does Exp17 have? Keep their review states distinct.",
+      "fixedQuery": "",
+      "structuredLookups": [
+        {
+          "kind": "region",
+          "query": "Carbon",
+          "range": "A1:C2"
+        },
+        {
+          "kind": "experiment",
+          "query": "Exp17"
+        }
+      ],
+      "searchSlots": 6,
+      "searchHits": [],
+      "support": [
+        {
+          "kind": "region",
+          "sheetName": "Carbon",
+          "range": "A1:C2",
+          "semanticType": "component_distribution",
+          "expectedPassageId": null,
+          "found": true
+        },
+        {
+          "kind": "field",
+          "columnId": "temperature",
+          "value": 82,
+          "unit": "C",
+          "expectedPassageId": null,
+          "found": true
+        }
+      ],
+      "recallAt8": 1
+    },
+    {
+      "id": "J5",
+      "split": "held_out",
+      "question": "What blank control is described in RQ-control.docx and in research.xls Notes!A2:B2?",
+      "fixedQuery": "Blank control No catalyst",
+      "structuredLookups": [
+        {
+          "kind": "workbook",
+          "source": "workbook_xls",
+          "sheetName": "Notes",
+          "range": "A2:B2"
+        }
+      ],
+      "searchSlots": 7,
+      "searchHits": [
+        {
+          "kind": "document",
+          "label": "RQ-control.docx",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "row": 1,
+              "kind": "word",
+              "part": "word/document.xml",
+              "table": 1,
+              "column": 1,
+              "charEnd": 13,
+              "charStart": 0,
+              "paragraph": 2
+            },
+            "ordinal": 1,
+            "snippet": "Blank control",
+            "passageId": "passage_8db0d447854ce293075161c2b35161db",
+            "versionId": "document_version_a013db9a491d4651bd4dd7e0",
+            "documentId": "context_doc_3ff1a10deaa94f59aa749b6f"
+          },
+          "score": "5"
+        },
+        {
+          "kind": "document",
+          "label": "RQ-control.docx",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "row": 1,
+              "kind": "word",
+              "part": "word/document.xml",
+              "table": 1,
+              "column": 2,
+              "charEnd": 11,
+              "charStart": 0,
+              "paragraph": 3
+            },
+            "ordinal": 2,
+            "snippet": "No catalyst",
+            "passageId": "passage_c5c58250c6136c737e3baee5be1cb772",
+            "versionId": "document_version_a013db9a491d4651bd4dd7e0",
+            "documentId": "context_doc_3ff1a10deaa94f59aa749b6f"
+          },
+          "score": "5"
+        },
+        {
+          "kind": "workbook_raw",
+          "label": "research.xlsx / Notes",
+          "target": {
+            "range": "A2",
+            "snippet": "Blank control",
+            "sheetName": "Notes",
+            "sourceDocumentId": "source_doc_c92bc01fa31a4b74b2d6ebfe"
+          },
+          "score": "4"
+        },
+        {
+          "kind": "workbook_raw",
+          "label": "research.xlsx / Notes",
+          "target": {
+            "range": "B2",
+            "snippet": "No catalyst",
+            "sheetName": "Notes",
+            "sourceDocumentId": "source_doc_c92bc01fa31a4b74b2d6ebfe"
+          },
+          "score": "4"
+        },
+        {
+          "kind": "workbook_raw",
+          "label": "research.xls / Notes",
+          "target": {
+            "range": "A2",
+            "snippet": "Blank control",
+            "sheetName": "Notes",
+            "sourceDocumentId": "source_doc_f02af5e91ffc4a08af597a96"
+          },
+          "score": "4"
+        },
+        {
+          "kind": "workbook_raw",
+          "label": "research.xls / Notes",
+          "target": {
+            "range": "B2",
+            "snippet": "No catalyst",
+            "sheetName": "Notes",
+            "sourceDocumentId": "source_doc_f02af5e91ffc4a08af597a96"
+          },
+          "score": "4"
+        },
+        {
+          "kind": "document",
+          "label": "RQ-control.docx",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "kind": "word",
+              "part": "word/document.xml",
+              "charEnd": 48,
+              "charStart": 0,
+              "paragraph": 1
+            },
+            "ordinal": 0,
+            "snippet": "RQ-CONTROL: Use nitrogen, only for a dry sample.",
+            "passageId": "passage_8e4076c3856e0ec0021b780e2e96f0a8",
+            "versionId": "document_version_a013db9a491d4651bd4dd7e0",
+            "documentId": "context_doc_3ff1a10deaa94f59aa749b6f"
+          },
+          "score": "3"
+        }
+      ],
+      "support": [
+        {
+          "kind": "document",
+          "source": "word",
+          "text": "Blank control",
+          "locator": {
+            "table": 1,
+            "row": 1,
+            "column": 1
+          },
+          "expectedPassageId": "passage_8db0d447854ce293075161c2b35161db",
+          "found": true
+        },
+        {
+          "kind": "document",
+          "source": "word",
+          "text": "No catalyst",
+          "locator": {
+            "table": 1,
+            "row": 1,
+            "column": 2
+          },
+          "expectedPassageId": "passage_c5c58250c6136c737e3baee5be1cb772",
+          "found": true
+        },
+        {
+          "kind": "cell",
+          "source": "workbook_xls",
+          "sheet": "Notes",
+          "address": "A2",
+          "rawValue": "Blank control",
+          "expectedPassageId": null,
+          "found": true
+        },
+        {
+          "kind": "cell",
+          "source": "workbook_xls",
+          "sheet": "Notes",
+          "address": "B2",
+          "rawValue": "No catalyst",
+          "expectedPassageId": null,
+          "found": true
+        }
+      ],
+      "recallAt8": 1
+    },
+    {
+      "id": "J6",
+      "split": "held_out",
+      "question": "RQ-DURATION 当前版本和 Exp17 记录的时长分别是多少？",
+      "fixedQuery": "RQ-DURATION",
+      "structuredLookups": [
+        {
+          "kind": "experiment",
+          "query": "Exp17"
+        }
+      ],
+      "searchSlots": 7,
+      "searchHits": [
+        {
+          "kind": "document",
+          "label": "RQ-duration.txt",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "kind": "text",
+              "charEnd": 78,
+              "lineEnd": 1,
+              "charStart": 0,
+              "lineStart": 1
+            },
+            "ordinal": 0,
+            "snippet": "RQ-DURATION revision 2: The documented duration is 40 minutes for dry samples.",
+            "passageId": "passage_a3b2acb6d2e110a7861c5c57fc90980f",
+            "versionId": "document_version_c0e1d5830ca0466d96312fe3",
+            "documentId": "context_doc_2f6b7c48d57246f29df708ba"
+          },
+          "score": "3"
+        }
+      ],
+      "support": [
+        {
+          "kind": "document",
+          "source": "revised",
+          "text": "The documented duration is 40 minutes for dry samples.",
+          "locator": {
+            "lineStart": 1
+          },
+          "expectedPassageId": "passage_a3b2acb6d2e110a7861c5c57fc90980f",
+          "found": true
+        },
+        {
+          "kind": "field",
+          "columnId": "duration",
+          "value": 30,
+          "unit": "min",
+          "expectedPassageId": null,
+          "found": true
+        }
+      ],
+      "recallAt8": 1
+    },
+    {
+      "id": "C1",
+      "split": "development",
+      "question": "RQ-CONFLICT 两份笔记的温度冲突是什么？能判断哪份正确吗？",
+      "fixedQuery": "RQ-CONFLICT",
+      "structuredLookups": [],
+      "searchSlots": 8,
+      "searchHits": [
+        {
+          "kind": "document",
+          "label": "RQ-conflict.txt",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "kind": "text",
+              "charEnd": 94,
+              "lineEnd": 3,
+              "charStart": 0,
+              "lineStart": 3
+            },
+            "ordinal": 1,
+            "snippet": "RQ-CONFLICT: Lab note B states 85 C for dry catalyst K. Neither note resolves the discrepancy.",
+            "passageId": "passage_20d9ec90bf21358a7314ce9d78b99a10",
+            "versionId": "document_version_fb0fe87e37e141f1a2018d37",
+            "documentId": "context_doc_0ee69c351f584aae9af12516"
+          },
+          "score": "3"
+        },
+        {
+          "kind": "document",
+          "label": "RQ-conflict.txt",
+          "target": {
+            "status": "ready",
+            "locator": {
+              "kind": "text",
+              "charEnd": 56,
+              "lineEnd": 2,
+              "charStart": 0,
+              "lineStart": 1
+            },
+            "ordinal": 0,
+            "snippet": "RQ-CONFLICT: Lab note A states 80 C for dry catalyst K.\n",
+            "passageId": "passage_6e94166ad4dab75a079634523a21fc78",
+            "versionId": "document_version_fb0fe87e37e141f1a2018d37",
+            "documentId": "context_doc_0ee69c351f584aae9af12516"
+          },
+          "score": "3"
+        }
+      ],
+      "support": [
+        {
+          "kind": "document",
+          "source": "conflict",
+          "text": "Lab note A states 80 C for dry catalyst K.",
+          "locator": {
+            "lineStart": 1
+          },
+          "expectedPassageId": "passage_6e94166ad4dab75a079634523a21fc78",
+          "found": true
+        },
+        {
+          "kind": "document",
+          "source": "conflict",
+          "text": "Lab note B states 85 C for dry catalyst K. Neither note resolves the discrepancy.",
+          "locator": {
+            "lineStart": 3
+          },
+          "expectedPassageId": "passage_20d9ec90bf21358a7314ce9d78b99a10",
+          "found": true
+        }
+      ],
+      "recallAt8": 1
+    }
+  ]
+}

@@ -1,0 +1,756 @@
+{
+  "schemaVersion": "labrat.researchQaEvaluation.v1",
+  "material": "synthetic only",
+  "provider": {
+    "provider": "deepseek",
+    "model": "deepseek-v4-pro",
+    "configured": true
+  },
+  "evaluation": "development",
+  "completed": true,
+  "records": [
+    {
+      "id": "C5",
+      "group": "controls",
+      "split": "held_out",
+      "question": "What concentration of cobalt does the project evidence establish?",
+      "expected": [
+        "insufficient_evidence"
+      ],
+      "supports": [],
+      "query": "",
+      "notes": "",
+      "allowedScope": "project_analysis synthetic sources only",
+      "minimumSupport": [],
+      "control": "insufficient_evidence",
+      "retrievalReads": [],
+      "controlReason": "No uploaded or accepted source establishes cobalt concentration.",
+      "forbidden": [
+        "new scientific values",
+        "cross-project evidence",
+        "unqualified scope expansion"
+      ],
+      "request": {
+        "runId": "agent_run_75a3653249dc40619459d870",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "eval-C5-1790525635336",
+        "question": "What concentration of cobalt does the project evidence establish?",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 4,
+          "elapsedMs": 20422,
+          "knownCost": null,
+          "toolCalls": 5,
+          "toolRounds": 3,
+          "inputTokens": 18767,
+          "lastActiveAt": 1790525655775,
+          "outputTokens": 1885,
+          "reservedTokens": 0,
+          "visibleToolCalls": 6,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-27T16:13:55.345Z",
+        "updatedAt": "2026-09-27T16:14:15.780Z"
+      },
+      "artifact": {
+        "id": "answer_100a50453def4c60a806ebab",
+        "runId": "agent_run_75a3653249dc40619459d870",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "The project scope document states \"This project studies catalyst stability\" and that \"Protocol RQ-001 applies only to dry samples.\" It contains no mention of cobalt or a cobalt concentration.",
+              "citations": [
+                {
+                  "quote": "RQ-SCOPE: This project studies catalyst stability.",
+                  "evidenceId": "evidence_73b6bd31a49edd5cee525bd6"
+                },
+                {
+                  "quote": "Protocol RQ-001 applies only to dry samples.",
+                  "evidenceId": "evidence_88591c732bd26f4e3851667f"
+                }
+              ],
+              "numericBindings": []
+            }
+          ],
+          "status": "insufficient_evidence",
+          "limitations": [],
+          "missingEvidence": [
+            "A project source establishing a cobalt concentration (document passage, raw workbook cell, confirmed region, or accepted experiment field). Searches for 'cobalt', 'Co', and 'Co concentration' returned no matches across uploaded documents, raw workbook cells, confirmed regions, and accepted field names in this project."
+          ]
+        },
+        "evidence": [
+          {
+            "id": "evidence_73b6bd31a49edd5cee525bd6",
+            "kind": "document_passage",
+            "label": "RQ-scope.txt",
+            "locator": {
+              "kind": "text",
+              "charEnd": 51,
+              "lineEnd": 2,
+              "charStart": 0,
+              "lineStart": 1
+            },
+            "version": {
+              "versionId": "document_version_fb64ce7aa3704b0ba2a9655f",
+              "documentId": "context_doc_a46a2256c1e845b99086831d",
+              "contentHash": "f46ffe1d6080101e61b1417ad137d698ced83b78dd2e7d56f147634039a545ff",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 1,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "part": "text",
+                  "lines": 5,
+                  "status": "ready"
+                },
+                "statusCounts": {
+                  "ready": 1
+                },
+                "warningParts": 0,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "ready",
+              "passageId": "passage_6e026f4a303eef1404367a4a1890efb5",
+              "limitations": []
+            },
+            "warnings": []
+          },
+          {
+            "id": "evidence_88591c732bd26f4e3851667f",
+            "kind": "document_passage",
+            "label": "RQ-scope.txt",
+            "locator": {
+              "kind": "text",
+              "charEnd": 45,
+              "lineEnd": 4,
+              "charStart": 0,
+              "lineStart": 3
+            },
+            "version": {
+              "versionId": "document_version_fb64ce7aa3704b0ba2a9655f",
+              "documentId": "context_doc_a46a2256c1e845b99086831d",
+              "contentHash": "f46ffe1d6080101e61b1417ad137d698ced83b78dd2e7d56f147634039a545ff",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 1,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "part": "text",
+                  "lines": 5,
+                  "status": "ready"
+                },
+                "statusCounts": {
+                  "ready": 1
+                },
+                "warningParts": 0,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "ready",
+              "passageId": "passage_451472a91314f8ebac78610f6f90961b",
+              "limitations": []
+            },
+            "warnings": []
+          }
+        ],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "status": "ok",
+            "elapsedMs": 34
+          },
+          {
+            "tool": "search_project_documents",
+            "status": "ok",
+            "elapsedMs": 9
+          },
+          {
+            "tool": "search_project_documents",
+            "status": "ok",
+            "elapsedMs": 7
+          },
+          {
+            "tool": "search_project_documents",
+            "status": "ok",
+            "elapsedMs": 7
+          },
+          {
+            "tool": "read_document_passage",
+            "status": "ok",
+            "elapsedMs": 6
+          },
+          {
+            "tool": "read_document_passage",
+            "status": "ok",
+            "elapsedMs": 6
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 4,
+          "elapsedMs": 20422,
+          "knownCost": null,
+          "toolCalls": 5,
+          "toolRounds": 3,
+          "inputTokens": 18767,
+          "lastActiveAt": 1790525655775,
+          "outputTokens": 1885,
+          "reservedTokens": 0,
+          "visibleToolCalls": 6,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-27 12:14:15.775742-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_73b6bd31a49edd5cee525bd6",
+          "data": {
+            "text": "RQ-SCOPE: This project studies catalyst stability.\n"
+          },
+          "kind": "document_passage",
+          "label": "RQ-scope.txt",
+          "locator": {
+            "kind": "text",
+            "charEnd": 51,
+            "lineEnd": 2,
+            "charStart": 0,
+            "lineStart": 1
+          },
+          "version": {
+            "versionId": "document_version_fb64ce7aa3704b0ba2a9655f",
+            "documentId": "context_doc_a46a2256c1e845b99086831d",
+            "contentHash": "f46ffe1d6080101e61b1417ad137d698ced83b78dd2e7d56f147634039a545ff",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 1,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "part": "text",
+                "lines": 5,
+                "status": "ready"
+              },
+              "statusCounts": {
+                "ready": 1
+              },
+              "warningParts": 0,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "ready",
+            "passageId": "passage_6e026f4a303eef1404367a4a1890efb5",
+            "limitations": []
+          },
+          "warnings": []
+        },
+        {
+          "id": "evidence_88591c732bd26f4e3851667f",
+          "data": {
+            "text": "Protocol RQ-001 applies only to dry samples.\n"
+          },
+          "kind": "document_passage",
+          "label": "RQ-scope.txt",
+          "locator": {
+            "kind": "text",
+            "charEnd": 45,
+            "lineEnd": 4,
+            "charStart": 0,
+            "lineStart": 3
+          },
+          "version": {
+            "versionId": "document_version_fb64ce7aa3704b0ba2a9655f",
+            "documentId": "context_doc_a46a2256c1e845b99086831d",
+            "contentHash": "f46ffe1d6080101e61b1417ad137d698ced83b78dd2e7d56f147634039a545ff",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 1,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "part": "text",
+                "lines": 5,
+                "status": "ready"
+              },
+              "statusCounts": {
+                "ready": 1
+              },
+              "warningParts": 0,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "ready",
+            "passageId": "passage_451472a91314f8ebac78610f6f90961b",
+            "limitations": []
+          },
+          "warnings": []
+        }
+      ],
+      "toolExecutions": [
+        {
+          "tool": "search_project_documents",
+          "input": {
+            "query": "cobalt"
+          },
+          "startedAt": "2026-09-27T16:13:57.954Z",
+          "result": {
+            "items": [],
+            "nextCursor": null,
+            "coverage": {
+              "scope": "current_project_sources",
+              "readForCitation": false,
+              "returned": 0,
+              "candidateWindow": 0,
+              "complete": true,
+              "includes": [
+                "uploaded_documents",
+                "raw_workbook_cells",
+                "confirmed_regions",
+                "accepted_field_names"
+              ],
+              "note": "Search snippets are not complete evidence. Empty results mean no keyword match, including accepted field names; report insufficient evidence within this search coverage, not universal absence."
+            }
+          },
+          "completedAt": "2026-09-27T16:13:57.963Z"
+        },
+        {
+          "tool": "search_project_documents",
+          "input": {
+            "query": "Co concentration"
+          },
+          "startedAt": "2026-09-27T16:13:57.963Z",
+          "result": {
+            "items": [],
+            "nextCursor": null,
+            "coverage": {
+              "scope": "current_project_sources",
+              "readForCitation": false,
+              "returned": 0,
+              "candidateWindow": 0,
+              "complete": true,
+              "includes": [
+                "uploaded_documents",
+                "raw_workbook_cells",
+                "confirmed_regions",
+                "accepted_field_names"
+              ],
+              "note": "Search snippets are not complete evidence. Empty results mean no keyword match, including accepted field names; report insufficient evidence within this search coverage, not universal absence."
+            }
+          },
+          "completedAt": "2026-09-27T16:13:57.970Z"
+        },
+        {
+          "tool": "search_project_documents",
+          "input": {
+            "query": "Co"
+          },
+          "startedAt": "2026-09-27T16:14:02.435Z",
+          "result": {
+            "items": [],
+            "nextCursor": null,
+            "coverage": {
+              "scope": "current_project_sources",
+              "readForCitation": false,
+              "returned": 0,
+              "candidateWindow": 0,
+              "complete": true,
+              "includes": [
+                "uploaded_documents",
+                "raw_workbook_cells",
+                "confirmed_regions",
+                "accepted_field_names"
+              ],
+              "note": "Search snippets are not complete evidence. Empty results mean no keyword match, including accepted field names; report insufficient evidence within this search coverage, not universal absence."
+            }
+          },
+          "completedAt": "2026-09-27T16:14:02.442Z"
+        },
+        {
+          "tool": "read_document_passage",
+          "input": {
+            "versionId": "document_version_fb64ce7aa3704b0ba2a9655f",
+            "passageId": "passage_6e026f4a303eef1404367a4a1890efb5"
+          },
+          "startedAt": "2026-09-27T16:14:02.443Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_73b6bd31a49edd5cee525bd6",
+              "kind": "document_passage",
+              "label": "RQ-scope.txt",
+              "version": {
+                "documentId": "context_doc_a46a2256c1e845b99086831d",
+                "versionId": "document_version_fb64ce7aa3704b0ba2a9655f",
+                "versionNumber": 1,
+                "contentHash": "f46ffe1d6080101e61b1417ad137d698ced83b78dd2e7d56f147634039a545ff",
+                "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+              },
+              "locator": {
+                "kind": "text",
+                "charEnd": 51,
+                "lineEnd": 2,
+                "charStart": 0,
+                "lineStart": 1
+              },
+              "data": {
+                "text": "RQ-SCOPE: This project studies catalyst stability.\n"
+              },
+              "coverage": {
+                "scope": "one_passage",
+                "passageId": "passage_6e026f4a303eef1404367a4a1890efb5",
+                "status": "ready",
+                "source": {
+                  "parts": 1,
+                  "statusCounts": {
+                    "ready": 1
+                  },
+                  "location": {
+                    "part": "text",
+                    "lines": 5,
+                    "status": "ready"
+                  },
+                  "warningParts": 0,
+                  "scope": "summary_and_cited_location_only",
+                  "fullCoverageAvailableOnVersion": true
+                },
+                "limitations": []
+              },
+              "warnings": []
+            },
+            "contextEvidence": [
+              {
+                "id": "evidence_88591c732bd26f4e3851667f",
+                "kind": "document_passage",
+                "label": "RQ-scope.txt",
+                "version": {
+                  "documentId": "context_doc_a46a2256c1e845b99086831d",
+                  "versionId": "document_version_fb64ce7aa3704b0ba2a9655f",
+                  "versionNumber": 1,
+                  "contentHash": "f46ffe1d6080101e61b1417ad137d698ced83b78dd2e7d56f147634039a545ff",
+                  "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+                },
+                "locator": {
+                  "kind": "text",
+                  "charEnd": 45,
+                  "lineEnd": 4,
+                  "charStart": 0,
+                  "lineStart": 3
+                },
+                "data": {
+                  "text": "Protocol RQ-001 applies only to dry samples.\n"
+                },
+                "coverage": {
+                  "scope": "one_passage",
+                  "passageId": "passage_451472a91314f8ebac78610f6f90961b",
+                  "status": "ready",
+                  "source": {
+                    "parts": 1,
+                    "statusCounts": {
+                      "ready": 1
+                    },
+                    "location": {
+                      "part": "text",
+                      "lines": 5,
+                      "status": "ready"
+                    },
+                    "warningParts": 0,
+                    "scope": "summary_and_cited_location_only",
+                    "fullCoverageAvailableOnVersion": true
+                  },
+                  "limitations": []
+                },
+                "warnings": []
+              }
+            ],
+            "neighbors": [
+              {
+                "id": "passage_451472a91314f8ebac78610f6f90961b",
+                "ordinal": 1,
+                "locator": {
+                  "kind": "text",
+                  "charEnd": 45,
+                  "lineEnd": 4,
+                  "charStart": 0,
+                  "lineStart": 3
+                }
+              }
+            ]
+          },
+          "completedAt": "2026-09-27T16:14:02.449Z"
+        },
+        {
+          "tool": "read_document_passage",
+          "input": {
+            "passageId": "passage_451472a91314f8ebac78610f6f90961b",
+            "versionId": "document_version_fb64ce7aa3704b0ba2a9655f"
+          },
+          "startedAt": "2026-09-27T16:14:05.683Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_88591c732bd26f4e3851667f",
+              "kind": "document_passage",
+              "label": "RQ-scope.txt",
+              "version": {
+                "documentId": "context_doc_a46a2256c1e845b99086831d",
+                "versionId": "document_version_fb64ce7aa3704b0ba2a9655f",
+                "versionNumber": 1,
+                "contentHash": "f46ffe1d6080101e61b1417ad137d698ced83b78dd2e7d56f147634039a545ff",
+                "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+              },
+              "locator": {
+                "kind": "text",
+                "charEnd": 45,
+                "lineEnd": 4,
+                "charStart": 0,
+                "lineStart": 3
+              },
+              "data": {
+                "text": "Protocol RQ-001 applies only to dry samples.\n"
+              },
+              "coverage": {
+                "scope": "one_passage",
+                "passageId": "passage_451472a91314f8ebac78610f6f90961b",
+                "status": "ready",
+                "source": {
+                  "parts": 1,
+                  "statusCounts": {
+                    "ready": 1
+                  },
+                  "location": {
+                    "part": "text",
+                    "lines": 5,
+                    "status": "ready"
+                  },
+                  "warningParts": 0,
+                  "scope": "summary_and_cited_location_only",
+                  "fullCoverageAvailableOnVersion": true
+                },
+                "limitations": []
+              },
+              "warnings": []
+            },
+            "contextEvidence": [
+              {
+                "id": "evidence_73b6bd31a49edd5cee525bd6",
+                "kind": "document_passage",
+                "label": "RQ-scope.txt",
+                "version": {
+                  "documentId": "context_doc_a46a2256c1e845b99086831d",
+                  "versionId": "document_version_fb64ce7aa3704b0ba2a9655f",
+                  "versionNumber": 1,
+                  "contentHash": "f46ffe1d6080101e61b1417ad137d698ced83b78dd2e7d56f147634039a545ff",
+                  "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+                },
+                "locator": {
+                  "kind": "text",
+                  "charEnd": 51,
+                  "lineEnd": 2,
+                  "charStart": 0,
+                  "lineStart": 1
+                },
+                "data": {
+                  "text": "RQ-SCOPE: This project studies catalyst stability.\n"
+                },
+                "coverage": {
+                  "scope": "one_passage",
+                  "passageId": "passage_6e026f4a303eef1404367a4a1890efb5",
+                  "status": "ready",
+                  "source": {
+                    "parts": 1,
+                    "statusCounts": {
+                      "ready": 1
+                    },
+                    "location": {
+                      "part": "text",
+                      "lines": 5,
+                      "status": "ready"
+                    },
+                    "warningParts": 0,
+                    "scope": "summary_and_cited_location_only",
+                    "fullCoverageAvailableOnVersion": true
+                  },
+                  "limitations": []
+                },
+                "warnings": []
+              },
+              {
+                "id": "evidence_70df9b4481513968e4eba48b",
+                "kind": "document_passage",
+                "label": "RQ-scope.txt",
+                "version": {
+                  "documentId": "context_doc_a46a2256c1e845b99086831d",
+                  "versionId": "document_version_fb64ce7aa3704b0ba2a9655f",
+                  "versionNumber": 1,
+                  "contentHash": "f46ffe1d6080101e61b1417ad137d698ced83b78dd2e7d56f147634039a545ff",
+                  "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+                },
+                "locator": {
+                  "kind": "text",
+                  "charEnd": 74,
+                  "lineEnd": 5,
+                  "charStart": 0,
+                  "lineStart": 5
+                },
+                "data": {
+                  "text": "Wet samples are excluded; the protocol provides no wet-sample temperature."
+                },
+                "coverage": {
+                  "scope": "one_passage",
+                  "passageId": "passage_4291a6a1cef428f450b2c6ebde3d9594",
+                  "status": "ready",
+                  "source": {
+                    "parts": 1,
+                    "statusCounts": {
+                      "ready": 1
+                    },
+                    "location": {
+                      "part": "text",
+                      "lines": 5,
+                      "status": "ready"
+                    },
+                    "warningParts": 0,
+                    "scope": "summary_and_cited_location_only",
+                    "fullCoverageAvailableOnVersion": true
+                  },
+                  "limitations": []
+                },
+                "warnings": []
+              }
+            ],
+            "neighbors": [
+              {
+                "id": "passage_6e026f4a303eef1404367a4a1890efb5",
+                "ordinal": 0,
+                "locator": {
+                  "kind": "text",
+                  "charEnd": 51,
+                  "lineEnd": 2,
+                  "charStart": 0,
+                  "lineStart": 1
+                }
+              },
+              {
+                "id": "passage_4291a6a1cef428f450b2c6ebde3d9594",
+                "ordinal": 2,
+                "locator": {
+                  "kind": "text",
+                  "charEnd": 74,
+                  "lineEnd": 5,
+                  "charStart": 0,
+                  "lineStart": 5
+                }
+              }
+            ]
+          },
+          "completedAt": "2026-09-27T16:14:05.689Z"
+        }
+      ],
+      "modelOutputs": [
+        {
+          "repairErrors": [],
+          "startedAt": "2026-09-27T16:13:55.390Z",
+          "result": {
+            "ok": true,
+            "status": "insufficient_evidence",
+            "claims": [
+              {
+                "text": "The project scope document states \"This project studies catalyst stability\" and that \"Protocol RQ-001 applies only to dry samples.\" It contains no mention of cobalt or a cobalt concentration.",
+                "citations": [
+                  {
+                    "evidenceId": "evidence_73b6bd31a49edd5cee525bd6",
+                    "quote": "RQ-SCOPE: This project studies catalyst stability."
+                  },
+                  {
+                    "evidenceId": "evidence_88591c732bd26f4e3851667f",
+                    "quote": "Protocol RQ-001 applies only to dry samples."
+                  }
+                ],
+                "numericBindings": []
+              }
+            ],
+            "missingEvidence": [
+              "A project source establishing a cobalt concentration (document passage, raw workbook cell, confirmed region, or accepted experiment field). Searches for 'cobalt', 'Co', and 'Co concentration' returned no matches across uploaded documents, raw workbook cells, confirmed regions, and accepted field names in this project."
+            ],
+            "metadata": {
+              "provider": "deepseek",
+              "model": "deepseek-v4-pro",
+              "latencyMs": 20379,
+              "usage": {
+                "inputTokens": 18767,
+                "outputTokens": 1885,
+                "reasoningTokens": 1369
+              },
+              "toolRounds": 3,
+              "requestedMaxTokens": 4000,
+              "finalRequestedMaxTokens": 4000,
+              "attemptCount": 1,
+              "stopReason": "stop"
+            }
+          },
+          "completedAt": "2026-09-27T16:14:15.769Z"
+        }
+      ],
+      "elapsedMs": 20601,
+      "semanticReview": "pending_independent_review"
+    }
+  ],
+  "execution": {
+    "startedAt": "2026-09-27T16:13:49.118Z",
+    "files": {
+      "src/research/citedAnswer.js": "b39e5bb807f9e30549412f05850314e629957facbb7ff7d9aeaee6d3eeea5d08",
+      "src/research/evidenceTools.js": "f8b07846ed7b91d28700de4d86cfe3190324be982bbcb0d438f82692754c9662",
+      "src/research/qaBudget.js": "144deccd1b105b24c380055dbbf6b67094cc3013addcd45945ff139419ee659f",
+      "src/research/testing/researchQaCorpus.js": "b8c9ec0d0a5a8425ed29082ac1a89049d8e5f0cbed939b6fc77fc1e3c83a82d6",
+      "src/research/testing/researchQaLabels.js": "5b3e5d19db8a2ced5bf71715d4762d8f35c9e0983ac1868bea00279c38136042",
+      "src/ai/gateway.js": "f7d685ce300bef67e45818a4fe30386c294ecc6111f46788e3581f6f7b41924e",
+      "src/ai/deepseek.js": "1a2b94539c70af64c66fa1680694b59319782bb0f680857c7c3a38d00b6d01a4",
+      "src/v1/research-qa/research-evidence.service.ts": "92d2eb90081bea2efbed47d388f0c9561577272752072596293c5218ac4fd411",
+      "src/v1/research-qa/research-evidence.repository.ts": "6b8c06b68d2eae5aeee281968b75ab1947d4b6530989be73cd9ff1a899cbf36f",
+      "src/v1/research-qa/research-questions.service.ts": "5af112b9de8351243984c3743cc16867359af8b25699c0c9069fbf2591afcc5b"
+    },
+    "limits": {
+      "question": 4000,
+      "search": 8,
+      "candidates": 40,
+      "cells": 240,
+      "fields": 20,
+      "points": 40,
+      "characters": 4000,
+      "toolBytes": 32000,
+      "evidenceBytes": 160000,
+      "toolCalls": 24,
+      "toolRounds": 8,
+      "requests": 12,
+      "tokens": 60000,
+      "deadlineMs": 120000
+    },
+    "thinking": {
+      "enabled": true,
+      "effort": "high"
+    },
+    "maxOutputTokens": 4000
+  }
+}

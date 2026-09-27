@@ -1113,6 +1113,256 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/projects/{projectId}/research-questions:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectId" }
+    get:
+      tags: [Evidence]
+      operationId: listResearchQuestions
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      description: Personal project Q&A with narrow answer persistence. Public Guest is denied; no scientific mutation permission is granted.
+      parameters: [{ $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/DocumentPageLimit" }]
+      responses:
+        "200": { description: Authorized question state or pinned evidence., content: { application/json: { schema: { $ref: "#/components/schemas/ResearchQuestionPage" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { description: A bounded question or resource budget is already in use. }
+    post:
+      tags: [Evidence]
+      operationId: createResearchQuestion
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      description: Personal project Q&A with narrow answer persistence. Public Guest is denied; no scientific mutation permission is granted.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CreateResearchQuestionRequest" } } }
+      responses:
+        "202": { description: Authorized question state or pinned evidence., content: { application/json: { schema: { $ref: "#/components/schemas/ResearchQuestionResponse" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { description: A bounded question or resource budget is already in use. }
+  /api/v1/projects/{projectId}/research-questions/{researchQuestionId}:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectId" }
+      - { name: researchQuestionId, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 160 } }
+    get:
+      tags: [Evidence]
+      operationId: getResearchQuestion
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      description: Personal project Q&A with narrow answer persistence. Public Guest is denied; no scientific mutation permission is granted.
+      responses:
+        "200": { description: Authorized question state or pinned evidence., content: { application/json: { schema: { $ref: "#/components/schemas/ResearchQuestionResponse" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { description: A bounded question or resource budget is already in use. }
+  /api/v1/projects/{projectId}/research-questions/{researchQuestionId}/retry:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectId" }
+      - { name: researchQuestionId, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 160 } }
+    post:
+      tags: [Evidence]
+      operationId: retryResearchQuestion
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      description: Personal project Q&A with narrow answer persistence. Public Guest is denied; no scientific mutation permission is granted.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/EmptyRequest" } } }
+      responses:
+        "202": { description: Authorized question state or pinned evidence., content: { application/json: { schema: { $ref: "#/components/schemas/ResearchQuestionResponse" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { description: A bounded question or resource budget is already in use. }
+  /api/v1/projects/{projectId}/research-questions/{researchQuestionId}/cancel:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectId" }
+      - { name: researchQuestionId, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 160 } }
+    post:
+      tags: [Evidence]
+      operationId: cancelResearchQuestion
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      description: Personal project Q&A with narrow answer persistence. Public Guest is denied; no scientific mutation permission is granted.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/EmptyRequest" } } }
+      responses:
+        "200": { description: Authorized question state or pinned evidence., content: { application/json: { schema: { $ref: "#/components/schemas/ResearchQuestionResponse" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { description: A bounded question or resource budget is already in use. }
+  /api/v1/projects/{projectId}/research-questions/{researchQuestionId}/evidence/{researchEvidenceId}:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectId" }
+      - { name: researchQuestionId, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 160 } }
+      - { name: researchEvidenceId, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 100 } }
+    get:
+      tags: [Evidence]
+      operationId: getResearchQuestionEvidence
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      description: Personal project Q&A with narrow answer persistence. Public Guest is denied; no scientific mutation permission is granted.
+      responses:
+        "200": { description: Authorized question state or pinned evidence., content: { application/json: { schema: { $ref: "#/components/schemas/ResearchEvidenceResponse" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { description: A bounded question or resource budget is already in use. }
+  /api/v1/projects/{projectId}/context-documents:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }]
+    get:
+      tags: [Evidence]
+      operationId: listContextDocuments
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      parameters: [{ $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/DocumentPageLimit" }]
+      responses:
+        "200": { description: Active documents and their current versions., content: { application/json: { schema: { $ref: "#/components/schemas/ContextDocumentPage" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [Evidence]
+      operationId: registerContextDocument
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/RegisterContextDocumentRequest" } } }
+      responses:
+        "201": { description: Registered immutable source version; parsing starts immediately., content: { application/json: { schema: { $ref: "#/components/schemas/RegisterContextDocumentResponse" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { description: File exceeds the document size limit. }
+        "415": { description: "File type, signature or declared MIME is unsupported." }
+        "422": { description: File cannot be decoded. }
+        "429": { description: Bounded parser concurrency is exhausted; retry later. }
+  /api/v1/projects/{projectId}/context-documents/{documentId}:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }, { $ref: "#/components/parameters/ContextDocumentId" }]
+    get:
+      tags: [Evidence]
+      operationId: getContextDocument
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      parameters: [{ $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/DocumentPageLimit" }]
+      responses:
+        "200": { description: Document and bounded immutable version history., content: { application/json: { schema: { $ref: "#/components/schemas/ContextDocumentDetail" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/projects/{projectId}/context-documents/{documentId}/archive:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }, { $ref: "#/components/parameters/ContextDocumentId" }]
+    post:
+      tags: [Evidence]
+      operationId: archiveContextDocument
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ArchiveContextDocumentRequest" } } }
+      responses:
+        "200": { description: Archived source; historical references remain readable when authorized., content: { application/json: { schema: { $ref: "#/components/schemas/ContextDocumentResponse" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /api/v1/projects/{projectId}/context-document-versions/{versionId}:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }, { $ref: "#/components/parameters/ContextDocumentVersionId" }]
+    get:
+      tags: [Evidence]
+      operationId: getContextDocumentVersion
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      responses:
+        "200": { description: Source processing state and bounded coverage., content: { application/json: { schema: { $ref: "#/components/schemas/ContextDocumentVersionResponse" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/projects/{projectId}/context-document-versions/{versionId}/retry:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }, { $ref: "#/components/parameters/ContextDocumentVersionId" }]
+    post:
+      tags: [Evidence]
+      operationId: retryContextDocumentVersion
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, additionalProperties: false } } }
+      responses:
+        "200": { description: "Resumed bounded processing, reusing completed pages.", content: { application/json: { schema: { $ref: "#/components/schemas/ContextDocumentVersionResponse" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { description: Parser concurrency is exhausted. }
+  /api/v1/projects/{projectId}/context-document-versions/{versionId}/passages:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }, { $ref: "#/components/parameters/ContextDocumentVersionId" }]
+    get:
+      tags: [Evidence]
+      operationId: listContextDocumentPassages
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      parameters: [{ $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/DocumentPageLimit" }]
+      responses:
+        "200": { description: Bounded passages with exact source positions., content: { application/json: { schema: { $ref: "#/components/schemas/ContextDocumentPassagePage" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/projects/{projectId}/context-document-versions/{versionId}/passages/{passageId}:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }, { $ref: "#/components/parameters/ContextDocumentVersionId" }, { $ref: "#/components/parameters/ContextDocumentPassageId" }]
+    get:
+      tags: [Evidence]
+      operationId: readContextDocumentPassage
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      responses:
+        "200": { description: One source passage pinned to its original file and processing version., content: { application/json: { schema: { $ref: "#/components/schemas/ContextDocumentPassageResponse" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/projects/{projectId}/context-document-versions/{versionId}/pages/{pageNumber}:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectId" }
+      - { $ref: "#/components/parameters/ContextDocumentVersionId" }
+      - { name: pageNumber, in: path, required: true, schema: { type: integer, minimum: 1, maximum: 200 } }
+    get:
+      tags: [Evidence]
+      operationId: renderContextDocumentPage
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      responses:
+        "200": { description: Original PDF page at its displayed rotation; private no-store., content: { image/png: { schema: { type: string, format: binary } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { description: Source page cannot be rendered. }
+        "429": { description: Source rendering concurrency is exhausted. }
   /api/v1/projects/{projectId}/files:
     parameters: [{ $ref: "#/components/parameters/ProjectId" }]
     get:
@@ -2611,6 +2861,25 @@ components:
       in: header
       required: true
       schema: { type: string, minLength: 1, maxLength: 200, pattern: "^[A-Za-z0-9._:-]+$" }
+    ContextDocumentId:
+      name: documentId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/OpaqueId" }
+    ContextDocumentVersionId:
+      name: versionId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/OpaqueId" }
+    ContextDocumentPassageId:
+      name: passageId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/OpaqueId" }
+    DocumentPageLimit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 40, default: 20 }
     Cursor:
       name: cursor
       in: query
@@ -3770,6 +4039,7 @@ components:
         status: { type: string, enum: [active, archived] }
         projectProfile: { $ref: "#/components/schemas/ProjectProfile" }
         shellOnly: { type: boolean, default: false }
+        canAskResearchQuestions: { type: boolean, readOnly: true, description: Full-project View member may use cited Q&A; false for public Guest and selected-experiments-only scope. }
         capabilities:
           type: array
           uniqueItems: true
@@ -4473,6 +4743,173 @@ components:
           oneOf:
             - { $ref: "#/components/schemas/JsonObject" }
             - type: "null"
+    RegisterContextDocumentRequest:
+      type: object
+      additionalProperties: false
+      required: [fileObjectId]
+      properties:
+        fileObjectId: { $ref: "#/components/schemas/OpaqueId" }
+    ArchiveContextDocumentRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      properties:
+        expectedVersion: { type: integer, minimum: 1 }
+    ContextDocument:
+      type: object
+      additionalProperties: false
+      required: [id, labId, projectId, originalName, status, currentVersionId, version, createdBy, createdAt, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        labId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        originalName: { type: string }
+        status: { type: string, enum: [active, archived] }
+        currentVersionId: { type: [string, "null"] }
+        version: { type: integer, minimum: 1 }
+        createdBy: { type: string }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+    CreateResearchQuestionRequest:
+      type: object
+      additionalProperties: false
+      required: [requestKey, question]
+      properties:
+        requestKey: { type: string, minLength: 8, maxLength: 100, pattern: '^[A-Za-z0-9_-]+$' }
+        question: { type: string, minLength: 1, maxLength: 4000 }
+    ResearchQuestion:
+      type: object
+      additionalProperties: false
+      required: [runId, projectId, actorUserId, requestKey, question, status, attempt, usage]
+      properties:
+        runId: { type: string }
+        labId: { type: string }
+        projectId: { type: string }
+        actorUserId: { type: string }
+        requestKey: { type: string }
+        question: { type: string }
+        status: { type: string, enum: [queued, running, interrupted, completed, failed, cancelled] }
+        attempt: { type: integer }
+        usage: { $ref: "#/components/schemas/JsonObject" }
+        failureCode: { type: [string, "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+    ResearchQuestionResponse:
+      type: object
+      additionalProperties: false
+      required: [request, artifact]
+      properties:
+        request: { $ref: "#/components/schemas/ResearchQuestion" }
+        artifact: { anyOf: [{ $ref: "#/components/schemas/JsonObject" }, { type: "null" }] }
+        reused: { type: boolean }
+    ResearchQuestionPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/ResearchQuestion" } }
+        nextCursor: { type: [string, "null"] }
+    ResearchEvidenceResponse:
+      type: object
+      additionalProperties: false
+      required: [evidence, capturedAt]
+      properties:
+        evidence: { $ref: "#/components/schemas/JsonObject" }
+        capturedAt: { type: string }
+    EmptyRequest:
+      type: object
+      additionalProperties: false
+      properties: {}
+    ContextDocumentVersion:
+      type: object
+      additionalProperties: false
+      required: [id, documentId, projectId, fileObjectId, versionNumber, contentHash, processingVersion, status, metadata, failureCode, createdBy, createdAt, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        documentId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        fileObjectId: { $ref: "#/components/schemas/OpaqueId" }
+        versionNumber: { type: integer, minimum: 1 }
+        contentHash: { type: string, pattern: "^[a-f0-9]{64}$" }
+        processingVersion: { type: string }
+        status: { type: string, enum: [pending, processing, ready, partial, failed, interrupted] }
+        metadata: { $ref: "#/components/schemas/JsonObject" }
+        failureCode: { $ref: "#/components/schemas/NullableString" }
+        createdBy: { $ref: "#/components/schemas/OpaqueId" }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    ContextDocumentPassage:
+      type: object
+      additionalProperties: false
+      required: [versionId, projectId, id, ordinal, text, locator, metadata]
+      properties:
+        versionId: { $ref: "#/components/schemas/OpaqueId" }
+        projectId: { $ref: "#/components/schemas/OpaqueId" }
+        id: { $ref: "#/components/schemas/OpaqueId" }
+        ordinal: { type: integer, minimum: 0 }
+        text: { type: string, maxLength: 4000 }
+        locator: { $ref: "#/components/schemas/JsonObject" }
+        metadata: { $ref: "#/components/schemas/JsonObject" }
+    RegisterContextDocumentResponse:
+      type: object
+      additionalProperties: false
+      required: [document, version, reused]
+      properties:
+        document: { $ref: "#/components/schemas/ContextDocument" }
+        version: { $ref: "#/components/schemas/ContextDocumentVersion" }
+        reused: { type: boolean }
+    ContextDocumentResponse:
+      type: object
+      additionalProperties: false
+      required: [document]
+      properties:
+        document: { $ref: "#/components/schemas/ContextDocument" }
+    ContextDocumentVersionResponse:
+      type: object
+      additionalProperties: false
+      required: [version]
+      properties:
+        version: { $ref: "#/components/schemas/ContextDocumentVersion" }
+    ContextDocumentPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          maxItems: 40
+          items:
+            type: object
+            additionalProperties: false
+            required: [document, currentVersion]
+            properties:
+              document: { $ref: "#/components/schemas/ContextDocument" }
+              currentVersion:
+                oneOf: [{ $ref: "#/components/schemas/ContextDocumentVersion" }, { type: "null" }]
+        nextCursor: { $ref: "#/components/schemas/NullableString" }
+    ContextDocumentDetail:
+      type: object
+      additionalProperties: false
+      required: [document, versions, nextCursor]
+      properties:
+        document: { $ref: "#/components/schemas/ContextDocument" }
+        versions: { type: array, maxItems: 40, items: { $ref: "#/components/schemas/ContextDocumentVersion" } }
+        nextCursor: { $ref: "#/components/schemas/NullableString" }
+    ContextDocumentPassagePage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, maxItems: 40, items: { $ref: "#/components/schemas/ContextDocumentPassage" } }
+        nextCursor: { $ref: "#/components/schemas/NullableString" }
+    ContextDocumentPassageResponse:
+      type: object
+      additionalProperties: false
+      required: [document, version, passage]
+      properties:
+        document: { $ref: "#/components/schemas/ContextDocument" }
+        version: { $ref: "#/components/schemas/ContextDocumentVersion" }
+        passage: { $ref: "#/components/schemas/ContextDocumentPassage" }
     FileObject:
       type: object
       additionalProperties: false

@@ -1,0 +1,15 @@
+import { apiV1Request } from "./backendApiV1Client.ts";
+
+export const listResearchQuestions = (projectId, query = {}, options = {}) => apiV1Request("get", "/api/v1/projects/{projectId}/research-questions", { pathParams: { projectId }, query, ...options });
+export const createResearchQuestion = (projectId, body, options = {}) => apiV1Request("post", "/api/v1/projects/{projectId}/research-questions", { pathParams: { projectId }, body, ...options });
+export const getResearchQuestion = (projectId, researchQuestionId, options = {}) => apiV1Request("get", "/api/v1/projects/{projectId}/research-questions/{researchQuestionId}", { pathParams: { projectId, researchQuestionId }, ...options });
+export const cancelResearchQuestion = (projectId, researchQuestionId, options = {}) => apiV1Request("post", "/api/v1/projects/{projectId}/research-questions/{researchQuestionId}/cancel", { pathParams: { projectId, researchQuestionId }, body: {}, ...options });
+export const retryResearchQuestion = (projectId, researchQuestionId, options = {}) => apiV1Request("post", "/api/v1/projects/{projectId}/research-questions/{researchQuestionId}/retry", { pathParams: { projectId, researchQuestionId }, body: {}, ...options });
+export const getResearchEvidence = (projectId, researchQuestionId, researchEvidenceId, options = {}) => apiV1Request("get", "/api/v1/projects/{projectId}/research-questions/{researchQuestionId}/evidence/{researchEvidenceId}", { pathParams: { projectId, researchQuestionId, researchEvidenceId }, ...options });
+export const listContextDocuments = (projectId, query = {}, options = {}) => apiV1Request("get", "/api/v1/projects/{projectId}/context-documents", { pathParams: { projectId }, query, ...options });
+export const registerContextDocument = (projectId, fileObjectId, options = {}) => apiV1Request("post", "/api/v1/projects/{projectId}/context-documents", { pathParams: { projectId }, body: { fileObjectId }, ...options });
+export const getContextDocumentVersion = (projectId, versionId, options = {}) => apiV1Request("get", "/api/v1/projects/{projectId}/context-document-versions/{versionId}", { pathParams: { projectId, versionId }, ...options });
+export const retryContextDocumentVersion = (projectId, versionId, options = {}) => apiV1Request("post", "/api/v1/projects/{projectId}/context-document-versions/{versionId}/retry", { pathParams: { projectId, versionId }, body: {}, ...options });
+export const archiveContextDocument = (projectId, documentId, expectedVersion, options = {}) => apiV1Request("post", "/api/v1/projects/{projectId}/context-documents/{documentId}/archive", { pathParams: { projectId, documentId }, body: { expectedVersion }, ...options });
+export const listContextDocumentPassages = (projectId, versionId, query = {}, options = {}) => apiV1Request("get", "/api/v1/projects/{projectId}/context-document-versions/{versionId}/passages", { pathParams: { projectId, versionId }, query, ...options });
+export const contextDocumentPageUrl = (projectId, versionId, pageNumber) => `/api/v1/projects/${encodeURIComponent(projectId)}/context-document-versions/${encodeURIComponent(versionId)}/pages/${Number(pageNumber)}`;

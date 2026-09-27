@@ -2,11 +2,21 @@
 
 Status: active
 Read when: starting or continuing a non-trivial LabRat milestone.
-Last reviewed: 2026-09-13
+Last reviewed: 2026-09-27
 
 This file is the reusable execution checklist for Codex work. It should describe how to run a milestone, not what the current product strategy is. Current milestone state belongs in `doc/current-milestone.md`; recent completed work belongs in `doc/PROGRESS.md`.
 
 ## Long-Task Loop
+
+Research Q&A release (2026-09-27):
+
+- [x] Preserve local work and integrate only Q&A on latest remote main.
+- [x] Keep remote migrations 031–033; append Q&A migrations 034/035.
+- [x] Preserve the completed synthetic real-provider review and original transcripts.
+- [x] Complete the integrated release regression and browser/database checks.
+- [ ] Push the reviewed release and verify hosted deployment and production health.
+
+Release evidence: doc/qa/research-qa-deployment.md.
 
 Current Claude v1 integration milestone:
 

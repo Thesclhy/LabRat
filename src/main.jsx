@@ -17,6 +17,7 @@ import { WorkbookReviewDock } from "./components/WorkbookReviewDock.jsx";
 import { ExperimentBrowser } from "./components/ExperimentBrowser.jsx";
 import { AnalysisConversationCard } from "./components/AnalysisConversationCard.jsx";
 import { AnalysisReviewWorkspace } from "./components/AnalysisReviewWorkspace.jsx";
+import { ResearchQaPanel } from "./components/ResearchQaPanel.jsx";
 import {
   getAnalysisThread,
   getProjectAnalysisCapabilities,
@@ -514,6 +515,7 @@ export function Topbar({
   onOpenManagement,
   canCreateProject = false,
   canEditProject = false,
+  canAskProject = false,
 }) {
   const showProjectTabs = workspaceMode !== "dashboard" && !!activeProjectId;
   const showProjectSwitcher = workspaceMode !== "dashboard";
@@ -561,7 +563,7 @@ export function Topbar({
             canEditProject={canEditProject}
           />
         )}
-        <button className="agent-btn" type="button" disabled={!canEditProject} onClick={onAgent}>
+        <button className="agent-btn" type="button" disabled={!canEditProject && !canAskProject} onClick={onAgent}>
           <img src={`${import.meta.env.BASE_URL}labrat-logo.png`} alt="" />
           <span>Ask</span>
         </button>
@@ -847,7 +849,7 @@ export function ProjectOverview({
   onGoManuscript,
 }) {
   const [workbookListOpen, setWorkbookListOpen] = useState(false);
-  const { canEdit } = useWorkspacePermissions();
+  const { canEdit, canAsk } = useWorkspacePermissions();
   const [deletingWorkbookSessionId, setDeletingWorkbookSessionId] = useState("");
   const [deleteWorkbookError, setDeleteWorkbookError] = useState("");
   const workbookFileInputRef = useRef(null);
@@ -932,7 +934,7 @@ export function ProjectOverview({
           detail="Conversational help for guided workflows and questions; actions still land in review surfaces"
           action="Open Ask LabRat"
           onClick={onAskLabRat}
-          actionDisabled={!canEdit}
+          actionDisabled={!canEdit && !canAsk}
         />
         <ProjectOverviewCard title="Project profile" value={`${summary.profileCount}/7`} detail={summary.profileComplete ? "Enough context for chart AI" : "Add research goal, materials, methods, and analysis notes"} action="Edit profile" onClick={onOpenProfile} actionDisabled={!canEdit} />
         <ProjectOverviewCard
@@ -2100,6 +2102,7 @@ export function AgentPanel({
   onRequestedAnalysisTargetHandled,
   requestedDraft = "",
   onRequestedDraftHandled,
+  onAskSources,
 }) {
   const { canApprove } = useWorkspacePermissions();
   const workbookAbortRef = useRef(new AbortController());
@@ -2668,6 +2671,7 @@ export function AgentPanel({
         <span>the lab rat</span>
       </div>
       <div className="agent-head-actions">
+        {onAskSources && <button className="qa-return" type="button" onClick={onAskSources}>Source questions</button>}
         <button type="button" aria-label={expanded ? "Collapse Lab Rat panel" : "Expand Lab Rat panel"} title={expanded ? "Collapse" : "Expand"} onClick={() => setExpanded((value) => !value)}>{expanded ? "\u2199" : "\u2197"}</button>
         <button type="button" className={settingsOpen ? "active" : ""} aria-label="Settings" title="Settings" onClick={openSettings}>&#9881;</button>
         <button type="button" aria-label="Reset chat" title="Reset chat" onClick={resetChat}>&#8635;</button>
@@ -2894,8 +2898,12 @@ function App() {
   const [chartSpecInsertRequest, setChartSpecInsertRequest] = useState(null);
   const [dirty, setDirty] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
+  const [assistantMode, setAssistantMode] = useState("questions");
   const [requestedAnalysisOutputTarget, setRequestedAnalysisOutputTarget] = useState("");
   const [requestedAgentDraft, setRequestedAgentDraft] = useState("");
+  useEffect(() => {
+    if (requestedAnalysisOutputTarget || requestedAgentDraft || pendingChartAnalysis) setAssistantMode("workflow");
+  }, [requestedAnalysisOutputTarget, requestedAgentDraft, pendingChartAnalysis]);
   const [onboardingRenderVersion, setOnboardingRenderVersion] = useState(0);
   const [analysisReviewState, setAnalysisReviewState] = useState(null);
   const [projectLoaded, setProjectLoaded] = useState(false);
@@ -3333,6 +3341,7 @@ function App() {
       setSourceError("Select or create a server project before uploading a workbook.");
       return;
     }
+    setAssistantMode("workflow");
     setAgentOpen(true);
   };
   const [requestedWorkbookFiles, setRequestedWorkbookFiles] = useState(null);
@@ -3345,6 +3354,7 @@ function App() {
       return;
     }
     setRequestedWorkbookFiles({ requestId: `workbook_files_${uid()}`, files: selected });
+    setAssistantMode("workflow");
     setAgentOpen(true);
   };
   const uploadOnboardingWorkbook = async (file) => {
@@ -4145,6 +4155,7 @@ function App() {
         key={`${activeProjectId}:${onboardingRenderVersion}`}
         projectId={activeProjectId}
         projectState={projectState}
+        onAskSources={permissions.canAsk ? () => { setAssistantMode("questions"); setAgentOpen(true); } : undefined}
         onUploadWorkbook={uploadOnboardingWorkbook}
         onHydrateWorkbookReview={hydrateOnboardingWorkbookReview}
         reviewState={workbookReviewState}
@@ -4202,7 +4213,7 @@ function App() {
   }
   return (
     <WorkspacePermissions.Provider value={permissions}>
-      <Topbar tab={tab} setTab={setTab} dirty={dirty} onSave={save} onAgent={() => setAgentOpen(true)}
+      <Topbar tab={tab} setTab={setTab} dirty={dirty} onSave={save} onAgent={() => { setAssistantMode("questions"); setAgentOpen(true); }}
         workspaceMode={workspaceMode}
         onOpenDashboard={openProjectDashboard}
         sourceName={sourceName}
@@ -4224,11 +4235,12 @@ function App() {
         onOpenManagement={openManagement}
         canCreateProject={canManageLab}
         canEditProject={canEditProject}
+        canAskProject={permissions.canAsk}
       />
       {!canEditProject && <div className="workspace-readonly" role="status">Read-only access · Draft editing and analysis proposals are disabled.</div>}
       {tab === "overview" && <ProjectOverview
         projectState={projectState}
-        onAskLabRat={() => setAgentOpen(true)}
+        onAskLabRat={() => { setAssistantMode("questions"); setAgentOpen(true); }}
         onOpenProfile={() => setProfileChatOpen(true)}
         onUploadWorkbook={continueWorkbookReview}
         onUploadWorkbookFiles={uploadWorkbookFilesFromOverview}
@@ -4362,10 +4374,23 @@ function App() {
         onCreate={createProject}
         onClose={() => setNewProjectOpen(false)}
       />
-      {canEditProject && <AgentPanel
+      {permissions.canAsk && assistantMode === "questions" && <ResearchQaPanel
+        key={`qa-${authState.user.id}-${activeProjectId}`}
+        open={agentOpen}
+        onClose={() => setAgentOpen(false)}
+        projectId={activeProjectId}
+        canEdit={canEditProject}
+        projectState={projectState}
+        onWorkflow={() => setAssistantMode("workflow")}
+        onAnalysis={(question) => { setRequestedAgentDraft(question); setAssistantMode("workflow"); }}
+        onWorkbookUploaded={async () => { const state = await getServerProjectState(activeProjectId); applyProjectWorkspaceRefresh(state); }}
+        onOpenWorkbook={(link) => { handleWorkbookReviewLinkOpen(link); setAgentOpen(false); }}
+      />}
+      {canEditProject && (assistantMode === "workflow" || !permissions.canAsk) && <AgentPanel
         key={activeProjectId}
         open={agentOpen}
         setOpen={setAgentOpen}
+        onAskSources={permissions.canAsk ? () => setAssistantMode("questions") : undefined}
         blocks={blocks}
         setBlocks={setBlocks}
         references={references}

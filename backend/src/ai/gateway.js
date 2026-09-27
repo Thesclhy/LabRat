@@ -120,7 +120,7 @@ export function createAiGateway({ config = {}, fetchImpl = globalThis.fetch, now
     configured: SUPPORTED_PROVIDERS.has(settings.provider) && Boolean(settings.apiKey),
   });
 
-  const invoke = async ({ withTools, ...request }) => {
+  const invoke = async ({ withTools, budget, ...request }) => {
     if (!selectedAdapter) return {
       ok: false,
       warning: unavailableWarning(
@@ -131,7 +131,7 @@ export function createAiGateway({ config = {}, fetchImpl = globalThis.fetch, now
     const requestFn = withTools
       ? selectedAdapter.requestJsonWithTools
       : selectedAdapter.requestJson;
-    return requestFn({ ...request, config: settings, fetchImpl });
+    return requestFn({ ...request, config: settings, fetchImpl: budget ? budget.wrapFetch(fetchImpl) : fetchImpl });
   };
 
   const requestStructuredInternal = async ({
@@ -145,7 +145,9 @@ export function createAiGateway({ config = {}, fetchImpl = globalThis.fetch, now
     toolHandlers = {},
     maxToolRounds = 12,
     thinking = { enabled: false },
+    allowRepair = true,
     signal,
+    budget,
   }) => {
     if (!SUPPORTED_PROVIDERS.has(settings.provider)) {
       return {
@@ -208,12 +210,13 @@ export function createAiGateway({ config = {}, fetchImpl = globalThis.fetch, now
         maxToolRounds,
         thinking: attemptThinking,
         signal,
+        budget,
       });
       addUsage(usage, response.usage);
       totalToolRounds += Number(response.toolRounds) || 0;
 
       if (!response.ok) {
-        if (attempt === 0 && REPAIRABLE_WARNING_CODES.has(response.warning?.code)) {
+        if (allowRepair && attempt === 0 && REPAIRABLE_WARNING_CODES.has(response.warning?.code)) {
           repairAttempts = 1;
           if (response.warning?.code === "ai_output_truncated") {
             nextRequestMaxTokens = normalizedTruncationRetryMaxTokens;
@@ -248,7 +251,7 @@ export function createAiGateway({ config = {}, fetchImpl = globalThis.fetch, now
         };
       }
 
-      if (attempt === 0) {
+      if (allowRepair && attempt === 0) {
         repairAttempts = 1;
         prompt = repairPrompt(prompt, response.text, validation.errors);
         continue;

@@ -105,3 +105,19 @@ test("scanWorkbook preserves comments, styles, and hidden row/column hints when 
   assert.equal(labelCell.comments[0].text, "Experiment label");
   assert.equal(Object.hasOwn(labelCell, "style"), true);
 });
+
+test("a formula without a saved numeric cache remains missing instead of becoming a parser placeholder zero", () => {
+  const workbook = XLSX.utils.book_new();
+  const sheet = XLSX.utils.aoa_to_sheet([["Saved", "Missing"], [0, null]]);
+  sheet.A2 = { t: "n", f: "1-1", v: 0 };
+  sheet.B2 = { t: "n", f: "A2+1" };
+  sheet["!ref"] = "A1:B2";
+  XLSX.utils.book_append_sheet(workbook, sheet, "Cache");
+  const result = scanWorkbook({ filename: "formula-cache.xlsx", buffer: XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) });
+  const cells = result.sheets[0].cellGrid.cells;
+  assert.equal(cells.find((cell) => cell.address === "A2").rawValue, 0);
+  const missing = cells.find((cell) => cell.address === "B2");
+  assert.equal(missing.formula, "A2+1");
+  assert.equal(missing.rawValue, null);
+  assert.equal(missing.formattedValue, "");
+});

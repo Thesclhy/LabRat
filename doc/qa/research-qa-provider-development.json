@@ -1,0 +1,984 @@
+{
+  "schemaVersion": "labrat.researchQaEvaluation.v1",
+  "material": "synthetic only",
+  "provider": {
+    "provider": "deepseek",
+    "model": "deepseek-v4-pro",
+    "configured": true
+  },
+  "evaluation": "development",
+  "completed": true,
+  "records": [
+    {
+      "id": "J6",
+      "group": "joint",
+      "split": "held_out",
+      "question": "RQ-DURATION 当前版本和 Exp17 记录的时长分别是多少？",
+      "expected": [
+        "40 minutes",
+        "30 min",
+        "separate sources"
+      ],
+      "supports": [
+        "revised",
+        "experiment"
+      ],
+      "query": "RQ-DURATION",
+      "notes": "",
+      "allowedScope": "project_analysis synthetic sources only",
+      "minimumSupport": [
+        {
+          "kind": "document",
+          "source": "revised",
+          "text": "The documented duration is 40 minutes for dry samples.",
+          "locator": {
+            "lineStart": 1
+          }
+        },
+        {
+          "kind": "field",
+          "columnId": "duration",
+          "value": 30,
+          "unit": "min"
+        }
+      ],
+      "control": null,
+      "retrievalReads": [
+        {
+          "kind": "experiment",
+          "query": "Exp17"
+        }
+      ],
+      "controlReason": null,
+      "forbidden": [
+        "new scientific values",
+        "cross-project evidence",
+        "unqualified scope expansion"
+      ],
+      "request": {
+        "runId": "agent_run_a200393d0f7145e78051f4f7",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "eval-J6-1790527132006",
+        "question": "RQ-DURATION 当前版本和 Exp17 记录的时长分别是多少？",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 16064,
+          "knownCost": null,
+          "toolCalls": 3,
+          "toolRounds": 2,
+          "inputTokens": 16234,
+          "lastActiveAt": 1790527148086,
+          "outputTokens": 1627,
+          "reservedTokens": 0,
+          "visibleToolCalls": 4,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-27T16:38:52.015Z",
+        "updatedAt": "2026-09-27T16:39:08.090Z"
+      },
+      "artifact": {
+        "id": "answer_30d217d893364bb1a37bd98c",
+        "runId": "agent_run_a200393d0f7145e78051f4f7",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "RQ-DURATION 当前版本记录的时长为 40 分钟（针对干燥样品）。",
+              "citations": [
+                {
+                  "quote": "RQ-DURATION revision 2: The documented duration is 40 minutes for dry samples.",
+                  "evidenceId": "evidence_46a07a4ecc7494ff3075fc5b"
+                }
+              ],
+              "numericBindings": []
+            },
+            {
+              "text": "Exp17 记录的时长为 30 分钟（Duration 字段，单位 min）。",
+              "citations": [
+                {
+                  "quote": "Duration",
+                  "evidenceId": "evidence_e9296520976f3b9e835f9069"
+                },
+                {
+                  "quote": "30",
+                  "evidenceId": "evidence_e9296520976f3b9e835f9069"
+                }
+              ],
+              "numericBindings": [
+                {
+                  "path": "/data/fields/4/value",
+                  "unit": "min",
+                  "value": 30,
+                  "evidenceId": "evidence_e9296520976f3b9e835f9069",
+                  "numericScale": null
+                }
+              ]
+            }
+          ],
+          "status": "answered",
+          "limitations": [
+            "Values retain their stored scale and unit; no conversion or new calculation was performed.",
+            "Only the cited window was read; additional records remain available."
+          ],
+          "missingEvidence": []
+        },
+        "evidence": [
+          {
+            "id": "evidence_46a07a4ecc7494ff3075fc5b",
+            "kind": "document_passage",
+            "label": "RQ-duration.txt",
+            "locator": {
+              "kind": "text",
+              "charEnd": 78,
+              "lineEnd": 1,
+              "charStart": 0,
+              "lineStart": 1
+            },
+            "version": {
+              "versionId": "document_version_6c6640975d3b4070b3552116",
+              "documentId": "context_doc_14f388b974d349b3b2ca6238",
+              "contentHash": "8a32b010542958d2651067b823a655ef360c5be93176987fcae22b0317da5507",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 1,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "part": "text",
+                  "lines": 1,
+                  "status": "ready"
+                },
+                "statusCounts": {
+                  "ready": 1
+                },
+                "warningParts": 0,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "ready",
+              "passageId": "passage_a3b2acb6d2e110a7861c5c57fc90980f",
+              "limitations": []
+            },
+            "warnings": []
+          },
+          {
+            "id": "evidence_e9296520976f3b9e835f9069",
+            "kind": "experiment_snapshot",
+            "label": "Exp17",
+            "locator": {
+              "seriesKey": null,
+              "fieldOffset": 0,
+              "pointOffset": 0,
+              "seriesOffset": 0
+            },
+            "version": {
+              "headId": "head_experiment_17",
+              "snapshotId": "snapshot_experiment_17",
+              "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+              "recordIndex": 0,
+              "experimentId": "experiment_17",
+              "headUpdatedAt": "2026-09-27T16:38:51.997Z"
+            },
+            "coverage": {
+              "scope": "accepted_snapshot_window",
+              "fieldCount": 29,
+              "seriesCount": 1,
+              "nextFieldOffset": 20,
+              "nextPointOffset": null,
+              "nextSeriesOffset": null
+            },
+            "warnings": [
+              "Values retain their stored scale and unit; no conversion or new calculation was performed."
+            ]
+          }
+        ],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "status": "ok",
+            "elapsedMs": 33
+          },
+          {
+            "tool": "read_document_passage",
+            "status": "ok",
+            "elapsedMs": 7
+          },
+          {
+            "tool": "find_experiments",
+            "status": "ok",
+            "elapsedMs": 5
+          },
+          {
+            "tool": "read_experiment_evidence",
+            "status": "ok",
+            "elapsedMs": 5
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 16064,
+          "knownCost": null,
+          "toolCalls": 3,
+          "toolRounds": 2,
+          "inputTokens": 16234,
+          "lastActiveAt": 1790527148086,
+          "outputTokens": 1627,
+          "reservedTokens": 0,
+          "visibleToolCalls": 4,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-27 12:39:08.087008-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_46a07a4ecc7494ff3075fc5b",
+          "data": {
+            "text": "RQ-DURATION revision 2: The documented duration is 40 minutes for dry samples."
+          },
+          "kind": "document_passage",
+          "label": "RQ-duration.txt",
+          "locator": {
+            "kind": "text",
+            "charEnd": 78,
+            "lineEnd": 1,
+            "charStart": 0,
+            "lineStart": 1
+          },
+          "version": {
+            "versionId": "document_version_6c6640975d3b4070b3552116",
+            "documentId": "context_doc_14f388b974d349b3b2ca6238",
+            "contentHash": "8a32b010542958d2651067b823a655ef360c5be93176987fcae22b0317da5507",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 1,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "part": "text",
+                "lines": 1,
+                "status": "ready"
+              },
+              "statusCounts": {
+                "ready": 1
+              },
+              "warningParts": 0,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "ready",
+            "passageId": "passage_a3b2acb6d2e110a7861c5c57fc90980f",
+            "limitations": []
+          },
+          "warnings": []
+        },
+        {
+          "id": "evidence_e9296520976f3b9e835f9069",
+          "data": {
+            "fields": [
+              {
+                "unit": "C",
+                "value": 82,
+                "columnId": "temperature",
+                "valueType": "number",
+                "sourceRefs": [
+                  {
+                    "cell": "B2",
+                    "sheet": "Measurements",
+                    "rawValue": 80
+                  }
+                ],
+                "displayName": "Temperature"
+              },
+              {
+                "unit": "%",
+                "value": 0.42,
+                "columnId": "yield_fraction",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Yield",
+                "numericScale": "fraction"
+              },
+              {
+                "unit": "%",
+                "value": 42,
+                "columnId": "yield_points",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Yield",
+                "numericScale": "percent_points"
+              },
+              {
+                "unit": "bar",
+                "value": null,
+                "columnId": "pressure",
+                "valueType": "number",
+                "sourceRefs": [
+                  {
+                    "cell": "H2",
+                    "sheet": "Measurements",
+                    "rawValue": null
+                  }
+                ],
+                "displayName": "Pressure",
+                "missingReason": "source_blank",
+                "formattedValue": null
+              },
+              {
+                "unit": "min",
+                "value": 30,
+                "columnId": "duration",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Duration"
+              },
+              {
+                "unit": "mg",
+                "value": 100,
+                "columnId": "aux_0",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 0"
+              },
+              {
+                "unit": "mg",
+                "value": 101,
+                "columnId": "aux_1",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 1"
+              },
+              {
+                "unit": "mg",
+                "value": 102,
+                "columnId": "aux_2",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 2"
+              },
+              {
+                "unit": "mg",
+                "value": 103,
+                "columnId": "aux_3",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 3"
+              },
+              {
+                "unit": "mg",
+                "value": 104,
+                "columnId": "aux_4",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 4"
+              },
+              {
+                "unit": "mg",
+                "value": 105,
+                "columnId": "aux_5",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 5"
+              },
+              {
+                "unit": "mg",
+                "value": 106,
+                "columnId": "aux_6",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 6"
+              },
+              {
+                "unit": "mg",
+                "value": 107,
+                "columnId": "aux_7",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 7"
+              },
+              {
+                "unit": "mg",
+                "value": 108,
+                "columnId": "aux_8",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 8"
+              },
+              {
+                "unit": "mg",
+                "value": 109,
+                "columnId": "aux_9",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 9"
+              },
+              {
+                "unit": "mg",
+                "value": 110,
+                "columnId": "aux_10",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 10"
+              },
+              {
+                "unit": "mg",
+                "value": 111,
+                "columnId": "aux_11",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 11"
+              },
+              {
+                "unit": "mg",
+                "value": 112,
+                "columnId": "aux_12",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 12"
+              },
+              {
+                "unit": "mg",
+                "value": 113,
+                "columnId": "aux_13",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 13"
+              },
+              {
+                "unit": "mg",
+                "value": 114,
+                "columnId": "aux_14",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 14"
+              }
+            ],
+            "series": [
+              {
+                "label": "Temperature trace",
+                "xField": {
+                  "unit": "min",
+                  "fieldId": "time"
+                },
+                "yField": {
+                  "unit": "C",
+                  "fieldId": "temperature"
+                },
+                "seriesKey": "temperature_trace",
+                "pointCount": 121,
+                "sourceRefs": []
+              }
+            ],
+            "warnings": [],
+            "acceptedAt": "2026-09-27T16:38:51.995Z",
+            "fieldCount": 29,
+            "snapshotId": "snapshot_experiment_17",
+            "sourceRefs": [],
+            "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+            "seriesCount": 1,
+            "sourceAlias": "Exp17",
+            "experimentId": "experiment_17",
+            "seriesWindow": null,
+            "recordWarnings": []
+          },
+          "kind": "experiment_snapshot",
+          "label": "Exp17",
+          "locator": {
+            "seriesKey": null,
+            "fieldOffset": 0,
+            "pointOffset": 0,
+            "seriesOffset": 0
+          },
+          "version": {
+            "headId": "head_experiment_17",
+            "snapshotId": "snapshot_experiment_17",
+            "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+            "recordIndex": 0,
+            "experimentId": "experiment_17",
+            "headUpdatedAt": "2026-09-27T16:38:51.997Z"
+          },
+          "coverage": {
+            "scope": "accepted_snapshot_window",
+            "fieldCount": 29,
+            "seriesCount": 1,
+            "nextFieldOffset": 20,
+            "nextPointOffset": null,
+            "nextSeriesOffset": null
+          },
+          "warnings": [
+            "Values retain their stored scale and unit; no conversion or new calculation was performed."
+          ]
+        }
+      ],
+      "toolExecutions": [
+        {
+          "tool": "read_document_passage",
+          "input": {
+            "versionId": "document_version_6c6640975d3b4070b3552116",
+            "passageId": "passage_a3b2acb6d2e110a7861c5c57fc90980f"
+          },
+          "startedAt": "2026-09-27T16:38:56.860Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_46a07a4ecc7494ff3075fc5b",
+              "kind": "document_passage",
+              "label": "RQ-duration.txt",
+              "version": {
+                "documentId": "context_doc_14f388b974d349b3b2ca6238",
+                "versionId": "document_version_6c6640975d3b4070b3552116",
+                "versionNumber": 1,
+                "contentHash": "8a32b010542958d2651067b823a655ef360c5be93176987fcae22b0317da5507",
+                "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+              },
+              "locator": {
+                "kind": "text",
+                "charEnd": 78,
+                "lineEnd": 1,
+                "charStart": 0,
+                "lineStart": 1
+              },
+              "data": {
+                "text": "RQ-DURATION revision 2: The documented duration is 40 minutes for dry samples."
+              },
+              "coverage": {
+                "scope": "one_passage",
+                "passageId": "passage_a3b2acb6d2e110a7861c5c57fc90980f",
+                "status": "ready",
+                "source": {
+                  "parts": 1,
+                  "statusCounts": {
+                    "ready": 1
+                  },
+                  "location": {
+                    "part": "text",
+                    "lines": 1,
+                    "status": "ready"
+                  },
+                  "warningParts": 0,
+                  "scope": "summary_and_cited_location_only",
+                  "fullCoverageAvailableOnVersion": true
+                },
+                "limitations": []
+              },
+              "warnings": []
+            },
+            "contextEvidence": [],
+            "neighbors": []
+          },
+          "completedAt": "2026-09-27T16:38:56.867Z"
+        },
+        {
+          "tool": "find_experiments",
+          "input": {
+            "query": "Exp17"
+          },
+          "startedAt": "2026-09-27T16:38:56.868Z",
+          "result": {
+            "status": "matched",
+            "items": [
+              {
+                "id": "experiment_17",
+                "canonicalLabel": "Exp17",
+                "aliases": [
+                  "Batch-A"
+                ],
+                "headId": "head_experiment_17",
+                "headUpdatedAt": "2026-09-27T16:38:51.997Z",
+                "recordIndex": 0,
+                "snapshotId": "snapshot_experiment_17",
+                "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+                "confirmedRegions": [
+                  {
+                    "regionId": "review_region_analysis",
+                    "revisionId": "revision_analysis",
+                    "sheetName": "Carbon",
+                    "range": "A1:C2"
+                  }
+                ],
+                "moreConfirmedRegions": false
+              }
+            ],
+            "nextCursor": null,
+            "coverage": {
+              "exactNameOrAlias": true,
+              "complete": true,
+              "note": "Only active accepted snapshot heads are listed."
+            }
+          },
+          "completedAt": "2026-09-27T16:38:56.873Z"
+        },
+        {
+          "tool": "read_experiment_evidence",
+          "input": {
+            "experimentId": "experiment_17",
+            "snapshotId": "snapshot_experiment_17"
+          },
+          "startedAt": "2026-09-27T16:38:58.719Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_e9296520976f3b9e835f9069",
+              "kind": "experiment_snapshot",
+              "label": "Exp17",
+              "version": {
+                "experimentId": "experiment_17",
+                "snapshotId": "snapshot_experiment_17",
+                "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+                "headId": "head_experiment_17",
+                "headUpdatedAt": "2026-09-27T16:38:51.997Z",
+                "recordIndex": 0
+              },
+              "locator": {
+                "fieldOffset": 0,
+                "seriesOffset": 0,
+                "seriesKey": null,
+                "pointOffset": 0
+              },
+              "data": {
+                "snapshotId": "snapshot_experiment_17",
+                "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+                "acceptedAt": "2026-09-27T16:38:51.995Z",
+                "warnings": [],
+                "experimentId": "experiment_17",
+                "sourceAlias": "Exp17",
+                "recordWarnings": [],
+                "sourceRefs": [],
+                "fieldCount": 29,
+                "seriesCount": 1,
+                "fields": [
+                  {
+                    "unit": "C",
+                    "value": 82,
+                    "columnId": "temperature",
+                    "valueType": "number",
+                    "sourceRefs": [
+                      {
+                        "cell": "B2",
+                        "sheet": "Measurements",
+                        "rawValue": 80
+                      }
+                    ],
+                    "displayName": "Temperature"
+                  },
+                  {
+                    "unit": "%",
+                    "value": 0.42,
+                    "columnId": "yield_fraction",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Yield",
+                    "numericScale": "fraction"
+                  },
+                  {
+                    "unit": "%",
+                    "value": 42,
+                    "columnId": "yield_points",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Yield",
+                    "numericScale": "percent_points"
+                  },
+                  {
+                    "unit": "bar",
+                    "value": null,
+                    "columnId": "pressure",
+                    "valueType": "number",
+                    "sourceRefs": [
+                      {
+                        "cell": "H2",
+                        "sheet": "Measurements",
+                        "rawValue": null
+                      }
+                    ],
+                    "displayName": "Pressure",
+                    "missingReason": "source_blank",
+                    "formattedValue": null
+                  },
+                  {
+                    "unit": "min",
+                    "value": 30,
+                    "columnId": "duration",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Duration"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 100,
+                    "columnId": "aux_0",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 0"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 101,
+                    "columnId": "aux_1",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 1"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 102,
+                    "columnId": "aux_2",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 2"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 103,
+                    "columnId": "aux_3",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 3"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 104,
+                    "columnId": "aux_4",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 4"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 105,
+                    "columnId": "aux_5",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 5"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 106,
+                    "columnId": "aux_6",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 6"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 107,
+                    "columnId": "aux_7",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 7"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 108,
+                    "columnId": "aux_8",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 8"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 109,
+                    "columnId": "aux_9",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 9"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 110,
+                    "columnId": "aux_10",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 10"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 111,
+                    "columnId": "aux_11",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 11"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 112,
+                    "columnId": "aux_12",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 12"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 113,
+                    "columnId": "aux_13",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 13"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 114,
+                    "columnId": "aux_14",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 14"
+                  }
+                ],
+                "series": [
+                  {
+                    "label": "Temperature trace",
+                    "xField": {
+                      "unit": "min",
+                      "fieldId": "time"
+                    },
+                    "yField": {
+                      "unit": "C",
+                      "fieldId": "temperature"
+                    },
+                    "seriesKey": "temperature_trace",
+                    "pointCount": 121,
+                    "sourceRefs": []
+                  }
+                ],
+                "seriesWindow": null
+              },
+              "coverage": {
+                "scope": "accepted_snapshot_window",
+                "fieldCount": 29,
+                "seriesCount": 1,
+                "nextFieldOffset": 20,
+                "nextSeriesOffset": null,
+                "nextPointOffset": null
+              },
+              "warnings": [
+                "Values retain their stored scale and unit; no conversion or new calculation was performed."
+              ]
+            }
+          },
+          "completedAt": "2026-09-27T16:38:58.724Z"
+        }
+      ],
+      "modelOutputs": [
+        {
+          "repairErrors": [],
+          "startedAt": "2026-09-27T16:38:52.058Z",
+          "result": {
+            "ok": true,
+            "status": "answered",
+            "claims": [
+              {
+                "text": "RQ-DURATION 当前版本记录的时长为 40 分钟（针对干燥样品）。",
+                "citations": [
+                  {
+                    "evidenceId": "evidence_46a07a4ecc7494ff3075fc5b",
+                    "quote": "RQ-DURATION revision 2: The documented duration is 40 minutes for dry samples."
+                  }
+                ],
+                "numericBindings": []
+              },
+              {
+                "text": "Exp17 记录的时长为 30 分钟（Duration 字段，单位 min）。",
+                "citations": [
+                  {
+                    "evidenceId": "evidence_e9296520976f3b9e835f9069",
+                    "quote": "Duration"
+                  },
+                  {
+                    "evidenceId": "evidence_e9296520976f3b9e835f9069",
+                    "quote": "30"
+                  }
+                ],
+                "numericBindings": [
+                  {
+                    "evidenceId": "evidence_e9296520976f3b9e835f9069",
+                    "path": "/data/fields/4/value",
+                    "value": 30,
+                    "unit": "min",
+                    "numericScale": null
+                  }
+                ]
+              }
+            ],
+            "missingEvidence": [],
+            "metadata": {
+              "provider": "deepseek",
+              "model": "deepseek-v4-pro",
+              "latencyMs": 16021,
+              "usage": {
+                "inputTokens": 16234,
+                "outputTokens": 1627,
+                "reasoningTokens": 1123
+              },
+              "toolRounds": 2,
+              "requestedMaxTokens": 4000,
+              "finalRequestedMaxTokens": 4000,
+              "attemptCount": 1,
+              "stopReason": "stop"
+            }
+          },
+          "completedAt": "2026-09-27T16:39:08.079Z"
+        }
+      ],
+      "elapsedMs": 16239,
+      "semanticReview": "pending_independent_review"
+    }
+  ],
+  "execution": {
+    "startedAt": "2026-09-27T16:38:44.814Z",
+    "files": {
+      "src/research/citedAnswer.js": "2782aa2db857d373130538bce681b49eb91d7fe3d77206cb8e615abb6debd832",
+      "src/research/evidenceTools.js": "f8b07846ed7b91d28700de4d86cfe3190324be982bbcb0d438f82692754c9662",
+      "src/research/qaBudget.js": "144deccd1b105b24c380055dbbf6b67094cc3013addcd45945ff139419ee659f",
+      "src/research/testing/researchQaCorpus.js": "b8c9ec0d0a5a8425ed29082ac1a89049d8e5f0cbed939b6fc77fc1e3c83a82d6",
+      "src/research/testing/researchQaLabels.js": "5b3e5d19db8a2ced5bf71715d4762d8f35c9e0983ac1868bea00279c38136042",
+      "src/research/testing/researchQaSupplemental.js": "cf078b3fe0bc00f02bee8d79f239ccde5e5ed81fd7ce626203b0aee0ad772643",
+      "src/research/testing/researchQaHoldout.js": "436ef42306fe396340e39e0ceaab64d3e4de587f45b43f40ac743054540e9e77",
+      "src/v1/research-qa/provider-eval.postgres.test.ts": "f34051246cfbd8f00ab05da0201caf284708876128ae1a0be863b2951ddf505b",
+      "src/ai/gateway.js": "86d0906b2a72834e79f0cfb1b51b0020df3fcead433d3e7057f55685a9888d12",
+      "src/ai/deepseek.js": "1a2b94539c70af64c66fa1680694b59319782bb0f680857c7c3a38d00b6d01a4",
+      "src/v1/research-qa/research-evidence.service.ts": "92d2eb90081bea2efbed47d388f0c9561577272752072596293c5218ac4fd411",
+      "src/v1/research-qa/research-evidence.repository.ts": "6b8c06b68d2eae5aeee281968b75ab1947d4b6530989be73cd9ff1a899cbf36f",
+      "src/v1/research-qa/research-questions.service.ts": "cb02a64a7cb3fa26d015f47e79ff38be7e76dea6750849ba0a368fe006607a60"
+    },
+    "limits": {
+      "question": 4000,
+      "search": 8,
+      "candidates": 40,
+      "cells": 240,
+      "fields": 20,
+      "points": 40,
+      "characters": 4000,
+      "toolBytes": 32000,
+      "evidenceBytes": 160000,
+      "toolCalls": 24,
+      "toolRounds": 8,
+      "requests": 12,
+      "tokens": 60000,
+      "deadlineMs": 120000
+    },
+    "thinking": {
+      "enabled": true,
+      "effort": "high"
+    },
+    "repairThinking": {
+      "enabled": false
+    },
+    "maxOutputTokens": 4000
+  }
+}

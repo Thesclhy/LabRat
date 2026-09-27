@@ -16,7 +16,7 @@ function cellType(cell) {
 
 function cellValue(cell) {
   if (!cell) return null;
-  if (cell.t === "e") return null;
+  if (cell.t === "e" || cell.t === "z") return null;
   return cell.v ?? null;
 }
 
@@ -49,7 +49,7 @@ export function scanCells(worksheet) {
         col: colIndex + 1,
         address,
         rawValue,
-        formattedValue: cell?.w ?? (rawValue == null ? (cell?.t === "e" ? "#ERROR" : "") : String(rawValue)),
+        formattedValue: cell?.t === "z" ? "" : cell?.w ?? (rawValue == null ? (cell?.t === "e" ? "#ERROR" : "") : String(rawValue)),
         type: cellType(cell),
         formula: cell?.f || null,
         style: cell?.s || null,

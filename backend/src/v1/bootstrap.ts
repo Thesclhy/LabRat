@@ -38,6 +38,9 @@ export async function createV1Application(
       limiter.take(request.ip, request.routeOptions.url || request.url);
     }
     if (request.url.includes("/invitations")) reply.header("Cache-Control", "no-store");
+    if (/^\/api\/v1\/projects\/[^/?]+\/(?:research-questions|context-documents|context-document-versions)(?:[/?]|$)/.test(request.url)) {
+      reply.header("Cache-Control", "private, no-store");
+    }
   });
   app.getHttpAdapter().getInstance().addContentTypeParser(
     /^multipart\/form-data/i,

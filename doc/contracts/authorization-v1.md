@@ -60,6 +60,15 @@ boundary. This is not a new Lab role and does not weaken ordinary authorization.
 See `doc/contracts/public-guest-v1.md` for provisioning, limits and revocation.
 
 - `read`: list and read the permitted resource and bounded evidence.
+- Research Q&A is a separate full-project `read` operation. Ordinary View
+  members may create its bounded question/run/answer records and cancel their
+  own pending questions. This permits no general project edit, analysis proposal,
+  execution, approval or publication. The existing mixed AgentRun action route
+  still requires `propose`. Public Guest cannot invoke AI; selected-experiment
+  access alone cannot retrieve project documents or invoke project-wide Q&A.
+  Retrieval, exact reads, answer persistence/fetch and citation opening recheck
+  the initiating/current actor's permissions; a background process cannot widen
+  them. See `research-qa-v1.md` for the new operation's implementation contract.
 - `propose`: create or revise project metadata, uploads, review proposals,
   analysis plans, annotations, Browser documentation and Manuscript drafts.
 - `approve`: confirm region interpretations and accept/publish reviewed

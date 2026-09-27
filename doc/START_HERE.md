@@ -2,11 +2,18 @@
 
 Status: active
 Read when: starting any non-trivial LabRat coding or documentation task.
-Last reviewed: 2026-09-10
+Last reviewed: 2026-09-27
 
 This file is the routing guide for AI agents. It tells you which docs are current source of truth, which docs are long-term plans, and which docs are historical reports.
 
 ## Current Direction
+
+Research Q&A v1 is implemented and locally accepted. Read
+[the Q&A plan](plans/research-qa-plan.md), [implementation contract](contracts/research-qa-v1.md),
+[local verification](qa/research-qa-verification.md) and [release record](qa/research-qa-deployment.md).
+The user authorized remote deployment on 2026-09-27. This release is based on
+remote main 834284d, preserving manual Browser rows and existing workbook behavior.
+Research migrations are 034/035 in this integrated release.
 
 For Claude workbook feature integration into Nest v1, read
 `doc/plans/claude-v1-integration-plan.md`, `doc/contracts/claude-features-v1.md`,

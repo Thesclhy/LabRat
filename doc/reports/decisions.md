@@ -299,3 +299,14 @@ Consequences:
 
 - Scripts and AGENTS instructions refer to `doc/PROGRESS.md`.
 - User requests that mention `doc/progress.md` should be interpreted as the existing progress log unless the repository moves to a case-sensitive filesystem and explicitly renames the file.
+
+
+## 2026-09-27: uploaded-source Q&A v1
+
+The confirmed D1–D6 scope is implemented: uploaded sources only, PDF/OCR plus
+Word/TXT/Excel, immediately readable evidence, full-project View Q&A, and
+review before any new science computation. Seven bounded read tools serve the
+Q&A agent; no diagnostic/optimization, external search, execution or publication
+capabilities are added. Exact contracts are in doc/contracts/research-qa-v1.md.
+The later explicit deployment request authorizes release of this feature through
+the main/Lightsail pipeline; it does not publish independent local work.

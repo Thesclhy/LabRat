@@ -54,7 +54,7 @@ function mergeProjectProfile(
 function publicProject(project: NonNullable<ProjectRow>, access: {
   shellOnly: boolean;
   capabilities: string[];
-}, workflowSummary: Record<string, number> | null = null) {
+}, workflowSummary: Record<string, number> | null = null, publicGuest = false) {
   return {
     id: project.id,
     labId: project.labId,
@@ -63,6 +63,7 @@ function publicProject(project: NonNullable<ProjectRow>, access: {
     status: project.status,
     shellOnly: access.shellOnly,
     capabilities: access.capabilities,
+    canAskResearchQuestions: !publicGuest && !access.shellOnly && access.capabilities.includes("read"),
     ...(!access.shellOnly ? { projectProfile: projectProfile(project) } : {}),
     ...(!access.shellOnly && workflowSummary ? { workflowSummary } : {}),
   };
@@ -88,7 +89,7 @@ export class WorkspaceService {
         const workflowSummary = resolved.access.shellOnly
           ? null
           : await this.repository.projectWorkflowSummary(project.id);
-        visible.push(publicProject(project, resolved.access, workflowSummary));
+        visible.push(publicProject(project, resolved.access, workflowSummary, Boolean(auth.publicGuest)));
       }
     }
     return visible;
@@ -103,7 +104,7 @@ export class WorkspaceService {
     const workflowSummary = access!.shellOnly
       ? null
       : await this.repository.projectWorkflowSummary(project.id);
-    return publicProject(project, access!, workflowSummary);
+    return publicProject(project, access!, workflowSummary, Boolean(auth.publicGuest));
   }
 
   async createProject(auth: AuthContext, input: {

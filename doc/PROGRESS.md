@@ -13,6 +13,19 @@ Keep entries concise, newest first, and include:
 - verification
 - follow-ups or residual risk
 
+## 2026-09-27 — Research Q&A remote deployment authorized
+
+- User requested remote deployment after completed local acceptance. Prepared an
+  isolated release from origin/main 834284d, preserving subsequent manual-row,
+  administrator and workbook features. Independent local permission and analysis
+  edits, credentials, cookies, temporary files and private materials are excluded.
+- Kept remote migrations 031–033; Q&A uses additive migrations 034/035. Core Q&A
+  implementation matches the accepted provider-evaluation hashes. Integrated regression, PostgreSQL and real Chrome passed; production backup
+  completed and validated.
+- Existing GitHub/Lightsail pipeline remains the deployment path. Production Node
+  22.23.1 meets parser requirements. Live success is pending, with details in
+  doc/qa/research-qa-deployment.md.
+
 ## 2026-09-20 — Experiment Browser manual rows (Add row)
 
 - User requested an Add row action so a new experiment can be logged by hand,

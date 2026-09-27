@@ -4,14 +4,16 @@ import { describe, expect, test, vi } from "vitest";
 import { WorkspacePermissions, permissionsForProject } from "./WorkspacePermissions.jsx";
 import { ManuscriptCanvas } from "./ManuscriptCanvas.jsx";
 import { WorkbookReviewDock } from "./WorkbookReviewDock.jsx";
-import { ProjectDashboard } from "../main.jsx";
+import { ProjectDashboard, ProjectOverview } from "../main.jsx";
 vi.mock("../charts/Plot.jsx", () => ({ Plot: () => <div /> }));
 
 describe("workspace permission boundaries", () => {
   test("view, edit and approve map independently and default deny", () => {
-    expect(permissionsForProject(null)).toEqual({ canEdit: false, canApprove: false, canExport: false });
-    expect(permissionsForProject({ capabilities: ["read", "export"] })).toEqual({ canEdit: false, canApprove: false, canExport: true });
-    expect(permissionsForProject({ capabilities: ["read", "propose", "export"] })).toEqual({ canEdit: true, canApprove: false, canExport: true });
+    expect(permissionsForProject(null)).toEqual({ canAsk: false, canEdit: false, canApprove: false, canExport: false });
+    expect(permissionsForProject({ capabilities: ["read", "export"] })).toEqual({ canAsk: false, canEdit: false, canApprove: false, canExport: true });
+    expect(permissionsForProject({ capabilities: ["read", "propose", "export"] })).toEqual({ canAsk: false, canEdit: true, canApprove: false, canExport: true });
+    expect(permissionsForProject({ capabilities: ["read"], canAskResearchQuestions: true }).canAsk).toBe(true);
+    expect(permissionsForProject({ capabilities: ["read"], canAskResearchQuestions: false }).canAsk).toBe(false);
     expect(permissionsForProject({ shellOnly: true, capabilities: ["propose", "approve"] }).canEdit).toBe(false);
   });
   test("readonly manuscript normalization and shortcuts cannot change persisted state", () => {

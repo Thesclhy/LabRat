@@ -1,0 +1,47 @@
+.qa-panel { display: flex; flex-direction: column; max-width: 100vw; }
+.qa-panel .agent-head-actions { flex-wrap: wrap; justify-content: flex-end; }
+.qa-panel .agent-head-actions button { width: auto; min-width: 28px; }
+.agent-head-actions .qa-return { width: auto; padding-inline: 8px; }
+.qa-scope { margin: 0; padding: 10px 16px; color: #656b75; font-size: 12px; border-bottom: 1px solid #e4e6ea; }
+.qa-sources { padding: 10px 16px; border-bottom: 1px solid #e4e6ea; max-height: 32vh; overflow: auto; flex-shrink: 0; }
+.qa-sources p { font-size: 12px; color: #656b75; }
+.qa-sources summary, .qa-conversation summary { cursor: pointer; font-size: 13px; padding: 4px 0; }
+.qa-source-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 0; border-bottom: 1px solid #eee; }
+.qa-source-row > button:first-child { flex: 1 1 55%; overflow-wrap: anywhere; text-align: left; }
+.qa-source-row small { flex: 1 1 55%; color: #626872; }
+.qa-panel button, .qa-evidence-dialog button { cursor: pointer; }
+.qa-panel button:disabled { cursor: default; opacity: .55; }
+.qa-conversation { min-height: 0; overflow-y: auto; padding: 12px 16px; flex: 1; overflow-wrap: anywhere; }
+.qa-history-item { display: block; width: 100%; text-align: left; margin: 5px 0; padding: 6px 8px; white-space: normal; overflow-wrap: anywhere; }
+.qa-answer h3 { font-size: 15px; line-height: 1.5; white-space: pre-wrap; }
+.qa-answer-status { font-size: 12px; color: #596773; }
+.qa-claim { border-bottom: 1px solid #e8ebed; padding: 8px 0 12px; }
+.qa-claim p { white-space: pre-wrap; line-height: 1.65; font-size: 13px; margin: 0 0 8px; }
+.qa-citations { display: flex; flex-wrap: wrap; gap: 6px; }
+.qa-citations button { font-size: 11px; text-align: left; white-space: normal; color: #325c76; background: #edf4f8; border: 1px solid #c9dbe5; border-radius: 4px; padding: 4px 6px; overflow-wrap: anywhere; }
+.qa-warning { background: #fff8e5; border: 1px solid #e8d5a2; padding: 8px; font-size: 12px; color: #6c542a; }
+.qa-question-form { border-top: 1px solid #e4e6ea; padding: 12px 16px; background: #fff; }
+.qa-question-form label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+.qa-question-form textarea { width: 100%; box-sizing: border-box; min-height: 70px; max-height: 160px; resize: vertical; padding: 8px; border: 1px solid #cbd0d6; border-radius: 5px; font: inherit; font-size: 13px; }
+.qa-question-form > div { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+.qa-question-form small { color: #737983; }
+.qa-question-form button { background: #314657; color: #fff; border: 0; padding: 7px 12px; border-radius: 5px; }
+.qa-evidence-dialog { width: min(900px, calc(100vw - 32px)); max-height: calc(100vh - 32px); box-sizing: border-box; border: 1px solid #c6cbd1; border-radius: 8px; padding: 16px; color: #252e36; overflow: auto; }
+.qa-evidence-dialog::backdrop { background: #111c2c66; }
+.qa-evidence-dialog header { display: flex; justify-content: space-between; gap: 16px; align-items: start; }
+.qa-evidence-dialog h2 { margin: 0; font-size: 17px; overflow-wrap: anywhere; }
+.qa-evidence-dialog header p { font-size: 12px; color: #606975; }
+.qa-evidence-dialog header button { font-size: 22px; padding: 0 8px; }
+.qa-evidence-dialog select { max-width: 100%; margin: 8px; }
+.qa-pdf-page { position: relative; line-height: 0; margin: 12px 0; border: 1px solid #dde0e4; }
+.qa-pdf-page img { width: 100%; height: auto; display: block; }
+.qa-source-highlight { position: absolute; background: #ffcf4b44; outline: 1px solid #d59416; pointer-events: none; }
+.qa-source-text { white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.65 ui-monospace, monospace; margin: 12px 0; padding: 10px; background: #f5f7f8; }
+.qa-table-scroll { overflow: auto; max-width: 100%; margin: 12px 0; }
+.qa-table-scroll table { border-collapse: collapse; font-size: 12px; min-width: 100%; }
+.qa-table-scroll th, .qa-table-scroll td { padding: 7px 10px; border: 1px solid #d9dee3; text-align: left; white-space: pre-wrap; min-width: 80px; }
+.qa-table-scroll th { background: #f2f5f7; }
+.qa-profile > div { margin-bottom: 12px; }
+.qa-profile dt { font-weight: 600; font-size: 12px; }
+.qa-profile dd { margin: 3px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 600px) { .qa-panel.agent, .qa-panel.agent.expanded { width: 100vw; right: 0; } .qa-evidence-dialog { padding: 10px; } }

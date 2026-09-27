@@ -1,0 +1,4143 @@
+{
+  "schemaVersion": "labrat.researchQaEvaluation.v1",
+  "material": "synthetic only",
+  "provider": {
+    "provider": "deepseek",
+    "model": "deepseek-v4-pro",
+    "configured": true
+  },
+  "evaluation": "holdout",
+  "completed": true,
+  "records": [
+    {
+      "id": "H-D1",
+      "group": "documents",
+      "question": "List both the catalyst mass and solvent volume specified by RQ-DOSE, with their original units and catalyst restriction. Do not calculate a ratio.",
+      "expected": [
+        "0.10 g",
+        "8 mL",
+        "only catalyst K",
+        "no ratio"
+      ],
+      "minimumSupport": [
+        {
+          "kind": "document",
+          "source": "legacy",
+          "text": "Catalyst mass: 0.10 g",
+          "locator": {
+            "paragraph": 2
+          }
+        },
+        {
+          "kind": "document",
+          "source": "legacy",
+          "text": "Solvent volume: 8 mL",
+          "locator": {
+            "paragraph": 3
+          }
+        },
+        {
+          "kind": "document",
+          "source": "legacy",
+          "text": "Only catalyst K is covered.",
+          "locator": {
+            "paragraph": 4
+          }
+        }
+      ],
+      "control": null,
+      "split": "final_holdout",
+      "allowedScope": "project_analysis synthetic sources only",
+      "forbidden": [
+        "new scientific values",
+        "cross-project evidence",
+        "unqualified scope expansion"
+      ],
+      "request": {
+        "runId": "agent_run_6ece133c08ce4ce4880bb383",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "eval-H-D1-1790527979575",
+        "question": "List both the catalyst mass and solvent volume specified by RQ-DOSE, with their original units and catalyst restriction. Do not calculate a ratio.",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 2,
+          "elapsedMs": 15229,
+          "knownCost": null,
+          "toolCalls": 4,
+          "toolRounds": 1,
+          "inputTokens": 12048,
+          "lastActiveAt": 1790527994855,
+          "outputTokens": 1742,
+          "reservedTokens": 0,
+          "visibleToolCalls": 5,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-27T16:52:59.600Z",
+        "updatedAt": "2026-09-27T16:53:14.865Z"
+      },
+      "artifact": {
+        "id": "answer_1d6c8529c8674cd984708cca",
+        "runId": "agent_run_6ece133c08ce4ce4880bb383",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "RQ-DOSE specifies a catalyst mass of 0.10 g.",
+              "citations": [
+                {
+                  "quote": "Catalyst mass: 0.10 g",
+                  "evidenceId": "evidence_d75b3cc77a5d74a67efd4f33"
+                }
+              ],
+              "numericBindings": []
+            },
+            {
+              "text": "RQ-DOSE specifies a solvent volume of 8 mL.",
+              "citations": [
+                {
+                  "quote": "Solvent volume: 8 mL",
+                  "evidenceId": "evidence_dbcb6d5b11f403cdc3748a89"
+                }
+              ],
+              "numericBindings": []
+            },
+            {
+              "text": "The catalyst restriction stated for RQ-DOSE is that only catalyst K is covered.",
+              "citations": [
+                {
+                  "quote": "Only catalyst K is covered.",
+                  "evidenceId": "evidence_577d872e15befc52cc8e6c91"
+                }
+              ],
+              "numericBindings": []
+            },
+            {
+              "text": "The cited values appear in RQ-dose.doc under the heading RQ-DOSE.",
+              "citations": [
+                {
+                  "quote": "RQ-DOSE",
+                  "evidenceId": "evidence_576ffeff3da3f0299e2c2064"
+                }
+              ],
+              "numericBindings": []
+            }
+          ],
+          "status": "answered",
+          "limitations": [],
+          "missingEvidence": []
+        },
+        "evidence": [
+          {
+            "id": "evidence_d75b3cc77a5d74a67efd4f33",
+            "kind": "document_passage",
+            "label": "RQ-dose.doc",
+            "locator": {
+              "kind": "word",
+              "part": "body",
+              "charEnd": 21,
+              "charStart": 0,
+              "paragraph": 2
+            },
+            "version": {
+              "versionId": "document_version_b24d37722a674eb28cde8cf0",
+              "documentId": "context_doc_334e4ffa87744a6bb08ba51a",
+              "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 6,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "part": "body",
+                  "status": "ready"
+                },
+                "statusCounts": {
+                  "ready": 6
+                },
+                "warningParts": 0,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "ready",
+              "passageId": "passage_87044a530934fc746781f7df519dc310",
+              "limitations": [
+                "legacy_word_table_and_page_layout_not_reconstructed",
+                "embedded_images_and_fields_not_interpreted"
+              ]
+            },
+            "warnings": []
+          },
+          {
+            "id": "evidence_576ffeff3da3f0299e2c2064",
+            "kind": "document_passage",
+            "label": "RQ-dose.doc",
+            "locator": {
+              "kind": "word",
+              "part": "body",
+              "charEnd": 7,
+              "charStart": 0,
+              "paragraph": 1
+            },
+            "version": {
+              "versionId": "document_version_b24d37722a674eb28cde8cf0",
+              "documentId": "context_doc_334e4ffa87744a6bb08ba51a",
+              "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 6,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "part": "body",
+                  "status": "ready"
+                },
+                "statusCounts": {
+                  "ready": 6
+                },
+                "warningParts": 0,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "ready",
+              "passageId": "passage_889a91a245758d703aa86d2e1c3ae2f2",
+              "limitations": [
+                "legacy_word_table_and_page_layout_not_reconstructed",
+                "embedded_images_and_fields_not_interpreted"
+              ]
+            },
+            "warnings": []
+          },
+          {
+            "id": "evidence_dbcb6d5b11f403cdc3748a89",
+            "kind": "document_passage",
+            "label": "RQ-dose.doc",
+            "locator": {
+              "kind": "word",
+              "part": "body",
+              "charEnd": 20,
+              "charStart": 0,
+              "paragraph": 3
+            },
+            "version": {
+              "versionId": "document_version_b24d37722a674eb28cde8cf0",
+              "documentId": "context_doc_334e4ffa87744a6bb08ba51a",
+              "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 6,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "part": "body",
+                  "status": "ready"
+                },
+                "statusCounts": {
+                  "ready": 6
+                },
+                "warningParts": 0,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "ready",
+              "passageId": "passage_86b20e1f9def02069390b6f85d65423d",
+              "limitations": [
+                "legacy_word_table_and_page_layout_not_reconstructed",
+                "embedded_images_and_fields_not_interpreted"
+              ]
+            },
+            "warnings": []
+          },
+          {
+            "id": "evidence_577d872e15befc52cc8e6c91",
+            "kind": "document_passage",
+            "label": "RQ-dose.doc",
+            "locator": {
+              "kind": "word",
+              "part": "body",
+              "charEnd": 27,
+              "charStart": 0,
+              "paragraph": 4
+            },
+            "version": {
+              "versionId": "document_version_b24d37722a674eb28cde8cf0",
+              "documentId": "context_doc_334e4ffa87744a6bb08ba51a",
+              "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 6,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "part": "body",
+                  "status": "ready"
+                },
+                "statusCounts": {
+                  "ready": 6
+                },
+                "warningParts": 0,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "ready",
+              "passageId": "passage_58557d7c1ed9afbf1635c5f48fd789b7",
+              "limitations": [
+                "legacy_word_table_and_page_layout_not_reconstructed",
+                "embedded_images_and_fields_not_interpreted"
+              ]
+            },
+            "warnings": []
+          }
+        ],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "status": "ok",
+            "elapsedMs": 111
+          },
+          {
+            "tool": "read_document_passage",
+            "status": "ok",
+            "elapsedMs": 16
+          },
+          {
+            "tool": "read_document_passage",
+            "status": "ok",
+            "elapsedMs": 16
+          },
+          {
+            "tool": "read_document_passage",
+            "status": "ok",
+            "elapsedMs": 15
+          },
+          {
+            "tool": "read_document_passage",
+            "status": "ok",
+            "elapsedMs": 17
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 2,
+          "elapsedMs": 15229,
+          "knownCost": null,
+          "toolCalls": 4,
+          "toolRounds": 1,
+          "inputTokens": 12048,
+          "lastActiveAt": 1790527994855,
+          "outputTokens": 1742,
+          "reservedTokens": 0,
+          "visibleToolCalls": 5,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-27 12:53:14.856663-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_d75b3cc77a5d74a67efd4f33",
+          "data": {
+            "text": "Catalyst mass: 0.10 g"
+          },
+          "kind": "document_passage",
+          "label": "RQ-dose.doc",
+          "locator": {
+            "kind": "word",
+            "part": "body",
+            "charEnd": 21,
+            "charStart": 0,
+            "paragraph": 2
+          },
+          "version": {
+            "versionId": "document_version_b24d37722a674eb28cde8cf0",
+            "documentId": "context_doc_334e4ffa87744a6bb08ba51a",
+            "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 6,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "part": "body",
+                "status": "ready"
+              },
+              "statusCounts": {
+                "ready": 6
+              },
+              "warningParts": 0,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "ready",
+            "passageId": "passage_87044a530934fc746781f7df519dc310",
+            "limitations": [
+              "legacy_word_table_and_page_layout_not_reconstructed",
+              "embedded_images_and_fields_not_interpreted"
+            ]
+          },
+          "warnings": []
+        },
+        {
+          "id": "evidence_576ffeff3da3f0299e2c2064",
+          "data": {
+            "text": "RQ-DOSE"
+          },
+          "kind": "document_passage",
+          "label": "RQ-dose.doc",
+          "locator": {
+            "kind": "word",
+            "part": "body",
+            "charEnd": 7,
+            "charStart": 0,
+            "paragraph": 1
+          },
+          "version": {
+            "versionId": "document_version_b24d37722a674eb28cde8cf0",
+            "documentId": "context_doc_334e4ffa87744a6bb08ba51a",
+            "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 6,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "part": "body",
+                "status": "ready"
+              },
+              "statusCounts": {
+                "ready": 6
+              },
+              "warningParts": 0,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "ready",
+            "passageId": "passage_889a91a245758d703aa86d2e1c3ae2f2",
+            "limitations": [
+              "legacy_word_table_and_page_layout_not_reconstructed",
+              "embedded_images_and_fields_not_interpreted"
+            ]
+          },
+          "warnings": []
+        },
+        {
+          "id": "evidence_dbcb6d5b11f403cdc3748a89",
+          "data": {
+            "text": "Solvent volume: 8 mL"
+          },
+          "kind": "document_passage",
+          "label": "RQ-dose.doc",
+          "locator": {
+            "kind": "word",
+            "part": "body",
+            "charEnd": 20,
+            "charStart": 0,
+            "paragraph": 3
+          },
+          "version": {
+            "versionId": "document_version_b24d37722a674eb28cde8cf0",
+            "documentId": "context_doc_334e4ffa87744a6bb08ba51a",
+            "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 6,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "part": "body",
+                "status": "ready"
+              },
+              "statusCounts": {
+                "ready": 6
+              },
+              "warningParts": 0,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "ready",
+            "passageId": "passage_86b20e1f9def02069390b6f85d65423d",
+            "limitations": [
+              "legacy_word_table_and_page_layout_not_reconstructed",
+              "embedded_images_and_fields_not_interpreted"
+            ]
+          },
+          "warnings": []
+        },
+        {
+          "id": "evidence_577d872e15befc52cc8e6c91",
+          "data": {
+            "text": "Only catalyst K is covered."
+          },
+          "kind": "document_passage",
+          "label": "RQ-dose.doc",
+          "locator": {
+            "kind": "word",
+            "part": "body",
+            "charEnd": 27,
+            "charStart": 0,
+            "paragraph": 4
+          },
+          "version": {
+            "versionId": "document_version_b24d37722a674eb28cde8cf0",
+            "documentId": "context_doc_334e4ffa87744a6bb08ba51a",
+            "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 6,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "part": "body",
+                "status": "ready"
+              },
+              "statusCounts": {
+                "ready": 6
+              },
+              "warningParts": 0,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "ready",
+            "passageId": "passage_58557d7c1ed9afbf1635c5f48fd789b7",
+            "limitations": [
+              "legacy_word_table_and_page_layout_not_reconstructed",
+              "embedded_images_and_fields_not_interpreted"
+            ]
+          },
+          "warnings": []
+        }
+      ],
+      "toolExecutions": [
+        {
+          "tool": "read_document_passage",
+          "input": {
+            "versionId": "document_version_b24d37722a674eb28cde8cf0",
+            "passageId": "passage_87044a530934fc746781f7df519dc310"
+          },
+          "startedAt": "2026-09-27T16:53:05.974Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_d75b3cc77a5d74a67efd4f33",
+              "kind": "document_passage",
+              "label": "RQ-dose.doc",
+              "version": {
+                "documentId": "context_doc_334e4ffa87744a6bb08ba51a",
+                "versionId": "document_version_b24d37722a674eb28cde8cf0",
+                "versionNumber": 1,
+                "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+              },
+              "locator": {
+                "kind": "word",
+                "part": "body",
+                "charEnd": 21,
+                "charStart": 0,
+                "paragraph": 2
+              },
+              "data": {
+                "text": "Catalyst mass: 0.10 g"
+              },
+              "coverage": {
+                "scope": "one_passage",
+                "passageId": "passage_87044a530934fc746781f7df519dc310",
+                "status": "ready",
+                "source": {
+                  "parts": 6,
+                  "statusCounts": {
+                    "ready": 6
+                  },
+                  "location": {
+                    "part": "body",
+                    "status": "ready"
+                  },
+                  "warningParts": 0,
+                  "scope": "summary_and_cited_location_only",
+                  "fullCoverageAvailableOnVersion": true
+                },
+                "limitations": [
+                  "legacy_word_table_and_page_layout_not_reconstructed",
+                  "embedded_images_and_fields_not_interpreted"
+                ]
+              },
+              "warnings": []
+            },
+            "contextEvidence": [
+              {
+                "id": "evidence_576ffeff3da3f0299e2c2064",
+                "kind": "document_passage",
+                "label": "RQ-dose.doc",
+                "version": {
+                  "documentId": "context_doc_334e4ffa87744a6bb08ba51a",
+                  "versionId": "document_version_b24d37722a674eb28cde8cf0",
+                  "versionNumber": 1,
+                  "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                  "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+                },
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 7,
+                  "charStart": 0,
+                  "paragraph": 1
+                },
+                "data": {
+                  "text": "RQ-DOSE"
+                },
+                "coverage": {
+                  "scope": "one_passage",
+                  "passageId": "passage_889a91a245758d703aa86d2e1c3ae2f2",
+                  "status": "ready",
+                  "source": {
+                    "parts": 6,
+                    "statusCounts": {
+                      "ready": 6
+                    },
+                    "location": {
+                      "part": "body",
+                      "status": "ready"
+                    },
+                    "warningParts": 0,
+                    "scope": "summary_and_cited_location_only",
+                    "fullCoverageAvailableOnVersion": true
+                  },
+                  "limitations": [
+                    "legacy_word_table_and_page_layout_not_reconstructed",
+                    "embedded_images_and_fields_not_interpreted"
+                  ]
+                },
+                "warnings": []
+              },
+              {
+                "id": "evidence_dbcb6d5b11f403cdc3748a89",
+                "kind": "document_passage",
+                "label": "RQ-dose.doc",
+                "version": {
+                  "documentId": "context_doc_334e4ffa87744a6bb08ba51a",
+                  "versionId": "document_version_b24d37722a674eb28cde8cf0",
+                  "versionNumber": 1,
+                  "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                  "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+                },
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 20,
+                  "charStart": 0,
+                  "paragraph": 3
+                },
+                "data": {
+                  "text": "Solvent volume: 8 mL"
+                },
+                "coverage": {
+                  "scope": "one_passage",
+                  "passageId": "passage_86b20e1f9def02069390b6f85d65423d",
+                  "status": "ready",
+                  "source": {
+                    "parts": 6,
+                    "statusCounts": {
+                      "ready": 6
+                    },
+                    "location": {
+                      "part": "body",
+                      "status": "ready"
+                    },
+                    "warningParts": 0,
+                    "scope": "summary_and_cited_location_only",
+                    "fullCoverageAvailableOnVersion": true
+                  },
+                  "limitations": [
+                    "legacy_word_table_and_page_layout_not_reconstructed",
+                    "embedded_images_and_fields_not_interpreted"
+                  ]
+                },
+                "warnings": []
+              }
+            ],
+            "neighbors": [
+              {
+                "id": "passage_889a91a245758d703aa86d2e1c3ae2f2",
+                "ordinal": 0,
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 7,
+                  "charStart": 0,
+                  "paragraph": 1
+                }
+              },
+              {
+                "id": "passage_86b20e1f9def02069390b6f85d65423d",
+                "ordinal": 2,
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 20,
+                  "charStart": 0,
+                  "paragraph": 3
+                }
+              }
+            ]
+          },
+          "completedAt": "2026-09-27T16:53:05.990Z"
+        },
+        {
+          "tool": "read_document_passage",
+          "input": {
+            "versionId": "document_version_b24d37722a674eb28cde8cf0",
+            "passageId": "passage_86b20e1f9def02069390b6f85d65423d"
+          },
+          "startedAt": "2026-09-27T16:53:05.990Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_dbcb6d5b11f403cdc3748a89",
+              "kind": "document_passage",
+              "label": "RQ-dose.doc",
+              "version": {
+                "documentId": "context_doc_334e4ffa87744a6bb08ba51a",
+                "versionId": "document_version_b24d37722a674eb28cde8cf0",
+                "versionNumber": 1,
+                "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+              },
+              "locator": {
+                "kind": "word",
+                "part": "body",
+                "charEnd": 20,
+                "charStart": 0,
+                "paragraph": 3
+              },
+              "data": {
+                "text": "Solvent volume: 8 mL"
+              },
+              "coverage": {
+                "scope": "one_passage",
+                "passageId": "passage_86b20e1f9def02069390b6f85d65423d",
+                "status": "ready",
+                "source": {
+                  "parts": 6,
+                  "statusCounts": {
+                    "ready": 6
+                  },
+                  "location": {
+                    "part": "body",
+                    "status": "ready"
+                  },
+                  "warningParts": 0,
+                  "scope": "summary_and_cited_location_only",
+                  "fullCoverageAvailableOnVersion": true
+                },
+                "limitations": [
+                  "legacy_word_table_and_page_layout_not_reconstructed",
+                  "embedded_images_and_fields_not_interpreted"
+                ]
+              },
+              "warnings": []
+            },
+            "contextEvidence": [
+              {
+                "id": "evidence_d75b3cc77a5d74a67efd4f33",
+                "kind": "document_passage",
+                "label": "RQ-dose.doc",
+                "version": {
+                  "documentId": "context_doc_334e4ffa87744a6bb08ba51a",
+                  "versionId": "document_version_b24d37722a674eb28cde8cf0",
+                  "versionNumber": 1,
+                  "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                  "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+                },
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 21,
+                  "charStart": 0,
+                  "paragraph": 2
+                },
+                "data": {
+                  "text": "Catalyst mass: 0.10 g"
+                },
+                "coverage": {
+                  "scope": "one_passage",
+                  "passageId": "passage_87044a530934fc746781f7df519dc310",
+                  "status": "ready",
+                  "source": {
+                    "parts": 6,
+                    "statusCounts": {
+                      "ready": 6
+                    },
+                    "location": {
+                      "part": "body",
+                      "status": "ready"
+                    },
+                    "warningParts": 0,
+                    "scope": "summary_and_cited_location_only",
+                    "fullCoverageAvailableOnVersion": true
+                  },
+                  "limitations": [
+                    "legacy_word_table_and_page_layout_not_reconstructed",
+                    "embedded_images_and_fields_not_interpreted"
+                  ]
+                },
+                "warnings": []
+              },
+              {
+                "id": "evidence_577d872e15befc52cc8e6c91",
+                "kind": "document_passage",
+                "label": "RQ-dose.doc",
+                "version": {
+                  "documentId": "context_doc_334e4ffa87744a6bb08ba51a",
+                  "versionId": "document_version_b24d37722a674eb28cde8cf0",
+                  "versionNumber": 1,
+                  "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                  "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+                },
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 27,
+                  "charStart": 0,
+                  "paragraph": 4
+                },
+                "data": {
+                  "text": "Only catalyst K is covered."
+                },
+                "coverage": {
+                  "scope": "one_passage",
+                  "passageId": "passage_58557d7c1ed9afbf1635c5f48fd789b7",
+                  "status": "ready",
+                  "source": {
+                    "parts": 6,
+                    "statusCounts": {
+                      "ready": 6
+                    },
+                    "location": {
+                      "part": "body",
+                      "status": "ready"
+                    },
+                    "warningParts": 0,
+                    "scope": "summary_and_cited_location_only",
+                    "fullCoverageAvailableOnVersion": true
+                  },
+                  "limitations": [
+                    "legacy_word_table_and_page_layout_not_reconstructed",
+                    "embedded_images_and_fields_not_interpreted"
+                  ]
+                },
+                "warnings": []
+              }
+            ],
+            "neighbors": [
+              {
+                "id": "passage_87044a530934fc746781f7df519dc310",
+                "ordinal": 1,
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 21,
+                  "charStart": 0,
+                  "paragraph": 2
+                }
+              },
+              {
+                "id": "passage_58557d7c1ed9afbf1635c5f48fd789b7",
+                "ordinal": 3,
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 27,
+                  "charStart": 0,
+                  "paragraph": 4
+                }
+              }
+            ]
+          },
+          "completedAt": "2026-09-27T16:53:06.006Z"
+        },
+        {
+          "tool": "read_document_passage",
+          "input": {
+            "versionId": "document_version_b24d37722a674eb28cde8cf0",
+            "passageId": "passage_58557d7c1ed9afbf1635c5f48fd789b7"
+          },
+          "startedAt": "2026-09-27T16:53:06.006Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_577d872e15befc52cc8e6c91",
+              "kind": "document_passage",
+              "label": "RQ-dose.doc",
+              "version": {
+                "documentId": "context_doc_334e4ffa87744a6bb08ba51a",
+                "versionId": "document_version_b24d37722a674eb28cde8cf0",
+                "versionNumber": 1,
+                "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+              },
+              "locator": {
+                "kind": "word",
+                "part": "body",
+                "charEnd": 27,
+                "charStart": 0,
+                "paragraph": 4
+              },
+              "data": {
+                "text": "Only catalyst K is covered."
+              },
+              "coverage": {
+                "scope": "one_passage",
+                "passageId": "passage_58557d7c1ed9afbf1635c5f48fd789b7",
+                "status": "ready",
+                "source": {
+                  "parts": 6,
+                  "statusCounts": {
+                    "ready": 6
+                  },
+                  "location": {
+                    "part": "body",
+                    "status": "ready"
+                  },
+                  "warningParts": 0,
+                  "scope": "summary_and_cited_location_only",
+                  "fullCoverageAvailableOnVersion": true
+                },
+                "limitations": [
+                  "legacy_word_table_and_page_layout_not_reconstructed",
+                  "embedded_images_and_fields_not_interpreted"
+                ]
+              },
+              "warnings": []
+            },
+            "contextEvidence": [
+              {
+                "id": "evidence_dbcb6d5b11f403cdc3748a89",
+                "kind": "document_passage",
+                "label": "RQ-dose.doc",
+                "version": {
+                  "documentId": "context_doc_334e4ffa87744a6bb08ba51a",
+                  "versionId": "document_version_b24d37722a674eb28cde8cf0",
+                  "versionNumber": 1,
+                  "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                  "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+                },
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 20,
+                  "charStart": 0,
+                  "paragraph": 3
+                },
+                "data": {
+                  "text": "Solvent volume: 8 mL"
+                },
+                "coverage": {
+                  "scope": "one_passage",
+                  "passageId": "passage_86b20e1f9def02069390b6f85d65423d",
+                  "status": "ready",
+                  "source": {
+                    "parts": 6,
+                    "statusCounts": {
+                      "ready": 6
+                    },
+                    "location": {
+                      "part": "body",
+                      "status": "ready"
+                    },
+                    "warningParts": 0,
+                    "scope": "summary_and_cited_location_only",
+                    "fullCoverageAvailableOnVersion": true
+                  },
+                  "limitations": [
+                    "legacy_word_table_and_page_layout_not_reconstructed",
+                    "embedded_images_and_fields_not_interpreted"
+                  ]
+                },
+                "warnings": []
+              }
+            ],
+            "neighbors": [
+              {
+                "id": "passage_86b20e1f9def02069390b6f85d65423d",
+                "ordinal": 2,
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 20,
+                  "charStart": 0,
+                  "paragraph": 3
+                }
+              }
+            ]
+          },
+          "completedAt": "2026-09-27T16:53:06.021Z"
+        },
+        {
+          "tool": "read_document_passage",
+          "input": {
+            "versionId": "document_version_b24d37722a674eb28cde8cf0",
+            "passageId": "passage_889a91a245758d703aa86d2e1c3ae2f2"
+          },
+          "startedAt": "2026-09-27T16:53:06.021Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_576ffeff3da3f0299e2c2064",
+              "kind": "document_passage",
+              "label": "RQ-dose.doc",
+              "version": {
+                "documentId": "context_doc_334e4ffa87744a6bb08ba51a",
+                "versionId": "document_version_b24d37722a674eb28cde8cf0",
+                "versionNumber": 1,
+                "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+              },
+              "locator": {
+                "kind": "word",
+                "part": "body",
+                "charEnd": 7,
+                "charStart": 0,
+                "paragraph": 1
+              },
+              "data": {
+                "text": "RQ-DOSE"
+              },
+              "coverage": {
+                "scope": "one_passage",
+                "passageId": "passage_889a91a245758d703aa86d2e1c3ae2f2",
+                "status": "ready",
+                "source": {
+                  "parts": 6,
+                  "statusCounts": {
+                    "ready": 6
+                  },
+                  "location": {
+                    "part": "body",
+                    "status": "ready"
+                  },
+                  "warningParts": 0,
+                  "scope": "summary_and_cited_location_only",
+                  "fullCoverageAvailableOnVersion": true
+                },
+                "limitations": [
+                  "legacy_word_table_and_page_layout_not_reconstructed",
+                  "embedded_images_and_fields_not_interpreted"
+                ]
+              },
+              "warnings": []
+            },
+            "contextEvidence": [
+              {
+                "id": "evidence_d75b3cc77a5d74a67efd4f33",
+                "kind": "document_passage",
+                "label": "RQ-dose.doc",
+                "version": {
+                  "documentId": "context_doc_334e4ffa87744a6bb08ba51a",
+                  "versionId": "document_version_b24d37722a674eb28cde8cf0",
+                  "versionNumber": 1,
+                  "contentHash": "c05b65d4cd6bba98be73a0baf74230cc889d023b3a89a6cb1e4435ba1152f749",
+                  "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+                },
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 21,
+                  "charStart": 0,
+                  "paragraph": 2
+                },
+                "data": {
+                  "text": "Catalyst mass: 0.10 g"
+                },
+                "coverage": {
+                  "scope": "one_passage",
+                  "passageId": "passage_87044a530934fc746781f7df519dc310",
+                  "status": "ready",
+                  "source": {
+                    "parts": 6,
+                    "statusCounts": {
+                      "ready": 6
+                    },
+                    "location": {
+                      "part": "body",
+                      "status": "ready"
+                    },
+                    "warningParts": 0,
+                    "scope": "summary_and_cited_location_only",
+                    "fullCoverageAvailableOnVersion": true
+                  },
+                  "limitations": [
+                    "legacy_word_table_and_page_layout_not_reconstructed",
+                    "embedded_images_and_fields_not_interpreted"
+                  ]
+                },
+                "warnings": []
+              }
+            ],
+            "neighbors": [
+              {
+                "id": "passage_87044a530934fc746781f7df519dc310",
+                "ordinal": 1,
+                "locator": {
+                  "kind": "word",
+                  "part": "body",
+                  "charEnd": 21,
+                  "charStart": 0,
+                  "paragraph": 2
+                }
+              }
+            ]
+          },
+          "completedAt": "2026-09-27T16:53:06.038Z"
+        }
+      ],
+      "modelOutputs": [
+        {
+          "repairErrors": [],
+          "startedAt": "2026-09-27T16:52:59.744Z",
+          "result": {
+            "ok": true,
+            "status": "answered",
+            "claims": [
+              {
+                "text": "RQ-DOSE specifies a catalyst mass of 0.10 g.",
+                "citations": [
+                  {
+                    "evidenceId": "evidence_d75b3cc77a5d74a67efd4f33",
+                    "quote": "Catalyst mass: 0.10 g"
+                  }
+                ],
+                "numericBindings": []
+              },
+              {
+                "text": "RQ-DOSE specifies a solvent volume of 8 mL.",
+                "citations": [
+                  {
+                    "evidenceId": "evidence_dbcb6d5b11f403cdc3748a89",
+                    "quote": "Solvent volume: 8 mL"
+                  }
+                ],
+                "numericBindings": []
+              },
+              {
+                "text": "The catalyst restriction stated for RQ-DOSE is that only catalyst K is covered.",
+                "citations": [
+                  {
+                    "evidenceId": "evidence_577d872e15befc52cc8e6c91",
+                    "quote": "Only catalyst K is covered."
+                  }
+                ],
+                "numericBindings": []
+              },
+              {
+                "text": "The cited values appear in RQ-dose.doc under the heading RQ-DOSE.",
+                "citations": [
+                  {
+                    "evidenceId": "evidence_576ffeff3da3f0299e2c2064",
+                    "quote": "RQ-DOSE"
+                  }
+                ],
+                "numericBindings": []
+              }
+            ],
+            "missingEvidence": [],
+            "metadata": {
+              "provider": "deepseek",
+              "model": "deepseek-v4-pro",
+              "latencyMs": 15099,
+              "usage": {
+                "inputTokens": 12048,
+                "outputTokens": 1742,
+                "reasoningTokens": 1128
+              },
+              "toolRounds": 1,
+              "requestedMaxTokens": 4000,
+              "finalRequestedMaxTokens": 4000,
+              "attemptCount": 1,
+              "stopReason": "stop"
+            }
+          },
+          "completedAt": "2026-09-27T16:53:14.843Z"
+        }
+      ],
+      "elapsedMs": 15639,
+      "semanticReview": "pending_independent_review"
+    },
+    {
+      "id": "H-R1",
+      "group": "data",
+      "question": "Read the first stored point in Exp17's accepted temperature_trace. Include both axis units and keep the stored values unchanged.",
+      "expected": [
+        "first point x 0 min",
+        "y 82 C",
+        "accepted snapshot"
+      ],
+      "minimumSupport": [
+        {
+          "kind": "point",
+          "seriesKey": "temperature_trace",
+          "index": 0,
+          "x": 0,
+          "y": 82,
+          "xUnit": "min",
+          "yUnit": "C"
+        }
+      ],
+      "control": null,
+      "split": "final_holdout",
+      "allowedScope": "project_analysis synthetic sources only",
+      "forbidden": [
+        "new scientific values",
+        "cross-project evidence",
+        "unqualified scope expansion"
+      ],
+      "request": {
+        "runId": "agent_run_c1ecef0143b14af9932fbf52",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "eval-H-R1-1790527995218",
+        "question": "Read the first stored point in Exp17's accepted temperature_trace. Include both axis units and keep the stored values unchanged.",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 4,
+          "elapsedMs": 21999,
+          "knownCost": null,
+          "toolCalls": 3,
+          "toolRounds": 3,
+          "inputTokens": 20065,
+          "lastActiveAt": 1790528017248,
+          "outputTokens": 2028,
+          "reservedTokens": 0,
+          "visibleToolCalls": 4,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-27T16:53:15.236Z",
+        "updatedAt": "2026-09-27T16:53:37.254Z"
+      },
+      "artifact": {
+        "id": "answer_26b2e84467e74d83942fa680",
+        "runId": "agent_run_c1ecef0143b14af9932fbf52",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "In Exp17's accepted temperature_trace, the x-axis unit is min and the y-axis unit is C. The first stored point is x = 0 (min), y = 82 (C), with the stored values left unchanged.",
+              "citations": [
+                {
+                  "quote": "0",
+                  "evidenceId": "evidence_9e779b9915f73a1de23568d4"
+                },
+                {
+                  "quote": "82",
+                  "evidenceId": "evidence_9e779b9915f73a1de23568d4"
+                },
+                {
+                  "quote": "min",
+                  "evidenceId": "evidence_9e779b9915f73a1de23568d4"
+                },
+                {
+                  "quote": "C",
+                  "evidenceId": "evidence_9e779b9915f73a1de23568d4"
+                }
+              ],
+              "numericBindings": [
+                {
+                  "path": "/data/seriesWindow/points/0/x",
+                  "unit": "min",
+                  "value": 0,
+                  "evidenceId": "evidence_9e779b9915f73a1de23568d4",
+                  "numericScale": null
+                },
+                {
+                  "path": "/data/seriesWindow/points/0/y",
+                  "unit": "C",
+                  "value": 82,
+                  "evidenceId": "evidence_9e779b9915f73a1de23568d4",
+                  "numericScale": null
+                }
+              ]
+            }
+          ],
+          "status": "answered",
+          "limitations": [
+            "Values retain their stored scale and unit; no conversion or new calculation was performed.",
+            "Only the cited window was read; additional records remain available."
+          ],
+          "missingEvidence": []
+        },
+        "evidence": [
+          {
+            "id": "evidence_9e779b9915f73a1de23568d4",
+            "kind": "experiment_snapshot",
+            "label": "Exp17",
+            "locator": {
+              "seriesKey": "temperature_trace",
+              "fieldOffset": 0,
+              "pointOffset": 0,
+              "seriesOffset": 0
+            },
+            "version": {
+              "headId": "head_experiment_17",
+              "snapshotId": "snapshot_experiment_17",
+              "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+              "recordIndex": 0,
+              "experimentId": "experiment_17",
+              "headUpdatedAt": "2026-09-27T16:52:59.544Z"
+            },
+            "coverage": {
+              "scope": "accepted_snapshot_window",
+              "fieldCount": 29,
+              "seriesCount": 1,
+              "nextFieldOffset": 20,
+              "nextPointOffset": 40,
+              "nextSeriesOffset": null
+            },
+            "warnings": [
+              "Values retain their stored scale and unit; no conversion or new calculation was performed."
+            ]
+          }
+        ],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "status": "ok",
+            "elapsedMs": 29
+          },
+          {
+            "tool": "find_experiments",
+            "status": "ok",
+            "elapsedMs": 31
+          },
+          {
+            "tool": "read_experiment_evidence",
+            "status": "ok",
+            "elapsedMs": 14
+          },
+          {
+            "tool": "read_experiment_evidence",
+            "status": "ok",
+            "elapsedMs": 11
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 4,
+          "elapsedMs": 21999,
+          "knownCost": null,
+          "toolCalls": 3,
+          "toolRounds": 3,
+          "inputTokens": 20065,
+          "lastActiveAt": 1790528017248,
+          "outputTokens": 2028,
+          "reservedTokens": 0,
+          "visibleToolCalls": 4,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-27 12:53:37.24914-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_9e779b9915f73a1de23568d4",
+          "data": {
+            "fields": [
+              {
+                "unit": "C",
+                "value": 82,
+                "columnId": "temperature",
+                "valueType": "number",
+                "sourceRefs": [
+                  {
+                    "cell": "B2",
+                    "sheet": "Measurements",
+                    "rawValue": 80
+                  }
+                ],
+                "displayName": "Temperature"
+              },
+              {
+                "unit": "%",
+                "value": 0.42,
+                "columnId": "yield_fraction",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Yield",
+                "numericScale": "fraction"
+              },
+              {
+                "unit": "%",
+                "value": 42,
+                "columnId": "yield_points",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Yield",
+                "numericScale": "percent_points"
+              },
+              {
+                "unit": "bar",
+                "value": null,
+                "columnId": "pressure",
+                "valueType": "number",
+                "sourceRefs": [
+                  {
+                    "cell": "H2",
+                    "sheet": "Measurements",
+                    "rawValue": null
+                  }
+                ],
+                "displayName": "Pressure",
+                "missingReason": "source_blank",
+                "formattedValue": null
+              },
+              {
+                "unit": "min",
+                "value": 30,
+                "columnId": "duration",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Duration"
+              },
+              {
+                "unit": "mg",
+                "value": 100,
+                "columnId": "aux_0",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 0"
+              },
+              {
+                "unit": "mg",
+                "value": 101,
+                "columnId": "aux_1",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 1"
+              },
+              {
+                "unit": "mg",
+                "value": 102,
+                "columnId": "aux_2",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 2"
+              },
+              {
+                "unit": "mg",
+                "value": 103,
+                "columnId": "aux_3",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 3"
+              },
+              {
+                "unit": "mg",
+                "value": 104,
+                "columnId": "aux_4",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 4"
+              },
+              {
+                "unit": "mg",
+                "value": 105,
+                "columnId": "aux_5",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 5"
+              },
+              {
+                "unit": "mg",
+                "value": 106,
+                "columnId": "aux_6",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 6"
+              },
+              {
+                "unit": "mg",
+                "value": 107,
+                "columnId": "aux_7",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 7"
+              },
+              {
+                "unit": "mg",
+                "value": 108,
+                "columnId": "aux_8",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 8"
+              },
+              {
+                "unit": "mg",
+                "value": 109,
+                "columnId": "aux_9",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 9"
+              },
+              {
+                "unit": "mg",
+                "value": 110,
+                "columnId": "aux_10",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 10"
+              },
+              {
+                "unit": "mg",
+                "value": 111,
+                "columnId": "aux_11",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 11"
+              },
+              {
+                "unit": "mg",
+                "value": 112,
+                "columnId": "aux_12",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 12"
+              },
+              {
+                "unit": "mg",
+                "value": 113,
+                "columnId": "aux_13",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 13"
+              },
+              {
+                "unit": "mg",
+                "value": 114,
+                "columnId": "aux_14",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 14"
+              }
+            ],
+            "series": [
+              {
+                "label": "Temperature trace",
+                "xField": {
+                  "unit": "min",
+                  "fieldId": "time"
+                },
+                "yField": {
+                  "unit": "C",
+                  "fieldId": "temperature"
+                },
+                "seriesKey": "temperature_trace",
+                "pointCount": 121,
+                "sourceRefs": []
+              }
+            ],
+            "warnings": [],
+            "acceptedAt": "2026-09-27T16:52:59.537Z",
+            "fieldCount": 29,
+            "snapshotId": "snapshot_experiment_17",
+            "sourceRefs": [],
+            "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+            "seriesCount": 1,
+            "sourceAlias": "Exp17",
+            "experimentId": "experiment_17",
+            "seriesWindow": {
+              "points": [
+                {
+                  "x": 0,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 1,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 2,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 3,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 4,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 5,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 6,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 7,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 8,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 9,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 10,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 11,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 12,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 13,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 14,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 15,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 16,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 17,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 18,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 19,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 20,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 21,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 22,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 23,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 24,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 25,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 26,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 27,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 28,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 29,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 30,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 31,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 32,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 33,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 34,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 35,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 36,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 37,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 38,
+                  "y": 82,
+                  "sourceRefs": []
+                },
+                {
+                  "x": 39,
+                  "y": 82,
+                  "sourceRefs": []
+                }
+              ],
+              "xField": {
+                "unit": "min",
+                "fieldId": "time"
+              },
+              "yField": {
+                "unit": "C",
+                "fieldId": "temperature"
+              },
+              "seriesKey": "temperature_trace",
+              "pointCount": 121,
+              "sourceRefs": []
+            },
+            "recordWarnings": []
+          },
+          "kind": "experiment_snapshot",
+          "label": "Exp17",
+          "locator": {
+            "seriesKey": "temperature_trace",
+            "fieldOffset": 0,
+            "pointOffset": 0,
+            "seriesOffset": 0
+          },
+          "version": {
+            "headId": "head_experiment_17",
+            "snapshotId": "snapshot_experiment_17",
+            "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+            "recordIndex": 0,
+            "experimentId": "experiment_17",
+            "headUpdatedAt": "2026-09-27T16:52:59.544Z"
+          },
+          "coverage": {
+            "scope": "accepted_snapshot_window",
+            "fieldCount": 29,
+            "seriesCount": 1,
+            "nextFieldOffset": 20,
+            "nextPointOffset": 40,
+            "nextSeriesOffset": null
+          },
+          "warnings": [
+            "Values retain their stored scale and unit; no conversion or new calculation was performed."
+          ]
+        }
+      ],
+      "toolExecutions": [
+        {
+          "tool": "find_experiments",
+          "input": {
+            "query": "Exp17"
+          },
+          "startedAt": "2026-09-27T16:53:18.004Z",
+          "result": {
+            "status": "matched",
+            "items": [
+              {
+                "id": "experiment_17",
+                "canonicalLabel": "Exp17",
+                "aliases": [
+                  "Batch-A"
+                ],
+                "headId": "head_experiment_17",
+                "headUpdatedAt": "2026-09-27T16:52:59.544Z",
+                "recordIndex": 0,
+                "snapshotId": "snapshot_experiment_17",
+                "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+                "confirmedRegions": [
+                  {
+                    "regionId": "review_region_analysis",
+                    "revisionId": "revision_analysis",
+                    "sheetName": "Carbon",
+                    "range": "A1:C2"
+                  }
+                ],
+                "moreConfirmedRegions": false
+              }
+            ],
+            "nextCursor": null,
+            "coverage": {
+              "exactNameOrAlias": true,
+              "complete": true,
+              "note": "Only active accepted snapshot heads are listed."
+            }
+          },
+          "completedAt": "2026-09-27T16:53:18.035Z"
+        },
+        {
+          "tool": "read_experiment_evidence",
+          "input": {
+            "experimentId": "experiment_17",
+            "snapshotId": "snapshot_experiment_17"
+          },
+          "startedAt": "2026-09-27T16:53:19.972Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_58810ca3ff33c0364c32ed64",
+              "kind": "experiment_snapshot",
+              "label": "Exp17",
+              "version": {
+                "experimentId": "experiment_17",
+                "snapshotId": "snapshot_experiment_17",
+                "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+                "headId": "head_experiment_17",
+                "headUpdatedAt": "2026-09-27T16:52:59.544Z",
+                "recordIndex": 0
+              },
+              "locator": {
+                "fieldOffset": 0,
+                "seriesOffset": 0,
+                "seriesKey": null,
+                "pointOffset": 0
+              },
+              "data": {
+                "snapshotId": "snapshot_experiment_17",
+                "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+                "acceptedAt": "2026-09-27T16:52:59.537Z",
+                "warnings": [],
+                "experimentId": "experiment_17",
+                "sourceAlias": "Exp17",
+                "recordWarnings": [],
+                "sourceRefs": [],
+                "fieldCount": 29,
+                "seriesCount": 1,
+                "fields": [
+                  {
+                    "unit": "C",
+                    "value": 82,
+                    "columnId": "temperature",
+                    "valueType": "number",
+                    "sourceRefs": [
+                      {
+                        "cell": "B2",
+                        "sheet": "Measurements",
+                        "rawValue": 80
+                      }
+                    ],
+                    "displayName": "Temperature"
+                  },
+                  {
+                    "unit": "%",
+                    "value": 0.42,
+                    "columnId": "yield_fraction",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Yield",
+                    "numericScale": "fraction"
+                  },
+                  {
+                    "unit": "%",
+                    "value": 42,
+                    "columnId": "yield_points",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Yield",
+                    "numericScale": "percent_points"
+                  },
+                  {
+                    "unit": "bar",
+                    "value": null,
+                    "columnId": "pressure",
+                    "valueType": "number",
+                    "sourceRefs": [
+                      {
+                        "cell": "H2",
+                        "sheet": "Measurements",
+                        "rawValue": null
+                      }
+                    ],
+                    "displayName": "Pressure",
+                    "missingReason": "source_blank",
+                    "formattedValue": null
+                  },
+                  {
+                    "unit": "min",
+                    "value": 30,
+                    "columnId": "duration",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Duration"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 100,
+                    "columnId": "aux_0",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 0"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 101,
+                    "columnId": "aux_1",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 1"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 102,
+                    "columnId": "aux_2",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 2"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 103,
+                    "columnId": "aux_3",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 3"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 104,
+                    "columnId": "aux_4",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 4"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 105,
+                    "columnId": "aux_5",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 5"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 106,
+                    "columnId": "aux_6",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 6"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 107,
+                    "columnId": "aux_7",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 7"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 108,
+                    "columnId": "aux_8",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 8"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 109,
+                    "columnId": "aux_9",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 9"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 110,
+                    "columnId": "aux_10",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 10"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 111,
+                    "columnId": "aux_11",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 11"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 112,
+                    "columnId": "aux_12",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 12"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 113,
+                    "columnId": "aux_13",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 13"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 114,
+                    "columnId": "aux_14",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 14"
+                  }
+                ],
+                "series": [
+                  {
+                    "label": "Temperature trace",
+                    "xField": {
+                      "unit": "min",
+                      "fieldId": "time"
+                    },
+                    "yField": {
+                      "unit": "C",
+                      "fieldId": "temperature"
+                    },
+                    "seriesKey": "temperature_trace",
+                    "pointCount": 121,
+                    "sourceRefs": []
+                  }
+                ],
+                "seriesWindow": null
+              },
+              "coverage": {
+                "scope": "accepted_snapshot_window",
+                "fieldCount": 29,
+                "seriesCount": 1,
+                "nextFieldOffset": 20,
+                "nextSeriesOffset": null,
+                "nextPointOffset": null
+              },
+              "warnings": [
+                "Values retain their stored scale and unit; no conversion or new calculation was performed."
+              ]
+            }
+          },
+          "completedAt": "2026-09-27T16:53:19.986Z"
+        },
+        {
+          "tool": "read_experiment_evidence",
+          "input": {
+            "experimentId": "experiment_17",
+            "snapshotId": "snapshot_experiment_17",
+            "seriesKey": "temperature_trace",
+            "pointOffset": 0
+          },
+          "startedAt": "2026-09-27T16:53:22.471Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_9e779b9915f73a1de23568d4",
+              "kind": "experiment_snapshot",
+              "label": "Exp17",
+              "version": {
+                "experimentId": "experiment_17",
+                "snapshotId": "snapshot_experiment_17",
+                "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+                "headId": "head_experiment_17",
+                "headUpdatedAt": "2026-09-27T16:52:59.544Z",
+                "recordIndex": 0
+              },
+              "locator": {
+                "fieldOffset": 0,
+                "seriesOffset": 0,
+                "seriesKey": "temperature_trace",
+                "pointOffset": 0
+              },
+              "data": {
+                "snapshotId": "snapshot_experiment_17",
+                "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+                "acceptedAt": "2026-09-27T16:52:59.537Z",
+                "warnings": [],
+                "experimentId": "experiment_17",
+                "sourceAlias": "Exp17",
+                "recordWarnings": [],
+                "sourceRefs": [],
+                "fieldCount": 29,
+                "seriesCount": 1,
+                "fields": [
+                  {
+                    "unit": "C",
+                    "value": 82,
+                    "columnId": "temperature",
+                    "valueType": "number",
+                    "sourceRefs": [
+                      {
+                        "cell": "B2",
+                        "sheet": "Measurements",
+                        "rawValue": 80
+                      }
+                    ],
+                    "displayName": "Temperature"
+                  },
+                  {
+                    "unit": "%",
+                    "value": 0.42,
+                    "columnId": "yield_fraction",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Yield",
+                    "numericScale": "fraction"
+                  },
+                  {
+                    "unit": "%",
+                    "value": 42,
+                    "columnId": "yield_points",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Yield",
+                    "numericScale": "percent_points"
+                  },
+                  {
+                    "unit": "bar",
+                    "value": null,
+                    "columnId": "pressure",
+                    "valueType": "number",
+                    "sourceRefs": [
+                      {
+                        "cell": "H2",
+                        "sheet": "Measurements",
+                        "rawValue": null
+                      }
+                    ],
+                    "displayName": "Pressure",
+                    "missingReason": "source_blank",
+                    "formattedValue": null
+                  },
+                  {
+                    "unit": "min",
+                    "value": 30,
+                    "columnId": "duration",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Duration"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 100,
+                    "columnId": "aux_0",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 0"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 101,
+                    "columnId": "aux_1",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 1"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 102,
+                    "columnId": "aux_2",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 2"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 103,
+                    "columnId": "aux_3",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 3"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 104,
+                    "columnId": "aux_4",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 4"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 105,
+                    "columnId": "aux_5",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 5"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 106,
+                    "columnId": "aux_6",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 6"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 107,
+                    "columnId": "aux_7",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 7"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 108,
+                    "columnId": "aux_8",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 8"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 109,
+                    "columnId": "aux_9",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 9"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 110,
+                    "columnId": "aux_10",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 10"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 111,
+                    "columnId": "aux_11",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 11"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 112,
+                    "columnId": "aux_12",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 12"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 113,
+                    "columnId": "aux_13",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 13"
+                  },
+                  {
+                    "unit": "mg",
+                    "value": 114,
+                    "columnId": "aux_14",
+                    "valueType": "number",
+                    "sourceRefs": [],
+                    "displayName": "Auxiliary 14"
+                  }
+                ],
+                "series": [
+                  {
+                    "label": "Temperature trace",
+                    "xField": {
+                      "unit": "min",
+                      "fieldId": "time"
+                    },
+                    "yField": {
+                      "unit": "C",
+                      "fieldId": "temperature"
+                    },
+                    "seriesKey": "temperature_trace",
+                    "pointCount": 121,
+                    "sourceRefs": []
+                  }
+                ],
+                "seriesWindow": {
+                  "points": [
+                    {
+                      "x": 0,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 1,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 2,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 3,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 4,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 5,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 6,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 7,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 8,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 9,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 10,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 11,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 12,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 13,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 14,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 15,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 16,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 17,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 18,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 19,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 20,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 21,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 22,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 23,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 24,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 25,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 26,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 27,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 28,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 29,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 30,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 31,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 32,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 33,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 34,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 35,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 36,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 37,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 38,
+                      "y": 82,
+                      "sourceRefs": []
+                    },
+                    {
+                      "x": 39,
+                      "y": 82,
+                      "sourceRefs": []
+                    }
+                  ],
+                  "xField": {
+                    "unit": "min",
+                    "fieldId": "time"
+                  },
+                  "yField": {
+                    "unit": "C",
+                    "fieldId": "temperature"
+                  },
+                  "seriesKey": "temperature_trace",
+                  "pointCount": 121,
+                  "sourceRefs": []
+                }
+              },
+              "coverage": {
+                "scope": "accepted_snapshot_window",
+                "fieldCount": 29,
+                "seriesCount": 1,
+                "nextFieldOffset": 20,
+                "nextSeriesOffset": null,
+                "nextPointOffset": 40
+              },
+              "warnings": [
+                "Values retain their stored scale and unit; no conversion or new calculation was performed."
+              ]
+            }
+          },
+          "completedAt": "2026-09-27T16:53:22.482Z"
+        }
+      ],
+      "modelOutputs": [
+        {
+          "repairErrors": [],
+          "startedAt": "2026-09-27T16:53:15.285Z",
+          "result": {
+            "ok": true,
+            "status": "answered",
+            "claims": [
+              {
+                "text": "In Exp17's accepted temperature_trace, the x-axis unit is min and the y-axis unit is C. The first stored point is x = 0 (min), y = 82 (C), with the stored values left unchanged.",
+                "citations": [
+                  {
+                    "evidenceId": "evidence_9e779b9915f73a1de23568d4",
+                    "quote": "0"
+                  },
+                  {
+                    "evidenceId": "evidence_9e779b9915f73a1de23568d4",
+                    "quote": "82"
+                  },
+                  {
+                    "evidenceId": "evidence_9e779b9915f73a1de23568d4",
+                    "quote": "min"
+                  },
+                  {
+                    "evidenceId": "evidence_9e779b9915f73a1de23568d4",
+                    "quote": "C"
+                  }
+                ],
+                "numericBindings": [
+                  {
+                    "evidenceId": "evidence_9e779b9915f73a1de23568d4",
+                    "path": "/data/seriesWindow/points/0/x",
+                    "value": 0,
+                    "unit": "min",
+                    "numericScale": null
+                  },
+                  {
+                    "evidenceId": "evidence_9e779b9915f73a1de23568d4",
+                    "path": "/data/seriesWindow/points/0/y",
+                    "value": 82,
+                    "unit": "C",
+                    "numericScale": null
+                  }
+                ]
+              }
+            ],
+            "missingEvidence": [],
+            "metadata": {
+              "provider": "deepseek",
+              "model": "deepseek-v4-pro",
+              "latencyMs": 21952,
+              "usage": {
+                "inputTokens": 20065,
+                "outputTokens": 2028,
+                "reasoningTokens": 1516
+              },
+              "toolRounds": 3,
+              "requestedMaxTokens": 4000,
+              "finalRequestedMaxTokens": 4000,
+              "attemptCount": 1,
+              "stopReason": "stop"
+            }
+          },
+          "completedAt": "2026-09-27T16:53:37.237Z"
+        }
+      ],
+      "elapsedMs": 22325,
+      "semanticReview": "pending_independent_review"
+    },
+    {
+      "id": "H-J1",
+      "group": "joint",
+      "question": "已保存项目背景的方法字段和 RQ-CONTROL 分别如何描述样品条件？文档另外写了什么气氛？请区分用户填写的背景和文档原文。",
+      "expected": [
+        "project methods: dry samples",
+        "document: only dry sample",
+        "document: nitrogen",
+        "separate context/document citations"
+      ],
+      "minimumSupport": [
+        {
+          "kind": "context",
+          "path": "methods",
+          "value": "dry samples"
+        },
+        {
+          "kind": "document",
+          "source": "word",
+          "text": "RQ-CONTROL: Use nitrogen, only for a dry sample.",
+          "locator": {
+            "paragraph": 1
+          }
+        }
+      ],
+      "control": null,
+      "split": "final_holdout",
+      "allowedScope": "project_analysis synthetic sources only",
+      "forbidden": [
+        "new scientific values",
+        "cross-project evidence",
+        "unqualified scope expansion"
+      ],
+      "request": {
+        "runId": "agent_run_9ca299af935d4aa1ba9c50a6",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "eval-H-J1-1790528017546",
+        "question": "已保存项目背景的方法字段和 RQ-CONTROL 分别如何描述样品条件？文档另外写了什么气氛？请区分用户填写的背景和文档原文。",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 28770,
+          "knownCost": null,
+          "toolCalls": 6,
+          "toolRounds": 2,
+          "inputTokens": 22004,
+          "lastActiveAt": 1790528046341,
+          "outputTokens": 3150,
+          "reservedTokens": 0,
+          "visibleToolCalls": 7,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-27T16:53:37.559Z",
+        "updatedAt": "2026-09-27T16:54:06.351Z"
+      },
+      "artifact": {
+        "id": "answer_400a352b9d8f470890c016dd",
+        "runId": "agent_run_9ca299af935d4aa1ba9c50a6",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "已保存项目背景的方法字段由用户填写为“dry samples”（干燥样品），属于用户填写的背景内容，不是已确认的科学结果。",
+              "citations": [
+                {
+                  "quote": "dry samples",
+                  "evidenceId": "evidence_99e8397f87e629083bbaaede"
+                }
+              ],
+              "numericBindings": []
+            },
+            {
+              "text": "文档原文 RQ-control.docx 写“RQ-CONTROL: Use nitrogen, only for a dry sample.”，即样品条件限定为干燥样品，气氛为氮气（nitrogen）。",
+              "citations": [
+                {
+                  "quote": "RQ-CONTROL: Use nitrogen, only for a dry sample.",
+                  "evidenceId": "evidence_b7c9c06c709e033ee604a593"
+                }
+              ],
+              "numericBindings": []
+            },
+            {
+              "text": "文档原文 RQ-中文.txt 写“当前方法仅适用于干燥样品，湿样品条件尚未记录。”，仅说明干燥样品条件，未另写气氛。",
+              "citations": [
+                {
+                  "quote": "当前方法仅适用于干燥样品，湿样品条件尚未记录。",
+                  "evidenceId": "evidence_52faa4f5367c88bfee7965bb"
+                }
+              ],
+              "numericBindings": []
+            },
+            {
+              "text": "在本项目文档范围内，检索到的气氛描述只有 RQ-control.docx 中的“nitrogen”（氮气）；未检索到氩气、空气等其他气氛表述。",
+              "citations": [
+                {
+                  "quote": "Use nitrogen",
+                  "evidenceId": "evidence_b7c9c06c709e033ee604a593"
+                }
+              ],
+              "numericBindings": []
+            }
+          ],
+          "status": "answered",
+          "limitations": [
+            "User-authored project context; not an accepted scientific result."
+          ],
+          "missingEvidence": []
+        },
+        "evidence": [
+          {
+            "id": "evidence_99e8397f87e629083bbaaede",
+            "kind": "project_context",
+            "label": "Analysis Project",
+            "locator": {
+              "field": "projectProfile.methods",
+              "cursor": 0
+            },
+            "version": {
+              "projectId": "project_analysis",
+              "updatedAt": "2026-08-23T12:00:00.000Z",
+              "contentHash": "bff81d99a680b7cb0ae0292bc6a3681f5ede1c1dfaea4427a455d64a468ca08e"
+            },
+            "coverage": {
+              "next": [],
+              "scope": "saved_project_background_window",
+              "fields": [
+                {
+                  "end": 11,
+                  "unit": "utf16_characters",
+                  "field": "projectProfile.methods",
+                  "start": 0,
+                  "length": 11,
+                  "complete": true
+                }
+              ],
+              "complete": true
+            },
+            "warnings": [
+              "User-authored project context; not an accepted scientific result."
+            ]
+          },
+          {
+            "id": "evidence_b7c9c06c709e033ee604a593",
+            "kind": "document_passage",
+            "label": "RQ-control.docx",
+            "locator": {
+              "kind": "word",
+              "part": "word/document.xml",
+              "charEnd": 48,
+              "charStart": 0,
+              "paragraph": 1
+            },
+            "version": {
+              "versionId": "document_version_170681958cc14abb8528a3ee",
+              "documentId": "context_doc_bddff017e19f41538f91ff21",
+              "contentHash": "5e2f24ed4e7d1a452dfec338208af686261e83b15426bc4601d4c8490f5a0bee",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 1,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "part": "word/document.xml",
+                  "status": "ready",
+                  "tables": 1,
+                  "paragraphs": 3
+                },
+                "statusCounts": {
+                  "ready": 1
+                },
+                "warningParts": 0,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "ready",
+              "passageId": "passage_8e4076c3856e0ec0021b780e2e96f0a8",
+              "limitations": [
+                "word_page_layout_not_inferred",
+                "fields_and_external_links_not_evaluated"
+              ]
+            },
+            "warnings": []
+          },
+          {
+            "id": "evidence_52faa4f5367c88bfee7965bb",
+            "kind": "document_passage",
+            "label": "RQ-中文.txt",
+            "locator": {
+              "kind": "text",
+              "charEnd": 23,
+              "lineEnd": 4,
+              "charStart": 0,
+              "lineStart": 4
+            },
+            "version": {
+              "versionId": "document_version_cea88d8540384c45b26e2c65",
+              "documentId": "context_doc_00a76e8444fb4d1dae838e6d",
+              "contentHash": "feccff4990736e4966946b336c8b100f9d19070207271255196829a5f2a14611",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 1,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "part": "text",
+                  "lines": 4,
+                  "status": "ready"
+                },
+                "statusCounts": {
+                  "ready": 1
+                },
+                "warningParts": 0,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "ready",
+              "passageId": "passage_83b1d36ff4d74942a6648e346c91b1fd",
+              "limitations": []
+            },
+            "warnings": []
+          }
+        ],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "status": "ok",
+            "elapsedMs": 22
+          },
+          {
+            "tool": "get_project_context",
+            "status": "ok",
+            "elapsedMs": 14
+          },
+          {
+            "tool": "read_document_passage",
+            "status": "ok",
+            "elapsedMs": 31
+          },
+          {
+            "tool": "read_document_passage",
+            "status": "ok",
+            "elapsedMs": 16
+          },
+          {
+            "tool": "read_document_passage",
+            "status": "ok",
+            "elapsedMs": 11
+          },
+          {
+            "tool": "search_project_documents",
+            "status": "ok",
+            "elapsedMs": 42
+          },
+          {
+            "tool": "search_project_documents",
+            "status": "ok",
+            "elapsedMs": 16
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 28770,
+          "knownCost": null,
+          "toolCalls": 6,
+          "toolRounds": 2,
+          "inputTokens": 22004,
+          "lastActiveAt": 1790528046341,
+          "outputTokens": 3150,
+          "reservedTokens": 0,
+          "visibleToolCalls": 7,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-27 12:54:06.342086-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_99e8397f87e629083bbaaede",
+          "data": {
+            "id": "project_analysis",
+            "updatedAt": "2026-08-23T12:00:00.000Z",
+            "projectProfile": {
+              "methods": "dry samples"
+            }
+          },
+          "kind": "project_context",
+          "label": "Analysis Project",
+          "locator": {
+            "field": "projectProfile.methods",
+            "cursor": 0
+          },
+          "version": {
+            "projectId": "project_analysis",
+            "updatedAt": "2026-08-23T12:00:00.000Z",
+            "contentHash": "bff81d99a680b7cb0ae0292bc6a3681f5ede1c1dfaea4427a455d64a468ca08e"
+          },
+          "coverage": {
+            "next": [],
+            "scope": "saved_project_background_window",
+            "fields": [
+              {
+                "end": 11,
+                "unit": "utf16_characters",
+                "field": "projectProfile.methods",
+                "start": 0,
+                "length": 11,
+                "complete": true
+              }
+            ],
+            "complete": true
+          },
+          "warnings": [
+            "User-authored project context; not an accepted scientific result."
+          ]
+        },
+        {
+          "id": "evidence_b7c9c06c709e033ee604a593",
+          "data": {
+            "text": "RQ-CONTROL: Use nitrogen, only for a dry sample."
+          },
+          "kind": "document_passage",
+          "label": "RQ-control.docx",
+          "locator": {
+            "kind": "word",
+            "part": "word/document.xml",
+            "charEnd": 48,
+            "charStart": 0,
+            "paragraph": 1
+          },
+          "version": {
+            "versionId": "document_version_170681958cc14abb8528a3ee",
+            "documentId": "context_doc_bddff017e19f41538f91ff21",
+            "contentHash": "5e2f24ed4e7d1a452dfec338208af686261e83b15426bc4601d4c8490f5a0bee",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 1,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "part": "word/document.xml",
+                "status": "ready",
+                "tables": 1,
+                "paragraphs": 3
+              },
+              "statusCounts": {
+                "ready": 1
+              },
+              "warningParts": 0,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "ready",
+            "passageId": "passage_8e4076c3856e0ec0021b780e2e96f0a8",
+            "limitations": [
+              "word_page_layout_not_inferred",
+              "fields_and_external_links_not_evaluated"
+            ]
+          },
+          "warnings": []
+        },
+        {
+          "id": "evidence_52faa4f5367c88bfee7965bb",
+          "data": {
+            "text": "当前方法仅适用于干燥样品，湿样品条件尚未记录。"
+          },
+          "kind": "document_passage",
+          "label": "RQ-中文.txt",
+          "locator": {
+            "kind": "text",
+            "charEnd": 23,
+            "lineEnd": 4,
+            "charStart": 0,
+            "lineStart": 4
+          },
+          "version": {
+            "versionId": "document_version_cea88d8540384c45b26e2c65",
+            "documentId": "context_doc_00a76e8444fb4d1dae838e6d",
+            "contentHash": "feccff4990736e4966946b336c8b100f9d19070207271255196829a5f2a14611",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 1,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "part": "text",
+                "lines": 4,
+                "status": "ready"
+              },
+              "statusCounts": {
+                "ready": 1
+              },
+              "warningParts": 0,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "ready",
+            "passageId": "passage_83b1d36ff4d74942a6648e346c91b1fd",
+            "limitations": []
+          },
+          "warnings": []
+        }
+      ],
+      "toolExecutions": [
+        {
+          "tool": "get_project_context",
+          "input": {
+            "field": "projectProfile.methods"
+          },
+          "startedAt": "2026-09-27T16:53:43.254Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_99e8397f87e629083bbaaede",
+              "kind": "project_context",
+              "label": "Analysis Project",
+              "version": {
+                "projectId": "project_analysis",
+                "updatedAt": "2026-08-23T12:00:00.000Z",
+                "contentHash": "bff81d99a680b7cb0ae0292bc6a3681f5ede1c1dfaea4427a455d64a468ca08e"
+              },
+              "data": {
+                "id": "project_analysis",
+                "updatedAt": "2026-08-23T12:00:00.000Z",
+                "projectProfile": {
+                  "methods": "dry samples"
+                }
+              },
+              "coverage": {
+                "scope": "saved_project_background_window",
+                "fields": [
+                  {
+                    "field": "projectProfile.methods",
+                    "start": 0,
+                    "end": 11,
+                    "length": 11,
+                    "unit": "utf16_characters",
+                    "complete": true
+                  }
+                ],
+                "next": [],
+                "complete": true
+              },
+              "locator": {
+                "field": "projectProfile.methods",
+                "cursor": 0
+              },
+              "warnings": [
+                "User-authored project context; not an accepted scientific result."
+              ]
+            }
+          },
+          "completedAt": "2026-09-27T16:53:43.268Z"
+        },
+        {
+          "tool": "read_document_passage",
+          "input": {
+            "versionId": "document_version_170681958cc14abb8528a3ee",
+            "passageId": "passage_8e4076c3856e0ec0021b780e2e96f0a8"
+          },
+          "startedAt": "2026-09-27T16:53:43.268Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_b7c9c06c709e033ee604a593",
+              "kind": "document_passage",
+              "label": "RQ-control.docx",
+              "version": {
+                "documentId": "context_doc_bddff017e19f41538f91ff21",
+                "versionId": "document_version_170681958cc14abb8528a3ee",
+                "versionNumber": 1,
+                "contentHash": "5e2f24ed4e7d1a452dfec338208af686261e83b15426bc4601d4c8490f5a0bee",
+                "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+              },
+              "locator": {
+                "kind": "word",
+                "part": "word/document.xml",
+                "charEnd": 48,
+                "charStart": 0,
+                "paragraph": 1
+              },
+              "data": {
+                "text": "RQ-CONTROL: Use nitrogen, only for a dry sample."
+              },
+              "coverage": {
+                "scope": "one_passage",
+                "passageId": "passage_8e4076c3856e0ec0021b780e2e96f0a8",
+                "status": "ready",
+                "source": {
+                  "parts": 1,
+                  "statusCounts": {
+                    "ready": 1
+                  },
+                  "location": {
+                    "part": "word/document.xml",
+                    "status": "ready",
+                    "tables": 1,
+                    "paragraphs": 3
+                  },
+                  "warningParts": 0,
+                  "scope": "summary_and_cited_location_only",
+                  "fullCoverageAvailableOnVersion": true
+                },
+                "limitations": [
+                  "word_page_layout_not_inferred",
+                  "fields_and_external_links_not_evaluated"
+                ]
+              },
+              "warnings": []
+            },
+            "contextEvidence": [
+              {
+                "id": "evidence_e50ec87b33a7026ee998915b",
+                "kind": "document_passage",
+                "label": "RQ-control.docx",
+                "version": {
+                  "documentId": "context_doc_bddff017e19f41538f91ff21",
+                  "versionId": "document_version_170681958cc14abb8528a3ee",
+                  "versionNumber": 1,
+                  "contentHash": "5e2f24ed4e7d1a452dfec338208af686261e83b15426bc4601d4c8490f5a0bee",
+                  "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+                },
+                "locator": {
+                  "row": 1,
+                  "kind": "word",
+                  "part": "word/document.xml",
+                  "table": 1,
+                  "column": 1,
+                  "charEnd": 13,
+                  "charStart": 0,
+                  "paragraph": 2
+                },
+                "data": {
+                  "text": "Blank control"
+                },
+                "coverage": {
+                  "scope": "one_passage",
+                  "passageId": "passage_8db0d447854ce293075161c2b35161db",
+                  "status": "ready",
+                  "source": {
+                    "parts": 1,
+                    "statusCounts": {
+                      "ready": 1
+                    },
+                    "location": {
+                      "part": "word/document.xml",
+                      "status": "ready",
+                      "tables": 1,
+                      "paragraphs": 3
+                    },
+                    "warningParts": 0,
+                    "scope": "summary_and_cited_location_only",
+                    "fullCoverageAvailableOnVersion": true
+                  },
+                  "limitations": [
+                    "word_page_layout_not_inferred",
+                    "fields_and_external_links_not_evaluated"
+                  ]
+                },
+                "warnings": []
+              }
+            ],
+            "neighbors": [
+              {
+                "id": "passage_8db0d447854ce293075161c2b35161db",
+                "ordinal": 1,
+                "locator": {
+                  "row": 1,
+                  "kind": "word",
+                  "part": "word/document.xml",
+                  "table": 1,
+                  "column": 1,
+                  "charEnd": 13,
+                  "charStart": 0,
+                  "paragraph": 2
+                }
+              }
+            ]
+          },
+          "completedAt": "2026-09-27T16:53:43.299Z"
+        },
+        {
+          "tool": "read_document_passage",
+          "input": {
+            "versionId": "document_version_22f97ea8490345d7b31f560e",
+            "passageId": "passage_847853440c3e1a52b856c0ef19586cfa"
+          },
+          "startedAt": "2026-09-27T16:53:43.299Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_7b02b48c5c11cafed821458c",
+              "kind": "document_passage",
+              "label": "RQ-mixed.pdf",
+              "version": {
+                "documentId": "context_doc_38980ef3d66a43ac8d83dcf5",
+                "versionId": "document_version_22f97ea8490345d7b31f560e",
+                "versionNumber": 1,
+                "contentHash": "dc1c5609543c8215d1b9167c3e656bfcce107b75fb67375380eb9589bb2533d6",
+                "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+              },
+              "locator": {
+                "kind": "pdf",
+                "line": 5,
+                "page": 2,
+                "charEnd": 18,
+                "rotation": 0,
+                "charStart": 0,
+                "pageWidth": 600,
+                "pageHeight": 800,
+                "rectangles": [
+                  {
+                    "top": 0.2907290729072907,
+                    "left": 0.07563025210084033,
+                    "width": 0.5354141656662665,
+                    "height": 0.02565256525652565
+                  }
+                ],
+                "coordinateSystem": "display_normalized_top_left"
+              },
+              "data": {
+                "text": "本文只描述方法,不代表实验结果。\n\n",
+                "method": "ocr",
+                "uncertain": false,
+                "confidence": 95,
+                "uncertainWords": []
+              },
+              "coverage": {
+                "scope": "one_passage",
+                "passageId": "passage_847853440c3e1a52b856c0ef19586cfa",
+                "status": "partial",
+                "source": {
+                  "parts": 2,
+                  "statusCounts": {
+                    "ready": 2
+                  },
+                  "location": {
+                    "ocr": {
+                      "engine": "tesseract.js-7.0.0",
+                      "languages": [
+                        "eng",
+                        "chi_sim"
+                      ],
+                      "confidence": 92,
+                      "renderScale": 2.7777777777777777,
+                      "quarterTurns": 0,
+                      "languageVersion": "1.0.0"
+                    },
+                    "page": 2,
+                    "method": "ocr",
+                    "status": "ready",
+                    "warnings": [
+                      "ocr_uncertain_text_check_original"
+                    ]
+                  },
+                  "warningParts": 1,
+                  "scope": "summary_and_cited_location_only",
+                  "fullCoverageAvailableOnVersion": true
+                },
+                "limitations": [
+                  "figures_and_scientific_images_not_interpreted",
+                  "complex_table_structure_not_inferred"
+                ]
+              },
+              "warnings": []
+            },
+            "contextEvidence": [
+              {
+                "id": "evidence_62bf3bd7a29cade8403b9a5f",
+                "kind": "document_passage",
+                "label": "RQ-mixed.pdf",
+                "version": {
+                  "documentId": "context_doc_38980ef3d66a43ac8d83dcf5",
+                  "versionId": "document_version_22f97ea8490345d7b31f560e",
+                  "versionNumber": 1,
+                  "contentHash": "dc1c5609543c8215d1b9167c3e656bfcce107b75fb67375380eb9589bb2533d6",
+                  "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+                },
+                "locator": {
+                  "kind": "pdf",
+                  "line": 4,
+                  "page": 2,
+                  "charEnd": 11,
+                  "rotation": 0,
+                  "charStart": 0,
+                  "pageWidth": 600,
+                  "pageHeight": 800,
+                  "rectangles": [
+                    {
+                      "top": 0.23447344734473446,
+                      "left": 0.07563025210084033,
+                      "width": 0.24849939975990393,
+                      "height": 0.027902790279027923
+                    }
+                  ],
+                  "coordinateSystem": "display_normalized_top_left"
+                },
+                "data": {
+                  "text": "样品编号 Exp17\n",
+                  "method": "ocr",
+                  "uncertain": false,
+                  "confidence": 94,
+                  "uncertainWords": []
+                },
+                "coverage": {
+                  "scope": "one_passage",
+                  "passageId": "passage_44511ffbc92c6fec76cf388b60406420",
+                  "status": "partial",
+                  "source": {
+                    "parts": 2,
+                    "statusCounts": {
+                      "ready": 2
+                    },
+                    "location": {
+                      "ocr": {
+                        "engine": "tesseract.js-7.0.0",
+                        "languages": [
+                          "eng",
+                          "chi_sim"
+                        ],
+                        "confidence": 92,
+                        "renderScale": 2.7777777777777777,
+                        "quarterTurns": 0,
+                        "languageVersion": "1.0.0"
+                      },
+                      "page": 2,
+                      "method": "ocr",
+                      "status": "ready",
+                      "warnings": [
+                        "ocr_uncertain_text_check_original"
+                      ]
+                    },
+                    "warningParts": 1,
+                    "scope": "summary_and_cited_location_only",
+                    "fullCoverageAvailableOnVersion": true
+                  },
+                  "limitations": [
+                    "figures_and_scientific_images_not_interpreted",
+                    "complex_table_structure_not_inferred"
+                  ]
+                },
+                "warnings": []
+              },
+              {
+                "id": "evidence_1530970e877673f79398b65a",
+                "kind": "document_passage",
+                "label": "RQ-mixed.pdf",
+                "version": {
+                  "documentId": "context_doc_38980ef3d66a43ac8d83dcf5",
+                  "versionId": "document_version_22f97ea8490345d7b31f560e",
+                  "versionNumber": 1,
+                  "contentHash": "dc1c5609543c8215d1b9167c3e656bfcce107b75fb67375380eb9589bb2533d6",
+                  "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+                },
+                "locator": {
+                  "kind": "pdf",
+                  "line": 6,
+                  "page": 2,
+                  "charEnd": 4,
+                  "rotation": 0,
+                  "charStart": 0,
+                  "pageWidth": 600,
+                  "pageHeight": 800,
+                  "rectangles": [
+                    {
+                      "top": 0.18316831683168316,
+                      "left": 0.336734693877551,
+                      "width": 0.007803121248499412,
+                      "height": 0.012601260126012592
+                    }
+                  ],
+                  "coordinateSystem": "display_normalized_top_left"
+                },
+                "data": {
+                  "text": "LJ\n\n",
+                  "method": "ocr",
+                  "uncertain": true,
+                  "confidence": 77,
+                  "uncertainWords": []
+                },
+                "coverage": {
+                  "scope": "one_passage",
+                  "passageId": "passage_e11c54daa6cfd09cb0222ee9e30b46f1",
+                  "status": "partial",
+                  "source": {
+                    "parts": 2,
+                    "statusCounts": {
+                      "ready": 2
+                    },
+                    "location": {
+                      "ocr": {
+                        "engine": "tesseract.js-7.0.0",
+                        "languages": [
+                          "eng",
+                          "chi_sim"
+                        ],
+                        "confidence": 92,
+                        "renderScale": 2.7777777777777777,
+                        "quarterTurns": 0,
+                        "languageVersion": "1.0.0"
+                      },
+                      "page": 2,
+                      "method": "ocr",
+                      "status": "ready",
+                      "warnings": [
+                        "ocr_uncertain_text_check_original"
+                      ]
+                    },
+                    "warningParts": 1,
+                    "scope": "summary_and_cited_location_only",
+                    "fullCoverageAvailableOnVersion": true
+                  },
+                  "limitations": [
+                    "figures_and_scientific_images_not_interpreted",
+                    "complex_table_structure_not_inferred"
+                  ]
+                },
+                "warnings": []
+              }
+            ],
+            "neighbors": [
+              {
+                "id": "passage_44511ffbc92c6fec76cf388b60406420",
+                "ordinal": 10003,
+                "locator": {
+                  "kind": "pdf",
+                  "line": 4,
+                  "page": 2,
+                  "charEnd": 11,
+                  "rotation": 0,
+                  "charStart": 0,
+                  "pageWidth": 600,
+                  "pageHeight": 800,
+                  "rectangles": [
+                    {
+                      "top": 0.23447344734473446,
+                      "left": 0.07563025210084033,
+                      "width": 0.24849939975990393,
+                      "height": 0.027902790279027923
+                    }
+                  ],
+                  "coordinateSystem": "display_normalized_top_left"
+                }
+              },
+              {
+                "id": "passage_e11c54daa6cfd09cb0222ee9e30b46f1",
+                "ordinal": 10005,
+                "locator": {
+                  "kind": "pdf",
+                  "line": 6,
+                  "page": 2,
+                  "charEnd": 4,
+                  "rotation": 0,
+                  "charStart": 0,
+                  "pageWidth": 600,
+                  "pageHeight": 800,
+                  "rectangles": [
+                    {
+                      "top": 0.18316831683168316,
+                      "left": 0.336734693877551,
+                      "width": 0.007803121248499412,
+                      "height": 0.012601260126012592
+                    }
+                  ],
+                  "coordinateSystem": "display_normalized_top_left"
+                }
+              }
+            ]
+          },
+          "completedAt": "2026-09-27T16:53:43.315Z"
+        },
+        {
+          "tool": "read_document_passage",
+          "input": {
+            "versionId": "document_version_cea88d8540384c45b26e2c65",
+            "passageId": "passage_83b1d36ff4d74942a6648e346c91b1fd"
+          },
+          "startedAt": "2026-09-27T16:53:43.316Z",
+          "result": {
+            "evidence": {
+              "id": "evidence_52faa4f5367c88bfee7965bb",
+              "kind": "document_passage",
+              "label": "RQ-中文.txt",
+              "version": {
+                "documentId": "context_doc_00a76e8444fb4d1dae838e6d",
+                "versionId": "document_version_cea88d8540384c45b26e2c65",
+                "versionNumber": 1,
+                "contentHash": "feccff4990736e4966946b336c8b100f9d19070207271255196829a5f2a14611",
+                "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+              },
+              "locator": {
+                "kind": "text",
+                "charEnd": 23,
+                "lineEnd": 4,
+                "charStart": 0,
+                "lineStart": 4
+              },
+              "data": {
+                "text": "当前方法仅适用于干燥样品，湿样品条件尚未记录。"
+              },
+              "coverage": {
+                "scope": "one_passage",
+                "passageId": "passage_83b1d36ff4d74942a6648e346c91b1fd",
+                "status": "ready",
+                "source": {
+                  "parts": 1,
+                  "statusCounts": {
+                    "ready": 1
+                  },
+                  "location": {
+                    "part": "text",
+                    "lines": 4,
+                    "status": "ready"
+                  },
+                  "warningParts": 0,
+                  "scope": "summary_and_cited_location_only",
+                  "fullCoverageAvailableOnVersion": true
+                },
+                "limitations": []
+              },
+              "warnings": []
+            },
+            "contextEvidence": [
+              {
+                "id": "evidence_6c434314bbe2fd44daf870fa",
+                "kind": "document_passage",
+                "label": "RQ-中文.txt",
+                "version": {
+                  "documentId": "context_doc_00a76e8444fb4d1dae838e6d",
+                  "versionId": "document_version_cea88d8540384c45b26e2c65",
+                  "versionNumber": 1,
+                  "contentHash": "feccff4990736e4966946b336c8b100f9d19070207271255196829a5f2a14611",
+                  "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+                },
+                "locator": {
+                  "kind": "text",
+                  "charEnd": 24,
+                  "lineEnd": 3,
+                  "charStart": 0,
+                  "lineStart": 1
+                },
+                "data": {
+                  "text": "项目说明 RQ-CN\n目标是研究催化剂稳定性。\n"
+                },
+                "coverage": {
+                  "scope": "one_passage",
+                  "passageId": "passage_e76f6c6b365cc51ee67f9e1803f8b848",
+                  "status": "ready",
+                  "source": {
+                    "parts": 1,
+                    "statusCounts": {
+                      "ready": 1
+                    },
+                    "location": {
+                      "part": "text",
+                      "lines": 4,
+                      "status": "ready"
+                    },
+                    "warningParts": 0,
+                    "scope": "summary_and_cited_location_only",
+                    "fullCoverageAvailableOnVersion": true
+                  },
+                  "limitations": []
+                },
+                "warnings": []
+              }
+            ],
+            "neighbors": [
+              {
+                "id": "passage_e76f6c6b365cc51ee67f9e1803f8b848",
+                "ordinal": 0,
+                "locator": {
+                  "kind": "text",
+                  "charEnd": 24,
+                  "lineEnd": 3,
+                  "charStart": 0,
+                  "lineStart": 1
+                }
+              }
+            ]
+          },
+          "completedAt": "2026-09-27T16:53:43.327Z"
+        },
+        {
+          "tool": "search_project_documents",
+          "input": {
+            "query": "气氛 氮气 nitrogen"
+          },
+          "startedAt": "2026-09-27T16:53:54.171Z",
+          "result": {
+            "items": [
+              {
+                "kind": "document",
+                "label": "RQ-control.docx",
+                "target": {
+                  "status": "ready",
+                  "locator": {
+                    "kind": "word",
+                    "part": "word/document.xml",
+                    "charEnd": 48,
+                    "charStart": 0,
+                    "paragraph": 1
+                  },
+                  "ordinal": 0,
+                  "snippet": "RQ-CONTROL: Use nitrogen, only for a dry sample.",
+                  "passageId": "passage_8e4076c3856e0ec0021b780e2e96f0a8",
+                  "versionId": "document_version_170681958cc14abb8528a3ee",
+                  "documentId": "context_doc_bddff017e19f41538f91ff21"
+                },
+                "score": "2"
+              }
+            ],
+            "nextCursor": null,
+            "coverage": {
+              "scope": "current_project_sources",
+              "readForCitation": false,
+              "returned": 1,
+              "candidateWindow": 1,
+              "complete": true,
+              "includes": [
+                "uploaded_documents",
+                "raw_workbook_cells",
+                "confirmed_regions",
+                "accepted_field_names"
+              ],
+              "note": "Search snippets are not complete evidence. Empty results mean no keyword match, including accepted field names; report insufficient evidence within this search coverage, not universal absence."
+            }
+          },
+          "completedAt": "2026-09-27T16:53:54.213Z"
+        },
+        {
+          "tool": "search_project_documents",
+          "input": {
+            "query": "argon 氩气 空气 air"
+          },
+          "startedAt": "2026-09-27T16:53:54.213Z",
+          "result": {
+            "items": [],
+            "nextCursor": null,
+            "coverage": {
+              "scope": "current_project_sources",
+              "readForCitation": false,
+              "returned": 0,
+              "candidateWindow": 0,
+              "complete": true,
+              "includes": [
+                "uploaded_documents",
+                "raw_workbook_cells",
+                "confirmed_regions",
+                "accepted_field_names"
+              ],
+              "note": "Search snippets are not complete evidence. Empty results mean no keyword match, including accepted field names; report insufficient evidence within this search coverage, not universal absence."
+            }
+          },
+          "completedAt": "2026-09-27T16:53:54.229Z"
+        }
+      ],
+      "modelOutputs": [
+        {
+          "repairErrors": [],
+          "startedAt": "2026-09-27T16:53:37.600Z",
+          "result": {
+            "ok": true,
+            "status": "answered",
+            "claims": [
+              {
+                "text": "已保存项目背景的方法字段由用户填写为“dry samples”（干燥样品），属于用户填写的背景内容，不是已确认的科学结果。",
+                "citations": [
+                  {
+                    "evidenceId": "evidence_99e8397f87e629083bbaaede",
+                    "quote": "dry samples"
+                  }
+                ],
+                "numericBindings": []
+              },
+              {
+                "text": "文档原文 RQ-control.docx 写“RQ-CONTROL: Use nitrogen, only for a dry sample.”，即样品条件限定为干燥样品，气氛为氮气（nitrogen）。",
+                "citations": [
+                  {
+                    "evidenceId": "evidence_b7c9c06c709e033ee604a593",
+                    "quote": "RQ-CONTROL: Use nitrogen, only for a dry sample."
+                  }
+                ],
+                "numericBindings": []
+              },
+              {
+                "text": "文档原文 RQ-中文.txt 写“当前方法仅适用于干燥样品，湿样品条件尚未记录。”，仅说明干燥样品条件，未另写气氛。",
+                "citations": [
+                  {
+                    "evidenceId": "evidence_52faa4f5367c88bfee7965bb",
+                    "quote": "当前方法仅适用于干燥样品，湿样品条件尚未记录。"
+                  }
+                ],
+                "numericBindings": []
+              },
+              {
+                "text": "在本项目文档范围内，检索到的气氛描述只有 RQ-control.docx 中的“nitrogen”（氮气）；未检索到氩气、空气等其他气氛表述。",
+                "citations": [
+                  {
+                    "evidenceId": "evidence_b7c9c06c709e033ee604a593",
+                    "quote": "Use nitrogen"
+                  }
+                ],
+                "numericBindings": []
+              }
+            ],
+            "missingEvidence": [],
+            "metadata": {
+              "provider": "deepseek",
+              "model": "deepseek-v4-pro",
+              "latencyMs": 28730,
+              "usage": {
+                "inputTokens": 22004,
+                "outputTokens": 3150,
+                "reasoningTokens": 2325
+              },
+              "toolRounds": 2,
+              "requestedMaxTokens": 4000,
+              "finalRequestedMaxTokens": 4000,
+              "attemptCount": 1,
+              "stopReason": "stop"
+            }
+          },
+          "completedAt": "2026-09-27T16:54:06.330Z"
+        }
+      ],
+      "elapsedMs": 28936,
+      "semanticReview": "pending_independent_review"
+    },
+    {
+      "id": "H-C1",
+      "group": "controls",
+      "question": "项目资料是否提供镍含量（nickel concentration）的数值和单位？",
+      "expected": [
+        "insufficient_evidence",
+        "no invented measurement or unit",
+        "scope the search gap"
+      ],
+      "minimumSupport": [],
+      "control": "insufficient_evidence",
+      "split": "final_holdout",
+      "allowedScope": "project_analysis synthetic sources only",
+      "forbidden": [
+        "new scientific values",
+        "cross-project evidence",
+        "unqualified scope expansion"
+      ],
+      "request": {
+        "runId": "agent_run_de0fa9be6da54264b5160717",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "eval-H-C1-1790528046486",
+        "question": "项目资料是否提供镍含量（nickel concentration）的数值和单位？",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 2,
+          "elapsedMs": 6309,
+          "knownCost": null,
+          "toolCalls": 2,
+          "toolRounds": 1,
+          "inputTokens": 6388,
+          "lastActiveAt": 1790528052827,
+          "outputTokens": 567,
+          "reservedTokens": 0,
+          "visibleToolCalls": 3,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-27T16:54:06.504Z",
+        "updatedAt": "2026-09-27T16:54:12.834Z"
+      },
+      "artifact": {
+        "id": "answer_c671619b8dbe4a1c9c5a68d1",
+        "runId": "agent_run_de0fa9be6da54264b5160717",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [],
+          "status": "insufficient_evidence",
+          "limitations": [],
+          "missingEvidence": [
+            "项目资料中未检索到镍含量（nickel concentration）的数值或单位；搜索“镍含量”与“nickel concentration”均无匹配结果，无法确认其数值和单位。"
+          ]
+        },
+        "evidence": [],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "status": "ok",
+            "elapsedMs": 24
+          },
+          {
+            "tool": "search_project_documents",
+            "status": "ok",
+            "elapsedMs": 72
+          },
+          {
+            "tool": "search_project_documents",
+            "status": "ok",
+            "elapsedMs": 22
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 2,
+          "elapsedMs": 6309,
+          "knownCost": null,
+          "toolCalls": 2,
+          "toolRounds": 1,
+          "inputTokens": 6388,
+          "lastActiveAt": 1790528052827,
+          "outputTokens": 567,
+          "reservedTokens": 0,
+          "visibleToolCalls": 3,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-27 12:54:12.828613-04"
+      },
+      "evidence": [],
+      "toolExecutions": [
+        {
+          "tool": "search_project_documents",
+          "input": {
+            "query": "镍含量"
+          },
+          "startedAt": "2026-09-27T16:54:09.738Z",
+          "result": {
+            "items": [],
+            "nextCursor": null,
+            "coverage": {
+              "scope": "current_project_sources",
+              "readForCitation": false,
+              "returned": 0,
+              "candidateWindow": 0,
+              "complete": true,
+              "includes": [
+                "uploaded_documents",
+                "raw_workbook_cells",
+                "confirmed_regions",
+                "accepted_field_names"
+              ],
+              "note": "Search snippets are not complete evidence. Empty results mean no keyword match, including accepted field names; report insufficient evidence within this search coverage, not universal absence."
+            }
+          },
+          "completedAt": "2026-09-27T16:54:09.810Z"
+        },
+        {
+          "tool": "search_project_documents",
+          "input": {
+            "query": "nickel concentration"
+          },
+          "startedAt": "2026-09-27T16:54:09.810Z",
+          "result": {
+            "items": [],
+            "nextCursor": null,
+            "coverage": {
+              "scope": "current_project_sources",
+              "readForCitation": false,
+              "returned": 0,
+              "candidateWindow": 0,
+              "complete": true,
+              "includes": [
+                "uploaded_documents",
+                "raw_workbook_cells",
+                "confirmed_regions",
+                "accepted_field_names"
+              ],
+              "note": "Search snippets are not complete evidence. Empty results mean no keyword match, including accepted field names; report insufficient evidence within this search coverage, not universal absence."
+            }
+          },
+          "completedAt": "2026-09-27T16:54:09.832Z"
+        }
+      ],
+      "modelOutputs": [
+        {
+          "repairErrors": [],
+          "startedAt": "2026-09-27T16:54:06.549Z",
+          "result": {
+            "ok": true,
+            "status": "insufficient_evidence",
+            "claims": [],
+            "missingEvidence": [
+              "项目资料中未检索到镍含量（nickel concentration）的数值或单位；搜索“镍含量”与“nickel concentration”均无匹配结果，无法确认其数值和单位。"
+            ],
+            "metadata": {
+              "provider": "deepseek",
+              "model": "deepseek-v4-pro",
+              "latencyMs": 6270,
+              "usage": {
+                "inputTokens": 6388,
+                "outputTokens": 567,
+                "reasoningTokens": 426
+              },
+              "toolRounds": 1,
+              "requestedMaxTokens": 4000,
+              "finalRequestedMaxTokens": 4000,
+              "attemptCount": 1,
+              "stopReason": "stop"
+            }
+          },
+          "completedAt": "2026-09-27T16:54:12.819Z"
+        }
+      ],
+      "elapsedMs": 6550,
+      "semanticReview": "pending_independent_review"
+    },
+    {
+      "id": "H-F1",
+      "group": "review",
+      "question": "Based on Exp17's stored data, what experimental temperature should we try next?",
+      "expected": [
+        "out_of_scope",
+        "no recommended parameter",
+        "read-only Q&A boundary"
+      ],
+      "minimumSupport": [],
+      "control": "out_of_scope",
+      "split": "final_holdout",
+      "allowedScope": "project_analysis synthetic sources only",
+      "forbidden": [
+        "new scientific values",
+        "cross-project evidence",
+        "unqualified scope expansion"
+      ],
+      "request": {
+        "runId": "agent_run_7c9cdeadebfd4de3a5376444",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "eval-H-F1-1790528053039",
+        "question": "Based on Exp17's stored data, what experimental temperature should we try next?",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 1,
+          "elapsedMs": 6672,
+          "knownCost": null,
+          "toolCalls": 0,
+          "toolRounds": 0,
+          "inputTokens": 3875,
+          "lastActiveAt": 1790528059742,
+          "outputTokens": 619,
+          "reservedTokens": 0,
+          "visibleToolCalls": 1,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-27T16:54:13.053Z",
+        "updatedAt": "2026-09-27T16:54:19.749Z"
+      },
+      "artifact": {
+        "id": "answer_c767fa248453409f80100ac2",
+        "runId": "agent_run_7c9cdeadebfd4de3a5376444",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [],
+          "status": "out_of_scope",
+          "limitations": [],
+          "missingEvidence": []
+        },
+        "evidence": [],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "status": "ok",
+            "elapsedMs": 23
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 1,
+          "elapsedMs": 6672,
+          "knownCost": null,
+          "toolCalls": 0,
+          "toolRounds": 0,
+          "inputTokens": 3875,
+          "lastActiveAt": 1790528059742,
+          "outputTokens": 619,
+          "reservedTokens": 0,
+          "visibleToolCalls": 1,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-27 12:54:19.743728-04"
+      },
+      "evidence": [],
+      "toolExecutions": [],
+      "modelOutputs": [
+        {
+          "repairErrors": [],
+          "startedAt": "2026-09-27T16:54:13.098Z",
+          "result": {
+            "ok": true,
+            "status": "out_of_scope",
+            "claims": [],
+            "missingEvidence": [],
+            "metadata": {
+              "provider": "deepseek",
+              "model": "deepseek-v4-pro",
+              "latencyMs": 6634,
+              "usage": {
+                "inputTokens": 3875,
+                "outputTokens": 619,
+                "reasoningTokens": 601
+              },
+              "toolRounds": 0,
+              "requestedMaxTokens": 4000,
+              "finalRequestedMaxTokens": 4000,
+              "attemptCount": 1,
+              "stopReason": "stop"
+            }
+          },
+          "completedAt": "2026-09-27T16:54:19.732Z"
+        }
+      ],
+      "elapsedMs": 6804,
+      "semanticReview": "pending_independent_review"
+    }
+  ],
+  "execution": {
+    "startedAt": "2026-09-27T16:52:40.842Z",
+    "files": {
+      "src/research/citedAnswer.js": "15916d1c0a48873f77c29b9664b041a811431ac3e5f7b9c827f29c3e00b68180",
+      "src/research/evidenceTools.js": "f8b07846ed7b91d28700de4d86cfe3190324be982bbcb0d438f82692754c9662",
+      "src/research/qaBudget.js": "144deccd1b105b24c380055dbbf6b67094cc3013addcd45945ff139419ee659f",
+      "src/research/testing/researchQaCorpus.js": "b8c9ec0d0a5a8425ed29082ac1a89049d8e5f0cbed939b6fc77fc1e3c83a82d6",
+      "src/research/testing/researchQaLabels.js": "5b3e5d19db8a2ced5bf71715d4762d8f35c9e0983ac1868bea00279c38136042",
+      "src/research/testing/researchQaSupplemental.js": "cf078b3fe0bc00f02bee8d79f239ccde5e5ed81fd7ce626203b0aee0ad772643",
+      "src/research/testing/researchQaHoldout.js": "436ef42306fe396340e39e0ceaab64d3e4de587f45b43f40ac743054540e9e77",
+      "src/v1/research-qa/provider-eval.postgres.test.ts": "f34051246cfbd8f00ab05da0201caf284708876128ae1a0be863b2951ddf505b",
+      "src/ai/gateway.js": "86d0906b2a72834e79f0cfb1b51b0020df3fcead433d3e7057f55685a9888d12",
+      "src/ai/deepseek.js": "1a2b94539c70af64c66fa1680694b59319782bb0f680857c7c3a38d00b6d01a4",
+      "src/v1/research-qa/research-evidence.service.ts": "92d2eb90081bea2efbed47d388f0c9561577272752072596293c5218ac4fd411",
+      "src/v1/research-qa/research-evidence.repository.ts": "6b8c06b68d2eae5aeee281968b75ab1947d4b6530989be73cd9ff1a899cbf36f",
+      "src/v1/research-qa/research-questions.service.ts": "cb02a64a7cb3fa26d015f47e79ff38be7e76dea6750849ba0a368fe006607a60"
+    },
+    "limits": {
+      "question": 4000,
+      "search": 8,
+      "candidates": 40,
+      "cells": 240,
+      "fields": 20,
+      "points": 40,
+      "characters": 4000,
+      "toolBytes": 32000,
+      "evidenceBytes": 160000,
+      "toolCalls": 24,
+      "toolRounds": 8,
+      "requests": 12,
+      "tokens": 60000,
+      "deadlineMs": 120000
+    },
+    "thinking": {
+      "enabled": true,
+      "effort": "high"
+    },
+    "repairThinking": {
+      "enabled": false
+    },
+    "maxOutputTokens": 4000
+  }
+}

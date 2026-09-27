@@ -343,6 +343,7 @@ export function ProjectOnboarding({
   extractionTemplates = [],
   onComplete,
   onExit,
+  onAskSources,
   loadAnalysisThread = getAnalysisThread,
   AnalysisReviewComponent = AnalysisReviewWorkspace,
 }) {
@@ -1376,6 +1377,7 @@ export function ProjectOnboarding({
             </div>
           )}
           <span className="project-onboarding-project-name">{projectState?.project?.name || "New project"}</span>
+          {onAskSources && <button type="button" onClick={onAskSources}>Ask about sources</button>}
           <button type="button" onClick={skipOnboarding}>Skip onboarding</button>
         </div>
         <div className="project-onboarding-progress" aria-hidden="true">

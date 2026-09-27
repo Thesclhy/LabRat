@@ -63,6 +63,20 @@ traceable to confirmed regions.
 Projects start empty. Workbooks under [public/templates](public/templates/) are
 examples only and are never imported automatically.
 
+## Source questions
+
+Ask LabRat can use uploaded PDF (including scans), DOC/DOCX, TXT and XLS/XLSX.
+After parsing, full-project View members may ask and open citations to exact
+source versions, pages, paragraphs, lines, cells or accepted data. Raw workbook
+content remains distinct from reviewed experiment meaning. New computations
+still require analysis-plan review. Public Guest and selected-experiment-only
+members cannot use project-wide Q&A; personal question history is actor-scoped.
+
+See [the contract](doc/contracts/research-qa-v1.md),
+[local acceptance](doc/qa/research-qa-verification.md) and
+[release record](doc/qa/research-qa-deployment.md). Small synthetic-corpus scores
+are not a general scientific reliability guarantee.
+
 ## Roles And Access
 
 - **Platform administrator:** manages lab-owner invitations and platform
