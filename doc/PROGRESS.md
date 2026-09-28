@@ -13,6 +13,19 @@ Keep entries concise, newest first, and include:
 - verification
 - follow-ups or residual risk
 
+## 2026-09-28 — Clear sent Ask attachments
+
+- User reported + attachments remaining after Send. Successful reference uploads
+  were being reinserted as selected-reference chips; upload-only messages did not
+  clear them. Clear composer selections while retaining the question's evidence,
+  chat receipts and library files.
+- Preserve only unregistered files after partial failure; successfully registered
+  files are not re-uploaded. Parsing failures remain retryable in the library.
+- Three before-fix regressions reproduced; 87 focused UI tests, production build
+  and actual Chromium/HTTP/PG regression passed. Screenshot confirms the cleared
+  composer and retained receipt. Release in progress; see `doc/qa/ask-attachment-clear.md`.
+- No backend, schema or scientific workflow changes. User retest remains pending.
+
 ## 2026-09-28 — Reference library navigation fix
 
 - During manual testing the user reported the library remaining above Overview.

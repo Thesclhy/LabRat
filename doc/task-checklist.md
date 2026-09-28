@@ -20,7 +20,8 @@ Cross-device pending Ask tasks (2026-09-28):
 
 - [x] Back up production, publish main and verify hosted release/migration 037.
 - [x] Verify live release, service, public assets and unauthenticated API rejection.
-- [ ] User manual chat-panel acceptance (not started, as explicitly confirmed).
+- [ ] User manual chat-panel acceptance (in progress; navigation and attachment
+  feedback tracked in `doc/current-milestone.md`; fixed-answer/cross-device checks pending).
 
 Deployed application e780cff; evidence: `doc/qa/cross-device-ask-deployment.md`.
 

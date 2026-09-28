@@ -157,6 +157,9 @@ await withTestSchema(databaseUrl, async ({ databaseUrl: isolated }) => {
     await panel.getByText("unified-method.txt was added to the reference library.").waitFor();
     await panel.getByRole("button", { name: "Send message", exact: true }).waitFor({ state: "visible" });
     await owner.waitForFunction(() => !document.querySelector('button[aria-label="Send message"]').disabled);
+    assert.equal(await panel.getByLabel("Attached files", { exact: true }).count(), 0, "Sent files leave the composer attachment list");
+    assert.equal(await panel.getByLabel("Selected references", { exact: true }).count(), 0, "Upload-only messages must not preselect their files for the next question");
+    await owner.screenshot({ path: path.join(output, "reference-upload-composer-cleared.png"), fullPage: false });
     const input = panel.getByRole("textbox", { name: "Ask LabRat", exact: true });
     await input.fill("@unified");
     await panel.getByRole("option").filter({ hasText: "unified-method.txt" }).click();

@@ -2675,6 +2675,7 @@ export function AgentPanel({
       const documents = spreadsheetAttachments.filter((file) => !/\.xlsx?$/i.test(file.name));
       const refs = [...referenceMentions];
       if (documents.length) {
+        const unregisteredDocuments = new Set(documents);
         const controller = new AbortController(); agentRequestAbortRef.current = controller;
         setBusy(true); setBusyOperation({ stage: "Uploading reference files", startedAt: Date.now(), elapsedSeconds: 0 });
         try {
@@ -2682,6 +2683,7 @@ export function AgentPanel({
             const uploaded = await uploadServerProjectFile(activeProjectId, file, { signal: controller.signal });
             const registered = await researchApi.registerContextDocument(activeProjectId, uploaded.fileObject.id, { signal: controller.signal }, { newDocument: true });
             controller.signal.throwIfAborted();
+            unregisteredDocuments.delete(file);
             refs.push({ documentId: registered.document.id, versionId: registered.version.id, label: registered.document.originalName, versionNumber: registered.version.versionNumber });
             next = [...next.map((message) => message.referenceUpload ? { ...message, pendingQuestion: null } : message), { role: "assistant", text: `${file.name} was added to the reference library.`, referenceUpload: refs.at(-1),
               pendingQuestion: userText ? { text: userText, refs: [...refs], requiresWorkbook: workbooks.length > 0 } : null }];
@@ -2695,9 +2697,10 @@ export function AgentPanel({
             if (!["ready", "partial"].includes(version.status)) throw new Error(`${file.name} is not ready. Check its status or retry in the reference library.`);
           }
           next = next.map((message) => message.referenceUpload ? { ...message, pendingQuestion: null } : message);
-          setHistory(next); setReferenceMentions(refs);
+          setHistory(next); setReferenceMentions([]);
         } catch (error) {
-          setInput(userText); setReferenceMentions(refs); setPendingSpreadsheetFiles(workbooks);
+          setInput(userText); setReferenceMentions(userText ? refs : []);
+          setPendingSpreadsheetFiles(spreadsheetAttachments.filter((file) => workbooks.includes(file) || unregisteredDocuments.has(file)));
           if (!controller.signal.aborted) setHistory([...next, { role: "assistant", text: error.message }]);
           return;
         } finally { setBusy(false); setBusyOperation(null); }

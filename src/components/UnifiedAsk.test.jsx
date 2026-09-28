@@ -95,6 +95,69 @@ describe("unified Ask", () => {
     await waitFor(() => expect(server.createServerWorkbookReviewSession).toHaveBeenCalledWith("project", { fileObjectId: "file" }, expect.anything()));
     expect(api.registerContextDocument).not.toHaveBeenCalled(); expect(api.createResearchQuestion).not.toHaveBeenCalled();
   });
+  test("sending reference files clears composer attachments and selections but keeps upload receipts", async () => {
+    server.uploadServerProjectFile.mockImplementation(async (_project, file) => ({ fileObject: { id: file.name } }));
+    api.registerContextDocument.mockImplementation(async (_project, id) => ({ document: { id, originalName: id }, version: { id: `v-${id}`, versionNumber: 1, status: "ready" } }));
+    const view = render(<AgentPanel {...panel} canEdit />);
+    fireEvent.change(view.container.querySelector('input[type="file"]'), { target: { files: [new File(["method"], "method.txt"), new File(["control"], "control.docx")] } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await screen.findByText("control.docx was added to the reference library.");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Send message" }).disabled).toBe(false));
+    expect(screen.queryByLabelText("Attached files")).toBeNull();
+    expect(screen.queryByLabelText("Selected references")).toBeNull();
+    expect(screen.getByText("method.txt was added to the reference library.")).toBeTruthy();
+    expect(api.createResearchQuestion).not.toHaveBeenCalled();
+  });
+  test("clearing uploaded file chips keeps their versions on the accompanying question", async () => {
+    let finishQuestion;
+    api.createResearchQuestion.mockImplementationOnce(() => new Promise((resolve) => { finishQuestion = resolve; }));
+    server.uploadServerProjectFile.mockResolvedValue({ fileObject: { id: "file" } });
+    api.registerContextDocument.mockResolvedValue({ document: { id: "method", originalName: "method.txt" }, version: { id: "method-v1", versionNumber: 1, status: "ready" } });
+    const view = render(<AgentPanel {...panel} canEdit />);
+    fireEvent.change(view.container.querySelector('input[type="file"]'), { target: { files: [new File(["method"], "method.txt")] } });
+    fireEvent.change(screen.getByLabelText("Ask LabRat"), { target: { value: "What sample does this method require?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => expect(api.createResearchQuestion).toHaveBeenCalledWith("project", expect.objectContaining({ referenceDocuments: [{ documentId: "method", versionId: "method-v1" }] }), expect.anything()));
+    expect(screen.queryByLabelText("Attached files")).toBeNull();
+    expect(screen.queryByLabelText("Selected references")).toBeNull();
+    finishQuestion(complete);
+    await screen.findByText("The available sources do not support a complete answer.");
+  });
+  test("partial upload failure restores only unsent files and retry does not upload successful files again", async () => {
+    let failNext = true;
+    server.uploadServerProjectFile.mockImplementation(async (_project, file) => {
+      if (file.name === "second.txt" && failNext) { failNext = false; throw new Error("Upload interrupted"); }
+      return { fileObject: { id: file.name } };
+    });
+    api.registerContextDocument.mockImplementation(async (_project, id) => ({ document: { id, originalName: id }, version: { id: `v-${id}`, versionNumber: 1, status: "ready" } }));
+    const view = render(<AgentPanel {...panel} canEdit />);
+    fireEvent.change(view.container.querySelector('input[type="file"]'), { target: { files: ["first.txt", "second.txt", "third.txt"].map((name) => new File([name], name)) } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await screen.findByText("Upload interrupted");
+    expect(screen.getByLabelText("Attached files").textContent).toContain("second.txt");
+    expect(screen.getByLabelText("Attached files").textContent).toContain("third.txt");
+    expect(screen.getByLabelText("Attached files").textContent).not.toContain("first.txt");
+    expect(screen.queryByLabelText("Selected references")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await screen.findByText("third.txt was added to the reference library.");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Send message" }).disabled).toBe(false));
+    expect(screen.queryByLabelText("Attached files")).toBeNull();
+    expect(screen.queryByLabelText("Selected references")).toBeNull();
+    expect(server.uploadServerProjectFile.mock.calls.map(([, file]) => file.name)).toEqual(["first.txt", "second.txt", "second.txt", "third.txt"]);
+    expect(api.registerContextDocument.mock.calls.map(([, id]) => id)).toEqual(["first.txt", "second.txt", "third.txt"]);
+  });
+  test("registered files with parsing errors stay in the library rather than becoming new upload attachments", async () => {
+    server.uploadServerProjectFile.mockResolvedValue({ fileObject: { id: "file" } });
+    api.registerContextDocument.mockResolvedValue({ document: { id: "method", originalName: "method.txt" }, version: { id: "method-v1", versionNumber: 1, status: "failed" } });
+    const view = render(<AgentPanel {...panel} canEdit />);
+    fireEvent.change(view.container.querySelector('input[type="file"]'), { target: { files: [new File(["method"], "method.txt")] } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await screen.findByText("method.txt is not ready. Check its status or retry in the reference library.");
+    expect(screen.queryByLabelText("Attached files")).toBeNull();
+    expect(screen.queryByLabelText("Selected references")).toBeNull();
+    expect(screen.getByText("method.txt was added to the reference library.")).toBeTruthy();
+    expect(api.createResearchQuestion).not.toHaveBeenCalled();
+  });
   test("Excel upload retains its original question in a pending task", async () => {
     let task = { id: "task", status: "waiting", question: "Compare these experiments", referencesReady: true, ready: false,
       attachments: [{ name: "data.xlsx", kind: "workbook", state: "needs_upload" }] };
