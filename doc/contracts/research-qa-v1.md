@@ -73,6 +73,9 @@ no generic project/chat migration or second analysis execution runtime is added.
 The reference library occupies the main workspace, with server-side name/type/
 status filtering, stable oldest/newest pagination, readable source passages/PDF
 pages, versions, retries and archive. It does not accumulate inside the chat pane.
+PDF reading navigates original pages using version metadata rather than passage
+pagination; the original-page preview limit remains explicit. Opening a citation
+retains its pinned version and page, with exact highlights only on the cited page.
 View members may read and ask; document mutations use existing proposal permission.
 
 @ selection pins up to eight documentId/versionId pairs. The server validates

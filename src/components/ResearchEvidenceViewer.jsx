@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
-import { contextDocumentPageUrl, getResearchEvidence, listContextDocumentPassages } from "../data/researchQaApi.js";
+import { getResearchEvidence, listContextDocumentPassages } from "../data/researchQaApi.js";
+import { PdfSourceViewer } from "./PdfSourceViewer.jsx";
 
 export function evidenceLocation(evidence) {
   const place = evidence?.locator || {};
-  if (place.kind === "pdf") return `Page ${place.page}${place.line ? ` · text block ${place.line}` : ""}`;
+  if (place.kind === "pdf") return `Page ${place.page}`;
   if (place.kind === "word") return `${place.part || "Document"} · paragraph ${place.paragraph}${place.table ? ` · table ${place.table}, row ${place.row}, column ${place.column}` : ""}`;
   if (place.kind === "text") return `Lines ${place.lineStart}–${place.lineEnd}`;
   if (place.sheet) return `${place.sheet}!${place.range}`;
@@ -21,19 +22,11 @@ function CellEvidence({ data }) {
       <td>{cell.formula || ""}{cell.cacheMissing ? " · no cached value" : ""}{cell.mergedRange ? ` · merged ${cell.mergedRange}` : ""}</td></tr>)}</tbody></table></div>;
 }
 
-function EvidenceBody({ projectId, evidence }) {
-  const [imageFailed, setImageFailed] = useState(false);
-  useEffect(() => setImageFailed(false), [evidence]);
+function EvidenceBody({ evidence }) {
   if (!evidence) return null;
-  const data = evidence.data || {}, location = evidence.locator || {};
+  const data = evidence.data || {};
   return <>
     {data.uncertain && <p className="qa-warning">OCR is uncertain. Check the original page before relying on its text or numbers.</p>}
-    {location.kind === "pdf" && <>
-      {imageFailed ? <p role="alert">The original page could not be displayed. Close and reopen the source to retry.</p> :
-        <div className="qa-pdf-page"><img src={contextDocumentPageUrl(projectId, evidence.version.versionId, location.page)} alt={`Original ${evidence.label}, page ${location.page}`} onError={() => setImageFailed(true)} />
-          {(location.rectangles || []).map((rect, index) => <span key={index} className="qa-source-highlight" aria-hidden="true"
-            style={{ left: `${rect.left * 100}%`, top: `${rect.top * 100}%`, width: `${rect.width * 100}%`, height: `${rect.height * 100}%` }} />)}</div>}
-    </>}
     {data.text && <blockquote className="qa-source-text">{data.text}</blockquote>}
     {evidence.kind === "workbook_raw" && <CellEvidence data={data} />}
     {evidence.kind === "confirmed_region" && <><p>Confirmed interpretation</p><pre className="qa-source-text">{JSON.stringify(data.interpretation, null, 2)}</pre><CellEvidence data={data.raw} /></>}
@@ -57,6 +50,11 @@ export function ResearchEvidenceViewer({ projectId, selection, onClose }) {
     if (selection.runId) {
       const result = await getResearchEvidence(projectId, selection.runId, selection.evidenceId, { signal });
       if (!signal.aborted) setState({ loading: false, error: "", items: [result.evidence], cursor: null });
+    } else if (selection.currentVersion?.metadata?.extension === "pdf" || /\.pdf$/i.test(selection.document?.originalName || "")) {
+      if (!signal.aborted) setState({ loading: false, error: "", cursor: null, items: [{ kind: "document_passage",
+        label: selection.document.originalName, version: { ...selection.currentVersion, versionId: selection.currentVersion.id },
+        locator: { kind: "pdf", page: 1 }, data: {}, coverage: selection.currentVersion.metadata?.coverage,
+        warnings: selection.currentVersion.metadata?.warnings }] });
     } else {
       const result = await listContextDocumentPassages(projectId, selection.currentVersion.id, { ...(cursor ? { cursor } : {}), limit: 8 }, { signal });
       const items = result.items.map((passage) => ({ kind: "document_passage", label: selection.document.originalName,
@@ -81,13 +79,13 @@ export function ResearchEvidenceViewer({ projectId, selection, onClose }) {
   const evidence = state.items[index];
   return <dialog ref={dialog} className="qa-evidence-dialog" aria-labelledby="qa-evidence-title" onCancel={(event) => { event.preventDefault(); onClose(); }}>
     <header><div><h2 id="qa-evidence-title">{evidence?.label || selection.document?.originalName || "Source evidence"}</h2>
-      {evidence && <p>{kindLabels[evidence.kind]} · {evidenceLocation(evidence)}{evidence.version?.versionNumber ? ` · version ${evidence.version.versionNumber}` : ""}</p>}</div>
+      {evidence && <p>{kindLabels[evidence.kind]} · {evidence.locator?.kind === "pdf" ? "PDF" : evidenceLocation(evidence)}{evidence.version?.versionNumber ? ` · version ${evidence.version.versionNumber}` : ""}</p>}</div>
       <button ref={close} type="button" aria-label="Close source evidence" onClick={onClose}>×</button></header>
     {state.loading && <p role="status">Loading the cited source…</p>}
     {state.error && <p role="alert">{state.error}</p>}
     {!state.loading && !state.error && !state.items.length && <p>No readable passages are available. Check the document processing status.</p>}
-    {state.items.length > 1 && <label>Passage <select value={index} onChange={(event) => setIndex(Number(event.target.value))}>{state.items.map((item, i) => <option key={i} value={i}>{evidenceLocation(item)}</option>)}</select></label>}
-    <EvidenceBody projectId={projectId} evidence={evidence} />
+    {state.items.length > 1 && evidence?.locator?.kind !== "pdf" && <label>Passage <select value={index} onChange={(event) => setIndex(Number(event.target.value))}>{state.items.map((item, i) => <option key={i} value={i}>{evidenceLocation(item)}</option>)}</select></label>}
+    {evidence?.locator?.kind === "pdf" ? <PdfSourceViewer key={`${projectId}:${evidence.version.versionId}:${evidence.id || "document"}`} projectId={projectId} evidence={evidence} cited={Boolean(selection.runId)} onPageChange={() => { if (dialog.current) dialog.current.scrollTop = 0; }} /> : <EvidenceBody evidence={evidence} />}
     {state.cursor && <button type="button" onClick={() => load(state.cursor, controller.current.signal).catch((error) => { if (!controller.current.signal.aborted) setState((old) => ({ ...old, error: error.message })); })}>Load more passages</button>}
   </dialog>;
 }

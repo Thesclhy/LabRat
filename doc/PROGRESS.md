@@ -13,6 +13,19 @@ Keep entries concise, newest first, and include:
 - verification
 - follow-ups or residual risk
 
+## 2026-09-28 — Read reference PDFs by page
+
+- User requested pages instead of the text-block selector. PDF browsing now uses
+  original-version page counts, Previous/Next and direct page selection, including
+  pages with no indexed text. Library reading has no arbitrary block highlight.
+- Citations still pin their version/page/rectangles; navigation clears overlays
+  on other pages and offers Return to cited page. Keep OCR warnings, page limits,
+  image/metadata retry and stale-read cancellation. Word/TXT paths stay unchanged.
+- Preflight, 96 focused tests, build and real Chromium/HTTP/PostgreSQL passed;
+  final 13-test/build/browser rerun confirmed return-to-top/style changes.
+  Hosted deployment pending. See
+  `doc/qa/pdf-page-navigation.md`. User retest remains pending.
+
 ## 2026-09-28 — Repair PDF preview missing glyphs
 
 - User suspected OCR after Q05-protocol.pdf page 1 lost most visible letters.

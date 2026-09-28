@@ -26,6 +26,7 @@ beforeEach(() => {
   api.listContextDocuments.mockResolvedValue({ items: [], nextCursor: null });
   api.createResearchQuestion.mockResolvedValue(complete); api.getResearchQuestion.mockResolvedValue(complete);
   api.getResearchEvidence.mockResolvedValue({ evidence: source }); api.contextDocumentPageUrl.mockReturnValue("/synthetic.png");
+  api.getContextDocumentVersion.mockResolvedValue({ version: { id: "version-1", metadata: { pageCount: 3 } } });
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -42,6 +43,7 @@ describe("cited source Q&A interface", () => {
     expect(await screen.findByText("Use 80 C for dry samples only.")).toBeTruthy();
     expect(api.getResearchEvidence).toHaveBeenCalledWith("project", "run", "ev", expect.objectContaining({ signal: expect.any(AbortSignal) }));
     expect(screen.getByAltText("Original Protocol.pdf, page 2").getAttribute("src")).toBe("/synthetic.png");
+    fireEvent.load(screen.getByAltText("Original Protocol.pdf, page 2"));
     expect(document.querySelector(".qa-source-highlight").style.top).toBe("20%");
     fireEvent.click(screen.getByRole("button", { name: "Close source evidence" }));
     expect(screen.queryByRole("dialog")).toBeNull();

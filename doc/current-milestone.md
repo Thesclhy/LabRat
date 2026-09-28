@@ -1,12 +1,18 @@
 # Current Milestone
 
-Status: User manual acceptance in progress — PDF preview font repair deployed
+Status: User manual acceptance in progress — PDF page navigation verified, release pending
 Read when: checking what the next implementation slice should be.
 Last reviewed: 2026-09-28
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
 
 ## Manual acceptance follow-up
+
+The user requested readable PDF page navigation instead of text-block choices.
+Implemented page/total, direct page selection and Previous/Next, preserving exact
+cited-page highlights and historical versions. Focused tests/build and real
+browser checks passed, including final return-to-top/style verification.
+Deployment pending. See `doc/qa/pdf-page-navigation.md`; user retest is still required.
 
 The user's Q05 PDF preview lost most letters. Production diagnostics isolated
 standard-font substitution in the preview renderer; all three pages are parsed,

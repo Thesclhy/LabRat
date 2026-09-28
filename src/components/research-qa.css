@@ -28,11 +28,20 @@
 .qa-question-form button { background: #314657; color: #fff; border: 0; padding: 7px 12px; border-radius: 5px; }
 .qa-evidence-dialog { width: min(900px, calc(100vw - 32px)); max-height: calc(100vh - 32px); box-sizing: border-box; border: 1px solid #c6cbd1; border-radius: 8px; padding: 16px; color: #252e36; overflow: auto; }
 .qa-evidence-dialog::backdrop { background: #111c2c66; }
+.qa-evidence-dialog button { background: #fff; border: 1px solid #dce1ec; border-radius: 7px; color: #4b5871; padding: 7px 10px; font: inherit; font-size: 12px; }
+.qa-evidence-dialog button:focus-visible { outline: 2px solid #7861d8; outline-offset: 2px; }
 .qa-evidence-dialog header { display: flex; justify-content: space-between; gap: 16px; align-items: start; }
 .qa-evidence-dialog h2 { margin: 0; font-size: 17px; overflow-wrap: anywhere; }
 .qa-evidence-dialog header p { font-size: 12px; color: #606975; }
 .qa-evidence-dialog header button { font-size: 22px; padding: 0 8px; }
 .qa-evidence-dialog select { max-width: 100%; margin: 8px; }
+.qa-evidence-dialog button:disabled { cursor: default; opacity: .5; }
+.qa-pdf-toolbar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 0; background: #fff; border-bottom: 1px solid #e4e6ea; }
+.qa-pdf-toolbar button { font-size: 12px; padding: 8px 10px; }
+.qa-pdf-page-picker { display: flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 13px; }
+.qa-evidence-dialog .qa-pdf-page-picker select { width: auto; min-width: 54px; margin: 0; padding: 6px; }
+.qa-evidence-dialog .qa-pdf-page-picker > span { font: inherit; color: inherit; text-transform: none; }
+.qa-pdf-citation-note { font-size: 12px; color: #606975; margin: 10px 0; }
 .qa-pdf-page { position: relative; line-height: 0; margin: 12px 0; border: 1px solid #dde0e4; }
 .qa-pdf-page img { width: 100%; height: auto; display: block; }
 .qa-source-highlight { position: absolute; background: #ffcf4b44; outline: 1px solid #d59416; pointer-events: none; }

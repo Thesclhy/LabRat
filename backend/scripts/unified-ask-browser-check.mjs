@@ -188,6 +188,56 @@ await withTestSchema(databaseUrl, async ({ databaseUrl: isolated }) => {
     await panel.locator(".qa-citations button").last().click();
     await owner.getByRole("dialog").getByText("The protocol requires a dry sample.", { exact: true }).waitFor();
     await owner.keyboard.press("Escape");
+    await library.getByLabel("Search references").fill("browser-scan");
+    await library.getByRole("button", { name: "Add reference", exact: true }).click();
+    await library.locator('input[type="file"]').setInputFiles({ name: "browser-scan.pdf", mimeType: "application/pdf", buffer: syntheticPdf([
+      { text: ["Cooling protocol", ...Array.from({ length: 10 }, (_, index) => `Dry sample preparation note ${index + 1}.`)] },
+      { scan: {} }, { scan: { chinese: true } },
+    ]) });
+    const pdfRow = library.locator(".reference-row").filter({ hasText: "browser-scan.pdf" });
+    await pdfRow.getByText(/v1 · (ready|partial)/).waitFor();
+    await pdfRow.getByRole("button", { name: "browser-scan.pdf", exact: true }).click();
+    const pdfDialog = owner.getByRole("dialog");
+    const waitPdfPage = async (pageNumber) => {
+      const image = pdfDialog.getByRole("img", { name: `Original browser-scan.pdf, page ${pageNumber}`, exact: true });
+      await image.waitFor();
+      await owner.waitForFunction((page) => {
+        const img = document.querySelector(`dialog img[alt="Original browser-scan.pdf, page ${page}"]`);
+        return img?.complete && img.naturalWidth > 0;
+      }, pageNumber);
+    };
+    await waitPdfPage(1);
+    assert.equal(await pdfDialog.getByRole("option").count(), 3, "PDF pages cannot be limited by the first eight passages");
+    assert.equal(await pdfDialog.getByLabel("Passage", { exact: true }).count(), 0);
+    assert.equal(await pdfDialog.locator(".qa-source-highlight").count(), 0, "Library reading shows a clean full page");
+    await pdfDialog.evaluate(el => { el.scrollTop = 500; });
+    await pdfDialog.getByRole("button", { name: "Next page", exact: true }).click();
+    await waitPdfPage(2);
+    assert.equal(await pdfDialog.evaluate(el => el.scrollTop), 0, "Turning the page returns to its top");
+    await owner.screenshot({ path: path.join(output, "pdf-pages-desktop.png"), fullPage: false });
+    await pdfDialog.getByRole("combobox", { name: "Page", exact: true }).selectOption("3");
+    await waitPdfPage(3);
+    assert.equal(await pdfDialog.getByRole("button", { name: "Next page", exact: true }).isDisabled(), true);
+    await owner.setViewportSize({ width: 390, height: 844 });
+    await owner.screenshot({ path: path.join(output, "pdf-pages-mobile.png"), fullPage: false });
+    assert.ok(await pdfDialog.evaluate(el => el.scrollWidth <= el.clientWidth + 1), "PDF controls fit the narrow dialog");
+    await owner.keyboard.press("Escape");
+    await owner.setViewportSize({ width: 1440, height: 1000 });
+    if (!await owner.locator(".agent.open").count()) await owner.getByRole("button", { name: "Ask", exact: true }).click();
+    await panel.waitFor();
+    await input.fill("What temperature does the scan document?"); await input.press("Enter");
+    await panel.getByText("The scanned protocol states 80 C.", { exact: true }).waitFor();
+    await panel.locator(".qa-citations button").last().click();
+    await waitPdfPage(2);
+    await pdfDialog.locator(".qa-source-highlight").first().waitFor();
+    await pdfDialog.getByRole("button", { name: "Next page", exact: true }).click();
+    await waitPdfPage(3);
+    assert.equal(await pdfDialog.locator(".qa-source-highlight").count(), 0);
+    await pdfDialog.getByRole("button", { name: "Return to cited page 2", exact: true }).click();
+    await waitPdfPage(2);
+    await pdfDialog.locator(".qa-source-highlight").first().waitFor();
+    await owner.screenshot({ path: path.join(output, "pdf-pages-citation.png"), fullPage: false });
+    await owner.keyboard.press("Escape");
     await owner.reload();
     await owner.getByRole("button", { name: "Open", exact: true }).click();
     await owner.getByRole("button", { name: "Ask", exact: true }).click();
@@ -262,6 +312,10 @@ await withTestSchema(databaseUrl, async ({ databaseUrl: isolated }) => {
     await viewPanel.getByRole("button", { name: "Library", exact: true }).click();
     assert.equal(await viewer.getByRole("button", { name: "Add reference", exact: true }).count(), 0);
     assert.equal(await viewer.getByRole("button", { name: "Archive", exact: true }).count(), 0);
+    await viewer.getByRole("region", { name: "Reference library" }).getByRole("button", { name: "browser-scan.pdf", exact: true }).click();
+    await viewer.getByRole("dialog").getByRole("combobox", { name: "Page", exact: true }).selectOption("3");
+    await viewer.getByRole("img", { name: "Original browser-scan.pdf, page 3", exact: true }).waitFor();
+    await viewer.keyboard.press("Escape");
     assert.deepEqual(errors, []);
     assert.equal(network.some(line => / \/api\/(?!v1\/)/.test(line)), false);
     assert.equal((await pool.query("select count(*)::int count from analysis_runs")).rows[0].count, 0);
