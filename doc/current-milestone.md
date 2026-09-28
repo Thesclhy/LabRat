@@ -1,6 +1,6 @@
 # Current Milestone
 
-Status: User manual acceptance in progress — sent Ask attachment cleanup under verification
+Status: User manual acceptance in progress — sent Ask attachment cleanup deployed
 Read when: checking what the next implementation slice should be.
 Last reviewed: 2026-09-28
 
@@ -11,8 +11,9 @@ This file tracks the active execution state. Keep `doc/plan.md` as the short roa
 The user next reported sent + attachments staying in the input status area.
 Clear automatically selected reference chips after successful upload, preserving
 evidence for the sent question and only retaining unregistered files for retry.
-Focused tests/build passed; browser/release verification:
-`doc/qa/ask-attachment-clear.md`.
+Focused tests/build and real-browser regression passed. Application e14610b is
+deployed; hosted workflow 36469079756 and live release checks passed. User retest
+pending; evidence: `doc/qa/ask-attachment-clear.md`.
 
 The user started chat-panel testing and found Reference library content surviving
 navigation back to Overview. The shared React key was reproduced and fixed;

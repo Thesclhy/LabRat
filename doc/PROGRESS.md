@@ -23,7 +23,10 @@ Keep entries concise, newest first, and include:
   files are not re-uploaded. Parsing failures remain retryable in the library.
 - Three before-fix regressions reproduced; 87 focused UI tests, production build
   and actual Chromium/HTTP/PG regression passed. Screenshot confirms the cleared
-  composer and retained receipt. Release in progress; see `doc/qa/ask-attachment-clear.md`.
+  composer and retained receipt. See `doc/qa/ask-attachment-clear.md`.
+- Application e14610b deployed via workflow 36469079756 to release
+  20260928190328-e14610b4147b. Fresh backup, hosted full verification and live
+  health/assets/schema checks passed; provider unchanged.
 - No backend, schema or scientific workflow changes. User retest remains pending.
 
 ## 2026-09-28 — Reference library navigation fix

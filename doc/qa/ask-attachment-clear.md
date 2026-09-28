@@ -1,6 +1,6 @@
 # Ask attachment cleanup after sending
 
-Date: 2026-09-28. Status: verified locally; deployment in progress.
+Date: 2026-09-28. Status: deployed and verified; user retest pending.
 
 The user reported files selected through Ask's + control staying in the composer
 after sending. The pending file array was cleared, but successful reference
@@ -40,3 +40,18 @@ User retest: refresh, use + to select a reference, send with no question, and
 verify the composer has no attached-file/selected-reference chips while the chat
 receipt and library item remain. Then select the document with @ and ask Q01.
 Manual fixed-answer, Excel and cross-device acceptance remain pending.
+
+## Release result
+
+- Application `e14610b4147b9c154dcb401540a44dbc4bf45a9a` pushed to main; active
+  release `/opt/labrat/releases/20260928190328-e14610b4147b`.
+- [Workflow 36469079756](https://github.com/Thesclhy/LabRat/actions/runs/36469079756)
+  passed full frontend/backend/PostgreSQL checks, builds and deployment.
+- Backup `/var/backups/labrat/ask-attachment-clear-20260928`, set `20260928185919`,
+  passed gzip/archive integrity checks. No new migration was added.
+- Live service and local/public health passed; public HTML/JS/CSS hashes match the
+  release. Existing migration 037 and task indexes remain valid; unauthenticated
+  task/reference/question requests return 401. Provider remains Anthropic.
+- Safe live receipt: [ask-attachment-clear-live.json](ask-attachment-clear-live.json),
+  completed `2026-09-28T19:04:17.922Z`. Verification made no production research
+  writes or real model calls. Documentation follows in a `[skip ci]` commit.
