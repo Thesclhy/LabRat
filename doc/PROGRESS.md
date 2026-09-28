@@ -28,7 +28,11 @@ Keep entries concise, newest first, and include:
   expected skips, 72 Nest tests, API generation/build/smoke); three focused real
   PostgreSQL scenarios passed. Real provider returned all requested facts with
   valid citations on its initial answer. Actual browser regression passed at
-  desktop/390px widths, including status geometry, cancel and retry; deployment pending.
+  desktop/390px widths, including status geometry, cancel and retry.
+- Application 2bf3226 deployed via workflow 36482075444 at release
+  20260928205352-2bf3226c3497. Backup integrity, exact public assets, service/auth
+  checks and a fresh same-question live-provider replay passed. Test-owned local
+  database was stopped after confirming no other clients.
 - Evidence and limits: `doc/qa/qa-citation-status.md`. Existing failed runs and
   their saved source scopes are preserved; user retest should submit a new question.
 

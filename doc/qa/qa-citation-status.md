@@ -1,6 +1,6 @@
 # Ask citation validation and progress presentation
 
-Date: 2026-09-28. Status: automated verification passed; deployment/user retest pending.
+Date: 2026-09-28. Status: deployed and verified; user retest pending.
 
 The user selected Q01-scope.txt and asked: "Based only on this document, what are
 the temperature, duration, and applicable sample types for RQ-001? Please cite
@@ -70,3 +70,15 @@ User retest: refresh the page, select @Q01-scope.txt, and send a new copy of the
 question. The hint should say only selected references; the answer should state
 80 C, 30 minutes, dry samples only and wet-sample exclusion, with citations that
 open the matching original lines. Existing failed messages remain in history.
+
+Release: application `2bf3226c3497e8cb69d9477c73f2a252b91fc685` is active at
+`/opt/labrat/releases/20260928205352-2bf3226c3497`.
+[Workflow 36482075444](https://github.com/Thesclhy/LabRat/actions/runs/36482075444)
+passed full hosted regression, PostgreSQL integration checks, build and deployment.
+Exact served HTML/JS/CSS, service health and unauthenticated API rejection passed.
+No schema migration or provider change. A new real-provider replay against the
+deployed compiled validator again returned all three correctly cited facts on
+the initial answer. No production research state was written. Safe receipts:
+[live release checks](qa-citation-status-live.json) and
+[live synthetic provider replay](qa-citation-live-provider.jsonl).
+Local test services were stopped after confirming no unrelated database clients.

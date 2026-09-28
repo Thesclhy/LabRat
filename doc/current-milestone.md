@@ -1,6 +1,6 @@
 # Current Milestone
 
-Status: User manual acceptance in progress — citation/status correction verified, deployment pending
+Status: User manual acceptance in progress — citation/status correction deployed
 Read when: checking what the next implementation slice should be.
 Last reviewed: 2026-09-28
 
@@ -16,8 +16,10 @@ their digits as measurements. It also separates progress/actions at 13px/12px,
 explains citation failures accurately, and recognizes "Based only on" as selected
 source scope. Full regression, focused database checks and real-model replay
 passed. Actual browser checks also passed at desktop/390px widths, including
-cancel/error/retry and the full existing Ask workflow. Deployment is pending; see
-`doc/qa/qa-citation-status.md`. User acceptance remains pending.
+cancel/error/retry and the full existing Ask workflow. Application 2bf3226 deployed
+via successful workflow 36482075444; exact live assets, service/auth checks and
+same-question live-provider replay passed. See `doc/qa/qa-citation-status.md`.
+User acceptance remains pending; refresh and submit a new selected-source question.
 
 The user requested readable PDF page navigation instead of text-block choices.
 Implemented page/total, direct page selection and Previous/Next, preserving exact
