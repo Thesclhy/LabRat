@@ -1,12 +1,23 @@
 # Current Milestone
 
-Status: User manual acceptance in progress — PDF page navigation deployed
+Status: User manual acceptance in progress — citation/status correction verified, deployment pending
 Read when: checking what the next implementation slice should be.
 Last reviewed: 2026-09-28
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
 
 ## Manual acceptance follow-up
+
+The user reported overlapping Ask progress text and qa_citation_invalid for
+Q01-scope.txt. A bounded real-provider replay reproduced protocol RQ-001 being
+misclassified as numeric value 001, including after the one permitted repair.
+The fix recognizes explicit source-declared protocol tokens without admitting
+their digits as measurements. It also separates progress/actions at 13px/12px,
+explains citation failures accurately, and recognizes "Based only on" as selected
+source scope. Full regression, focused database checks and real-model replay
+passed. Actual browser checks also passed at desktop/390px widths, including
+cancel/error/retry and the full existing Ask workflow. Deployment is pending; see
+`doc/qa/qa-citation-status.md`. User acceptance remains pending.
 
 The user requested readable PDF page navigation instead of text-block choices.
 Implemented page/total, direct page selection and Previous/Next, preserving exact

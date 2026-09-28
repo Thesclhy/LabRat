@@ -84,7 +84,9 @@ retrieval. Default sourceScope=project prioritizes selected versions while allow
 other authorized evidence; a selected document's latest version never substitutes
 for its pinned version. sourceScope=selected restricts discovery and tools to
 selected document versions. Explicit only-use/仅根据 requests with mentions infer
-this scope. Question context stores the resolved identities in the personal
+this scope, including English "Based only/solely on this document" in immediate
+questions and continued AssistantTasks. The composer displays the same scope.
+Question context stores the resolved identities in the personal
 AgentRun selectedContext JSON, not in mutable document names. At most six recent
 messages (1,000 characters each) and a removable experiment label are untrusted
 conversational context; they confer neither citation support nor permissions.
@@ -165,6 +167,10 @@ retain their existing retry behavior. Repair hints identify matching stored
 numeric paths without automatically assigning scientific meaning or changing
 bindings. Verified field identifiers and quoted display names are metadata;
 unverified identifiers, wrong locations and new measurements remain invalid.
+An explicitly declared protocol code (for example `Protocol: RQ-001`) in the
+claim's cited document passage is metadata, not a measurement. Only the exact
+source-declared token is excluded from numeric checks; digits from the code
+cannot support a measurement, even when the code is in the literal quote.
 The model adapter compacts an exactly repeated evidence window to references to
 its earlier result. The authorized reader still executes on every call, and a
 changed window is returned in full. This does not cache authorization, bypass

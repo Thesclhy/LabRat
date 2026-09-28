@@ -74,7 +74,7 @@ describe.skipIf(!databaseUrl)("unified Ask reference identities and scope", () =
           return { ok: true, status: "answered", claims: [{ text: "The original method requires a dry sample.", citations: [{ evidenceId: evidence.id, quote: "dry sample" }], numericBindings: [] }], missingEvidence: [] } as any;
         });
         const question = {
-          requestKey: "pinned-source-question", question: "Only use the selected method. What sample is required?", referenceDocuments: [{ documentId: first.document.id, versionId: first.version.id }],
+          requestKey: "pinned-source-question", question: "Based only on this document, what sample is required?", referenceDocuments: [{ documentId: first.document.id, versionId: first.version.id }],
           conversation: [{ role: "user", text: "We discussed sample preparation." }] };
         const send = await app.inject({ method: "POST", url: `${base}/research-questions`, headers: { cookie: view.cookie }, payload: question });
         expect(send.statusCode, send.body).toBe(202);

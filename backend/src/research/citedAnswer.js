@@ -77,8 +77,23 @@ function bindingUnits(evidence, path) {
   return { unit: parent?.unit ?? null, numericScale: parent?.numericScale ?? null };
 }
 
-function scientificClaimText(value, evidence, citations, errors, prefix) {
+function withoutProtocolIdentifiers(value, evidence) {
   let result = norm(value);
+  for (const item of evidence) {
+    if (!["document_passage", "project_context"].includes(item.kind) || typeof item.data?.text !== "string") continue;
+    // Only explicitly declared codes in this claim's cited source can be metadata.
+    const declarations = norm(item.data.text).matchAll(/(?:\bprotocol(?:\s+(?:id|code|number))?|协议(?:编号)?|规程(?:编号)?)\s*[:：#]\s*([A-Za-z][A-Za-z0-9]*(?:[-_][A-Za-z0-9]+)+)(?![A-Za-z0-9_-])/giu);
+    for (const [, identifier] of declarations) {
+      if (!/\d/u.test(identifier)) continue;
+      const escaped = identifier.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+      result = result.replace(new RegExp(`(?<![A-Za-z0-9_-])${escaped}(?![A-Za-z0-9_-])`, "gu"), "[protocol identifier]");
+    }
+  }
+  return result;
+}
+
+function scientificClaimText(value, evidence, citations, errors, prefix) {
+  let result = withoutProtocolIdentifiers(value, evidence);
   for (const item of evidence) {
     const fields = [...(item.data?.fields || []), ...(item.data?.series || [])];
     for (const field of fields) {
@@ -172,13 +187,14 @@ export function validateCitedAnswer(answer, registry) {
       }
       cited.add(evidence.id);
       if (["document_passage", "project_context"].includes(evidence.kind)) {
-        for (const number of numbers(citation.quote)) allowedNumbers.add(numberKey(number));
-        for (const match of norm(citation.quote).matchAll(/([-+]?\d+(?:\.\d+)?)\s*(°?C|°?F|摄氏度|minutes?|min|分钟|hours?|h|秒|seconds?|s|mL|mg|kg|g|MPa|kPa|bar|%)(?![a-z])/giu)) {
+        const quotedValues = withoutProtocolIdentifiers(citation.quote, [evidence]);
+        for (const number of numbers(quotedValues)) allowedNumbers.add(numberKey(number));
+        for (const match of quotedValues.matchAll(/([-+]?\d+(?:\.\d+)?)\s*(°?C|°?F|摄氏度|minutes?|min|分钟|hours?|h|秒|seconds?|s|mL|mg|kg|g|MPa|kPa|bar|%)(?![a-z])/giu)) {
           const key = numberKey(match[1]);
           const units = allowedUnits.get(key) || new Set(); units.add(unitKey(match[2])); allowedUnits.set(key, units);
         }
       }
-      if (evidence.data?.uncertain && numbers(claim.text).length) errors.push(`${prefix}: uncertain OCR cannot support a definite numeric claim`);
+      if (evidence.data?.uncertain && numbers(withoutProtocolIdentifiers(claim.text, [evidence])).length) errors.push(`${prefix}: uncertain OCR cannot support a definite numeric claim`);
     }
     for (const binding of claim.numericBindings) {
       const evidence = available.get(binding.evidenceId);

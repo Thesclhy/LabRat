@@ -34,9 +34,14 @@ export function CitedAnswerCard({ projectId, runId, canEdit, onAnalysis, onSettl
   return <div className="ask-cited-answer">
     {error && <div role="alert"><p>{error}</p><button type="button" onClick={() => setRefresh((n) => n + 1)}>Reload answer</button></div>}
     {!result && !error && <p role="status">Loading answer…</p>}
-    {running && <div className="ask-task" role="status"><span>{result.request.status === "queued" ? "Question saved and waiting to start." : "Reading evidence and checking citations…"}</span>{result.request.status === "queued" && <button type="button" onClick={() => action(api.retryResearchQuestion)}>Start saved question</button>}<button type="button" onClick={() => action(api.cancelResearchQuestion)}>Cancel</button></div>}
+    {running && <div className="ask-task">
+      <p className="ask-task-status" role="status">{result.request.status === "queued" ? "Question saved and waiting to start." : "Reading sources and checking citations…"}</p>
+      <div className="ask-task-actions">{result.request.status === "queued" && <button type="button" onClick={() => action(api.retryResearchQuestion)}>Start saved question</button>}<button type="button" onClick={() => action(api.cancelResearchQuestion)}>Cancel</button></div>
+    </div>}
     {result?.request.status === "cancelled" && <p>Question cancelled.</p>}
-    {["failed", "interrupted"].includes(result?.request.status) && <div className="ask-task"><p role="alert">The answer was not completed. Retry when the service is available.</p><button type="button" onClick={() => action(api.retryResearchQuestion)}>Retry question</button><details><summary>Error details</summary>{result.request.failureCode || "Interrupted"}</details></div>}
+    {["failed", "interrupted"].includes(result?.request.status) && <div className="ask-task"><p role="alert">{result.request.failureCode === "qa_citation_invalid"
+      ? "The answer’s citations could not be verified. Try again or narrow your question to a specific passage."
+      : "The answer was not completed. Please try again."}</p><div className="ask-task-actions"><button type="button" onClick={() => action(api.retryResearchQuestion)}>Retry question</button></div><details><summary>Error details</summary>{result.request.failureCode || "Interrupted"}</details></div>}
     {answer?.claims.map((claim, i) => <div key={i} className="qa-claim"><p>{claim.text}</p><div className="qa-citations">{claim.citations.map((citation, n) => {
       const evidence = result.artifact.evidence.find((item) => item.id === citation.evidenceId);
       return <button type="button" key={n} title={`${evidence?.label || "Source"} · ${evidenceLocation(evidence)}`} onClick={() => setSource({ runId, evidenceId: citation.evidenceId })}>{evidence?.label || "Source"} · {evidenceLocation(evidence)}</button>;

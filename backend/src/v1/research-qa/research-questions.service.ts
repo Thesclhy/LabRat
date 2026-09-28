@@ -38,7 +38,7 @@ export class ResearchQuestionsService implements OnModuleDestroy {
     const { project } = await this.documents.authorize(auth, projectId);
     const question = input.question.trim();
     if (!question) throw new ApiError(400, "qa_question_empty", "Enter a question.");
-    const sourceScope = input.sourceScope === "selected" || input.referenceDocuments?.length && /(?:仅|只)(?:根据|使用|参考|用)|\bonly\s+(?:use|using|from|based on)\b/i.test(question) ? "selected" : "project";
+    const sourceScope = input.sourceScope === "selected" || input.referenceDocuments?.length && /(?:仅|只)(?:根据|使用|参考|用)|\bonly\s+(?:use|using|from|based on)\b|\bbased\s+(?:only|solely)\s+on\b/i.test(question) ? "selected" : "project";
     const existing = await this.repository.byRequestKey(auth, projectId, input.requestKey);
     if (existing) {
       const saved = await this.repository.context(auth, projectId, existing.runId);

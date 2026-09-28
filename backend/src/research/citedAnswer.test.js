@@ -13,6 +13,21 @@ const snapshot = { id: "snapshot", kind: "experiment_snapshot", data: { fields: 
 const answer = (claim) => ({ status: "answered", claims: [{ numericBindings: [], ...claim }], missingEvidence: [] });
 const binding = { evidenceId: "snapshot", path: "/data/fields/0/value", value: 82, unit: "C", numericScale: null };
 
+test("source-declared protocol codes are identifiers, never measurement support", () => {
+  const source = { ...doc, data: { text: "Protocol: RQ-001.\nTemperature: 80 C.\nDuration: 30 minutes.\nSample condition: dry sample only; wet samples are excluded." } };
+  const claim = { text: "For protocol RQ-001, the temperature is 80 C.", citations: [{ evidenceId: "doc", quote: "Temperature: 80 C." }] };
+  assert.equal(validateCitedAnswer(answer(claim), [source]).valid, true);
+  assert.equal(validateCitedAnswer(answer({ text: "RQ-001 takes 30 minutes.", citations: [{ evidenceId: "doc", quote: "Duration: 30 minutes." }] }), [source]).valid, true);
+  assert.equal(validateCitedAnswer(answer({ text: "RQ-001 requires dry samples; wet samples are excluded.", citations: [{ evidenceId: "doc", quote: "dry sample only; wet samples are excluded." }] }), [source]).valid, true);
+  for (const text of ["Protocol RQ-002 uses 80 C.", "Protocol RQ-0010 uses 80 C.", "RQ-001 uses 90 C.", "RQ-001 uses 80 F.", "RQ-001 uses 1 C."]) {
+    assert.equal(validateCitedAnswer(answer({ ...claim, text }), [source]).valid, false, text);
+  }
+  assert.equal(validateCitedAnswer(answer({ ...claim, citations: [{ evidenceId: "doc", quote: "invented" }] }), [source]).valid, false);
+  assert.equal(validateCitedAnswer(answer(claim), [doc]).valid, false, "An uncited/unread protocol declaration is not sufficient");
+  assert.equal(validateCitedAnswer(answer({ text: "The temperature is 1 C.", citations: [{ evidenceId: "doc", quote: "Protocol: RQ-001." }] }), [source]).valid, false);
+  assert.equal(validateCitedAnswer(answer(claim), [{ ...source, data: { ...source.data, uncertain: true } }]).valid, false);
+});
+
 test("citations require this run's exact evidence and exact excerpts; no numeric invention or unit changes", () => {
   const base = { text: "Dry samples use 80 C.", citations: [{ evidenceId: "doc", quote: "80 C for dry samples only" }] };
   assert.equal(validateCitedAnswer(answer(base), [doc]).valid, true);

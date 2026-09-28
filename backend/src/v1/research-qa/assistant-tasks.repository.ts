@@ -179,7 +179,7 @@ export class AssistantTasksRepository {
         const row = (await this.reference(tx, projectId, ref))!;
         if (!resolved.some((item) => item.versionId === row.version.id)) resolved.push({ documentId: row.document.id, versionId: row.version.id, label: row.document.originalName, versionNumber: row.version.versionNumber });
       }
-      const sourceScope = task.context.sourceScope === "selected" || resolved.length && /(?:仅|只)(?:根据|使用|参考|用)|\bonly\s+(?:use|using|from|based on)\b/i.test(task.question) ? "selected" : "project";
+      const sourceScope = task.context.sourceScope === "selected" || resolved.length && /(?:仅|只)(?:根据|使用|参考|用)|\bonly\s+(?:use|using|from|based on)\b|\bbased\s+(?:only|solely)\s+on\b/i.test(task.question) ? "selected" : "project";
       if (sourceScope === "selected" && !resolved.length) throw new ApiError(400, "qa_sources_required", "Select at least one reference for a sources-only question.");
       const workbooks = task.attachments.filter((file) => file.kind === "workbook");
       const question = task.question + `\nUse the confirmed regions of: ${workbooks.map((file) => `${file.workbookName} [sourceDocumentId: ${file.sourceDocumentId}]`).join(", ")}.`;

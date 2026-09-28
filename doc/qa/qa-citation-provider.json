@@ -1,0 +1,204 @@
+{
+  "schemaVersion": "labrat.qaCitationCanary.v1",
+  "material": "synthetic only",
+  "provider": "anthropic",
+  "model": "claude-sonnet-4-5",
+  "question": "Based only on this document, what are the temperature, duration, and applicable sample types for RQ-001? Please cite the relevant passages.",
+  "fixture": "Q01-scope.txt",
+  "fixtureSha256": "5edb14c1c49a5f83243a19aef28ccc420fc355852c16b99885d4740bf75286ca",
+  "validatorSha256": "756e82b4a6fc8dfdb637c5b65174f1b3aca5caf61d47d3503ba5926dbeb0c51b",
+  "baseline": [
+    {
+      "stage": "synthetic-replay",
+      "pass": 0,
+      "answer": {
+        "status": "answered",
+        "claims": [
+          {
+            "text": "For protocol RQ-001, the temperature is 80 C.",
+            "citations": [
+              {
+                "evidenceId": "synthetic_evidence_0",
+                "quote": "Temperature: 80 C."
+              }
+            ],
+            "numericBindings": []
+          },
+          {
+            "text": "For protocol RQ-001, the duration is 30 minutes.",
+            "citations": [
+              {
+                "evidenceId": "synthetic_evidence_0",
+                "quote": "Duration: 30 minutes."
+              }
+            ],
+            "numericBindings": []
+          },
+          {
+            "text": "For protocol RQ-001, the applicable sample type is dry sample only; wet samples are excluded.",
+            "citations": [
+              {
+                "evidenceId": "synthetic_evidence_0",
+                "quote": "Sample condition: dry sample only; wet samples are excluded."
+              }
+            ],
+            "numericBindings": []
+          }
+        ],
+        "missingEvidence": []
+      },
+      "validation": {
+        "valid": false,
+        "errors": [
+          "claim 1: number 001 is unsupported or newly calculated. Remove this numeric phrase; do not invent a binding.",
+          "claim 2: number 001 is unsupported or newly calculated. Remove this numeric phrase; do not invent a binding.",
+          "claim 3: number 001 is unsupported or newly calculated. Remove this numeric phrase; do not invent a binding."
+        ]
+      },
+      "usage": {
+        "requests": 2,
+        "toolRounds": 1,
+        "toolCalls": 1,
+        "inputTokens": 7931,
+        "outputTokens": 284,
+        "unknownUsageRequests": 0,
+        "reservedTokens": 0,
+        "elapsedMs": 6029,
+        "knownCost": null,
+        "lastActiveAt": 1790627899226,
+        "failure": null
+      },
+      "trace": [
+        "read_document_passage"
+      ]
+    },
+    {
+      "stage": "synthetic-replay",
+      "pass": 1,
+      "answer": {
+        "status": "answered",
+        "claims": [
+          {
+            "text": "For protocol RQ-001, the temperature is 80 C.",
+            "citations": [
+              {
+                "evidenceId": "synthetic_evidence_0",
+                "quote": "Temperature: 80 C."
+              }
+            ],
+            "numericBindings": []
+          },
+          {
+            "text": "For protocol RQ-001, the duration is 30 minutes.",
+            "citations": [
+              {
+                "evidenceId": "synthetic_evidence_0",
+                "quote": "Duration: 30 minutes."
+              }
+            ],
+            "numericBindings": []
+          },
+          {
+            "text": "For protocol RQ-001, the applicable sample type is dry sample only; wet samples are excluded.",
+            "citations": [
+              {
+                "evidenceId": "synthetic_evidence_0",
+                "quote": "Sample condition: dry sample only; wet samples are excluded."
+              }
+            ],
+            "numericBindings": []
+          }
+        ],
+        "missingEvidence": []
+      },
+      "validation": {
+        "valid": false,
+        "errors": [
+          "claim 1: number 001 is unsupported or newly calculated. Remove this numeric phrase; do not invent a binding.",
+          "claim 2: number 001 is unsupported or newly calculated. Remove this numeric phrase; do not invent a binding.",
+          "claim 3: number 001 is unsupported or newly calculated. Remove this numeric phrase; do not invent a binding."
+        ]
+      },
+      "usage": {
+        "requests": 3,
+        "toolRounds": 1,
+        "toolCalls": 1,
+        "inputTokens": 10648,
+        "outputTokens": 471,
+        "unknownUsageRequests": 0,
+        "reservedTokens": 0,
+        "elapsedMs": 9121,
+        "knownCost": null,
+        "lastActiveAt": 1790627902318,
+        "failure": null
+      },
+      "trace": [
+        "read_document_passage"
+      ]
+    }
+  ],
+  "candidate": [
+    {
+      "stage": "synthetic-replay",
+      "pass": 0,
+      "answer": {
+        "status": "answered",
+        "claims": [
+          {
+            "text": "For protocol RQ-001, the temperature is 80 C.",
+            "citations": [
+              {
+                "evidenceId": "synthetic_evidence_0",
+                "quote": "Temperature: 80 C."
+              }
+            ],
+            "numericBindings": []
+          },
+          {
+            "text": "For protocol RQ-001, the duration is 30 minutes.",
+            "citations": [
+              {
+                "evidenceId": "synthetic_evidence_0",
+                "quote": "Duration: 30 minutes."
+              }
+            ],
+            "numericBindings": []
+          },
+          {
+            "text": "For protocol RQ-001, the applicable sample type is dry sample only; wet samples are excluded.",
+            "citations": [
+              {
+                "evidenceId": "synthetic_evidence_0",
+                "quote": "Sample condition: dry sample only; wet samples are excluded."
+              }
+            ],
+            "numericBindings": []
+          }
+        ],
+        "missingEvidence": []
+      },
+      "validation": {
+        "valid": true,
+        "errors": []
+      },
+      "usage": {
+        "requests": 2,
+        "toolRounds": 1,
+        "toolCalls": 1,
+        "inputTokens": 7931,
+        "outputTokens": 284,
+        "unknownUsageRequests": 0,
+        "reservedTokens": 0,
+        "elapsedMs": 6146,
+        "knownCost": null,
+        "lastActiveAt": 1790628266932,
+        "failure": null
+      },
+      "trace": [
+        "read_document_passage"
+      ]
+    }
+  ],
+  "status": "passed",
+  "productionResearchWrites": false
+}

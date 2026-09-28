@@ -13,6 +13,25 @@ Keep entries concise, newest first, and include:
 - verification
 - follow-ups or residual risk
 
+## 2026-09-28 — Ask citation validation and progress presentation
+
+- User reported crowded progress text and qa_citation_invalid on Q01-scope.txt.
+  Read-only diagnostics confirmed complete source text and an incorrectly broad
+  scope; isolated real-provider replay reproduced RQ-001 digits rejected as new
+  numerical values in both initial answer and bounded repair.
+- Distinguish exact source-declared protocol codes from measurements, retaining
+  literal quotes, units, numeric bindings and uncertain-OCR protection. Recognize
+  "Based only/solely on" for selected references in Ask and task continuation.
+- Split sentence-case progress and action rows at 13px/12px; citation errors now
+  explain verification failure instead of claiming service unavailability.
+- Full codex verification passed (447 frontend, 397 legacy backend with nine
+  expected skips, 72 Nest tests, API generation/build/smoke); three focused real
+  PostgreSQL scenarios passed. Real provider returned all requested facts with
+  valid citations on its initial answer. Actual browser regression passed at
+  desktop/390px widths, including status geometry, cancel and retry; deployment pending.
+- Evidence and limits: `doc/qa/qa-citation-status.md`. Existing failed runs and
+  their saved source scopes are preserved; user retest should submit a new question.
+
 ## 2026-09-28 — Compact @ reference picker typography
 
 - User reported oversized reference filenames. The picker inherited 18px/44px

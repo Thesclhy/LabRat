@@ -38,6 +38,18 @@ const panel = { open: true, setOpen: vi.fn(), blocks: [], setBlocks: vi.fn(), re
   actorId: "actor", projectState: { project: { id: "project", name: "Research project" } }, canAsk: true, canEdit: false };
 
 describe("unified Ask", () => {
+  test("only-selected wording updates the scope hint without treating an ordinary mention as exclusive", async () => {
+    render(<Composer />);
+    const input = screen.getByLabelText("Ask LabRat");
+    fireEvent.change(input, { target: { value: "@Meth", selectionStart: 5 } });
+    fireEvent.click(await screen.findByRole("option"));
+    for (const question of ["Based only on this document, what sample is required?", "Based solely on this document, what sample is required?", "Only use this method", "仅根据这份资料回答"]) {
+      fireEvent.change(input, { target: { value: question } });
+      expect(screen.getByText("Only selected references for this question.")).toBeTruthy();
+    }
+    fireEvent.change(input, { target: { value: "Compare this method with my experiments" } });
+    expect(screen.getByText("Selected references first; other project evidence when needed.")).toBeTruthy();
+  });
   test("@ selection binds a document version, removes its query and can be removed", async () => {
     const selected = vi.fn(), send = vi.fn(); render(<Composer selected={selected} send={send} />);
     const input = screen.getByLabelText("Ask LabRat");

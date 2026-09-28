@@ -98,6 +98,12 @@ describe.skipIf(!databaseUrl)("cross-device pending Ask tasks", () => {
           { fileObjectId: replacementFile.id, documentId: ref.document.id, expectedVersion: ref.document.version })).json();
         expect((await call("GET", `${base}/${mixed.id}`)).json().attachments[1].versionId).toBe(ref.version.id);
         expect((await call("GET", `${base}/${mixed.id}`)).json().ready).toBe(true);
+        const scoped = (await call("POST", base, first.cookie, { ...body, requestKey: "scoped-pending-question",
+          question: "Based only on this document, what sample is required?", referenceDocuments: [{ documentId: ref.document.id, versionId: ref.version.id }] })).json();
+        await call("POST", `${base}/${scoped.id}/attachments`, first.cookie, attach);
+        const scopedRun = await call("POST", `${base}/${scoped.id}/continue`, second.cookie, {});
+        expect(scopedRun.statusCode, scopedRun.body).toBe(202);
+        expect(scopedRun.json().request.sourceScope).toBe("selected");
         await call("POST", `/api/v1/projects/${projectId}/context-documents/${ref.document.id}/archive`, first.cookie, { expectedVersion: replacement.document.version });
         expect((await call("GET", `${base}/${mixed.id}`)).json().ready).toBe(false);
         expect((await call("POST", `${base}/${mixed.id}/continue`, first.cookie, {})).statusCode).toBe(409);

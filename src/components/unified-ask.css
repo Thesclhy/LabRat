@@ -45,6 +45,10 @@
 .ask-task { padding: 11px; border: 1px solid #e0e5ef; border-radius: 10px; background: #fafbfe; margin: 10px 0; font-size: 12px; }
 .ask-task p { margin: 6px 0; }
 .ask-task button, .ask-cited-answer > button { border: 1px solid #d9d2f4; color: #5941bd; background: #f0ecfd; border-radius: 7px; padding: 6px 9px; }
+.unified-ask .ask-cited-answer .ask-task { display: flex; flex-direction: column; align-items: stretch; gap: 9px; font-size: 13px; line-height: 1.55; }
+.unified-ask .ask-cited-answer .ask-task p { margin: 0; color: #47546c; font: inherit; text-transform: none; overflow-wrap: anywhere; }
+.unified-ask .ask-cited-answer .ask-task button { font: inherit; font-size: 12px; line-height: 1.4; }
+.unified-ask .ask-cited-answer .ask-task details { color: #6a7890; font-size: 11px; overflow-wrap: anywhere; }
 .ask-answer-note { display: block; font-size: 11px; color: #728097; margin-top: 10px; }
 .unified-ask .qa-citations button { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: #f2f4f9; border: 1px solid #e1e6ee; border-radius: 6px; color: #4d6182; }
 .unified-ask .qa-claim { border-bottom: 0; padding-bottom: 6px; }
