@@ -18,7 +18,7 @@ const scope = (auth: AuthContext, projectId: string, id?: string) => and(eq(requ
 export class ResearchQuestionsRepository {
   constructor(private readonly database: DatabaseService) {}
 
-  private async authorize(tx: V1Transaction, auth: AuthContext, project: { id: string; labId: string }) {
+  async authorize(tx: V1Transaction, auth: AuthContext, project: { id: string; labId: string }) {
     const database = { db: tx } as unknown as DatabaseService;
     await authorizeProjectTransaction(database, auth, project, "read");
     const [session] = await tx.select({ id: sessions.id }).from(sessions).where(and(eq(sessions.id, auth.sessionId),
@@ -28,8 +28,11 @@ export class ResearchQuestionsRepository {
   }
 
   async create(auth: AuthContext, project: { id: string; labId: string }, requestKey: string, question: string, context: Record<string, any> = {}) {
+    return this.database.db.transaction((tx) => this.createInTransaction(tx, auth, project, requestKey, question, context));
+  }
+
+  async createInTransaction(tx: V1Transaction, auth: AuthContext, project: { id: string; labId: string }, requestKey: string, question: string, context: Record<string, any> = {}) {
     const requestHash = evidenceHash({ question, scope: "full_project", ...(Object.keys(context).length ? { context } : {}) });
-    return this.database.db.transaction(async (tx) => {
       await this.authorize(tx, auth, project);
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${JSON.stringify(["research-qa", project.id, auth.user.id])}))`);
       const [existing] = await tx.select().from(requests).where(and(scope(auth, project.id), eq(requests.requestKey, requestKey))).limit(1);
@@ -46,7 +49,6 @@ export class ResearchQuestionsRepository {
       const [request] = await tx.insert(requests).values({ runId, labId: project.labId, projectId: project.id, actorUserId: auth.user.id,
         requestKey, requestHash, question, createdAt: timestamp, updatedAt: timestamp }).returning();
       return { request: request!, reused: false };
-    });
   }
 
   async get(auth: AuthContext, projectId: string, id: string) {

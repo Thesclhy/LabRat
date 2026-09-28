@@ -1,4 +1,6 @@
 import { Module } from "@nestjs/common";
+import { AssistantTasksController } from "./assistant-tasks.controller.js";
+import { AssistantTasksRepository } from "./assistant-tasks.repository.js";
 import { AuthorizationModule } from "../authorization/authorization.module.js";
 import { EvidenceModule } from "../evidence/evidence.module.js";
 import { IdentityModule } from "../identity/identity.module.js";
@@ -13,8 +15,8 @@ import { ResearchQuestionsService } from "./research-questions.service.js";
 
 @Module({
   imports: [AuthorizationModule, EvidenceModule, IdentityModule],
-  controllers: [ContextDocumentsController, ContextDocumentVersionsController, ResearchQuestionsController],
-  providers: [DocumentsRepository, DocumentsService, ResearchEvidenceRepository, ResearchEvidenceService, ResearchQuestionsRepository, ResearchQuestionsService],
+  controllers: [ContextDocumentsController, ContextDocumentVersionsController, ResearchQuestionsController, AssistantTasksController],
+  providers: [DocumentsRepository, DocumentsService, ResearchEvidenceRepository, ResearchEvidenceService, ResearchQuestionsRepository, ResearchQuestionsService, AssistantTasksRepository],
   exports: [DocumentsRepository, DocumentsService, ResearchEvidenceRepository, ResearchEvidenceService],
 })
 export class ResearchQaModule {}

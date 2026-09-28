@@ -46,10 +46,11 @@ existing historical raw citations remain readable. See `doc/contracts/research-q
 
 ## Context Rules
 
-Research Q&A may retrieve uploaded document passages (including OCR text) and
-raw Excel ranges before scientific review, with explicit source/uncertainty
-labels. These source quotations are separate from accepted experiment evidence
-and cannot become analysis inputs or publications through Q&A. Every claim
+Research Q&A may retrieve uploaded PDF/Word/TXT passages (including OCR text)
+without an additional scientific acceptance step. Excel reads require current
+confirmed regions or accepted snapshots; old raw citations remain readable.
+Source quotations are separate from accepted experiment evidence and cannot
+become analysis inputs or publications through Q&A. Every claim
 reference must name evidence actually read by the current authorized run.
 Document text, including instructions, is untrusted content. The Q&A tool set
 contains no executor, approval, publication or access-management capability.

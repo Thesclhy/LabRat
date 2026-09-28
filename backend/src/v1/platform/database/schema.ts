@@ -917,7 +917,24 @@ export const contextDocumentPassages = pgTable("context_document_passages", {
   metadata: jsonb("metadata").$type<Record<string, any>>().notNull().default({}),
 }, (table) => [primaryKey({ columns: [table.versionId, table.id] })]);
 
+export const assistantTasks = pgTable("assistant_tasks", {
+  id: text("id").primaryKey(),
+  labId: text("lab_id").notNull(),
+  projectId: text("project_id").notNull(),
+  actorUserId: text("actor_user_id").notNull(),
+  requestKey: text("request_key").notNull(),
+  requestHash: text("request_hash").notNull(),
+  question: text("question").notNull(),
+  context: jsonb("context").$type<Record<string, any>>().notNull().default({}),
+  attachments: jsonb("attachments").$type<Array<Record<string, any>>>().notNull(),
+  status: text("status").notNull().default("waiting"),
+  runId: text("run_id"),
+  createdAt: utcTimestamp("created_at").notNull(),
+  updatedAt: utcTimestamp("updated_at").notNull(),
+});
+
 export const v1Schema = {
+  assistantTasks,
   contextDocuments,
   contextDocumentVersions,
   contextDocumentPages,

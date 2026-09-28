@@ -13,6 +13,33 @@ Keep entries concise, newest first, and include:
 - verification
 - follow-ups or residual risk
 
+## 2026-09-28 — Cross-device Ask deployment requested
+
+- User requested deployment first, then manual chat-panel testing. User manual
+  acceptance has not started; previous checks were automated/synthetic.
+- Preparing the isolated feature checkout for the existing main-triggered
+  Lightsail pipeline. See `doc/qa/cross-device-ask-deployment.md` for release status.
+
+## 2026-09-28 — Cross-device pending Ask tasks
+
+- User requested cross-device continuation and asked about LangGraph. The earlier
+  analysis-stability pilot remains separate; this implementation uses existing
+  PostgreSQL/Nest state on `codex/cross-device-tasks` from main 9092efe.
+- Migration 037 saves personal tasks before uploads, immutable file/version links,
+  current server readiness and an atomic single-question handoff. Added scoped
+  APIs/types, a bounded collapsible pending list, missing-file reselection, remote
+  answer recovery and explicit saving of older browser-only workbook tasks.
+- Verified full regression (431 frontend, 395 Node / 9 skips, 72 Nest), three real
+  PostgreSQL scenarios, final 83 focused UI checks and two independent Chromium
+  contexts through HTTP/PostgreSQL. Desktop/390px screenshots reviewed. Forced
+  transaction failure, concurrency, restart, stale evidence and revoked access
+  are covered. Initial regressions and corrections are recorded in the QA report.
+- Synced contracts and corrected stale Excel/deployment descriptions. See
+  `doc/qa/cross-device-ask-tasks.md` for exact coverage. No real-provider/scientific
+  quality evaluation, commit, push or deployment; production remains 0d4a9ea.
+  Files not fully uploaded/linked require reselection. Original dirty checkout
+  changes remain separate.
+
 ## 2026-09-28 — Unified Ask main deployment completed
 
 - User requested main deployment. Pushed application commit 0d4a9ea; hosted

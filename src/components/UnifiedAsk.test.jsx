@@ -11,6 +11,7 @@ vi.mock("../charts/Plot.jsx", () => ({ Plot: () => <div /> }));
 vi.mock("../data/researchQaApi.js", async (original) => ({ ...(await original()),
   listContextDocuments: vi.fn(), listResearchQuestions: vi.fn(), createResearchQuestion: vi.fn(), getResearchQuestion: vi.fn(),
   archiveContextDocument: vi.fn(), getContextDocument: vi.fn(), registerContextDocument: vi.fn(), getContextDocumentVersion: vi.fn(),
+  listAssistantTasks: vi.fn(), createAssistantTask: vi.fn(), getAssistantTask: vi.fn(), attachAssistantTaskFile: vi.fn(), continueAssistantTask: vi.fn(), cancelAssistantTask: vi.fn(),
 }));
 vi.mock("../data/serverApi.js", async (original) => ({ ...(await original()), createServerAgentRun: vi.fn(),
   uploadServerProjectFile: vi.fn(), createServerWorkbookReviewSession: vi.fn(), getServerProjectState: vi.fn() }));
@@ -24,6 +25,7 @@ beforeEach(() => {
   vi.clearAllMocks(); localStorage.clear();
   api.listContextDocuments.mockResolvedValue({ items: [document], nextCursor: null });
   api.listResearchQuestions.mockResolvedValue({ items: [], nextCursor: null });
+  api.listAssistantTasks.mockResolvedValue({ items: [], nextCursor: null });
   api.createResearchQuestion.mockResolvedValue(complete); api.getResearchQuestion.mockResolvedValue(complete);
   server.getServerProjectState.mockResolvedValue({ project: { id: "project" } });
 });
@@ -94,21 +96,32 @@ describe("unified Ask", () => {
     expect(api.registerContextDocument).not.toHaveBeenCalled(); expect(api.createResearchQuestion).not.toHaveBeenCalled();
   });
   test("Excel upload retains its original question in a pending task", async () => {
+    let task = { id: "task", status: "waiting", question: "Compare these experiments", referencesReady: true, ready: false,
+      attachments: [{ name: "data.xlsx", kind: "workbook", state: "needs_upload" }] };
+    api.listAssistantTasks.mockImplementation(async () => ({ items: api.createAssistantTask.mock.calls.length ? [task] : [], nextCursor: null }));
+    api.createAssistantTask.mockImplementation(async () => task); api.getAssistantTask.mockImplementation(async () => task);
+    api.attachAssistantTaskFile.mockImplementation(async () => (task = { ...task, attachments: [{ ...task.attachments[0], state: "needs_review", workbookReviewSessionId: "review" }] }));
+    api.continueAssistantTask.mockResolvedValue(complete);
     server.uploadServerProjectFile.mockResolvedValue({ fileObject: { id: "file" } });
     server.createServerWorkbookReviewSession.mockResolvedValue({ workbookReviewSession: { id: "review", sourceDocumentId: "source" }, sourceDocument: { id: "source" }, regions: [] });
     const view = render(<AgentPanel {...panel} canEdit onWorkbookReviewReady={vi.fn()} />);
     fireEvent.change(view.container.querySelector('input[type="file"]'), { target: { files: [new File(["synthetic"], "data.xlsx")] } });
     fireEvent.change(screen.getByLabelText("Ask LabRat"), { target: { value: "Compare these experiments" } });
     fireEvent.click(screen.getByRole("button", { name: "Send message" }));
-    expect(await screen.findByText("Next: Compare these experiments")).toBeTruthy();
+    await waitFor(() => expect(api.attachAssistantTaskFile).toHaveBeenCalledWith("project", "task", { index: 0, workbookReviewSessionId: "review" }, expect.anything()));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Continue question" }).disabled).toBe(true));
     expect(api.createResearchQuestion).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Continue after region review" }).disabled).toBe(true);
-    view.rerender(<AgentPanel {...panel} canEdit onWorkbookReviewReady={vi.fn()} projectState={{ ...panel.projectState,
-      workbookReviewRegions: [{ sourceDocumentId: "source", disposition: "active", reviewStatus: "accepted", acceptedRevisionId: "r1", currentRevisionId: "r1" }] }} />);
+    expect(api.createAssistantTask.mock.invocationCallOrder[0]).toBeLessThan(server.uploadServerProjectFile.mock.invocationCallOrder[0]);
+    fireEvent.click(screen.getByRole("button", { name: "New conversation" }));
+    expect(screen.getByRole("button", { name: "Continue question" }).disabled).toBe(true);
+    expect(api.cancelAssistantTask).not.toHaveBeenCalled();
+    task = { ...task, ready: true };
+    view.unmount(); localStorage.clear();
+    render(<AgentPanel {...panel} canEdit />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Continue question" }).disabled).toBe(false));
     expect(api.createResearchQuestion).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Continue after region review" }));
-    await waitFor(() => expect(api.createResearchQuestion).toHaveBeenCalledWith("project", expect.objectContaining({
-      question: "Compare these experiments\nUse the confirmed regions of: data.xlsx [sourceDocumentId: source]." }), expect.anything()));
+    fireEvent.click(screen.getByRole("button", { name: "Continue question" }));
+    await waitFor(() => expect(api.continueAssistantTask).toHaveBeenCalledWith("project", "task", expect.anything()));
   });
   test("reference management is searchable in a separate workspace and read-only for View", async () => {
     render(<ReferenceLibrary projectId="project" canEdit={false} />);
@@ -116,5 +129,19 @@ describe("unified Ask", () => {
     expect(screen.queryByRole("button", { name: "Archive" })).toBeNull(); expect(screen.queryByRole("button", { name: "New version" })).toBeNull();
     fireEvent.change(screen.getByLabelText("Search references"), { target: { value: "Meth" } });
     await waitFor(() => expect(api.listContextDocuments).toHaveBeenCalledWith("project", expect.objectContaining({ search: "Meth" }), expect.anything()));
+  });
+  test("an uncertain task-save response retries the exact frozen request before uploading", async () => {
+    const saved = { id: "saved", status: "waiting", question: "Read my workbook", attachments: [{ name: "data.xlsx", kind: "workbook", state: "needs_review" }] };
+    api.createAssistantTask.mockRejectedValueOnce(new Error("Response lost")).mockResolvedValueOnce(saved);
+    api.getAssistantTask.mockResolvedValue(saved);
+    const view = render(<AgentPanel {...panel} canEdit />);
+    fireEvent.change(view.container.querySelector('input[type="file"]'), { target: { files: [new File(["synthetic"], "data.xlsx")] } });
+    fireEvent.change(screen.getByLabelText("Ask LabRat"), { target: { value: "Read my workbook" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await screen.findByText(/has not been confirmed saved/);
+    expect(server.uploadServerProjectFile).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => expect(api.createAssistantTask).toHaveBeenCalledTimes(2));
+    expect(api.createAssistantTask.mock.calls[1][1]).toEqual(api.createAssistantTask.mock.calls[0][1]);
   });
 });

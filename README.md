@@ -70,7 +70,11 @@ Use + for PDF (including scans), DOC/DOCX and TXT references; manage them in the
 References workspace. Type @ to prioritize specific document versions, while
 allowing other project evidence when needed. Explicit only-selected questions
 restrict retrieval. Excel uses the original region selection and confirmation
-workflow, with the original question retained for an explicit continuation.
+workflow, with the original question saved to the account for explicit continuation
+on another device. Pending files still need to finish uploading; local file bytes
+are not transferred between devices. Older browser-only pending cards offer
+**Save across devices**. This extension requires migration 037; see
+[the delivery status](doc/plans/cross-device-ask-tasks.md).
 Full-project View members may ask and open citations to exact source versions,
 pages, paragraphs, lines, confirmed regions or accepted data. New computations
 still require analysis-plan review. Public Guest and selected-experiment-only

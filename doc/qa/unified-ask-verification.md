@@ -85,9 +85,10 @@ schema/server/browser/file store. Captures and result JSON are under
   review-required rejection; the supported retrieval subset keeps Recall@8 >= 0.9.
   Its denominator differs from the archived pre-unification report, so old scores
   must not be advertised as validation of this extension.
-- Pending upload tasks are local to the browser and actor/project. Server-backed
-  personal questions/citations remain durable; local pending tasks do not promise
-  cross-device recovery. Initial server question recovery is bounded to 20.
+- At this release checkpoint pending upload tasks were local to the browser and
+  actor/project. The subsequent server-task extension is tracked separately in
+  `doc/plans/cross-device-ask-tasks.md`; its acceptance must not be inferred from
+  this historical report. Initial server question-history recovery is bounded to 20.
 - Word/TXT source inspection shows extracted passages and original locators; PDF
   inspection also renders original pages. This is not a full Word layout editor.
 - The release applied migration 036 after existing 034/035. Main publication and

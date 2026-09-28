@@ -93,6 +93,15 @@ store transactions verify the association; database transactions do so after
 locking the thread. Existing authorization, source/head freshness and idempotent
 replay semantics remain in force. This changes no API, table or snapshot shape.
 
+## Pending question continuation
+
+Saving, listing or attaching an AssistantTask never accepts a region, executes
+analysis or publishes scientific values. Continue rechecks current eligible
+workbook regions/reference versions and atomically creates one read-only question
+with the task link. Both the question's evidence readers and any later analysis
+handoff retain their existing authorization and review checks. A saved ready flag
+from a browser or graph checkpoint cannot replace current server validation.
+
 ## Atomicity And Idempotency
 
 - Plan acceptance creates one queued AnalysisRun and no result or publication.

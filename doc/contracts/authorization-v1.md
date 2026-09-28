@@ -3,6 +3,14 @@
 Status: contract
 Last reviewed: 2026-08-23
 
+## Cross-device Ask tasks
+
+These tasks are personal project state. Create/attach require full-project
+propose; list/get, dismiss and continue require full-project read, the original
+actor and a currently active session. Public Guest and limited experiment scopes
+are denied. Recovery grants no scientific approval, execution or publication
+authority. See `research-qa-v1.md` and the assistant-task OpenAPI paths.
+
 ## Purpose
 
 This contract replaces LabRat's Lab-role-rank authorization for `/api/v1`.

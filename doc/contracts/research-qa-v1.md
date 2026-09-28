@@ -38,8 +38,37 @@ PDF, DOC/DOCX and TXT attached with + enter the reference library. Excel attache
 with + enters the existing workbook review chain, retaining the original question
 as a pending task. Continue is explicit after current accepted regions exist for
 each uploaded workbook; exact range eligibility is still checked on the server.
-Local pending tasks are scoped by actor and project, survive same-browser refresh,
-and never automatically execute or publish scientific results.
+Pending workbook questions are saved in server-owned AssistantTasks before upload,
+scoped by actor and project. They survive browser/app restarts and are available
+to another authenticated device. Local File bytes are not synchronized: unfinished
+uploads require reselecting the file. Recovery never automatically executes or
+publishes scientific results. The implementation after deployed 0d4a9ea requires
+migration 037; see `doc/plans/cross-device-ask-tasks.md` for delivery status.
+
+AssistantTasks use a bounded manifest of up to eight workbook/reference files and
+pin selected document versions, the original question and bounded conversational
+context. Create and attach require full-project propose; list/get, dismiss and
+explicit continue require full-project read and personal ownership. Public Guest
+and selected-experiment-only members are denied. Other project members cannot
+enumerate these personal tasks. Every operation rechecks current session/access.
+
+The `/assistant-tasks` API exposes create and cursor-paged pending lists;
+`/{taskId}` retrieves one owned task; `/attachments` idempotently binds one file
+slot; `/cancel` dismisses the task; `/continue` starts or retrieves its question.
+At most 100 waiting tasks are allowed per actor/project and 40 per API page.
+Readiness comes from current indexed sources, undeleted sessions, current accepted
+regions and available pinned references. The client cannot supply a ready flag.
+Missing uploads, withdrawn region confirmation and archived/unreadable references
+block continuation. Same-key conflicting creates or attachment replacements return
+409. Creating one Q&A request and marking its task submitted share a transaction;
+continue/dismiss races serialize on the task. Replaying continue returns the same
+run without silently retrying a failed or cancelled question. A saved queued run
+can explicitly start through the existing question UI after a server interruption.
+
+Task polling is read-only and surfaces an answer started on another device. New
+conversation clears its conversation view, not server pending tasks. Old local
+workbook pending cards offer explicit Save across devices, preserving source IDs;
+no generic project/chat migration or second analysis execution runtime is added.
 
 The reference library occupies the main workspace, with server-side name/type/
 status filtering, stable oldest/newest pagination, readable source passages/PDF

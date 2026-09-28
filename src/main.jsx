@@ -24,6 +24,7 @@ import * as researchApi from "./data/researchQaApi.js";
 import "./components/research-qa.css";
 import "./components/unified-ask.css";
 import { isWorkspaceAction, workbookTaskReady, workbookTaskSources } from "./data/assistantTasks.js";
+import { PendingAskTasks } from "./components/PendingAskTasks.jsx";
 import {
   getAnalysisThread,
   getProjectAnalysisCapabilities,
@@ -2120,7 +2121,7 @@ export function AgentPanel({
     return () => {
       workbookAbortRef.current.abort();
     };
-  }, [activeProjectId]);
+  }, [activeProjectId, actorId]);
   const chatHistoryKey = useMemo(
     () => agentChatHistoryKey(activeProjectId, projectState, actorId),
     [activeProjectId, projectState?.project?.id, actorId],
@@ -2129,7 +2130,7 @@ export function AgentPanel({
     key: chatHistoryKey,
     messages: readAgentChatHistory(chatHistoryKey),
   }));
-  const history = historyState.messages;
+  const history = historyState.key === chatHistoryKey ? historyState.messages : [];
   const setHistory = (updater) => {
     setHistoryState((current) => ({
       ...current,
@@ -2146,6 +2147,9 @@ export function AgentPanel({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pendingSpreadsheetFiles, setPendingSpreadsheetFiles] = useState([]);
   const [referenceMentions, setReferenceMentions] = useState([]);
+  const [taskRefresh, setTaskRefresh] = useState(0);
+  const taskCreateRequest = useRef(null);
+  const taskScope = useRef(chatHistoryKey);
   const [qaBusy, setQaBusy] = useState(false);
   const activeQaRun = useRef(null);
   const [contextDismissed, setContextDismissed] = useState({ experiment: false, chart: false });
@@ -2206,6 +2210,14 @@ export function AgentPanel({
     return () => window.clearInterval(timer);
   }, [busyOperation?.startedAt]);
   useEffect(() => () => agentRequestAbortRef.current?.abort(), []);
+  useEffect(() => {
+    if (taskScope.current !== chatHistoryKey) {
+      taskScope.current = chatHistoryKey; taskCreateRequest.current = null;
+      setBusy(false); setQaBusy(false); setBusyOperation(null);
+      setReferenceMentions([]); setPendingSpreadsheetFiles([]); setInput(requestedDraft || "");
+    }
+    return () => agentRequestAbortRef.current?.abort();
+  }, [chatHistoryKey]);
   useEffect(() => {
     ["key_v1", "model_v1"].forEach((suffix) => {
       localStorage.removeItem(`labrat_blank_anthropic_${suffix}`);
@@ -2460,6 +2472,65 @@ export function AgentPanel({
   const removePendingSpreadsheetFile = (index) => {
     setPendingSpreadsheetFiles((current) => current.filter((_, position) => position !== index));
   };
+  const uploadTaskFile = async (task, index, file, signal) => {
+    const expected = task.attachments[index];
+    if (file.name !== expected.name || file.size > 25 * 1024 * 1024) throw new Error(`Choose ${expected.name}, no larger than 25 MiB.`);
+    const latest = await researchApi.getAssistantTask(activeProjectId, task.id, { signal });
+    if (latest.status !== "waiting") throw new Error("This task has already been continued or dismissed.");
+    if (latest.attachments[index].state !== "needs_upload") return latest;
+    let identity;
+    if (expected.kind === "workbook") {
+      if (!/\.xlsx?$/i.test(file.name)) throw new Error("Choose an Excel workbook.");
+      const result = await createWorkbookReviewSessionFromChatAttachment(file, { signal });
+      identity = { workbookReviewSessionId: result.workbookReviewLink.workbookReviewSessionId };
+    } else {
+      if (!/\.(pdf|docx?|txt)$/i.test(file.name)) throw new Error("Choose a PDF, Word or TXT reference.");
+      const uploaded = await uploadServerProjectFile(activeProjectId, file, { signal });
+      const registered = await researchApi.registerContextDocument(activeProjectId, uploaded.fileObject.id, { signal }, { newDocument: true });
+      identity = { documentId: registered.document.id, versionId: registered.version.id };
+    }
+    signal.throwIfAborted();
+    // A response-loss retry attaches the same server identity; it never re-uploads.
+    try { return await researchApi.attachAssistantTaskFile(activeProjectId, task.id, { index, ...identity }, { signal }); }
+    catch (error) {
+      signal.throwIfAborted();
+      const recovered = await researchApi.getAssistantTask(activeProjectId, task.id, { signal });
+      if (recovered.attachments[index].state !== "needs_upload") return recovered;
+      return researchApi.attachAssistantTaskFile(activeProjectId, task.id, { index, ...identity }, { signal });
+    }
+  };
+  const savePendingTask = async (question, files, refs, messages, signal, requestKey) => {
+    const body = { question, attachments: files.map((file) => ({ name: file.name, kind: /\.xlsx?$/i.test(file.name) ? "workbook" : "reference" })),
+      referenceDocuments: refs.map(({ documentId, versionId }) => ({ documentId, versionId })),
+      conversation: messages.filter((message) => message.text).slice(-7, -1).map((message) => ({ role: message.role, text: message.text.slice(0, 1000) })),
+      selectedExperimentLabel: contextDismissed.experiment ? "" : selected?.label || "" };
+    const { conversation: _conversation, ...identity } = body;
+    const signature = JSON.stringify(identity);
+    if (taskCreateRequest.current?.signature !== signature) taskCreateRequest.current = { signature, body, requestKey: requestKey || `task-${crypto.randomUUID()}` };
+    const saved = await researchApi.createAssistantTask(activeProjectId, { ...taskCreateRequest.current.body, requestKey: taskCreateRequest.current.requestKey }, { signal });
+    signal.throwIfAborted(); taskCreateRequest.current = null; setTaskRefresh((value) => value + 1);
+    return saved;
+  };
+  const saveLegacyTask = async (message) => {
+    const controller = new AbortController(); agentRequestAbortRef.current = controller;
+    setBusy(true);
+    try {
+      const links = workbookTaskSources(message);
+      const files = message.workbookBatch?.items?.map((item) => ({ name: item.fileName })) || links.map((link) => ({ name: link.workbookName }));
+      const requestKey = message.pendingQuestion.serverRequestKey || `legacy-${crypto.randomUUID()}`;
+      setHistory((items) => items.map((item) => item === message ? { ...item, pendingQuestion: { ...item.pendingQuestion, serverRequestKey: requestKey } } : item));
+      const task = await savePendingTask(message.pendingQuestion.text, files, message.pendingQuestion.refs || [], [], controller.signal, requestKey);
+      for (let index = 0; index < files.length; index += 1) {
+        const link = message.workbookBatch ? message.workbookBatch.items[index].workbookReviewLink : links[index];
+        if (link?.workbookReviewSessionId) await researchApi.attachAssistantTaskFile(activeProjectId, task.id, { index, workbookReviewSessionId: link.workbookReviewSessionId }, { signal: controller.signal });
+      }
+      if (!controller.signal.aborted) {
+        setHistory((items) => items.map((item) => item.pendingQuestion?.serverRequestKey === requestKey ? { ...item, pendingQuestion: null } : item));
+        setTaskRefresh((value) => value + 1);
+      }
+    } catch (error) { if (!controller.signal.aborted) setHistory((items) => [...items, { role: "assistant", text: `Could not save task: ${error.message}` }]); }
+    finally { if (!controller.signal.aborted) setBusy(false); }
+  };
   const uploadWorkbookAttachments = async (files, next, pendingQuestion = null) => {
     const spreadsheetAttachments = asArray(files);
     if (!spreadsheetAttachments.length) return;
@@ -2577,6 +2648,29 @@ export function AgentPanel({
     setHistory(next);
     if (serverAgentEnabled && spreadsheetAttachments.length && !meta?.source) {
       if (!canEdit) return;
+      if (canAsk && userText && spreadsheetAttachments.some((file) => /\.xlsx?$/i.test(file.name))) {
+        const controller = new AbortController(); agentRequestAbortRef.current = controller;
+        setBusy(true);
+        let task;
+        try {
+          task = await savePendingTask(userText, spreadsheetAttachments, referenceMentions, next, controller.signal);
+          for (let index = 0; index < spreadsheetAttachments.length; index += 1) {
+            try { task = await uploadTaskFile(task, index, spreadsheetAttachments[index], controller.signal); }
+            catch (error) {
+              if (controller.signal.aborted) return;
+              setHistory((items) => [...items, { role: "assistant", text: `${spreadsheetAttachments[index].name}: ${error.message}. Your question is saved; finish this upload in Questions to continue.` }]);
+            }
+            if (!controller.signal.aborted) setTaskRefresh((value) => value + 1);
+          }
+          if (!controller.signal.aborted) setReferenceMentions([]);
+        } catch (error) {
+          if (!controller.signal.aborted) {
+            setInput(userText); setPendingSpreadsheetFiles(spreadsheetAttachments);
+            setHistory((items) => [...items, { role: "assistant", text: `The question has not been confirmed saved: ${error.message}. Send again to safely check the same request.` }]);
+          }
+        } finally { if (!controller.signal.aborted) setBusy(false); }
+        return;
+      }
       const workbooks = spreadsheetAttachments.filter((file) => /\.xlsx?$/i.test(file.name));
       const documents = spreadsheetAttachments.filter((file) => !/\.xlsx?$/i.test(file.name));
       const refs = [...referenceMentions];
@@ -2801,6 +2895,13 @@ export function AgentPanel({
         </div>
       </div>
     )}
+      {canAsk && <PendingAskTasks key={chatHistoryKey} projectId={activeProjectId} refreshKey={taskRefresh} canEdit={canEdit} busy={busy || qaBusy}
+        onOpenWorkbook={openWorkbookReviewLink} onOpenReferences={onOpenReferences} onUpload={uploadTaskFile}
+        onContinue={(task, response) => {
+          activeQaRun.current = response.request.runId; setQaBusy(["queued", "running"].includes(response.request.status));
+          setHistory((items) => items.some((item) => item.qaRunId === response.request.runId) ? items : [...items,
+            { role: "user", text: task.question }, { role: "assistant", text: "", qaRunId: response.request.runId }]);
+        }} />}
     <div className="messages" ref={messagesRef} onScroll={rememberChatScroll}>
       {!history.length && <div className="welcome">
         <img className="welcome-avatar" src={logoSrc} alt="" />
@@ -2828,7 +2929,9 @@ export function AgentPanel({
               const question = task.text + (task.requiresWorkbook ? `\nUse the confirmed regions of: ${workbookTaskSources(m).map((link) => `${link.workbookName} [sourceDocumentId: ${link.sourceDocumentId}]`).join(", ")}.` : "");
               if (canAsk) await askCitedQuestion(question, next, task.refs || []);
               else { setInput(question); setHistory(next); }
-            }}>{m.pendingQuestion.requiresWorkbook ? "Continue after region review" : "Continue question"}</button></div>}
+            }}>{m.pendingQuestion.requiresWorkbook ? "Continue after region review" : "Continue question"}</button>
+            {m.pendingQuestion.requiresWorkbook && canAsk && canEdit && <button type="button" disabled={busy || qaBusy} onClick={() => saveLegacyTask(m)}>Save across devices</button>}
+            </div>}
           {!!asArray(m.attachments).length && (
             <div className="agent-attachments">
               {asArray(m.attachments).map((attachment, attachmentIndex) => (

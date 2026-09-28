@@ -72,3 +72,20 @@
 @media(max-width: 700px) { .reference-library { padding: 0 14px 24px; } .reference-row { align-items: stretch; flex-direction: column; gap: 9px; } .reference-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); } .reference-filters input { grid-column: 1 / -1; } .reference-filters select { padding: 8px 4px; } .agent.unified-ask { width: 100vw; max-width: 100vw; } }
 @media(prefers-reduced-motion: reduce) { .agent.unified-ask { transition: none; } }
 @media(min-width: 900px) { .reference-library.with-assistant { margin-right: 440px; } .reference-library.with-assistant .reference-row { flex-wrap: wrap; } }
+.ask-saved-tasks { padding: 10px 12px; border-bottom: 1px solid var(--border, #e1e5ee); min-width: 0; flex-shrink: 0; }
+.ask-saved-tasks-body { max-height: 245px; overflow: auto; }
+.ask-saved-tasks-heading > div { display: flex; gap: 6px; }
+.ask-saved-tasks-heading button { border: 1px solid #dce1ed; background: #f8f9fe; border-radius: 6px; color: #596780; padding: 4px 7px; font: inherit; font-size: 11px; cursor: pointer; }
+.ask-saved-tasks-heading button:focus-visible { outline: 2px solid #7154d8; outline-offset: 2px; }
+.ask-saved-tasks-heading, .ask-task-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ask-saved-tasks-heading { justify-content: space-between; font-size: 13px; }
+.ask-saved-tasks-hint { color: #64748b; font-size: 12px; margin: 5px 0; }
+.ask-saved-tasks .ask-task { margin: 10px 0; }
+.ask-saved-tasks .ask-task p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.ask-task ul { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; }
+.ask-task li { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 8px; min-width: 0; }
+.ask-task li > span { max-width: 100%; overflow-wrap: anywhere; font-size: 12px; }
+.ask-task li small { color: #64748b; }
+.ask-task-upload { position: relative; display: inline-flex; padding: 5px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; cursor: pointer; }
+.ask-task-upload:focus-within { outline: 2px solid #7154d8; }
+.ask-task-upload input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }

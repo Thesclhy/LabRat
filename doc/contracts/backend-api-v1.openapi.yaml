@@ -1113,6 +1113,222 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/projects/{projectId}/assistant-tasks:
+    parameters:
+      - &a1
+        $ref: "#/components/parameters/ProjectId"
+    get:
+      tags:
+        - Evidence
+      operationId: listAssistantTasks
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      description: Personal project pending question. Public Guest is denied. Reading
+        never executes a model or accepts scientific data.
+      responses:
+        "200":
+          description: Authorized personal task or question.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssistantTaskPage"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          description: Pending task or question limit reached.
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/DocumentPageLimit"
+    post:
+      tags:
+        - Evidence
+      operationId: createAssistantTask
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      description: Personal project pending question. Public Guest is denied. Reading
+        never executes a model or accepts scientific data.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAssistantTaskRequest"
+      responses:
+        "201":
+          description: Authorized personal task or question.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssistantTask"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          description: Pending task or question limit reached.
+  /api/v1/projects/{projectId}/assistant-tasks/{taskId}:
+    parameters:
+      - *a1
+      - &a2
+        name: taskId
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 160
+    get:
+      tags:
+        - Evidence
+      operationId: getAssistantTask
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      description: Personal project pending question. Public Guest is denied. Reading
+        never executes a model or accepts scientific data.
+      responses:
+        "200":
+          description: Authorized personal task or question.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssistantTask"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          description: Pending task or question limit reached.
+  /api/v1/projects/{projectId}/assistant-tasks/{taskId}/attachments:
+    parameters:
+      - *a1
+      - *a2
+    post:
+      tags:
+        - Evidence
+      operationId: attachAssistantTaskFile
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      description: Personal project pending question. Public Guest is denied. Reading
+        never executes a model or accepts scientific data.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttachTaskFileRequest"
+      responses:
+        "200":
+          description: Authorized personal task or question.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssistantTask"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          description: Pending task or question limit reached.
+  /api/v1/projects/{projectId}/assistant-tasks/{taskId}/cancel:
+    parameters:
+      - *a1
+      - *a2
+    post:
+      tags:
+        - Evidence
+      operationId: cancelAssistantTask
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      description: Personal project pending question. Public Guest is denied. Reading
+        never executes a model or accepts scientific data.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssistantTaskAction"
+      responses:
+        "200":
+          description: Authorized personal task or question.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssistantTask"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          description: Pending task or question limit reached.
+  /api/v1/projects/{projectId}/assistant-tasks/{taskId}/continue:
+    parameters:
+      - *a1
+      - *a2
+    post:
+      tags:
+        - Evidence
+      operationId: continueAssistantTask
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      description: Personal project pending question. Public Guest is denied. Reading
+        never executes a model or accepts scientific data.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssistantTaskAction"
+      responses:
+        "202":
+          description: Authorized personal task or question.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResearchQuestionResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          description: Pending task or question limit reached.
   /api/v1/projects/{projectId}/research-questions:
     parameters:
       - { $ref: "#/components/parameters/ProjectId" }
@@ -4779,6 +4995,194 @@ components:
         createdBy: { type: string }
         createdAt: { type: string }
         updatedAt: { type: string }
+    CreateAssistantTaskRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - requestKey
+        - question
+        - attachments
+      properties:
+        requestKey:
+          type: string
+          minLength: 8
+          maxLength: 100
+          pattern: ^[A-Za-z0-9_-]+$
+        question:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        referenceDocuments:
+          type: array
+          maxItems: 8
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - documentId
+              - versionId
+            properties:
+              documentId:
+                type: string
+                minLength: 1
+                maxLength: 160
+              versionId:
+                type: string
+                minLength: 1
+                maxLength: 160
+        sourceScope:
+          type: string
+          enum:
+            - project
+            - selected
+          default: project
+        selectedExperimentLabel:
+          type: string
+          maxLength: 250
+        conversation:
+          type: array
+          maxItems: 6
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - role
+              - text
+            properties:
+              role:
+                type: string
+                enum:
+                  - user
+                  - assistant
+              text:
+                type: string
+                maxLength: 1000
+        attachments:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            type: object
+            additionalProperties: false
+            required: &a3
+              - name
+              - kind
+            properties:
+              name: &a4
+                type: string
+                minLength: 1
+                maxLength: 250
+              kind: &a5
+                type: string
+                enum:
+                  - workbook
+                  - reference
+    AttachTaskFileRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - index
+      properties:
+        index:
+          type: integer
+          minimum: 0
+          maximum: 7
+        workbookReviewSessionId: &a1
+          type: string
+          minLength: 1
+          maxLength: 160
+        documentId: *a1
+        versionId: *a1
+    AssistantTaskAction:
+      type: object
+      additionalProperties: false
+      properties: {}
+    AssistantTask:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - projectId
+        - actorUserId
+        - question
+        - context
+        - attachments
+        - status
+        - runId
+        - createdAt
+        - updatedAt
+        - ready
+        - referencesReady
+      properties:
+        id: *a1
+        labId: *a1
+        projectId: *a1
+        actorUserId: *a1
+        requestKey: &a2
+          type: string
+        question: *a2
+        context:
+          type: object
+          additionalProperties: true
+        attachments:
+          type: array
+          maxItems: 8
+          items:
+            type: object
+            additionalProperties: false
+            required: *a3
+            properties:
+              name: *a4
+              kind: *a5
+              sourceDocumentId: *a1
+              workbookReviewSessionId: *a1
+              workbookName: *a2
+              documentId: *a1
+              versionId: *a1
+              label: *a2
+              versionNumber:
+                type: integer
+              state:
+                type: string
+                enum:
+                  - needs_upload
+                  - needs_review
+                  - processing
+                  - unavailable
+                  - ready
+        status:
+          type: string
+          enum:
+            - waiting
+            - submitted
+            - cancelled
+        runId:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        ready:
+          type: boolean
+        referencesReady:
+          type: boolean
+    AssistantTaskPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - nextCursor
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AssistantTask"
+        nextCursor:
+          type: string
+          nullable: true
     CreateResearchQuestionRequest:
       type: object
       additionalProperties: false

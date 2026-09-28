@@ -8,6 +8,11 @@ This file is the routing guide for AI agents. It tells you which docs are curren
 
 ## Current Direction
 
+Cross-device pending Ask tasks are the active local milestone after deployed
+0d4a9ea. Read [the task plan](plans/cross-device-ask-tasks.md) and the current
+Q&A contract. This uses server task state and migration 037; it does not merge
+the separate LangGraph analysis-stability pilot.
+
 The unified Ask extension is deployed from main at application commit `0d4a9ea`.
 Read [its approved plan](plans/unified-ask-plan.md),
 [current Q&A contract](contracts/research-qa-v1.md), and

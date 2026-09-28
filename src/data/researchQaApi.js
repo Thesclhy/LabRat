@@ -1,5 +1,12 @@
 import { apiV1Request } from "./backendApiV1Client.ts";
 
+export const createAssistantTask = (projectId, body, options = {}) => apiV1Request("post", "/api/v1/projects/{projectId}/assistant-tasks", { pathParams: { projectId }, body, ...options });
+export const listAssistantTasks = (projectId, query = {}, options = {}) => apiV1Request("get", "/api/v1/projects/{projectId}/assistant-tasks", { pathParams: { projectId }, query, ...options });
+export const getAssistantTask = (projectId, taskId, options = {}) => apiV1Request("get", "/api/v1/projects/{projectId}/assistant-tasks/{taskId}", { pathParams: { projectId, taskId }, ...options });
+export const attachAssistantTaskFile = (projectId, taskId, body, options = {}) => apiV1Request("post", "/api/v1/projects/{projectId}/assistant-tasks/{taskId}/attachments", { pathParams: { projectId, taskId }, body, ...options });
+export const continueAssistantTask = (projectId, taskId, options = {}) => apiV1Request("post", "/api/v1/projects/{projectId}/assistant-tasks/{taskId}/continue", { pathParams: { projectId, taskId }, body: {}, ...options });
+export const cancelAssistantTask = (projectId, taskId, options = {}) => apiV1Request("post", "/api/v1/projects/{projectId}/assistant-tasks/{taskId}/cancel", { pathParams: { projectId, taskId }, body: {}, ...options });
+
 export const listResearchQuestions = (projectId, query = {}, options = {}) => apiV1Request("get", "/api/v1/projects/{projectId}/research-questions", { pathParams: { projectId }, query, ...options });
 export const createResearchQuestion = (projectId, body, options = {}) => apiV1Request("post", "/api/v1/projects/{projectId}/research-questions", { pathParams: { projectId }, body, ...options });
 export const getResearchQuestion = (projectId, researchQuestionId, options = {}) => apiV1Request("get", "/api/v1/projects/{projectId}/research-questions/{researchQuestionId}", { pathParams: { projectId, researchQuestionId }, ...options });

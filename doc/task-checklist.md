@@ -8,6 +8,18 @@ This file is the reusable execution checklist for Codex work. It should describe
 
 ## Long-Task Loop
 
+Cross-device pending Ask tasks (2026-09-28):
+
+- [x] Inspect the isolated LangGraph pilot and choose bounded server task state.
+- [x] Persist personal tasks and file links with migration 037 and v1 contracts.
+- [x] Atomically link continuation to one Q&A run; preserve current review/access.
+- [x] Verify two sessions, restart, concurrent continue/cancel, forced rollback,
+  stale evidence, lost responses and permissions.
+- [x] Complete full regression, actual two-context browser QA and narrow layout.
+- [x] Record coverage/limits in `doc/qa/cross-device-ask-tasks.md`.
+
+Completed locally; not published or deployed.
+
 Unified Ask extension (2026-09-28):
 
 - [x] Reuse the isolated deployment checkout and preserve the original dirty tree.

@@ -1,7 +1,12 @@
 # 上传资料与实验数据的带引用问答 v1
 
-Status: completed locally — M0–M5 implemented and verified; not deployed
-Last reviewed: 2026-09-27
+Status: M0–M5 completed; baseline deployed 2026-09-27, unified Ask deployed 2026-09-28
+Last reviewed: 2026-09-28
+
+后续已确认变更：Excel 只走原区域选择与确认链路，不作为独立参考资料；新问答
+只能读取已确认区域或已接受结果，历史原始单元格引用保留。统一 Ask、资料库及
+@ 选择见 `unified-ask-plan.md`。跨设备待办的独立交付状态见
+`cross-device-ask-tasks.md`；以下 M0–M5 表格保留原实施阶段的记录。
 
 ## 目标与阅读入口
 
@@ -75,7 +80,7 @@ Last reviewed: 2026-09-27
 
 ## 关键体验
 
-有上传权限的用户从已有 Ask LabRat 附件入口添加 PDF、Word、TXT 或 Excel。附件显示解析中、可检索、部分可读或失败；完成读取后自动可引用。View 成员可向已上传且可访问的资料提问。工作簿保留原有区域审核，但引用其文件原文不必等待科学语义确认。
+有上传权限的用户从已有 Ask LabRat 附件入口添加 PDF、Word、TXT 或 Excel。参考资料显示解析中、可检索、部分可读或失败；完成读取后自动可引用。View 成员可向已上传且可访问的资料提问。Excel 必须走原区域审核；新问答只读取当前已确认的区域或已接受实验数据。
 
 回答中的引用可以打开文件名、版本和精确位置：文字型 PDF 使用页码及文本定位，扫描 PDF 使用原始页码和识别区域高亮，Word 使用段落/标题/表格位置，TXT 使用行号，Excel 使用工作表和单元格/范围。已审核实验引用打开对应快照或确认区域；后台重新检查权限。
 

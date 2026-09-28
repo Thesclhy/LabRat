@@ -2,7 +2,19 @@
 
 Status: reference
 Read when: checking durable architecture or product decisions.
-Last reviewed: 2026-08-19
+Last reviewed: 2026-09-28
+
+## 2026-09-28 — Cross-device pending questions use server task state
+
+The user requested cross-device continuation and asked whether the earlier
+LangGraph pilot could provide it. Keep the isolated analysis-stability pilot
+separate: this feature needs durable personal task discovery, source links and
+an atomic question handoff, not a new execution graph. Implement AssistantTasks
+in the existing PostgreSQL/Nest stack. Domain authorization and scientific review
+remain authoritative if a future LangGraph runtime consumes these identities.
+Task reads never invoke the model; explicit continuation atomically links a single
+Q&A request. Local files that never finished uploading require reselection.
+Delivery and QA: `doc/plans/cross-device-ask-tasks.md`.
 
 Durable decisions for LabRat architecture, product workflow, and Codex execution belong here. Keep entries newest first. Each entry should explain the decision, the context, the consequences, and any follow-up.
 

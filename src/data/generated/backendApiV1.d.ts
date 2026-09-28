@@ -808,6 +808,106 @@ export interface paths {
         readonly patch: operations["updateBrowserView"];
         readonly trace?: never;
     };
+    readonly "/api/v1/projects/{projectId}/assistant-tasks": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+            };
+            readonly cookie?: never;
+        };
+        /** @description Personal project pending question. Public Guest is denied. Reading never executes a model or accepts scientific data. */
+        readonly get: operations["listAssistantTasks"];
+        readonly put?: never;
+        /** @description Personal project pending question. Public Guest is denied. Reading never executes a model or accepts scientific data. */
+        readonly post: operations["createAssistantTask"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/projects/{projectId}/assistant-tasks/{taskId}": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly taskId: string;
+            };
+            readonly cookie?: never;
+        };
+        /** @description Personal project pending question. Public Guest is denied. Reading never executes a model or accepts scientific data. */
+        readonly get: operations["getAssistantTask"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/projects/{projectId}/assistant-tasks/{taskId}/attachments": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly taskId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /** @description Personal project pending question. Public Guest is denied. Reading never executes a model or accepts scientific data. */
+        readonly post: operations["attachAssistantTaskFile"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/projects/{projectId}/assistant-tasks/{taskId}/cancel": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly taskId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /** @description Personal project pending question. Public Guest is denied. Reading never executes a model or accepts scientific data. */
+        readonly post: operations["cancelAssistantTask"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/projects/{projectId}/assistant-tasks/{taskId}/continue": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly taskId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /** @description Personal project pending question. Public Guest is denied. Reading never executes a model or accepts scientific data. */
+        readonly post: operations["continueAssistantTask"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/api/v1/projects/{projectId}/research-questions": {
         readonly parameters: {
             readonly query?: never;
@@ -2912,6 +3012,75 @@ export interface components {
             readonly createdAt: string;
             readonly updatedAt: string;
         };
+        readonly CreateAssistantTaskRequest: {
+            readonly requestKey: string;
+            readonly question: string;
+            readonly referenceDocuments?: readonly {
+                readonly documentId: string;
+                readonly versionId: string;
+            }[];
+            /**
+             * @default project
+             * @enum {string}
+             */
+            readonly sourceScope: "project" | "selected";
+            readonly selectedExperimentLabel?: string;
+            readonly conversation?: readonly {
+                /** @enum {string} */
+                readonly role: "user" | "assistant";
+                readonly text: string;
+            }[];
+            readonly attachments: readonly {
+                readonly name: string;
+                /** @enum {string} */
+                readonly kind: "workbook" | "reference";
+            }[];
+        };
+        readonly AttachTaskFileRequest: {
+            readonly index: number;
+            readonly workbookReviewSessionId?: string;
+            readonly documentId?: string;
+            readonly versionId?: string;
+        };
+        readonly AssistantTaskAction: Record<string, never>;
+        readonly AssistantTask: {
+            readonly id: string;
+            readonly labId?: string;
+            readonly projectId: string;
+            readonly actorUserId: string;
+            readonly requestKey?: string;
+            readonly question: string;
+            readonly context: {
+                readonly [key: string]: unknown;
+            };
+            readonly attachments: readonly {
+                readonly name: string;
+                /** @enum {string} */
+                readonly kind: "workbook" | "reference";
+                readonly sourceDocumentId?: string;
+                readonly workbookReviewSessionId?: string;
+                readonly workbookName?: string;
+                readonly documentId?: string;
+                readonly versionId?: string;
+                readonly label?: string;
+                readonly versionNumber?: number;
+                /** @enum {string} */
+                readonly state?: "needs_upload" | "needs_review" | "processing" | "unavailable" | "ready";
+            }[];
+            /** @enum {string} */
+            readonly status: "waiting" | "submitted" | "cancelled";
+            readonly runId: string | null;
+            /** Format: date-time */
+            readonly createdAt: string;
+            /** Format: date-time */
+            readonly updatedAt: string;
+            readonly ready: boolean;
+            readonly referencesReady: boolean;
+        };
+        readonly AssistantTaskPage: {
+            readonly items: readonly components["schemas"]["AssistantTask"][];
+            readonly nextCursor: string | null;
+        };
         readonly CreateResearchQuestionRequest: {
             readonly requestKey: string;
             readonly question: string;
@@ -4728,6 +4897,11 @@ export type SchemaEvidenceRetrievalResponse = components['schemas']['EvidenceRet
 export type SchemaRegisterContextDocumentRequest = components['schemas']['RegisterContextDocumentRequest'];
 export type SchemaArchiveContextDocumentRequest = components['schemas']['ArchiveContextDocumentRequest'];
 export type SchemaContextDocument = components['schemas']['ContextDocument'];
+export type SchemaCreateAssistantTaskRequest = components['schemas']['CreateAssistantTaskRequest'];
+export type SchemaAttachTaskFileRequest = components['schemas']['AttachTaskFileRequest'];
+export type SchemaAssistantTaskAction = components['schemas']['AssistantTaskAction'];
+export type SchemaAssistantTask = components['schemas']['AssistantTask'];
+export type SchemaAssistantTaskPage = components['schemas']['AssistantTaskPage'];
 export type SchemaCreateResearchQuestionRequest = components['schemas']['CreateResearchQuestionRequest'];
 export type SchemaResearchQuestion = components['schemas']['ResearchQuestion'];
 export type SchemaResearchQuestionResponse = components['schemas']['ResearchQuestionResponse'];
@@ -6777,6 +6951,233 @@ export interface operations {
             readonly 401: components["responses"]["Unauthorized"];
             readonly 403: components["responses"]["Forbidden"];
             readonly 404: components["responses"]["NotFound"];
+        };
+    };
+    readonly listAssistantTasks: {
+        readonly parameters: {
+            readonly query?: {
+                readonly cursor?: components["parameters"]["Cursor"];
+                readonly limit?: components["parameters"]["DocumentPageLimit"];
+            };
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Authorized personal task or question. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["AssistantTaskPage"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+            /** @description Pending task or question limit reached. */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    readonly createAssistantTask: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["CreateAssistantTaskRequest"];
+            };
+        };
+        readonly responses: {
+            /** @description Authorized personal task or question. */
+            readonly 201: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["AssistantTask"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+            /** @description Pending task or question limit reached. */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    readonly getAssistantTask: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly taskId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Authorized personal task or question. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["AssistantTask"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+            /** @description Pending task or question limit reached. */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    readonly attachAssistantTaskFile: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly taskId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["AttachTaskFileRequest"];
+            };
+        };
+        readonly responses: {
+            /** @description Authorized personal task or question. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["AssistantTask"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+            /** @description Pending task or question limit reached. */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    readonly cancelAssistantTask: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly taskId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["AssistantTaskAction"];
+            };
+        };
+        readonly responses: {
+            /** @description Authorized personal task or question. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["AssistantTask"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+            /** @description Pending task or question limit reached. */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    readonly continueAssistantTask: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly taskId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["AssistantTaskAction"];
+            };
+        };
+        readonly responses: {
+            /** @description Authorized personal task or question. */
+            readonly 202: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ResearchQuestionResponse"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            readonly 409: components["responses"]["Conflict"];
+            /** @description Pending task or question limit reached. */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     readonly listResearchQuestions: {

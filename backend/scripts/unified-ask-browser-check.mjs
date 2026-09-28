@@ -151,13 +151,49 @@ await withTestSchema(databaseUrl, async ({ databaseUrl: isolated }) => {
     await panel.getByRole("button", { name: "Prepare analysis plan", exact: true }).waitFor();
     await panel.locator('input[type="file"]').setInputFiles({ name: "unified-data.xlsx", mimeType: "application/octet-stream", buffer: researchWorkbook("xlsx") });
     await input.fill("What are the reviewed conditions in this workbook?"); await input.press("Enter");
-    await panel.getByText("Next: What are the reviewed conditions in this workbook?", { exact: true }).waitFor();
-    assert.equal(await panel.getByRole("button", { name: "Continue after region review", exact: true }).isEnabled(), false);
+    const pendingTask = panel.getByRole("region", { name: "Saved questions to continue" });
+    await pendingTask.getByRole("button", { name: "Open review", exact: true }).waitFor();
+    assert.equal(await pendingTask.getByRole("button", { name: "Continue question", exact: true }).isEnabled(), false);
     await owner.reload();
     await owner.getByRole("button", { name: "Open", exact: true }).click();
     await owner.getByRole("button", { name: "Ask", exact: true }).click();
-    await panel.getByText("Next: What are the reviewed conditions in this workbook?", { exact: true }).waitFor();
+    await pendingTask.getByText("What are the reviewed conditions in this workbook?", { exact: true }).waitFor();
     await owner.screenshot({ path: path.join(output, "workbook-pending-question.png"), fullPage: true });
+    const otherDevice = await login("owner");
+    assert.equal(await otherDevice.evaluate(() => JSON.stringify(localStorage).includes("What are the reviewed conditions in this workbook?")), false);
+    await otherDevice.getByRole("button", { name: "Ask", exact: true }).click();
+    const otherPanel = otherDevice.getByRole("complementary", { name: "Ask LabRat panel" });
+    const otherTask = otherPanel.getByRole("region", { name: "Saved questions to continue" });
+    await otherTask.getByText("What are the reviewed conditions in this workbook?", { exact: true }).waitFor();
+    assert.equal(await otherTask.getByRole("button", { name: "Continue question", exact: true }).isEnabled(), false);
+    const opened = otherDevice.waitForResponse(response => response.url().includes("/workbook-review-sessions/") && response.request().method() === "GET" && response.status() === 200);
+    await otherTask.getByRole("button", { name: "Open review", exact: true }).click(); await opened;
+    await otherDevice.screenshot({ path: path.join(output, "task-other-device-review.png"), fullPage: true });
+    const savedTask = (await pool.query("select * from assistant_tasks where actor_user_id='user_owner' and status='waiting'")).rows[0];
+    const uploadedWorkbook = savedTask.attachments[0];
+    // Fixture confirmation isolates task recovery from the already-tested semantic-review UI.
+    await pool.query(`insert into workbook_review_regions(id,lab_id,project_id,workbook_review_session_id,source_document_id,
+      sheet_name,range_ref,selection_method,disposition,review_status,version,warnings,created_at,updated_at,created_by)
+      values('task_region','lab_analysis','project_analysis',$1,$2,'Measurements','A1:G2','manual','active','accepted',1,'[]',now(),now(),'user_owner')`,
+      [uploadedWorkbook.workbookReviewSessionId, uploadedWorkbook.sourceDocumentId]);
+    await pool.query(`insert into region_understanding_revisions(id,lab_id,project_id,workbook_review_session_id,source_document_id,region_id,
+      revision_number,trigger,user_feedback,summary,interpretation,source_refs,source_content_hash,dependency_hash,validation,provider,warnings,confidence,created_at,created_by)
+      select 'task_revision',lab_id,project_id,$1,$2,'task_region',1,trigger,user_feedback,summary,interpretation,source_refs,source_content_hash,
+      dependency_hash,validation,provider,warnings,confidence,now(),created_by from region_understanding_revisions where id='revision_analysis'`,
+      [uploadedWorkbook.workbookReviewSessionId, uploadedWorkbook.sourceDocumentId]);
+    await pool.query("update workbook_review_regions set current_revision_id='task_revision',accepted_revision_id='task_revision' where id='task_region'");
+    await otherDevice.reload(); await otherDevice.getByRole("button", { name: "Open", exact: true }).click();
+    await otherDevice.getByRole("button", { name: "Ask", exact: true }).click();
+    await otherTask.getByText("Ready to continue", { exact: true }).waitFor();
+    await otherDevice.setViewportSize({ width: 390, height: 844 });
+    await otherDevice.waitForFunction(() => { const panel = document.querySelector(".agent.open"); return panel && panel.scrollWidth <= panel.clientWidth + 1; });
+    await otherTask.scrollIntoViewIfNeeded();
+    await otherDevice.screenshot({ path: path.join(output, "task-other-device-mobile.png"), fullPage: false });
+    await otherTask.getByRole("button", { name: "Continue question", exact: true }).click();
+    await otherPanel.getByText("The saved goal is to study catalyst stability.", { exact: true }).waitFor();
+    await otherDevice.screenshot({ path: path.join(output, "task-other-device-continued.png"), fullPage: true });
+    assert.equal((await pool.query("select count(*)::int count from research_qa_requests where request_key=$1", [`task-${savedTask.id}`])).rows[0].count, 1);
+    await panel.getByText("The saved goal is to study catalyst stability.", { exact: true }).waitFor();
     await owner.setViewportSize({ width: 390, height: 844 });
     await owner.waitForFunction(() => { const r = document.querySelector(".agent.open").getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth + 1; });
     await owner.screenshot({ path: path.join(output, "unified-ask-mobile.png"), fullPage: false });
@@ -182,7 +218,7 @@ await withTestSchema(databaseUrl, async ({ databaseUrl: isolated }) => {
     assert.equal(network.some(line => / \/api\/(?!v1\/)/.test(line)), false);
     assert.equal((await pool.query("select count(*)::int count from analysis_runs")).rows[0].count, 0);
     assert.equal((await pool.query("select count(*)::int count from data_snapshots")).rows[0].count, 2);
-    await writeFile(path.join(output, "result.json"), JSON.stringify({ status: "passed", provider: "deterministic substitute", coverage: ["one conversation", "upload and mention", "precise old-version citation", "library search/version/archive", "View Q&A and no mutations", "Excel review and retained question after reload", "reviewed analysis boundary", "390px layout"], errors }, null, 2));
+    await writeFile(path.join(output, "result.json"), JSON.stringify({ status: "passed", provider: "deterministic substitute", coverage: ["one conversation", "upload and mention", "precise old-version citation", "library search/version/archive", "View Q&A and no mutations", "Excel pending task after reload", "second independent browser session opens review and continues", "fixture-confirmed region eligibility", "one linked question across devices", "first device recovers answer", "reviewed analysis boundary", "390px layout"], errors }, null, 2));
     console.log("PASS unified Ask browser acceptance with real HTTP/PostgreSQL and a provider substitute.");
   } catch (error) {
     console.error(viteLog);
