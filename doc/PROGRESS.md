@@ -22,8 +22,11 @@ Keep entries concise, newest first, and include:
 - Preflight, 83 focused UI tests, production build and real Chromium/HTTP/PG
   regression passed, including repeated tab changes, Home, closing/reopening Ask,
   draft preservation and mobile navigation. See `doc/qa/reference-library-navigation.md`.
-- Preparing the fix for the existing main deployment flow. Manual acceptance is
-  in progress; fixed-answer reference questions and cross-device user tests remain.
+- Deployed application d6d1459 via workflow 36467608805 to release
+  20260928185114-d6d1459aaf2a. Fresh backup, hosted full checks and live release,
+  health and asset verification passed. No new migration or production data writes.
+- Manual acceptance is in progress. Refresh/retest of the navigation fix,
+  fixed-answer reference questions and cross-device user tests remain.
 
 ## 2026-09-28 — Cross-device Ask main deployment completed
 

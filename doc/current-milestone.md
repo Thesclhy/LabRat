@@ -1,6 +1,6 @@
 # Current Milestone
 
-Status: User manual acceptance in progress — Reference library navigation fix verified locally
+Status: User manual acceptance in progress — Reference library navigation fix deployed
 Read when: checking what the next implementation slice should be.
 Last reviewed: 2026-09-28
 
@@ -10,9 +10,10 @@ This file tracks the active execution state. Keep `doc/plan.md` as the short roa
 
 The user started chat-panel testing and found Reference library content surviving
 navigation back to Overview. The shared React key was reproduced and fixed;
-focused tests, build and actual browser regression passed. Deployment pending:
-`doc/qa/reference-library-navigation.md`. Reference-answer and cross-device user
-acceptance remain unverified.
+focused tests, build and actual browser regression passed. Application d6d1459
+is deployed; workflow 36467608805 and live health/assets checks passed. See
+`doc/qa/reference-library-navigation.md`. User retest, reference-answer and
+cross-device user acceptance remain unverified.
 
 ## Cross-device pending Ask tasks
 
@@ -26,7 +27,9 @@ scenarios and actual two-context browser automation passed. See
 testing. Application e780cff is live at release 20260928181733-e780cffec0cf;
 workflow 36463660597, migration 037, backup integrity and live health/asset checks
 passed. See `doc/qa/cross-device-ask-deployment.md`.
-User manual acceptance has not started; it is distinct from automated verification.
+At that release checkpoint user manual acceptance had not started; subsequent
+chat-panel testing and the navigation repair are recorded above. Cross-device
+user acceptance remains unverified.
 
 ## Unified Ask implementation
 

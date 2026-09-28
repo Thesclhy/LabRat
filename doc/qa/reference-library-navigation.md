@@ -1,6 +1,6 @@
 # Reference library navigation regression
 
-Date: 2026-09-28. Status: repaired and verified locally; deployment in progress.
+Date: 2026-09-28. Status: repaired, deployed and verified; user retest pending.
 
 The user began manual chat-panel testing and reported the Reference library
 remaining above Overview after navigating away. Reproduced on the deployed
@@ -48,3 +48,21 @@ Fresh pre-release backup: `/var/backups/labrat/reference-navigation-20260928`,
 set `20260928184608`; database gzip and uploaded-file archive integrity passed.
 No migration is added. The test-owned browser/server processes and test database
 were shut down after verification; no other database clients were connected.
+
+## Deployment result
+
+- Application commit `d6d1459aaf2a4dac07df62df3938bbdc305e76f7` is on main.
+- [Workflow 36467608805](https://github.com/Thesclhy/LabRat/actions/runs/36467608805)
+  passed frontend/backend/PostgreSQL tests, builds and the deployment.
+- Active release: `/opt/labrat/releases/20260928185114-d6d1459aaf2a`.
+- Backend active; local/public health, exact HTML/JS/CSS hashes and unauthenticated
+  API rejection passed. Existing migration 037 checksum and task schema verified.
+- Provider remains Anthropic / claude-sonnet-4-5. No production research records
+  or model calls were made by verification.
+- Safe receipt: [reference-library-navigation-live.json](reference-library-navigation-live.json),
+  completed at `2026-09-28T18:51:43.509Z`.
+
+Refresh the existing browser page to load the new bundle and clear the already
+orphaned DOM. Retest References -> Overview, Library from Ask -> Overview, and
+closing/reopening Ask while References is selected. User retest is pending.
+Documentation is committed separately with `[skip ci]`.
