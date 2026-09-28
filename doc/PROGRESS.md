@@ -23,8 +23,10 @@ Keep entries concise, newest first, and include:
   image/metadata retry and stale-read cancellation. Word/TXT paths stay unchanged.
 - Preflight, 96 focused tests, build and real Chromium/HTTP/PostgreSQL passed;
   final 13-test/build/browser rerun confirmed return-to-top/style changes.
-  Hosted deployment pending. See
-  `doc/qa/pdf-page-navigation.md`. User retest remains pending.
+- Application a107097 deployed via successful workflow 36476507491 at release
+  20260928200744-a10709779615. Fresh backup, full hosted regression and exact
+  live assets/health/schema checks passed. See `doc/qa/pdf-page-navigation.md`.
+- User retest remains pending. No production research writes or provider calls.
 
 ## 2026-09-28 — Repair PDF preview missing glyphs
 

@@ -1,6 +1,6 @@
 # PDF page navigation
 
-Date: 2026-09-28. Status: local verification passed; release pending.
+Date: 2026-09-28. Status: deployed and verified; user retest pending.
 
 The user found the PDF preview's Passage/text-block selector difficult to read.
 It also exposed only the first eight passages until Load more was clicked,
@@ -36,8 +36,9 @@ Verification:
 - A final 13-test rerun, rebuild and actual-browser pass verified return-to-top
   behavior and consistent button/text styling across library and chat entry
   points; final screenshots inspected. Test-owned servers/database were stopped
-  after checking no other database clients were active. Hosted full regression is a
-  deployment gate. No real provider or production research write is needed.
+  after checking no other database clients were active. Hosted full regression
+  subsequently passed before deployment. No real provider or production research
+  writes were made.
 
 Local evidence: `.tmp/pdf-page-tests.log`, `.tmp/pdf-page-final-tests.log`,
 `.tmp/pdf-page-build.log`, `.tmp/pdf-page-browser.log`, and screenshots
@@ -47,3 +48,19 @@ Manual retest: refresh LabRat and open Q05-protocol.pdf. The selector should sho
 three pages, with Previous/Next controls; switch to pages 2 and 3. Then open a
 PDF citation from an answer, check its highlight, visit another page and return.
 No re-upload or OCR Retry is required. User acceptance remains pending.
+
+## Release result
+
+- Application `a10709779615061609acf378b36c16184bee64d1` deployed from main at
+  `/opt/labrat/releases/20260928200744-a10709779615`.
+- [Workflow 36476507491](https://github.com/Thesclhy/LabRat/actions/runs/36476507491)
+  passed full frontend/backend/PostgreSQL tests, builds, smoke and deployment.
+- Fresh backup `/var/backups/labrat/pdf-page-navigation-20260928`, set
+  `20260928200302`, passed database/archive integrity checks.
+- Live service, local/public health, exact public HTML/JS/CSS hashes and current
+  schema/auth checks passed. No migration added; Anthropic provider unchanged.
+  Receipt: [pdf-page-navigation-live.json](pdf-page-navigation-live.json).
+- Browser acceptance used the local production build and synthetic records;
+  live verification checked the deployed release/assets without writing user
+  research data. User manual retest remains pending. Documentation follows in a
+  `[skip ci]` commit.

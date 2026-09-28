@@ -1,6 +1,6 @@
 # Current Milestone
 
-Status: User manual acceptance in progress — PDF page navigation verified, release pending
+Status: User manual acceptance in progress — PDF page navigation deployed
 Read when: checking what the next implementation slice should be.
 Last reviewed: 2026-09-28
 
@@ -12,7 +12,9 @@ The user requested readable PDF page navigation instead of text-block choices.
 Implemented page/total, direct page selection and Previous/Next, preserving exact
 cited-page highlights and historical versions. Focused tests/build and real
 browser checks passed, including final return-to-top/style verification.
-Deployment pending. See `doc/qa/pdf-page-navigation.md`; user retest is still required.
+Application a107097 deployed via successful workflow 36476507491; exact live
+assets/service checks passed. See `doc/qa/pdf-page-navigation.md`; user retest
+is still required.
 
 The user's Q05 PDF preview lost most letters. Production diagnostics isolated
 standard-font substitution in the preview renderer; all three pages are parsed,
