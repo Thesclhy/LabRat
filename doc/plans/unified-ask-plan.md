@@ -1,6 +1,6 @@
 # Unified Ask and reference library
 
-Status: implemented and locally verified, 2026-09-28.
+Status: implemented, deployed and verified, 2026-09-28.
 Baseline: integrated research Q&A release 1c06923, branch codex/unified-ask.
 
 ## Confirmed product behavior
@@ -37,5 +37,6 @@ Baseline: integrated research Q&A release 1c06923, branch codex/unified-ask.
 See `doc/qa/unified-ask-verification.md` for executed checks and manual acceptance.
 
 The original dirty checkout's independent permissions/analysis work is excluded.
-This approval covers implementation; production remains the previously verified
-release until a separately recorded publication/deployment.
+The user separately authorized main deployment on 2026-09-28. Application commit
+0d4a9ea is live with migration 036; hosted checks and bounded real-provider canaries
+passed. See `doc/qa/unified-ask-deployment.md` for release evidence and limits.

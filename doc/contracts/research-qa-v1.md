@@ -1,6 +1,6 @@
 # Research Q&A v1 contract
 
-Status: Q&A baseline deployed 2026-09-27; unified Ask extension implemented locally
+Status: Q&A baseline and unified Ask extension deployed; verified 2026-09-28
 Last reviewed: 2026-09-28
 
 Scope: the confirmed research Q&A plan and acceptance matrix. This contract

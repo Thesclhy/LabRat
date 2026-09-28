@@ -2,19 +2,21 @@
 
 Status: active
 Read when: deciding what LabRat should build next.
-Last reviewed: 2026-09-27
+Last reviewed: 2026-09-28
 
 This is the short active plan. Current execution status lives in `doc/current-milestone.md`; detailed implementation plans live under `doc/plans/`.
 
 ## Current Focus
 
-Unified Ask is locally implemented on `codex/unified-ask`, following
+Unified Ask is deployed from main at application commit `0d4a9ea`, following
 `doc/plans/unified-ask-plan.md`. The current reference path supports PDF/Word/TXT;
 Excel follows workbook region review. See `doc/qa/unified-ask-verification.md`.
-The production checkpoint below describes the previous release.
+Hosted and live verification passed, including migration 036 and two real-provider
+citation canaries; see `doc/qa/unified-ask-deployment.md`. The checkpoint below
+describes the previous release.
 
 Research Q&A remote deployment is complete at f317265; hosted and live verification
-passed. See `doc/qa/research-qa-deployment.md` for the current release and coverage.
+passed. See `doc/qa/research-qa-deployment.md` for that release and coverage.
 
 Research Q&A v1 completed its local implementation and semantic gates. The user
 requested and completed deployment through the existing main/Lightsail pipeline. The release

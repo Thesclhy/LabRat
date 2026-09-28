@@ -1,6 +1,6 @@
 # Current Milestone
 
-Status: Unified Ask — main publication and deployment in progress
+Status: Unified Ask — deployed and verified
 Read when: checking what the next implementation slice should be.
 Last reviewed: 2026-09-28
 
@@ -11,16 +11,17 @@ This file tracks the active execution state. Keep `doc/plan.md` as the short roa
 The user approved the unified Ask, @reference selection, separate reference
 library, visible context and resumable Excel review tasks on 2026-09-28.
 Implemented doc/plans/unified-ask-plan.md on codex/unified-ask in the reused
-research-qa-deploy checkout. Preserve the original dirty checkout and current
-production release. Preflight, full codex verification, real PostgreSQL scenarios
+research-qa-deploy checkout. The original dirty checkout's independent changes
+are preserved. Preflight, full codex verification, real PostgreSQL scenarios
 and actual-browser acceptance passed. See doc/qa/unified-ask-verification.md for
 manual checks, exact coverage and the real-provider evaluation limitation.
-The user authorized main publication/deployment on 2026-09-28. Remote main
-remains the implementation baseline 1c06923; no merge conflict is present.
-Migration 036 is required for this release. Publication, hosted verification,
-production migration/asset checks and health verification remain to complete.
+The user authorized main publication/deployment on 2026-09-28. Application commit
+0d4a9ea is deployed at /opt/labrat/releases/20260928155800-0d4a9eaabccb.
+Fresh backups, hosted workflow 36447049162, migration 036, public asset/health
+checks and two real Anthropic synthetic citation canaries passed. No production
+research records were created. See [deployment evidence](qa/unified-ask-deployment.md).
 
-## Research Q&A production checkpoint
+## Previous Research Q&A production checkpoint
 
 The remote deployment request is complete. Production code f317265 is served
 from /opt/labrat/releases/20260927184046-f31726520c3a. Hosted workflow 36341375213

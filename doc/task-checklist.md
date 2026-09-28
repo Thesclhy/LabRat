@@ -2,7 +2,7 @@
 
 Status: active
 Read when: starting or continuing a non-trivial LabRat milestone.
-Last reviewed: 2026-09-27
+Last reviewed: 2026-09-28
 
 This file is the reusable execution checklist for Codex work. It should describe how to run a milestone, not what the current product strategy is. Current milestone state belongs in `doc/current-milestone.md`; recent completed work belongs in `doc/PROGRESS.md`.
 
@@ -14,7 +14,11 @@ Unified Ask extension (2026-09-28):
 - [x] Implement approved references, mentions, unified conversation and workbook boundaries.
 - [x] Verify full regression, real PostgreSQL and actual browser interactions.
 - [x] Record source/version/review contracts and manual acceptance in
-  `doc/qa/unified-ask-verification.md`; production remains unchanged.
+  `doc/qa/unified-ask-verification.md`.
+- [x] Back up production, publish main, verify hosted deployment and migration 036.
+- [x] Verify exact release/assets, authorization rejection and live citation canaries.
+
+Release evidence: `doc/qa/unified-ask-deployment.md`; application commit 0d4a9ea.
 
 Research Q&A release (2026-09-27):
 

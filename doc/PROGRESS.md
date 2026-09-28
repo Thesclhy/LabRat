@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-09-20
+Last reviewed: 2026-09-28
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -12,6 +12,19 @@ Keep entries concise, newest first, and include:
 - meaningful changes
 - verification
 - follow-ups or residual risk
+
+## 2026-09-28 — Unified Ask main deployment completed
+
+- User requested main deployment. Pushed application commit 0d4a9ea; hosted
+  workflow 36447049162 passed and activated release 20260928155800-0d4a9eaabccb.
+- Fresh database/file backups passed integrity checks. Verified migration 036,
+  service/public health, exact served assets and unauthenticated API rejection.
+- Both live Anthropic synthetic canaries passed selected-version citation checks
+  and accepted-value numeric binding. Corrected two canary-harness omissions;
+  no application fix or second deployment was needed. Full scientific semantic
+  evaluation was not rerun. No production research records were created.
+- Deployment receipt and safe structured evidence live under
+  `doc/qa/unified-ask-deployment.md`. Original checkout changes remain excluded.
 
 ## 2026-09-28 — Unified Ask main deployment started
 

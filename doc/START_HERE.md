@@ -2,19 +2,20 @@
 
 Status: active
 Read when: starting any non-trivial LabRat coding or documentation task.
-Last reviewed: 2026-09-27
+Last reviewed: 2026-09-28
 
 This file is the routing guide for AI agents. It tells you which docs are current source of truth, which docs are long-term plans, and which docs are historical reports.
 
 ## Current Direction
 
-The unified Ask extension is implemented locally on `codex/unified-ask`.
+The unified Ask extension is deployed from main at application commit `0d4a9ea`.
 Read [its approved plan](plans/unified-ask-plan.md),
 [current Q&A contract](contracts/research-qa-v1.md), and
 [verification and manual checks](qa/unified-ask-verification.md).
 It merges Ask/workflow UI, adds a main-workspace reference library and @mentions,
 and requires Excel region confirmation before new Q&A evidence reads.
-The deployed baseline below remains unchanged until a separate release.
+See [deployment evidence](qa/unified-ask-deployment.md) for migration 036, hosted
+verification and live citation canaries. The baseline below is the previous release.
 
 Research Q&A v1 is implemented and locally accepted. Read
 [the Q&A plan](plans/research-qa-plan.md), [implementation contract](contracts/research-qa-v1.md),

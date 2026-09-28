@@ -1,7 +1,8 @@
 # Unified Ask verification and manual checks
 
 Date: 2026-09-28. Branch: `codex/unified-ask`, based on integrated release 1c06923.
-Status: local implementation accepted; production remains f317265.
+Status: local implementation accepted; subsequently deployed as 0d4a9ea.
+Hosted and live results are recorded in [the deployment report](unified-ask-deployment.md).
 
 ## Executed verification
 
@@ -76,9 +77,10 @@ schema/server/browser/file store. Captures and result JSON are under
 
 ## Limits and release notes
 
-- No real-provider semantic evaluation was rerun for this UI/scope extension.
+- No full real-provider semantic evaluation was rerun for this UI/scope extension.
   Browser/provider substitutes establish routing, persistence and citation wiring,
-  not open-ended scientific answer quality.
+  not open-ended scientific answer quality. Two bounded live Anthropic canaries
+  subsequently passed; their scope and evidence are in the deployment report.
 - The old 30-question corpus includes raw Excel read cases. Those cases now assert
   review-required rejection; the supported retrieval subset keeps Recall@8 >= 0.9.
   Its denominator differs from the archived pre-unification report, so old scores
@@ -88,6 +90,6 @@ schema/server/browser/file store. Captures and result JSON are under
   cross-device recovery. Initial server question recovery is bounded to 20.
 - Word/TXT source inspection shows extracted passages and original locators; PDF
   inspection also renders original pages. This is not a full Word layout editor.
-- Release must apply migration 036 after existing 034/035. This work has not been
-  committed, pushed or deployed; original checkout changes remain separate.
+- The release applied migration 036 after existing 034/035. Main publication and
+  deployment are complete; original checkout changes remain separate.
 - Existing large Plotly bundle warning remains. No dependency was added.

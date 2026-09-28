@@ -1,0 +1,143 @@
+{
+  "release": "/opt/labrat/releases/20260928155800-0d4a9eaabccb",
+  "checks": {
+    "migration": {
+      "filename": "036_reference_document_identity.sql",
+      "checksum": "4008c55fa8784ab28e0d29a50e2e1824382ccc2358a13489da7549dde1cfcd06"
+    },
+    "indexSha256": "ca97bf52a96e438c84d4002c94c8b170263a75e8af03de8188f73d9ff88fdab0",
+    "health": "passed",
+    "context-documentsUnauthenticated": 401,
+    "research-questionsUnauthenticated": 401,
+    "readOnlyBoundary": "passed"
+  },
+  "assets": [
+    {
+      "url": "/LabRat/assets/index-BUwBfLgp.js",
+      "sha256": "b3dee44f24e82dd5f52a8f7452e22319ead9681e070edea5487482a07136f551"
+    },
+    {
+      "url": "/LabRat/assets/index-DYG3njNv.css",
+      "sha256": "41d08c88abf7ea739b8c2d97bfcd873e4eff8b7f40b6725e3d9ea1569c6fa020"
+    }
+  ],
+  "providerCanaries": [
+    {
+      "scope": "selected",
+      "question": "Only use the selected synthetic-method.txt version. What samples are allowed and what samples are excluded? Cite the source.",
+      "initialWarning": null,
+      "answer": {
+        "status": "answered",
+        "claims": [
+          {
+            "text": "According to the synthetic-method.txt, dry samples are allowed.",
+            "citations": [
+              {
+                "evidenceId": "synthetic_doc_evidence",
+                "quote": "use 80 C for dry samples only"
+              }
+            ],
+            "numericBindings": []
+          },
+          {
+            "text": "Wet samples are excluded.",
+            "citations": [
+              {
+                "evidenceId": "synthetic_doc_evidence",
+                "quote": "Wet samples are excluded."
+              }
+            ],
+            "numericBindings": []
+          }
+        ]
+      },
+      "trace": [
+        "read_document_passage"
+      ],
+      "validation": {
+        "valid": true,
+        "errors": []
+      },
+      "usage": {
+        "requests": 2,
+        "toolRounds": 1,
+        "toolCalls": 1,
+        "inputTokens": 7688,
+        "outputTokens": 197,
+        "unknownUsageRequests": 0,
+        "reservedTokens": 0,
+        "elapsedMs": 5752,
+        "knownCost": null,
+        "lastActiveAt": 1790611298645,
+        "failure": null
+      }
+    },
+    {
+      "scope": "project",
+      "question": "Read the temperature in the selected synthetic-method.txt and the accepted temperature for Exp17. Report each original value with its own citation and conditions. Do not calculate a difference.",
+      "initialWarning": null,
+      "answer": {
+        "status": "answered",
+        "claims": [
+          {
+            "text": "The selected document synthetic-method.txt specifies a temperature of 80 C for dry samples only, with wet samples excluded.",
+            "citations": [
+              {
+                "evidenceId": "synthetic_doc_evidence",
+                "quote": "Synthetic protocol: use 80 C for dry samples only. Wet samples are excluded."
+              }
+            ],
+            "numericBindings": []
+          },
+          {
+            "text": "The accepted Temperature for Exp17 is 82 C.",
+            "citations": [
+              {
+                "evidenceId": "synthetic_exp_evidence",
+                "quote": "Temperature"
+              }
+            ],
+            "numericBindings": [
+              {
+                "evidenceId": "synthetic_exp_evidence",
+                "path": "/data/fields/0/value",
+                "value": 82,
+                "unit": "C",
+                "numericScale": null
+              }
+            ]
+          }
+        ]
+      },
+      "trace": [
+        "read_document_passage",
+        "find_experiments",
+        "read_experiment_evidence"
+      ],
+      "validation": {
+        "valid": true,
+        "errors": []
+      },
+      "usage": {
+        "requests": 3,
+        "toolRounds": 2,
+        "toolCalls": 3,
+        "inputTokens": 12143,
+        "outputTokens": 396,
+        "unknownUsageRequests": 0,
+        "reservedTokens": 0,
+        "elapsedMs": 8863,
+        "knownCost": null,
+        "lastActiveAt": 1790611307508,
+        "failure": null
+      }
+    }
+  ],
+  "provider": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-4-5",
+    "configured": true
+  },
+  "status": "passed",
+  "completedAt": "2026-09-28T16:01:47.508Z"
+}
