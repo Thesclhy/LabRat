@@ -4464,7 +4464,7 @@ function App() {
         canAskProject={permissions.canAsk}
       />
       {!canEditProject && <div className="workspace-readonly" role="status">Read-only access · Draft editing and analysis proposals are disabled.</div>}
-      {tab === "references" && permissions.canAsk && <ReferenceLibrary key={`${authState.user.id}-${activeProjectId}`} projectId={activeProjectId} canEdit={canEditProject} assistantOpen={agentOpen} />}
+      {tab === "references" && permissions.canAsk && <ReferenceLibrary key={`references-${authState.user.id}-${activeProjectId}`} projectId={activeProjectId} canEdit={canEditProject} assistantOpen={agentOpen} />}
       {tab === "overview" && <ProjectOverview
         projectState={projectState}
         onAskLabRat={() => { setAgentOpen(true); }}
@@ -4602,7 +4602,7 @@ function App() {
         onClose={() => setNewProjectOpen(false)}
       />
       {(permissions.canAsk || canEditProject) && <AgentPanel
-        key={`${authState.user.id}-${activeProjectId}`}
+        key={`ask-${authState.user.id}-${activeProjectId}`}
         actorId={authState.user.id}
         canAsk={permissions.canAsk}
         canEdit={canEditProject}

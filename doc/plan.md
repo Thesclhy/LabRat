@@ -12,7 +12,8 @@ Server-backed pending Ask tasks across devices are deployed at application
 commit `e780cff`, using `doc/plans/cross-device-ask-tasks.md`. Migration 037 stores
 personal questions and exact uploaded-file links; continuation reuses the existing
 Q&A lifecycle. Automated and live release checks passed; user manual acceptance
-has not started. See `doc/qa/cross-device-ask-deployment.md`.
+is in progress. See `doc/qa/cross-device-ask-deployment.md` and the first reported
+UI fix in `doc/qa/reference-library-navigation.md`.
 The deployed checkpoint below predates this extension.
 
 Unified Ask is deployed from main at application commit `0d4a9ea`, following

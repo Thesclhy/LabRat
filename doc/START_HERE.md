@@ -12,7 +12,8 @@ Cross-device pending Ask tasks are deployed at application commit `e780cff`.
 Read [the task plan](plans/cross-device-ask-tasks.md),
 [release evidence](qa/cross-device-ask-deployment.md) and the current Q&A contract.
 This uses server task state and migration 037; it does not merge the separate
-LangGraph analysis-stability pilot. User manual acceptance has not started.
+LangGraph analysis-stability pilot. User manual acceptance is in progress; the
+navigation issue and its fix are tracked in [the regression report](qa/reference-library-navigation.md).
 
 The unified Ask extension is deployed from main at application commit `0d4a9ea`.
 Read [its approved plan](plans/unified-ask-plan.md),

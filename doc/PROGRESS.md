@@ -13,6 +13,18 @@ Keep entries concise, newest first, and include:
 - verification
 - follow-ups or residual risk
 
+## 2026-09-28 — Reference library navigation fix
+
+- During manual testing the user reported the library remaining above Overview.
+  Reproduced on the production build: leaving References retained one library.
+- ReferenceLibrary and AgentPanel shared a sibling React key. Added distinct
+  component prefixes while retaining account/project scope; no data/API changes.
+- Preflight, 83 focused UI tests, production build and real Chromium/HTTP/PG
+  regression passed, including repeated tab changes, Home, closing/reopening Ask,
+  draft preservation and mobile navigation. See `doc/qa/reference-library-navigation.md`.
+- Preparing the fix for the existing main deployment flow. Manual acceptance is
+  in progress; fixed-answer reference questions and cross-device user tests remain.
+
 ## 2026-09-28 — Cross-device Ask main deployment completed
 
 - User requested deployment first, then manual chat-panel testing. User manual

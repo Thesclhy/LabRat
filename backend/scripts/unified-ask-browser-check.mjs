@@ -95,6 +95,7 @@ await withTestSchema(databaseUrl, async ({ databaseUrl: isolated }) => {
       const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: "reduce" });
       const page = await context.newPage(); pages.push(page);
       page.on("pageerror", (error) => errors.push(error.message));
+      page.on("console", (message) => { if (/Encountered two children with the same key/.test(message.text())) errors.push(message.text()); });
       page.on("requestfailed", (request) => network.push(`FAILED ${request.method()} ${new URL(request.url()).pathname}: ${request.failure()?.errorText}`));
       page.on("response", (response) => { if (response.url().includes("/api/")) network.push(`${response.status()} ${response.request().method()} ${new URL(response.url()).pathname}`); });
       await page.goto(base); await page.getByRole("button", { name: "Log in", exact: true }).click();
@@ -106,9 +107,50 @@ await withTestSchema(databaseUrl, async ({ databaseUrl: isolated }) => {
       return page;
     };
     const owner = await login("owner");
+    const assertLibraryClosed = async () => {
+      assert.equal(await owner.getByRole("region", { name: "Reference library" }).count(), 0, "Leaving References must unmount the library without orphaned content");
+      assert.equal(await owner.getByRole("button", { name: "Add reference", exact: true }).count(), 0);
+    };
+    for (let cycle = 0; cycle < 3; cycle++) {
+      await owner.getByRole("button", { name: "References", exact: true }).click();
+      const currentLibrary = owner.getByRole("region", { name: "Reference library" });
+      await currentLibrary.waitFor();
+      assert.equal(await currentLibrary.count(), 1);
+      const navigation = await owner.locator(".topbar").boundingBox(), content = await currentLibrary.boundingBox();
+      assert.ok(content.y >= navigation.y + navigation.height, "Reference library belongs below the workspace navigation");
+      await owner.getByRole("button", { name: "Overview", exact: true }).click();
+      await owner.getByRole("heading", { name: "Analysis Project", exact: true }).waitFor();
+      await assertLibraryClosed();
+    }
+    for (const destination of ["Browser", "Manuscript", "Home"]) {
+      await owner.getByRole("button", { name: "References", exact: true }).click();
+      await owner.getByRole("region", { name: "Reference library" }).waitFor();
+      await owner.getByRole("button", { name: destination, exact: true }).click();
+      await assertLibraryClosed();
+    }
+    await owner.getByRole("heading", { name: "Projects", exact: true }).waitFor();
+    await owner.getByRole("button", { name: "Open", exact: true }).click();
+    await owner.getByRole("button", { name: "Overview", exact: true }).waitFor();
+    await owner.getByRole("heading", { name: "Analysis Project", exact: true }).waitFor();
+    await assertLibraryClosed();
+    await owner.screenshot({ path: path.join(output, "reference-library-closed-desktop.png"), fullPage: true });
     await owner.getByRole("button", { name: "Ask", exact: true }).click();
     const panel = owner.getByRole("complementary", { name: "Ask LabRat panel" });
     await panel.waitFor();
+    const draft = panel.getByRole("textbox", { name: "Ask LabRat", exact: true });
+    await draft.fill("Navigation should keep this unsent question");
+    await panel.getByRole("button", { name: "Library", exact: true }).click();
+    await owner.getByRole("region", { name: "Reference library" }).waitFor();
+    await panel.getByRole("button", { name: "Close Lab Rat panel", exact: true }).click();
+    await owner.waitForFunction(() => !document.querySelector(".agent.open"));
+    assert.equal(await owner.getByRole("region", { name: "Reference library" }).count(), 1, "Closing Ask preserves the selected workspace");
+    await owner.getByRole("button", { name: "Overview", exact: true }).click();
+    await assertLibraryClosed();
+    await owner.getByRole("button", { name: "Ask", exact: true }).click();
+    await panel.waitFor();
+    assert.equal(await draft.inputValue(), "Navigation should keep this unsent question");
+    assert.equal(await panel.count(), 1, "Navigation must not duplicate the assistant");
+    await draft.fill("");
     assert.equal(await owner.getByText("Source questions", { exact: true }).count(), 0);
     await panel.locator('input[type="file"]').setInputFiles({ name: "unified-method.txt", mimeType: "text/plain", buffer: Buffer.from("The protocol requires a dry sample.") });
     await panel.getByRole("button", { name: "Send message", exact: true }).click();
@@ -203,6 +245,9 @@ await withTestSchema(databaseUrl, async ({ databaseUrl: isolated }) => {
     await owner.waitForFunction(() => !document.querySelector(".agent.open"));
     await library.locator(".reference-row").first().waitFor();
     await owner.screenshot({ path: path.join(output, "reference-library-mobile.png"), fullPage: true });
+    await owner.getByRole("button", { name: "Overview", exact: true }).click();
+    await assertLibraryClosed();
+    await owner.screenshot({ path: path.join(output, "reference-library-closed-mobile.png"), fullPage: true });
     const viewer = await login("reviewer");
     await viewer.getByRole("button", { name: "Ask", exact: true }).click();
     const viewPanel = viewer.getByRole("complementary", { name: "Ask LabRat panel" });
@@ -218,7 +263,7 @@ await withTestSchema(databaseUrl, async ({ databaseUrl: isolated }) => {
     assert.equal(network.some(line => / \/api\/(?!v1\/)/.test(line)), false);
     assert.equal((await pool.query("select count(*)::int count from analysis_runs")).rows[0].count, 0);
     assert.equal((await pool.query("select count(*)::int count from data_snapshots")).rows[0].count, 2);
-    await writeFile(path.join(output, "result.json"), JSON.stringify({ status: "passed", provider: "deterministic substitute", coverage: ["one conversation", "upload and mention", "precise old-version citation", "library search/version/archive", "View Q&A and no mutations", "Excel pending task after reload", "second independent browser session opens review and continues", "fixture-confirmed region eligibility", "one linked question across devices", "first device recovers answer", "reviewed analysis boundary", "390px layout"], errors }, null, 2));
+    await writeFile(path.join(output, "result.json"), JSON.stringify({ status: "passed", provider: "deterministic substitute", coverage: ["one conversation", "library repeated open/close and workspace navigation", "closing Ask preserves the active library and composer draft", "upload and mention", "precise old-version citation", "library search/version/archive", "View Q&A and no mutations", "Excel pending task after reload", "second independent browser session opens review and continues", "fixture-confirmed region eligibility", "one linked question across devices", "first device recovers answer", "reviewed analysis boundary", "390px layout"], errors }, null, 2));
     console.log("PASS unified Ask browser acceptance with real HTTP/PostgreSQL and a provider substitute.");
   } catch (error) {
     console.error(viteLog);

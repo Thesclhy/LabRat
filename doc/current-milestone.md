@@ -1,10 +1,18 @@
 # Current Milestone
 
-Status: Cross-device pending Ask tasks — deployed; user manual acceptance not started
+Status: User manual acceptance in progress — Reference library navigation fix verified locally
 Read when: checking what the next implementation slice should be.
 Last reviewed: 2026-09-28
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
+
+## Manual acceptance follow-up
+
+The user started chat-panel testing and found Reference library content surviving
+navigation back to Overview. The shared React key was reproduced and fixed;
+focused tests, build and actual browser regression passed. Deployment pending:
+`doc/qa/reference-library-navigation.md`. Reference-answer and cross-device user
+acceptance remain unverified.
 
 ## Cross-device pending Ask tasks
 
