@@ -204,7 +204,8 @@ export async function parsePdf(buffer, { completedPages = [], onEvent = async ()
 }
 
 export async function renderPdfPage(buffer, pageNumber) {
-  const task = getDocument({ data: new Uint8Array(buffer), isEvalSupported: false, useSystemFonts: true,
+  // Node disables font faces; use PDF.js's bundled glyphs instead of host-font substitution.
+  const task = getDocument({ data: new Uint8Array(buffer), isEvalSupported: false, useSystemFonts: false,
     standardFontDataUrl: `${pdfRoot}/standard_fonts/`,
     cMapUrl: `${pdfRoot}/cmaps/`, cMapPacked: true,
     wasmUrl: `${pdfRoot}/wasm/`, verbosity: 0 });

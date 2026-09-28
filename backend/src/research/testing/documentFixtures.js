@@ -65,12 +65,12 @@ export function scanCanvas({ chinese = false, turns = 0, lowContrast = false, co
   return rotated;
 }
 
-export function syntheticPdf(pages = [{ text: ["Research protocol RQ-001", "Temperature: 80 C. Duration: 30 minutes."] }]) {
+export function syntheticPdf(pages = [{ text: ["Research protocol RQ-001", "Temperature: 80 C. Duration: 30 minutes."] }], { fontName = "Helvetica" } = {}) {
   const objects = [];
   const add = (value) => { objects.push(Buffer.isBuffer(value) ? value : Buffer.from(value)); return objects.length; };
   const stream = (dictionary, bytes) => Buffer.concat([Buffer.from(`<< ${dictionary} /Length ${bytes.length} >>\nstream\n`), bytes, Buffer.from("\nendstream")]);
   const catalog = add(""); const pageTree = add("");
-  const font = add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  const font = add(`<< /Type /Font /Subtype /Type1 /BaseFont /${fontName} >>`);
   const ids = [];
   for (const source of pages) {
     let resources = `/Font << /F1 ${font} 0 R >>`;

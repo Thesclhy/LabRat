@@ -13,6 +13,19 @@ Keep entries concise, newest first, and include:
 - verification
 - follow-ups or residual risk
 
+## 2026-09-28 — Repair PDF preview missing glyphs
+
+- User suspected OCR after Q05-protocol.pdf page 1 lost most visible letters.
+  Reproduced the production preview failure; original PDF and all three parsed
+  pages are readable. The partial status is a low-confidence Exp17 warning.
+- Switch transient previews to PDF.js bundled standard-font glyphs. Keep stored
+  text, OCR, parser versions, locators and review boundaries unchanged.
+- New rendered-pixel regression fails before the fix and passes after it for
+  four standard fonts. All 16 focused document tests and NestJS build passed;
+  corrected local and production-runtime images were visually inspected.
+- Deployment/full hosted regression and user retest pending. See
+  `doc/qa/pdf-preview-fonts.md`. No production research writes or model calls.
+
 ## 2026-09-28 — Clear sent Ask attachments
 
 - User reported + attachments remaining after Send. Successful reference uploads
