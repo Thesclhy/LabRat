@@ -1,8 +1,9 @@
 # Cross-device pending Ask task acceptance
 
-Date: 2026-09-28. Status: implemented and verified locally; not deployed.
+Date: 2026-09-28. Status: automated verification passed; deployed; user manual acceptance not started.
 Branch: `codex/cross-device-tasks`, based on main `9092efe`.
-Production remains the unified Ask application `0d4a9ea`; release needs migration 037.
+Application `e780cff` is deployed with migration 037; see
+[release verification](cross-device-ask-deployment.md).
 
 ## Verified behavior
 
@@ -59,8 +60,13 @@ question. Final runs pass with the original behavior checks retained.
 
 The browser uses a deterministic model substitute and fixture-confirmed region
 state after verifying the actual review link; it does not re-evaluate scientific
-interpretation quality. No real research uploads, external provider requests,
-production migrations, commits, pushes or deployments were performed.
+interpretation quality. The local implementation checks made no real research
+uploads or external provider requests. The subsequent authorized deployment is
+recorded separately in `cross-device-ask-deployment.md`; its live verification
+created no production research records or model calls.
+
+The user explicitly confirmed that manual acceptance has not started. All checks
+listed above are automated checks, including the browser scenarios.
 
 The scope is pending Excel-related questions, including attached/selected
 references. It is not synchronization of unsent drafts, entire local workflow chat,

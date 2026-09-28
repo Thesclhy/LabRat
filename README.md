@@ -73,7 +73,7 @@ restrict retrieval. Excel uses the original region selection and confirmation
 workflow, with the original question saved to the account for explicit continuation
 on another device. Pending files still need to finish uploading; local file bytes
 are not transferred between devices. Older browser-only pending cards offer
-**Save across devices**. This extension requires migration 037; see
+**Save across devices**. This extension is deployed with migration 037; see
 [the delivery status](doc/plans/cross-device-ask-tasks.md).
 Full-project View members may ask and open citations to exact source versions,
 pages, paragraphs, lines, confirmed regions or accepted data. New computations

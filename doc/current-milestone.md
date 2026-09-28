@@ -1,6 +1,6 @@
 # Current Milestone
 
-Status: Cross-device pending Ask tasks — deployment in progress; user manual acceptance not started
+Status: Cross-device pending Ask tasks — deployed; user manual acceptance not started
 Read when: checking what the next implementation slice should be.
 Last reviewed: 2026-09-28
 
@@ -13,11 +13,12 @@ User requested server-backed continuation across devices. Implemented
 Reuse PostgreSQL task state and the existing idempotent question lifecycle; the
 separate LangGraph analysis pilot remains independent. No automatic calculation
 or scientific acceptance is added. Preflight, full regression, three PostgreSQL
-scenarios and actual two-context browser acceptance passed. See
-`doc/qa/cross-device-ask-tasks.md`. Migration 037 is required on release; no
-publication or deployment occurred in the implementation milestone. The user has
-now authorized deployment before manual testing; see
-`doc/qa/cross-device-ask-deployment.md`. User manual acceptance has not started.
+scenarios and actual two-context browser automation passed. See
+`doc/qa/cross-device-ask-tasks.md`. The user authorized deployment before manual
+testing. Application e780cff is live at release 20260928181733-e780cffec0cf;
+workflow 36463660597, migration 037, backup integrity and live health/asset checks
+passed. See `doc/qa/cross-device-ask-deployment.md`.
+User manual acceptance has not started; it is distinct from automated verification.
 
 ## Unified Ask implementation
 

@@ -1,8 +1,9 @@
 # Cross-device pending Ask tasks
 
-Status: implemented and verified locally, 2026-09-28. Baseline: main 9092efe.
-Not committed, pushed or deployed. Production remains 0d4a9ea; release requires
-migration 037. Acceptance: `doc/qa/cross-device-ask-tasks.md`.
+Status: deployed at application commit e780cff with migration 037, 2026-09-28.
+Baseline: main 9092efe. Automated verification passed; user manual acceptance has
+not started. See `doc/qa/cross-device-ask-tasks.md` and
+`doc/qa/cross-device-ask-deployment.md`.
 
 The user requested cross-device continuation and asked about the earlier LangGraph
 pilot. That pilot belongs to the separate analysis-stability checkout, is not

@@ -13,12 +13,18 @@ Keep entries concise, newest first, and include:
 - verification
 - follow-ups or residual risk
 
-## 2026-09-28 — Cross-device Ask deployment requested
+## 2026-09-28 — Cross-device Ask main deployment completed
 
 - User requested deployment first, then manual chat-panel testing. User manual
   acceptance has not started; previous checks were automated/synthetic.
-- Preparing the isolated feature checkout for the existing main-triggered
-  Lightsail pipeline. See `doc/qa/cross-device-ask-deployment.md` for release status.
+- Pushed isolated application e780cff to main. Hosted workflow 36463660597 passed
+  and activated `/opt/labrat/releases/20260928181733-e780cffec0cf`.
+- Fresh database/file backups passed integrity checks. Migration 037 checksum,
+  task columns/indexes, live service/health, exact public assets and unauthorized
+  API rejection passed. No provider calls or production research records were
+  created by verification. Provider remains Anthropic / claude-sonnet-4-5.
+- See `doc/qa/cross-device-ask-deployment.md` and its structured receipt. The
+  original dirty checkout remains separate. User manual acceptance is pending.
 
 ## 2026-09-28 — Cross-device pending Ask tasks
 

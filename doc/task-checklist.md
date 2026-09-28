@@ -18,7 +18,11 @@ Cross-device pending Ask tasks (2026-09-28):
 - [x] Complete full regression, actual two-context browser QA and narrow layout.
 - [x] Record coverage/limits in `doc/qa/cross-device-ask-tasks.md`.
 
-Completed locally; not published or deployed.
+- [x] Back up production, publish main and verify hosted release/migration 037.
+- [x] Verify live release, service, public assets and unauthenticated API rejection.
+- [ ] User manual chat-panel acceptance (not started, as explicitly confirmed).
+
+Deployed application e780cff; evidence: `doc/qa/cross-device-ask-deployment.md`.
 
 Unified Ask extension (2026-09-28):
 
