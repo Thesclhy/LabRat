@@ -13,6 +13,17 @@ Keep entries concise, newest first, and include:
 - verification
 - follow-ups or residual risk
 
+## 2026-09-28 — Compact @ reference picker typography
+
+- User reported oversized reference filenames. The picker inherited 18px/44px
+  composer-button styles, also causing long-name and metadata overlap.
+- Scoped CSS uses 13px filenames, 11px metadata, tighter spacing and automatic
+  row height while preserving selected backgrounds and full filenames.
+- Build/diff checks and actual Chromium/HTTP/PostgreSQL verification passed at
+  desktop/390px widths, including long Chinese/English names and mouse/keyboard
+  selection. Temporary harness issues were corrected; final screenshots inspected.
+- Release pending; see `doc/qa/reference-picker-typography.md`. User retest pending.
+
 ## 2026-09-28 — Read reference PDFs by page
 
 - User requested pages instead of the text-block selector. PDF browsing now uses

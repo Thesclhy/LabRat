@@ -37,11 +37,11 @@
 .ask-context-chips button { border: 1px solid #e3e7f0; border-radius: 6px; background: #f7f8fb; padding: 3px 7px; font-size: 11px; max-width: 100%; overflow-wrap: anywhere; }
 .ask-mention-picker { position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); max-height: 265px; overflow-y: auto; background: #fff; border: 1px solid #dce1ec; border-radius: 12px; box-shadow: 0 7px 25px #20345618; z-index: 10; padding: 5px; }
 .ask-mention-picker p { margin: 10px; font-size: 12px; color: #65718a; }
-.ask-mention-picker button { display: flex; width: 100%; flex-direction: column; gap: 4px; text-align: left; border: 0; background: transparent; border-radius: 7px; padding: 9px; color: #29354c; }
-.ask-mention-picker button[aria-selected=true] { background: #f0edfb; }
+.unified-ask .ask-mention-picker button { display: flex; width: 100%; height: auto; min-height: 48px; box-sizing: border-box; flex-direction: column; gap: 2px; text-align: left; border: 0; background: transparent; border-radius: 7px; padding: 8px 10px; color: #29354c; font: inherit; font-size: 13px; line-height: 1.4; }
+.unified-ask .ask-mention-picker button[aria-selected=true] { background: #f0edfb; }
 .ask-mention-picker button[aria-disabled=true] { opacity: .55; }
-.ask-mention-picker button span { overflow-wrap: anywhere; }
-.ask-mention-picker small { color: #6a7891; font-size: 11px; }
+.ask-mention-picker button span { overflow-wrap: anywhere; font-weight: 500; }
+.ask-mention-picker small { color: #6a7891; font-size: 11px; line-height: 1.35; }
 .ask-task { padding: 11px; border: 1px solid #e0e5ef; border-radius: 10px; background: #fafbfe; margin: 10px 0; font-size: 12px; }
 .ask-task p { margin: 6px 0; }
 .ask-task button, .ask-cited-answer > button { border: 1px solid #d9d2f4; color: #5941bd; background: #f0ecfd; border-radius: 7px; padding: 6px 9px; }
