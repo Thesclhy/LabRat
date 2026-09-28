@@ -27,8 +27,8 @@ export class ResearchQuestionsRepository {
     if (auth.publicGuest || await new IdentityRepository(database).findPublicGuestScope(auth.user.id)) throw new ApiError(403, "public_guest_read_only", "Public Guest cannot use AI.");
   }
 
-  async create(auth: AuthContext, project: { id: string; labId: string }, requestKey: string, question: string) {
-    const requestHash = evidenceHash({ question, scope: "full_project" });
+  async create(auth: AuthContext, project: { id: string; labId: string }, requestKey: string, question: string, context: Record<string, any> = {}) {
+    const requestHash = evidenceHash({ question, scope: "full_project", ...(Object.keys(context).length ? { context } : {}) });
     return this.database.db.transaction(async (tx) => {
       await this.authorize(tx, auth, project);
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${JSON.stringify(["research-qa", project.id, auth.user.id])}))`);
@@ -42,7 +42,7 @@ export class ResearchQuestionsRepository {
       if (running) throw new ApiError(429, "qa_actor_busy", "A question is already running for this project. Wait or cancel it first.");
       const timestamp = now(), runId = makeId("agent_run");
       await tx.insert(agentRuns).values({ id: runId, labId: project.labId, projectId: project.id, status: "running", mode: "research_qa",
-        userMessage: question, selectedContext: { scope: "full_project", readOnly: true }, createdAt: timestamp, updatedAt: timestamp, createdBy: auth.user.id });
+        userMessage: question, selectedContext: { ...context, scope: "full_project", readOnly: true }, createdAt: timestamp, updatedAt: timestamp, createdBy: auth.user.id });
       const [request] = await tx.insert(requests).values({ runId, labId: project.labId, projectId: project.id, actorUserId: auth.user.id,
         requestKey, requestHash, question, createdAt: timestamp, updatedAt: timestamp }).returning();
       return { request: request!, reused: false };
@@ -52,6 +52,18 @@ export class ResearchQuestionsRepository {
   async get(auth: AuthContext, projectId: string, id: string) {
     const [request] = await this.database.db.select().from(requests).where(scope(auth, projectId, id)).limit(1);
     return request || null;
+  }
+
+  async byRequestKey(auth: AuthContext, projectId: string, key: string) {
+    const [request] = await this.database.db.select().from(requests).where(and(scope(auth, projectId), eq(requests.requestKey, key))).limit(1);
+    return request || null;
+  }
+
+  async context(auth: AuthContext, projectId: string, id: string): Promise<Record<string, any>> {
+    const [row] = await this.database.db.select({ context: agentRuns.selectedContext }).from(requests)
+      .innerJoin(agentRuns, and(eq(agentRuns.id, requests.runId), eq(agentRuns.projectId, projectId)))
+      .where(scope(auth, projectId, id)).limit(1);
+    return row?.context || {};
   }
 
   async list(auth: AuthContext, projectId: string, cursor: string | undefined, limit: number) {

@@ -8,6 +8,11 @@ This is the short active plan. Current execution status lives in `doc/current-mi
 
 ## Current Focus
 
+Unified Ask is locally implemented on `codex/unified-ask`, following
+`doc/plans/unified-ask-plan.md`. The current reference path supports PDF/Word/TXT;
+Excel follows workbook region review. See `doc/qa/unified-ask-verification.md`.
+The production checkpoint below describes the previous release.
+
 Research Q&A remote deployment is complete at f317265; hosted and live verification
 passed. See `doc/qa/research-qa-deployment.md` for the current release and coverage.
 

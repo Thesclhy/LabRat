@@ -1234,7 +1234,13 @@ paths:
       operationId: listContextDocuments
       x-labrat-capability: read
       x-labrat-scope: all_experiments
-      parameters: [{ $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/DocumentPageLimit" }]
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/DocumentPageLimit" }
+        - { name: search, in: query, schema: { type: string, maxLength: 250 } }
+        - { name: type, in: query, schema: { type: string, enum: ["", pdf, word, txt] } }
+        - { name: status, in: query, schema: { type: string, enum: ["", ready, partial, processing, pending, failed, interrupted] } }
+        - { name: sort, in: query, schema: { type: string, enum: [newest, oldest] } }
       responses:
         "200": { description: Active documents and their current versions., content: { application/json: { schema: { $ref: "#/components/schemas/ContextDocumentPage" } } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -4749,6 +4755,9 @@ components:
       required: [fileObjectId]
       properties:
         fileObjectId: { $ref: "#/components/schemas/OpaqueId" }
+        newDocument: { type: boolean, description: Create an independent reference even when another reference has the same filename. }
+        documentId: { type: string, minLength: 1, maxLength: 160, description: Explicit existing document receiving a new version. }
+        expectedVersion: { type: integer, minimum: 1, description: Required when documentId is supplied. }
     ArchiveContextDocumentRequest:
       type: object
       additionalProperties: false
@@ -4777,6 +4786,28 @@ components:
       properties:
         requestKey: { type: string, minLength: 8, maxLength: 100, pattern: '^[A-Za-z0-9_-]+$' }
         question: { type: string, minLength: 1, maxLength: 4000 }
+        referenceDocuments:
+          type: array
+          maxItems: 8
+          items:
+            type: object
+            additionalProperties: false
+            required: [documentId, versionId]
+            properties:
+              documentId: { type: string, minLength: 1, maxLength: 160 }
+              versionId: { type: string, minLength: 1, maxLength: 160 }
+        sourceScope: { type: string, enum: [project, selected], default: project }
+        selectedExperimentLabel: { type: string, maxLength: 250 }
+        conversation:
+          type: array
+          maxItems: 6
+          items:
+            type: object
+            additionalProperties: false
+            required: [role, text]
+            properties:
+              role: { type: string, enum: [user, assistant] }
+              text: { type: string, maxLength: 1000 }
     ResearchQuestion:
       type: object
       additionalProperties: false
@@ -4788,6 +4819,8 @@ components:
         actorUserId: { type: string }
         requestKey: { type: string }
         question: { type: string }
+        referenceDocuments: { type: array, items: { $ref: "#/components/schemas/JsonObject" } }
+        sourceScope: { type: string, enum: [project, selected] }
         status: { type: string, enum: [queued, running, interrupted, completed, failed, cancelled] }
         attempt: { type: integer }
         usage: { $ref: "#/components/schemas/JsonObject" }

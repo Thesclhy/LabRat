@@ -100,6 +100,12 @@ test("new calculations route to review while explicit do-not-calculate read requ
   assert.equal(researchBoundary("诊断实验失败并推荐温度"), "out_of_scope");
   assert.equal(researchBoundary("Read existing values. Do not calculate the difference."), null);
   assert.equal(researchBoundary("Read cached formulas, without calculating new results."), null);
+  assert.equal(researchBoundary("Read the reported mean temperature"), null);
+  assert.equal(researchBoundary("Explain how the paper calculated yield"), null);
+  assert.equal(researchBoundary("文献是如何计算产率的？"), null);
+  assert.equal(researchBoundary("Read the values and calculate the mean"), "needs_analysis");
+  assert.equal(researchBoundary("Read the method then compute the mean"), "needs_analysis");
+  assert.equal(researchBoundary("读取数据，然后计算平均值"), "needs_analysis");
 });
 
 test("citation repair reuses authorized evidence in a tool-free provider request", async () => {

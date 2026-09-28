@@ -38,7 +38,23 @@ export class ResearchQuestionsService implements OnModuleDestroy {
     const { project } = await this.documents.authorize(auth, projectId);
     const question = input.question.trim();
     if (!question) throw new ApiError(400, "qa_question_empty", "Enter a question.");
-    const result = await this.repository.create(auth, project, input.requestKey, question);
+    const sourceScope = input.sourceScope === "selected" || input.referenceDocuments?.length && /(?:仅|只)(?:根据|使用|参考|用)|\bonly\s+(?:use|using|from|based on)\b/i.test(question) ? "selected" : "project";
+    const existing = await this.repository.byRequestKey(auth, projectId, input.requestKey);
+    if (existing) {
+      const saved = await this.repository.context(auth, projectId, existing.runId);
+      const identities = (refs: any[] = []) => [...new Set(refs.map((ref) => `${ref.documentId}:${ref.versionId}`))].sort();
+      if (existing.question !== question || JSON.stringify(identities(saved.referenceDocuments)) !== JSON.stringify(identities(input.referenceDocuments))
+        || (saved.sourceScope || "project") !== sourceScope || (saved.selectedExperimentLabel || "") !== (input.selectedExperimentLabel || "")
+        || JSON.stringify(saved.conversation || []) !== JSON.stringify(input.conversation || [])) {
+        throw new ApiError(409, "qa_request_conflict", "This request key belongs to a different question.");
+      }
+      return { ...(await this.get(auth, projectId, existing.runId)), reused: true };
+    }
+    const references = await this.evidence.resolveReferences(auth, projectId, input.referenceDocuments || []);
+    if (sourceScope === "selected" && !references.length) throw new ApiError(400, "qa_sources_required", "Select at least one reference for a sources-only question.");
+    const context = { referenceDocuments: references, sourceScope,
+      conversation: input.conversation || [], selectedExperimentLabel: input.selectedExperimentLabel || "" };
+    const result = await this.repository.create(auth, project, input.requestKey, question, context);
     if (!result.reused) await this.start(auth, result.request);
     return { ...(await this.get(auth, projectId, result.request.runId)), reused: result.reused };
   }
@@ -59,7 +75,8 @@ export class ResearchQuestionsService implements OnModuleDestroy {
     const answer = await this.repository.answer(auth, projectId, runId);
     const artifact = answer ? { ...answer, evidence: answer.evidence.map(({ data: _data, ...reference }) => reference) } : null;
     await this.evidence.authorize(auth, projectId);
-    return { request: questionSummary(request), artifact };
+    const context = await this.repository.context(auth, projectId, runId);
+    return { request: { ...questionSummary(request), referenceDocuments: context.referenceDocuments || [], sourceScope: context.sourceScope || "project" }, artifact };
   }
 
   async source(auth: AuthContext, projectId: string, runId: string, evidenceId: string) {
@@ -105,15 +122,17 @@ export class ResearchQuestionsService implements OnModuleDestroy {
     let timedOut = false;
     const remainingMs = Math.max(0, QA_LIMITS.deadlineMs - (Number(request.usage.elapsedMs) || 0));
     const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, remainingMs);
-    const session = this.evidence.createSession(auth, request.projectId, controller.signal);
+    let session: ReturnType<ResearchEvidenceService["createSession"]> | undefined;
     const budget = (createQaBudget as any)({ signal: controller.signal, previous: request.usage,
       checkpoint: (usage: Record<string, any>) => this.repository.checkpoint(auth, request, usage) });
     const provider = this.provider.publicConfig();
     let providerFailure: Record<string, any> | null = null;
     const stats = () => ({ ...budget.stats(), provider: provider.provider, model: provider.model,
-      attempt: request.attempt, visibleToolCalls: (Number(request.usage.visibleToolCalls) || 0) + session.trace.length,
+      attempt: request.attempt, visibleToolCalls: (Number(request.usage.visibleToolCalls) || 0) + (session?.trace.length || 0),
       ...(providerFailure ? { providerFailure } : {}) });
     try {
+      const context = await this.repository.context(auth, request.projectId, request.runId);
+      session = this.evidence.createSession(auth, request.projectId, controller.signal, context);
       budget.check(); await session.check();
       const boundary = researchBoundary(request.question);
       let answer: Record<string, any>;
@@ -124,7 +143,7 @@ export class ResearchQuestionsService implements OnModuleDestroy {
         let generated: any;
         let errors: string[] = [];
         for (let repair = 0; repair <= 1; repair += 1) {
-          generated = await (this.provider.answerResearchQuestion as any)({ question: request.question,
+          generated = await (this.provider.answerResearchQuestion as any)({ question: request.question, selectedContext: context,
             ...(repair ? { citationRepair: { errors, previous: { status: generated.status, claims: generated.claims,
               missingEvidence: generated.missingEvidence }, readEvidence: session.registry.values() } } : { initialDiscovery }) },
             { toolHandlers: session.handlers, signal: controller.signal, budget });

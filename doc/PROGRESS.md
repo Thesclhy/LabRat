@@ -13,6 +13,40 @@ Keep entries concise, newest first, and include:
 - verification
 - follow-ups or residual risk
 
+## 2026-09-28 — Unified Ask main deployment started
+
+- User explicitly requested deployment to main. Remote main is still 1c06923,
+  matching the isolated implementation baseline; production f317265 is healthy.
+- Publishing the completed unified Ask scope through the existing main-triggered
+  GitHub Actions/Lightsail pipeline. Migration 036 preserves existing document
+  identities and history while permitting independent same-name references.
+- Preflight passed; prior full/local database/browser checks remain applicable.
+  Fresh production backup, hosted verification and live release checks are tracked
+  in `doc/qa/unified-ask-deployment.md`. Unrelated primary checkout changes are excluded.
+
+## 2026-09-28 — Unified Ask, @references and separate reference library
+
+- User approved implementation after design discussion. Reused the attached
+  research-qa-deploy checkout on `codex/unified-ask`, based on integrated 1c06923;
+  original checkout changes and deployed f317265 remain separate.
+- Unified Ask now hosts cited answers and reviewed workflow cards. + routes
+  PDF/Word/TXT to references and Excel only to original region review. Pending
+  questions survive local refresh and continue explicitly after confirmation.
+- Added main-workspace reference search/filter/order, source viewing, version
+  history, retry/archive and explicit new-document/new-version identities;
+  migration 036 permits independent same-name references. @ pins versions,
+  prioritizes selected evidence and enforces explicit selected-only scope.
+- Preserved View Q&A, actor/project history separation, immutable citations,
+  backend authorization and scientific review. Updated OpenAPI/types, Q&A
+  contract, decisions, plan and focused manual checklist.
+- Verification: preflight; full `codex:verify` (427 frontend, 395 Node with 9
+  existing skips, 72 Nest); 5 PostgreSQL files/6 tests; focused routing/continuation
+  checks; actual Chromium HTTP/PostgreSQL acceptance with model substitute.
+  Inspected 1440px/390px screenshots. See `doc/qa/unified-ask-verification.md`.
+- Real-provider semantic evaluation was not rerun; old raw-Excel recall scores
+  do not validate the narrowed current scope. Pending upload tasks are local to
+  the browser. No dependency installation, commit, push or deployment.
+
 ## 2026-09-27 — Research Q&A deployed and live-verified
 
 - User requested remote deployment. Published Q&A from remote base 834284d,

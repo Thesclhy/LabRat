@@ -27,7 +27,10 @@ describe.skipIf(!databaseUrl)("exact supporting evidence Recall@8", () => {
         app = await createV1Application({ logger: false });
         const fixture = await seedResearchCorpus(app, isolated), service = app.get(ResearchEvidenceService);
         const records: any[] = [];
-        for (const question of RESEARCH_QA_CASES.filter((item) => !item.control)) {
+        const supported = RESEARCH_QA_CASES.filter((item) => !item.control && !item.retrievalReads.some((read: any) => read.kind === "workbook"));
+        // Raw Excel cases are now review-boundary controls, tested in evidence.postgres.test.ts.
+        // Do not compare this narrower denominator with the archived pre-unification Recall@8 report.
+        for (const question of supported) {
           const session = service.createSession(fixture.auth, projectId, new AbortController().signal);
           const retrieved: any[] = [];
           for (const read of question.retrievalReads as any[]) {
@@ -101,7 +104,8 @@ describe.skipIf(!databaseUrl)("exact supporting evidence Recall@8", () => {
           schemaVersion: "labrat.researchQaRetrieval.v1", generatedAt: new Date().toISOString(), material: "synthetic only", k: 8,
           protocol: "Fixed predeclared tool queries; explicit structured lookups consume one slot each, then ranked search hits fill the remaining slots. No neighbor expansion or source-level credit. This tests retrieval, not model query choice.",
           questionCount: records.length, recallAt8, missed, records }, null, 2) + "\n");
-        expect(records).toHaveLength(19);
+        expect(records).toHaveLength(supported.length);
+        expect(records.length).toBeGreaterThanOrEqual(10);
         expect(recallAt8, JSON.stringify(missed)).toBeGreaterThanOrEqual(0.9);
       } finally { await app?.close(); await pool.end(); vi.unstubAllEnvs(); await fs.rm(storage, { recursive: true, force: true }); }
     });

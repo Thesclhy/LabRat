@@ -17,7 +17,13 @@ import { WorkbookReviewDock } from "./components/WorkbookReviewDock.jsx";
 import { ExperimentBrowser } from "./components/ExperimentBrowser.jsx";
 import { AnalysisConversationCard } from "./components/AnalysisConversationCard.jsx";
 import { AnalysisReviewWorkspace } from "./components/AnalysisReviewWorkspace.jsx";
-import { ResearchQaPanel } from "./components/ResearchQaPanel.jsx";
+import { ReferenceLibrary } from "./components/ReferenceLibrary.jsx";
+import { ReferenceMentionComposer } from "./components/ReferenceMentionComposer.jsx";
+import { CitedAnswerCard } from "./components/CitedAnswerCard.jsx";
+import * as researchApi from "./data/researchQaApi.js";
+import "./components/research-qa.css";
+import "./components/unified-ask.css";
+import { isWorkspaceAction, workbookTaskReady, workbookTaskSources } from "./data/assistantTasks.js";
 import {
   getAnalysisThread,
   getProjectAnalysisCapabilities,
@@ -532,7 +538,7 @@ export function Topbar({
       </button>
       <nav className="tabs">
         {showProjectTabs && <button type="button" className="tab-home" onClick={() => onOpenDashboard?.()}>Home</button>}
-        {showProjectTabs && [["overview", "Overview"], ["browser", "Browser"], ["manuscript", "Manuscript"]].map(([k, label]) => (
+        {showProjectTabs && [["overview", "Overview"], ["browser", "Browser"], ["manuscript", "Manuscript"], ...(canAskProject ? [["references", "References"]] : [])].map(([k, label]) => (
           <button key={k} className={tab === k ? "active" : ""} onClick={() => setTab(k)}>{label}</button>
         ))}
       </nav>
@@ -2062,10 +2068,10 @@ export function ChartReviewModal({
 const AGENT_CHAT_HISTORY_KEY_PREFIX = "labrat_blank_chat_history_v2_project_";
 const AGENT_CHAT_HISTORY_LOCAL_KEY = "labrat_blank_chat_history_v2_local";
 
-function agentChatHistoryKey(activeProjectId, projectState) {
+function agentChatHistoryKey(activeProjectId, projectState, actorId) {
   const projectId = String(activeProjectId || projectState?.project?.id || "").trim();
   return projectId
-    ? `${AGENT_CHAT_HISTORY_KEY_PREFIX}${encodeURIComponent(projectId)}`
+    ? `${AGENT_CHAT_HISTORY_KEY_PREFIX}${encodeURIComponent(actorId || "local")}_${encodeURIComponent(projectId)}`
     : AGENT_CHAT_HISTORY_LOCAL_KEY;
 }
 
@@ -2102,7 +2108,10 @@ export function AgentPanel({
   onRequestedAnalysisTargetHandled,
   requestedDraft = "",
   onRequestedDraftHandled,
-  onAskSources,
+  actorId,
+  canAsk = false,
+  canEdit = true,
+  onOpenReferences,
 }) {
   const { canApprove } = useWorkspacePermissions();
   const workbookAbortRef = useRef(new AbortController());
@@ -2113,8 +2122,8 @@ export function AgentPanel({
     };
   }, [activeProjectId]);
   const chatHistoryKey = useMemo(
-    () => agentChatHistoryKey(activeProjectId, projectState),
-    [activeProjectId, projectState?.project?.id],
+    () => agentChatHistoryKey(activeProjectId, projectState, actorId),
+    [activeProjectId, projectState?.project?.id, actorId],
   );
   const [historyState, setHistoryState] = useState(() => ({
     key: chatHistoryKey,
@@ -2136,6 +2145,27 @@ export function AgentPanel({
   const [expanded, setExpanded] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [pendingSpreadsheetFiles, setPendingSpreadsheetFiles] = useState([]);
+  const [referenceMentions, setReferenceMentions] = useState([]);
+  const [qaBusy, setQaBusy] = useState(false);
+  const activeQaRun = useRef(null);
+  const [contextDismissed, setContextDismissed] = useState({ experiment: false, chart: false });
+  const qaRequest = useRef(null);
+  useEffect(() => setContextDismissed({ experiment: false, chart: false }), [selected?.label, selectedChartContext?.chartSpecId]);
+  useEffect(() => {
+    if (!canAsk || !activeProjectId) return undefined;
+    const controller = new AbortController();
+    researchApi.listResearchQuestions(activeProjectId, { limit: 20 }, { signal: controller.signal }).then((page) => {
+      if (controller.signal.aborted) return;
+      const since = Number(localStorage.getItem(`${chatHistoryKey}_since`) || 0);
+      setHistory((current) => {
+        const known = new Set(current.map((message) => message.qaRunId).filter(Boolean));
+        const recovered = page.items.filter((item) => !known.has(item.runId) && Date.parse(item.createdAt) > since).reverse()
+          .flatMap((item) => [{ role: "user", text: item.question, recovered: true }, { role: "assistant", text: "", qaRunId: item.runId }]);
+        return [...recovered, ...current];
+      });
+    }).catch(() => {});
+    return () => controller.abort();
+  }, [activeProjectId, canAsk, chatHistoryKey]);
   const [analysisCapabilitiesState, setAnalysisCapabilitiesState] = useState({
     loading: false,
     error: "",
@@ -2196,7 +2226,7 @@ export function AgentPanel({
     ls.set(historyState.key, sanitizeStoredChatHistory(historyState.messages));
   }, [historyState]);
   useEffect(() => {
-    if (!open || !activeProjectId) {
+    if (!open || !activeProjectId || !canEdit) {
       setAnalysisCapabilitiesState({ loading: false, error: "", value: null });
       return undefined;
     }
@@ -2239,7 +2269,11 @@ export function AgentPanel({
     lastChatScrollTopRef.current = messagesRef.current.scrollTop;
   };
   const resetChat = () => {
+    if (busy || qaBusy) return;
+    localStorage.setItem(`${chatHistoryKey}_since`, String(Date.now()));
     setHistory([]);
+    setReferenceMentions([]);
+    setInput("");
     setPendingSpreadsheetFiles([]);
     chatScrollInitializedRef.current = false;
     lastChatScrollTopRef.current = 0;
@@ -2413,7 +2447,11 @@ export function AgentPanel({
   const onAgentFileSelected = async (event) => {
     const selectedFiles = Array.from(event.target.files || []);
     event.target.value = "";
-    if (!selectedFiles.length) return;
+    if (!selectedFiles.length || !canEdit) return;
+    if (selectedFiles.some((file) => !/\.(pdf|docx?|txt|xlsx?)$/i.test(file.name) || file.size > 25 * 1024 * 1024)
+      || selectedFiles.length + pendingSpreadsheetFiles.length > 8) {
+      setHistory((current) => [...current, { role: "assistant", text: "Choose up to eight PDF, Word, TXT or Excel files, each no larger than 25 MiB." }]); return;
+    }
     setPendingSpreadsheetFiles((current) => {
       const known = new Set(current.map((file) => `${file.name}:${file.size}`));
       return [...current, ...selectedFiles.filter((file) => !known.has(`${file.name}:${file.size}`))];
@@ -2422,7 +2460,7 @@ export function AgentPanel({
   const removePendingSpreadsheetFile = (index) => {
     setPendingSpreadsheetFiles((current) => current.filter((_, position) => position !== index));
   };
-  const uploadWorkbookAttachments = async (files, next) => {
+  const uploadWorkbookAttachments = async (files, next, pendingQuestion = null) => {
     const spreadsheetAttachments = asArray(files);
     if (!spreadsheetAttachments.length) return;
     if (spreadsheetAttachments.length > 1) {
@@ -2433,6 +2471,7 @@ export function AgentPanel({
         role: "assistant",
         text: workbookBatchSummaryText(items),
         workbookBatch: { batchId, items },
+        pendingQuestion,
       }]);
       setBusy(true);
       try {
@@ -2457,9 +2496,11 @@ export function AgentPanel({
           ? `I indexed ${workbookName} and created ${regionCount} potentially useful ${regionCount === 1 ? "region" : "regions"}. AI is understanding them in Workbook Review.`
           : `I indexed ${workbookName}. You can inspect the workbook in the preview; select a range and describe it if you want LabRat to revise its understanding.`,
         workbookReviewLink,
+        pendingQuestion,
       }]);
     } catch (err) {
       setPendingSpreadsheetFiles([spreadsheetAttachment]);
+      if (pendingQuestion) { setInput(pendingQuestion.text); setReferenceMentions(pendingQuestion.refs || []); }
       setHistory([...next, { role: "assistant", text: `Workbook upload failed: ${err.message || String(err)}` }]);
     } finally {
       setBusy(false);
@@ -2491,24 +2532,91 @@ export function AgentPanel({
     setHistory(next);
     uploadWorkbookAttachments(files, next);
   }, [busy, open, requestedWorkbookFiles]);
+  const askCitedQuestion = async (text, next, refs = referenceMentions, retry = null) => {
+    const controller = new AbortController(); agentRequestAbortRef.current = controller;
+    setBusy(true);
+    const body = retry?.body || { question: text, referenceDocuments: refs.map(({ documentId, versionId }) => ({ documentId, versionId })),
+      selectedExperimentLabel: contextDismissed.experiment ? "" : selected?.label || "",
+      conversation: next.filter((message) => message.text).slice(-7, -1).map((message) => ({ role: message.role, text: message.text.slice(0, 1000) })) };
+    const signature = JSON.stringify(body);
+    if (qaRequest.current?.signature !== signature) qaRequest.current = { signature, requestKey: retry?.requestKey || `qa-${crypto.randomUUID()}` };
+    const requestKey = qaRequest.current.requestKey;
+    try {
+      const response = await researchApi.createResearchQuestion(activeProjectId, { ...body, requestKey: qaRequest.current.requestKey }, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      qaRequest.current = null; setReferenceMentions([]);
+      activeQaRun.current = response.request.runId;
+      setQaBusy(["queued", "running"].includes(response.request.status));
+      setHistory([...next, { role: "assistant", text: "", qaRunId: response.request.runId }]);
+    } catch (error) {
+      if (!controller.signal.aborted) { setHistory([...next, { role: "assistant", text: `Question could not start: ${error.message}`, retryQuestion: { text, refs, body, requestKey } }]); }
+    } finally { setBusy(false); }
+  };
   const send = async (prefill, meta = null) => {
-    const text = (prefill ?? input).trim();
-    if (!text || busy) return;
+    const userText = (prefill ?? input).trim();
+    const text = userText || (pendingSpreadsheetFiles.length ? `Upload ${pendingSpreadsheetFiles.map((file) => file.name).join(", ")}` : "");
+    if (!text || busy || qaBusy) return;
+    if (!meta && !pendingSpreadsheetFiles.length && isWorkspaceAction(userText)) meta = { workflow: true };
+    if (referenceMentions.length + pendingSpreadsheetFiles.filter((file) => !/\.xlsx?$/i.test(file.name)).length > 8) {
+      setHistory((current) => [...current, { role: "assistant", text: "Use up to eight selected reference documents in one question. Remove a selection or upload files in a separate message." }]); return;
+    }
+    if (!meta && !pendingSpreadsheetFiles.length && !referenceMentions.length && selectedChartContext && !contextDismissed.chart && canEdit
+      && /(?:解释|描述|图注|\b(?:explain|describe|caption)\b)/i.test(userText)
+      && /(?:图|\b(?:chart|plot|figure)\b)/i.test(userText)) meta = { source: "chart", chartCommentaryMode: /caption|图注/i.test(userText) ? "caption" : "analysis" };
     const spreadsheetAttachments = pendingSpreadsheetFiles;
     const spreadsheetAttachment = spreadsheetAttachments.length === 1 ? spreadsheetAttachments[0] : null;
     setInput("");
     if (spreadsheetAttachments.length) setPendingSpreadsheetFiles([]);
-    const next = [...history.map(({ streaming, streamId, ...message }) => message), {
+    let next = [...history.map(({ streaming, streamId, ...message }) => message), {
       role: "user",
       text,
       meta,
-      attachments: spreadsheetAttachments.map((file) => ({ name: file.name, kind: "spreadsheet" })),
+      references: referenceMentions,
+      attachments: spreadsheetAttachments.map((file) => ({ name: file.name, kind: /\.xlsx?$/i.test(file.name) ? "spreadsheet" : "reference" })),
     }];
     setHistory(next);
     if (serverAgentEnabled && spreadsheetAttachments.length && !meta?.source) {
-      await uploadWorkbookAttachments(spreadsheetAttachments, next);
+      if (!canEdit) return;
+      const workbooks = spreadsheetAttachments.filter((file) => /\.xlsx?$/i.test(file.name));
+      const documents = spreadsheetAttachments.filter((file) => !/\.xlsx?$/i.test(file.name));
+      const refs = [...referenceMentions];
+      if (documents.length) {
+        const controller = new AbortController(); agentRequestAbortRef.current = controller;
+        setBusy(true); setBusyOperation({ stage: "Uploading reference files", startedAt: Date.now(), elapsedSeconds: 0 });
+        try {
+          for (const file of documents) {
+            const uploaded = await uploadServerProjectFile(activeProjectId, file, { signal: controller.signal });
+            const registered = await researchApi.registerContextDocument(activeProjectId, uploaded.fileObject.id, { signal: controller.signal }, { newDocument: true });
+            controller.signal.throwIfAborted();
+            refs.push({ documentId: registered.document.id, versionId: registered.version.id, label: registered.document.originalName, versionNumber: registered.version.versionNumber });
+            next = [...next.map((message) => message.referenceUpload ? { ...message, pendingQuestion: null } : message), { role: "assistant", text: `${file.name} was added to the reference library.`, referenceUpload: refs.at(-1),
+              pendingQuestion: userText ? { text: userText, refs: [...refs], requiresWorkbook: workbooks.length > 0 } : null }];
+            setHistory(next);
+            let version = registered.version;
+            const deadline = Date.now() + 190_000;
+            while (["pending", "processing"].includes(version.status) && Date.now() < deadline) {
+              await new Promise((resolve) => setTimeout(resolve, 1400)); controller.signal.throwIfAborted();
+              version = (await researchApi.getContextDocumentVersion(activeProjectId, version.id, { signal: controller.signal })).version;
+            }
+            if (!["ready", "partial"].includes(version.status)) throw new Error(`${file.name} is not ready. Check its status or retry in the reference library.`);
+          }
+          next = next.map((message) => message.referenceUpload ? { ...message, pendingQuestion: null } : message);
+          setHistory(next); setReferenceMentions(refs);
+        } catch (error) {
+          setInput(userText); setReferenceMentions(refs); setPendingSpreadsheetFiles(workbooks);
+          if (!controller.signal.aborted) setHistory([...next, { role: "assistant", text: error.message }]);
+          return;
+        } finally { setBusy(false); setBusyOperation(null); }
+      }
+      if (workbooks.length) {
+        await uploadWorkbookAttachments(workbooks, next, userText ? { text: userText, refs, requiresWorkbook: true } : null);
+        return;
+      }
+      if (userText && canAsk) await askCitedQuestion(userText, next, refs);
       return;
     }
+    if (canAsk && !meta?.workflow && meta?.source !== "chart" && !requestedAnalysisOutputTarget) { await askCitedQuestion(text, next); return; }
+    if (!canEdit) { setHistory([...next, { role: "assistant", text: "An editor can prepare this workflow. You can continue asking about project evidence." }]); return; }
     if (serverAgentEnabled) {
       const requestAbortController = new AbortController();
       agentRequestAbortRef.current = requestAbortController;
@@ -2524,7 +2632,7 @@ export function AgentPanel({
       try {
         const requestSurface = requestedAnalysisOutputTarget === "experiment_browser"
           ? "experiment_browser"
-          : selectedChartContext
+            : selectedChartContext && !contextDismissed.chart
             ? "manuscript_chart"
             : activeSurface || "project";
         const response = await createServerAgentRun(activeProjectId, {
@@ -2539,15 +2647,15 @@ export function AgentPanel({
             ...(requestedAnalysisOutputTarget
               ? { analysisOutputTarget: requestedAnalysisOutputTarget }
               : {}),
-            selectedExperimentLabel: selected?.label || "",
+            selectedExperimentLabel: contextDismissed.experiment ? "" : selected?.label || "",
             ...(meta?.source === "chart" ? {
               requestedWorkflow: "chart_commentary",
               chartCommentaryMode: meta.chartCommentaryMode || "analysis",
               selectedChartSpecId: selectedChartContext?.chartSpecId || "",
             } : {}),
-            selectedChartTitle: selectedChartContext?.title || "",
-            selectedChartBlockId: selectedChartContext?.blockId || "",
-            selectedChartView: selectedChartContext?.chartView || null,
+            selectedChartTitle: contextDismissed.chart ? "" : selectedChartContext?.title || "",
+            selectedChartBlockId: contextDismissed.chart ? "" : selectedChartContext?.blockId || "",
+            selectedChartView: contextDismissed.chart ? null : selectedChartContext?.chartView || null,
             assistantProfile: {
               writingExamples,
               projectBackground,
@@ -2664,45 +2772,22 @@ export function AgentPanel({
     agentRequestAbortRef.current.abort();
   };
   return <>
-  <aside className={`agent ${open ? "open" : ""} ${expanded ? "expanded" : ""}`}>
+  <aside className={`agent unified-ask ${open ? "open" : ""} ${expanded ? "expanded" : ""}`} aria-label="Ask LabRat panel">
     <div className="agent-head">
       <div className="agent-title">
         <img src={logoSrc} alt="" />
-        <span>the lab rat</span>
+        <span>Ask LabRat</span>
       </div>
       <div className="agent-head-actions">
-        {onAskSources && <button className="qa-return" type="button" onClick={onAskSources}>Source questions</button>}
+        {canAsk && <button className="ask-library-button" type="button" onClick={() => { setExpanded(false); onOpenReferences?.(); }}>Library</button>}
         <button type="button" aria-label={expanded ? "Collapse Lab Rat panel" : "Expand Lab Rat panel"} title={expanded ? "Collapse" : "Expand"} onClick={() => setExpanded((value) => !value)}>{expanded ? "\u2199" : "\u2197"}</button>
         <button type="button" className={settingsOpen ? "active" : ""} aria-label="Settings" title="Settings" onClick={openSettings}>&#9881;</button>
-        <button type="button" aria-label="Reset chat" title="Reset chat" onClick={resetChat}>&#8635;</button>
+        <button type="button" aria-label="New conversation" title="New conversation" disabled={busy || qaBusy} onClick={resetChat}>&#8635;</button>
         <button type="button" aria-label="Close Lab Rat panel" title="Close" onClick={closeAgent}>&times;</button>
       </div>
     </div>
-    <div className="agent-context">Manuscript - {blocks.length} blocks on canvas - focused: {selected?.label || "none"} - {selectedChartContext ? "1 chart selected" : "0 charts selected"}</div>
-    {activeProjectId && (
-      <div className="analysis-runtime-status" role="status" aria-label="Analysis runtime status">
-        {analysisCapabilitiesState.loading && <span>Analysis runtime: checking...</span>}
-        {!analysisCapabilitiesState.loading && analysisCapabilitiesState.value && (
-          <>
-            <span>
-              Model: {analysisCapabilitiesState.value.model?.configured
-                ? `${analysisCapabilitiesState.value.model?.provider || "configured"} / ${analysisCapabilitiesState.value.model?.model || "default"} ready`
-                : "unavailable"}
-            </span>
-            <span>
-              Python: {analysisCapabilitiesState.value.executor?.configured
-                ? `${analysisCapabilitiesState.value.executor?.adapter || "configured"} ready`
-                : "unavailable"}
-            </span>
-            <span>
-              Evidence: {analysisCapabilitiesState.value.acceptedData?.confirmedRegionCount || 0} confirmed regions, {analysisCapabilitiesState.value.acceptedData?.acceptedSnapshotCount || 0} snapshots, {analysisCapabilitiesState.value.acceptedData?.activeExperimentHeadCount || 0} active heads
-            </span>
-          </>
-        )}
-        {!analysisCapabilitiesState.loading && analysisCapabilitiesState.error && <span>Analysis runtime: unavailable</span>}
-      </div>
-    )}
-    {selectedChartContext && (
+    <div className="ask-project-context"><span>{projectState?.project?.name || "Current project"}</span><small>Answers with evidence · New calculations reviewed</small></div>
+    {selectedChartContext && !contextDismissed.chart && canEdit && (
       <div className="agent-chart-context">
         <img className="agent-chart-avatar" src={logoSrc} alt="" />
         <div className="agent-chart-copy">
@@ -2719,17 +2804,31 @@ export function AgentPanel({
     <div className="messages" ref={messagesRef} onScroll={rememberChatScroll}>
       {!history.length && <div className="welcome">
         <img className="welcome-avatar" src={logoSrc} alt="" />
-        <span>Hi! I'm the lab rat.</span>
-        <p>I can read all your experiments, the manuscript canvas, and references. Ask me anything: analyze a chart, compare experiments, draft a paragraph, or explain a result.</p>
-        <button onClick={() => send("Give me a one-paragraph overview of the trends across all experiments.")}>Overview of all experiments</button>
-        <button onClick={() => send("Which experiment has the highest liquid selectivity, and why?")}>Highest liquid selectivity?</button>
-        <button onClick={() => send("Compare reaction time vs selectivity across the experiments. Highlight the main trend and any caveats.")}>Reaction time vs selectivity</button>
+        <span>How can I help with your research?</span>
+        <p>Ask about references and reviewed experiments, or describe your next task. Type @ to focus on a reference.</p>
+        <button onClick={() => send("What is the purpose of this project? Cite its project context.")}>Understand this project</button>
+        <button onClick={() => setInput("What does @")}>Ask about a reference</button>
       </div>}
       {history.map((m, i) => <div key={i} className={`msg ${m.role}`}>
         {m.role === "assistant" ? <img className="msg-avatar" src={logoSrc} alt="" /> : <span className="msg-avatar user">You</span>}
         <div className="msg-body">
-          <span>{m.role === "user" ? "You" : "the lab rat"}</span>
-          <p>{m.text}</p>
+          <span>{m.role === "user" ? "You" : "LabRat"}</span>
+          {m.text && <p>{m.text}</p>}
+          {!!m.references?.length && <div className="ask-message-references">{m.references.map((ref) => <span key={ref.versionId} title={ref.label}>@{ref.label}</span>)}</div>}
+          {m.qaRunId && <CitedAnswerCard projectId={activeProjectId} runId={m.qaRunId} canEdit={canEdit}
+            onRunning={() => { activeQaRun.current = m.qaRunId; setQaBusy(true); }}
+            onSettled={() => { if (activeQaRun.current === m.qaRunId) setQaBusy(false); }} onAnalysis={(question) => send(question, { workflow: true })} />}
+          {m.retryQuestion && <button type="button" disabled={busy || qaBusy} onClick={() => askCitedQuestion(m.retryQuestion.text, history.filter((item) => item !== m), m.retryQuestion.refs, m.retryQuestion)}>Retry question</button>}
+          {m.referenceUpload && <button type="button" onClick={onOpenReferences}>Open reference library</button>}
+          {m.pendingQuestion && <div className="ask-task"><strong>{m.pendingQuestion.requiresWorkbook ? "Waiting for region confirmation" : "Waiting for reference processing"}</strong><p>Next: {m.pendingQuestion.text}</p>
+            <button type="button" disabled={busy || qaBusy || m.pendingQuestion.requiresWorkbook && !workbookTaskReady(m, projectState)} onClick={async () => {
+              const task = m.pendingQuestion;
+              setReferenceMentions(task.refs || []);
+              const next = history.map((item) => item === m ? { ...item, pendingQuestion: null } : item);
+              const question = task.text + (task.requiresWorkbook ? `\nUse the confirmed regions of: ${workbookTaskSources(m).map((link) => `${link.workbookName} [sourceDocumentId: ${link.sourceDocumentId}]`).join(", ")}.` : "");
+              if (canAsk) await askCitedQuestion(question, next, task.refs || []);
+              else { setInput(question); setHistory(next); }
+            }}>{m.pendingQuestion.requiresWorkbook ? "Continue after region review" : "Continue question"}</button></div>}
           {!!asArray(m.attachments).length && (
             <div className="agent-attachments">
               {asArray(m.attachments).map((attachment, attachmentIndex) => (
@@ -2770,7 +2869,7 @@ export function AgentPanel({
             />
           )}
           {m.agentRun?.visibleSteps?.length > 0 && (
-            <div className="backend-workflow-steps agent-run-steps">
+            <details className="backend-workflow-steps agent-run-steps"><summary>Task details</summary>
               {m.agentRun.visibleSteps.map((step, stepIndex) => (
                 <div className="backend-workflow-step is-done" key={step.stepId || `${step.label}-${stepIndex}`}>
                   <span>{step.label}</span>
@@ -2779,7 +2878,7 @@ export function AgentPanel({
                   )}
                 </div>
               ))}
-            </div>
+            </details>
           )}
           {m.analysisThread?.id && (
             <AnalysisConversationCard
@@ -2817,16 +2916,16 @@ export function AgentPanel({
     </div>
     <div className="agent-foot">
       {pendingSpreadsheetFiles.length > 0 && (
-        <div className="agent-pending-attachments" aria-label="Attached spreadsheets">
+        <div className="agent-pending-attachments" aria-label="Attached files">
           {pendingSpreadsheetFiles.length > 1 && (
-            <span className="agent-pending-attachment-count">{pendingSpreadsheetFiles.length} workbooks attached. Send to upload them as one batch.</span>
+            <span className="agent-pending-attachment-count">{pendingSpreadsheetFiles.length} files · Excel goes to region review; PDF, Word and TXT become references.</span>
           )}
           {pendingSpreadsheetFiles.map((file, index) => (
             <div className="agent-pending-attachment" key={`${file.name}:${file.size}:${index}`}>
               <span>{file.name}</span>
               <button
                 type="button"
-                aria-label={pendingSpreadsheetFiles.length > 1 ? `Remove attached spreadsheet ${file.name}` : "Remove attached spreadsheet"}
+                aria-label={pendingSpreadsheetFiles.length > 1 ? `Remove attached file ${file.name}` : "Remove attached file"}
                 onClick={() => removePendingSpreadsheetFile(index)}
               >
                 x
@@ -2835,10 +2934,13 @@ export function AgentPanel({
           ))}
         </div>
       )}
-      <button type="button" className="agent-tool" aria-label="Attach spreadsheet" title="Attach one or more spreadsheets" onClick={chooseSpreadsheetAttachment}>+</button>
-      <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="Ask the rat about your data, charts, or manuscript..." />
-      <button type="button" className="agent-send" onClick={() => send()}>&#8593;</button>
-      <input ref={fileActionInputRef} className="agent-file-input" type="file" accept=".xlsx,.xls" multiple onChange={onAgentFileSelected} />
+      <ReferenceMentionComposer projectId={activeProjectId} value={input} onChange={setInput} references={referenceMentions} onReferencesChange={setReferenceMentions}
+        onSend={() => send()} onAttach={chooseSpreadsheetAttachment} disabled={busy || qaBusy} canAttach={canEdit}
+        context={<div className="ask-context-chips">
+          {selected?.label && !contextDismissed.experiment && <button type="button" onClick={() => setContextDismissed((state) => ({ ...state, experiment: true }))}>Experiment: {selected.label} ×</button>}
+          {selectedChartContext && !contextDismissed.chart && <button type="button" onClick={() => setContextDismissed((state) => ({ ...state, chart: true }))}>Chart: {selectedChartContext.title} ×</button>}
+        </div>} />
+      <input ref={fileActionInputRef} className="agent-file-input" type="file" accept=".pdf,.doc,.docx,.txt,.xlsx,.xls" multiple onChange={onAgentFileSelected} />
     </div>
   </aside>
   {settingsOpen && (
@@ -2849,6 +2951,30 @@ export function AgentPanel({
           <button type="button" aria-label="Close settings" onClick={cancelSettings}>&times;</button>
         </div>
         <div className="settings-body">
+    {activeProjectId && canEdit && (
+      <div className="analysis-runtime-status" role="status" aria-label="Analysis runtime status">
+        {analysisCapabilitiesState.loading && <span>Analysis runtime: checking...</span>}
+        {!analysisCapabilitiesState.loading && analysisCapabilitiesState.value && (
+          <>
+            <span>
+              Model: {analysisCapabilitiesState.value.model?.configured
+                ? `${analysisCapabilitiesState.value.model?.provider || "configured"} / ${analysisCapabilitiesState.value.model?.model || "default"} ready`
+                : "unavailable"}
+            </span>
+            <span>
+              Python: {analysisCapabilitiesState.value.executor?.configured
+                ? `${analysisCapabilitiesState.value.executor?.adapter || "configured"} ready`
+                : "unavailable"}
+            </span>
+            <span>
+              Evidence: {analysisCapabilitiesState.value.acceptedData?.confirmedRegionCount || 0} confirmed regions, {analysisCapabilitiesState.value.acceptedData?.acceptedSnapshotCount || 0} snapshots, {analysisCapabilitiesState.value.acceptedData?.activeExperimentHeadCount || 0} active heads
+            </span>
+          </>
+        )}
+        {!analysisCapabilitiesState.loading && analysisCapabilitiesState.error && <span>Analysis runtime: unavailable</span>}
+      </div>
+    )}
+
           <section className="settings-section">
             <h3>Voice &amp; Context</h3>
             <p className="settings-help">Anything you put here is included in every chat. The agent picks up your writing voice from the examples, learns your project from the background, and obeys the house rules.</p>
@@ -2898,12 +3024,9 @@ function App() {
   const [chartSpecInsertRequest, setChartSpecInsertRequest] = useState(null);
   const [dirty, setDirty] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
-  const [assistantMode, setAssistantMode] = useState("questions");
+
   const [requestedAnalysisOutputTarget, setRequestedAnalysisOutputTarget] = useState("");
   const [requestedAgentDraft, setRequestedAgentDraft] = useState("");
-  useEffect(() => {
-    if (requestedAnalysisOutputTarget || requestedAgentDraft || pendingChartAnalysis) setAssistantMode("workflow");
-  }, [requestedAnalysisOutputTarget, requestedAgentDraft, pendingChartAnalysis]);
   const [onboardingRenderVersion, setOnboardingRenderVersion] = useState(0);
   const [analysisReviewState, setAnalysisReviewState] = useState(null);
   const [projectLoaded, setProjectLoaded] = useState(false);
@@ -3341,7 +3464,7 @@ function App() {
       setSourceError("Select or create a server project before uploading a workbook.");
       return;
     }
-    setAssistantMode("workflow");
+
     setAgentOpen(true);
   };
   const [requestedWorkbookFiles, setRequestedWorkbookFiles] = useState(null);
@@ -3354,7 +3477,7 @@ function App() {
       return;
     }
     setRequestedWorkbookFiles({ requestId: `workbook_files_${uid()}`, files: selected });
-    setAssistantMode("workflow");
+
     setAgentOpen(true);
   };
   const uploadOnboardingWorkbook = async (file) => {
@@ -4155,7 +4278,7 @@ function App() {
         key={`${activeProjectId}:${onboardingRenderVersion}`}
         projectId={activeProjectId}
         projectState={projectState}
-        onAskSources={permissions.canAsk ? () => { setAssistantMode("questions"); setAgentOpen(true); } : undefined}
+        onAskSources={permissions.canAsk ? () => { setAgentOpen(true); } : undefined}
         onUploadWorkbook={uploadOnboardingWorkbook}
         onHydrateWorkbookReview={hydrateOnboardingWorkbookReview}
         reviewState={workbookReviewState}
@@ -4213,7 +4336,7 @@ function App() {
   }
   return (
     <WorkspacePermissions.Provider value={permissions}>
-      <Topbar tab={tab} setTab={setTab} dirty={dirty} onSave={save} onAgent={() => { setAssistantMode("questions"); setAgentOpen(true); }}
+      <Topbar tab={tab} setTab={setTab} dirty={dirty} onSave={save} onAgent={() => { setAgentOpen(true); }}
         workspaceMode={workspaceMode}
         onOpenDashboard={openProjectDashboard}
         sourceName={sourceName}
@@ -4238,9 +4361,10 @@ function App() {
         canAskProject={permissions.canAsk}
       />
       {!canEditProject && <div className="workspace-readonly" role="status">Read-only access · Draft editing and analysis proposals are disabled.</div>}
+      {tab === "references" && permissions.canAsk && <ReferenceLibrary key={`${authState.user.id}-${activeProjectId}`} projectId={activeProjectId} canEdit={canEditProject} assistantOpen={agentOpen} />}
       {tab === "overview" && <ProjectOverview
         projectState={projectState}
-        onAskLabRat={() => { setAssistantMode("questions"); setAgentOpen(true); }}
+        onAskLabRat={() => { setAgentOpen(true); }}
         onOpenProfile={() => setProfileChatOpen(true)}
         onUploadWorkbook={continueWorkbookReview}
         onUploadWorkbookFiles={uploadWorkbookFilesFromOverview}
@@ -4374,23 +4498,14 @@ function App() {
         onCreate={createProject}
         onClose={() => setNewProjectOpen(false)}
       />
-      {permissions.canAsk && assistantMode === "questions" && <ResearchQaPanel
-        key={`qa-${authState.user.id}-${activeProjectId}`}
-        open={agentOpen}
-        onClose={() => setAgentOpen(false)}
-        projectId={activeProjectId}
+      {(permissions.canAsk || canEditProject) && <AgentPanel
+        key={`${authState.user.id}-${activeProjectId}`}
+        actorId={authState.user.id}
+        canAsk={permissions.canAsk}
         canEdit={canEditProject}
-        projectState={projectState}
-        onWorkflow={() => setAssistantMode("workflow")}
-        onAnalysis={(question) => { setRequestedAgentDraft(question); setAssistantMode("workflow"); }}
-        onWorkbookUploaded={async () => { const state = await getServerProjectState(activeProjectId); applyProjectWorkspaceRefresh(state); }}
-        onOpenWorkbook={(link) => { handleWorkbookReviewLinkOpen(link); setAgentOpen(false); }}
-      />}
-      {canEditProject && (assistantMode === "workflow" || !permissions.canAsk) && <AgentPanel
-        key={activeProjectId}
+        onOpenReferences={() => { setTab("references"); if (window.innerWidth < 900) setAgentOpen(false); }}
         open={agentOpen}
         setOpen={setAgentOpen}
-        onAskSources={permissions.canAsk ? () => setAssistantMode("questions") : undefined}
         blocks={blocks}
         setBlocks={setBlocks}
         references={references}

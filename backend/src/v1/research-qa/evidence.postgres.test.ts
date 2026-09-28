@@ -63,20 +63,10 @@ describe.skipIf(!databaseUrl)("research evidence PostgreSQL", () => {
         expect(JSON.stringify(next.items)).not.toBe(JSON.stringify(browse.items));
 
         for (const key of ["workbook", "workbook_xls"]) {
-          const data = await invoke("read_workbook_source", { sourceDocumentId: seeded.sources[key].id, sheetName: "Measurements", range: "A1:G2" });
-          const cells = data.evidence.data.cells;
-          expect(cells.find((cell: any) => cell.address === "B2").rawValue).toBe(80);
-          expect(cells.find((cell: any) => cell.address === "E2").rawValue).toBe(0.42);
-          expect(cells.find((cell: any) => cell.address === "F2")).toMatchObject({ rawValue: 110, formula: "B2+D2" });
-          expect(cells.find((cell: any) => cell.address === "G2")).toMatchObject(key === "workbook"
-            ? { rawValue: null, formula: "B2*2", cacheMissing: true }
-            : { rawValue: "", formula: "B2*2", cacheMissing: false });
-          expect(data.evidence.kind).toBe("workbook_raw");
-          const merged = await invoke("read_workbook_source", { sourceDocumentId: seeded.sources[key].id, sheetName: "Notes", range: "B1" });
-          expect(merged.evidence.data.cells[0].mergedRange).toBe("A1:B1");
-          expect(merged.evidence.data.cells[0].rawValue).toBeNull();
+          await expect(invoke("read_workbook_source", { sourceDocumentId: seeded.sources[key].id, sheetName: "Measurements", range: "A1:G2" }))
+            .rejects.toMatchObject({ code: "qa_workbook_review_required" });
         }
-        await expect(invoke("read_workbook_source", { sourceDocumentId: seeded.sources.workbook.id, sheetName: "Measurements", range: "A1:Z100" })).rejects.toMatchObject({ code: "source_range_too_large" });
+        expect((await invoke("search_project_documents", { query: "research.xlsx" })).items).toEqual([]);
 
         const dataSession = session();
         const noMatch = await dataSession.invoke("find_experiments", { query: "Exp404" });

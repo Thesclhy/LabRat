@@ -63,16 +63,21 @@ traceable to confirmed regions.
 Projects start empty. Workbooks under [public/templates](public/templates/) are
 examples only and are never imported automatically.
 
-## Source questions
+## Ask and reference library
 
-Ask LabRat can use uploaded PDF (including scans), DOC/DOCX, TXT and XLS/XLSX.
-After parsing, full-project View members may ask and open citations to exact
-source versions, pages, paragraphs, lines, cells or accepted data. Raw workbook
-content remains distinct from reviewed experiment meaning. New computations
+Ask LabRat combines cited questions and reviewed workflows in one conversation.
+Use + for PDF (including scans), DOC/DOCX and TXT references; manage them in the
+References workspace. Type @ to prioritize specific document versions, while
+allowing other project evidence when needed. Explicit only-selected questions
+restrict retrieval. Excel uses the original region selection and confirmation
+workflow, with the original question retained for an explicit continuation.
+Full-project View members may ask and open citations to exact source versions,
+pages, paragraphs, lines, confirmed regions or accepted data. New computations
 still require analysis-plan review. Public Guest and selected-experiment-only
 members cannot use project-wide Q&A; personal question history is actor-scoped.
 
 See [the contract](doc/contracts/research-qa-v1.md),
+[unified Ask verification](doc/qa/unified-ask-verification.md),
 [local acceptance](doc/qa/research-qa-verification.md) and
 [release record](doc/qa/research-qa-deployment.md). Small synthetic-corpus scores
 are not a general scientific reliability guarantee.

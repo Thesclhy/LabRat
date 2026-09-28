@@ -1,7 +1,7 @@
 # Research Q&A v1 contract
 
-Status: implemented; deployed and smoke-verified on 2026-09-27
-Last reviewed: 2026-09-27
+Status: Q&A baseline deployed 2026-09-27; unified Ask extension implemented locally
+Last reviewed: 2026-09-28
 
 Scope: the confirmed research Q&A plan and acceptance matrix. This contract
 extends read-only evidence, not scientific acceptance or analysis execution.
@@ -10,17 +10,59 @@ extends read-only evidence, not scientific acceptance or analysis execution.
 
 PDF/DOC/DOCX/TXT evidence references an existing immutable FileObject. A logical
 ContextDocument belongs to one project. Each DocumentVersion pins file hash,
-parser/OCR build, ordered passages, coverage and original locators. Same-name
-new content creates another version; retries resume only the same file hash and
+parser/OCR build, ordered passages, coverage and original locators. New uploads
+in Ask or the reference library create an independent document, including when
+filenames match. An explicit New version action binds documentId and
+expectedVersion. Legacy registration without a choice groups by name only when
+unambiguous; duplicate identities require an explicit choice. Migration 036
+replaces the active-name unique index with a lookup index. Retries resume only the same file hash and
 processing version. Reprocessing after a parser change creates a new version.
 Archiving removes the document from future retrieval, preserving historical
-versions and lawful citations. Excel keeps the existing SourceDocument index.
+versions and lawful citations. Excel keeps the existing SourceDocument index
+and only follows workbook upload, region selection and semantic confirmation.
+It is not a reference document. New Q&A discovery excludes unconfirmed workbook
+indexes; read_workbook_source is absent from provider tools and rejects direct
+calls. Confirmed region reads retain bounded raw cells inside the confirmed range.
+Historical workbook_raw citations remain readable under current authorization.
 
 Document passages are source statements. Project profile evidence freezes the
 read fields and their hash. `workbook_raw`, `confirmed_region` and
 `experiment_snapshot` remain separate evidence types with their original
 coordinates, raw/display values, units, missing states and revision/head hashes.
 Saved answers pin these evidence versions; fetching/opening reauthorizes them.
+
+## Unified Ask and selected references
+
+One Ask panel contains cited answers and existing reviewed workflow cards.
+PDF, DOC/DOCX and TXT attached with + enter the reference library. Excel attached
+with + enters the existing workbook review chain, retaining the original question
+as a pending task. Continue is explicit after current accepted regions exist for
+each uploaded workbook; exact range eligibility is still checked on the server.
+Local pending tasks are scoped by actor and project, survive same-browser refresh,
+and never automatically execute or publish scientific results.
+
+The reference library occupies the main workspace, with server-side name/type/
+status filtering, stable oldest/newest pagination, readable source passages/PDF
+pages, versions, retries and archive. It does not accumulate inside the chat pane.
+View members may read and ask; document mutations use existing proposal permission.
+
+@ selection pins up to eight documentId/versionId pairs. The server validates
+ownership, active document state and readable version state before and during
+retrieval. Default sourceScope=project prioritizes selected versions while allowing
+other authorized evidence; a selected document's latest version never substitutes
+for its pinned version. sourceScope=selected restricts discovery and tools to
+selected document versions. Explicit only-use/仅根据 requests with mentions infer
+this scope. Question context stores the resolved identities in the personal
+AgentRun selectedContext JSON, not in mutable document names. At most six recent
+messages (1,000 characters each) and a removable experiment label are untrusted
+conversational context; they confer neither citation support nor permissions.
+
+New conversation clears the local conversation view and mention selections,
+retaining project documents and durable personal answers. The server restores up
+to the latest 20 personal questions when local history is unavailable. Old
+unscoped browser history is not imported into an authenticated actor's history.
+Runtime diagnostics live in Settings. Existing calculation/analysis approval and
+manuscript actions retain their separate review boundaries in the shared panel.
 
 ## Local processing
 
@@ -130,7 +172,8 @@ passages carry a summary plus the cited page's coverage instead of the whole
 document's per-page list. The model gets no
 network, calculation, acceptance, publication or administration tools.
 
-Idempotency binds request key to actor, project, question and scope. Same input
+Idempotency binds request key to actor, project, question, pinned references,
+source scope and bounded conversation/context. Same input
 returns the same run; different input conflicts. Cancellation/revocation prevents
 late answer persistence. Interrupted attempts are visible and explicitly
 retryable; no unimplemented durable automatic worker is promised. Provider calls

@@ -5,6 +5,13 @@ Last reviewed: 2026-08-20
 
 LabRat uses AI as a proposal and workflow layer. Authorization, bounded evidence reads, schema validation, deterministic execution, hashing, and persistence remain backend responsibilities.
 
+Unified Ask combines the interfaces, not their authorities. @reference selections
+are immutable document/version identities validated in the personal Q&A service;
+they prioritize retrieval and never approve calculations. Explicit selected-only
+scope limits the server's readers. Conversation history is untrusted context.
+Excel reaches new Q&A only through confirmed region evidence or accepted snapshots;
+existing historical raw citations remain readable. See `doc/contracts/research-qa-v1.md`.
+
 ## AI May
 
 - classify workbook regions and explain confidence/warnings

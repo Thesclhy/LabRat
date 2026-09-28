@@ -6,6 +6,23 @@ Last reviewed: 2026-08-19
 
 Durable decisions for LabRat architecture, product workflow, and Codex execution belong here. Keep entries newest first. Each entry should explain the decision, the context, the consequences, and any follow-up.
 
+## 2026-09-28 — Unified Ask, reference identities and workbook review
+
+- User approved one Ask conversation and composer, with a separate reference
+  workspace. PDF/Word/TXT are references; Excel only follows original region
+  selection and confirmation. No Excel reference-only path remains in new Q&A.
+- @ pins document versions and prioritizes them while allowing relevant project
+  evidence. Explicit only-selected questions restrict server-side retrieval.
+- Uploading a same-name file creates a separate reference; a row's New version
+  action explicitly identifies the document and checks its version. Migration 036
+  replaces the filename uniqueness index. Archive retains historical citations.
+- Pending upload questions survive same-browser refresh under actor/project keys.
+  They resume explicitly after review; new conversation keeps project sources.
+- Unified UI preserves read/propose/review separation. Runtime diagnostics move
+  to Settings; library management remains out of the message list.
+- Implementation and verification: `doc/plans/unified-ask-plan.md` and
+  `doc/qa/unified-ask-verification.md`. Production release remains separate.
+
 ## 2026-09-11 — Invitation Onboarding Reuses Lab Roles
 
 - Use isSuperAdmin only for platform issuance, lab_owner/lab_admin for lab

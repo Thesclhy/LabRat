@@ -8,6 +8,14 @@ This file is the reusable execution checklist for Codex work. It should describe
 
 ## Long-Task Loop
 
+Unified Ask extension (2026-09-28):
+
+- [x] Reuse the isolated deployment checkout and preserve the original dirty tree.
+- [x] Implement approved references, mentions, unified conversation and workbook boundaries.
+- [x] Verify full regression, real PostgreSQL and actual browser interactions.
+- [x] Record source/version/review contracts and manual acceptance in
+  `doc/qa/unified-ask-verification.md`; production remains unchanged.
+
 Research Q&A release (2026-09-27):
 
 - [x] Preserve local work and integrate only Q&A on latest remote main.

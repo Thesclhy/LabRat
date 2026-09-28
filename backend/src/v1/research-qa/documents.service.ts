@@ -11,7 +11,7 @@ import { IdentityRepository } from "../identity/identity.repository.js";
 import type { AuthContext } from "../identity/identity.types.js";
 import { V1_CONFIG, type V1Config } from "../platform/config/v1-config.js";
 import { ApiError } from "../platform/http/api-error.js";
-import type { DocumentPageDto } from "./documents.dto.js";
+import type { DocumentPageDto, RegisterDocumentDto } from "./documents.dto.js";
 import { DocumentsRepository, type DocumentVersion } from "./documents.repository.js";
 
 function versionSummary(row: DocumentVersion) {
@@ -56,7 +56,7 @@ export class DocumentsService implements OnModuleDestroy {
   async list(auth: AuthContext, projectId: string, query: DocumentPageDto) {
     await this.authorize(auth, projectId);
     const limit = query.limit || 20;
-    const rows = await this.repository.listDocuments(projectId, query.cursor, limit);
+    const rows = await this.repository.listDocuments(projectId, query.cursor, limit, query);
     const items = rows.slice(0, limit).map(({ document, currentVersion }) => ({ document, currentVersion: currentVersion ? versionSummary(currentVersion) : null }));
     await this.authorize(auth, projectId);
     return { items, nextCursor: rows.length > limit ? items.at(-1)!.document.id : null };
@@ -80,7 +80,7 @@ export class DocumentsService implements OnModuleDestroy {
     return versionSummary(row);
   }
 
-  async register(auth: AuthContext, projectId: string, fileObjectId: string) {
+  async register(auth: AuthContext, projectId: string, fileObjectId: string, choice: Partial<RegisterDocumentDto> = {}) {
     const { project } = await this.authorize(auth, projectId, "propose");
     const file = await this.evidence.findFileObjectById(fileObjectId);
     if (!file || file.projectId !== projectId) throw new ApiError(404, "file_object_not_found", "File object not found.");
@@ -90,7 +90,10 @@ export class DocumentsService implements OnModuleDestroy {
     if (sha256Hex(buffer) !== file.checksumSha256) throw new ApiError(409, "document_content_changed", "The saved file no longer matches its original checksum.");
     if (this.jobs.size + this.starting >= 2) throw new ApiError(429, "document_processing_busy", "Two documents are already being processed. Retry shortly.");
     await this.authorize(auth, projectId, "propose");
+    if (choice.newDocument && choice.documentId || choice.documentId && !choice.expectedVersion) throw new ApiError(400, "document_version_choice", "Choose a new reference or an existing document and its current version.");
     const registered = await this.repository.register({ projectId, labId: project.labId, fileObjectId: file.id,
+      ...(choice.newDocument !== undefined ? { newDocument: choice.newDocument } : {}),
+      ...(choice.documentId ? { documentId: choice.documentId, expectedVersion: choice.expectedVersion! } : {}),
       originalName: file.originalName, contentHash: file.checksumSha256, processingVersion: DOCUMENT_PROCESSING_VERSION, actorUserId: auth.user.id }, auth);
     await this.start(auth, projectId, registered.version.id);
     return { ...registered, version: await this.version(auth, projectId, registered.version.id) };

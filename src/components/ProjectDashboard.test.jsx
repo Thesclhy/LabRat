@@ -2267,7 +2267,7 @@ describe("AgentPanel", () => {
         />,
       );
 
-      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
+      const promptInput = screen.getByRole("textbox", { name: "Ask LabRat", exact: true });
       fireEvent.change(promptInput, { target: { value: "Add normalized selectivity to Exp31." } });
       fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
 
@@ -2327,7 +2327,7 @@ describe("AgentPanel", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...").value)
+      expect(screen.getByRole("textbox", { name: "Ask LabRat", exact: true }).value)
         .toBe("Build reviewed Experiment Browser records from the confirmed master table.");
     });
     expect(onRequestedDraftHandled).toHaveBeenCalled();
@@ -2359,6 +2359,7 @@ describe("AgentPanel", () => {
         />,
       );
 
+      fireEvent.click(screen.getByRole("button", { name: "Settings", exact: true }));
       await waitFor(() => expect(screen.getByLabelText("Analysis runtime status").textContent).toContain("Model: anthropic / claude-test ready"));
       expect(screen.getByLabelText("Analysis runtime status").textContent).toContain("Python: local ready");
       expect(screen.getByLabelText("Analysis runtime status").textContent).toContain("Evidence: 0 confirmed regions, 3 snapshots, 2 active heads");
@@ -2404,6 +2405,7 @@ describe("AgentPanel", () => {
         dataSnapshots: [],
         experimentSnapshotHeads: [],
       }));
+      fireEvent.click(screen.getByRole("button", { name: "Settings", exact: true }));
       await waitFor(() => expect(screen.getByLabelText("Analysis runtime status").textContent).toContain("0 snapshots, 0 active heads"));
 
       rerender(panel({
@@ -2423,10 +2425,10 @@ describe("AgentPanel", () => {
     localStorage.setItem("labrat_blank_chat_history_v1_react", JSON.stringify([
       { role: "assistant", text: "Legacy shared answer" },
     ]));
-    localStorage.setItem("labrat_blank_chat_history_v2_project_project_alpha", JSON.stringify([
+    localStorage.setItem("labrat_blank_chat_history_v2_project_local_project_alpha", JSON.stringify([
       { role: "assistant", text: "Alpha project answer" },
     ]));
-    localStorage.setItem("labrat_blank_chat_history_v2_project_project_beta", JSON.stringify([
+    localStorage.setItem("labrat_blank_chat_history_v2_project_local_project_beta", JSON.stringify([
       { role: "assistant", text: "Beta project answer" },
     ]));
 
@@ -2459,8 +2461,8 @@ describe("AgentPanel", () => {
       expect(screen.queryByText("Legacy shared answer")).toBeNull();
     } finally {
       localStorage.removeItem("labrat_blank_chat_history_v1_react");
-      localStorage.removeItem("labrat_blank_chat_history_v2_project_project_alpha");
-      localStorage.removeItem("labrat_blank_chat_history_v2_project_project_beta");
+      localStorage.removeItem("labrat_blank_chat_history_v2_project_local_project_alpha");
+      localStorage.removeItem("labrat_blank_chat_history_v2_project_local_project_beta");
     }
   });
 
@@ -2471,7 +2473,7 @@ describe("AgentPanel", () => {
       workbookName: "Saved Master.xlsx",
       regionCount: 4,
     };
-    localStorage.setItem("labrat_blank_chat_history_v2_project_project_1", JSON.stringify([{
+    localStorage.setItem("labrat_blank_chat_history_v2_project_local_project_1", JSON.stringify([{
       role: "assistant",
       text: "I indexed Saved Master.xlsx and found 4 potentially useful regions.",
       workbookReviewLink,
@@ -2501,7 +2503,7 @@ describe("AgentPanel", () => {
   });
 
   it("scrolls chat history to the bottom on first open and preserves user scroll after that", async () => {
-    localStorage.setItem("labrat_blank_chat_history_v2_project_project_1", JSON.stringify([
+    localStorage.setItem("labrat_blank_chat_history_v2_project_local_project_1", JSON.stringify([
       { role: "user", text: "Earlier question" },
       { role: "assistant", text: "Earlier answer" },
       { role: "user", text: "Follow-up question" },
@@ -2550,19 +2552,19 @@ describe("AgentPanel", () => {
       frameCallbacks.shift()();
       expect(messages.scrollTop).toBe(240);
 
-      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
+      const promptInput = screen.getByRole("textbox", { name: "Ask LabRat", exact: true });
       fireEvent.change(promptInput, { target: { value: "Will this preserve my place?" } });
       fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
 
       await waitFor(() => expect(screen.getByText(/Select a server project before asking LabRat/)).toBeTruthy());
       expect(messages.scrollTop).toBe(240);
 
-      fireEvent.click(screen.getByRole("button", { name: "Reset chat" }));
+      fireEvent.click(screen.getByRole("button", { name: "New conversation" }));
       expect(messages.scrollTop).toBe(0);
     } finally {
       window.requestAnimationFrame = originalRequestAnimationFrame;
       window.cancelAnimationFrame = originalCancelAnimationFrame;
-      localStorage.removeItem("labrat_blank_chat_history_v2_project_project_1");
+      localStorage.removeItem("labrat_blank_chat_history_v2_project_local_project_1");
     }
   });
 
@@ -2606,7 +2608,7 @@ describe("AgentPanel", () => {
         />,
       );
 
-      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
+      const promptInput = screen.getByRole("textbox", { name: "Ask LabRat", exact: true });
       fireEvent.change(promptInput, { target: { value: "Compare all accepted experiments." } });
       fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
 
@@ -2659,7 +2661,7 @@ describe("AgentPanel", () => {
         />,
       );
 
-      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
+      const promptInput = screen.getByRole("textbox", { name: "Ask LabRat", exact: true });
       fireEvent.change(promptInput, { target: { value: "Chart carbon number distribution for Exp31." } });
       fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
 
@@ -2707,7 +2709,7 @@ describe("AgentPanel", () => {
         />,
       );
 
-      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
+      const promptInput = screen.getByRole("textbox", { name: "Ask LabRat", exact: true });
       fireEvent.change(promptInput, { target: { value: "这个项目目前有哪些内容？" } });
       fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
 
@@ -2774,7 +2776,7 @@ describe("AgentPanel", () => {
         />,
       );
 
-      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
+      const promptInput = screen.getByRole("textbox", { name: "Ask LabRat", exact: true });
       fireEvent.change(promptInput, {
         target: { value: "Normalize selectivity and compare every experiment." },
       });
@@ -2856,8 +2858,10 @@ describe("AgentPanel", () => {
         />,
       );
 
+      fireEvent.click(screen.getByRole("button", { name: "Settings", exact: true }));
       await waitFor(() => expect(screen.getByLabelText("Analysis runtime status").textContent).toContain("Model: configured"));
-      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
+      fireEvent.click(screen.getByRole("button", { name: "Close settings", exact: true }));
+      const promptInput = screen.getByRole("textbox", { name: "Ask LabRat", exact: true });
       fireEvent.change(promptInput, { target: { value: analysisThread.originalRequest } });
       fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
 
@@ -2930,14 +2934,18 @@ describe("AgentPanel", () => {
 
     try {
       const { rerender } = render(panel("project_1"));
+      fireEvent.click(screen.getByRole("button", { name: "Settings", exact: true }));
       await waitFor(() => expect(screen.getByLabelText("Analysis runtime status").textContent).toContain("Model: configured"));
-      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
+      fireEvent.click(screen.getByRole("button", { name: "Close settings", exact: true }));
+      const promptInput = screen.getByRole("textbox", { name: "Ask LabRat", exact: true });
       fireEvent.change(promptInput, { target: { value: analysisThread.originalRequest } });
       fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
       fireEvent.click(await screen.findByRole("button", { name: "Retry with confirmed evidence" }));
 
       rerender(panel("project_2"));
+      fireEvent.click(screen.getByRole("button", { name: "Settings", exact: true }));
       await waitFor(() => expect(screen.getByLabelText("Analysis runtime status").textContent).toContain("Model: configured"));
+      fireEvent.click(screen.getByRole("button", { name: "Close settings", exact: true }));
       await act(async () => {
         resolveRetry({
           ok: true,
@@ -3289,7 +3297,7 @@ describe("AgentPanel", () => {
 
     try {
       render(<GoldenWorkflowHarness />);
-      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
+      const promptInput = screen.getByRole("textbox", { name: "Ask LabRat", exact: true });
       fireEvent.change(promptInput, {
         target: { value: "Normalize selectivity and compare every experiment." },
       });
@@ -3451,7 +3459,7 @@ describe("AgentPanel", () => {
         />,
       );
 
-      fireEvent.click(screen.getByRole("button", { name: "Attach spreadsheet" }));
+      fireEvent.click(screen.getByRole("button", { name: "Add files" }));
       const fileInput = container.querySelector('input[type="file"]');
       const file = new File(["placeholder"], "Master.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       fireEvent.change(fileInput, { target: { files: [file] } });
@@ -3459,7 +3467,7 @@ describe("AgentPanel", () => {
       expect(screen.getByText("Master.xlsx")).toBeTruthy();
       expect(fetchMock.mock.calls.some(([url, init]) => url === "/api/v1/projects/project_1/files" && init.method === "POST")).toBe(false);
 
-      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
+      const promptInput = screen.getByRole("textbox", { name: "Ask LabRat", exact: true });
       fireEvent.change(promptInput, { target: { value: "Please help me understand this workbook" } });
       fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
 
@@ -3573,11 +3581,11 @@ describe("AgentPanel", () => {
       const exp32 = new File(["b"], "Calculation Exp32.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       fireEvent.change(fileInput, { target: { files: [exp31, exp32] } });
 
-      expect(screen.getByText("2 workbooks attached. Send to upload them as one batch.")).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Remove attached spreadsheet Calculation Exp32.xlsx" })).toBeTruthy();
+      expect(screen.getByText("2 files · Excel goes to region review; PDF, Word and TXT become references.")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Remove attached file Calculation Exp32.xlsx" })).toBeTruthy();
       expect(fetchMock.mock.calls.some(([url, init]) => url === "/api/v1/projects/project_1/files" && init.method === "POST")).toBe(false);
 
-      const promptInput = screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...");
+      const promptInput = screen.getByRole("textbox", { name: "Ask LabRat", exact: true });
       fireEvent.change(promptInput, { target: { value: "Upload these calculation workbooks" } });
       fireEvent.keyDown(promptInput, { key: "Enter", code: "Enter" });
 
@@ -3615,7 +3623,7 @@ describe("AgentPanel", () => {
         regionCount: 1,
       })));
 
-      const stored = JSON.parse(localStorage.getItem("labrat_blank_chat_history_v2_project_project_1") || "[]");
+      const stored = JSON.parse(localStorage.getItem("labrat_blank_chat_history_v2_project_local_project_1") || "[]");
       const storedBatch = stored.find((message) => message.workbookBatch)?.workbookBatch;
       expect(storedBatch?.items.every((item) => !("result" in item) && !("file" in item))).toBe(true);
     } finally {
@@ -3624,7 +3632,7 @@ describe("AgentPanel", () => {
   });
 
   it("starts a batch upload from files requested by the Overview without a typed message", async () => {
-    localStorage.removeItem("labrat_blank_chat_history_v2_project_project_1");
+    localStorage.removeItem("labrat_blank_chat_history_v2_project_local_project_1");
     const onRequestedWorkbookFilesHandled = vi.fn();
     const onWorkbookBatchUploaded = vi.fn();
     const fetchMock = vi.fn(async (url, init = {}) => {
@@ -3687,7 +3695,7 @@ describe("AgentPanel", () => {
   });
 
   it("matches an extraction template against a batch and shows per-file results", async () => {
-    const historyKey = "labrat_blank_chat_history_v2_project_project_1";
+    const historyKey = "labrat_blank_chat_history_v2_project_local_project_1";
     localStorage.setItem(historyKey, JSON.stringify([{
       role: "assistant",
       text: "I indexed 3 workbooks.",
@@ -3772,7 +3780,7 @@ describe("AgentPanel", () => {
   });
 
   it("applies a matched template as prefilled regions and confirms the linked ones in one batch", async () => {
-    const historyKey = "labrat_blank_chat_history_v2_project_project_1";
+    const historyKey = "labrat_blank_chat_history_v2_project_local_project_1";
     localStorage.setItem(historyKey, JSON.stringify([{
       role: "assistant",
       text: "I indexed 2 workbooks.",
@@ -3916,7 +3924,7 @@ describe("AgentPanel", () => {
     );
 
     expect(screen.queryByLabelText("Workbook review response")).toBeNull();
-    expect(screen.getByPlaceholderText("Ask the rat about your data, charts, or manuscript...")).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Ask LabRat", exact: true })).toBeTruthy();
   });
 
 });

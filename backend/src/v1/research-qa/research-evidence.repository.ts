@@ -29,7 +29,7 @@ export class ResearchEvidenceRepository {
     return rows.length > 0;
   }
 
-  async search(projectId: string, query: string, offset: number) {
+  async search(projectId: string, query: string, offset: number, preferredVersions: string[] = [], selectedOnly = false) {
     const terms = searchTerms(query);
     return this.query(`with candidates as (
       select 'document'::text kind, p.version_id || ':' || p.id sort_id,
@@ -37,34 +37,19 @@ export class ResearchEvidenceRepository {
         jsonb_build_object('versionId',p.version_id,'passageId',p.id,'documentId',d.id,
           'locator',p.locator,'snippet',left(p.text,700),'status',v.status,'ordinal',p.ordinal) target
       from context_document_passages p
-      join context_documents d on d.project_id=$1 and d.current_version_id=p.version_id and d.status='active'
+      join context_documents d on d.project_id=$1 and d.status='active' and
+        (p.version_id=any($5::text[]) or (d.current_version_id=p.version_id and not exists
+          (select 1 from context_document_versions selected where selected.document_id=d.id and selected.id=any($5::text[]))))
       join context_document_versions v on v.id=p.version_id and v.project_id=$1 and v.status in ('ready','partial')
-      where p.project_id=$1
+      where p.project_id=$1 and v.document_id=d.id and (not $6 or p.version_id=any($5::text[]))
       union all
-      select 'workbook_raw', b.id || ':' || s.n || ':' || c.n,
-        coalesce(d.metadata->>'workbookName',d.id) || ' / ' || (s.body->>'name'),
-        coalesce(c.body->>'formattedValue',c.body->>'rawValue','') || ' ' || coalesce(c.body->>'formula',''),
-        jsonb_build_object('sourceDocumentId',d.id,'sheetName',s.body->>'name',
-          'range',c.body->>'address','snippet',left(coalesce(c.body->>'formattedValue',c.body->>'rawValue',''),700))
-      from source_documents d join source_index_blobs b on b.source_document_id=d.id and b.project_id=$1
-      cross join lateral jsonb_array_elements(coalesce(b.payload->'sheets','[]')) with ordinality s(body,n)
-      cross join lateral jsonb_array_elements(coalesce(s.body->'cellGrid'->'cells','[]')) with ordinality c(body,n)
-      where d.project_id=$1 and d.status='indexed' and $4=false
-      union all
-      select 'workbook_catalog',d.id || ':' || s.n,coalesce(d.metadata->>'workbookName',d.id),
-        coalesce(d.metadata->>'workbookName','') || ' ' || (s.body->>'name'),
-        jsonb_build_object('sourceDocumentId',d.id,'sheetName',s.body->>'name',
-          'range',coalesce(s.body->'cellGrid'->>'range',s.body->>'usedRange'),
-          'snippet','Raw workbook: choose a range of at most 240 cells.')
-      from source_documents d join source_index_blobs b on b.source_document_id=d.id and b.project_id=$1
-      cross join lateral jsonb_array_elements(coalesce(b.payload->'sheets','[]')) with ordinality s(body,n)
-      where d.project_id=$1 and d.status='indexed'
-      union all
-      select 'confirmed_region',r.id,r.sheet_name || ' ' || r.range_ref,coalesce(v.summary::text,'') || ' ' || r.sheet_name,
+      select 'confirmed_region',r.id,coalesce(d.metadata->>'workbookName',d.id) || ' / ' || r.sheet_name || ' ' || r.range_ref,
+        coalesce(v.summary::text,'') || ' ' || r.sheet_name || ' ' || coalesce(d.metadata->>'workbookName',''),
         jsonb_build_object('regionId',r.id,'revisionId',v.id,'sourceDocumentId',r.source_document_id,
           'sheetName',r.sheet_name,'range',r.range_ref,'snippet',left(v.summary::text,700))
       from workbook_review_regions r join region_understanding_revisions v on v.id=r.accepted_revision_id and v.project_id=$1
-      where r.project_id=$1 and r.disposition='active' and r.review_status='accepted'
+      join source_documents d on d.id=r.source_document_id and d.project_id=$1
+      where r.project_id=$1 and r.disposition='active' and r.review_status='accepted' and not $6
       union all
       select 'experiment_field',h.id || ':field:' || f.n,i.canonical_label,
         coalesce(f.body->>'displayName','') || ' ' || coalesce(f.body->>'columnId','') || ' ' || coalesce(f.body->>'unit',''),
@@ -73,15 +58,17 @@ export class ResearchEvidenceRepository {
       from experiment_identities i join experiment_snapshot_heads h on h.experiment_id=i.id and h.project_id=$1
       join data_snapshots s on s.id=h.data_snapshot_id and s.project_id=$1 and s.status='accepted'
       cross join lateral jsonb_array_elements(coalesce((s.experiment_records->h.record_index)->'fields','[]')) with ordinality f(body,n)
-      where i.project_id=$1 and $4=false
+      where i.project_id=$1 and $4=false and not $6
     ), ranked as (
       select *, (select coalesce(sum(case when case when t ~ '^[a-z0-9]{1,3}$' then lower(searchable) ~ ('(^|[^[:alnum:]_])' || t || '([^[:alnum:]_]|$)')
         else position(t in lower(searchable))>0 end then 2 else 0 end
         +case when case when t ~ '^[a-z0-9]{1,3}$' then lower(label) ~ ('(^|[^[:alnum:]_])' || t || '([^[:alnum:]_]|$)')
         else position(t in lower(label))>0 end then 1 else 0 end),0) from unnest($2::text[]) t) score
       from candidates
-    ) select kind,label,target,score from ranked where $4 or score>0
-      order by score desc,sort_id offset $3 limit 40`, [projectId, terms, offset, !query.trim()]);
+    ) select kind,label,target,score from ranked where $4 or score>0 or
+      (kind='document' and target->>'versionId'=any($5::text[]) and (target->>'ordinal')::int<2)
+      order by (kind='document' and target->>'versionId'=any($5::text[])) desc,
+        score desc,sort_id offset $3 limit 40`, [projectId, terms, offset, !query.trim(), preferredVersions, selectedOnly]);
   }
 
   async neighbors(projectId: string, versionId: string, ordinal: number) {

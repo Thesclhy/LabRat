@@ -2889,6 +2889,12 @@ export interface components {
         };
         readonly RegisterContextDocumentRequest: {
             readonly fileObjectId: components["schemas"]["OpaqueId"];
+            /** @description Create an independent reference even when another reference has the same filename. */
+            readonly newDocument?: boolean;
+            /** @description Explicit existing document receiving a new version. */
+            readonly documentId?: string;
+            /** @description Required when documentId is supplied. */
+            readonly expectedVersion?: number;
         };
         readonly ArchiveContextDocumentRequest: {
             readonly expectedVersion: number;
@@ -2909,6 +2915,21 @@ export interface components {
         readonly CreateResearchQuestionRequest: {
             readonly requestKey: string;
             readonly question: string;
+            readonly referenceDocuments?: readonly {
+                readonly documentId: string;
+                readonly versionId: string;
+            }[];
+            /**
+             * @default project
+             * @enum {string}
+             */
+            readonly sourceScope: "project" | "selected";
+            readonly selectedExperimentLabel?: string;
+            readonly conversation?: readonly {
+                /** @enum {string} */
+                readonly role: "user" | "assistant";
+                readonly text: string;
+            }[];
         };
         readonly ResearchQuestion: {
             readonly runId: string;
@@ -2917,6 +2938,9 @@ export interface components {
             readonly actorUserId: string;
             readonly requestKey: string;
             readonly question: string;
+            readonly referenceDocuments?: readonly components["schemas"]["JsonObject"][];
+            /** @enum {string} */
+            readonly sourceScope?: "project" | "selected";
             /** @enum {string} */
             readonly status: "queued" | "running" | "interrupted" | "completed" | "failed" | "cancelled";
             readonly attempt: number;
@@ -6984,6 +7008,10 @@ export interface operations {
             readonly query?: {
                 readonly cursor?: components["parameters"]["Cursor"];
                 readonly limit?: components["parameters"]["DocumentPageLimit"];
+                readonly search?: string;
+                readonly type?: "" | "pdf" | "word" | "txt";
+                readonly status?: "" | "ready" | "partial" | "processing" | "pending" | "failed" | "interrupted";
+                readonly sort?: "newest" | "oldest";
             };
             readonly header?: never;
             readonly path: {

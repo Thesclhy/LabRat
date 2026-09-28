@@ -1,10 +1,24 @@
 # Current Milestone
 
-Status: Research Q&A v1 deployed — hosted and live verification passed
+Status: Unified Ask — main publication and deployment in progress
 Read when: checking what the next implementation slice should be.
-Last reviewed: 2026-09-27
+Last reviewed: 2026-09-28
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
+
+## Unified Ask implementation
+
+The user approved the unified Ask, @reference selection, separate reference
+library, visible context and resumable Excel review tasks on 2026-09-28.
+Implemented doc/plans/unified-ask-plan.md on codex/unified-ask in the reused
+research-qa-deploy checkout. Preserve the original dirty checkout and current
+production release. Preflight, full codex verification, real PostgreSQL scenarios
+and actual-browser acceptance passed. See doc/qa/unified-ask-verification.md for
+manual checks, exact coverage and the real-provider evaluation limitation.
+The user authorized main publication/deployment on 2026-09-28. Remote main
+remains the implementation baseline 1c06923; no merge conflict is present.
+Migration 036 is required for this release. Publication, hosted verification,
+production migration/asset checks and health verification remain to complete.
 
 ## Research Q&A production checkpoint
 

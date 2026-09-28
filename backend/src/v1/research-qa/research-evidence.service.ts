@@ -61,9 +61,26 @@ export class ResearchEvidenceService {
         ...(cells.some((cell: any) => cell.cacheMissing) ? ["A formula has no saved cached value; it was not evaluated."] : [])] };
   }
 
-  createSession(auth: AuthContext, projectId: string, signal: AbortSignal) {
+  async resolveReferences(auth: AuthContext, projectId: string, references: Array<{ documentId: string; versionId: string }>) {
+    await this.authorize(auth, projectId);
+    const resolved: Array<{ documentId: string; versionId: string; label: string; versionNumber: number }> = [];
+    for (const reference of references) {
+      const document = await this.documents.findDocument(projectId, reference.documentId);
+      const version = await this.documents.findVersion(projectId, reference.versionId);
+      if (!document || document.status !== "active" || !version || version.documentId !== document.id
+        || !["ready", "partial"].includes(version.status)) {
+        throw new ApiError(409, "qa_reference_unavailable", "A selected reference is unavailable or still being read. Review your selected files.");
+      }
+      if (!resolved.some((item) => item.versionId === version.id)) resolved.push({ documentId: document.id, versionId: version.id,
+        label: document.originalName, versionNumber: version.versionNumber });
+    }
+    return resolved;
+  }
+
+  createSession(auth: AuthContext, projectId: string, signal: AbortSignal, context: Record<string, any> = {}) {
     const registry = new EvidenceRegistry();
-    const selectedVersions = new Set<string>();
+    const preferredVersions: string[] = (context.referenceDocuments || []).map((item: any) => item.versionId);
+    const selectedVersions = new Set<string>(preferredVersions);
     const experiments = new Map<string, any>();
     const trace: Array<Record<string, unknown>> = [];
     let calls = 0;
@@ -73,8 +90,10 @@ export class ResearchEvidenceService {
       if (signal.aborted) throw new ApiError(409, "qa_cancelled", "Q&A was cancelled.");
       if (Date.now() - startedAt >= QA_LIMITS.deadlineMs) throw new ApiError(408, "qa_timeout", "Q&A reached its time limit.");
       await this.authorize(auth, projectId);
+      if (preferredVersions.length) await this.resolveReferences(auth, projectId, context.referenceDocuments);
     };
     const read = async (name: string, input: any): Promise<any> => {
+      if (context.sourceScope === "selected" && !["search_project_documents", "read_document_passage"].includes(name)) throw missing();
       if (name === "get_project_context") {
         const data = await this.repository.context(projectId);
         if (!data) throw missing();
@@ -86,13 +105,13 @@ export class ResearchEvidenceService {
       }
       if (name === "search_project_documents") {
         const offset = integer(input.cursor);
-        const candidates = await this.repository.search(projectId, input.query, offset);
+        const candidates = await this.repository.search(projectId, input.query, offset, preferredVersions, context.sourceScope === "selected");
         const items = candidates.slice(0, QA_LIMITS.search);
         for (const item of items) if (item.kind === "document") selectedVersions.add(item.target.versionId);
         return { items, nextCursor: candidates.length > items.length ? offset + items.length : null,
           coverage: { scope: "current_project_sources", readForCitation: false, returned: items.length,
             candidateWindow: candidates.length, complete: candidates.length <= items.length,
-            includes: ["uploaded_documents", "raw_workbook_cells", "confirmed_regions", "accepted_field_names"],
+            includes: context.sourceScope === "selected" ? ["selected_document_versions"] : ["uploaded_documents", "confirmed_regions", "accepted_field_names"],
             note: "Search snippets are not complete evidence. Empty results mean no keyword match, including accepted field names; report insufficient evidence within this search coverage, not universal absence." } };
       }
       if (name === "read_document_passage") {
@@ -122,7 +141,7 @@ export class ResearchEvidenceService {
         }
         return { evidence, contextEvidence, neighbors: adjacent };
       }
-      if (name === "read_workbook_source") return { evidence: registry.add(await this.rawRange(projectId, input.sourceDocumentId, input.sheetName, input.range)) };
+      if (name === "read_workbook_source") throw new ApiError(409, "qa_workbook_review_required", "Select and confirm workbook regions first, then read confirmed region evidence.");
       if (name === "find_experiments") {
         const offset = integer(input.cursor);
         const rows = await this.repository.experiments(projectId, input.query, offset);

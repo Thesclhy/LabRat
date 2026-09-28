@@ -16,7 +16,7 @@ export class ContextDocumentsController {
 
   @Post()
   register(@CurrentAuth() auth: AuthContext, @Param("projectId") projectId: string, @Body() body: RegisterDocumentDto) {
-    return this.documents.register(auth, projectId, body.fileObjectId);
+    return this.documents.register(auth, projectId, body.fileObjectId, body);
   }
 
   @Get(":documentId")

@@ -25,11 +25,21 @@ export class DocumentsRepository {
     return row || null;
   }
 
-  async listDocuments(projectId: string, after: string | undefined, limit: number) {
+  async listDocuments(projectId: string, after: string | undefined, limit: number, filters: { search?: string; type?: string; status?: string; sort?: string } = {}) {
+    const cursor = after && filters.sort ? await this.findDocument(projectId, after) : null;
+    if (after && filters.sort && !cursor) throw new ApiError(400, "document_cursor_invalid", "Refresh the reference list.");
+    const ascending = filters.sort === "oldest";
+    const cursorFilter = !after ? undefined : filters.sort && cursor
+      ? (ascending ? sql`(${documents.createdAt},${documents.id}) > (${cursor.createdAt}::timestamptz,${cursor.id})`
+        : sql`(${documents.createdAt},${documents.id}) < (${cursor.createdAt}::timestamptz,${cursor.id})`)
+      : gt(documents.id, after);
     return this.database.db.select({ document: documents, currentVersion: versions }).from(documents)
       .leftJoin(versions, and(eq(versions.id, documents.currentVersionId), eq(versions.projectId, projectId)))
-      .where(and(eq(documents.projectId, projectId), eq(documents.status, "active"), after ? gt(documents.id, after) : undefined))
-      .orderBy(asc(documents.id)).limit(limit + 1);
+      .where(and(eq(documents.projectId, projectId), eq(documents.status, "active"), cursorFilter,
+        filters.search ? sql`position(lower(${filters.search}) in lower(${documents.originalName})) > 0` : undefined,
+        filters.status ? eq(versions.status, filters.status) : undefined,
+        filters.type ? sql`lower(${documents.originalName}) ~ ${filters.type === "word" ? '\\.(doc|docx)$' : `\\.${filters.type}$`}` : undefined))
+      .orderBy(...(filters.sort ? (ascending ? [asc(documents.createdAt), asc(documents.id)] : [desc(documents.createdAt), desc(documents.id)]) : [asc(documents.id)])).limit(limit + 1);
   }
 
   async listVersions(projectId: string, documentId: string, after: number, limit: number) {
@@ -38,12 +48,16 @@ export class DocumentsRepository {
   }
 
   async register(input: { projectId: string; labId: string; fileObjectId: string; originalName: string;
-    contentHash: string; processingVersion: string; actorUserId: string }, auth: AuthContext) {
+    contentHash: string; processingVersion: string; actorUserId: string; newDocument?: boolean; documentId?: string; expectedVersion?: number }, auth: AuthContext) {
     return this.database.db.transaction(async (tx) => {
       await authorizeProjectTransaction({ db: tx } as unknown as DatabaseService, auth, { id: input.projectId, labId: input.labId }, "propose");
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${JSON.stringify(["context-document", input.projectId, input.originalName])}))`);
-      let [document] = await tx.select().from(documents).where(and(eq(documents.projectId, input.projectId),
-        eq(documents.originalName, input.originalName), eq(documents.status, "active"))).limit(1);
+      const matching = await tx.select().from(documents).where(and(eq(documents.projectId, input.projectId),
+        input.documentId ? eq(documents.id, input.documentId) : input.newDocument ? sql`false` : eq(documents.originalName, input.originalName),
+        eq(documents.status, "active"))).limit(2).for("update");
+      if (matching.length > 1) throw new ApiError(409, "document_identity_required", "Choose an existing reference for a new version, or add a separate reference.");
+      let [document] = matching;
+      if (input.documentId && (!document || document.version !== input.expectedVersion)) throw new ApiError(409, "document_version_conflict", "The reference changed. Refresh before adding a version.");
       const timestamp = now();
       if (!document) {
         [document] = await tx.insert(documents).values({ id: makeId("context_doc"), projectId: input.projectId,

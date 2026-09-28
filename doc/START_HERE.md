@@ -8,6 +8,14 @@ This file is the routing guide for AI agents. It tells you which docs are curren
 
 ## Current Direction
 
+The unified Ask extension is implemented locally on `codex/unified-ask`.
+Read [its approved plan](plans/unified-ask-plan.md),
+[current Q&A contract](contracts/research-qa-v1.md), and
+[verification and manual checks](qa/unified-ask-verification.md).
+It merges Ask/workflow UI, adds a main-workspace reference library and @mentions,
+and requires Excel region confirmation before new Q&A evidence reads.
+The deployed baseline below remains unchanged until a separate release.
+
 Research Q&A v1 is implemented and locally accepted. Read
 [the Q&A plan](plans/research-qa-plan.md), [implementation contract](contracts/research-qa-v1.md),
 [local verification](qa/research-qa-verification.md) and [release record](qa/research-qa-deployment.md).
