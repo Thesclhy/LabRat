@@ -1,6 +1,6 @@
 # PDF preview standard-font repair
 
-Date: 2026-09-28. Status: focused verification passed; release pending.
+Date: 2026-09-28. Status: deployed and verified; user retest pending.
 
 The user saw almost all letters missing from the Q05-protocol.pdf page 1
 preview and suspected OCR. The original synthetic fixture is intact (SHA-256
@@ -24,7 +24,7 @@ Verification:
   Helvetica-Bold, Times-Roman and Courier.
 - All 16 focused document/parser/preview tests passed, including English/Chinese
   scans, rotation, low contrast, hidden text, original-page locators and retries.
-  NestJS production build passed. The hosted full regression remains a release gate.
+  NestJS production build passed. Hosted full regression passed before deployment.
 - Original Q05 page 1 and corrected local/server-runtime images were visually
   inspected. Both corrected images show the complete heading, 30 C instruction
   and remaining paragraphs. The server-runtime experiment changed no deployed code.
@@ -46,3 +46,22 @@ on pages 2/3. The page 2 confidence warning should remain. User manual acceptanc
 and fixed-answer/cross-device checks remain pending. Future changes to OCR input
 rendering must use a new parsing version and preserve historical evidence; the
 current parsing pipeline is intentionally outside this preview-only repair.
+
+## Release result
+
+- Application `8a6e382c4e4c21ebc98d493a418137858fe221e3` deployed from main to
+  `/opt/labrat/releases/20260928193932-8a6e382c4e4c`.
+- [Workflow 36473285885](https://github.com/Thesclhy/LabRat/actions/runs/36473285885)
+  passed full frontend/backend/PostgreSQL tests, both builds, smoke and deployment.
+- Fresh backup `/var/backups/labrat/pdf-preview-fonts-20260928`, set
+  `20260928193446`, passed database/archive integrity checks.
+- Live service, local/public health, exact assets and authorization rejection
+  passed; existing migration 037 is unchanged. Provider remains Anthropic.
+  Receipt: [pdf-preview-live.json](pdf-preview-live.json).
+- The deployed worker rendered the original Q05 bytes; page 1 was visually
+  inspected and is now complete. Pages 2/3 are byte-identical to their previous
+  PNG previews. Read-only stored metadata and freshly parsed passages, locators,
+  confidence and warnings exactly match the before-release baseline.
+  Receipt: [pdf-preview-regression-live.json](pdf-preview-regression-live.json).
+- No re-upload, stored retry, provider call or production research write occurred.
+  Documentation follows in a `[skip ci]` commit. User manual retest is pending.

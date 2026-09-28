@@ -23,8 +23,11 @@ Keep entries concise, newest first, and include:
 - New rendered-pixel regression fails before the fix and passes after it for
   four standard fonts. All 16 focused document tests and NestJS build passed;
   corrected local and production-runtime images were visually inspected.
-- Deployment/full hosted regression and user retest pending. See
-  `doc/qa/pdf-preview-fonts.md`. No production research writes or model calls.
+- Application 8a6e382 deployed via successful workflow 36473285885 to release
+  20260928193932-8a6e382c4e4c. Fresh backup, full hosted regression and live checks
+  passed. Deployed page 1 is complete; scans, parsing and stored metadata match
+  the baseline. See `doc/qa/pdf-preview-fonts.md` and its safe live receipts.
+- User retest pending. No production research writes or model calls.
 
 ## 2026-09-28 — Clear sent Ask attachments
 

@@ -1,0 +1,30 @@
+{
+  "checkedAt": "2026-09-28T19:40:26.286Z",
+  "release": "/opt/labrat/releases/20260928193932-8a6e382c4e4c",
+  "fixture": "Q05-protocol.pdf",
+  "contentHash": "55f91e9ad7a478a7abc868c941ecd26965b85aef85747c907785ad9d51a8c156",
+  "storedMetadataUnchanged": true,
+  "parsedEvidenceAndLocatorsUnchanged": true,
+  "scanPreviewPixelsUnchanged": [
+    2,
+    3
+  ],
+  "textPagePreviewRepaired": true,
+  "pageMethods": [
+    {
+      "page": 1,
+      "method": "text"
+    },
+    {
+      "page": 2,
+      "method": "ocr"
+    },
+    {
+      "page": 3,
+      "method": "ocr"
+    }
+  ],
+  "warning": "Page 2: Exp17 confidence 89, numeric-token threshold 90; all pages readable.",
+  "productionResearchWrites": false,
+  "providerCalls": false
+}

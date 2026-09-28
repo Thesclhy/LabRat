@@ -1,6 +1,6 @@
 # Current Milestone
 
-Status: User manual acceptance in progress — PDF preview font repair verified, release pending
+Status: User manual acceptance in progress — PDF preview font repair deployed
 Read when: checking what the next implementation slice should be.
 Last reviewed: 2026-09-28
 
@@ -12,7 +12,9 @@ The user's Q05 PDF preview lost most letters. Production diagnostics isolated
 standard-font substitution in the preview renderer; all three pages are parsed,
 with an Exp17 uncertainty warning accounting for partial status. The preview-only
 repair and 16 focused tests/build passed, including real server-runtime visual
-inspection. Release and user retest pending; see `doc/qa/pdf-preview-fonts.md`.
+inspection. Application 8a6e382 deployed via successful workflow 36473285885;
+live page 1 is complete and parsing/stored metadata are unchanged. User retest
+pending; see `doc/qa/pdf-preview-fonts.md`.
 
 The user next reported sent + attachments staying in the input status area.
 Clear automatically selected reference chips after successful upload, preserving
