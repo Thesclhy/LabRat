@@ -1,6 +1,6 @@
 # Reference picker typography
 
-Date: 2026-09-28. Status: local verification passed; release pending.
+Date: 2026-09-28. Status: deployed and verified; user retest pending.
 
 The user found @ reference filenames too large. Candidate buttons inherited
 the generic composer button's 18px type and fixed 44px height. Metadata spilled
@@ -29,3 +29,12 @@ in that directory. This isolated CSS change adds no unit tests.
 
 User retest: refresh Ask, type @, inspect filename/metadata sizing and select a
 reference. Manual acceptance remains pending.
+
+Release: application `84e4443fa687880626454ef2739e1315fdcbdd56` is live at
+`/opt/labrat/releases/20260928202623-84e4443fa687`.
+[Workflow 36478638372](https://github.com/Thesclhy/LabRat/actions/runs/36478638372)
+passed full regression, builds and deployment. Backup
+`/var/backups/labrat/reference-picker-typography-20260928`, set `20260928202119`,
+passed integrity checks. Exact public assets, health and existing schema/auth
+checks passed; no migration or provider change. Safe receipt:
+[reference-picker-typography-live.json](reference-picker-typography-live.json).

@@ -22,7 +22,10 @@ Keep entries concise, newest first, and include:
 - Build/diff checks and actual Chromium/HTTP/PostgreSQL verification passed at
   desktop/390px widths, including long Chinese/English names and mouse/keyboard
   selection. Temporary harness issues were corrected; final screenshots inspected.
-- Release pending; see `doc/qa/reference-picker-typography.md`. User retest pending.
+- Application 84e4443 deployed via workflow 36478638372 at release
+  20260928202623-84e4443fa687. Backup, full hosted checks and live asset/health
+  verification passed. See `doc/qa/reference-picker-typography.md`.
+- User retest pending. No production research writes or provider calls.
 
 ## 2026-09-28 — Read reference PDFs by page
 

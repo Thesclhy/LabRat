@@ -1,0 +1,56 @@
+{
+  "expectedCommit": "84e4443fa687880626454ef2739e1315fdcbdd56",
+  "release": "/opt/labrat/releases/20260928202623-84e4443fa687",
+  "checks": {
+    "service": "active",
+    "migration": {
+      "filename": "037_assistant_tasks.sql",
+      "checksum": "47d328c7ae9e7297513a55e2fc3ff0bd18c6fb0a12ebafe818793ea140685282"
+    },
+    "taskSchema": {
+      "columns": [
+        "id",
+        "lab_id",
+        "project_id",
+        "actor_user_id",
+        "request_key",
+        "request_hash",
+        "question",
+        "context",
+        "attachments",
+        "status",
+        "run_id",
+        "created_at",
+        "updated_at"
+      ],
+      "indexes": [
+        "assistant_tasks_pkey",
+        "assistant_tasks_project_id_actor_user_id_request_key_key",
+        "assistant_tasks_personal_page"
+      ]
+    },
+    "compiledTaskModules": "passed",
+    "indexSha256": "d3f192a66f86cddfc47e92500515e26cf7740eff46af48d1ece09dc1b783a11f",
+    "localAndPublicHealth": "passed",
+    "assistant-tasksUnauthenticated": 401,
+    "context-documentsUnauthenticated": 401,
+    "research-questionsUnauthenticated": 401
+  },
+  "assets": [
+    {
+      "url": "/LabRat/assets/index-D7rAMEeL.js",
+      "sha256": "f97b33ee3628159a8cf4cffd17039d8c5d826fbc87c7663b0eea7febaf25e609"
+    },
+    {
+      "url": "/LabRat/assets/index-Da4nNM7Q.css",
+      "sha256": "ce755292e181c86bf7147f7f90d7d7de0ac991be8ccafc17e5a9396dc9760f9c"
+    }
+  ],
+  "provider": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-4-5",
+    "configured": true
+  },
+  "status": "passed",
+  "completedAt": "2026-09-28T20:26:57.141Z"
+}
