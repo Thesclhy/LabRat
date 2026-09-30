@@ -1,6 +1,6 @@
 # Read-only Q&A trace acceptance
 
-Status: cases frozen before code edits, 2026-09-29; local implementation and verification complete; deployment and user manual acceptance pending
+Status: cases frozen before code edits, 2026-09-29; deployed and verified 2026-09-30; user manual acceptance pending
 Baseline: application 2bf3226 / docs 4f99874. All materials are synthetic.
 
 ## Fixed cases
@@ -77,14 +77,16 @@ new version upload and verify the earlier answer still opens its original versio
   checks passed, followed by actual R01/R08 runs on both providers; semantic review
   confirms selected document only, correct protocol facts and no inferred experiment
   measurement. No further application changes followed. git diff --check passed.
-- No migrations, dependency installation, deployment or production-data changes
-  were needed. Test-owned local PostgreSQL was stopped after confirming zero other
+- Local implementation introduced no migration or dependency changes. The separate
+  main release is recorded in [deployment verification](readonly-qa-deployment.md);
+  it made no production research-record changes. Test-owned local PostgreSQL was
+  stopped after confirming zero other
   clients. Code-review checks cover scope, ownership, immutable evidence, reviewed
   calculations, visible trace privacy and relevant verification.
 
 ## 人工测试：按顺序完成第一轮
 
-本改动尚未部署。部署后刷新页面，进入专用测试项目，从 Ask 发起**新问题**；
+本改动已部署（应用提交 159e50b）。刷新页面，进入专用测试项目，从 Ask 发起**新问题**；
 旧失败记录不会被改写。Excel 上传后已经发布的两条记录就是实验记录，
 无需再上传另一份“实验记录文件”。以下检查以你项目实际接受的数据为准。
 

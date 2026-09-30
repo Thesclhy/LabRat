@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-09-29
+Last reviewed: 2026-09-30
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -12,6 +12,23 @@ Keep entries concise, newest first, and include:
 - meaningful changes
 - verification
 - follow-ups or residual risk
+
+## 2026-09-30 — Read-only Q&A merged to main and deployed
+
+- User explicitly requested main merge. Confirmed remote baseline unchanged and
+  fast-forwarded main from 4f99874 to verified application 159e50b. Preserved all
+  unrelated original-tree work and reused the isolated checkout.
+- Fresh backup set 20260930050229 passed database/file integrity checks before
+  push. Existing main-triggered workflow 36671612147 passed hosted frontend/backend,
+  full PostgreSQL regression, generated API, builds, entry smoke and deployment.
+- Live verification confirmed exact release, public HTML/JS/CSS hashes, service
+  and health, selected-only tool exposure, new answer interface and 401 auth
+  boundaries. No production research data was written or model request made.
+- Local gh credentials were invalid; SSH push and connector/public API status
+  checks succeeded without credential changes. Evidence and live receipts:
+  doc/qa/readonly-qa-deployment.md. Documentation published separately with skip-ci.
+- User manual acceptance remains pending; refresh and submit a new selected-source
+  question using doc/qa/readonly-qa-trace.md. Historical answers remain unchanged.
 
 ## 2026-09-29 — Read-only Q&A M3 verified and delivered locally
 

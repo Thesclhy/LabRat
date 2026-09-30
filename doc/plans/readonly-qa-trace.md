@@ -1,6 +1,6 @@
 # Unified read-only Q&A and source trace
 
-Status: completed locally and verified 2026-09-29; not deployed
+Status: deployed and verified 2026-09-30; user manual acceptance pending
 Baseline: origin/main 4f99874, application 2bf3226; branch codex/readonly-qa-trace.
 
 ## Approved outcome
@@ -30,7 +30,8 @@ verification claim. Existing source/value/unit/permission checks in tools remain
 M0–M3 are complete. Evidence: ../qa/readonly-qa-trace.md and
 ../qa/readonly-qa-provider-review.md. Preserve the earlier failed provider runs;
 the last successful synthetic suite is not a guarantee for arbitrary future input.
-Deployment and the user's manual acceptance remain separate follow-ups.
+Deployment verification passed for 159e50b; see ../qa/readonly-qa-deployment.md.
+The user's manual acceptance remains pending.
 
 ## Boundaries
 

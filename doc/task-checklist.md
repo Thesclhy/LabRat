@@ -2,7 +2,7 @@
 
 Status: active
 Read when: starting or continuing a non-trivial LabRat milestone.
-Last reviewed: 2026-09-29
+Last reviewed: 2026-09-30
 
 This file is the reusable execution checklist for Codex work. It should describe how to run a milestone, not what the current product strategy is. Current milestone state belongs in `doc/current-milestone.md`; recent completed work belongs in `doc/PROGRESS.md`.
 
@@ -20,7 +20,11 @@ Read-only Q&A/source trace (2026-09-29):
 - [x] Complete final full regression and record exact counts.
 - [x] Deliver manual test instructions in doc/qa/readonly-qa-trace.md.
 
-Deployment and user manual acceptance are separate follow-ups, not claimed done.
+- [x] Back up production, fast-forward main to 159e50b and verify hosted deployment.
+- [x] Verify active release, exact public assets, health and unauthenticated rejection.
+- [ ] User manual acceptance; see doc/qa/readonly-qa-trace.md.
+
+Release evidence: doc/qa/readonly-qa-deployment.md.
 
 Cross-device pending Ask tasks (2026-09-28):
 

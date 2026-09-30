@@ -1,7 +1,7 @@
 # Research Q&A v1 contract
 
-Status: read-only source-trace revision implemented locally; deployment remains at the prior checkpoint
-Last reviewed: 2026-09-29
+Status: read-only source-trace revision deployed and verified 2026-09-30
+Last reviewed: 2026-09-30
 
 Scope: the confirmed research Q&A plan and acceptance matrix. This contract
 extends read-only evidence, not scientific acceptance or analysis execution.

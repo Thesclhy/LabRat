@@ -1,0 +1,31 @@
+{
+  "expectedCommit": "159e50b9a21ae2ce3c3d37044b43cb0150fc8033",
+  "release": "/opt/labrat/releases/20260930050626-159e50b9a21a",
+  "checks": {
+    "service": "active",
+    "deployedAnswerInterface": "passed: format/link only; not a semantic correctness check",
+    "selectedOnlyToolScope": "passed",
+    "indexSha256": "94a9647bfda2c3acba724328e1f1b30bc711e5a0707ad963173e5a3011ceb023",
+    "localAndPublicHealth": "passed",
+    "assistant-tasksUnauthenticated": 401,
+    "context-documentsUnauthenticated": 401,
+    "research-questionsUnauthenticated": 401
+  },
+  "assets": [
+    {
+      "url": "/LabRat/assets/index-BOpcEF97.js",
+      "sha256": "8de368139f7d34a90f5d1f3ea1fcb8c5f891d1efee4f03d9fc00426b96cbd3f3"
+    },
+    {
+      "url": "/LabRat/assets/index-BSA-MRb4.css",
+      "sha256": "1da150550ce3ee9128fd4cb9342835ab506d1e02ff4b0f031a35582dd0d0fe20"
+    }
+  ],
+  "provider": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-4-5",
+    "configured": true
+  },
+  "status": "passed",
+  "completedAt": "2026-09-30T05:09:39.432Z"
+}

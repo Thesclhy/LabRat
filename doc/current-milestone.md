@@ -1,8 +1,8 @@
 # Current Milestone
 
-Status: Read-only Q&A/source trace complete locally; not yet deployed
+Status: Read-only Q&A/source trace deployed and verified; user manual acceptance pending
 Read when: checking what the next implementation slice should be.
-Last reviewed: 2026-09-29
+Last reviewed: 2026-09-30
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
 
@@ -22,7 +22,10 @@ message with sources, never a claim of absence. Full regression passed: 451 fron
 396 Node backend (9 expected skips), 72 Nest; builds/API/smoke passed. Final scope
 wording was followed by build, PostgreSQL and two real-model selected-source rechecks.
 Manual instructions and all verification details are in doc/qa/readonly-qa-trace.md.
-This revision has not been deployed; the production checkpoint remains 2bf3226.
+User authorized main merge on 2026-09-30. Application 159e50b is deployed at
+/opt/labrat/releases/20260930050626-159e50b9a21a; workflow 36671612147 and live release/asset/health/auth
+checks passed. See doc/qa/readonly-qa-deployment.md. User manual acceptance remains
+pending; refresh and submit a new question to test this version.
 
 ## Manual acceptance follow-up
 
