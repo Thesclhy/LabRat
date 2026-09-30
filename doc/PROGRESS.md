@@ -13,6 +13,18 @@ Keep entries concise, newest first, and include:
 - verification
 - follow-ups or residual risk
 
+## 2026-09-30 — Deploy mean-temperature planning fix
+
+- User authorized deployment. Committed verified changes as c8a5869 and
+  fast-forwarded main from bad89ca; original dirty workspace was excluded.
+- Fresh database/file backup 20260930151934 passed integrity checks. Existing
+  workflow 36735959542 passed hosted tests including PostgreSQL, builds and deploy.
+- Active release /opt/labrat/releases/20260930152442-c8a586963e5f; exact public
+  HTML/JS/CSS, service, health, compiled calculation/direct-draft routing and
+  unauthenticated 401 checks passed. No production research write or model call.
+- Evidence: doc/qa/analysis-series-mean-deployment.md plus live/workflow receipts.
+  User retest remains pending; deployment did not change or approve old Revision 1.
+
 ## 2026-09-30 — Fix mean-temperature plan intent and missing-series clarification
 
 - User reported that a calculation-only Exp17 request produced a chart plan,

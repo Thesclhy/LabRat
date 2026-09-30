@@ -8,6 +8,15 @@ This file is the reusable execution checklist for Codex work. It should describe
 
 ## Long-Task Loop
 
+Mean-temperature fix release (2026-09-30):
+
+- [x] Back up database/files and fast-forward main to c8a5869.
+- [x] Hosted regression including PostgreSQL and deployment completed.
+- [x] Verify exact live assets, compiled routing, health and auth boundaries.
+- [ ] User retest with a new question; leave incorrect old Revision 1 unapproved.
+
+Release evidence: doc/qa/analysis-series-mean-deployment.md.
+
 Read-only Q&A/source trace (2026-09-29):
 
 - [x] Freeze R01–R17 before edits and update the superseding answer contract.

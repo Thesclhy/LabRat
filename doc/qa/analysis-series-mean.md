@@ -1,6 +1,6 @@
 # Mean-temperature planning regression
 
-Status: implemented and verified locally; not merged or deployed
+Status: deployed and verified; user retest pending
 Date: 2026-09-30
 Branch: codex/analysis-series-mean; baseline main bad89ca
 
@@ -60,7 +60,9 @@ Desktop 1280px and narrow 390px real Chrome component harness checks passed:
 clarification label, no review/retry button for missing inputs, normal plan review
 button still works, no page overflow or runtime errors. Screenshots inspected.
 This was a component harness, not a logged-in end-to-end production test. A fresh
-PostgreSQL suite and live deployment were not run for this fix.
+PostgreSQL suite and live deployment were not run during local verification.
+Deployment subsequently passed hosted PostgreSQL and live checks; see
+[deployment evidence](analysis-series-mean-deployment.md).
 
 ## Manual retest after deployment
 

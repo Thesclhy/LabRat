@@ -1,0 +1,233 @@
+{
+  "total_count": 1,
+  "jobs": [
+    {
+      "id": 109957596122,
+      "run_id": 36735959542,
+      "workflow_name": "Deploy to Lightsail",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/Thesclhy/LabRat/actions/runs/36735959542",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS73Mcc8AAAAZmfvD2g",
+      "head_sha": "c8a586963e5ffd6cc6678d985de040456c85d910",
+      "url": "https://api.github.com/repos/Thesclhy/LabRat/actions/jobs/109957596122",
+      "html_url": "https://github.com/Thesclhy/LabRat/actions/runs/36735959542/job/109957596122",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-09-30T15:20:20Z",
+      "started_at": "2026-09-30T15:20:25Z",
+      "completed_at": "2026-09-30T15:25:01Z",
+      "name": "test-build-deploy",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-09-30T15:20:26Z",
+          "completed_at": "2026-09-30T15:20:27Z"
+        },
+        {
+          "name": "Initialize containers",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-09-30T15:20:27Z",
+          "completed_at": "2026-09-30T15:20:43Z"
+        },
+        {
+          "name": "Check out repository",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-09-30T15:20:43Z",
+          "completed_at": "2026-09-30T15:20:44Z"
+        },
+        {
+          "name": "Validate deployment AI provider",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-09-30T15:20:44Z",
+          "completed_at": "2026-09-30T15:20:44Z"
+        },
+        {
+          "name": "Verify deployment scripts",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-09-30T15:20:44Z",
+          "completed_at": "2026-09-30T15:20:44Z"
+        },
+        {
+          "name": "Set up Node",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-09-30T15:20:44Z",
+          "completed_at": "2026-09-30T15:20:58Z"
+        },
+        {
+          "name": "Install frontend dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-09-30T15:20:58Z",
+          "completed_at": "2026-09-30T15:21:03Z"
+        },
+        {
+          "name": "Install backend dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-09-30T15:21:03Z",
+          "completed_at": "2026-09-30T15:21:10Z"
+        },
+        {
+          "name": "Check generated API v1 client types",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-09-30T15:21:10Z",
+          "completed_at": "2026-09-30T15:21:11Z"
+        },
+        {
+          "name": "Run frontend tests",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10,
+          "started_at": "2026-09-30T15:21:11Z",
+          "completed_at": "2026-09-30T15:21:57Z"
+        },
+        {
+          "name": "Install fonts for generated OCR fixtures",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-09-30T15:21:57Z",
+          "completed_at": "2026-09-30T15:22:13Z"
+        },
+        {
+          "name": "Run backend tests",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-09-30T15:22:13Z",
+          "completed_at": "2026-09-30T15:22:46Z"
+        },
+        {
+          "name": "Run Postgres integration tests",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-09-30T15:22:46Z",
+          "completed_at": "2026-09-30T15:24:04Z"
+        },
+        {
+          "name": "Build NestJS backend",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14,
+          "started_at": "2026-09-30T15:24:04Z",
+          "completed_at": "2026-09-30T15:24:07Z"
+        },
+        {
+          "name": "Smoke production NestJS entry",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-09-30T15:24:07Z",
+          "completed_at": "2026-09-30T15:24:09Z"
+        },
+        {
+          "name": "Build frontend",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16,
+          "started_at": "2026-09-30T15:24:09Z",
+          "completed_at": "2026-09-30T15:24:37Z"
+        },
+        {
+          "name": "Create release archive",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17,
+          "started_at": "2026-09-30T15:24:37Z",
+          "completed_at": "2026-09-30T15:24:38Z"
+        },
+        {
+          "name": "Prepare SSH",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 18,
+          "started_at": "2026-09-30T15:24:38Z",
+          "completed_at": "2026-09-30T15:24:39Z"
+        },
+        {
+          "name": "Upload release",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 19,
+          "started_at": "2026-09-30T15:24:39Z",
+          "completed_at": "2026-09-30T15:24:41Z"
+        },
+        {
+          "name": "Deploy release",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 20,
+          "started_at": "2026-09-30T15:24:41Z",
+          "completed_at": "2026-09-30T15:24:57Z"
+        },
+        {
+          "name": "Report deployed commit",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 21,
+          "started_at": "2026-09-30T15:24:57Z",
+          "completed_at": "2026-09-30T15:24:57Z"
+        },
+        {
+          "name": "Post Set up Node",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 40,
+          "started_at": "2026-09-30T15:24:57Z",
+          "completed_at": "2026-09-30T15:24:57Z"
+        },
+        {
+          "name": "Post Check out repository",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 41,
+          "started_at": "2026-09-30T15:24:57Z",
+          "completed_at": "2026-09-30T15:24:57Z"
+        },
+        {
+          "name": "Stop containers",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 42,
+          "started_at": "2026-09-30T15:24:57Z",
+          "completed_at": "2026-09-30T15:24:57Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 43,
+          "started_at": "2026-09-30T15:24:57Z",
+          "completed_at": "2026-09-30T15:24:57Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/Thesclhy/LabRat/check-runs/109957596122",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000000092,
+      "runner_name": "GitHub Actions 1000000092",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    }
+  ]
+}

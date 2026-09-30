@@ -12,8 +12,10 @@ This file tracks the active execution state. Keep `doc/plan.md` as the short roa
 by the user on codex/analysis-series-mean, reusing the isolated checkout at main
 bad89ca. No calculation-only result type is added. Pure calculations clarify
 output; missing series can return a non-executable clarification. Full regression, both real providers and desktop/narrow card checks passed.
-See doc/qa/analysis-series-mean.md for counts, limits and manual retest. The fix
-is local and not deployed; production remains 159e50b.
+See doc/qa/analysis-series-mean.md for counts, limits and manual retest. User
+authorized deployment on 2026-09-30. Application c8a5869 is deployed; workflow
+36735959542 and live release/asset/health/routing/auth checks passed. See
+doc/qa/analysis-series-mean-deployment.md. User retest remains pending.
 
 ## Active goal: unified read-only Q&A and source trace
 

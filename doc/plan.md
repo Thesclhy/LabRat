@@ -14,6 +14,10 @@ Use doc/qa/readonly-qa-trace.md for fixed acceptance; preserve existing review,
 permissions, selected-source scope and cross-device history. Application 159e50b is deployed with hosted/live checks passed on 2026-09-30.
 See doc/qa/readonly-qa-deployment.md; user manual acceptance remains pending.
 
+Mean-temperature planning follow-up is deployed as application c8a5869.
+Pure calculations clarify the supported output; absent series produce an input
+clarification without an executable plan. See doc/qa/analysis-series-mean-deployment.md.
+
 ## Current Focus
 
 Server-backed pending Ask tasks across devices are deployed at application
