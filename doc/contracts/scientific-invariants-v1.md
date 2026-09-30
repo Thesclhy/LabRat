@@ -49,10 +49,10 @@ approval at a later boundary.
 - Source selections must stay inside active accepted regions. Experiment
   selections must resolve through frozen active snapshot heads.
 
-Research Q&A additionally reads bounded uploaded document text and exact raw
-workbook cells immediately after indexing. These are distinct `document` and
-`workbook_raw` evidence, never accepted scientific values or legal analysis
-selections. Project background is a frozen user statement. References retain
+Research Q&A reads bounded uploaded PDF/Word/TXT after parsing. New Excel reads
+require confirmed regions or accepted snapshots; historical workbook_raw references
+remain readable. These source statements are never automatically accepted scientific
+values or legal analysis selections. Project background is a frozen user statement. References retain
 content/processing versions, page/paragraph/line/cell locations and uncertainty.
 An answer does not confirm meanings, update profiles, calculate new values or
 publish anything. New scientific calculations still require the analysis review
@@ -73,6 +73,13 @@ a v1 compatibility requirement. Any later compaction must retain values,
 types, formula/display distinctions, ordering and exact cell addresses.
 
 ## Current analysis review
+
+A scalar temperature is not a within-experiment temperature series; a genuine
+confirmed series may contain one point. Plans must establish the requested
+experiment, quantity and series layout from evidence, or ask for clarification.
+Planning describes future computation without announcing derived results.
+Standalone calculation requests must not silently become a chart or data write.
+The current supported outputs remain chart and experiment_browser.
 
 The current plan is the maximum numeric revision, independent of API list order.
 For that plan the current run follows the server's append-ordered analysisRunIds;

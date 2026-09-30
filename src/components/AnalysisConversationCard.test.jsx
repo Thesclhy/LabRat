@@ -113,3 +113,10 @@ describe("AnalysisConversationCard", () => {
     expect(screen.getByText("Confirm a workbook region or publish accepted experiment data before retrying.")).toBeTruthy();
   });
 });
+
+it("asks for inputs without presenting review or blind retry controls", () => {
+  render(<AnalysisConversationCard thread={{ id: "thread_missing", originalRequest: "Plot Exp17 mean temperature", status: "planning" }} clarificationRequired evidenceBlocked modelAvailable acceptedDataAvailable onRetry={vi.fn()} onOpen={vi.fn()} />);
+  expect(screen.getByText("More information needed")).toBeTruthy();
+  expect(screen.getByText("Clarify the inputs in Ask before preparing a new plan.")).toBeTruthy();
+  expect(screen.queryByRole("button")).toBeNull();
+});

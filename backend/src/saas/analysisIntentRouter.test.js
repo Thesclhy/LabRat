@@ -194,3 +194,25 @@ test("invalid provider output becomes clarification instead of a Browser action"
   assert.equal(result.disposition, "clarification");
   assert.equal(result.actionType, null);
 });
+
+test("standalone mean requests clarify output on every surface instead of inventing charts or publication", async () => {
+  for (const message of ["Calculate the mean of Exp17's temperature series.", "计算 Exp17 温度序列的平均值。", "Compare the calculated means of Exp17 and Exp17B."]) {
+    for (const activeSurface of ["project", "experiment_browser", "manuscript_chart"]) {
+      const route = await routeAnalysisIntent({ message, selectedContext: { activeSurface } });
+      assert.equal(route.disposition, "clarification");
+      assert.equal(route.intent, "clarification");
+      assert.ok(route.clarification);
+    }
+  }
+});
+
+test("explicit mean chart and publication requests still use reviewed analysis", async () => {
+  for (const [message, intent] of [
+    ["Calculate the mean of Exp17's temperature series and plot it.", "create_analysis_chart"],
+    ["Calculate the mean and publish a new temperature field in Experiment Browser.", "publish_experiment_data"],
+  ]) {
+    const route = await routeAnalysisIntent({ message });
+    assert.equal(route.intent, intent);
+    assert.equal(route.disposition, "analysis_thread");
+  }
+});

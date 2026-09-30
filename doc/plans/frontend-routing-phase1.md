@@ -47,4 +47,6 @@ References sibling-key fix. Navigation must not create scientific records.
 Record exact executed checks and limitations; skipped checks are not passes.
 Full verification is `npm run codex:verify` (the submitted goal truncated the
 command and route parameter placeholders; the preceding agreed plan supplies
-their intended spellings). Delivery stays local, without push/merge/deployment.
+their intended spellings). Delivery stays local, without remote main publication or deployment. The
+2026-09-30 follow-up authorizes integrating current main into this feature
+branch and resolving conflicts; see the acceptance report for verification.

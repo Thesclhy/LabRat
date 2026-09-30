@@ -13,6 +13,7 @@ export function AnalysisConversationCard({
   run = null,
   result = null,
   evidenceBlocked = false,
+  clarificationRequired = false,
   modelAvailable = false,
   acceptedDataAvailable = false,
   retrying = false,
@@ -23,14 +24,14 @@ export function AnalysisConversationCard({
   const reviewable = Boolean(revision?.id);
   const resultReady = run?.status === "awaiting_result_review" && result?.status === "awaiting_review";
   const actionLabel = resultReady ? "Review result" : "Review analysis plan";
-  const canRetry = evidenceBlocked && !reviewable && typeof onRetry === "function";
+  const canRetry = evidenceBlocked && !clarificationRequired && !reviewable && typeof onRetry === "function";
   return (
     <article className={`analysis-conversation-card${reviewable ? " is-reviewable" : ""}`}>
       <header>
         <strong>
           {reviewable ? `Analysis plan revision ${revision.revision}` : "Analysis planning"}
         </strong>
-        <span>{resultReady ? "Result ready" : statusLabel(revision?.status || thread.status)}</span>
+        <span>{resultReady ? "Result ready" : clarificationRequired && !reviewable ? "More information needed" : statusLabel(revision?.status || thread.status)}</span>
       </header>
       <p>{revision?.requestSummary || thread.originalRequest}</p>
       <small>
@@ -38,6 +39,8 @@ export function AnalysisConversationCard({
           ? `${result.rowCount || 0} point(s), ${result.traceCount || 0} series`
           : reviewable
           ? `${revision.sourceRectangles?.length || 0} source range(s)`
+          : clarificationRequired
+          ? "Clarify the inputs in Ask before preparing a new plan."
           : "A reviewable plan could not be drafted yet."}
       </small>
       {reviewable && (

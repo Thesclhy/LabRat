@@ -1,6 +1,36 @@
 # Frontend routing phase one acceptance
 
-Date: 2026-09-28. Status: complete locally; not pushed, merged or deployed.
+Date: 2026-09-28; integration follow-up: 2026-09-30.
+Status: phase one and current-main integration verified locally; not published.
+
+## Integration with current main
+
+On 2026-09-30, saved phase one as local commit bcdae22 and integrated
+origin/main 933c5fc on codex/frontend-routing-phase1. Conflicts were limited
+to PROGRESS/current-milestone: both histories are retained. Application code
+merged automatically, including main's analysis clarification prop and all
+source-trace changes. All 64 files changed only by main match its contents;
+the App difference from the routing checkpoint is exactly main's clarification
+prop. No additional application change was needed to resolve the conflicts.
+
+- Preflight and full codex:verify passed: 479 frontend tests (including 26 routing
+  and 52 manuscript history cases), 402 legacy-backend tests, 74 Nest tests. Nine
+  legacy tests retain their existing skips. Generated API, both builds and
+  production-entry smoke pass; the existing large-bundle warning remains.
+- All 14 real Chromium/HTTP/PostgreSQL scenarios passed against the integrated
+  production build, including history, deep reload, login return, draft decisions,
+  save failure, read-only access and actual revocation. Browser errors are empty;
+  expected network rejections remain recorded. Desktop/390px prompts and workbook
+  review screenshots were visually inspected. Test services were closed.
+- Receipt: [2026-09-30 integration browser run](frontend-routing-main-integration-browser.json).
+  The original 2026-09-28 receipt is retained separately. Local logs are
+  routing-main-verify.log and routing-main-browser.log.
+- Git diff checks pass and there are no unresolved conflicts. No new provider
+  or production checks were run; main's provider evidence remains its own record.
+
+No remote main publication, push or deployment is included.
+
+The sections below record the original 2026-09-28 acceptance.
 
 ## Baseline and implementation
 

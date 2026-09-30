@@ -41,7 +41,7 @@ export function ReferenceMentionComposer({ projectId, value, onChange, reference
         <span>@{ref.label}</span><button type="button" disabled={disabled} aria-label={`Remove ${ref.label}`} onClick={() => onReferencesChange(references.filter((item) => item.versionId !== ref.versionId))}>×</button>
       </span>)}
       {references.length > 2 && <button type="button" className="ask-more-references" onClick={() => setShowAll(!showAll)}>{showAll ? "Show fewer" : `+${references.length - 2} references`}</button>}
-      <small>{/(?:仅|只)(?:根据|使用|参考|用)|\bonly\s+(?:use|using|from|based on)\b/i.test(value) ? "Only selected references for this question." : "Selected references first; other project evidence when needed."}</small>
+      <small>{/(?:仅|只)(?:根据|使用|参考|用)|\bonly\s+(?:use|using|from|based on)\b|\bbased\s+(?:only|solely)\s+on\b/i.test(value) ? "Only selected references for this question." : "Selected references first; other project evidence when needed."}</small>
     </div>}
     {attachments}
     <textarea ref={inputRef} value={value} maxLength={4000} disabled={disabled} aria-label="Ask LabRat"

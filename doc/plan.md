@@ -2,16 +2,30 @@
 
 Status: active
 Read when: deciding what LabRat should build next.
-Last reviewed: 2026-09-28
+Last reviewed: 2026-09-30
 
 This is the short active plan. Current execution status lives in `doc/current-milestone.md`; detailed implementation plans live under `doc/plans/`.
 
+## Active Q&A simplification
+
+Deployed: doc/plans/readonly-qa-trace.md (approved 2026-09-29), model-selected
+read tools and durable source trace, removing prose-content acceptance gates.
+Use doc/qa/readonly-qa-trace.md for fixed acceptance; preserve existing review,
+permissions, selected-source scope and cross-device history. Application 159e50b is deployed with hosted/live checks passed on 2026-09-30.
+See doc/qa/readonly-qa-deployment.md; user manual acceptance remains pending.
+
+Mean-temperature planning follow-up is deployed as application c8a5869.
+Pure calculations clarify the supported output; absent series produce an input
+clarification without an executable plan. See doc/qa/analysis-series-mean-deployment.md.
+
 ## Current Focus
 
-The active local goal is [frontend routing phase one](plans/frontend-routing-phase1.md):
-addressable login/project lists/project tabs, browser history and protected
-manuscript drafts. Delivery is local only; phase-two review/entity routes and
-deployment are outside scope. Prior production milestones below are preserved.
+[Frontend routing phase one](plans/frontend-routing-phase1.md) is complete
+locally: addressable login/project lists/project tabs, browser history and
+protected manuscript drafts. The 2026-09-30 follow-up integrated main 933c5fc
+and passed full regression and browser acceptance. Delivery is local only;
+phase-two review/entity routes and deployment are outside scope. Prior
+production milestones below are preserved.
 
 Server-backed pending Ask tasks across devices are deployed at application
 commit `e780cff`, using `doc/plans/cross-device-ask-tasks.md`. Migration 037 stores

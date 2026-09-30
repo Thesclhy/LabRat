@@ -125,7 +125,7 @@ export class ResearchQuestionsRepository {
       await tx.insert(answers).values({ id: makeId("answer"), runId: request.runId, projectId: request.projectId,
         createdBy: auth.user.id, answer, evidence, trace, usage });
       await tx.update(requests).set({ status: "completed", leaseToken: null, leaseExpiresAt: null, usage, updatedAt: now() }).where(eq(requests.runId, request.runId));
-      await tx.update(agentRuns).set({ status: "completed", usage, toolTrace: trace, visibleSteps: [{ title: "Completed cited project question", status: answer.status }],
+      await tx.update(agentRuns).set({ status: "completed", usage, toolTrace: trace, visibleSteps: [{ title: "Completed read-only project question", status: answer.status }],
         updatedAt: now() }).where(eq(agentRuns.id, request.runId));
     });
   }

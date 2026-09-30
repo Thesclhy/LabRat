@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { SourcesRead } from "./SourcesRead.jsx";
 import * as api from "../data/researchQaApi.js";
 import { ResearchEvidenceViewer, evidenceLocation } from "./ResearchEvidenceViewer.jsx";
 
@@ -34,21 +35,28 @@ export function CitedAnswerCard({ projectId, runId, canEdit, onAnalysis, onSettl
   return <div className="ask-cited-answer">
     {error && <div role="alert"><p>{error}</p><button type="button" onClick={() => setRefresh((n) => n + 1)}>Reload answer</button></div>}
     {!result && !error && <p role="status">Loading answer…</p>}
-    {running && <div className="ask-task" role="status"><span>{result.request.status === "queued" ? "Question saved and waiting to start." : "Reading evidence and checking citations…"}</span>{result.request.status === "queued" && <button type="button" onClick={() => action(api.retryResearchQuestion)}>Start saved question</button>}<button type="button" onClick={() => action(api.cancelResearchQuestion)}>Cancel</button></div>}
+    {running && <div className="ask-task">
+      <p className="ask-task-status" role="status">{result.request.status === "queued" ? "Question saved and waiting to start." : "Reading sources…"}</p>
+      <div className="ask-task-actions">{result.request.status === "queued" && <button type="button" onClick={() => action(api.retryResearchQuestion)}>Start saved question</button>}<button type="button" onClick={() => action(api.cancelResearchQuestion)}>Cancel</button></div>
+    </div>}
     {result?.request.status === "cancelled" && <p>Question cancelled.</p>}
-    {["failed", "interrupted"].includes(result?.request.status) && <div className="ask-task"><p role="alert">The answer was not completed. Retry when the service is available.</p><button type="button" onClick={() => action(api.retryResearchQuestion)}>Retry question</button><details><summary>Error details</summary>{result.request.failureCode || "Interrupted"}</details></div>}
+    {["failed", "interrupted"].includes(result?.request.status) && <div className="ask-task"><p role="alert">{result.request.failureCode === "qa_citation_invalid"
+      ? "This earlier answer failed a citation check. Try the question again."
+      : "The answer was not completed. Please try again."}</p><div className="ask-task-actions"><button type="button" onClick={() => action(api.retryResearchQuestion)}>Retry question</button></div><details><summary>Error details</summary>{result.request.failureCode || "Interrupted"}</details></div>}
     {answer?.claims.map((claim, i) => <div key={i} className="qa-claim"><p>{claim.text}</p><div className="qa-citations">{claim.citations.map((citation, n) => {
       const evidence = result.artifact.evidence.find((item) => item.id === citation.evidenceId);
+      if (!evidence) return null;
       return <button type="button" key={n} title={`${evidence?.label || "Source"} · ${evidenceLocation(evidence)}`} onClick={() => setSource({ runId, evidenceId: citation.evidenceId })}>{evidence?.label || "Source"} · {evidenceLocation(evidence)}</button>;
     })}</div></div>)}
     {answer?.status === "needs_analysis" && <div className="ask-task"><p>This needs a reviewed analysis plan.</p>{canEdit
       ? <button type="button" onClick={() => onAnalysis(result.request.question)}>Prepare analysis plan</button>
       : <small>An editor can prepare the plan. Existing review permissions still apply.</small>}</div>}
     {answer?.status === "out_of_scope" && <p>This request is outside the current evidence Q&amp;A scope.</p>}
-    {answer?.status === "insufficient_evidence" && <p>The available sources do not support a complete answer.</p>}
+    {answer?.status === "insufficient_evidence" && <p>{answer.route === "read_limit" ? "The question could not be completed within the reading limit." : "The available sources do not support a complete answer."}</p>}
     {answer?.missingEvidence?.length > 0 && <ul className="ask-missing">{answer.missingEvidence.map((item, i) => <li key={i}>{item}</li>)}</ul>}
     {answer?.limitations?.length > 0 && <details><summary>Coverage and limitations</summary><ul>{answer.limitations.map((item, i) => <li key={i}>{item}</li>)}</ul></details>}
-    {answer && <small className="ask-answer-note">Citations retain the source versions used for this answer.</small>}
+    {answer && <SourcesRead artifact={result.artifact} onOpen={(evidenceId) => setSource({ runId, evidenceId })} />}
+    {answer && <small className="ask-answer-note">Source links open the versions read for this answer.</small>}
     {source && <ResearchEvidenceViewer projectId={projectId} selection={source} onClose={() => setSource(null)} />}
   </div>;
 }

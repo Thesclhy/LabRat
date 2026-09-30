@@ -1,10 +1,21 @@
 # Research Q&A v1 contract
 
-Status: Q&A baseline and unified Ask extension deployed; verified 2026-09-28
-Last reviewed: 2026-09-28
+Status: read-only source-trace revision deployed and verified 2026-09-30
+Last reviewed: 2026-09-30
 
 Scope: the confirmed research Q&A plan and acceptance matrix. This contract
 extends read-only evidence, not scientific acceptance or analysis execution.
+
+## Read-only answer interface (2026-09-29)
+
+The active goal in ../plans/readonly-qa-trace.md supersedes older answer acceptance
+rules in the original planning and evaluation records: no generated-quote matching, prose number/unit extraction or required
+numericBindings. Check answer structure and references to actually returned evidence
+IDs only, with at most one structural repair. Omit unresolved links and explain the
+link limitation; never label prose verified. Source/tool authorization, stored values,
+review boundaries and resource budgets remain enforced. Persist all successful read
+windows, including uncited ones, and bounded inputs/output identities in the tool
+trace; distinguish discovery from reading. Historical artifacts are not rewritten.
 
 ## Ownership and versions
 
@@ -84,7 +95,9 @@ retrieval. Default sourceScope=project prioritizes selected versions while allow
 other authorized evidence; a selected document's latest version never substitutes
 for its pinned version. sourceScope=selected restricts discovery and tools to
 selected document versions. Explicit only-use/仅根据 requests with mentions infer
-this scope. Question context stores the resolved identities in the personal
+this scope, including English "Based only/solely on this document" in immediate
+questions and continued AssistantTasks. The composer displays the same scope.
+Question context stores the resolved identities in the personal
 AgentRun selectedContext JSON, not in mutable document names. At most six recent
 messages (1,000 characters each) and a removable experiment label are untrusted
 conversational context; they confer neither citation support nor permissions.
@@ -135,44 +148,61 @@ and unreadable parts are explicit. A question never triggers OCR itself.
 Document passage reads also include immediately adjacent passages when their
 combined text fits the 4,000-character window and tool-byte limit. Each has its
 own evidence ID and original locator; unread neighbor IDs remain available for
-explicit continuation. Citation repair reuses the already-read evidence with
-tools disabled, so correcting a binding does not restart discovery or increase
-the shared budget. Browser UTF-8 upload filenames retain their original Unicode
-text; file bytes and existing immutable records are unchanged.
+explicit continuation. One service-owned format/link repair may reuse the already
+read evidence with tools disabled; it cannot restart retrieval or grow the budget.
+If the token, request or tool-reading budget is exhausted, do not restart the model
+or enlarge the limits. After rechecking current authorization and cancellation,
+save an insufficient_evidence artifact with route=read_limit, no generated claims,
+the successful read windows and trace, and an explicit incomplete-reading message.
+This is not evidence that the requested fact is absent. Usage retains the original
+limit failure. Cancellation, timeout, provider outages and revoked access remain
+failures/cancellations, not completed partial answers. Narrowing the question starts
+a new request; it does not silently retry the exhausted run.
+Browser UTF-8 upload filenames retain their original Unicode text.
 
-Each non-review question starts with one bounded discovery query using its text.
-The same search tool covers current accepted field names as discovery targets;
-numeric values still require exact experiment resolution and a pinned read.
-Short Latin abbreviations match whole tokens so, for example, Co does not match
-control. Search misses establish a retrieval gap, never universal absence.
-After precise topic and synonym searches find no relevant support, the model
-should return scoped insufficient evidence; an empty-query inventory must not
-be used to exhaust every source in an attempt to prove universal absence.
-This initial read counts toward the session's 24-call cap and visible tool trace;
-provider tool-call statistics separately count model-issued calls.
-Quoted structured JSON fragments must literally occur in the read data. Exact
-source timestamps, verified locator/count phrases and verbatim quoted formulas
-are distinguished from scientific numeric assertions; they cannot authorize a
-new calculated value or changed unit. Empty continuation arrays do not claim
-that more evidence remains. Reasoning is enabled for initial evidence selection
-within the same frozen budget; reasoning text is not persisted. The final
-tool-free repair disables reasoning to reserve its unchanged output allowance
-for the structured answer, using the supplied evidence and exact repair hints.
-Q&A disables the gateway's generic automatic format retry. Empty, truncated or
-invalid structured output and invalid citations share one service-owned repair
-using the frozen evidence already read, with no tools. Other gateway callers
-retain their existing retry behavior. Repair hints identify matching stored
-numeric paths without automatically assigning scientific meaning or changing
-bindings. Verified field identifiers and quoted display names are metadata;
-unverified identifiers, wrong locations and new measurements remain invalid.
-The model adapter compacts an exactly repeated evidence window to references to
-its earlier result. The authorized reader still executes on every call, and a
-changed window is returned in full. This does not cache authorization, bypass
-archive/revocation checks, or change the registry's immutable evidence. Prompt
-instructions are kept concise to leave room for evidence under the same caps.
-An application version is checked against stored version metadata; a literal
-author-written revision label is checked against the cited passage text. Neither
-kind of version number can authorize a scientific measurement with that number.
+The model chooses the first tool from the question and selected context; there is
+no unconditional document search. Existing calculation/diagnosis routing remains
+as an early handoff, and the tool set has no execution or publication capability.
+Search covers uploaded passages, confirmed regions and accepted field names, not
+unconfirmed workbook indexes. Selected-only questions expose only document search/read
+tools, in addition to enforcing the same scope server-side. Exact experiment names/aliases must resolve before
+a pinned snapshot read. Short abbreviations match whole tokens. Search misses
+describe coverage gaps; they do not prove universal absence.
+
+The answer interface retains status, claims (text plus optional links in a citations
+array) and missingEvidence. Citations reference only evidence IDs returned in this
+run. Legacy quote/numericBindings fields are optional at the boundary for existing
+adapters, have no content-checking role, and are omitted from newly saved answers.
+No rule extracts prose numbers, verifies paraphrases, compares units in prose,
+or classifies protocol identifiers. This interface does not establish correctness.
+
+Malformed/empty/truncated output or unknown reference IDs share at most one repair.
+After repair, a malformed structure fails as qa_output_invalid (or the provider's
+format error); a well-formed answer with unresolved IDs is saved without those
+links and with an explicit link limitation. No qa_citation_invalid content gate
+is used for new answers. Existing failed records keep their historical code.
+Unknown links are also suppressed by the renderer, never converted to arbitrary URLs.
+
+All successfully returned read windows, including adjacent passages and uncited
+reads, are frozen in AnswerArtifact.evidence; bodies are omitted from the question
+summary response and fetched through the authorized evidence endpoint. The existing
+JSON storage suffices, with no new migration. New answers carry provenanceVersion=2.
+The bounded trace contains sequence, tool, phase (discovery/read), validated input,
+status and elapsedMs. Successful reads identify evidenceIds. Discovery records
+returnedCount, bounded matching identities, coverage and nextCursor, with no claim
+that the matched sources were fully read. Failed calls cannot add read evidence;
+invalid arguments are not copied to trace. No credentials or hidden reasoning are logged.
+
+Sources read groups evidence by immutable document version, workbook source/index
+or experiment snapshot; individual window links open the original saved evidence.
+The list is collapsible and remains available after refresh or on another device.
+Old artifacts lacking provenanceVersion=2 display Saved sources and explain that
+their cited-only record is incomplete; neither old prose nor history is rewritten.
+OCR/coverage limitations remain visible. Link integrity is never labeled verified facts.
+
+The model adapter compacts identical repeated windows only after the authorized
+reader rechecks access; changed windows are returned in full. Reasoning remains
+transient and budgeted; the final format/link repair disables it.
 
 ## Persistence and endpoints
 
@@ -221,8 +251,7 @@ Existing immutable indexes and accepted results are not rewritten by this fix.
 ## Provider schema compatibility
 
 Anthropic's wire schema omits unsupported numeric/string/array limits and keeps
-their values in field descriptions. The gateway validates returned data against
-the unchanged original schema, before service-owned citation repair and evidence
-validation. The eight-claim cap, quote lengths, per-claim citation/binding caps,
-units, source authorization and shared resource budgets remain enforced by LabRat.
-This transport adjustment does not select a provider or weaken acceptance rules.
+them in field descriptions. The gateway validates the original output shape before
+the service-owned format/link check. Claim/link counts, text lengths and shared
+resource budgets remain enforced; these are interface limits, not semantic checks.
+Provider selection and all other gateway callers remain unchanged.

@@ -1,0 +1,5182 @@
+{
+  "startedAt": "2026-09-30T00:18:40.360Z",
+  "material": "synthetic only",
+  "provider": {
+    "provider": "deepseek",
+    "model": "deepseek-v4-pro",
+    "configured": true
+  },
+  "completed": true,
+  "records": [
+    {
+      "id": "R01",
+      "question": "Based only on this document, what are the temperature, duration, and applicable sample types for RQ-001?",
+      "expected": "80 C; 30 minutes; dry only, wet excluded; selected version (not same-name 99 C)",
+      "request": {
+        "runId": "agent_run_d3429c47289e4ec8922006b6",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "readonly-R01-1790727530068",
+        "question": "Based only on this document, what are the temperature, duration, and applicable sample types for RQ-001?",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 6046,
+          "knownCost": null,
+          "toolCalls": 3,
+          "toolRounds": 2,
+          "inputTokens": 9830,
+          "lastActiveAt": 1790727536130,
+          "outputTokens": 463,
+          "reservedTokens": 0,
+          "visibleToolCalls": 3,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-30T00:18:50.078Z",
+        "updatedAt": "2026-09-30T00:18:56.134Z",
+        "referenceDocuments": [
+          {
+            "label": "Q01-scope.txt",
+            "versionId": "document_version_41c7c0741bb14509b77e7cc7",
+            "documentId": "context_doc_27bfc7397cf5475eab908c80",
+            "versionNumber": 1
+          }
+        ],
+        "sourceScope": "selected"
+      },
+      "artifact": {
+        "id": "answer_689a3c7c23a74b42aa65b16c",
+        "runId": "agent_run_d3429c47289e4ec8922006b6",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "According to Q01-scope.txt, RQ-001 specifies a temperature of 80 C and a duration of 30 minutes.",
+              "citations": [
+                {
+                  "evidenceId": "evidence_b2d4b5e0971bc54ef41e1598"
+                }
+              ]
+            },
+            {
+              "text": "The applicable sample type is dry sample only; wet samples are excluded.",
+              "citations": [
+                {
+                  "evidenceId": "evidence_b2d4b5e0971bc54ef41e1598"
+                }
+              ]
+            }
+          ],
+          "status": "answered",
+          "limitations": [],
+          "missingEvidence": [],
+          "provenanceVersion": 2
+        },
+        "evidence": [
+          {
+            "id": "evidence_b2d4b5e0971bc54ef41e1598",
+            "kind": "document_passage",
+            "label": "Q01-scope.txt",
+            "locator": {
+              "kind": "text",
+              "charEnd": 165,
+              "lineEnd": 6,
+              "charStart": 0,
+              "lineStart": 1
+            },
+            "version": {
+              "versionId": "document_version_41c7c0741bb14509b77e7cc7",
+              "documentId": "context_doc_27bfc7397cf5475eab908c80",
+              "contentHash": "0e64e7445dcbac709ddcfbbeb62497a00e662a624476a3eb69a3efa7bee1a068",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 1,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "part": "text",
+                  "lines": 6,
+                  "status": "ready"
+                },
+                "statusCounts": {
+                  "ready": 1
+                },
+                "warningParts": 0,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "ready",
+              "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+              "limitations": []
+            },
+            "warnings": []
+          }
+        ],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "input": {
+              "query": "RQ-001"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [
+              {
+                "kind": "document",
+                "label": "Q01-scope.txt",
+                "target": {
+                  "status": "ready",
+                  "locator": {
+                    "kind": "text",
+                    "charEnd": 165,
+                    "lineEnd": 6,
+                    "charStart": 0,
+                    "lineStart": 1
+                  },
+                  "ordinal": 0,
+                  "snippet": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n",
+                  "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+                  "versionId": "document_version_41c7c0741bb14509b77e7cc7",
+                  "documentId": "context_doc_27bfc7397cf5475eab908c80"
+                }
+              }
+            ],
+            "coverage": {
+              "note": "Search snippets are not complete evidence. Empty results mean no keyword match, including accepted field names; report insufficient evidence within this search coverage, not universal absence.",
+              "scope": "current_project_sources",
+              "complete": true,
+              "includes": [
+                "selected_document_versions"
+              ],
+              "returned": 1,
+              "candidateWindow": 1,
+              "readForCitation": false
+            },
+            "sequence": 1,
+            "elapsedMs": 24,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "returnedCount": 1
+          },
+          {
+            "tool": "search_project_documents",
+            "input": {
+              "query": "Q01-scope"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [
+              {
+                "kind": "document",
+                "label": "Q01-scope.txt",
+                "target": {
+                  "status": "ready",
+                  "locator": {
+                    "kind": "text",
+                    "charEnd": 165,
+                    "lineEnd": 6,
+                    "charStart": 0,
+                    "lineStart": 1
+                  },
+                  "ordinal": 0,
+                  "snippet": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n",
+                  "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+                  "versionId": "document_version_41c7c0741bb14509b77e7cc7",
+                  "documentId": "context_doc_27bfc7397cf5475eab908c80"
+                }
+              }
+            ],
+            "coverage": {
+              "note": "Search snippets are not complete evidence. Empty results mean no keyword match, including accepted field names; report insufficient evidence within this search coverage, not universal absence.",
+              "scope": "current_project_sources",
+              "complete": true,
+              "includes": [
+                "selected_document_versions"
+              ],
+              "returned": 1,
+              "candidateWindow": 1,
+              "readForCitation": false
+            },
+            "sequence": 2,
+            "elapsedMs": 10,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "returnedCount": 1
+          },
+          {
+            "tool": "read_document_passage",
+            "input": {
+              "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+              "versionId": "document_version_41c7c0741bb14509b77e7cc7"
+            },
+            "phase": "read",
+            "status": "ok",
+            "sequence": 3,
+            "elapsedMs": 14,
+            "evidenceIds": [
+              "evidence_b2d4b5e0971bc54ef41e1598"
+            ]
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 6046,
+          "knownCost": null,
+          "toolCalls": 3,
+          "toolRounds": 2,
+          "inputTokens": 9830,
+          "lastActiveAt": 1790727536130,
+          "outputTokens": 463,
+          "reservedTokens": 0,
+          "visibleToolCalls": 3,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-29 20:18:56.130479-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_b2d4b5e0971bc54ef41e1598",
+          "data": {
+            "text": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n"
+          },
+          "kind": "document_passage",
+          "label": "Q01-scope.txt",
+          "locator": {
+            "kind": "text",
+            "charEnd": 165,
+            "lineEnd": 6,
+            "charStart": 0,
+            "lineStart": 1
+          },
+          "version": {
+            "versionId": "document_version_41c7c0741bb14509b77e7cc7",
+            "documentId": "context_doc_27bfc7397cf5475eab908c80",
+            "contentHash": "0e64e7445dcbac709ddcfbbeb62497a00e662a624476a3eb69a3efa7bee1a068",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 1,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "part": "text",
+                "lines": 6,
+                "status": "ready"
+              },
+              "statusCounts": {
+                "ready": 1
+              },
+              "warningParts": 0,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "ready",
+            "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+            "limitations": []
+          },
+          "warnings": []
+        }
+      ],
+      "elapsedMs": 6095,
+      "semanticReview": "pending"
+    },
+    {
+      "id": "R02",
+      "question": "仅根据这份资料，RQ-001 对湿样品规定的温度是多少？",
+      "expected": "wet samples excluded; no applicable wet temperature",
+      "request": {
+        "runId": "agent_run_7c9d2e8390004636938342ab",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "readonly-R02-1790727536164",
+        "question": "仅根据这份资料，RQ-001 对湿样品规定的温度是多少？",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 4,
+          "elapsedMs": 8387,
+          "knownCost": null,
+          "toolCalls": 4,
+          "toolRounds": 3,
+          "inputTokens": 13754,
+          "lastActiveAt": 1790727544567,
+          "outputTokens": 577,
+          "reservedTokens": 0,
+          "visibleToolCalls": 4,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-30T00:18:56.174Z",
+        "updatedAt": "2026-09-30T00:19:04.570Z",
+        "referenceDocuments": [
+          {
+            "label": "Q01-scope.txt",
+            "versionId": "document_version_41c7c0741bb14509b77e7cc7",
+            "documentId": "context_doc_27bfc7397cf5475eab908c80",
+            "versionNumber": 1
+          }
+        ],
+        "sourceScope": "selected"
+      },
+      "artifact": {
+        "id": "answer_bb9478435649479bb22148ad",
+        "runId": "agent_run_7c9d2e8390004636938342ab",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "根据 Q01-scope.txt，RQ-001 仅适用于干样品，湿样品被排除，因此该资料没有为湿样品规定温度。",
+              "citations": [
+                {
+                  "evidenceId": "evidence_b2d4b5e0971bc54ef41e1598"
+                }
+              ]
+            },
+            {
+              "text": "资料中标注的温度为 80 C，时长为 30 分钟，但这是在“仅干样品”的样品条件下给出的，不适用于湿样品。",
+              "citations": [
+                {
+                  "evidenceId": "evidence_b2d4b5e0971bc54ef41e1598"
+                }
+              ]
+            }
+          ],
+          "status": "answered",
+          "limitations": [],
+          "missingEvidence": [],
+          "provenanceVersion": 2
+        },
+        "evidence": [
+          {
+            "id": "evidence_b2d4b5e0971bc54ef41e1598",
+            "kind": "document_passage",
+            "label": "Q01-scope.txt",
+            "locator": {
+              "kind": "text",
+              "charEnd": 165,
+              "lineEnd": 6,
+              "charStart": 0,
+              "lineStart": 1
+            },
+            "version": {
+              "versionId": "document_version_41c7c0741bb14509b77e7cc7",
+              "documentId": "context_doc_27bfc7397cf5475eab908c80",
+              "contentHash": "0e64e7445dcbac709ddcfbbeb62497a00e662a624476a3eb69a3efa7bee1a068",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 1,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "part": "text",
+                  "lines": 6,
+                  "status": "ready"
+                },
+                "statusCounts": {
+                  "ready": 1
+                },
+                "warningParts": 0,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "ready",
+              "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+              "limitations": []
+            },
+            "warnings": []
+          }
+        ],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "input": {
+              "query": "RQ-001 湿样品 温度"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [
+              {
+                "kind": "document",
+                "label": "Q01-scope.txt",
+                "target": {
+                  "status": "ready",
+                  "locator": {
+                    "kind": "text",
+                    "charEnd": 165,
+                    "lineEnd": 6,
+                    "charStart": 0,
+                    "lineStart": 1
+                  },
+                  "ordinal": 0,
+                  "snippet": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n",
+                  "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+                  "versionId": "document_version_41c7c0741bb14509b77e7cc7",
+                  "documentId": "context_doc_27bfc7397cf5475eab908c80"
+                }
+              }
+            ],
+            "coverage": {
+              "note": "Search snippets are not complete evidence. Empty results mean no keyword match, including accepted field names; report insufficient evidence within this search coverage, not universal absence.",
+              "scope": "current_project_sources",
+              "complete": true,
+              "includes": [
+                "selected_document_versions"
+              ],
+              "returned": 1,
+              "candidateWindow": 1,
+              "readForCitation": false
+            },
+            "sequence": 1,
+            "elapsedMs": 14,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "returnedCount": 1
+          },
+          {
+            "tool": "search_project_documents",
+            "input": {
+              "query": "RQ-001"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [
+              {
+                "kind": "document",
+                "label": "Q01-scope.txt",
+                "target": {
+                  "status": "ready",
+                  "locator": {
+                    "kind": "text",
+                    "charEnd": 165,
+                    "lineEnd": 6,
+                    "charStart": 0,
+                    "lineStart": 1
+                  },
+                  "ordinal": 0,
+                  "snippet": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n",
+                  "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+                  "versionId": "document_version_41c7c0741bb14509b77e7cc7",
+                  "documentId": "context_doc_27bfc7397cf5475eab908c80"
+                }
+              }
+            ],
+            "coverage": {
+              "note": "Search snippets are not complete evidence. Empty results mean no keyword match, including accepted field names; report insufficient evidence within this search coverage, not universal absence.",
+              "scope": "current_project_sources",
+              "complete": true,
+              "includes": [
+                "selected_document_versions"
+              ],
+              "returned": 1,
+              "candidateWindow": 1,
+              "readForCitation": false
+            },
+            "sequence": 2,
+            "elapsedMs": 11,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "returnedCount": 1
+          },
+          {
+            "tool": "read_document_passage",
+            "input": {
+              "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+              "versionId": "document_version_41c7c0741bb14509b77e7cc7"
+            },
+            "phase": "read",
+            "status": "ok",
+            "sequence": 3,
+            "elapsedMs": 11,
+            "evidenceIds": [
+              "evidence_b2d4b5e0971bc54ef41e1598"
+            ]
+          },
+          {
+            "tool": "get_project_context",
+            "input": {},
+            "phase": "read",
+            "status": "evidence_not_found",
+            "sequence": 4,
+            "elapsedMs": 4
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 4,
+          "elapsedMs": 8387,
+          "knownCost": null,
+          "toolCalls": 4,
+          "toolRounds": 3,
+          "inputTokens": 13754,
+          "lastActiveAt": 1790727544567,
+          "outputTokens": 577,
+          "reservedTokens": 0,
+          "visibleToolCalls": 4,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-29 20:19:04.567394-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_b2d4b5e0971bc54ef41e1598",
+          "data": {
+            "text": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n"
+          },
+          "kind": "document_passage",
+          "label": "Q01-scope.txt",
+          "locator": {
+            "kind": "text",
+            "charEnd": 165,
+            "lineEnd": 6,
+            "charStart": 0,
+            "lineStart": 1
+          },
+          "version": {
+            "versionId": "document_version_41c7c0741bb14509b77e7cc7",
+            "documentId": "context_doc_27bfc7397cf5475eab908c80",
+            "contentHash": "0e64e7445dcbac709ddcfbbeb62497a00e662a624476a3eb69a3efa7bee1a068",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 1,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "part": "text",
+                "lines": 6,
+                "status": "ready"
+              },
+              "statusCounts": {
+                "ready": 1
+              },
+              "warningParts": 0,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "ready",
+            "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+            "limitations": []
+          },
+          "warnings": []
+        }
+      ],
+      "elapsedMs": 8480,
+      "semanticReview": "pending"
+    },
+    {
+      "id": "R03",
+      "question": "What is the accepted Temperature for Exp17?",
+      "expected": "exact Exp17 find then accepted snapshot, 82 C",
+      "request": {
+        "runId": "agent_run_3caf22459dea4ed7b0b3dc72",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "readonly-R03-1790727544645",
+        "question": "What is the accepted Temperature for Exp17?",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 4852,
+          "knownCost": null,
+          "toolCalls": 2,
+          "toolRounds": 2,
+          "inputTokens": 9576,
+          "lastActiveAt": 1790727549513,
+          "outputTokens": 306,
+          "reservedTokens": 0,
+          "visibleToolCalls": 2,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-30T00:19:04.655Z",
+        "updatedAt": "2026-09-30T00:19:09.517Z",
+        "referenceDocuments": [],
+        "sourceScope": "project"
+      },
+      "artifact": {
+        "id": "answer_64d9631407bc4c9cbe4cb134",
+        "runId": "agent_run_3caf22459dea4ed7b0b3dc72",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "The accepted Temperature for Exp17 is 82 °C. The stored field is numeric, with unit C; the raw source cell B2 on the Measurements sheet shows 80, but the accepted snapshot value is 82.",
+              "citations": [
+                {
+                  "evidenceId": "evidence_e62347d0072774df0cd7d390"
+                }
+              ]
+            }
+          ],
+          "status": "answered",
+          "limitations": [
+            "Values retain their stored scale and unit; no conversion or new calculation was performed.",
+            "Only the listed windows were read; additional records remain available."
+          ],
+          "missingEvidence": [],
+          "provenanceVersion": 2
+        },
+        "evidence": [
+          {
+            "id": "evidence_e62347d0072774df0cd7d390",
+            "kind": "experiment_snapshot",
+            "label": "Exp17",
+            "locator": {
+              "seriesKey": null,
+              "fieldOffset": 0,
+              "pointOffset": 0,
+              "seriesOffset": 0
+            },
+            "version": {
+              "headId": "head_experiment_17",
+              "snapshotId": "snapshot_experiment_17",
+              "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+              "recordIndex": 0,
+              "experimentId": "experiment_17",
+              "headUpdatedAt": "2026-09-30T00:18:48.901Z"
+            },
+            "coverage": {
+              "scope": "accepted_snapshot_window",
+              "fieldCount": 29,
+              "seriesCount": 1,
+              "nextFieldOffset": 20,
+              "nextPointOffset": null,
+              "nextSeriesOffset": null
+            },
+            "warnings": [
+              "Values retain their stored scale and unit; no conversion or new calculation was performed."
+            ]
+          }
+        ],
+        "trace": [
+          {
+            "tool": "find_experiments",
+            "input": {
+              "query": "Exp17"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [
+              {
+                "kind": "experiment",
+                "label": "Exp17",
+                "target": {
+                  "snapshotId": "snapshot_experiment_17",
+                  "experimentId": "experiment_17"
+                }
+              }
+            ],
+            "coverage": {
+              "note": "Only active accepted snapshot heads are listed.",
+              "complete": true,
+              "exactNameOrAlias": true
+            },
+            "sequence": 1,
+            "elapsedMs": 6,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "matchStatus": "matched",
+            "returnedCount": 1
+          },
+          {
+            "tool": "read_experiment_evidence",
+            "input": {
+              "snapshotId": "snapshot_experiment_17",
+              "experimentId": "experiment_17"
+            },
+            "phase": "read",
+            "status": "ok",
+            "sequence": 2,
+            "elapsedMs": 5,
+            "evidenceIds": [
+              "evidence_e62347d0072774df0cd7d390"
+            ]
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 4852,
+          "knownCost": null,
+          "toolCalls": 2,
+          "toolRounds": 2,
+          "inputTokens": 9576,
+          "lastActiveAt": 1790727549513,
+          "outputTokens": 306,
+          "reservedTokens": 0,
+          "visibleToolCalls": 2,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-29 20:19:09.514061-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_e62347d0072774df0cd7d390",
+          "data": {
+            "fields": [
+              {
+                "unit": "C",
+                "value": 82,
+                "columnId": "temperature",
+                "valueType": "number",
+                "sourceRefs": [
+                  {
+                    "cell": "B2",
+                    "sheet": "Measurements",
+                    "rawValue": 80
+                  }
+                ],
+                "displayName": "Temperature"
+              },
+              {
+                "unit": "%",
+                "value": 0.42,
+                "columnId": "yield_fraction",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Yield",
+                "numericScale": "fraction"
+              },
+              {
+                "unit": "%",
+                "value": 42,
+                "columnId": "yield_points",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Yield",
+                "numericScale": "percent_points"
+              },
+              {
+                "unit": "bar",
+                "value": null,
+                "columnId": "pressure",
+                "valueType": "number",
+                "sourceRefs": [
+                  {
+                    "cell": "H2",
+                    "sheet": "Measurements",
+                    "rawValue": null
+                  }
+                ],
+                "displayName": "Pressure",
+                "missingReason": "source_blank",
+                "formattedValue": null
+              },
+              {
+                "unit": "min",
+                "value": 30,
+                "columnId": "duration",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Duration"
+              },
+              {
+                "unit": "mg",
+                "value": 100,
+                "columnId": "aux_0",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 0"
+              },
+              {
+                "unit": "mg",
+                "value": 101,
+                "columnId": "aux_1",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 1"
+              },
+              {
+                "unit": "mg",
+                "value": 102,
+                "columnId": "aux_2",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 2"
+              },
+              {
+                "unit": "mg",
+                "value": 103,
+                "columnId": "aux_3",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 3"
+              },
+              {
+                "unit": "mg",
+                "value": 104,
+                "columnId": "aux_4",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 4"
+              },
+              {
+                "unit": "mg",
+                "value": 105,
+                "columnId": "aux_5",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 5"
+              },
+              {
+                "unit": "mg",
+                "value": 106,
+                "columnId": "aux_6",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 6"
+              },
+              {
+                "unit": "mg",
+                "value": 107,
+                "columnId": "aux_7",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 7"
+              },
+              {
+                "unit": "mg",
+                "value": 108,
+                "columnId": "aux_8",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 8"
+              },
+              {
+                "unit": "mg",
+                "value": 109,
+                "columnId": "aux_9",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 9"
+              },
+              {
+                "unit": "mg",
+                "value": 110,
+                "columnId": "aux_10",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 10"
+              },
+              {
+                "unit": "mg",
+                "value": 111,
+                "columnId": "aux_11",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 11"
+              },
+              {
+                "unit": "mg",
+                "value": 112,
+                "columnId": "aux_12",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 12"
+              },
+              {
+                "unit": "mg",
+                "value": 113,
+                "columnId": "aux_13",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 13"
+              },
+              {
+                "unit": "mg",
+                "value": 114,
+                "columnId": "aux_14",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 14"
+              }
+            ],
+            "series": [
+              {
+                "label": "Temperature trace",
+                "xField": {
+                  "unit": "min",
+                  "fieldId": "time"
+                },
+                "yField": {
+                  "unit": "C",
+                  "fieldId": "temperature"
+                },
+                "seriesKey": "temperature_trace",
+                "pointCount": 121,
+                "sourceRefs": []
+              }
+            ],
+            "warnings": [],
+            "acceptedAt": "2026-09-30T00:18:48.898Z",
+            "fieldCount": 29,
+            "snapshotId": "snapshot_experiment_17",
+            "sourceRefs": [],
+            "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+            "seriesCount": 1,
+            "sourceAlias": "Exp17",
+            "experimentId": "experiment_17",
+            "seriesWindow": null,
+            "recordWarnings": []
+          },
+          "kind": "experiment_snapshot",
+          "label": "Exp17",
+          "locator": {
+            "seriesKey": null,
+            "fieldOffset": 0,
+            "pointOffset": 0,
+            "seriesOffset": 0
+          },
+          "version": {
+            "headId": "head_experiment_17",
+            "snapshotId": "snapshot_experiment_17",
+            "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+            "recordIndex": 0,
+            "experimentId": "experiment_17",
+            "headUpdatedAt": "2026-09-30T00:18:48.901Z"
+          },
+          "coverage": {
+            "scope": "accepted_snapshot_window",
+            "fieldCount": 29,
+            "seriesCount": 1,
+            "nextFieldOffset": 20,
+            "nextPointOffset": null,
+            "nextSeriesOffset": null
+          },
+          "warnings": [
+            "Values retain their stored scale and unit; no conversion or new calculation was performed."
+          ]
+        }
+      ],
+      "elapsedMs": 5020,
+      "semanticReview": "pending"
+    },
+    {
+      "id": "R04",
+      "question": "读取 Q09-raw.xlsx 已确认区域的 Measurements!A1:C2，B2 原始值和表头单位是什么？",
+      "expected": "confirmed region, B2=80, header Temperature (C)",
+      "request": {
+        "runId": "agent_run_c32d9c3e089f4138808aae9b",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "readonly-R04-1790727549666",
+        "question": "读取 Q09-raw.xlsx 已确认区域的 Measurements!A1:C2，B2 原始值和表头单位是什么？",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 6733,
+          "knownCost": null,
+          "toolCalls": 2,
+          "toolRounds": 2,
+          "inputTokens": 9648,
+          "lastActiveAt": 1790727556415,
+          "outputTokens": 472,
+          "reservedTokens": 0,
+          "visibleToolCalls": 2,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-30T00:19:09.675Z",
+        "updatedAt": "2026-09-30T00:19:16.417Z",
+        "referenceDocuments": [],
+        "sourceScope": "project"
+      },
+      "artifact": {
+        "id": "answer_5adf81d56dd144a28481c862",
+        "runId": "agent_run_c32d9c3e089f4138808aae9b",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "在 Q09-raw.xlsx 的已确认区域 Measurements!A1:C2 中，B2 的原始值为 80（数值类型，单元格本身未存储单位）。",
+              "citations": [
+                {
+                  "evidenceId": "evidence_7a945bd9c8ec8bc0da102cd2"
+                }
+              ]
+            },
+            {
+              "text": "表头 B1 为 \"Temperature (C)\"，即该列单位是摄氏度（C）。",
+              "citations": [
+                {
+                  "evidenceId": "evidence_7a945bd9c8ec8bc0da102cd2"
+                }
+              ]
+            }
+          ],
+          "status": "answered",
+          "limitations": [
+            "Confirmed interpretation of this region; not a published experimental dataset."
+          ],
+          "missingEvidence": [],
+          "provenanceVersion": 2
+        },
+        "evidence": [
+          {
+            "id": "evidence_7a945bd9c8ec8bc0da102cd2",
+            "kind": "confirmed_region",
+            "label": "Q09-raw.xlsx / Measurements A1:G3",
+            "locator": {
+              "range": "A1:C2",
+              "sheet": "Measurements",
+              "semanticOffset": 0
+            },
+            "version": {
+              "regionId": "region_readonly_eval",
+              "revisionId": "revision_readonly_eval",
+              "contentHash": "6e14b941de899e0f1024031f8d20f4c3c8c4a3ecb7d5f4618711004d31e6b600",
+              "fileObjectId": "file_561e5d08636b4b158206c0e9",
+              "indexVersion": "labrat.sourceIndex.v1",
+              "regionVersion": 2,
+              "dependencyHash": "dependency_hash",
+              "sourceDocumentId": "source_doc_a5b1a88d4d7f4edb92550056",
+              "sourceContentHash": "source_hash"
+            },
+            "coverage": {
+              "scope": "confirmed_region_window",
+              "nextSemanticOffset": null
+            },
+            "warnings": [
+              "Confirmed interpretation of this region; not a published experimental dataset."
+            ]
+          }
+        ],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "input": {
+              "query": "Q09-raw.xlsx Measurements"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [
+              {
+                "kind": "confirmed_region",
+                "label": "Q09-raw.xlsx / Measurements A1:G3",
+                "target": {
+                  "range": "A1:G3",
+                  "snippet": "[\"Q09 experimental measurements for Exp17 and Exp17B\"]",
+                  "regionId": "region_readonly_eval",
+                  "sheetName": "Measurements",
+                  "revisionId": "revision_readonly_eval",
+                  "sourceDocumentId": "source_doc_a5b1a88d4d7f4edb92550056"
+                }
+              },
+              {
+                "kind": "document",
+                "label": "RQ-untrusted.txt",
+                "target": {
+                  "status": "ready",
+                  "locator": {
+                    "kind": "text",
+                    "charEnd": 52,
+                    "lineEnd": 3,
+                    "charStart": 0,
+                    "lineStart": 3
+                  },
+                  "ordinal": 1,
+                  "snippet": "This appendix provides no experimental measurements.",
+                  "passageId": "passage_082f7aa33b59432f6682bfe262569c9c",
+                  "versionId": "document_version_c6d2dd595926476d9f19563b",
+                  "documentId": "context_doc_cb007c31f5694ef8bc132a29"
+                }
+              }
+            ],
+            "coverage": {
+              "note": "Search snippets are not complete evidence. Empty results mean no keyword match, including accepted field names; report insufficient evidence within this search coverage, not universal absence.",
+              "scope": "current_project_sources",
+              "complete": true,
+              "includes": [
+                "uploaded_documents",
+                "confirmed_regions",
+                "accepted_field_names"
+              ],
+              "returned": 2,
+              "candidateWindow": 2,
+              "readForCitation": false
+            },
+            "sequence": 1,
+            "elapsedMs": 5,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "returnedCount": 2
+          },
+          {
+            "tool": "read_confirmed_region_evidence",
+            "input": {
+              "range": "A1:C2",
+              "regionId": "region_readonly_eval",
+              "revisionId": "revision_readonly_eval"
+            },
+            "phase": "read",
+            "status": "ok",
+            "sequence": 2,
+            "elapsedMs": 9,
+            "evidenceIds": [
+              "evidence_7a945bd9c8ec8bc0da102cd2"
+            ]
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 6733,
+          "knownCost": null,
+          "toolCalls": 2,
+          "toolRounds": 2,
+          "inputTokens": 9648,
+          "lastActiveAt": 1790727556415,
+          "outputTokens": 472,
+          "reservedTokens": 0,
+          "visibleToolCalls": 2,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-29 20:19:16.415714-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_7a945bd9c8ec8bc0da102cd2",
+          "data": {
+            "raw": {
+              "cells": [
+                {
+                  "col": 0,
+                  "row": 0,
+                  "type": "string",
+                  "merged": false,
+                  "address": "A1",
+                  "formula": null,
+                  "missing": false,
+                  "rawValue": "Experiment",
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "formattedValue": "Experiment"
+                },
+                {
+                  "col": 1,
+                  "row": 0,
+                  "type": "string",
+                  "merged": false,
+                  "address": "B1",
+                  "formula": null,
+                  "missing": false,
+                  "rawValue": "Temperature (C)",
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "formattedValue": "Temperature (C)"
+                },
+                {
+                  "col": 2,
+                  "row": 0,
+                  "type": "string",
+                  "merged": false,
+                  "address": "C1",
+                  "formula": null,
+                  "missing": false,
+                  "rawValue": "Catalyst mass (g)",
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "formattedValue": "Catalyst mass (g)"
+                },
+                {
+                  "col": 0,
+                  "row": 1,
+                  "type": "string",
+                  "merged": false,
+                  "address": "A2",
+                  "formula": null,
+                  "missing": false,
+                  "rawValue": "Exp17",
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "formattedValue": "Exp17"
+                },
+                {
+                  "col": 1,
+                  "row": 1,
+                  "type": "number",
+                  "merged": false,
+                  "address": "B2",
+                  "formula": null,
+                  "missing": false,
+                  "rawValue": 80,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "formattedValue": "80"
+                },
+                {
+                  "col": 2,
+                  "row": 1,
+                  "type": "number",
+                  "merged": false,
+                  "address": "C2",
+                  "formula": null,
+                  "missing": false,
+                  "rawValue": 0.12,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "formattedValue": "0.12"
+                }
+              ],
+              "range": "A1:C2",
+              "rowCount": 2,
+              "warnings": [],
+              "cellCount": 6,
+              "sheetName": "Measurements",
+              "sourceRef": {
+                "range": "A1:C2",
+                "sheet": "Measurements",
+                "sourceType": "excel_range",
+                "importRunId": null,
+                "fileObjectId": "file_561e5d08636b4b158206c0e9",
+                "sourceDocumentId": "source_doc_a5b1a88d4d7f4edb92550056"
+              },
+              "columnCount": 3,
+              "schemaVersion": "labrat.sourceRange.v1",
+              "sourceDocumentId": "source_doc_a5b1a88d4d7f4edb92550056"
+            },
+            "range": "A1:G3",
+            "fields": [],
+            "series": [],
+            "version": 2,
+            "regionId": "region_readonly_eval",
+            "warnings": [],
+            "sheetName": "Measurements",
+            "acceptedAt": "2026-08-23T12:00:00.000Z",
+            "fieldCount": 0,
+            "revisionId": "revision_readonly_eval",
+            "seriesCount": 0,
+            "dependencyHash": "dependency_hash",
+            "interpretation": {
+              "semanticType": "experiment_table"
+            },
+            "sourceDocumentId": "source_doc_a5b1a88d4d7f4edb92550056",
+            "sourceContentHash": "source_hash"
+          },
+          "kind": "confirmed_region",
+          "label": "Q09-raw.xlsx / Measurements A1:G3",
+          "locator": {
+            "range": "A1:C2",
+            "sheet": "Measurements",
+            "semanticOffset": 0
+          },
+          "version": {
+            "regionId": "region_readonly_eval",
+            "revisionId": "revision_readonly_eval",
+            "contentHash": "6e14b941de899e0f1024031f8d20f4c3c8c4a3ecb7d5f4618711004d31e6b600",
+            "fileObjectId": "file_561e5d08636b4b158206c0e9",
+            "indexVersion": "labrat.sourceIndex.v1",
+            "regionVersion": 2,
+            "dependencyHash": "dependency_hash",
+            "sourceDocumentId": "source_doc_a5b1a88d4d7f4edb92550056",
+            "sourceContentHash": "source_hash"
+          },
+          "coverage": {
+            "scope": "confirmed_region_window",
+            "nextSemanticOffset": null
+          },
+          "warnings": [
+            "Confirmed interpretation of this region; not a published experimental dataset."
+          ]
+        }
+      ],
+      "elapsedMs": 6864,
+      "semanticReview": "pending"
+    },
+    {
+      "id": "R05",
+      "question": "List RQ-001 method temperature and Exp17 accepted temperature with their respective sources. Do not calculate.",
+      "expected": "80 C method, 82 C accepted; both read",
+      "request": {
+        "runId": "agent_run_fc265435380f44fcb09462a3",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "readonly-R05-1790727556531",
+        "question": "List RQ-001 method temperature and Exp17 accepted temperature with their respective sources. Do not calculate.",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 10882,
+          "knownCost": null,
+          "toolCalls": 4,
+          "toolRounds": 2,
+          "inputTokens": 13194,
+          "lastActiveAt": 1790727567429,
+          "outputTokens": 1019,
+          "reservedTokens": 0,
+          "visibleToolCalls": 4,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-30T00:19:16.541Z",
+        "updatedAt": "2026-09-30T00:19:27.432Z",
+        "referenceDocuments": [
+          {
+            "label": "Q01-scope.txt",
+            "versionId": "document_version_41c7c0741bb14509b77e7cc7",
+            "documentId": "context_doc_27bfc7397cf5475eab908c80",
+            "versionNumber": 1
+          }
+        ],
+        "sourceScope": "project"
+      },
+      "artifact": {
+        "id": "answer_03e02260fd8e468ca4e98091",
+        "runId": "agent_run_fc265435380f44fcb09462a3",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "RQ-001 method temperature is 80 C, as stated in the project document Q01-scope.txt: \"Protocol: RQ-001. ... Temperature: 80 C.\"",
+              "citations": [
+                {
+                  "evidenceId": "evidence_b2d4b5e0971bc54ef41e1598"
+                }
+              ]
+            },
+            {
+              "text": "Exp17 accepted temperature is 82 C (stored unit C) in the accepted experiment snapshot. The accepted value's source reference points to cell B2 on the Measurements sheet, whose raw value is 80; the accepted snapshot stores 82 C.",
+              "citations": [
+                {
+                  "evidenceId": "evidence_e62347d0072774df0cd7d390"
+                }
+              ]
+            }
+          ],
+          "status": "answered",
+          "limitations": [
+            "Values retain their stored scale and unit; no conversion or new calculation was performed.",
+            "Only the listed windows were read; additional records remain available."
+          ],
+          "missingEvidence": [],
+          "provenanceVersion": 2
+        },
+        "evidence": [
+          {
+            "id": "evidence_b2d4b5e0971bc54ef41e1598",
+            "kind": "document_passage",
+            "label": "Q01-scope.txt",
+            "locator": {
+              "kind": "text",
+              "charEnd": 165,
+              "lineEnd": 6,
+              "charStart": 0,
+              "lineStart": 1
+            },
+            "version": {
+              "versionId": "document_version_41c7c0741bb14509b77e7cc7",
+              "documentId": "context_doc_27bfc7397cf5475eab908c80",
+              "contentHash": "0e64e7445dcbac709ddcfbbeb62497a00e662a624476a3eb69a3efa7bee1a068",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 1,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "part": "text",
+                  "lines": 6,
+                  "status": "ready"
+                },
+                "statusCounts": {
+                  "ready": 1
+                },
+                "warningParts": 0,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "ready",
+              "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+              "limitations": []
+            },
+            "warnings": []
+          },
+          {
+            "id": "evidence_e62347d0072774df0cd7d390",
+            "kind": "experiment_snapshot",
+            "label": "Exp17",
+            "locator": {
+              "seriesKey": null,
+              "fieldOffset": 0,
+              "pointOffset": 0,
+              "seriesOffset": 0
+            },
+            "version": {
+              "headId": "head_experiment_17",
+              "snapshotId": "snapshot_experiment_17",
+              "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+              "recordIndex": 0,
+              "experimentId": "experiment_17",
+              "headUpdatedAt": "2026-09-30T00:18:48.901Z"
+            },
+            "coverage": {
+              "scope": "accepted_snapshot_window",
+              "fieldCount": 29,
+              "seriesCount": 1,
+              "nextFieldOffset": 20,
+              "nextPointOffset": null,
+              "nextSeriesOffset": null
+            },
+            "warnings": [
+              "Values retain their stored scale and unit; no conversion or new calculation was performed."
+            ]
+          }
+        ],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "input": {
+              "query": "RQ-001 method temperature"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [
+              {
+                "kind": "document",
+                "label": "Q01-scope.txt",
+                "target": {
+                  "status": "ready",
+                  "locator": {
+                    "kind": "text",
+                    "charEnd": 165,
+                    "lineEnd": 6,
+                    "charStart": 0,
+                    "lineStart": 1
+                  },
+                  "ordinal": 0,
+                  "snippet": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n",
+                  "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+                  "versionId": "document_version_41c7c0741bb14509b77e7cc7",
+                  "documentId": "context_doc_27bfc7397cf5475eab908c80"
+                }
+              },
+              {
+                "kind": "document",
+                "label": "Q01-scope.txt",
+                "target": {
+                  "status": "ready",
+                  "locator": {
+                    "kind": "text",
+                    "charEnd": 88,
+                    "lineEnd": 3,
+                    "charStart": 0,
+                    "lineStart": 1
+                  },
+                  "ordinal": 0,
+                  "snippet": "Protocol: RQ-OTHER.\nTemperature: 99 C.\nThis unrelated document does not describe RQ-001.",
+                  "passageId": "passage_ed32b787dd600d0679808bb6e418cbda",
+                  "versionId": "document_version_f008a7da41a4480f86b7b5c8",
+                  "documentId": "context_doc_4b0afddf9c734aec96cb4a9c"
+                }
+              },
+              {
+                "kind": "document",
+                "label": "RQ-scan.pdf",
+                "target": {
+                  "status": "partial",
+                  "locator": {
+                    "kind": "pdf",
+                    "line": 2,
+                    "page": 1,
+                    "charEnd": 18,
+                    "rotation": 0,
+                    "charStart": 0,
+                    "pageWidth": 600,
+                    "pageHeight": 800,
+                    "rectangles": [
+                      {
+                        "top": 0.12646264626462647,
+                        "left": 0.07563025210084033,
+                        "width": 0.2737094837935174,
+                        "height": 0.022502250225022502
+                      }
+                    ],
+                    "coordinateSystem": "display_normalized_top_left"
+                  },
+                  "ordinal": 1,
+                  "snippet": "Temperature: 80 C\n",
+                  "passageId": "passage_41820a9174618a60aa29bcd7f4bde39e",
+                  "versionId": "document_version_91cf64d4ac0a48a8a5c8d4c2",
+                  "documentId": "context_doc_9c39fecfa1d740fbbafae13d"
+                }
+              },
+              {
+                "kind": "document",
+                "label": "RQ-scan.pdf",
+                "target": {
+                  "status": "partial",
+                  "locator": {
+                    "kind": "pdf",
+                    "line": 1,
+                    "page": 1,
+                    "charEnd": 25,
+                    "rotation": 0,
+                    "charStart": 0,
+                    "pageWidth": 600,
+                    "pageHeight": 800,
+                    "rectangles": [
+                      {
+                        "top": 0.0702070207020702,
+                        "left": 0.07743097238895558,
+                        "width": 0.3877551020408163,
+                        "height": 0.022502250225022502
+                      }
+                    ],
+                    "coordinateSystem": "display_normalized_top_left"
+                  },
+                  "ordinal": 0,
+                  "snippet": "Research protocol RQ-001\n",
+                  "passageId": "passage_646e9b410b00bc0cdde69d54621e0522",
+                  "versionId": "document_version_91cf64d4ac0a48a8a5c8d4c2",
+                  "documentId": "context_doc_9c39fecfa1d740fbbafae13d"
+                }
+              },
+              {
+                "kind": "document",
+                "label": "RQ-scope.txt",
+                "target": {
+                  "status": "ready",
+                  "locator": {
+                    "kind": "text",
+                    "charEnd": 74,
+                    "lineEnd": 5,
+                    "charStart": 0,
+                    "lineStart": 5
+                  },
+                  "ordinal": 2,
+                  "snippet": "Wet samples are excluded; the protocol provides no wet-sample temperature.",
+                  "passageId": "passage_4291a6a1cef428f450b2c6ebde3d9594",
+                  "versionId": "document_version_a7770c7081fb4cbf82170f16",
+                  "documentId": "context_doc_53e0962149f64caa8f845b3d"
+                }
+              },
+              {
+                "kind": "document",
+                "label": "RQ-scope.txt",
+                "target": {
+                  "status": "ready",
+                  "locator": {
+                    "kind": "text",
+                    "charEnd": 45,
+                    "lineEnd": 4,
+                    "charStart": 0,
+                    "lineStart": 3
+                  },
+                  "ordinal": 1,
+                  "snippet": "Protocol RQ-001 applies only to dry samples.\n",
+                  "passageId": "passage_451472a91314f8ebac78610f6f90961b",
+                  "versionId": "document_version_a7770c7081fb4cbf82170f16",
+                  "documentId": "context_doc_53e0962149f64caa8f845b3d"
+                }
+              },
+              {
+                "kind": "experiment_field",
+                "label": "Exp17",
+                "target": {
+                  "snippet": "Temperature",
+                  "columnId": "temperature",
+                  "snapshotId": "snapshot_experiment_17",
+                  "fieldOffset": 0,
+                  "experimentId": "experiment_17",
+                  "canonicalLabel": "Exp17"
+                }
+              },
+              {
+                "kind": "experiment_field",
+                "label": "Exp17B",
+                "target": {
+                  "snippet": "Temperature",
+                  "columnId": "temperature",
+                  "snapshotId": "snapshot_experiment_17b",
+                  "fieldOffset": 0,
+                  "experimentId": "experiment_17b",
+                  "canonicalLabel": "Exp17B"
+                }
+              }
+            ],
+            "coverage": {
+              "note": "Search snippets are not complete evidence. Empty results mean no keyword match, including accepted field names; report insufficient evidence within this search coverage, not universal absence.",
+              "scope": "current_project_sources",
+              "complete": true,
+              "includes": [
+                "uploaded_documents",
+                "confirmed_regions",
+                "accepted_field_names"
+              ],
+              "returned": 8,
+              "candidateWindow": 8,
+              "readForCitation": false
+            },
+            "sequence": 1,
+            "elapsedMs": 10,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "returnedCount": 8
+          },
+          {
+            "tool": "find_experiments",
+            "input": {
+              "query": "Exp17"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [
+              {
+                "kind": "experiment",
+                "label": "Exp17",
+                "target": {
+                  "snapshotId": "snapshot_experiment_17",
+                  "experimentId": "experiment_17"
+                }
+              }
+            ],
+            "coverage": {
+              "note": "Only active accepted snapshot heads are listed.",
+              "complete": true,
+              "exactNameOrAlias": true
+            },
+            "sequence": 2,
+            "elapsedMs": 8,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "matchStatus": "matched",
+            "returnedCount": 1
+          },
+          {
+            "tool": "read_document_passage",
+            "input": {
+              "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+              "versionId": "document_version_41c7c0741bb14509b77e7cc7"
+            },
+            "phase": "read",
+            "status": "ok",
+            "sequence": 3,
+            "elapsedMs": 11,
+            "evidenceIds": [
+              "evidence_b2d4b5e0971bc54ef41e1598"
+            ]
+          },
+          {
+            "tool": "read_experiment_evidence",
+            "input": {
+              "snapshotId": "snapshot_experiment_17",
+              "experimentId": "experiment_17"
+            },
+            "phase": "read",
+            "status": "ok",
+            "sequence": 4,
+            "elapsedMs": 14,
+            "evidenceIds": [
+              "evidence_e62347d0072774df0cd7d390"
+            ]
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 10882,
+          "knownCost": null,
+          "toolCalls": 4,
+          "toolRounds": 2,
+          "inputTokens": 13194,
+          "lastActiveAt": 1790727567429,
+          "outputTokens": 1019,
+          "reservedTokens": 0,
+          "visibleToolCalls": 4,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-29 20:19:27.430154-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_b2d4b5e0971bc54ef41e1598",
+          "data": {
+            "text": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n"
+          },
+          "kind": "document_passage",
+          "label": "Q01-scope.txt",
+          "locator": {
+            "kind": "text",
+            "charEnd": 165,
+            "lineEnd": 6,
+            "charStart": 0,
+            "lineStart": 1
+          },
+          "version": {
+            "versionId": "document_version_41c7c0741bb14509b77e7cc7",
+            "documentId": "context_doc_27bfc7397cf5475eab908c80",
+            "contentHash": "0e64e7445dcbac709ddcfbbeb62497a00e662a624476a3eb69a3efa7bee1a068",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 1,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "part": "text",
+                "lines": 6,
+                "status": "ready"
+              },
+              "statusCounts": {
+                "ready": 1
+              },
+              "warningParts": 0,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "ready",
+            "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+            "limitations": []
+          },
+          "warnings": []
+        },
+        {
+          "id": "evidence_e62347d0072774df0cd7d390",
+          "data": {
+            "fields": [
+              {
+                "unit": "C",
+                "value": 82,
+                "columnId": "temperature",
+                "valueType": "number",
+                "sourceRefs": [
+                  {
+                    "cell": "B2",
+                    "sheet": "Measurements",
+                    "rawValue": 80
+                  }
+                ],
+                "displayName": "Temperature"
+              },
+              {
+                "unit": "%",
+                "value": 0.42,
+                "columnId": "yield_fraction",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Yield",
+                "numericScale": "fraction"
+              },
+              {
+                "unit": "%",
+                "value": 42,
+                "columnId": "yield_points",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Yield",
+                "numericScale": "percent_points"
+              },
+              {
+                "unit": "bar",
+                "value": null,
+                "columnId": "pressure",
+                "valueType": "number",
+                "sourceRefs": [
+                  {
+                    "cell": "H2",
+                    "sheet": "Measurements",
+                    "rawValue": null
+                  }
+                ],
+                "displayName": "Pressure",
+                "missingReason": "source_blank",
+                "formattedValue": null
+              },
+              {
+                "unit": "min",
+                "value": 30,
+                "columnId": "duration",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Duration"
+              },
+              {
+                "unit": "mg",
+                "value": 100,
+                "columnId": "aux_0",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 0"
+              },
+              {
+                "unit": "mg",
+                "value": 101,
+                "columnId": "aux_1",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 1"
+              },
+              {
+                "unit": "mg",
+                "value": 102,
+                "columnId": "aux_2",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 2"
+              },
+              {
+                "unit": "mg",
+                "value": 103,
+                "columnId": "aux_3",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 3"
+              },
+              {
+                "unit": "mg",
+                "value": 104,
+                "columnId": "aux_4",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 4"
+              },
+              {
+                "unit": "mg",
+                "value": 105,
+                "columnId": "aux_5",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 5"
+              },
+              {
+                "unit": "mg",
+                "value": 106,
+                "columnId": "aux_6",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 6"
+              },
+              {
+                "unit": "mg",
+                "value": 107,
+                "columnId": "aux_7",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 7"
+              },
+              {
+                "unit": "mg",
+                "value": 108,
+                "columnId": "aux_8",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 8"
+              },
+              {
+                "unit": "mg",
+                "value": 109,
+                "columnId": "aux_9",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 9"
+              },
+              {
+                "unit": "mg",
+                "value": 110,
+                "columnId": "aux_10",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 10"
+              },
+              {
+                "unit": "mg",
+                "value": 111,
+                "columnId": "aux_11",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 11"
+              },
+              {
+                "unit": "mg",
+                "value": 112,
+                "columnId": "aux_12",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 12"
+              },
+              {
+                "unit": "mg",
+                "value": 113,
+                "columnId": "aux_13",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 13"
+              },
+              {
+                "unit": "mg",
+                "value": 114,
+                "columnId": "aux_14",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 14"
+              }
+            ],
+            "series": [
+              {
+                "label": "Temperature trace",
+                "xField": {
+                  "unit": "min",
+                  "fieldId": "time"
+                },
+                "yField": {
+                  "unit": "C",
+                  "fieldId": "temperature"
+                },
+                "seriesKey": "temperature_trace",
+                "pointCount": 121,
+                "sourceRefs": []
+              }
+            ],
+            "warnings": [],
+            "acceptedAt": "2026-09-30T00:18:48.898Z",
+            "fieldCount": 29,
+            "snapshotId": "snapshot_experiment_17",
+            "sourceRefs": [],
+            "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+            "seriesCount": 1,
+            "sourceAlias": "Exp17",
+            "experimentId": "experiment_17",
+            "seriesWindow": null,
+            "recordWarnings": []
+          },
+          "kind": "experiment_snapshot",
+          "label": "Exp17",
+          "locator": {
+            "seriesKey": null,
+            "fieldOffset": 0,
+            "pointOffset": 0,
+            "seriesOffset": 0
+          },
+          "version": {
+            "headId": "head_experiment_17",
+            "snapshotId": "snapshot_experiment_17",
+            "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+            "recordIndex": 0,
+            "experimentId": "experiment_17",
+            "headUpdatedAt": "2026-09-30T00:18:48.901Z"
+          },
+          "coverage": {
+            "scope": "accepted_snapshot_window",
+            "fieldCount": 29,
+            "seriesCount": 1,
+            "nextFieldOffset": 20,
+            "nextPointOffset": null,
+            "nextSeriesOffset": null
+          },
+          "warnings": [
+            "Values retain their stored scale and unit; no conversion or new calculation was performed."
+          ]
+        }
+      ],
+      "elapsedMs": 11086,
+      "semanticReview": "pending"
+    },
+    {
+      "id": "R06",
+      "question": "共同别名 Batch-A 对应实验的温度是多少？",
+      "expected": "clarify ambiguous Exp17/Exp17B; no arbitrary accepted snapshot read",
+      "request": {
+        "runId": "agent_run_f2455b0c88ba4e5b8a497d7c",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "readonly-R06-1790727567618",
+        "question": "共同别名 Batch-A 对应实验的温度是多少？",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 4476,
+          "knownCost": null,
+          "toolCalls": 2,
+          "toolRounds": 2,
+          "inputTokens": 9113,
+          "lastActiveAt": 1790727572111,
+          "outputTokens": 280,
+          "reservedTokens": 0,
+          "visibleToolCalls": 2,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-30T00:19:27.627Z",
+        "updatedAt": "2026-09-30T00:19:32.114Z",
+        "referenceDocuments": [],
+        "sourceScope": "project"
+      },
+      "artifact": {
+        "id": "answer_332af70ec7ec4cf4acb42ca8",
+        "runId": "agent_run_f2455b0c88ba4e5b8a497d7c",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "共同别名“Batch-A”同时对应两个实验：Exp17 和 Exp17B，因此无法确定应读取哪一个实验的温度。",
+              "citations": []
+            }
+          ],
+          "status": "clarification",
+          "limitations": [],
+          "missingEvidence": [
+            "请提供唯一的规范实验名（Exp17 或 Exp17B），以便读取对应的温度值。"
+          ],
+          "provenanceVersion": 2
+        },
+        "evidence": [],
+        "trace": [
+          {
+            "tool": "find_experiments",
+            "input": {
+              "query": "Batch-A"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [
+              {
+                "kind": "experiment",
+                "label": "Exp17",
+                "target": {
+                  "snapshotId": "snapshot_experiment_17",
+                  "experimentId": "experiment_17"
+                }
+              },
+              {
+                "kind": "experiment",
+                "label": "Exp17B",
+                "target": {
+                  "snapshotId": "snapshot_experiment_17b",
+                  "experimentId": "experiment_17b"
+                }
+              }
+            ],
+            "coverage": {
+              "note": "Ask the user for the unique canonical name before reading an experiment.",
+              "complete": true,
+              "exactNameOrAlias": true
+            },
+            "sequence": 1,
+            "elapsedMs": 13,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "matchStatus": "ambiguous",
+            "returnedCount": 2
+          },
+          {
+            "tool": "find_experiments",
+            "input": {
+              "query": "Batch-A"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [
+              {
+                "kind": "experiment",
+                "label": "Exp17",
+                "target": {
+                  "snapshotId": "snapshot_experiment_17",
+                  "experimentId": "experiment_17"
+                }
+              },
+              {
+                "kind": "experiment",
+                "label": "Exp17B",
+                "target": {
+                  "snapshotId": "snapshot_experiment_17b",
+                  "experimentId": "experiment_17b"
+                }
+              }
+            ],
+            "coverage": {
+              "note": "Ask the user for the unique canonical name before reading an experiment.",
+              "complete": true,
+              "exactNameOrAlias": true
+            },
+            "sequence": 2,
+            "elapsedMs": 6,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "matchStatus": "ambiguous",
+            "returnedCount": 2
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 4476,
+          "knownCost": null,
+          "toolCalls": 2,
+          "toolRounds": 2,
+          "inputTokens": 9113,
+          "lastActiveAt": 1790727572111,
+          "outputTokens": 280,
+          "reservedTokens": 0,
+          "visibleToolCalls": 2,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-29 20:19:32.111543-04"
+      },
+      "evidence": [],
+      "elapsedMs": 4536,
+      "semanticReview": "pending"
+    },
+    {
+      "id": "R07",
+      "question": "Q09-raw.xlsx 中 Exp17B 的催化剂质量是多少？读取已确认区域，缺失就说明缺失。",
+      "expected": "Measurements C3 blank; not zero or 0.12",
+      "request": {
+        "runId": "agent_run_a8c245d4d37b4bbfbf20bdd4",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "readonly-R07-1790727572155",
+        "question": "Q09-raw.xlsx 中 Exp17B 的催化剂质量是多少？读取已确认区域，缺失就说明缺失。",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 7834,
+          "knownCost": null,
+          "toolCalls": 3,
+          "toolRounds": 2,
+          "inputTokens": 10642,
+          "lastActiveAt": 1790727580007,
+          "outputTokens": 614,
+          "reservedTokens": 0,
+          "visibleToolCalls": 3,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-30T00:19:32.162Z",
+        "updatedAt": "2026-09-30T00:19:40.016Z",
+        "referenceDocuments": [],
+        "sourceScope": "project"
+      },
+      "artifact": {
+        "id": "answer_287550a614f74f5a97427131",
+        "runId": "agent_run_a8c245d4d37b4bbfbf20bdd4",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "在已确认区域 Q09-raw.xlsx / Measurements A1:G3 中，Exp17B 对应第 3 行（A3），其催化剂质量列（C 列，表头为 Catalyst mass (g)）的单元格 C3 为空白，rawValue 为 null，missing 为 true，因此该值缺失，不能当作 0。",
+              "citations": [
+                {
+                  "evidenceId": "evidence_a56cecf321f7f28de19698ef"
+                }
+              ]
+            }
+          ],
+          "status": "answered",
+          "limitations": [
+            "Confirmed interpretation of this region; not a published experimental dataset."
+          ],
+          "missingEvidence": [],
+          "provenanceVersion": 2
+        },
+        "evidence": [
+          {
+            "id": "evidence_a56cecf321f7f28de19698ef",
+            "kind": "confirmed_region",
+            "label": "Q09-raw.xlsx / Measurements A1:G3",
+            "locator": {
+              "range": "A1:G3",
+              "sheet": "Measurements",
+              "semanticOffset": 0
+            },
+            "version": {
+              "regionId": "region_readonly_eval",
+              "revisionId": "revision_readonly_eval",
+              "contentHash": "6e14b941de899e0f1024031f8d20f4c3c8c4a3ecb7d5f4618711004d31e6b600",
+              "fileObjectId": "file_561e5d08636b4b158206c0e9",
+              "indexVersion": "labrat.sourceIndex.v1",
+              "regionVersion": 2,
+              "dependencyHash": "dependency_hash",
+              "sourceDocumentId": "source_doc_a5b1a88d4d7f4edb92550056",
+              "sourceContentHash": "source_hash"
+            },
+            "coverage": {
+              "scope": "confirmed_region_window",
+              "nextSemanticOffset": null
+            },
+            "warnings": [
+              "Confirmed interpretation of this region; not a published experimental dataset."
+            ]
+          }
+        ],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "input": {
+              "query": "Q09-raw.xlsx"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [
+              {
+                "kind": "confirmed_region",
+                "label": "Q09-raw.xlsx / Measurements A1:G3",
+                "target": {
+                  "range": "A1:G3",
+                  "snippet": "[\"Q09 experimental measurements for Exp17 and Exp17B\"]",
+                  "regionId": "region_readonly_eval",
+                  "sheetName": "Measurements",
+                  "revisionId": "revision_readonly_eval",
+                  "sourceDocumentId": "source_doc_a5b1a88d4d7f4edb92550056"
+                }
+              }
+            ],
+            "coverage": {
+              "note": "Search snippets are not complete evidence. Empty results mean no keyword match, including accepted field names; report insufficient evidence within this search coverage, not universal absence.",
+              "scope": "current_project_sources",
+              "complete": true,
+              "includes": [
+                "uploaded_documents",
+                "confirmed_regions",
+                "accepted_field_names"
+              ],
+              "returned": 1,
+              "candidateWindow": 1,
+              "readForCitation": false
+            },
+            "sequence": 1,
+            "elapsedMs": 21,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "returnedCount": 1
+          },
+          {
+            "tool": "find_experiments",
+            "input": {
+              "query": "Exp17B"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [
+              {
+                "kind": "experiment",
+                "label": "Exp17B",
+                "target": {
+                  "snapshotId": "snapshot_experiment_17b",
+                  "experimentId": "experiment_17b"
+                }
+              }
+            ],
+            "coverage": {
+              "note": "Only active accepted snapshot heads are listed.",
+              "complete": true,
+              "exactNameOrAlias": true
+            },
+            "sequence": 2,
+            "elapsedMs": 5,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "matchStatus": "matched",
+            "returnedCount": 1
+          },
+          {
+            "tool": "read_confirmed_region_evidence",
+            "input": {
+              "range": "A1:G3",
+              "regionId": "region_readonly_eval",
+              "revisionId": "revision_readonly_eval"
+            },
+            "phase": "read",
+            "status": "ok",
+            "sequence": 3,
+            "elapsedMs": 9,
+            "evidenceIds": [
+              "evidence_a56cecf321f7f28de19698ef"
+            ]
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 7834,
+          "knownCost": null,
+          "toolCalls": 3,
+          "toolRounds": 2,
+          "inputTokens": 10642,
+          "lastActiveAt": 1790727580007,
+          "outputTokens": 614,
+          "reservedTokens": 0,
+          "visibleToolCalls": 3,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-29 20:19:40.007589-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_a56cecf321f7f28de19698ef",
+          "data": {
+            "raw": {
+              "cells": [
+                {
+                  "col": 0,
+                  "row": 0,
+                  "type": "string",
+                  "merged": false,
+                  "address": "A1",
+                  "formula": null,
+                  "missing": false,
+                  "rawValue": "Experiment",
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "formattedValue": "Experiment"
+                },
+                {
+                  "col": 1,
+                  "row": 0,
+                  "type": "string",
+                  "merged": false,
+                  "address": "B1",
+                  "formula": null,
+                  "missing": false,
+                  "rawValue": "Temperature (C)",
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "formattedValue": "Temperature (C)"
+                },
+                {
+                  "col": 2,
+                  "row": 0,
+                  "type": "string",
+                  "merged": false,
+                  "address": "C1",
+                  "formula": null,
+                  "missing": false,
+                  "rawValue": "Catalyst mass (g)",
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "formattedValue": "Catalyst mass (g)"
+                },
+                {
+                  "col": 3,
+                  "row": 0,
+                  "type": "string",
+                  "merged": false,
+                  "address": "D1",
+                  "formula": null,
+                  "missing": false,
+                  "rawValue": "Duration (min)",
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "formattedValue": "Duration (min)"
+                },
+                {
+                  "col": 4,
+                  "row": 0,
+                  "type": "string",
+                  "merged": false,
+                  "address": "E1",
+                  "formula": null,
+                  "missing": false,
+                  "rawValue": "Yield (%)",
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "formattedValue": "Yield (%)"
+                },
+                {
+                  "col": 5,
+                  "row": 0,
+                  "type": "string",
+                  "merged": false,
+                  "address": "F1",
+                  "formula": null,
+                  "missing": false,
+                  "rawValue": "Saved formula",
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "formattedValue": "Saved formula"
+                },
+                {
+                  "col": 6,
+                  "row": 0,
+                  "type": "string",
+                  "merged": false,
+                  "address": "G1",
+                  "formula": null,
+                  "missing": false,
+                  "rawValue": "No cached value",
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "formattedValue": "No cached value"
+                },
+                {
+                  "col": 0,
+                  "row": 1,
+                  "type": "string",
+                  "merged": false,
+                  "address": "A2",
+                  "formula": null,
+                  "missing": false,
+                  "rawValue": "Exp17",
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "formattedValue": "Exp17"
+                },
+                {
+                  "col": 1,
+                  "row": 1,
+                  "type": "number",
+                  "merged": false,
+                  "address": "B2",
+                  "formula": null,
+                  "missing": false,
+                  "rawValue": 80,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "formattedValue": "80"
+                },
+                {
+                  "col": 2,
+                  "row": 1,
+                  "type": "number",
+                  "merged": false,
+                  "address": "C2",
+                  "formula": null,
+                  "missing": false,
+                  "rawValue": 0.12,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "formattedValue": "0.12"
+                },
+                {
+                  "col": 3,
+                  "row": 1,
+                  "type": "number",
+                  "merged": false,
+                  "address": "D2",
+                  "formula": null,
+                  "missing": false,
+                  "rawValue": 30,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "formattedValue": "30"
+                },
+                {
+                  "col": 4,
+                  "row": 1,
+                  "type": "number",
+                  "merged": false,
+                  "address": "E2",
+                  "formula": null,
+                  "missing": false,
+                  "rawValue": 0.42,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "formattedValue": "42.00%"
+                },
+                {
+                  "col": 5,
+                  "row": 1,
+                  "type": "formula",
+                  "merged": false,
+                  "address": "F2",
+                  "formula": "B2+D2",
+                  "missing": false,
+                  "rawValue": 110,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "formattedValue": "110"
+                },
+                {
+                  "col": 6,
+                  "row": 1,
+                  "type": "formula",
+                  "merged": false,
+                  "address": "G2",
+                  "formula": "B2*2",
+                  "missing": true,
+                  "rawValue": null,
+                  "mergedRange": null,
+                  "cacheMissing": true,
+                  "formattedValue": ""
+                },
+                {
+                  "col": 0,
+                  "row": 2,
+                  "type": "string",
+                  "merged": false,
+                  "address": "A3",
+                  "formula": null,
+                  "missing": false,
+                  "rawValue": "Exp17B",
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "formattedValue": "Exp17B"
+                },
+                {
+                  "col": 1,
+                  "row": 2,
+                  "type": "number",
+                  "merged": false,
+                  "address": "B3",
+                  "formula": null,
+                  "missing": false,
+                  "rawValue": 85,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "formattedValue": "85"
+                },
+                {
+                  "col": 2,
+                  "row": 2,
+                  "type": "blank",
+                  "merged": false,
+                  "address": "C3",
+                  "formula": null,
+                  "missing": true,
+                  "rawValue": null,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "formattedValue": null
+                },
+                {
+                  "col": 3,
+                  "row": 2,
+                  "type": "number",
+                  "merged": false,
+                  "address": "D3",
+                  "formula": null,
+                  "missing": false,
+                  "rawValue": 40,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "formattedValue": "40"
+                },
+                {
+                  "col": 4,
+                  "row": 2,
+                  "type": "number",
+                  "merged": false,
+                  "address": "E3",
+                  "formula": null,
+                  "missing": false,
+                  "rawValue": 42,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "formattedValue": "42"
+                },
+                {
+                  "col": 5,
+                  "row": 2,
+                  "type": "blank",
+                  "merged": false,
+                  "address": "F3",
+                  "formula": null,
+                  "missing": true,
+                  "rawValue": null,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "formattedValue": null
+                },
+                {
+                  "col": 6,
+                  "row": 2,
+                  "type": "blank",
+                  "merged": false,
+                  "address": "G3",
+                  "formula": null,
+                  "missing": true,
+                  "rawValue": null,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "formattedValue": null
+                }
+              ],
+              "range": "A1:G3",
+              "rowCount": 3,
+              "warnings": [],
+              "cellCount": 21,
+              "sheetName": "Measurements",
+              "sourceRef": {
+                "range": "A1:G3",
+                "sheet": "Measurements",
+                "sourceType": "excel_range",
+                "importRunId": null,
+                "fileObjectId": "file_561e5d08636b4b158206c0e9",
+                "sourceDocumentId": "source_doc_a5b1a88d4d7f4edb92550056"
+              },
+              "columnCount": 7,
+              "schemaVersion": "labrat.sourceRange.v1",
+              "sourceDocumentId": "source_doc_a5b1a88d4d7f4edb92550056"
+            },
+            "range": "A1:G3",
+            "fields": [],
+            "series": [],
+            "version": 2,
+            "regionId": "region_readonly_eval",
+            "warnings": [],
+            "sheetName": "Measurements",
+            "acceptedAt": "2026-08-23T12:00:00.000Z",
+            "fieldCount": 0,
+            "revisionId": "revision_readonly_eval",
+            "seriesCount": 0,
+            "dependencyHash": "dependency_hash",
+            "interpretation": {
+              "semanticType": "experiment_table"
+            },
+            "sourceDocumentId": "source_doc_a5b1a88d4d7f4edb92550056",
+            "sourceContentHash": "source_hash"
+          },
+          "kind": "confirmed_region",
+          "label": "Q09-raw.xlsx / Measurements A1:G3",
+          "locator": {
+            "range": "A1:G3",
+            "sheet": "Measurements",
+            "semanticOffset": 0
+          },
+          "version": {
+            "regionId": "region_readonly_eval",
+            "revisionId": "revision_readonly_eval",
+            "contentHash": "6e14b941de899e0f1024031f8d20f4c3c8c4a3ecb7d5f4618711004d31e6b600",
+            "fileObjectId": "file_561e5d08636b4b158206c0e9",
+            "indexVersion": "labrat.sourceIndex.v1",
+            "regionVersion": 2,
+            "dependencyHash": "dependency_hash",
+            "sourceDocumentId": "source_doc_a5b1a88d4d7f4edb92550056",
+            "sourceContentHash": "source_hash"
+          },
+          "coverage": {
+            "scope": "confirmed_region_window",
+            "nextSemanticOffset": null
+          },
+          "warnings": [
+            "Confirmed interpretation of this region; not a published experimental dataset."
+          ]
+        }
+      ],
+      "elapsedMs": 7930,
+      "semanticReview": "pending"
+    },
+    {
+      "id": "R08",
+      "question": "仅根据选中资料，Exp17 的实测温度是多少？",
+      "expected": "selected document has method only; no experiment read or inferred measured value",
+      "request": {
+        "runId": "agent_run_d62e6418f0734507a203a3eb",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "readonly-R08-1790727580086",
+        "question": "仅根据选中资料，Exp17 的实测温度是多少？",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 11472,
+          "knownCost": null,
+          "toolCalls": 4,
+          "toolRounds": 2,
+          "inputTokens": 9896,
+          "lastActiveAt": 1790727591572,
+          "outputTokens": 1106,
+          "reservedTokens": 0,
+          "visibleToolCalls": 4,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-30T00:19:40.093Z",
+        "updatedAt": "2026-09-30T00:19:51.575Z",
+        "referenceDocuments": [
+          {
+            "label": "Q01-scope.txt",
+            "versionId": "document_version_41c7c0741bb14509b77e7cc7",
+            "documentId": "context_doc_27bfc7397cf5475eab908c80",
+            "versionNumber": 1
+          }
+        ],
+        "sourceScope": "selected"
+      },
+      "artifact": {
+        "id": "answer_216af36eec6f4c91b4c9ede5",
+        "runId": "agent_run_d62e6418f0734507a203a3eb",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "选中资料 Q01-scope.txt 仅给出方案条件 “Temperature: 80 C”（属于 RQ-001 协议设定），文中未出现 “Exp17”，也未记录任何实测温度。",
+              "citations": [
+                {
+                  "evidenceId": "evidence_b2d4b5e0971bc54ef41e1598"
+                }
+              ]
+            },
+            {
+              "text": "在当前项目与所选范围内未找到名为 “Exp17” 的实验及其记录值，因此无法据此确定 Exp17 的实测温度。",
+              "citations": []
+            }
+          ],
+          "status": "insufficient_evidence",
+          "limitations": [],
+          "missingEvidence": [
+            "Exp17 的实测温度字段或数值未在选中资料中出现。",
+            "当前范围内没有可解析的 Exp17 实验记录。"
+          ],
+          "provenanceVersion": 2
+        },
+        "evidence": [
+          {
+            "id": "evidence_b2d4b5e0971bc54ef41e1598",
+            "kind": "document_passage",
+            "label": "Q01-scope.txt",
+            "locator": {
+              "kind": "text",
+              "charEnd": 165,
+              "lineEnd": 6,
+              "charStart": 0,
+              "lineStart": 1
+            },
+            "version": {
+              "versionId": "document_version_41c7c0741bb14509b77e7cc7",
+              "documentId": "context_doc_27bfc7397cf5475eab908c80",
+              "contentHash": "0e64e7445dcbac709ddcfbbeb62497a00e662a624476a3eb69a3efa7bee1a068",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 1,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "part": "text",
+                  "lines": 6,
+                  "status": "ready"
+                },
+                "statusCounts": {
+                  "ready": 1
+                },
+                "warningParts": 0,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "ready",
+              "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+              "limitations": []
+            },
+            "warnings": []
+          }
+        ],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "input": {
+              "query": "Exp17"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [
+              {
+                "kind": "document",
+                "label": "Q01-scope.txt",
+                "target": {
+                  "status": "ready",
+                  "locator": {
+                    "kind": "text",
+                    "charEnd": 165,
+                    "lineEnd": 6,
+                    "charStart": 0,
+                    "lineStart": 1
+                  },
+                  "ordinal": 0,
+                  "snippet": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n",
+                  "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+                  "versionId": "document_version_41c7c0741bb14509b77e7cc7",
+                  "documentId": "context_doc_27bfc7397cf5475eab908c80"
+                }
+              }
+            ],
+            "coverage": {
+              "note": "Search snippets are not complete evidence. Empty results mean no keyword match, including accepted field names; report insufficient evidence within this search coverage, not universal absence.",
+              "scope": "current_project_sources",
+              "complete": true,
+              "includes": [
+                "selected_document_versions"
+              ],
+              "returned": 1,
+              "candidateWindow": 1,
+              "readForCitation": false
+            },
+            "sequence": 1,
+            "elapsedMs": 10,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "returnedCount": 1
+          },
+          {
+            "tool": "find_experiments",
+            "input": {
+              "query": "Exp17"
+            },
+            "phase": "discovery",
+            "status": "evidence_not_found",
+            "sequence": 2,
+            "elapsedMs": 3
+          },
+          {
+            "tool": "read_document_passage",
+            "input": {
+              "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+              "versionId": "document_version_41c7c0741bb14509b77e7cc7"
+            },
+            "phase": "read",
+            "status": "ok",
+            "sequence": 3,
+            "elapsedMs": 10,
+            "evidenceIds": [
+              "evidence_b2d4b5e0971bc54ef41e1598"
+            ]
+          },
+          {
+            "tool": "find_experiments",
+            "input": {
+              "query": ""
+            },
+            "phase": "discovery",
+            "status": "evidence_not_found",
+            "sequence": 4,
+            "elapsedMs": 3
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 11472,
+          "knownCost": null,
+          "toolCalls": 4,
+          "toolRounds": 2,
+          "inputTokens": 9896,
+          "lastActiveAt": 1790727591572,
+          "outputTokens": 1106,
+          "reservedTokens": 0,
+          "visibleToolCalls": 4,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-29 20:19:51.572628-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_b2d4b5e0971bc54ef41e1598",
+          "data": {
+            "text": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n"
+          },
+          "kind": "document_passage",
+          "label": "Q01-scope.txt",
+          "locator": {
+            "kind": "text",
+            "charEnd": 165,
+            "lineEnd": 6,
+            "charStart": 0,
+            "lineStart": 1
+          },
+          "version": {
+            "versionId": "document_version_41c7c0741bb14509b77e7cc7",
+            "documentId": "context_doc_27bfc7397cf5475eab908c80",
+            "contentHash": "0e64e7445dcbac709ddcfbbeb62497a00e662a624476a3eb69a3efa7bee1a068",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 1,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "part": "text",
+                "lines": 6,
+                "status": "ready"
+              },
+              "statusCounts": {
+                "ready": 1
+              },
+              "warningParts": 0,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "ready",
+            "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+            "limitations": []
+          },
+          "warnings": []
+        }
+      ],
+      "elapsedMs": 11569,
+      "semanticReview": "pending"
+    },
+    {
+      "id": "R08-followup",
+      "question": "那它的时长是多少？",
+      "expected": "resolve Exp17 again, read snapshot Duration 30 min",
+      "request": {
+        "runId": "agent_run_21abc3797c32446fa7dde47e",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "readonly-R08-followup-1790727591656",
+        "question": "那它的时长是多少？",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 4,
+          "elapsedMs": 7376,
+          "knownCost": null,
+          "toolCalls": 3,
+          "toolRounds": 3,
+          "inputTokens": 14242,
+          "lastActiveAt": 1790727599044,
+          "outputTokens": 456,
+          "reservedTokens": 0,
+          "visibleToolCalls": 3,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-30T00:19:51.663Z",
+        "updatedAt": "2026-09-30T00:19:59.054Z",
+        "referenceDocuments": [],
+        "sourceScope": "project"
+      },
+      "artifact": {
+        "id": "answer_435645a1c9504d089c3537da",
+        "runId": "agent_run_21abc3797c32446fa7dde47e",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "Exp17 的已接受时长为 30 分钟。",
+              "citations": [
+                {
+                  "evidenceId": "evidence_e62347d0072774df0cd7d390"
+                }
+              ]
+            }
+          ],
+          "status": "answered",
+          "limitations": [
+            "Values retain their stored scale and unit; no conversion or new calculation was performed.",
+            "Only the listed windows were read; additional records remain available."
+          ],
+          "missingEvidence": [],
+          "provenanceVersion": 2
+        },
+        "evidence": [
+          {
+            "id": "evidence_e62347d0072774df0cd7d390",
+            "kind": "experiment_snapshot",
+            "label": "Exp17",
+            "locator": {
+              "seriesKey": null,
+              "fieldOffset": 0,
+              "pointOffset": 0,
+              "seriesOffset": 0
+            },
+            "version": {
+              "headId": "head_experiment_17",
+              "snapshotId": "snapshot_experiment_17",
+              "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+              "recordIndex": 0,
+              "experimentId": "experiment_17",
+              "headUpdatedAt": "2026-09-30T00:18:48.901Z"
+            },
+            "coverage": {
+              "scope": "accepted_snapshot_window",
+              "fieldCount": 29,
+              "seriesCount": 1,
+              "nextFieldOffset": 20,
+              "nextPointOffset": null,
+              "nextSeriesOffset": null
+            },
+            "warnings": [
+              "Values retain their stored scale and unit; no conversion or new calculation was performed."
+            ]
+          }
+        ],
+        "trace": [
+          {
+            "tool": "find_experiments",
+            "input": {
+              "query": "Exp17"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [
+              {
+                "kind": "experiment",
+                "label": "Exp17",
+                "target": {
+                  "snapshotId": "snapshot_experiment_17",
+                  "experimentId": "experiment_17"
+                }
+              }
+            ],
+            "coverage": {
+              "note": "Only active accepted snapshot heads are listed.",
+              "complete": true,
+              "exactNameOrAlias": true
+            },
+            "sequence": 1,
+            "elapsedMs": 12,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "matchStatus": "matched",
+            "returnedCount": 1
+          },
+          {
+            "tool": "read_experiment_evidence",
+            "input": {
+              "snapshotId": "snapshot_experiment_17",
+              "experimentId": "experiment_17"
+            },
+            "phase": "read",
+            "status": "ok",
+            "sequence": 2,
+            "elapsedMs": 5,
+            "evidenceIds": [
+              "evidence_e62347d0072774df0cd7d390"
+            ]
+          },
+          {
+            "tool": "read_experiment_evidence",
+            "input": {
+              "snapshotId": "snapshot_experiment_17",
+              "fieldOffset": 0,
+              "experimentId": "experiment_17"
+            },
+            "phase": "read",
+            "status": "ok",
+            "sequence": 3,
+            "elapsedMs": 3,
+            "evidenceIds": [
+              "evidence_e62347d0072774df0cd7d390"
+            ]
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 4,
+          "elapsedMs": 7376,
+          "knownCost": null,
+          "toolCalls": 3,
+          "toolRounds": 3,
+          "inputTokens": 14242,
+          "lastActiveAt": 1790727599044,
+          "outputTokens": 456,
+          "reservedTokens": 0,
+          "visibleToolCalls": 3,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-29 20:19:59.044902-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_e62347d0072774df0cd7d390",
+          "data": {
+            "fields": [
+              {
+                "unit": "C",
+                "value": 82,
+                "columnId": "temperature",
+                "valueType": "number",
+                "sourceRefs": [
+                  {
+                    "cell": "B2",
+                    "sheet": "Measurements",
+                    "rawValue": 80
+                  }
+                ],
+                "displayName": "Temperature"
+              },
+              {
+                "unit": "%",
+                "value": 0.42,
+                "columnId": "yield_fraction",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Yield",
+                "numericScale": "fraction"
+              },
+              {
+                "unit": "%",
+                "value": 42,
+                "columnId": "yield_points",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Yield",
+                "numericScale": "percent_points"
+              },
+              {
+                "unit": "bar",
+                "value": null,
+                "columnId": "pressure",
+                "valueType": "number",
+                "sourceRefs": [
+                  {
+                    "cell": "H2",
+                    "sheet": "Measurements",
+                    "rawValue": null
+                  }
+                ],
+                "displayName": "Pressure",
+                "missingReason": "source_blank",
+                "formattedValue": null
+              },
+              {
+                "unit": "min",
+                "value": 30,
+                "columnId": "duration",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Duration"
+              },
+              {
+                "unit": "mg",
+                "value": 100,
+                "columnId": "aux_0",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 0"
+              },
+              {
+                "unit": "mg",
+                "value": 101,
+                "columnId": "aux_1",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 1"
+              },
+              {
+                "unit": "mg",
+                "value": 102,
+                "columnId": "aux_2",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 2"
+              },
+              {
+                "unit": "mg",
+                "value": 103,
+                "columnId": "aux_3",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 3"
+              },
+              {
+                "unit": "mg",
+                "value": 104,
+                "columnId": "aux_4",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 4"
+              },
+              {
+                "unit": "mg",
+                "value": 105,
+                "columnId": "aux_5",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 5"
+              },
+              {
+                "unit": "mg",
+                "value": 106,
+                "columnId": "aux_6",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 6"
+              },
+              {
+                "unit": "mg",
+                "value": 107,
+                "columnId": "aux_7",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 7"
+              },
+              {
+                "unit": "mg",
+                "value": 108,
+                "columnId": "aux_8",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 8"
+              },
+              {
+                "unit": "mg",
+                "value": 109,
+                "columnId": "aux_9",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 9"
+              },
+              {
+                "unit": "mg",
+                "value": 110,
+                "columnId": "aux_10",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 10"
+              },
+              {
+                "unit": "mg",
+                "value": 111,
+                "columnId": "aux_11",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 11"
+              },
+              {
+                "unit": "mg",
+                "value": 112,
+                "columnId": "aux_12",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 12"
+              },
+              {
+                "unit": "mg",
+                "value": 113,
+                "columnId": "aux_13",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 13"
+              },
+              {
+                "unit": "mg",
+                "value": 114,
+                "columnId": "aux_14",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 14"
+              }
+            ],
+            "series": [
+              {
+                "label": "Temperature trace",
+                "xField": {
+                  "unit": "min",
+                  "fieldId": "time"
+                },
+                "yField": {
+                  "unit": "C",
+                  "fieldId": "temperature"
+                },
+                "seriesKey": "temperature_trace",
+                "pointCount": 121,
+                "sourceRefs": []
+              }
+            ],
+            "warnings": [],
+            "acceptedAt": "2026-09-30T00:18:48.898Z",
+            "fieldCount": 29,
+            "snapshotId": "snapshot_experiment_17",
+            "sourceRefs": [],
+            "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+            "seriesCount": 1,
+            "sourceAlias": "Exp17",
+            "experimentId": "experiment_17",
+            "seriesWindow": null,
+            "recordWarnings": []
+          },
+          "kind": "experiment_snapshot",
+          "label": "Exp17",
+          "locator": {
+            "seriesKey": null,
+            "fieldOffset": 0,
+            "pointOffset": 0,
+            "seriesOffset": 0
+          },
+          "version": {
+            "headId": "head_experiment_17",
+            "snapshotId": "snapshot_experiment_17",
+            "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+            "recordIndex": 0,
+            "experimentId": "experiment_17",
+            "headUpdatedAt": "2026-09-30T00:18:48.901Z"
+          },
+          "coverage": {
+            "scope": "accepted_snapshot_window",
+            "fieldCount": 29,
+            "seriesCount": 1,
+            "nextFieldOffset": 20,
+            "nextPointOffset": null,
+            "nextSeriesOffset": null
+          },
+          "warnings": [
+            "Values retain their stored scale and unit; no conversion or new calculation was performed."
+          ]
+        }
+      ],
+      "elapsedMs": 7426,
+      "semanticReview": "pending"
+    },
+    {
+      "id": "R09",
+      "question": "Read the unconfirmed research.xls workbook Notes!A2:B2.",
+      "expected": "unconfirmed workbook unavailable; request region review",
+      "request": {
+        "runId": "agent_run_fb520b405e4945c3910c5bd7",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "readonly-R09-1790727599084",
+        "question": "Read the unconfirmed research.xls workbook Notes!A2:B2.",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 2,
+          "elapsedMs": 5261,
+          "knownCost": null,
+          "toolCalls": 1,
+          "toolRounds": 1,
+          "inputTokens": 5527,
+          "lastActiveAt": 1790727604358,
+          "outputTokens": 408,
+          "reservedTokens": 0,
+          "visibleToolCalls": 1,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-30T00:19:59.091Z",
+        "updatedAt": "2026-09-30T00:20:04.360Z",
+        "referenceDocuments": [],
+        "sourceScope": "project"
+      },
+      "artifact": {
+        "id": "answer_bb7441eabe42458390404b21",
+        "runId": "agent_run_fb520b405e4945c3910c5bd7",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "The requested cells Notes!A2:B2 in research.xls cannot be read because this workbook has not been confirmed as a workbook region. Unconfirmed workbook cells are excluded from the read tools, and a project search returned no confirmed region for research.xls.",
+              "citations": []
+            }
+          ],
+          "status": "insufficient_evidence",
+          "limitations": [],
+          "missingEvidence": [
+            "research.xls has no confirmed region; Notes!A2:B2 is unavailable until the workbook region is reviewed and confirmed."
+          ],
+          "provenanceVersion": 2
+        },
+        "evidence": [],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "input": {
+              "query": "research.xls"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [],
+            "coverage": {
+              "note": "Search snippets are not complete evidence. Empty results mean no keyword match, including accepted field names; report insufficient evidence within this search coverage, not universal absence.",
+              "scope": "current_project_sources",
+              "complete": true,
+              "includes": [
+                "uploaded_documents",
+                "confirmed_regions",
+                "accepted_field_names"
+              ],
+              "returned": 0,
+              "candidateWindow": 0,
+              "readForCitation": false
+            },
+            "sequence": 1,
+            "elapsedMs": 15,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "returnedCount": 0
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 2,
+          "elapsedMs": 5261,
+          "knownCost": null,
+          "toolCalls": 1,
+          "toolRounds": 1,
+          "inputTokens": 5527,
+          "lastActiveAt": 1790727604358,
+          "outputTokens": 408,
+          "reservedTokens": 0,
+          "visibleToolCalls": 1,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-29 20:20:04.358808-04"
+      },
+      "evidence": [],
+      "elapsedMs": 5299,
+      "semanticReview": "pending"
+    },
+    {
+      "id": "R10",
+      "question": "计算 Exp17 温度序列的均值。",
+      "expected": "needs_analysis; no new number or execution",
+      "request": {
+        "runId": "agent_run_bb7b0c4bd433403eba410997",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "readonly-R10-1790727604385",
+        "question": "计算 Exp17 温度序列的均值。",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 0,
+          "elapsedMs": 4,
+          "knownCost": null,
+          "toolCalls": 0,
+          "toolRounds": 0,
+          "inputTokens": 0,
+          "lastActiveAt": 1790727604403,
+          "outputTokens": 0,
+          "reservedTokens": 0,
+          "visibleToolCalls": 0,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-30T00:20:04.394Z",
+        "updatedAt": "2026-09-30T00:20:04.406Z",
+        "referenceDocuments": [],
+        "sourceScope": "project"
+      },
+      "artifact": {
+        "id": "answer_9ccbf96ea38948da839498c4",
+        "runId": "agent_run_bb7b0c4bd433403eba410997",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "route": "review_boundary",
+          "claims": [],
+          "status": "needs_analysis",
+          "limitations": [],
+          "missingEvidence": []
+        },
+        "evidence": [],
+        "trace": [],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 0,
+          "elapsedMs": 4,
+          "knownCost": null,
+          "toolCalls": 0,
+          "toolRounds": 0,
+          "inputTokens": 0,
+          "lastActiveAt": 1790727604403,
+          "outputTokens": 0,
+          "reservedTokens": 0,
+          "visibleToolCalls": 0,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-29 20:20:04.403846-04"
+      },
+      "evidence": [],
+      "elapsedMs": 278,
+      "semanticReview": "pending"
+    },
+    {
+      "id": "R10-diagnosis",
+      "question": "诊断为什么 Exp17 失败，并推荐下一次实验温度。",
+      "expected": "out_of_scope; no recommendation",
+      "request": {
+        "runId": "agent_run_f582c8c4fce146aabcd2a1cd",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "readonly-R10-diagnosis-1790727604664",
+        "question": "诊断为什么 Exp17 失败，并推荐下一次实验温度。",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 0,
+          "elapsedMs": 3,
+          "knownCost": null,
+          "toolCalls": 0,
+          "toolRounds": 0,
+          "inputTokens": 0,
+          "lastActiveAt": 1790727604682,
+          "outputTokens": 0,
+          "reservedTokens": 0,
+          "visibleToolCalls": 0,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-30T00:20:04.672Z",
+        "updatedAt": "2026-09-30T00:20:04.685Z",
+        "referenceDocuments": [],
+        "sourceScope": "project"
+      },
+      "artifact": {
+        "id": "answer_2ec2295c1de642619178d829",
+        "runId": "agent_run_f582c8c4fce146aabcd2a1cd",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "route": "review_boundary",
+          "claims": [],
+          "status": "out_of_scope",
+          "limitations": [],
+          "missingEvidence": []
+        },
+        "evidence": [],
+        "trace": [],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 0,
+          "elapsedMs": 3,
+          "knownCost": null,
+          "toolCalls": 0,
+          "toolRounds": 0,
+          "inputTokens": 0,
+          "lastActiveAt": 1790727604682,
+          "outputTokens": 0,
+          "reservedTokens": 0,
+          "visibleToolCalls": 0,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-29 20:20:04.683308-04"
+      },
+      "evidence": [],
+      "elapsedMs": 289,
+      "semanticReview": "pending"
+    },
+    {
+      "id": "R11",
+      "question": "Based only on this scanned document, what temperature does it appear to state? Is the OCR reliable enough for a definite measurement?",
+      "expected": "OCR uncertainty retained; original scan link, no claim of definite measurement",
+      "request": {
+        "runId": "agent_run_b9bd174dafe0476798b8fdd3",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "readonly-R11-1790727604954",
+        "question": "Based only on this scanned document, what temperature does it appear to state? Is the OCR reliable enough for a definite measurement?",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 7416,
+          "knownCost": null,
+          "toolCalls": 2,
+          "toolRounds": 2,
+          "inputTokens": 11290,
+          "lastActiveAt": 1790727612385,
+          "outputTokens": 646,
+          "reservedTokens": 0,
+          "visibleToolCalls": 2,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-30T00:20:04.962Z",
+        "updatedAt": "2026-09-30T00:20:12.389Z",
+        "referenceDocuments": [
+          {
+            "label": "RQ-scan.pdf",
+            "versionId": "document_version_91cf64d4ac0a48a8a5c8d4c2",
+            "documentId": "context_doc_9c39fecfa1d740fbbafae13d",
+            "versionNumber": 1
+          }
+        ],
+        "sourceScope": "selected"
+      },
+      "artifact": {
+        "id": "answer_c19dc1bcd46943bf81bb1436",
+        "runId": "agent_run_b9bd174dafe0476798b8fdd3",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "The scanned document appears to state \"Temperature: 80 C\" on page 1.",
+              "citations": [
+                {
+                  "evidenceId": "evidence_a90ede5399e3d5af260d00c6"
+                }
+              ]
+            },
+            {
+              "text": "The OCR is not reliable enough for a definite measurement: the passage is flagged uncertain and carries an \"ocr_uncertain_text_check_original\" warning, so the reading should be checked against the original scan before being treated as a confirmed value.",
+              "citations": [
+                {
+                  "evidenceId": "evidence_a90ede5399e3d5af260d00c6"
+                }
+              ]
+            }
+          ],
+          "status": "answered",
+          "limitations": [
+            "This source is only partially readable; unread portions are not evidence.",
+            "OCR text is uncertain. Inspect the original page before relying on it."
+          ],
+          "missingEvidence": [],
+          "provenanceVersion": 2
+        },
+        "evidence": [
+          {
+            "id": "evidence_a90ede5399e3d5af260d00c6",
+            "kind": "document_passage",
+            "label": "RQ-scan.pdf",
+            "locator": {
+              "kind": "pdf",
+              "line": 2,
+              "page": 1,
+              "charEnd": 18,
+              "rotation": 0,
+              "charStart": 0,
+              "pageWidth": 600,
+              "pageHeight": 800,
+              "rectangles": [
+                {
+                  "top": 0.12646264626462647,
+                  "left": 0.07563025210084033,
+                  "width": 0.2737094837935174,
+                  "height": 0.022502250225022502
+                }
+              ],
+              "coordinateSystem": "display_normalized_top_left"
+            },
+            "version": {
+              "versionId": "document_version_91cf64d4ac0a48a8a5c8d4c2",
+              "documentId": "context_doc_9c39fecfa1d740fbbafae13d",
+              "contentHash": "b255d90b6601ccd7fe7c46c9694043a054607fdc2cbb139746976af65fd8a966",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 1,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "ocr": {
+                    "engine": "tesseract.js-7.0.0",
+                    "languages": [
+                      "eng",
+                      "chi_sim"
+                    ],
+                    "confidence": 93,
+                    "renderScale": 2.7777777777777777,
+                    "quarterTurns": 0,
+                    "languageVersion": "1.0.0"
+                  },
+                  "page": 1,
+                  "method": "ocr",
+                  "status": "ready",
+                  "warnings": [
+                    "ocr_uncertain_text_check_original"
+                  ]
+                },
+                "statusCounts": {
+                  "ready": 1
+                },
+                "warningParts": 1,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "partial",
+              "passageId": "passage_41820a9174618a60aa29bcd7f4bde39e",
+              "limitations": [
+                "figures_and_scientific_images_not_interpreted",
+                "complex_table_structure_not_inferred"
+              ]
+            },
+            "warnings": []
+          },
+          {
+            "id": "evidence_b02bc5eb7897b87bba342c03",
+            "kind": "document_passage",
+            "label": "RQ-scan.pdf",
+            "locator": {
+              "kind": "pdf",
+              "line": 1,
+              "page": 1,
+              "charEnd": 25,
+              "rotation": 0,
+              "charStart": 0,
+              "pageWidth": 600,
+              "pageHeight": 800,
+              "rectangles": [
+                {
+                  "top": 0.0702070207020702,
+                  "left": 0.07743097238895558,
+                  "width": 0.3877551020408163,
+                  "height": 0.022502250225022502
+                }
+              ],
+              "coordinateSystem": "display_normalized_top_left"
+            },
+            "version": {
+              "versionId": "document_version_91cf64d4ac0a48a8a5c8d4c2",
+              "documentId": "context_doc_9c39fecfa1d740fbbafae13d",
+              "contentHash": "b255d90b6601ccd7fe7c46c9694043a054607fdc2cbb139746976af65fd8a966",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 1,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "ocr": {
+                    "engine": "tesseract.js-7.0.0",
+                    "languages": [
+                      "eng",
+                      "chi_sim"
+                    ],
+                    "confidence": 93,
+                    "renderScale": 2.7777777777777777,
+                    "quarterTurns": 0,
+                    "languageVersion": "1.0.0"
+                  },
+                  "page": 1,
+                  "method": "ocr",
+                  "status": "ready",
+                  "warnings": [
+                    "ocr_uncertain_text_check_original"
+                  ]
+                },
+                "statusCounts": {
+                  "ready": 1
+                },
+                "warningParts": 1,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "partial",
+              "passageId": "passage_646e9b410b00bc0cdde69d54621e0522",
+              "limitations": [
+                "figures_and_scientific_images_not_interpreted",
+                "complex_table_structure_not_inferred"
+              ]
+            },
+            "warnings": []
+          },
+          {
+            "id": "evidence_ede0dd058b7b51ac5183cd75",
+            "kind": "document_passage",
+            "label": "RQ-scan.pdf",
+            "locator": {
+              "kind": "pdf",
+              "line": 3,
+              "page": 1,
+              "charEnd": 21,
+              "rotation": 0,
+              "charStart": 0,
+              "pageWidth": 600,
+              "pageHeight": 800,
+              "rectangles": [
+                {
+                  "top": 0.18271827182718273,
+                  "left": 0.07743097238895558,
+                  "width": 0.3037214885954382,
+                  "height": 0.01710171017101708
+                }
+              ],
+              "coordinateSystem": "display_normalized_top_left"
+            },
+            "version": {
+              "versionId": "document_version_91cf64d4ac0a48a8a5c8d4c2",
+              "documentId": "context_doc_9c39fecfa1d740fbbafae13d",
+              "contentHash": "b255d90b6601ccd7fe7c46c9694043a054607fdc2cbb139746976af65fd8a966",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 1,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "ocr": {
+                    "engine": "tesseract.js-7.0.0",
+                    "languages": [
+                      "eng",
+                      "chi_sim"
+                    ],
+                    "confidence": 93,
+                    "renderScale": 2.7777777777777777,
+                    "quarterTurns": 0,
+                    "languageVersion": "1.0.0"
+                  },
+                  "page": 1,
+                  "method": "ocr",
+                  "status": "ready",
+                  "warnings": [
+                    "ocr_uncertain_text_check_original"
+                  ]
+                },
+                "statusCounts": {
+                  "ready": 1
+                },
+                "warningParts": 1,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "partial",
+              "passageId": "passage_e7b81fba968e85e0d1244559c3282b6e",
+              "limitations": [
+                "figures_and_scientific_images_not_interpreted",
+                "complex_table_structure_not_inferred"
+              ]
+            },
+            "warnings": []
+          }
+        ],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "input": {
+              "query": "temperature"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [
+              {
+                "kind": "document",
+                "label": "RQ-scan.pdf",
+                "target": {
+                  "status": "partial",
+                  "locator": {
+                    "kind": "pdf",
+                    "line": 2,
+                    "page": 1,
+                    "charEnd": 18,
+                    "rotation": 0,
+                    "charStart": 0,
+                    "pageWidth": 600,
+                    "pageHeight": 800,
+                    "rectangles": [
+                      {
+                        "top": 0.12646264626462647,
+                        "left": 0.07563025210084033,
+                        "width": 0.2737094837935174,
+                        "height": 0.022502250225022502
+                      }
+                    ],
+                    "coordinateSystem": "display_normalized_top_left"
+                  },
+                  "ordinal": 1,
+                  "snippet": "Temperature: 80 C\n",
+                  "passageId": "passage_41820a9174618a60aa29bcd7f4bde39e",
+                  "versionId": "document_version_91cf64d4ac0a48a8a5c8d4c2",
+                  "documentId": "context_doc_9c39fecfa1d740fbbafae13d"
+                }
+              },
+              {
+                "kind": "document",
+                "label": "RQ-scan.pdf",
+                "target": {
+                  "status": "partial",
+                  "locator": {
+                    "kind": "pdf",
+                    "line": 1,
+                    "page": 1,
+                    "charEnd": 25,
+                    "rotation": 0,
+                    "charStart": 0,
+                    "pageWidth": 600,
+                    "pageHeight": 800,
+                    "rectangles": [
+                      {
+                        "top": 0.0702070207020702,
+                        "left": 0.07743097238895558,
+                        "width": 0.3877551020408163,
+                        "height": 0.022502250225022502
+                      }
+                    ],
+                    "coordinateSystem": "display_normalized_top_left"
+                  },
+                  "ordinal": 0,
+                  "snippet": "Research protocol RQ-001\n",
+                  "passageId": "passage_646e9b410b00bc0cdde69d54621e0522",
+                  "versionId": "document_version_91cf64d4ac0a48a8a5c8d4c2",
+                  "documentId": "context_doc_9c39fecfa1d740fbbafae13d"
+                }
+              }
+            ],
+            "coverage": {
+              "note": "Search snippets are not complete evidence. Empty results mean no keyword match, including accepted field names; report insufficient evidence within this search coverage, not universal absence.",
+              "scope": "current_project_sources",
+              "complete": true,
+              "includes": [
+                "selected_document_versions"
+              ],
+              "returned": 2,
+              "candidateWindow": 2,
+              "readForCitation": false
+            },
+            "sequence": 1,
+            "elapsedMs": 10,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "returnedCount": 2
+          },
+          {
+            "tool": "read_document_passage",
+            "input": {
+              "passageId": "passage_41820a9174618a60aa29bcd7f4bde39e",
+              "versionId": "document_version_91cf64d4ac0a48a8a5c8d4c2"
+            },
+            "phase": "read",
+            "status": "ok",
+            "sequence": 2,
+            "elapsedMs": 10,
+            "evidenceIds": [
+              "evidence_a90ede5399e3d5af260d00c6",
+              "evidence_b02bc5eb7897b87bba342c03",
+              "evidence_ede0dd058b7b51ac5183cd75"
+            ]
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 7416,
+          "knownCost": null,
+          "toolCalls": 2,
+          "toolRounds": 2,
+          "inputTokens": 11290,
+          "lastActiveAt": 1790727612385,
+          "outputTokens": 646,
+          "reservedTokens": 0,
+          "visibleToolCalls": 2,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-29 20:20:12.385804-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_a90ede5399e3d5af260d00c6",
+          "data": {
+            "text": "Temperature: 80 C\n",
+            "method": "ocr",
+            "uncertain": true,
+            "confidence": 93,
+            "uncertainWords": []
+          },
+          "kind": "document_passage",
+          "label": "RQ-scan.pdf",
+          "locator": {
+            "kind": "pdf",
+            "line": 2,
+            "page": 1,
+            "charEnd": 18,
+            "rotation": 0,
+            "charStart": 0,
+            "pageWidth": 600,
+            "pageHeight": 800,
+            "rectangles": [
+              {
+                "top": 0.12646264626462647,
+                "left": 0.07563025210084033,
+                "width": 0.2737094837935174,
+                "height": 0.022502250225022502
+              }
+            ],
+            "coordinateSystem": "display_normalized_top_left"
+          },
+          "version": {
+            "versionId": "document_version_91cf64d4ac0a48a8a5c8d4c2",
+            "documentId": "context_doc_9c39fecfa1d740fbbafae13d",
+            "contentHash": "b255d90b6601ccd7fe7c46c9694043a054607fdc2cbb139746976af65fd8a966",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 1,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "ocr": {
+                  "engine": "tesseract.js-7.0.0",
+                  "languages": [
+                    "eng",
+                    "chi_sim"
+                  ],
+                  "confidence": 93,
+                  "renderScale": 2.7777777777777777,
+                  "quarterTurns": 0,
+                  "languageVersion": "1.0.0"
+                },
+                "page": 1,
+                "method": "ocr",
+                "status": "ready",
+                "warnings": [
+                  "ocr_uncertain_text_check_original"
+                ]
+              },
+              "statusCounts": {
+                "ready": 1
+              },
+              "warningParts": 1,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "partial",
+            "passageId": "passage_41820a9174618a60aa29bcd7f4bde39e",
+            "limitations": [
+              "figures_and_scientific_images_not_interpreted",
+              "complex_table_structure_not_inferred"
+            ]
+          },
+          "warnings": []
+        },
+        {
+          "id": "evidence_b02bc5eb7897b87bba342c03",
+          "data": {
+            "text": "Research protocol RQ-001\n",
+            "method": "ocr",
+            "uncertain": true,
+            "confidence": 91,
+            "uncertainWords": [
+              {
+                "text": "RQ-001",
+                "rectangle": {
+                  "top": 0.0702070207020702,
+                  "left": 0.3577430972388956,
+                  "width": 0.10744297719087631,
+                  "height": 0.018001800180018013
+                },
+                "confidence": 84
+              }
+            ]
+          },
+          "kind": "document_passage",
+          "label": "RQ-scan.pdf",
+          "locator": {
+            "kind": "pdf",
+            "line": 1,
+            "page": 1,
+            "charEnd": 25,
+            "rotation": 0,
+            "charStart": 0,
+            "pageWidth": 600,
+            "pageHeight": 800,
+            "rectangles": [
+              {
+                "top": 0.0702070207020702,
+                "left": 0.07743097238895558,
+                "width": 0.3877551020408163,
+                "height": 0.022502250225022502
+              }
+            ],
+            "coordinateSystem": "display_normalized_top_left"
+          },
+          "version": {
+            "versionId": "document_version_91cf64d4ac0a48a8a5c8d4c2",
+            "documentId": "context_doc_9c39fecfa1d740fbbafae13d",
+            "contentHash": "b255d90b6601ccd7fe7c46c9694043a054607fdc2cbb139746976af65fd8a966",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 1,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "ocr": {
+                  "engine": "tesseract.js-7.0.0",
+                  "languages": [
+                    "eng",
+                    "chi_sim"
+                  ],
+                  "confidence": 93,
+                  "renderScale": 2.7777777777777777,
+                  "quarterTurns": 0,
+                  "languageVersion": "1.0.0"
+                },
+                "page": 1,
+                "method": "ocr",
+                "status": "ready",
+                "warnings": [
+                  "ocr_uncertain_text_check_original"
+                ]
+              },
+              "statusCounts": {
+                "ready": 1
+              },
+              "warningParts": 1,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "partial",
+            "passageId": "passage_646e9b410b00bc0cdde69d54621e0522",
+            "limitations": [
+              "figures_and_scientific_images_not_interpreted",
+              "complex_table_structure_not_inferred"
+            ]
+          },
+          "warnings": []
+        },
+        {
+          "id": "evidence_ede0dd058b7b51ac5183cd75",
+          "data": {
+            "text": "Duration: 30 minutes\n",
+            "method": "ocr",
+            "uncertain": true,
+            "confidence": 96,
+            "uncertainWords": []
+          },
+          "kind": "document_passage",
+          "label": "RQ-scan.pdf",
+          "locator": {
+            "kind": "pdf",
+            "line": 3,
+            "page": 1,
+            "charEnd": 21,
+            "rotation": 0,
+            "charStart": 0,
+            "pageWidth": 600,
+            "pageHeight": 800,
+            "rectangles": [
+              {
+                "top": 0.18271827182718273,
+                "left": 0.07743097238895558,
+                "width": 0.3037214885954382,
+                "height": 0.01710171017101708
+              }
+            ],
+            "coordinateSystem": "display_normalized_top_left"
+          },
+          "version": {
+            "versionId": "document_version_91cf64d4ac0a48a8a5c8d4c2",
+            "documentId": "context_doc_9c39fecfa1d740fbbafae13d",
+            "contentHash": "b255d90b6601ccd7fe7c46c9694043a054607fdc2cbb139746976af65fd8a966",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 1,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "ocr": {
+                  "engine": "tesseract.js-7.0.0",
+                  "languages": [
+                    "eng",
+                    "chi_sim"
+                  ],
+                  "confidence": 93,
+                  "renderScale": 2.7777777777777777,
+                  "quarterTurns": 0,
+                  "languageVersion": "1.0.0"
+                },
+                "page": 1,
+                "method": "ocr",
+                "status": "ready",
+                "warnings": [
+                  "ocr_uncertain_text_check_original"
+                ]
+              },
+              "statusCounts": {
+                "ready": 1
+              },
+              "warningParts": 1,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "partial",
+            "passageId": "passage_e7b81fba968e85e0d1244559c3282b6e",
+            "limitations": [
+              "figures_and_scientific_images_not_interpreted",
+              "complex_table_structure_not_inferred"
+            ]
+          },
+          "warnings": []
+        }
+      ],
+      "elapsedMs": 7650,
+      "semanticReview": "pending"
+    },
+    {
+      "id": "R12",
+      "question": "What is the accepted temperature of Exp404?",
+      "expected": "no match; no substitute experiment",
+      "request": {
+        "runId": "agent_run_f86f7769554347709ee2d1d5",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "readonly-R12-1790727612607",
+        "question": "What is the accepted temperature of Exp404?",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 5,
+          "elapsedMs": 10644,
+          "knownCost": null,
+          "toolCalls": 5,
+          "toolRounds": 4,
+          "inputTokens": 16179,
+          "lastActiveAt": 1790727623263,
+          "outputTokens": 740,
+          "reservedTokens": 0,
+          "visibleToolCalls": 5,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-30T00:20:12.613Z",
+        "updatedAt": "2026-09-30T00:20:23.267Z",
+        "referenceDocuments": [],
+        "sourceScope": "project"
+      },
+      "artifact": {
+        "id": "answer_4f85d24176ae48618bd09db4",
+        "runId": "agent_run_f86f7769554347709ee2d1d5",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "No experiment named \"Exp404\" was found in the project's active accepted snapshots; the only listed experiments are Exp17 and Exp17B. Please confirm the exact experiment name or alias before I can report its accepted temperature.",
+              "citations": []
+            }
+          ],
+          "status": "clarification",
+          "limitations": [
+            "User-authored project context; not an accepted scientific result."
+          ],
+          "missingEvidence": [
+            "Exact experiment name/alias \"Exp404\" has no match among active accepted snapshot heads, so its accepted temperature cannot be read."
+          ],
+          "provenanceVersion": 2
+        },
+        "evidence": [
+          {
+            "id": "evidence_1bf763dedd8759b6f05a28ae",
+            "kind": "project_context",
+            "label": "Analysis Project",
+            "locator": {
+              "field": "name",
+              "cursor": 0
+            },
+            "version": {
+              "projectId": "project_analysis",
+              "updatedAt": "2026-08-23T12:00:00.000Z",
+              "contentHash": "bff81d99a680b7cb0ae0292bc6a3681f5ede1c1dfaea4427a455d64a468ca08e"
+            },
+            "coverage": {
+              "next": [],
+              "scope": "saved_project_background_window",
+              "fields": [
+                {
+                  "end": 16,
+                  "unit": "utf16_characters",
+                  "field": "name",
+                  "start": 0,
+                  "length": 16,
+                  "complete": true
+                }
+              ],
+              "complete": true
+            },
+            "warnings": [
+              "User-authored project context; not an accepted scientific result."
+            ]
+          }
+        ],
+        "trace": [
+          {
+            "tool": "find_experiments",
+            "input": {
+              "query": "Exp404"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [],
+            "coverage": {
+              "note": "Only active accepted snapshot heads are listed.",
+              "complete": true,
+              "exactNameOrAlias": true
+            },
+            "sequence": 1,
+            "elapsedMs": 3,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "matchStatus": "no_match",
+            "returnedCount": 0
+          },
+          {
+            "tool": "search_project_documents",
+            "input": {
+              "query": "Exp404"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [],
+            "coverage": {
+              "note": "Search snippets are not complete evidence. Empty results mean no keyword match, including accepted field names; report insufficient evidence within this search coverage, not universal absence.",
+              "scope": "current_project_sources",
+              "complete": true,
+              "includes": [
+                "uploaded_documents",
+                "confirmed_regions",
+                "accepted_field_names"
+              ],
+              "returned": 0,
+              "candidateWindow": 0,
+              "readForCitation": false
+            },
+            "sequence": 2,
+            "elapsedMs": 7,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "returnedCount": 0
+          },
+          {
+            "tool": "find_experiments",
+            "input": {
+              "query": ""
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [
+              {
+                "kind": "experiment",
+                "label": "Exp17",
+                "target": {
+                  "snapshotId": "snapshot_experiment_17",
+                  "experimentId": "experiment_17"
+                }
+              },
+              {
+                "kind": "experiment",
+                "label": "Exp17B",
+                "target": {
+                  "snapshotId": "snapshot_experiment_17b",
+                  "experimentId": "experiment_17b"
+                }
+              }
+            ],
+            "coverage": {
+              "note": "Only active accepted snapshot heads are listed.",
+              "complete": true,
+              "exactNameOrAlias": false
+            },
+            "sequence": 3,
+            "elapsedMs": 4,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "matchStatus": "matched",
+            "returnedCount": 2
+          },
+          {
+            "tool": "get_project_context",
+            "input": {
+              "field": "name"
+            },
+            "phase": "read",
+            "status": "ok",
+            "sequence": 4,
+            "elapsedMs": 5,
+            "evidenceIds": [
+              "evidence_1bf763dedd8759b6f05a28ae"
+            ]
+          },
+          {
+            "tool": "search_project_documents",
+            "input": {
+              "query": "temperature"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [
+              {
+                "kind": "document",
+                "label": "Q01-scope.txt",
+                "target": {
+                  "status": "ready",
+                  "locator": {
+                    "kind": "text",
+                    "charEnd": 165,
+                    "lineEnd": 6,
+                    "charStart": 0,
+                    "lineStart": 1
+                  },
+                  "ordinal": 0,
+                  "snippet": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n",
+                  "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+                  "versionId": "document_version_41c7c0741bb14509b77e7cc7",
+                  "documentId": "context_doc_27bfc7397cf5475eab908c80"
+                }
+              },
+              {
+                "kind": "document",
+                "label": "RQ-scan.pdf",
+                "target": {
+                  "status": "partial",
+                  "locator": {
+                    "kind": "pdf",
+                    "line": 2,
+                    "page": 1,
+                    "charEnd": 18,
+                    "rotation": 0,
+                    "charStart": 0,
+                    "pageWidth": 600,
+                    "pageHeight": 800,
+                    "rectangles": [
+                      {
+                        "top": 0.12646264626462647,
+                        "left": 0.07563025210084033,
+                        "width": 0.2737094837935174,
+                        "height": 0.022502250225022502
+                      }
+                    ],
+                    "coordinateSystem": "display_normalized_top_left"
+                  },
+                  "ordinal": 1,
+                  "snippet": "Temperature: 80 C\n",
+                  "passageId": "passage_41820a9174618a60aa29bcd7f4bde39e",
+                  "versionId": "document_version_91cf64d4ac0a48a8a5c8d4c2",
+                  "documentId": "context_doc_9c39fecfa1d740fbbafae13d"
+                }
+              },
+              {
+                "kind": "document",
+                "label": "RQ-scope.txt",
+                "target": {
+                  "status": "ready",
+                  "locator": {
+                    "kind": "text",
+                    "charEnd": 74,
+                    "lineEnd": 5,
+                    "charStart": 0,
+                    "lineStart": 5
+                  },
+                  "ordinal": 2,
+                  "snippet": "Wet samples are excluded; the protocol provides no wet-sample temperature.",
+                  "passageId": "passage_4291a6a1cef428f450b2c6ebde3d9594",
+                  "versionId": "document_version_a7770c7081fb4cbf82170f16",
+                  "documentId": "context_doc_53e0962149f64caa8f845b3d"
+                }
+              },
+              {
+                "kind": "document",
+                "label": "Q01-scope.txt",
+                "target": {
+                  "status": "ready",
+                  "locator": {
+                    "kind": "text",
+                    "charEnd": 88,
+                    "lineEnd": 3,
+                    "charStart": 0,
+                    "lineStart": 1
+                  },
+                  "ordinal": 0,
+                  "snippet": "Protocol: RQ-OTHER.\nTemperature: 99 C.\nThis unrelated document does not describe RQ-001.",
+                  "passageId": "passage_ed32b787dd600d0679808bb6e418cbda",
+                  "versionId": "document_version_f008a7da41a4480f86b7b5c8",
+                  "documentId": "context_doc_4b0afddf9c734aec96cb4a9c"
+                }
+              },
+              {
+                "kind": "experiment_field",
+                "label": "Exp17",
+                "target": {
+                  "snippet": "Temperature",
+                  "columnId": "temperature",
+                  "snapshotId": "snapshot_experiment_17",
+                  "fieldOffset": 0,
+                  "experimentId": "experiment_17",
+                  "canonicalLabel": "Exp17"
+                }
+              },
+              {
+                "kind": "experiment_field",
+                "label": "Exp17B",
+                "target": {
+                  "snippet": "Temperature",
+                  "columnId": "temperature",
+                  "snapshotId": "snapshot_experiment_17b",
+                  "fieldOffset": 0,
+                  "experimentId": "experiment_17b",
+                  "canonicalLabel": "Exp17B"
+                }
+              }
+            ],
+            "coverage": {
+              "note": "Search snippets are not complete evidence. Empty results mean no keyword match, including accepted field names; report insufficient evidence within this search coverage, not universal absence.",
+              "scope": "current_project_sources",
+              "complete": true,
+              "includes": [
+                "uploaded_documents",
+                "confirmed_regions",
+                "accepted_field_names"
+              ],
+              "returned": 6,
+              "candidateWindow": 6,
+              "readForCitation": false
+            },
+            "sequence": 5,
+            "elapsedMs": 5,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "returnedCount": 6
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 5,
+          "elapsedMs": 10644,
+          "knownCost": null,
+          "toolCalls": 5,
+          "toolRounds": 4,
+          "inputTokens": 16179,
+          "lastActiveAt": 1790727623263,
+          "outputTokens": 740,
+          "reservedTokens": 0,
+          "visibleToolCalls": 5,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-29 20:20:23.264118-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_1bf763dedd8759b6f05a28ae",
+          "data": {
+            "id": "project_analysis",
+            "name": "Analysis Project",
+            "updatedAt": "2026-08-23T12:00:00.000Z",
+            "projectProfile": {}
+          },
+          "kind": "project_context",
+          "label": "Analysis Project",
+          "locator": {
+            "field": "name",
+            "cursor": 0
+          },
+          "version": {
+            "projectId": "project_analysis",
+            "updatedAt": "2026-08-23T12:00:00.000Z",
+            "contentHash": "bff81d99a680b7cb0ae0292bc6a3681f5ede1c1dfaea4427a455d64a468ca08e"
+          },
+          "coverage": {
+            "next": [],
+            "scope": "saved_project_background_window",
+            "fields": [
+              {
+                "end": 16,
+                "unit": "utf16_characters",
+                "field": "name",
+                "start": 0,
+                "length": 16,
+                "complete": true
+              }
+            ],
+            "complete": true
+          },
+          "warnings": [
+            "User-authored project context; not an accepted scientific result."
+          ]
+        }
+      ],
+      "elapsedMs": 10786,
+      "semanticReview": "pending"
+    },
+    {
+      "id": "R12-field",
+      "question": "What is the accepted Pressure for Exp17? If missing, explain the stored reason.",
+      "expected": "missing, source_blank, unit bar; no invented value",
+      "request": {
+        "runId": "agent_run_336408d8493c440083b70b9b",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "readonly-R12-field-1790727623395",
+        "question": "What is the accepted Pressure for Exp17? If missing, explain the stored reason.",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 4,
+          "elapsedMs": 9263,
+          "knownCost": null,
+          "toolCalls": 3,
+          "toolRounds": 3,
+          "inputTokens": 14130,
+          "lastActiveAt": 1790727632673,
+          "outputTokens": 693,
+          "reservedTokens": 0,
+          "visibleToolCalls": 3,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-30T00:20:23.403Z",
+        "updatedAt": "2026-09-30T00:20:32.677Z",
+        "referenceDocuments": [],
+        "sourceScope": "project"
+      },
+      "artifact": {
+        "id": "answer_a15bbb782d3f4e6ba713cf32",
+        "runId": "agent_run_336408d8493c440083b70b9b",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "The accepted Pressure for Exp17 is missing: its stored value is null (no recorded value).",
+              "citations": [
+                {
+                  "evidenceId": "evidence_e62347d0072774df0cd7d390"
+                }
+              ]
+            },
+            {
+              "text": "The stored missing reason is \"source_blank\". The pressure field references source cell H2 on the Measurements sheet, whose raw value is also null.",
+              "citations": [
+                {
+                  "evidenceId": "evidence_e62347d0072774df0cd7d390"
+                }
+              ]
+            }
+          ],
+          "status": "answered",
+          "limitations": [
+            "Values retain their stored scale and unit; no conversion or new calculation was performed.",
+            "Only the listed windows were read; additional records remain available."
+          ],
+          "missingEvidence": [],
+          "provenanceVersion": 2
+        },
+        "evidence": [
+          {
+            "id": "evidence_e62347d0072774df0cd7d390",
+            "kind": "experiment_snapshot",
+            "label": "Exp17",
+            "locator": {
+              "seriesKey": null,
+              "fieldOffset": 0,
+              "pointOffset": 0,
+              "seriesOffset": 0
+            },
+            "version": {
+              "headId": "head_experiment_17",
+              "snapshotId": "snapshot_experiment_17",
+              "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+              "recordIndex": 0,
+              "experimentId": "experiment_17",
+              "headUpdatedAt": "2026-09-30T00:18:48.901Z"
+            },
+            "coverage": {
+              "scope": "accepted_snapshot_window",
+              "fieldCount": 29,
+              "seriesCount": 1,
+              "nextFieldOffset": 20,
+              "nextPointOffset": null,
+              "nextSeriesOffset": null
+            },
+            "warnings": [
+              "Values retain their stored scale and unit; no conversion or new calculation was performed."
+            ]
+          }
+        ],
+        "trace": [
+          {
+            "tool": "find_experiments",
+            "input": {
+              "query": "Exp17"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [
+              {
+                "kind": "experiment",
+                "label": "Exp17",
+                "target": {
+                  "snapshotId": "snapshot_experiment_17",
+                  "experimentId": "experiment_17"
+                }
+              }
+            ],
+            "coverage": {
+              "note": "Only active accepted snapshot heads are listed.",
+              "complete": true,
+              "exactNameOrAlias": true
+            },
+            "sequence": 1,
+            "elapsedMs": 18,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "matchStatus": "matched",
+            "returnedCount": 1
+          },
+          {
+            "tool": "read_experiment_evidence",
+            "input": {
+              "snapshotId": "snapshot_experiment_17",
+              "experimentId": "experiment_17"
+            },
+            "phase": "read",
+            "status": "ok",
+            "sequence": 2,
+            "elapsedMs": 6,
+            "evidenceIds": [
+              "evidence_e62347d0072774df0cd7d390"
+            ]
+          },
+          {
+            "tool": "read_document_passage",
+            "input": {
+              "passageId": "dummy",
+              "versionId": "dummy"
+            },
+            "phase": "read",
+            "status": "evidence_not_found",
+            "sequence": 3,
+            "elapsedMs": 2
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 4,
+          "elapsedMs": 9263,
+          "knownCost": null,
+          "toolCalls": 3,
+          "toolRounds": 3,
+          "inputTokens": 14130,
+          "lastActiveAt": 1790727632673,
+          "outputTokens": 693,
+          "reservedTokens": 0,
+          "visibleToolCalls": 3,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-29 20:20:32.674172-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_e62347d0072774df0cd7d390",
+          "data": {
+            "fields": [
+              {
+                "unit": "C",
+                "value": 82,
+                "columnId": "temperature",
+                "valueType": "number",
+                "sourceRefs": [
+                  {
+                    "cell": "B2",
+                    "sheet": "Measurements",
+                    "rawValue": 80
+                  }
+                ],
+                "displayName": "Temperature"
+              },
+              {
+                "unit": "%",
+                "value": 0.42,
+                "columnId": "yield_fraction",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Yield",
+                "numericScale": "fraction"
+              },
+              {
+                "unit": "%",
+                "value": 42,
+                "columnId": "yield_points",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Yield",
+                "numericScale": "percent_points"
+              },
+              {
+                "unit": "bar",
+                "value": null,
+                "columnId": "pressure",
+                "valueType": "number",
+                "sourceRefs": [
+                  {
+                    "cell": "H2",
+                    "sheet": "Measurements",
+                    "rawValue": null
+                  }
+                ],
+                "displayName": "Pressure",
+                "missingReason": "source_blank",
+                "formattedValue": null
+              },
+              {
+                "unit": "min",
+                "value": 30,
+                "columnId": "duration",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Duration"
+              },
+              {
+                "unit": "mg",
+                "value": 100,
+                "columnId": "aux_0",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 0"
+              },
+              {
+                "unit": "mg",
+                "value": 101,
+                "columnId": "aux_1",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 1"
+              },
+              {
+                "unit": "mg",
+                "value": 102,
+                "columnId": "aux_2",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 2"
+              },
+              {
+                "unit": "mg",
+                "value": 103,
+                "columnId": "aux_3",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 3"
+              },
+              {
+                "unit": "mg",
+                "value": 104,
+                "columnId": "aux_4",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 4"
+              },
+              {
+                "unit": "mg",
+                "value": 105,
+                "columnId": "aux_5",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 5"
+              },
+              {
+                "unit": "mg",
+                "value": 106,
+                "columnId": "aux_6",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 6"
+              },
+              {
+                "unit": "mg",
+                "value": 107,
+                "columnId": "aux_7",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 7"
+              },
+              {
+                "unit": "mg",
+                "value": 108,
+                "columnId": "aux_8",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 8"
+              },
+              {
+                "unit": "mg",
+                "value": 109,
+                "columnId": "aux_9",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 9"
+              },
+              {
+                "unit": "mg",
+                "value": 110,
+                "columnId": "aux_10",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 10"
+              },
+              {
+                "unit": "mg",
+                "value": 111,
+                "columnId": "aux_11",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 11"
+              },
+              {
+                "unit": "mg",
+                "value": 112,
+                "columnId": "aux_12",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 12"
+              },
+              {
+                "unit": "mg",
+                "value": 113,
+                "columnId": "aux_13",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 13"
+              },
+              {
+                "unit": "mg",
+                "value": 114,
+                "columnId": "aux_14",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 14"
+              }
+            ],
+            "series": [
+              {
+                "label": "Temperature trace",
+                "xField": {
+                  "unit": "min",
+                  "fieldId": "time"
+                },
+                "yField": {
+                  "unit": "C",
+                  "fieldId": "temperature"
+                },
+                "seriesKey": "temperature_trace",
+                "pointCount": 121,
+                "sourceRefs": []
+              }
+            ],
+            "warnings": [],
+            "acceptedAt": "2026-09-30T00:18:48.898Z",
+            "fieldCount": 29,
+            "snapshotId": "snapshot_experiment_17",
+            "sourceRefs": [],
+            "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+            "seriesCount": 1,
+            "sourceAlias": "Exp17",
+            "experimentId": "experiment_17",
+            "seriesWindow": null,
+            "recordWarnings": []
+          },
+          "kind": "experiment_snapshot",
+          "label": "Exp17",
+          "locator": {
+            "seriesKey": null,
+            "fieldOffset": 0,
+            "pointOffset": 0,
+            "seriesOffset": 0
+          },
+          "version": {
+            "headId": "head_experiment_17",
+            "snapshotId": "snapshot_experiment_17",
+            "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+            "recordIndex": 0,
+            "experimentId": "experiment_17",
+            "headUpdatedAt": "2026-09-30T00:18:48.901Z"
+          },
+          "coverage": {
+            "scope": "accepted_snapshot_window",
+            "fieldCount": 29,
+            "seriesCount": 1,
+            "nextFieldOffset": 20,
+            "nextPointOffset": null,
+            "nextSeriesOffset": null
+          },
+          "warnings": [
+            "Values retain their stored scale and unit; no conversion or new calculation was performed."
+          ]
+        }
+      ],
+      "elapsedMs": 9501,
+      "semanticReview": "pending"
+    },
+    {
+      "id": "R12-topic",
+      "question": "What concentration of cobalt does the project evidence establish?",
+      "expected": "bounded search and insufficient evidence",
+      "request": {
+        "runId": "agent_run_57c3e4a81e614d45b022ed2b",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "readonly-R12-topic-1790727632898",
+        "question": "What concentration of cobalt does the project evidence establish?",
+        "status": "failed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": "qa_token_limit",
+          "provider": "deepseek",
+          "requests": 4,
+          "elapsedMs": 9392,
+          "knownCost": null,
+          "toolCalls": 11,
+          "toolRounds": 4,
+          "inputTokens": 15207,
+          "lastActiveAt": 1790727642307,
+          "outputTokens": 908,
+          "reservedTokens": 0,
+          "visibleToolCalls": 11,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": "qa_token_limit",
+        "createdAt": "2026-09-30T00:20:32.907Z",
+        "updatedAt": "2026-09-30T00:20:42.308Z",
+        "referenceDocuments": [],
+        "sourceScope": "project"
+      },
+      "artifact": null,
+      "evidence": [],
+      "elapsedMs": 9483,
+      "semanticReview": "pending"
+    }
+  ],
+  "semanticReview": "pending",
+  "files": {
+    "backend/src/research/citedAnswer.js": "03365fcc4fb63bb8f281590556e3cbb1adf8f8fd86d3a5be1aa00520dd743279",
+    "backend/src/research/evidenceTools.js": "7b0e4b45e32d2a91361cb766a426f7227859ae040a8b69ad0982d3ae8ea4fb11",
+    "backend/src/v1/research-qa/research-questions.service.ts": "9542431d87c9c0e1300caf73f5d140a22678a36feb658f4a62a851d69207aad9",
+    "backend/src/v1/research-qa/research-evidence.service.ts": "0b63da274b9116b74cd57adfc8cd2b505d0d54b5307c26781719028f471e82d9"
+  },
+  "finishedAt": "2026-09-30T00:20:42.383Z"
+}

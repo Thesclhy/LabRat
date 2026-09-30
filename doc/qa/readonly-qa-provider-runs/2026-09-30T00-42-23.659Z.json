@@ -1,0 +1,794 @@
+{
+  "startedAt": "2026-09-30T00:42:23.659Z",
+  "material": "synthetic only",
+  "provider": {
+    "provider": "deepseek",
+    "model": "deepseek-v4-pro",
+    "configured": true
+  },
+  "completed": true,
+  "records": [
+    {
+      "trace": [
+        {
+          "sequence": 1,
+          "tool": "search_project_documents",
+          "phase": "discovery",
+          "input": {
+            "query": "RQ-001"
+          },
+          "status": "ok",
+          "evidenceIds": [],
+          "coverage": {
+            "scope": "selected_document_versions",
+            "readForCitation": false,
+            "returned": 1,
+            "candidateWindow": 1,
+            "complete": true,
+            "includes": [
+              "selected_document_versions"
+            ],
+            "note": "Only the selected document versions were searched. Search snippets are not complete evidence; read relevant passages. No experiment records or other project sources were searched."
+          },
+          "returnedCount": 1,
+          "matches": [
+            {
+              "kind": "document",
+              "label": "Q01-scope.txt",
+              "target": {
+                "status": "ready",
+                "locator": {
+                  "kind": "text",
+                  "charEnd": 165,
+                  "lineEnd": 6,
+                  "charStart": 0,
+                  "lineStart": 1
+                },
+                "ordinal": 0,
+                "snippet": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n",
+                "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+                "versionId": "document_version_c27603244f424e87aaac26fc",
+                "documentId": "context_doc_fb34d67e47564c7186276d27"
+              }
+            }
+          ],
+          "nextCursor": null,
+          "elapsedMs": 22
+        },
+        {
+          "sequence": 2,
+          "tool": "read_document_passage",
+          "phase": "read",
+          "input": {
+            "versionId": "document_version_c27603244f424e87aaac26fc",
+            "passageId": "passage_b37b68bf84100eaac095b89683d3897b"
+          },
+          "status": "ok",
+          "evidenceIds": [
+            "evidence_f8d7bbf2708397758138edd4"
+          ],
+          "elapsedMs": 11
+        }
+      ],
+      "readWindows": [
+        {
+          "id": "evidence_f8d7bbf2708397758138edd4",
+          "kind": "document_passage",
+          "label": "Q01-scope.txt",
+          "version": {
+            "documentId": "context_doc_fb34d67e47564c7186276d27",
+            "versionId": "document_version_c27603244f424e87aaac26fc",
+            "versionNumber": 1,
+            "contentHash": "0e64e7445dcbac709ddcfbbeb62497a00e662a624476a3eb69a3efa7bee1a068",
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "locator": {
+            "kind": "text",
+            "charEnd": 165,
+            "lineEnd": 6,
+            "charStart": 0,
+            "lineStart": 1
+          },
+          "data": {
+            "text": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+            "status": "ready",
+            "source": {
+              "parts": 1,
+              "statusCounts": {
+                "ready": 1
+              },
+              "location": {
+                "part": "text",
+                "lines": 6,
+                "status": "ready"
+              },
+              "warningParts": 0,
+              "scope": "summary_and_cited_location_only",
+              "fullCoverageAvailableOnVersion": true
+            },
+            "limitations": []
+          },
+          "warnings": []
+        }
+      ],
+      "id": "R01",
+      "question": "Based only on this document, what are the temperature, duration, and applicable sample types for RQ-001?",
+      "expected": "80 C; 30 minutes; dry only, wet excluded; selected version (not same-name 99 C)",
+      "request": {
+        "runId": "agent_run_86e573cb22434cc78b03f5cc",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "readonly-R01-1790728952673",
+        "question": "Based only on this document, what are the temperature, duration, and applicable sample types for RQ-001?",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 6131,
+          "knownCost": null,
+          "toolCalls": 2,
+          "toolRounds": 2,
+          "inputTokens": 7286,
+          "lastActiveAt": 1790728958820,
+          "outputTokens": 414,
+          "reservedTokens": 0,
+          "visibleToolCalls": 2,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-30T00:42:32.683Z",
+        "updatedAt": "2026-09-30T00:42:38.824Z",
+        "referenceDocuments": [
+          {
+            "label": "Q01-scope.txt",
+            "versionId": "document_version_c27603244f424e87aaac26fc",
+            "documentId": "context_doc_fb34d67e47564c7186276d27",
+            "versionNumber": 1
+          }
+        ],
+        "sourceScope": "selected"
+      },
+      "artifact": {
+        "id": "answer_b63304692faf42248413e59a",
+        "runId": "agent_run_86e573cb22434cc78b03f5cc",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "According to Q01-scope.txt, RQ-001 specifies a temperature of 80 C and a duration of 30 minutes. The applicable sample type is dry sample only; wet samples are excluded.",
+              "citations": [
+                {
+                  "evidenceId": "evidence_f8d7bbf2708397758138edd4"
+                }
+              ]
+            }
+          ],
+          "status": "answered",
+          "limitations": [],
+          "missingEvidence": [],
+          "provenanceVersion": 2
+        },
+        "evidence": [
+          {
+            "id": "evidence_f8d7bbf2708397758138edd4",
+            "kind": "document_passage",
+            "label": "Q01-scope.txt",
+            "locator": {
+              "kind": "text",
+              "charEnd": 165,
+              "lineEnd": 6,
+              "charStart": 0,
+              "lineStart": 1
+            },
+            "version": {
+              "versionId": "document_version_c27603244f424e87aaac26fc",
+              "documentId": "context_doc_fb34d67e47564c7186276d27",
+              "contentHash": "0e64e7445dcbac709ddcfbbeb62497a00e662a624476a3eb69a3efa7bee1a068",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 1,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "part": "text",
+                  "lines": 6,
+                  "status": "ready"
+                },
+                "statusCounts": {
+                  "ready": 1
+                },
+                "warningParts": 0,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "ready",
+              "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+              "limitations": []
+            },
+            "warnings": []
+          }
+        ],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "input": {
+              "query": "RQ-001"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [
+              {
+                "kind": "document",
+                "label": "Q01-scope.txt",
+                "target": {
+                  "status": "ready",
+                  "locator": {
+                    "kind": "text",
+                    "charEnd": 165,
+                    "lineEnd": 6,
+                    "charStart": 0,
+                    "lineStart": 1
+                  },
+                  "ordinal": 0,
+                  "snippet": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n",
+                  "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+                  "versionId": "document_version_c27603244f424e87aaac26fc",
+                  "documentId": "context_doc_fb34d67e47564c7186276d27"
+                }
+              }
+            ],
+            "coverage": {
+              "note": "Only the selected document versions were searched. Search snippets are not complete evidence; read relevant passages. No experiment records or other project sources were searched.",
+              "scope": "selected_document_versions",
+              "complete": true,
+              "includes": [
+                "selected_document_versions"
+              ],
+              "returned": 1,
+              "candidateWindow": 1,
+              "readForCitation": false
+            },
+            "sequence": 1,
+            "elapsedMs": 22,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "returnedCount": 1
+          },
+          {
+            "tool": "read_document_passage",
+            "input": {
+              "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+              "versionId": "document_version_c27603244f424e87aaac26fc"
+            },
+            "phase": "read",
+            "status": "ok",
+            "sequence": 2,
+            "elapsedMs": 11,
+            "evidenceIds": [
+              "evidence_f8d7bbf2708397758138edd4"
+            ]
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 6131,
+          "knownCost": null,
+          "toolCalls": 2,
+          "toolRounds": 2,
+          "inputTokens": 7286,
+          "lastActiveAt": 1790728958820,
+          "outputTokens": 414,
+          "reservedTokens": 0,
+          "visibleToolCalls": 2,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-29 20:42:38.821085-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_f8d7bbf2708397758138edd4",
+          "data": {
+            "text": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n"
+          },
+          "kind": "document_passage",
+          "label": "Q01-scope.txt",
+          "locator": {
+            "kind": "text",
+            "charEnd": 165,
+            "lineEnd": 6,
+            "charStart": 0,
+            "lineStart": 1
+          },
+          "version": {
+            "versionId": "document_version_c27603244f424e87aaac26fc",
+            "documentId": "context_doc_fb34d67e47564c7186276d27",
+            "contentHash": "0e64e7445dcbac709ddcfbbeb62497a00e662a624476a3eb69a3efa7bee1a068",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 1,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "part": "text",
+                "lines": 6,
+                "status": "ready"
+              },
+              "statusCounts": {
+                "ready": 1
+              },
+              "warningParts": 0,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "ready",
+            "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+            "limitations": []
+          },
+          "warnings": []
+        }
+      ],
+      "elapsedMs": 6382,
+      "semanticReview": "pending"
+    },
+    {
+      "trace": [
+        {
+          "sequence": 1,
+          "tool": "search_project_documents",
+          "phase": "discovery",
+          "input": {
+            "query": "Exp17"
+          },
+          "status": "ok",
+          "evidenceIds": [],
+          "coverage": {
+            "scope": "selected_document_versions",
+            "readForCitation": false,
+            "returned": 1,
+            "candidateWindow": 1,
+            "complete": true,
+            "includes": [
+              "selected_document_versions"
+            ],
+            "note": "Only the selected document versions were searched. Search snippets are not complete evidence; read relevant passages. No experiment records or other project sources were searched."
+          },
+          "returnedCount": 1,
+          "matches": [
+            {
+              "kind": "document",
+              "label": "Q01-scope.txt",
+              "target": {
+                "status": "ready",
+                "locator": {
+                  "kind": "text",
+                  "charEnd": 165,
+                  "lineEnd": 6,
+                  "charStart": 0,
+                  "lineStart": 1
+                },
+                "ordinal": 0,
+                "snippet": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n",
+                "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+                "versionId": "document_version_c27603244f424e87aaac26fc",
+                "documentId": "context_doc_fb34d67e47564c7186276d27"
+              }
+            }
+          ],
+          "nextCursor": null,
+          "elapsedMs": 26
+        },
+        {
+          "sequence": 2,
+          "tool": "search_project_documents",
+          "phase": "discovery",
+          "input": {
+            "query": "Exp17 temperature"
+          },
+          "status": "ok",
+          "evidenceIds": [],
+          "coverage": {
+            "scope": "selected_document_versions",
+            "readForCitation": false,
+            "returned": 1,
+            "candidateWindow": 1,
+            "complete": true,
+            "includes": [
+              "selected_document_versions"
+            ],
+            "note": "Only the selected document versions were searched. Search snippets are not complete evidence; read relevant passages. No experiment records or other project sources were searched."
+          },
+          "returnedCount": 1,
+          "matches": [
+            {
+              "kind": "document",
+              "label": "Q01-scope.txt",
+              "target": {
+                "status": "ready",
+                "locator": {
+                  "kind": "text",
+                  "charEnd": 165,
+                  "lineEnd": 6,
+                  "charStart": 0,
+                  "lineStart": 1
+                },
+                "ordinal": 0,
+                "snippet": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n",
+                "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+                "versionId": "document_version_c27603244f424e87aaac26fc",
+                "documentId": "context_doc_fb34d67e47564c7186276d27"
+              }
+            }
+          ],
+          "nextCursor": null,
+          "elapsedMs": 11
+        },
+        {
+          "sequence": 3,
+          "tool": "read_document_passage",
+          "phase": "read",
+          "input": {
+            "versionId": "document_version_c27603244f424e87aaac26fc",
+            "passageId": "passage_b37b68bf84100eaac095b89683d3897b"
+          },
+          "status": "ok",
+          "evidenceIds": [
+            "evidence_f8d7bbf2708397758138edd4"
+          ],
+          "elapsedMs": 8
+        }
+      ],
+      "readWindows": [
+        {
+          "id": "evidence_f8d7bbf2708397758138edd4",
+          "kind": "document_passage",
+          "label": "Q01-scope.txt",
+          "version": {
+            "documentId": "context_doc_fb34d67e47564c7186276d27",
+            "versionId": "document_version_c27603244f424e87aaac26fc",
+            "versionNumber": 1,
+            "contentHash": "0e64e7445dcbac709ddcfbbeb62497a00e662a624476a3eb69a3efa7bee1a068",
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "locator": {
+            "kind": "text",
+            "charEnd": 165,
+            "lineEnd": 6,
+            "charStart": 0,
+            "lineStart": 1
+          },
+          "data": {
+            "text": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+            "status": "ready",
+            "source": {
+              "parts": 1,
+              "statusCounts": {
+                "ready": 1
+              },
+              "location": {
+                "part": "text",
+                "lines": 6,
+                "status": "ready"
+              },
+              "warningParts": 0,
+              "scope": "summary_and_cited_location_only",
+              "fullCoverageAvailableOnVersion": true
+            },
+            "limitations": []
+          },
+          "warnings": []
+        }
+      ],
+      "id": "R08",
+      "question": "仅根据选中资料，Exp17 的实测温度是多少？",
+      "expected": "selected document has method only; no experiment read or inferred measured value",
+      "request": {
+        "runId": "agent_run_af182b0aac36440ea2d04c12",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "readonly-R08-1790728959056",
+        "question": "仅根据选中资料，Exp17 的实测温度是多少？",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 10743,
+          "knownCost": null,
+          "toolCalls": 3,
+          "toolRounds": 2,
+          "inputTokens": 8337,
+          "lastActiveAt": 1790728969817,
+          "outputTokens": 963,
+          "reservedTokens": 0,
+          "visibleToolCalls": 3,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-30T00:42:39.067Z",
+        "updatedAt": "2026-09-30T00:42:49.821Z",
+        "referenceDocuments": [
+          {
+            "label": "Q01-scope.txt",
+            "versionId": "document_version_c27603244f424e87aaac26fc",
+            "documentId": "context_doc_fb34d67e47564c7186276d27",
+            "versionNumber": 1
+          }
+        ],
+        "sourceScope": "selected"
+      },
+      "artifact": {
+        "id": "answer_2528bcd856b24e3aaf8c22b2",
+        "runId": "agent_run_af182b0aac36440ea2d04c12",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "选中的 Q01-scope.txt 中只写了协议 RQ-001 的条件 “Temperature: 80 C”，并没有出现 Exp17 或其实测温度。",
+              "citations": [
+                {
+                  "evidenceId": "evidence_f8d7bbf2708397758138edd4"
+                }
+              ]
+            }
+          ],
+          "status": "insufficient_evidence",
+          "limitations": [],
+          "missingEvidence": [
+            "选中资料中未包含 Exp17 的实测温度；文档仅提供 RQ-001 的协议温度 80 C，无法据此得出 Exp17 的实测值。"
+          ],
+          "provenanceVersion": 2
+        },
+        "evidence": [
+          {
+            "id": "evidence_f8d7bbf2708397758138edd4",
+            "kind": "document_passage",
+            "label": "Q01-scope.txt",
+            "locator": {
+              "kind": "text",
+              "charEnd": 165,
+              "lineEnd": 6,
+              "charStart": 0,
+              "lineStart": 1
+            },
+            "version": {
+              "versionId": "document_version_c27603244f424e87aaac26fc",
+              "documentId": "context_doc_fb34d67e47564c7186276d27",
+              "contentHash": "0e64e7445dcbac709ddcfbbeb62497a00e662a624476a3eb69a3efa7bee1a068",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 1,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "part": "text",
+                  "lines": 6,
+                  "status": "ready"
+                },
+                "statusCounts": {
+                  "ready": 1
+                },
+                "warningParts": 0,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "ready",
+              "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+              "limitations": []
+            },
+            "warnings": []
+          }
+        ],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "input": {
+              "query": "Exp17"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [
+              {
+                "kind": "document",
+                "label": "Q01-scope.txt",
+                "target": {
+                  "status": "ready",
+                  "locator": {
+                    "kind": "text",
+                    "charEnd": 165,
+                    "lineEnd": 6,
+                    "charStart": 0,
+                    "lineStart": 1
+                  },
+                  "ordinal": 0,
+                  "snippet": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n",
+                  "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+                  "versionId": "document_version_c27603244f424e87aaac26fc",
+                  "documentId": "context_doc_fb34d67e47564c7186276d27"
+                }
+              }
+            ],
+            "coverage": {
+              "note": "Only the selected document versions were searched. Search snippets are not complete evidence; read relevant passages. No experiment records or other project sources were searched.",
+              "scope": "selected_document_versions",
+              "complete": true,
+              "includes": [
+                "selected_document_versions"
+              ],
+              "returned": 1,
+              "candidateWindow": 1,
+              "readForCitation": false
+            },
+            "sequence": 1,
+            "elapsedMs": 26,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "returnedCount": 1
+          },
+          {
+            "tool": "search_project_documents",
+            "input": {
+              "query": "Exp17 temperature"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [
+              {
+                "kind": "document",
+                "label": "Q01-scope.txt",
+                "target": {
+                  "status": "ready",
+                  "locator": {
+                    "kind": "text",
+                    "charEnd": 165,
+                    "lineEnd": 6,
+                    "charStart": 0,
+                    "lineStart": 1
+                  },
+                  "ordinal": 0,
+                  "snippet": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n",
+                  "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+                  "versionId": "document_version_c27603244f424e87aaac26fc",
+                  "documentId": "context_doc_fb34d67e47564c7186276d27"
+                }
+              }
+            ],
+            "coverage": {
+              "note": "Only the selected document versions were searched. Search snippets are not complete evidence; read relevant passages. No experiment records or other project sources were searched.",
+              "scope": "selected_document_versions",
+              "complete": true,
+              "includes": [
+                "selected_document_versions"
+              ],
+              "returned": 1,
+              "candidateWindow": 1,
+              "readForCitation": false
+            },
+            "sequence": 2,
+            "elapsedMs": 11,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "returnedCount": 1
+          },
+          {
+            "tool": "read_document_passage",
+            "input": {
+              "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+              "versionId": "document_version_c27603244f424e87aaac26fc"
+            },
+            "phase": "read",
+            "status": "ok",
+            "sequence": 3,
+            "elapsedMs": 8,
+            "evidenceIds": [
+              "evidence_f8d7bbf2708397758138edd4"
+            ]
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 10743,
+          "knownCost": null,
+          "toolCalls": 3,
+          "toolRounds": 2,
+          "inputTokens": 8337,
+          "lastActiveAt": 1790728969817,
+          "outputTokens": 963,
+          "reservedTokens": 0,
+          "visibleToolCalls": 3,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-29 20:42:49.818466-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_f8d7bbf2708397758138edd4",
+          "data": {
+            "text": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n"
+          },
+          "kind": "document_passage",
+          "label": "Q01-scope.txt",
+          "locator": {
+            "kind": "text",
+            "charEnd": 165,
+            "lineEnd": 6,
+            "charStart": 0,
+            "lineStart": 1
+          },
+          "version": {
+            "versionId": "document_version_c27603244f424e87aaac26fc",
+            "documentId": "context_doc_fb34d67e47564c7186276d27",
+            "contentHash": "0e64e7445dcbac709ddcfbbeb62497a00e662a624476a3eb69a3efa7bee1a068",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 1,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "part": "text",
+                "lines": 6,
+                "status": "ready"
+              },
+              "statusCounts": {
+                "ready": 1
+              },
+              "warningParts": 0,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "ready",
+            "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+            "limitations": []
+          },
+          "warnings": []
+        }
+      ],
+      "elapsedMs": 10801,
+      "semanticReview": "pending"
+    }
+  ],
+  "semanticReview": "pending",
+  "files": {
+    "backend/src/research/citedAnswer.js": "3d3afd3872fe493af8507118a35d442882b2e91cefbd1264e9fcf46167ae93cf",
+    "backend/src/research/evidenceTools.js": "7b0e4b45e32d2a91361cb766a426f7227859ae040a8b69ad0982d3ae8ea4fb11",
+    "backend/src/v1/research-qa/research-questions.service.ts": "39bb99f25408431cdea34c920bc0a87101dc3d4e575dfc183d69cb2136ab7719",
+    "backend/src/v1/research-qa/research-evidence.service.ts": "2514bf9b58ffdb2fc3c6e4a37e51a6fd6ffc6ce3d48a1affaa72b6f0ff0d5dda"
+  },
+  "finishedAt": "2026-09-30T00:42:49.857Z"
+}

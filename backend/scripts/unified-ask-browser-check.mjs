@@ -36,8 +36,13 @@ await withTestSchema(databaseUrl, async ({ databaseUrl: isolated }) => {
     const fixture = await seedResearchCorpus(app, isolated);
     const provider = app.get(V1_MODEL_PROVIDER);
     let retryFailure = true;
+
     provider.publicConfig = () => ({ configured: true, provider: "test-substitute", model: "synthetic-browser-only" });
     provider.answerResearchQuestion = async (input, { toolHandlers: tools, signal }) => {
+      if (input.question.includes("citation failure")) {
+        if (!input.citationRepair) await tools.get_project_context({});
+        return { ok: true, status: "answered", claims: [{ text: "The saved goal is to study catalyst stability, with an unavailable link.", citations: [{ evidenceId: "unread" }] }], missingEvidence: [] };
+      }
       if (input.question.includes("fail once") && retryFailure) {
         retryFailure = false; return { ok: false, warning: { code: "ai_request_failed", message: "HTTP 429" } };
       }
@@ -138,6 +143,46 @@ await withTestSchema(databaseUrl, async ({ databaseUrl: isolated }) => {
     const panel = owner.getByRole("complementary", { name: "Ask LabRat panel" });
     await panel.waitFor();
     const draft = panel.getByRole("textbox", { name: "Ask LabRat", exact: true });
+    await draft.fill("Read the saved project goal, slow response");
+    await panel.getByRole("button", { name: "Send message", exact: true }).click();
+    const progress = panel.getByRole("status").filter({ hasText: "Reading sources…" });
+    await progress.waitFor();
+    const statusLayouts = [];
+    for (const width of [1440, 390]) {
+      await owner.setViewportSize({ width, height: 900 });
+      const layout = await progress.evaluate(el => {
+        const card = el.closest('.ask-task'), action = card.querySelector('button');
+        const statusBox = el.getBoundingClientRect(), buttonBox = action.getBoundingClientRect();
+        return { font: getComputedStyle(el).fontSize, casing: getComputedStyle(el).textTransform,
+          buttonFont: getComputedStyle(action).fontSize, noOverlap: statusBox.bottom + 7 <= buttonBox.top,
+          fits: card.scrollWidth <= card.clientWidth + 1 };
+      });
+      assert.deepEqual(layout, { font: "13px", casing: "none", buttonFont: "12px", noOverlap: true, fits: true });
+      statusLayouts.push({ width, ...layout });
+      await panel.screenshot({ path: path.join(output, `citation-progress-${width}.png`) });
+    }
+    await panel.getByRole("button", { name: "Cancel", exact: true }).click();
+    await panel.getByText("Question cancelled.", { exact: true }).waitFor();
+    await draft.fill("Read the saved project goal, citation failure");
+    await panel.getByRole("button", { name: "Send message", exact: true }).click();
+    const omitted = panel.getByText('The saved goal is to study catalyst stability, with an unavailable link.', { exact:true });
+    await omitted.waitFor();
+    const answerCard = omitted.locator('xpath=ancestor::div[contains(@class,"ask-cited-answer")]');
+    assert.equal(await answerCard.locator('.qa-citations button').count(),0,'Unknown IDs never render links');
+    await answerCard.getByText('Coverage and limitations',{exact:true}).click();
+    await answerCard.getByText('Some source links were unavailable and have been omitted. The sources read are listed below.',{exact:true}).waitFor();
+    await answerCard.getByText('Sources read · 1',{exact:true}).click();
+    await answerCard.getByRole('button',{name:'Saved project background',exact:true}).click();
+    await owner.getByRole('dialog').getByText('Study catalyst stability',{exact:true}).waitFor();
+    await owner.keyboard.press('Escape');
+    await answerCard.getByText('Search and read activity',{exact:true}).click();
+    assert.match(await answerCard.innerText(),/1 evidence windows read/);
+    await panel.screenshot({path:path.join(output,'sources-read-390.png')});
+    assert.ok(await panel.evaluate(el=>el.scrollWidth<=el.clientWidth+1));
+    await owner.setViewportSize({width:1440,height:1000});
+    await panel.screenshot({path:path.join(output,'sources-read-1440.png')});
+    await writeFile(path.join(output,'citation-status-layout.json'),JSON.stringify({status:'passed',statusLayouts,
+      interactions:['cancel','unknown links omitted after one repair','uncited read retained','original source opens','reading activity visible']},null,2));
     await draft.fill("Navigation should keep this unsent question");
     await panel.getByRole("button", { name: "Library", exact: true }).click();
     await owner.getByRole("region", { name: "Reference library" }).waitFor();
@@ -286,6 +331,11 @@ await withTestSchema(databaseUrl, async ({ databaseUrl: isolated }) => {
     await otherDevice.screenshot({ path: path.join(output, "task-other-device-mobile.png"), fullPage: false });
     await otherTask.getByRole("button", { name: "Continue question", exact: true }).click();
     await otherPanel.getByText("The saved goal is to study catalyst stability.", { exact: true }).waitFor();
+    const otherAnswer=otherPanel.getByText("The saved goal is to study catalyst stability.",{exact:true}).locator('xpath=ancestor::div[contains(@class,"ask-cited-answer")]');
+    await otherAnswer.getByText('Sources read · 1',{exact:true}).click();
+    await otherAnswer.getByRole('button',{name:'Saved project background',exact:true}).click();
+    await otherDevice.getByRole('dialog').getByText('Study catalyst stability',{exact:true}).waitFor();
+    await otherDevice.keyboard.press('Escape');
     await otherDevice.screenshot({ path: path.join(output, "task-other-device-continued.png"), fullPage: true });
     assert.equal((await pool.query("select count(*)::int count from research_qa_requests where request_key=$1", [`task-${savedTask.id}`])).rows[0].count, 1);
     await panel.getByText("The saved goal is to study catalyst stability.", { exact: true }).waitFor();

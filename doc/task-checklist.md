@@ -2,11 +2,38 @@
 
 Status: active
 Read when: starting or continuing a non-trivial LabRat milestone.
-Last reviewed: 2026-09-28
+Last reviewed: 2026-09-30
 
 This file is the reusable execution checklist for Codex work. It should describe how to run a milestone, not what the current product strategy is. Current milestone state belongs in `doc/current-milestone.md`; recent completed work belongs in `doc/PROGRESS.md`.
 
 ## Long-Task Loop
+
+Mean-temperature fix release (2026-09-30):
+
+- [x] Back up database/files and fast-forward main to c8a5869.
+- [x] Hosted regression including PostgreSQL and deployment completed.
+- [x] Verify exact live assets, compiled routing, health and auth boundaries.
+- [ ] User retest with a new question; leave incorrect old Revision 1 unapproved.
+
+Release evidence: doc/qa/analysis-series-mean-deployment.md.
+
+Read-only Q&A/source trace (2026-09-29):
+
+- [x] Freeze R01–R17 before edits and update the superseding answer contract.
+- [x] Protect original-tree work; use isolated codex/readonly-qa-trace.
+- [x] Keep scientific review/auth boundaries; model-select bounded read tools.
+- [x] Retain shape/read-ID checks, remove prose/number acceptance gates.
+- [x] Persist all returned windows and grouped Sources read across history.
+- [x] Review both providers’ actual answers; retain first failures and limit behavior.
+- [x] Verify PostgreSQL and actual browser/second-session behavior.
+- [x] Complete final full regression and record exact counts.
+- [x] Deliver manual test instructions in doc/qa/readonly-qa-trace.md.
+
+- [x] Back up production, fast-forward main to 159e50b and verify hosted deployment.
+- [x] Verify active release, exact public assets, health and unauthenticated rejection.
+- [ ] User manual acceptance; see doc/qa/readonly-qa-trace.md.
+
+Release evidence: doc/qa/readonly-qa-deployment.md.
 
 Cross-device pending Ask tasks (2026-09-28):
 

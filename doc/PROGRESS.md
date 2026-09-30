@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-09-28
+Last reviewed: 2026-09-30
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -12,6 +12,171 @@ Keep entries concise, newest first, and include:
 - meaningful changes
 - verification
 - follow-ups or residual risk
+
+## 2026-09-30 — Integrate current main into frontend routing
+
+- User requested resolving conflicts with main. Saved the complete local routing
+  work as bcdae22 on codex/frontend-routing-phase1, then integrated origin/main
+  933c5fc. The original dirty checkout and other worktrees are preserved.
+- Resolved overlapping progress/milestone text by retaining both histories.
+  Source trace, reference typography and missing-series clarification from main
+  remain alongside routing, browser history and manuscript draft protection.
+- Preflight and full codex:verify passed: 479 frontend, 402 legacy-backend and
+  74 Nest tests; nine existing skips, generated API, builds and entry smoke pass.
+- All 14 actual Chromium/HTTP/PostgreSQL navigation scenarios passed against
+  the integrated production build. Desktop/390px prompts and workbook review
+  screenshots inspected. No browser runtime errors; test services stopped.
+- Confirmed all 64 main-only files match origin/main and the App merge adds
+  exactly its clarification prop to the routing implementation. Conflict markers
+  are cleared and diff checks pass. Evidence: doc/qa/frontend-routing-phase1.md
+  and doc/qa/frontend-routing-main-integration-browser.json.
+- Local integration only; no remote main update, push or deployment.
+
+## 2026-09-30 — Deploy mean-temperature planning fix
+
+- User authorized deployment. Committed verified changes as c8a5869 and
+  fast-forwarded main from bad89ca; original dirty workspace was excluded.
+- Fresh database/file backup 20260930151934 passed integrity checks. Existing
+  workflow 36735959542 passed hosted tests including PostgreSQL, builds and deploy.
+- Active release /opt/labrat/releases/20260930152442-c8a586963e5f; exact public
+  HTML/JS/CSS, service, health, compiled calculation/direct-draft routing and
+  unauthenticated 401 checks passed. No production research write or model call.
+- Evidence: doc/qa/analysis-series-mean-deployment.md plus live/workflow receipts.
+  User retest remains pending; deployment did not change or approve old Revision 1.
+
+## 2026-09-30 — Fix mean-temperature plan intent and missing-series clarification
+
+- User reported that a calculation-only Exp17 request produced a chart plan,
+  treated a scalar cell as a series and announced an unexecuted mean.
+- Reused the isolated checkout on codex/analysis-series-mean. Added shared
+  output-choice gating, nullable model clarification for both plan providers,
+  non-executable/durable Ask clarification, and existing-card input status.
+  No standalone calculation result type or answer-prose validator was added.
+- Regression covers direct-draft bypass, Browser surface, missing series,
+  prior-revision preservation, no execution, and actual single-point series.
+  Full verification passed: 452 frontend, 402 Node backend (9 expected skips),
+  74 Nest; API/build/smoke passed. Both real providers' four-case replays and
+  desktop/390px browser card checks passed after fixing initial findings.
+- Final prompt wording refinement rechecked with 17 provider unit tests, backend
+  build and both real providers. Details, first failures and manual retest:
+  doc/qa/analysis-series-mean.md. Fresh PostgreSQL and production checks not run.
+- Local fix only; production remains 159e50b. Existing incorrect Revision 1
+  is not modified or approved. User manual retest follows deployment.
+
+## 2026-09-30 — Read-only Q&A merged to main and deployed
+
+- User explicitly requested main merge. Confirmed remote baseline unchanged and
+  fast-forwarded main from 4f99874 to verified application 159e50b. Preserved all
+  unrelated original-tree work and reused the isolated checkout.
+- Fresh backup set 20260930050229 passed database/file integrity checks before
+  push. Existing main-triggered workflow 36671612147 passed hosted frontend/backend,
+  full PostgreSQL regression, generated API, builds, entry smoke and deployment.
+- Live verification confirmed exact release, public HTML/JS/CSS hashes, service
+  and health, selected-only tool exposure, new answer interface and 401 auth
+  boundaries. No production research data was written or model request made.
+- Local gh credentials were invalid; SSH push and connector/public API status
+  checks succeeded without credential changes. Evidence and live receipts:
+  doc/qa/readonly-qa-deployment.md. Documentation published separately with skip-ci.
+- User manual acceptance remains pending; refresh and submit a new selected-source
+  question using doc/qa/readonly-qa-trace.md. Historical answers remain unchanged.
+
+## 2026-09-29 — Read-only Q&A M3 verified and delivered locally
+
+- Completed the approved source-trace goal in codex/readonly-qa-trace; all reads,
+  not only cited ones, persist with immutable identity and discovery/read activity.
+  Sources read is compact/collapsible and retains legacy cited-only history labels.
+- Both real providers completed the 16-case synthetic suite with inspected answer
+  content and exact source/tool identity. Initial DeepSeek missing-topic failures
+  remain saved. Reaching a reading budget now saves an honest incomplete-reading
+  outcome and prior reads; no extra model call, larger budget or claim of absence.
+- Full codex verification passed: 451 frontend, 396 Node backend (9 expected
+  skips), 72 Nest; generated API, backend/frontend builds and production-entry
+  smoke passed. Existing large-bundle warning only. Four targeted PostgreSQL
+  scenarios cover permissions, immutable history, uncited reads, limit handling
+  and cross-device continuation. An initially mistyped fourth test path was
+  corrected and that scenario passed separately.
+- Actual desktop/390px HTTP/PostgreSQL/Chromium workflow passed and final source
+  screenshots were visually inspected. One intervening local-server disconnection
+  was retained; standalone rerun passed without suppressing assertions. Its
+  transient root cause was not established.
+- Final audit corrected selected-only search coverage wording. Build/scoped
+  database recheck and R01/R08 real-provider rechecks on both providers passed.
+  No subsequent application changes. git diff --check passed. Test-owned local
+  database stopped after checking for other clients.
+- Updated active plan/contracts/checklist and delivered manual instructions in
+  doc/qa/readonly-qa-trace.md; semantic review and preserved failures are in
+  doc/qa/readonly-qa-provider-review.md. No migration/dependency change or production
+  deployment. Original dirty working-tree code is untouched. User manual acceptance
+  remains pending; the online deployment still uses application 2bf3226.
+
+## 2026-09-29 — Read-only Q&A M1/M2 implementation
+
+- Replaced prose/quote/number checking with format and read-ID integrity; unknown
+  IDs receive one tool-free repair then are omitted with a limitation. Legacy
+  quote/binding fields are no longer required or persisted on new answers.
+- Model selects its initial read/discovery tool. Preserved early scientific
+  review handoff, project permissions and confirmed-workbook readers. Save all
+  returned evidence plus bounded arguments, discovery targets and read IDs.
+- Added collapsed Sources read, immutable grouping/window links and legacy
+  Saved sources explanation. Actual browser HTTP/PostgreSQL/Chromium flow passed
+  at desktop and 390px, including unknown-link fallback, original source opening,
+  refresh/second-device continuation and View restrictions. Screenshots inspected.
+- Backend compile, 23 interface/gateway tests, 21 frontend tests and four targeted
+  PostgreSQL scenarios passed. One old test substitute depended on removed fixed
+  discovery; corrected it to explicitly invoke the search tool and reran it.
+- Automatic review initially rejected the edit script; preserved the old review
+  router, pinned absolute isolated-workspace paths and checked all edits before
+  writing. The revised action was approved and completed. No original-tree code
+  changes or weakened tool permissions resulted.
+- M3: real-provider semantic evaluation and full regression remain in progress.
+
+## 2026-09-29 — Read-only Q&A simplification M0
+
+- Started the approved goal on codex/readonly-qa-trace from current origin/main
+  4f99874; reused the isolated checkout and left original unrelated changes alone.
+- Preflight passed; inspected answer service, evidence registry, persistence,
+  tools, UI and active authorization/scientific contracts. Current persistence
+  keeps only cited windows; trace lacks arguments/result identities.
+- Froze 17 acceptance cases before code edits in doc/qa/readonly-qa-trace.md;
+  recorded the simplification plan and precedence over old prose validators.
+- M1 implementation and all functional verification remain pending.
+
+## 2026-09-28 — Ask citation validation and progress presentation
+
+- User reported crowded progress text and qa_citation_invalid on Q01-scope.txt.
+  Read-only diagnostics confirmed complete source text and an incorrectly broad
+  scope; isolated real-provider replay reproduced RQ-001 digits rejected as new
+  numerical values in both initial answer and bounded repair.
+- Distinguish exact source-declared protocol codes from measurements, retaining
+  literal quotes, units, numeric bindings and uncertain-OCR protection. Recognize
+  "Based only/solely on" for selected references in Ask and task continuation.
+- Split sentence-case progress and action rows at 13px/12px; citation errors now
+  explain verification failure instead of claiming service unavailability.
+- Full codex verification passed (447 frontend, 397 legacy backend with nine
+  expected skips, 72 Nest tests, API generation/build/smoke); three focused real
+  PostgreSQL scenarios passed. Real provider returned all requested facts with
+  valid citations on its initial answer. Actual browser regression passed at
+  desktop/390px widths, including status geometry, cancel and retry.
+- Application 2bf3226 deployed via workflow 36482075444 at release
+  20260928205352-2bf3226c3497. Backup integrity, exact public assets, service/auth
+  checks and a fresh same-question live-provider replay passed. Test-owned local
+  database was stopped after confirming no other clients.
+- Evidence and limits: `doc/qa/qa-citation-status.md`. Existing failed runs and
+  their saved source scopes are preserved; user retest should submit a new question.
+
+## 2026-09-28 — Compact @ reference picker typography
+
+- User reported oversized reference filenames. The picker inherited 18px/44px
+  composer-button styles, also causing long-name and metadata overlap.
+- Scoped CSS uses 13px filenames, 11px metadata, tighter spacing and automatic
+  row height while preserving selected backgrounds and full filenames.
+- Build/diff checks and actual Chromium/HTTP/PostgreSQL verification passed at
+  desktop/390px widths, including long Chinese/English names and mouse/keyboard
+  selection. Temporary harness issues were corrected; final screenshots inspected.
+- Application 84e4443 deployed via workflow 36478638372 at release
+  20260928202623-84e4443fa687. Backup, full hosted checks and live asset/health
+  verification passed. See `doc/qa/reference-picker-typography.md`.
+- User retest pending. No production research writes or provider calls.
 
 ## 2026-09-28 — Frontend routing phase one verified locally
 

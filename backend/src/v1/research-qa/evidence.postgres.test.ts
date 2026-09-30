@@ -46,6 +46,14 @@ describe.skipIf(!databaseUrl)("research evidence PostgreSQL", () => {
         const scope = await contextual.invoke("read_document_passage", { versionId: scopeHit.target.versionId, passageId: scopeHit.target.passageId });
         const excluded = scope.contextEvidence.find((item: any) => item.data.text.startsWith("Wet samples"));
         expect(excluded).toBeTruthy(); expect(excluded.locator.lineStart).toBe(5);
+        expect(contextual.trace[0]).toMatchObject({ phase:'discovery', input:{query:'RQ-001 dry samples'}, evidenceIds:[], status:'ok' });
+        expect(contextual.trace[1]).toMatchObject({ phase:'read',input:{versionId:scopeHit.target.versionId,passageId:scopeHit.target.passageId},
+          evidenceIds:[scope.evidence.id,...scope.contextEvidence.map((item:any)=>item.id)] });
+        const before=contextual.registry.values().map((item:any)=>item.id);
+        await expect(contextual.invoke('read_document_passage',{versionId:scopeHit.target.versionId,passageId:'not-real'})).rejects.toMatchObject({statusCode:404});
+        expect(contextual.registry.values().map((item:any)=>item.id)).toEqual(before);
+        expect(contextual.trace.at(-1)).toMatchObject({phase:'read',status:'evidence_not_found'});
+        expect(contextual.trace.at(-1)?.evidenceIds).toBeUndefined();
         expect(excluded.version.versionId).toBe(scope.evidence.version.versionId);
         expect([scope.evidence, ...scope.contextEvidence].reduce((size: number, item: any) => size + item.data.text.length, 0)).toBeLessThanOrEqual(4000);
         expect(validateCitedAnswer({ status: "answered", claims: [{ text: "Wet samples are excluded.", numericBindings: [],

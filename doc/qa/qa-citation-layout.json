@@ -1,0 +1,26 @@
+{
+  "status": "passed",
+  "statusLayouts": [
+    {
+      "width": 1440,
+      "font": "13px",
+      "casing": "none",
+      "buttonFont": "12px",
+      "noOverlap": true,
+      "fits": true
+    },
+    {
+      "width": 390,
+      "font": "13px",
+      "casing": "none",
+      "buttonFont": "12px",
+      "noOverlap": true,
+      "fits": true
+    }
+  ],
+  "interactions": [
+    "cancel",
+    "citation failure details",
+    "retry same question"
+  ]
+}

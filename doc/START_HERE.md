@@ -6,6 +6,12 @@ Last reviewed: 2026-09-28
 
 This file is the routing guide for AI agents. It tells you which docs are current source of truth, which docs are long-term plans, and which docs are historical reports.
 
+For the current read-only Q&A simplification, start with
+[the approved plan](plans/readonly-qa-trace.md),
+[fixed acceptance matrix](qa/readonly-qa-trace.md), and
+[Q&A contract](contracts/research-qa-v1.md). Its 2026-09-29 decision supersedes
+the old prose numeric/quotation acceptance rules; unrelated safeguards remain.
+
 ## Current Direction
 
 For the active local frontend navigation goal, read

@@ -606,7 +606,7 @@ test("Anthropic Q&A tool requests preserve the original answer and citation limi
       assert.match(sent.properties.claims.description, /maxItems=8/);
       const claim = sent.properties.claims.items.properties;
       assert.equal(claim.text.maxLength, undefined);
-      assert.equal(claim.citations.minItems, 1);
+      assert.equal(claim.citations.minItems, undefined);
       assert.equal(claim.citations.maxItems, undefined);
       assert.deepEqual(claim.numericBindings.items.properties.unit.type, ["string", "null"]);
       return jsonResponse({ content: [{ type: "text", text: JSON.stringify({ status: "answered",

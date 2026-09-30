@@ -103,6 +103,20 @@ export function deterministicAnalysisIntent({ message = "", selectedContext = {}
     && browserMention
     && (dataObject || experimentObject)
     && !pureDisplayRequest;
+  const calculation = /\b(normalize|calculate|compute|sum|average|means?|median|regression|fit|correlation|statistics?)\b/.test(value)
+    || /(?:归一化|标准化|计算|求和|平均|拟合|回归|相关性|统计)/.test(raw);
+  const explicitDataWrite = /\b(add|append|publish|replace|merge|populate)\b/.test(value)
+    || /(?:增加|添加|追加|发布|替换|合并|写入)/.test(raw);
+  if (calculation && !chartRequest && !explicitBrowserPublication && !explicitDataWrite
+    && !["chart", "experiment_browser"].includes(selectedContext?.analysisOutputTarget)) {
+    return result({
+      intent: "clarification",
+      disposition: "clarification",
+      clarification: /[\p{Script=Han}]/u.test(raw)
+        ? "目前计算流程支持生成图表或把结果写入实验数据，尚不支持只返回一个计算结果。你希望采用哪种输出？我会先核对所需数据，再准备审核计划。"
+        : "The calculation workflow currently supports a chart or a new experiment-data field, rather than a standalone numeric answer. Which output do you want? I will check the required inputs before preparing a plan for review.",
+    });
+  }
   const contextualBrowserPublication = browserSurface
     && dataChangeVerb
     && (dataObject || experimentObject)
@@ -189,8 +203,6 @@ export function deterministicAnalysisIntent({ message = "", selectedContext = {}
     });
   }
 
-  const calculation = /\b(normalize|calculate|compute|sum|average|mean|median|regression|fit|correlation|statistics?)\b/.test(value)
-    || /(?:归一化|标准化|计算|求和|平均|拟合|回归|相关性|统计)/.test(raw);
   if (calculation) {
     return result({
       intent: "experiment_compare",

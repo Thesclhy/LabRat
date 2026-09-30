@@ -1,8 +1,8 @@
 # Current Milestone
 
-Status: Frontend routing phase one — complete and verified locally
+Status: Frontend routing integrated with current main and verified locally; not deployed
 Read when: checking what the next implementation slice should be.
-Last reviewed: 2026-09-28
+Last reviewed: 2026-09-30
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
 
@@ -16,10 +16,61 @@ lifetime, save/discard/stay, cancellation and access-loss handling are in place.
 acceptance and final 78-test manuscript/navigation regression pass. The
 [acceptance report](qa/frontend-routing-phase1.md) audits every requirement and
 records existing skips, resolved test issues and remaining scope limits. Test
-services are stopped. No push, merge or deployment is authorized, and phase two
-is not started. The prior deployed work below remains the production checkpoint.
+services were stopped at that checkpoint. On 2026-09-30 the user requested
+conflict resolution with main. Local branch codex/frontend-routing-phase1 now
+integrates origin/main 933c5fc, retaining its source-trace and analysis fixes.
+Integrated codex:verify passed (479 frontend, 402 legacy backend, 74 Nest; nine
+existing skips), along with all 14 real-browser acceptance scenarios. Test
+services are stopped. No remote main update, push or deployment is included,
+and phase two is not started. The deployed records below remain
+the production checkpoints.
+
+## Manual-test follow-up: mean-temperature planning
+
+2026-09-30: fixed and verified the scalar-to-series substitution reported
+by the user on codex/analysis-series-mean, reusing the isolated checkout at main
+bad89ca. No calculation-only result type is added. Pure calculations clarify
+output; missing series can return a non-executable clarification. Full regression, both real providers and desktop/narrow card checks passed.
+See doc/qa/analysis-series-mean.md for counts, limits and manual retest. User
+authorized deployment on 2026-09-30. Application c8a5869 is deployed; workflow
+36735959542 and live release/asset/health/routing/auth checks passed. See
+doc/qa/analysis-series-mean-deployment.md. User retest remains pending.
+
+## Active goal: unified read-only Q&A and source trace
+
+2026-09-29: completed doc/plans/readonly-qa-trace.md on
+codex/readonly-qa-trace from origin/main 4f99874 in the existing isolated checkout.
+The original dirty working tree is excluded. Preflight passed. M0 baseline and
+fixed acceptance matrix doc/qa/readonly-qa-trace.md are recorded before code edits.
+M1/M2 implemented: structural-only answer checks, model-selected initial tools,
+all returned evidence and bounded trace, grouped Sources read and legacy history.
+Focused unit/UI, PostgreSQL question/evidence/task scenarios and actual desktop/
+narrow browser workflow passed. Both real providers completed the 16-case final
+suite with inspected semantic expectations; first failures are retained in
+doc/qa/readonly-qa-provider-review.md. Limits produce a saved incomplete-reading
+message with sources, never a claim of absence. Full regression passed: 451 frontend,
+396 Node backend (9 expected skips), 72 Nest; builds/API/smoke passed. Final scope
+wording was followed by build, PostgreSQL and two real-model selected-source rechecks.
+Manual instructions and all verification details are in doc/qa/readonly-qa-trace.md.
+User authorized main merge on 2026-09-30. Application 159e50b is deployed at
+/opt/labrat/releases/20260930050626-159e50b9a21a; workflow 36671612147 and live release/asset/health/auth
+checks passed. See doc/qa/readonly-qa-deployment.md. User manual acceptance remains
+pending; refresh and submit a new question to test this version.
 
 ## Manual acceptance follow-up
+
+The user reported overlapping Ask progress text and qa_citation_invalid for
+Q01-scope.txt. A bounded real-provider replay reproduced protocol RQ-001 being
+misclassified as numeric value 001, including after the one permitted repair.
+The fix recognizes explicit source-declared protocol tokens without admitting
+their digits as measurements. It also separates progress/actions at 13px/12px,
+explains citation failures accurately, and recognizes "Based only on" as selected
+source scope. Full regression, focused database checks and real-model replay
+passed. Actual browser checks also passed at desktop/390px widths, including
+cancel/error/retry and the full existing Ask workflow. Application 2bf3226 deployed
+via successful workflow 36482075444; exact live assets, service/auth checks and
+same-question live-provider replay passed. See `doc/qa/qa-citation-status.md`.
+User acceptance remains pending; refresh and submit a new selected-source question.
 
 The user requested readable PDF page navigation instead of text-block choices.
 Implemented page/total, direct page selection and Previous/Next, preserving exact

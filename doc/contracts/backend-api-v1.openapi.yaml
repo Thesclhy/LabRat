@@ -2065,6 +2065,7 @@ paths:
     post:
       tags: [Analysis]
       operationId: createAnalysisPlanRevision
+      description: Missing or ambiguous required inputs return analysis_plan_clarification_required without saving a revision.
       x-labrat-capability: propose
       x-labrat-scope: all_experiments
       requestBody:
@@ -2080,6 +2081,7 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "413": { $ref: "#/components/responses/ValidationError" }
+        "422": { $ref: "#/components/responses/ValidationError" }
   /api/v1/analysis-threads/{threadId}/retry:
     parameters: [{ $ref: "#/components/parameters/ThreadId" }]
     post:
@@ -5237,7 +5239,7 @@ components:
       required: [request, artifact]
       properties:
         request: { $ref: "#/components/schemas/ResearchQuestion" }
-        artifact: { anyOf: [{ $ref: "#/components/schemas/JsonObject" }, { type: "null" }] }
+        artifact: { description: 'Personal immutable answer, evidence metadata and bounded tool trace. provenanceVersion 2 retains all successful read windows; legacy records may contain cited sources only. Source links are not factual verification.', anyOf: [{ $ref: "#/components/schemas/JsonObject" }, { type: "null" }] }
         reused: { type: boolean }
     ResearchQuestionPage:
       type: object

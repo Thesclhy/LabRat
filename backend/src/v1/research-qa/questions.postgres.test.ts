@@ -37,10 +37,15 @@ describe.skipIf(!databaseUrl)("persistent cited questions PostgreSQL (model subs
         const provider = app.get(V1_MODEL_PROVIDER);
         let mode = "valid", formatWarning = "ai_invalid_response", release: (() => void) | undefined;
         const model = vi.spyOn(provider, "answerResearchQuestion").mockImplementation(async (input: any, options: any) => {
-          const context = mode === "format" && input.citationRepair
+          const context = input.citationRepair
             ? { evidence: input.citationRepair.readEvidence.find((item: any) => item.kind === "project_context") }
             : await options.toolHandlers.get_project_context({});
           if (mode === "format" && !input.citationRepair) return { ok: false, warning: { code: formatWarning, message: "Synthetic format failure" } } as any;
+          if (input.citationRepair) expect(Object.keys(options.toolHandlers)).toEqual([]);
+          if (mode === "limit") await options.budget.wrapFetch(async () => { throw new Error("No additional provider request is allowed"); })(
+            "https://invalid.example", { body: JSON.stringify({ max_tokens: 60_001 }) });
+          if (mode === "multi") await options.toolHandlers.get_project_context({ field: "projectProfile.researchGoal" });
+          if (mode === "malformed") return { ok: true, status: "answered", claims: "broken", missingEvidence: [] } as any;
           if (mode === "late") await new Promise<void>((resolve) => { release = resolve; });
           return { ok: true, status: "answered", claims: [{ text: "The saved project goal is to study catalyst stability.",
             citations: [{ evidenceId: mode === "invalid" ? "fabricated" : context.evidence.id, quote: "Study catalyst stability" }], numericBindings: [] }], missingEvidence: [] } as any;
@@ -53,7 +58,7 @@ describe.skipIf(!databaseUrl)("persistent cited questions PostgreSQL (model subs
         const complete = await terminal(app, viewer.cookie, id);
         expect((await app.inject({ method: "GET", url: `${base}/${id}`, headers: { cookie: viewer.cookie } })).headers["cache-control"]).toContain("no-store");
         expect(complete.request.status).toBe("completed"); expect(complete.artifact.answer.status).toBe("answered");
-        expect(complete.artifact.answer.limitations).not.toContain("Only the cited window was read; additional records remain available.");
+        expect(complete.artifact.answer.limitations).not.toContain("Only the listed windows were read; additional records remain available.");
         expect(complete.artifact.evidence[0].data).toBeUndefined(); expect(complete.request.leaseToken).toBeUndefined();
         const cited = complete.artifact.answer.claims[0].citations[0].evidenceId;
         const source = await app.inject({ method: "GET", url: `${base}/${id}/evidence/${cited}`, headers: { cookie: viewer.cookie } });
@@ -81,8 +86,19 @@ describe.skipIf(!databaseUrl)("persistent cited questions PostgreSQL (model subs
         expect(model).toHaveBeenCalledTimes(1);
         mode = "invalid";
         const invalid = await send("request-invalid-01");
-        const failed = await terminal(app, viewer.cookie, invalid.json().request.runId);
-        expect(failed.request.failureCode).toBe("qa_citation_invalid"); expect(failed.artifact).toBeNull(); expect(model).toHaveBeenCalledTimes(3);
+        const omitted = await terminal(app, viewer.cookie, invalid.json().request.runId);
+        expect(omitted.request.status).toBe("completed"); expect(model).toHaveBeenCalledTimes(3);
+        expect(omitted.artifact.answer.claims[0].citations).toEqual([]);
+        expect(omitted.artifact.answer.limitations.join(' ')).toContain('omitted');
+        expect(omitted.artifact.evidence).toHaveLength(1); // uncited successful read is retained
+        expect(omitted.artifact.trace).toEqual([expect.objectContaining({ tool:'get_project_context',phase:'read',input:{},
+          evidenceIds:[omitted.artifact.evidence[0].id],status:'ok' })]);
+        expect((await app.inject({method:'GET',url:base+'/'+omitted.request.runId+'/evidence/'+omitted.artifact.evidence[0].id,
+          headers:{cookie:viewer.cookie}})).json().evidence.data.projectProfile.researchGoal).toBe('Study catalyst stability');
+        mode = "malformed";
+        const malformed = await send("request-malformed-01");
+        const failed = await terminal(app, viewer.cookie, malformed.json().request.runId);
+        expect(failed.request.failureCode).toBe("qa_output_invalid"); expect(failed.artifact).toBeNull();
 
         mode = "format";
         for (const warning of ["ai_invalid_response", "ai_empty_response", "ai_output_truncated"]) {
@@ -95,6 +111,30 @@ describe.skipIf(!databaseUrl)("persistent cited questions PostgreSQL (model subs
           expect(repaired.artifact.trace.filter((item: any) => item.tool === "get_project_context")).toHaveLength(1);
           expect(repaired.artifact.answer.claims[0].text).toContain("catalyst stability");
         }
+
+        mode = "multi";
+        const multi = await send("request-multiple-reads-01");
+        const allReads = await terminal(app, viewer.cookie, multi.json().request.runId);
+        expect(allReads.artifact.evidence).toHaveLength(2);
+        expect(allReads.artifact.answer.claims[0].citations).toHaveLength(1);
+        const citedIds = new Set(allReads.artifact.answer.claims[0].citations.map((item: any) => item.evidenceId));
+        const uncited = allReads.artifact.evidence.find((item: any) => !citedIds.has(item.id));
+        expect(uncited.locator.field).toBe("projectProfile.researchGoal");
+        expect((await app.inject({method:"GET",url:base+"/"+allReads.request.runId+"/evidence/"+uncited.id,
+          headers:{cookie:viewer.cookie}})).json().evidence.data.projectProfile.researchGoal).toBe("Study catalyst stability");
+        expect(allReads.artifact.trace.flatMap((item: any) => item.evidenceIds)).toHaveLength(2);
+
+        mode = "limit";
+        const limited = await send("request-reading-limit-01");
+        const limitResult = await terminal(app, viewer.cookie, limited.json().request.runId);
+        expect(limitResult.request.status).toBe("completed");
+        expect(limitResult.request.usage.failure).toBe("qa_token_limit");
+        expect(limitResult.artifact.answer.route).toBe("read_limit");
+        expect(limitResult.artifact.answer.status).toBe("insufficient_evidence");
+        expect(limitResult.artifact.answer.claims).toEqual([]);
+        expect(limitResult.artifact.answer.missingEvidence[0]).toContain("does not establish");
+        expect(limitResult.artifact.evidence).toHaveLength(1);
+        expect(limitResult.artifact.trace).toHaveLength(1);
 
         mode = "late";
         const slow = await send("request-cancel-01"); const slowId = slow.json().request.runId;

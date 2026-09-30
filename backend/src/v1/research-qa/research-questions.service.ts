@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger, type OnModuleDestroy } from "@nestjs/common";
 import { createQaBudget } from "../../research/qaBudget.js";
-import { researchBoundary, validateCitedAnswer } from "../../research/citedAnswer.js";
+import { researchBoundary, answerWithReadLinks, validateCitedAnswer } from "../../research/citedAnswer.js";
 import { QA_LIMITS } from "../../research/evidenceTools.js";
 import type { AuthContext } from "../identity/identity.types.js";
 import { ApiError } from "../platform/http/api-error.js";
@@ -38,7 +38,7 @@ export class ResearchQuestionsService implements OnModuleDestroy {
     const { project } = await this.documents.authorize(auth, projectId);
     const question = input.question.trim();
     if (!question) throw new ApiError(400, "qa_question_empty", "Enter a question.");
-    const sourceScope = input.sourceScope === "selected" || input.referenceDocuments?.length && /(?:仅|只)(?:根据|使用|参考|用)|\bonly\s+(?:use|using|from|based on)\b/i.test(question) ? "selected" : "project";
+    const sourceScope = input.sourceScope === "selected" || input.referenceDocuments?.length && /(?:仅|只)(?:根据|使用|参考|用)|\bonly\s+(?:use|using|from|based on)\b|\bbased\s+(?:only|solely)\s+on\b/i.test(question) ? "selected" : "project";
     const existing = await this.repository.byRequestKey(auth, projectId, input.requestKey);
     if (existing) {
       const saved = await this.repository.context(auth, projectId, existing.runId);
@@ -139,14 +139,13 @@ export class ResearchQuestionsService implements OnModuleDestroy {
       if (boundary) {
         answer = { status: boundary, claims: [], missingEvidence: [], limitations: [], route: "review_boundary" };
       } else {
-        const initialDiscovery = await session.invoke("search_project_documents", { query: request.question.slice(0, 500) });
         let generated: any;
         let errors: string[] = [];
         for (let repair = 0; repair <= 1; repair += 1) {
           generated = await (this.provider.answerResearchQuestion as any)({ question: request.question, selectedContext: context,
             ...(repair ? { citationRepair: { errors, previous: { status: generated.status, claims: generated.claims,
-              missingEvidence: generated.missingEvidence }, readEvidence: session.registry.values() } } : { initialDiscovery }) },
-            { toolHandlers: session.handlers, signal: controller.signal, budget });
+              missingEvidence: generated.missingEvidence }, readEvidence: session.registry.values() } } : {}) },
+            { toolHandlers: repair ? {} : session.handlers, signal: controller.signal, budget });
           budget.check(); await session.check();
           if (!generated?.ok) {
             if (!repair && ["ai_empty_response", "ai_output_truncated", "ai_invalid_response"].includes(generated?.warning?.code)) {
@@ -161,27 +160,40 @@ export class ResearchQuestionsService implements OnModuleDestroy {
           }
           const candidate = { status: generated.status, claims: generated.claims, missingEvidence: generated.missingEvidence };
           const validation = validateCitedAnswer(candidate, session.registry.values());
-          if (validation.valid) { answer = candidate; break; }
+          if (validation.valid || repair && validation.shapeValid) {
+            answer = answerWithReadLinks(candidate, session.registry.values()); break;
+          }
           errors = validation.errors;
-          if (repair) throw new ApiError(422, "qa_citation_invalid", "The answer could not be supported by the retrieved evidence.");
+          if (repair) throw new ApiError(422, "qa_output_invalid", "The answer format could not be completed.");
         }
         answer = answer!;
-        const cited = new Set(answer.claims.flatMap((claim: any) => claim.citations.map((citation: any) => citation.evidenceId)));
-        const selected = session.registry.values().filter((item: any) => cited.has(item.id));
-        answer.limitations = [...new Set(selected.flatMap((item: any) => [
+        const selected = session.registry.values();
+        answer.limitations = [...new Set([...(answer.limitations || []), ...selected.flatMap((item: any) => [
           ...(item.warnings || []).map((warning: any) => typeof warning === "string" ? warning : warning.message || warning.code),
           ...(item.coverage?.status === "partial" ? ["This source is only partially readable; unread portions are not evidence."] : []),
           ...(item.data?.uncertain ? ["OCR text is uncertain. Inspect the original page before relying on it."] : []),
           ...(Object.entries(item.coverage || {}).some(([key, value]) => key.startsWith("next") && (Array.isArray(value) ? value.length > 0 : value != null))
-            ? ["Only the cited window was read; additional records remain available."] : []),
-        ]).filter(Boolean))].slice(0, 24);
+            ? ["Only the listed windows were read; additional records remain available."] : []),
+        ]).filter(Boolean)])].slice(0, 24);
       }
       await session.check(); budget.check();
-      const cited = new Set(answer.claims.flatMap((claim: any) => claim.citations.map((citation: any) => citation.evidenceId)));
-      await this.repository.finish(auth, request, answer, session.registry.values().filter((item: any) => cited.has(item.id)), session.trace, stats());
+      await this.repository.finish(auth, request, answer, session.registry.values(), session.trace, stats());
     } catch (error: any) {
       const code = this.closing ? "qa_interrupted" : timedOut ? "qa_timeout" : String(error.code || "qa_failed").slice(0, 100);
-      await this.repository.fail(request, code, stats());
+      if (!this.closing && !timedOut && !controller.signal.aborted && session
+        && ["qa_token_limit", "qa_tool_limit", "qa_request_limit", "ai_tool_round_limit"].includes(code)) {
+        // Resource exhaustion is an incomplete read, never proof that a fact is absent.
+        // Recheck authority/cancellation; do not restart the exhausted model budget.
+        try {
+          await session.check();
+          await this.repository.finish(auth, request, { status: "insufficient_evidence", claims: [],
+            provenanceVersion: 2, route: "read_limit", limitations: [],
+            missingEvidence: ["The reading limit was reached before an answer could be completed. This does not establish that the requested information is absent. Narrow the question or select a source to continue."] },
+          session.registry.values(), session.trace, stats());
+        } catch (failure: any) {
+          await this.repository.fail(request, String(failure.code || "qa_failed").slice(0, 100), stats());
+        }
+      } else await this.repository.fail(request, code, stats());
     } finally { clearTimeout(timeout); }
   }
 }

@@ -68,7 +68,10 @@ Completed pages can be checkpointed; lifecycle state does not change their text.
 Archiving removes current retrieval eligibility and retains historical references.
 These are source statements available after parsing, not accepted experimental
 meanings, values or analysis inputs. Excel continues using SourceDocument and
-exact original cell/range positions. See `research-qa-v1.md`.
+exact original cell/range positions and requires confirmed regions for new Q&A.
+AnswerArtifacts with answer.provenanceVersion=2 freeze all successful read windows
+and a bounded discovery/read trace. Earlier artifacts retain their cited-only
+history without rewriting. See `research-qa-v1.md`.
 
 ## ImportRun
 
@@ -399,6 +402,9 @@ targets, semantic keys, roles, Browser column ids, Python, materialized values,
 result rows, traces, Plotly, or user-review hashes. Feedback creates a later
 numbered revision and marks the prior awaiting-review revision superseded
 without modifying it.
+
+The internal model draft may instead return clarification with reviewPlan null.
+It does not become an AnalysisPlanRevision; earlier revisions remain unchanged.
 
 ## AnalysisThread v1
 

@@ -52,6 +52,9 @@ confirmed regions or accepted snapshots; old raw citations remain readable.
 Source quotations are separate from accepted experiment evidence and cannot
 become analysis inputs or publications through Q&A. Every claim
 reference must name evidence actually read by the current authorized run.
+All successful read windows are recorded even if not cited. Answer prose is not
+subject to numeric/quotation content validation; output/link checks establish
+interface integrity only, never factual correctness.
 Document text, including instructions, is untrusted content. The Q&A tool set
 contains no executor, approval, publication or access-management capability.
 
@@ -68,6 +71,13 @@ Send compact project-owned context only:
 Do not send full workbooks, entire DataSnapshot point collections, unrelated project history, credentials, or private session data.
 
 ## Review Boundaries
+
+Analysis plan providers can return a structured clarification with no plan. The
+backend does not repair missing evidence into a guessed selection, create a
+revision, or execute it. Ask persists the clarification as a waiting-for-user
+message; direct revision requests return analysis_plan_clarification_required.
+This is a model assessment of input sufficiency, not a guarantee of semantic
+correctness or an answer-text validator. Existing reviews remain required.
 
 ```text
 AI draft

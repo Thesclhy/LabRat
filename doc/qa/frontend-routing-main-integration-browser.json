@@ -1,0 +1,42 @@
+{
+  "status": "passed",
+  "startedAt": "2026-09-30T15:41:48.445Z",
+  "completedAt": "2026-09-30T15:41:59.924Z",
+  "testedBuild": "7a53e06efa3d297811e864f2fa8035cc92c6a3304c25aba0d0382041f814d872",
+  "environment": "Production build, actual Chromium/HTTP/PostgreSQL, synthetic records, no provider",
+  "checks": [
+    "unauthenticated deep link and login return",
+    "all four production deep links, reload and assets under /LabRat",
+    "login direct entry/reload preserves return target; lab dashboard reload",
+    "native reload warning protects an unsaved draft",
+    "PUSH/POP/forward, same-tab deduplication, draft retained, References cleanup",
+    "stay, injected save failure, save-and-leave and persisted manuscript reload",
+    "discard restores saved state; 390px navigation and prompt",
+    "new project onboarding, direct Browser and management dismissed by history",
+    "real workbook review opens; main navigation closes it without replay",
+    "unknown path and missing project recovery",
+    "archived project cannot reopen",
+    "real expired session clears a dirty workspace without prompting",
+    "read-only deep link and actual project permission revocation",
+    "navigation creates no analysis, snapshot or chart"
+  ],
+  "errors": [],
+  "writes": [
+    "POST /api/v1/auth/login",
+    "POST /api/v1/projects/project_analysis/manuscripts",
+    "POST /api/v1/projects/project_analysis/manuscripts",
+    "POST /api/v1/source-documents/source_analysis/range",
+    "PATCH /api/v1/manuscripts/manuscript_db3078ab817b4ec4a78e8907",
+    "POST /api/v1/auth/login"
+  ],
+  "network": [
+    "401 /api/v1/auth/me",
+    "401 /api/v1/auth/me",
+    "503 /api/v1/projects/project_analysis/manuscripts",
+    "GET /api/v1/projects: net::ERR_ABORTED",
+    "404 /api/v1/projects/missing",
+    "404 /api/v1/projects/project_231b07bfe70d437caef8b33a",
+    "401 /api/v1/manuscripts/manuscript_db3078ab817b4ec4a78e8907",
+    "404 /api/v1/projects/project_analysis/browser-config"
+  ]
+}

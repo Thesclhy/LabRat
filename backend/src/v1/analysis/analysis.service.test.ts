@@ -222,3 +222,34 @@ describe("AnalysisService contract and authorization boundaries", () => {
     expect(testFixture.repository.createAnalysisThread).not.toHaveBeenCalled();
   });
 });
+
+test("a standalone mean request cannot create an analysis thread or a plan", async () => {
+  const { service, repository } = fixture();
+  const result = await service.createAgentRun(auth, "project_1", { message: "Calculate the mean of Exp17's temperature series.", selectedContext: { activeSurface: "experiment_browser" } });
+  expect(result.agentRun.mode).toBe("clarification");
+  expect(result.analysisThread).toBeNull();
+  expect(result.currentPlanRevision).toBeNull();
+  expect(repository.createAnalysisThread).not.toHaveBeenCalled();
+  expect(result.reply).toContain("standalone numeric answer");
+});
+
+test("missing series remains a durable clarification, not a provider failure or executable revision", async () => {
+  const { temperaturePlanFixture } = await import("../../saas/testing/temperaturePlanFixture.js");
+  const { store, project } = await temperaturePlanFixture();
+  const base = fixture();
+  base.authorization.requireFullProjectCapability.mockResolvedValue({ project, access: { allExperiments: true, capabilities: ["read", "propose", "approve"] } } as never);
+  base.authorization.resolveProjectAccess.mockResolvedValue({ project, access: { allExperiments: true, capabilities: ["read", "propose", "approve"] } } as never);
+  const service = new AnalysisService(store as never, base.authorization as never, base.identityRepository as never, {
+    draftAnalysisPlan: async () => ({ ok: true, clarification: "Exp17 has no confirmed temperature series. Which series should I use?", reviewPlan: null }),
+  } as never, base.executor as never);
+  const result = await service.createAgentRun(auth, project.id, { message: "Calculate the mean of Exp17's temperature series and plot it.", selectedContext: {} });
+  expect(result.agentRun).toMatchObject({ mode: "clarification", status: "waiting_for_user" });
+  expect(result.currentPlanRevision).toBeNull();
+  expect(result.reply).toContain("no confirmed temperature series");
+  expect(result.reply).not.toContain("backend could not");
+  const detail = await service.threadDetail(auth, result.analysisThread!.id);
+  expect(detail.planFailure).toBeNull();
+  expect(detail.analysisThread.status).toBe("planning");
+  expect(detail.analysisThread.messages.at(-1)?.content).toBe(result.reply);
+  expect(store.analysisRuns.size).toBe(0);
+});

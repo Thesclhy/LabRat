@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validateCitedAnswer, researchBoundary, researchQuestionRequest } from "./citedAnswer.js";
+import { answerWithReadLinks, validateCitedAnswer, researchBoundary, researchQuestionRequest } from "./citedAnswer.js";
 import { createQaBudget } from "./qaBudget.js";
 import { documentCoverage, projectContextWindow, QA_LIMITS } from "./evidenceTools.js";
 import { createAiGateway } from "../ai/gateway.js";
@@ -13,85 +13,45 @@ const snapshot = { id: "snapshot", kind: "experiment_snapshot", data: { fields: 
 const answer = (claim) => ({ status: "answered", claims: [{ numericBindings: [], ...claim }], missingEvidence: [] });
 const binding = { evidenceId: "snapshot", path: "/data/fields/0/value", value: 82, unit: "C", numericScale: null };
 
-test("citations require this run's exact evidence and exact excerpts; no numeric invention or unit changes", () => {
-  const base = { text: "Dry samples use 80 C.", citations: [{ evidenceId: "doc", quote: "80 C for dry samples only" }] };
-  assert.equal(validateCitedAnswer(answer(base), [doc]).valid, true);
-  for (const patch of [
-    { text: "Dry samples use 90 C." }, { text: "温度为999。" }, { text: "Dry samples use 80 F." },
-    { citations: [{ evidenceId: "never-read", quote: "80 C" }] }, { citations: [{ evidenceId: "doc", quote: "all wet samples" }] },
-  ]) assert.equal(validateCitedAnswer(answer({ ...base, ...patch }), [doc]).valid, false, JSON.stringify(patch));
-  assert.equal(validateCitedAnswer(answer(base), [{ ...doc, data: { ...doc.data, uncertain: true } }]).valid, false);
-});
-
-test("structured values bind exact paths, units and percentage scale without recalculation", () => {
-  const base = { text: "Exp17 has accepted Temperature 82 C.", citations: [{ evidenceId: "snapshot", quote: "Temperature" }], numericBindings: [binding] };
-  assert.equal(validateCitedAnswer(answer(base), [snapshot]).valid, true);
-  for (const patch of [{ value: 83 }, { unit: "F" }, { path: "/data/fields/1/value" }, { numericScale: "fraction" }]) {
-    assert.equal(validateCitedAnswer(answer({ ...base, numericBindings: [{ ...binding, ...patch }] }), [snapshot]).valid, false);
+test("answer checks accept identifiers and paraphrases without inspecting numbers or units", () => {
+  for (const text of ['RQ-001 uses 80 C for thirty minutes.', '编号 RQ-002：温度八十度。', 'A source says 90 F.']) {
+    // Even inaccurate prose is structurally valid. Semantic correctness is tested separately.
+    const result = validateCitedAnswer({ status: 'answered', claims: [{ text,
+      citations: [{ evidenceId: 'doc' }] }], missingEvidence: [] }, [doc]);
+    assert.equal(result.valid, true);
   }
-  assert.equal(validateCitedAnswer(answer({ ...base, text: "The new mean is 81 C." }), [snapshot]).valid, false);
-  const fraction = { text: "Stored Yield: 0.42 (numericScale fraction; unit %).", citations: [{ evidenceId: "snapshot", quote: "Yield" }],
-    numericBindings: [{ evidenceId: "snapshot", path: "/data/fields/1/value", value: 0.42, unit: "%", numericScale: "fraction" }] };
-  assert.equal(validateCitedAnswer(answer(fraction), [snapshot]).valid, true);
-  assert.equal(validateCitedAnswer(answer({ ...fraction, text: "Yield is 42%." }), [snapshot]).valid, false);
-  assert.equal(validateCitedAnswer(answer({ ...fraction, text: "Yield is 0.42%." }), [snapshot]).valid, false);
+  const uncertain = { ...doc, data: { ...doc.data, uncertain: true } };
+  assert.equal(validateCitedAnswer(answer({text:'OCR may say 80 C.',citations:[{evidenceId:'doc',quote:'paraphrase'}]}), [uncertain]).valid,true);
 });
 
-test("verified source locators and identifiers are distinct from scientific numbers", () => {
-  const source = { ...doc, label: "protocol-17.pdf", locator: { page: 1, line: 2 }, version: { versionId: "document_version_17" } };
-  const claim = { text: "protocol-17.pdf 第 1 页第 2 行记录 80 C。", citations: [{ evidenceId: "doc", quote: "Use 80 C for dry samples only." }] };
-  assert.equal(validateCitedAnswer(answer(claim), [source]).valid, true);
-  assert.equal(validateCitedAnswer(answer({ ...claim, text: "document_version_17 page 1 line 2 records 80 C." }), [source]).valid, true);
-  assert.equal(validateCitedAnswer(answer({ ...claim, text: "protocol-17.pdf 第 80 页记录 80 C。" }), [source]).valid, false);
-  assert.equal(validateCitedAnswer(answer({ ...claim, text: "protocol-17.pdf 第 1 页记录 1 C。" }), [source]).valid, false);
-  assert.equal(validateCitedAnswer(answer({ ...claim, text: "document_version_17 records 17 C." }), [source]).valid, false);
-  const numbered = { ...source, version: { versionNumber: 1 } };
-  assert.equal(validateCitedAnswer(answer({ ...claim, text: "应用版本号 1 的记录为 80 C。" }), [numbered]).valid, true);
-  assert.equal(validateCitedAnswer(answer({ ...claim, text: "应用版本号 2 的记录为 80 C。" }), [numbered]).valid, false);
-  assert.equal(validateCitedAnswer(answer({ ...claim, text: "应用版本号 1 的记录为 1 C。" }), [numbered]).valid, false);
-  const revision = { ...numbered, data: { text: "revision 2: Use 80 C for dry samples only." } };
-  assert.equal(validateCitedAnswer(answer({ ...claim, text: "应用版本号 1 的文字为 revision 2，记录 80 C。" }), [revision]).valid, true);
-  assert.equal(validateCitedAnswer(answer({ ...claim, text: "revision 3 records 80 C." }), [revision]).valid, false);
-  assert.equal(validateCitedAnswer(answer({ ...claim, text: "revision 2 records 2 C." }), [revision]).valid, false);
-  const raw = { id: "raw", kind: "workbook_raw", data: { cells: [{ rawValue: 80 }] } };
-  const result = validateCitedAnswer(answer({ text: "Cell B2 stores 80.", citations: [{ evidenceId: "raw", quote: "80" }],
-    numericBindings: [{ evidenceId: "raw", path: "/data/cells/0/value", value: 80, unit: null, numericScale: null }] }), [raw]);
-  assert.equal(result.valid, false);
-  assert.ok(result.errors.some((error) => error.includes("/data/cells/0/rawValue")));
+test("structured reads no longer require model-generated numerical bindings", () => {
+  const result = validateCitedAnswer({status:'answered',claims:[{text:'Stored Temperature: 82 C.',
+    citations:[{evidenceId:'snapshot'}]}],missingEvidence:[]}, [snapshot]);
+  assert.equal(result.valid,true);
+  assert.equal(validateCitedAnswer(answer({text:'The saved scale is fraction.',citations:[]}), []).valid,true);
 });
 
-test("literal formulas, stored counts and timestamps do not authorize derived measurements", () => {
-  const raw = { id: "raw", kind: "workbook_raw", data: { cells: [{ address: "G2", formula: "B2*2", rawValue: null, cacheMissing: true }] } };
-  const formula = { text: 'G2 stores formula "B2*2" with a missing cache.', citations: [{ evidenceId: "raw", quote: "B2*2" }, { evidenceId: "raw", quote: '"cacheMissing":true' }] };
-  assert.equal(validateCitedAnswer(answer(formula), [raw]).valid, true);
-  assert.equal(validateCitedAnswer(answer({ ...formula, citations: [{ evidenceId: "raw", quote: '"formula":"B2*2"' }] }), [raw]).valid, true);
-  assert.equal(validateCitedAnswer(answer({ ...formula, text: 'G2 stores formula "B2*2", which equals 160.' }), [raw]).valid, false);
-  assert.equal(validateCitedAnswer(answer({ ...formula, citations: [{ evidenceId: "raw", quote: '"cacheMissing":false' }] }), [raw]).valid, false);
-  const series = { id: "series", kind: "experiment_snapshot", data: { acceptedAt: "2026-08-23T12:00:00.000Z", seriesWindow: { pointCount: 121 } } };
-  const count = { text: "The series contains 121 points; acceptedAt 2026-08-23T12:00:00.000Z.", citations: [{ evidenceId: "series", quote: "121" }, { evidenceId: "series", quote: "2026-08-23T12:00:00.000Z" }] };
-  assert.equal(validateCitedAnswer(answer(count), [series]).valid, true);
-  assert.equal(validateCitedAnswer(answer({ ...count, text: "The series contains 122 points." }), [series]).valid, false);
-  assert.equal(validateCitedAnswer(answer({ ...count, text: "The series contains 121 points at 121 C." }), [series]).valid, false);
-  assert.equal(validateCitedAnswer(answer({ ...count, text: "Accepted at 2026-08-24T12:00:00.000Z." }), [series]).valid, false);
-  const conflict = { id: "conflict", kind: "document_passage", data: { text: "A: 80 C. B: 85 C." } };
-  assert.equal(validateCitedAnswer(answer({ text: "A is 80 C, B is 85 C; difference 5 C.", citations: [{ evidenceId: "conflict", quote: conflict.data.text }] }), [conflict]).valid, false);
+test("only this run's read IDs become links; duplicate links and legacy generated excerpts are removed", () => {
+  const candidate=answer({text:'A source statement.',citations:[{evidenceId:'doc',quote:'invented excerpt'},
+    {evidenceId:'never-read'}, {evidenceId:'doc'}],numericBindings:[binding]});
+  const before=structuredClone(candidate);
+  const checked=validateCitedAnswer(candidate,[doc]);
+  assert.equal(checked.shapeValid,true); assert.equal(checked.valid,false);
+  assert.deepEqual(checked.unknownEvidenceIds,['never-read']);
+  const saved=answerWithReadLinks(candidate,[doc]);
+  assert.deepEqual(saved.claims,[{text:'A source statement.',citations:[{evidenceId:'doc'}]}]);
+  assert.match(saved.limitations[0],/omitted/); assert.equal(saved.provenanceVersion,2);
+  assert.deepEqual(candidate,before);
 });
 
-test("field identifiers and cell-header prose are not scientific numbers or false table locations", () => {
-  const evidence = { id: "aux", kind: "experiment_snapshot", data: { fields: [{ columnId: "aux_23", displayName: "Auxiliary 23", value: 123, unit: "mg" }] } };
-  const claim = { text: "columnId aux_23, displayName 'Auxiliary 23', stores 123 mg.", citations: [{ evidenceId: "aux", quote: "Auxiliary 23" }],
-    numericBindings: [{ evidenceId: "aux", path: "/data/fields/0/value", value: 123, unit: "mg", numericScale: null }] };
-  assert.equal(validateCitedAnswer(answer(claim), [evidence]).valid, true);
-  assert.equal(validateCitedAnswer(answer({ ...claim, text: "columnId aux_234 stores 123 mg." }), [evidence]).valid, false);
-  assert.equal(validateCitedAnswer(answer({ ...claim, text: "columnId aux_23 stores 23 mg." }), [evidence]).valid, false);
-  const raw = { id: "raw", kind: "workbook_raw", data: { cells: [{ address: "B1", rawValue: "Temperature (C)" }, { address: "B2", rawValue: 80 }] } };
-  const cell = { text: "B1 表头为 Temperature (C)，B2 原文为 80。", citations: [{ evidenceId: "raw", quote: "Temperature (C)" }],
-    numericBindings: [{ evidenceId: "raw", path: "/data/cells/1/rawValue", value: 80, unit: null, numericScale: null }] };
-  assert.equal(validateCitedAnswer(answer(cell), [raw]).valid, true);
-  assert.equal(validateCitedAnswer(answer({ ...cell, text: "第 1 表中 B2 原文为 80。" }), [raw]).valid, false);
-  const missing = validateCitedAnswer(answer({ ...cell, numericBindings: [] }), [raw]);
-  assert.equal(missing.valid, false);
-  assert.ok(missing.errors.some((error) => error.includes('/data/cells/1/rawValue') && error.includes('THIS claim')));
+test("unknown links may be omitted but malformed output remains invalid", () => {
+  const candidate={status:'answered',claims:[{text:'Source summary.',citations:[{evidenceId:'unknown'}]}],missingEvidence:[]};
+  assert.deepEqual(answerWithReadLinks(candidate,[]).claims[0].citations,[]);
+  for(const bad of [{...candidate,claims:'broken'}, {...candidate,claims:[]},
+    {...candidate,claims:[{text:'Missing citations array'}]}, {...candidate,claims:[{text:'',citations:[]}]}]) {
+    assert.equal(validateCitedAnswer(bad,[]).shapeValid,false);
+    assert.throws(()=>answerWithReadLinks(bad,[]),{code:'qa_output_invalid'});
+  }
 });
 
 test("new calculations route to review while explicit do-not-calculate read requests remain Q&A", () => {
@@ -227,4 +187,11 @@ test("long multilingual project context can be continued without silently losing
   const methods = projectContextWindow(context, { field: "projectProfile.methods", cursor: 0 });
   assert.equal(methods.data.projectProfile.methods, "Dry samples only.");
   assert.equal(methods.coverage.complete, true);
+});
+
+test('selected-only questions expose only their two authorized document tools', () => {
+  const request=researchQuestionRequest({selectedContext:{sourceScope:'selected'}},{});
+  assert.deepEqual(request.tools.map(tool=>tool.name),['search_project_documents','read_document_passage']);
+  assert.ok(researchQuestionRequest({selectedContext:{sourceScope:'project'}},{}).tools.some(tool=>tool.name==='find_experiments'));
+  assert.deepEqual(researchQuestionRequest({citationRepair:{},selectedContext:{sourceScope:'selected'}},{}).tools,[]);
 });

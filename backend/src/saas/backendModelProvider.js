@@ -15,7 +15,7 @@ const INTENT_SYSTEM = [
   "experiment_lookup, open_or_filter_browser, upload_workbook, create_analysis_chart, publish_experiment_data,",
   "manuscript_action, clarification.",
   "Allowed dispositions: direct_answer, analysis_thread, action, clarification.",
-  "Derived calculations, trends, comparisons, statistics, and charts use analysis_thread.",
+  "Explicit charts and scientific data publication use analysis_thread. Standalone calculations or statistics without an explicitly requested supported output use clarification: explain that only chart or experiment-data publication outputs are currently supported and ask the user to choose. Do not invent a chart or publication goal.",
   "Use publish_experiment_data with analysis_thread when the user wants to add, derive, replace, or publish scientific fields, series, or experiment records in Experiment Browser.",
   "The selectedContext activeSurface is a weak hint, not an instruction: ordinary questions on the Browser surface must still be answered or classified by their actual intent.",
   "Hiding, showing, sorting, filtering, or reordering existing Browser columns is display state, not publish_experiment_data.",
@@ -96,9 +96,19 @@ const CHART_COMMENTARY_OUTPUT_SCHEMA = {
   additionalProperties: false,
 };
 
+const PLAN_INPUT_REQUIREMENTS = [
+  "Return clarification as null when the requested inputs and output are supported. If required evidence is missing, ambiguous, or incompatible with the request, return a concise clarification question with reviewPlan null, empty sourceSelections, experimentSelections and displayPlan, and no invented plan or calculated result.",
+  "Keep scalar fields distinct from measurement series. An experiment's single temperature field is not a temperature series. Never relabel a scalar or combine other experiments' rows to satisfy a requested within-experiment series. A genuine confirmed series may have one point; do not impose an arbitrary minimum point count.",
+  "For missing-series clarification, briefly identify the available scalar and ask for the intended confirmed series or range. Do not give a generic definition of series, claim multiple measurements are required, or suggest averaging other experiments unless the user requested that scope.",
+  "Before selecting a requested series, establish its experiment identity, measured quantity, and series layout from confirmed interpretation/catalog metadata and inspect source cells when necessary. If that cannot be established, ask for the intended confirmed range or series instead of substituting another input.",
+  "Describe calculations prospectively without announcing a mean or another new derived value, even for a one-point series. No scientific computation is executed during planning.",
+];
+
 const ANALYSIS_PLAN_SYSTEM = [
   "Draft one reviewable LabRat analysis plan as JSON only.",
-  "Return exactly {requestSummary, sourceSelections, experimentSelections, reviewPlan, displayPlan, warnings}.",
+  "Return exactly {requestSummary, sourceSelections, experimentSelections, reviewPlan, displayPlan, warnings, clarification}.",
+  ...PLAN_INPUT_REQUIREMENTS,
+  "Do not invent a chart for a calculation-only request. If the user has not requested a chart and no explicit output choice is supplied, return clarification explaining the supported chart or experiment-data outputs.",
   "Select only cells inside supplied user-confirmed workbook regions and fields from supplied active experiments.",
   "Use inspect_source_range whenever the supplied summaries and column metadata are insufficient to identify the exact rows or columns.",
   "Each source selection must name one confirmed region revision, its exact sourceDocumentId, sheetName, and a rectangular Excel range inside that confirmed region.",
@@ -122,6 +132,7 @@ const ANALYSIS_PLAN_SYSTEM = [
 const ANALYSIS_PLAN_OUTPUT_SCHEMA = {
   type: "object",
   properties: {
+    clarification: { anyOf: [{ type: "string" }, { type: "null" }] },
     requestSummary: { type: "string" },
     sourceSelections: {
       type: "array",
@@ -161,7 +172,7 @@ const ANALYSIS_PLAN_OUTPUT_SCHEMA = {
       },
     },
     reviewPlan: {
-      type: "object",
+      type: ["object", "null"],
       properties: {
         processingSteps: { type: "array", items: { type: "string" } },
         missingValueHandling: { type: "string" },
@@ -209,6 +220,7 @@ const ANALYSIS_PLAN_OUTPUT_SCHEMA = {
     "reviewPlan",
     "displayPlan",
     "warnings",
+    "clarification",
   ],
   additionalProperties: false,
 };
@@ -255,7 +267,8 @@ const ANALYSIS_PROGRAM_OUTPUT_SCHEMA = {
 
 const EXPERIMENT_BROWSER_PLAN_SYSTEM = [
   "Draft one reviewable LabRat Experiment Browser data plan as JSON only.",
-  "Return exactly {requestSummary, sourceSelections, experimentSelections, reviewPlan, displayPlan, warnings}.",
+  "Return exactly {requestSummary, sourceSelections, experimentSelections, reviewPlan, displayPlan, warnings, clarification}.",
+  ...PLAN_INPUT_REQUIREMENTS,
   "Select only cells inside supplied user-confirmed workbook regions and fields from supplied active experiments.",
   "Use inspect_source_range whenever summaries are insufficient to identify exact workbook rows or columns.",
   "Each workbook selection must be the smallest rectangular range containing the labels, headers, and values needed.",
@@ -279,6 +292,7 @@ const EXPERIMENT_BROWSER_PLAN_SYSTEM = [
 const EXPERIMENT_BROWSER_PLAN_OUTPUT_SCHEMA = {
   type: "object",
   properties: {
+    clarification: { anyOf: [{ type: "string" }, { type: "null" }] },
     requestSummary: { type: "string" },
     sourceSelections: ANALYSIS_PLAN_OUTPUT_SCHEMA.properties.sourceSelections,
     experimentSelections: {
@@ -296,7 +310,7 @@ const EXPERIMENT_BROWSER_PLAN_OUTPUT_SCHEMA = {
       },
     },
     reviewPlan: {
-      type: "object",
+      type: ["object", "null"],
       properties: {
         processingSteps: { type: "array", items: { type: "string" } },
         missingValueHandling: { type: "string" },
@@ -340,6 +354,7 @@ const EXPERIMENT_BROWSER_PLAN_OUTPUT_SCHEMA = {
     "reviewPlan",
     "displayPlan",
     "warnings",
+    "clarification",
   ],
   additionalProperties: false,
 };
