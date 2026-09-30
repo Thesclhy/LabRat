@@ -3120,6 +3120,7 @@ export interface components {
         };
         readonly ResearchQuestionResponse: {
             readonly request: components["schemas"]["ResearchQuestion"];
+            /** @description Personal immutable answer, evidence metadata and bounded tool trace. provenanceVersion 2 retains all successful read windows; legacy records may contain cited sources only. Source links are not factual verification. */
             readonly artifact: components["schemas"]["JsonObject"] | null;
             readonly reused?: boolean;
         };

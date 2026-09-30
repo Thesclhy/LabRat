@@ -1,10 +1,28 @@
 # Current Milestone
 
-Status: User manual acceptance in progress — citation/status correction deployed
+Status: Read-only Q&A/source trace complete locally; not yet deployed
 Read when: checking what the next implementation slice should be.
-Last reviewed: 2026-09-28
+Last reviewed: 2026-09-29
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
+
+## Active goal: unified read-only Q&A and source trace
+
+2026-09-29: completed doc/plans/readonly-qa-trace.md on
+codex/readonly-qa-trace from origin/main 4f99874 in the existing isolated checkout.
+The original dirty working tree is excluded. Preflight passed. M0 baseline and
+fixed acceptance matrix doc/qa/readonly-qa-trace.md are recorded before code edits.
+M1/M2 implemented: structural-only answer checks, model-selected initial tools,
+all returned evidence and bounded trace, grouped Sources read and legacy history.
+Focused unit/UI, PostgreSQL question/evidence/task scenarios and actual desktop/
+narrow browser workflow passed. Both real providers completed the 16-case final
+suite with inspected semantic expectations; first failures are retained in
+doc/qa/readonly-qa-provider-review.md. Limits produce a saved incomplete-reading
+message with sources, never a claim of absence. Full regression passed: 451 frontend,
+396 Node backend (9 expected skips), 72 Nest; builds/API/smoke passed. Final scope
+wording was followed by build, PostgreSQL and two real-model selected-source rechecks.
+Manual instructions and all verification details are in doc/qa/readonly-qa-trace.md.
+This revision has not been deployed; the production checkpoint remains 2bf3226.
 
 ## Manual acceptance follow-up
 

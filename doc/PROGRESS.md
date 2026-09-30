@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-09-28
+Last reviewed: 2026-09-29
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -12,6 +12,67 @@ Keep entries concise, newest first, and include:
 - meaningful changes
 - verification
 - follow-ups or residual risk
+
+## 2026-09-29 — Read-only Q&A M3 verified and delivered locally
+
+- Completed the approved source-trace goal in codex/readonly-qa-trace; all reads,
+  not only cited ones, persist with immutable identity and discovery/read activity.
+  Sources read is compact/collapsible and retains legacy cited-only history labels.
+- Both real providers completed the 16-case synthetic suite with inspected answer
+  content and exact source/tool identity. Initial DeepSeek missing-topic failures
+  remain saved. Reaching a reading budget now saves an honest incomplete-reading
+  outcome and prior reads; no extra model call, larger budget or claim of absence.
+- Full codex verification passed: 451 frontend, 396 Node backend (9 expected
+  skips), 72 Nest; generated API, backend/frontend builds and production-entry
+  smoke passed. Existing large-bundle warning only. Four targeted PostgreSQL
+  scenarios cover permissions, immutable history, uncited reads, limit handling
+  and cross-device continuation. An initially mistyped fourth test path was
+  corrected and that scenario passed separately.
+- Actual desktop/390px HTTP/PostgreSQL/Chromium workflow passed and final source
+  screenshots were visually inspected. One intervening local-server disconnection
+  was retained; standalone rerun passed without suppressing assertions. Its
+  transient root cause was not established.
+- Final audit corrected selected-only search coverage wording. Build/scoped
+  database recheck and R01/R08 real-provider rechecks on both providers passed.
+  No subsequent application changes. git diff --check passed. Test-owned local
+  database stopped after checking for other clients.
+- Updated active plan/contracts/checklist and delivered manual instructions in
+  doc/qa/readonly-qa-trace.md; semantic review and preserved failures are in
+  doc/qa/readonly-qa-provider-review.md. No migration/dependency change or production
+  deployment. Original dirty working-tree code is untouched. User manual acceptance
+  remains pending; the online deployment still uses application 2bf3226.
+
+## 2026-09-29 — Read-only Q&A M1/M2 implementation
+
+- Replaced prose/quote/number checking with format and read-ID integrity; unknown
+  IDs receive one tool-free repair then are omitted with a limitation. Legacy
+  quote/binding fields are no longer required or persisted on new answers.
+- Model selects its initial read/discovery tool. Preserved early scientific
+  review handoff, project permissions and confirmed-workbook readers. Save all
+  returned evidence plus bounded arguments, discovery targets and read IDs.
+- Added collapsed Sources read, immutable grouping/window links and legacy
+  Saved sources explanation. Actual browser HTTP/PostgreSQL/Chromium flow passed
+  at desktop and 390px, including unknown-link fallback, original source opening,
+  refresh/second-device continuation and View restrictions. Screenshots inspected.
+- Backend compile, 23 interface/gateway tests, 21 frontend tests and four targeted
+  PostgreSQL scenarios passed. One old test substitute depended on removed fixed
+  discovery; corrected it to explicitly invoke the search tool and reran it.
+- Automatic review initially rejected the edit script; preserved the old review
+  router, pinned absolute isolated-workspace paths and checked all edits before
+  writing. The revised action was approved and completed. No original-tree code
+  changes or weakened tool permissions resulted.
+- M3: real-provider semantic evaluation and full regression remain in progress.
+
+## 2026-09-29 — Read-only Q&A simplification M0
+
+- Started the approved goal on codex/readonly-qa-trace from current origin/main
+  4f99874; reused the isolated checkout and left original unrelated changes alone.
+- Preflight passed; inspected answer service, evidence registry, persistence,
+  tools, UI and active authorization/scientific contracts. Current persistence
+  keeps only cited windows; trace lacks arguments/result identities.
+- Froze 17 acceptance cases before code edits in doc/qa/readonly-qa-trace.md;
+  recorded the simplification plan and precedence over old prose validators.
+- M1 implementation and all functional verification remain pending.
 
 ## 2026-09-28 — Ask citation validation and progress presentation
 

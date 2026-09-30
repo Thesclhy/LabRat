@@ -2,9 +2,17 @@
 
 Status: active
 Read when: deciding what LabRat should build next.
-Last reviewed: 2026-09-28
+Last reviewed: 2026-09-29
 
 This is the short active plan. Current execution status lives in `doc/current-milestone.md`; detailed implementation plans live under `doc/plans/`.
+
+## Active Q&A simplification
+
+Completed locally: doc/plans/readonly-qa-trace.md (approved 2026-09-29), model-selected
+read tools and durable source trace, removing prose-content acceptance gates.
+Use doc/qa/readonly-qa-trace.md for fixed acceptance; preserve existing review,
+permissions, selected-source scope and cross-device history. Local checks passed;
+this revision is not yet deployed. See the current milestone for evidence.
 
 ## Current Focus
 

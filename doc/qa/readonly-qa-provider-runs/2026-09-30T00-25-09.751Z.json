@@ -1,0 +1,3016 @@
+{
+  "startedAt": "2026-09-30T00:25:09.751Z",
+  "material": "synthetic only",
+  "provider": {
+    "provider": "deepseek",
+    "model": "deepseek-v4-pro",
+    "configured": true
+  },
+  "completed": true,
+  "records": [
+    {
+      "trace": [
+        {
+          "sequence": 1,
+          "tool": "search_project_documents",
+          "phase": "discovery",
+          "input": {
+            "query": "RQ-001 湿样品 温度"
+          },
+          "status": "ok",
+          "evidenceIds": [],
+          "coverage": {
+            "scope": "current_project_sources",
+            "readForCitation": false,
+            "returned": 1,
+            "candidateWindow": 1,
+            "complete": true,
+            "includes": [
+              "selected_document_versions"
+            ],
+            "note": "Search snippets are not complete evidence. This search includes accepted experiment field names as well as documents and confirmed regions. If a precise query and synonym have no relevant matches, answer insufficient_evidence within that search coverage. Do not enumerate experiments or read every field to prove absence."
+          },
+          "returnedCount": 1,
+          "matches": [
+            {
+              "kind": "document",
+              "label": "Q01-scope.txt",
+              "target": {
+                "status": "ready",
+                "locator": {
+                  "kind": "text",
+                  "charEnd": 165,
+                  "lineEnd": 6,
+                  "charStart": 0,
+                  "lineStart": 1
+                },
+                "ordinal": 0,
+                "snippet": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n",
+                "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+                "versionId": "document_version_6dbfe690e9be43dab3b0cfd6",
+                "documentId": "context_doc_e903425d60874a708abd6c72"
+              }
+            }
+          ],
+          "nextCursor": null,
+          "elapsedMs": 23
+        },
+        {
+          "sequence": 2,
+          "tool": "search_project_documents",
+          "phase": "discovery",
+          "input": {
+            "query": "RQ-001 wet sample temperature"
+          },
+          "status": "ok",
+          "evidenceIds": [],
+          "coverage": {
+            "scope": "current_project_sources",
+            "readForCitation": false,
+            "returned": 1,
+            "candidateWindow": 1,
+            "complete": true,
+            "includes": [
+              "selected_document_versions"
+            ],
+            "note": "Search snippets are not complete evidence. This search includes accepted experiment field names as well as documents and confirmed regions. If a precise query and synonym have no relevant matches, answer insufficient_evidence within that search coverage. Do not enumerate experiments or read every field to prove absence."
+          },
+          "returnedCount": 1,
+          "matches": [
+            {
+              "kind": "document",
+              "label": "Q01-scope.txt",
+              "target": {
+                "status": "ready",
+                "locator": {
+                  "kind": "text",
+                  "charEnd": 165,
+                  "lineEnd": 6,
+                  "charStart": 0,
+                  "lineStart": 1
+                },
+                "ordinal": 0,
+                "snippet": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n",
+                "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+                "versionId": "document_version_6dbfe690e9be43dab3b0cfd6",
+                "documentId": "context_doc_e903425d60874a708abd6c72"
+              }
+            }
+          ],
+          "nextCursor": null,
+          "elapsedMs": 10
+        },
+        {
+          "sequence": 3,
+          "tool": "read_document_passage",
+          "phase": "read",
+          "input": {
+            "versionId": "document_version_6dbfe690e9be43dab3b0cfd6",
+            "passageId": "passage_b37b68bf84100eaac095b89683d3897b"
+          },
+          "status": "ok",
+          "evidenceIds": [
+            "evidence_5dbcf1124e17480b3d876778"
+          ],
+          "elapsedMs": 10
+        }
+      ],
+      "readWindows": [
+        {
+          "id": "evidence_5dbcf1124e17480b3d876778",
+          "kind": "document_passage",
+          "label": "Q01-scope.txt",
+          "version": {
+            "documentId": "context_doc_e903425d60874a708abd6c72",
+            "versionId": "document_version_6dbfe690e9be43dab3b0cfd6",
+            "versionNumber": 1,
+            "contentHash": "0e64e7445dcbac709ddcfbbeb62497a00e662a624476a3eb69a3efa7bee1a068",
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "locator": {
+            "kind": "text",
+            "charEnd": 165,
+            "lineEnd": 6,
+            "charStart": 0,
+            "lineStart": 1
+          },
+          "data": {
+            "text": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+            "status": "ready",
+            "source": {
+              "parts": 1,
+              "statusCounts": {
+                "ready": 1
+              },
+              "location": {
+                "part": "text",
+                "lines": 6,
+                "status": "ready"
+              },
+              "warningParts": 0,
+              "scope": "summary_and_cited_location_only",
+              "fullCoverageAvailableOnVersion": true
+            },
+            "limitations": []
+          },
+          "warnings": []
+        }
+      ],
+      "id": "R02",
+      "question": "仅根据这份资料，RQ-001 对湿样品规定的温度是多少？",
+      "expected": "wet samples excluded; no applicable wet temperature",
+      "request": {
+        "runId": "agent_run_ac9a00be256443a18316bf7e",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "readonly-R02-1790727918635",
+        "question": "仅根据这份资料，RQ-001 对湿样品规定的温度是多少？",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 7762,
+          "knownCost": null,
+          "toolCalls": 3,
+          "toolRounds": 2,
+          "inputTokens": 8252,
+          "lastActiveAt": 1790727926414,
+          "outputTokens": 632,
+          "reservedTokens": 0,
+          "visibleToolCalls": 3,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-30T00:25:18.646Z",
+        "updatedAt": "2026-09-30T00:25:26.418Z",
+        "referenceDocuments": [
+          {
+            "label": "Q01-scope.txt",
+            "versionId": "document_version_6dbfe690e9be43dab3b0cfd6",
+            "documentId": "context_doc_e903425d60874a708abd6c72",
+            "versionNumber": 1
+          }
+        ],
+        "sourceScope": "selected"
+      },
+      "artifact": {
+        "id": "answer_16582fb1b7eb41a285932b06",
+        "runId": "agent_run_ac9a00be256443a18316bf7e",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "这份资料（Q01-scope.txt）中 RQ-001 写明“Sample condition: dry sample only; wet samples are excluded.”，即湿样品被排除在外，因此资料并未为湿样品规定温度。资料中列出的“Temperature: 80 C”是针对（干）样品的规定，而不是湿样品的规定。",
+              "citations": [
+                {
+                  "evidenceId": "evidence_5dbcf1124e17480b3d876778"
+                }
+              ]
+            }
+          ],
+          "status": "answered",
+          "limitations": [],
+          "missingEvidence": [],
+          "provenanceVersion": 2
+        },
+        "evidence": [
+          {
+            "id": "evidence_5dbcf1124e17480b3d876778",
+            "kind": "document_passage",
+            "label": "Q01-scope.txt",
+            "locator": {
+              "kind": "text",
+              "charEnd": 165,
+              "lineEnd": 6,
+              "charStart": 0,
+              "lineStart": 1
+            },
+            "version": {
+              "versionId": "document_version_6dbfe690e9be43dab3b0cfd6",
+              "documentId": "context_doc_e903425d60874a708abd6c72",
+              "contentHash": "0e64e7445dcbac709ddcfbbeb62497a00e662a624476a3eb69a3efa7bee1a068",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 1,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "part": "text",
+                  "lines": 6,
+                  "status": "ready"
+                },
+                "statusCounts": {
+                  "ready": 1
+                },
+                "warningParts": 0,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "ready",
+              "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+              "limitations": []
+            },
+            "warnings": []
+          }
+        ],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "input": {
+              "query": "RQ-001 湿样品 温度"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [
+              {
+                "kind": "document",
+                "label": "Q01-scope.txt",
+                "target": {
+                  "status": "ready",
+                  "locator": {
+                    "kind": "text",
+                    "charEnd": 165,
+                    "lineEnd": 6,
+                    "charStart": 0,
+                    "lineStart": 1
+                  },
+                  "ordinal": 0,
+                  "snippet": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n",
+                  "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+                  "versionId": "document_version_6dbfe690e9be43dab3b0cfd6",
+                  "documentId": "context_doc_e903425d60874a708abd6c72"
+                }
+              }
+            ],
+            "coverage": {
+              "note": "Search snippets are not complete evidence. This search includes accepted experiment field names as well as documents and confirmed regions. If a precise query and synonym have no relevant matches, answer insufficient_evidence within that search coverage. Do not enumerate experiments or read every field to prove absence.",
+              "scope": "current_project_sources",
+              "complete": true,
+              "includes": [
+                "selected_document_versions"
+              ],
+              "returned": 1,
+              "candidateWindow": 1,
+              "readForCitation": false
+            },
+            "sequence": 1,
+            "elapsedMs": 23,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "returnedCount": 1
+          },
+          {
+            "tool": "search_project_documents",
+            "input": {
+              "query": "RQ-001 wet sample temperature"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [
+              {
+                "kind": "document",
+                "label": "Q01-scope.txt",
+                "target": {
+                  "status": "ready",
+                  "locator": {
+                    "kind": "text",
+                    "charEnd": 165,
+                    "lineEnd": 6,
+                    "charStart": 0,
+                    "lineStart": 1
+                  },
+                  "ordinal": 0,
+                  "snippet": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n",
+                  "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+                  "versionId": "document_version_6dbfe690e9be43dab3b0cfd6",
+                  "documentId": "context_doc_e903425d60874a708abd6c72"
+                }
+              }
+            ],
+            "coverage": {
+              "note": "Search snippets are not complete evidence. This search includes accepted experiment field names as well as documents and confirmed regions. If a precise query and synonym have no relevant matches, answer insufficient_evidence within that search coverage. Do not enumerate experiments or read every field to prove absence.",
+              "scope": "current_project_sources",
+              "complete": true,
+              "includes": [
+                "selected_document_versions"
+              ],
+              "returned": 1,
+              "candidateWindow": 1,
+              "readForCitation": false
+            },
+            "sequence": 2,
+            "elapsedMs": 10,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "returnedCount": 1
+          },
+          {
+            "tool": "read_document_passage",
+            "input": {
+              "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+              "versionId": "document_version_6dbfe690e9be43dab3b0cfd6"
+            },
+            "phase": "read",
+            "status": "ok",
+            "sequence": 3,
+            "elapsedMs": 10,
+            "evidenceIds": [
+              "evidence_5dbcf1124e17480b3d876778"
+            ]
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 7762,
+          "knownCost": null,
+          "toolCalls": 3,
+          "toolRounds": 2,
+          "inputTokens": 8252,
+          "lastActiveAt": 1790727926414,
+          "outputTokens": 632,
+          "reservedTokens": 0,
+          "visibleToolCalls": 3,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-29 20:25:26.415753-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_5dbcf1124e17480b3d876778",
+          "data": {
+            "text": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n"
+          },
+          "kind": "document_passage",
+          "label": "Q01-scope.txt",
+          "locator": {
+            "kind": "text",
+            "charEnd": 165,
+            "lineEnd": 6,
+            "charStart": 0,
+            "lineStart": 1
+          },
+          "version": {
+            "versionId": "document_version_6dbfe690e9be43dab3b0cfd6",
+            "documentId": "context_doc_e903425d60874a708abd6c72",
+            "contentHash": "0e64e7445dcbac709ddcfbbeb62497a00e662a624476a3eb69a3efa7bee1a068",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 1,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "part": "text",
+                "lines": 6,
+                "status": "ready"
+              },
+              "statusCounts": {
+                "ready": 1
+              },
+              "warningParts": 0,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "ready",
+            "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+            "limitations": []
+          },
+          "warnings": []
+        }
+      ],
+      "elapsedMs": 7949,
+      "semanticReview": "pending"
+    },
+    {
+      "trace": [
+        {
+          "sequence": 1,
+          "tool": "search_project_documents",
+          "phase": "discovery",
+          "input": {
+            "query": "Exp17"
+          },
+          "status": "ok",
+          "evidenceIds": [],
+          "coverage": {
+            "scope": "current_project_sources",
+            "readForCitation": false,
+            "returned": 1,
+            "candidateWindow": 1,
+            "complete": true,
+            "includes": [
+              "selected_document_versions"
+            ],
+            "note": "Search snippets are not complete evidence. This search includes accepted experiment field names as well as documents and confirmed regions. If a precise query and synonym have no relevant matches, answer insufficient_evidence within that search coverage. Do not enumerate experiments or read every field to prove absence."
+          },
+          "returnedCount": 1,
+          "matches": [
+            {
+              "kind": "document",
+              "label": "Q01-scope.txt",
+              "target": {
+                "status": "ready",
+                "locator": {
+                  "kind": "text",
+                  "charEnd": 165,
+                  "lineEnd": 6,
+                  "charStart": 0,
+                  "lineStart": 1
+                },
+                "ordinal": 0,
+                "snippet": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n",
+                "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+                "versionId": "document_version_6dbfe690e9be43dab3b0cfd6",
+                "documentId": "context_doc_e903425d60874a708abd6c72"
+              }
+            }
+          ],
+          "nextCursor": null,
+          "elapsedMs": 16
+        },
+        {
+          "sequence": 2,
+          "tool": "search_project_documents",
+          "phase": "discovery",
+          "input": {
+            "query": "实测温度"
+          },
+          "status": "ok",
+          "evidenceIds": [],
+          "coverage": {
+            "scope": "current_project_sources",
+            "readForCitation": false,
+            "returned": 1,
+            "candidateWindow": 1,
+            "complete": true,
+            "includes": [
+              "selected_document_versions"
+            ],
+            "note": "Search snippets are not complete evidence. This search includes accepted experiment field names as well as documents and confirmed regions. If a precise query and synonym have no relevant matches, answer insufficient_evidence within that search coverage. Do not enumerate experiments or read every field to prove absence."
+          },
+          "returnedCount": 1,
+          "matches": [
+            {
+              "kind": "document",
+              "label": "Q01-scope.txt",
+              "target": {
+                "status": "ready",
+                "locator": {
+                  "kind": "text",
+                  "charEnd": 165,
+                  "lineEnd": 6,
+                  "charStart": 0,
+                  "lineStart": 1
+                },
+                "ordinal": 0,
+                "snippet": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n",
+                "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+                "versionId": "document_version_6dbfe690e9be43dab3b0cfd6",
+                "documentId": "context_doc_e903425d60874a708abd6c72"
+              }
+            }
+          ],
+          "nextCursor": null,
+          "elapsedMs": 12
+        },
+        {
+          "sequence": 3,
+          "tool": "read_document_passage",
+          "phase": "read",
+          "input": {
+            "versionId": "document_version_6dbfe690e9be43dab3b0cfd6",
+            "passageId": "passage_b37b68bf84100eaac095b89683d3897b"
+          },
+          "status": "ok",
+          "evidenceIds": [
+            "evidence_5dbcf1124e17480b3d876778"
+          ],
+          "elapsedMs": 13
+        }
+      ],
+      "readWindows": [
+        {
+          "id": "evidence_5dbcf1124e17480b3d876778",
+          "kind": "document_passage",
+          "label": "Q01-scope.txt",
+          "version": {
+            "documentId": "context_doc_e903425d60874a708abd6c72",
+            "versionId": "document_version_6dbfe690e9be43dab3b0cfd6",
+            "versionNumber": 1,
+            "contentHash": "0e64e7445dcbac709ddcfbbeb62497a00e662a624476a3eb69a3efa7bee1a068",
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "locator": {
+            "kind": "text",
+            "charEnd": 165,
+            "lineEnd": 6,
+            "charStart": 0,
+            "lineStart": 1
+          },
+          "data": {
+            "text": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+            "status": "ready",
+            "source": {
+              "parts": 1,
+              "statusCounts": {
+                "ready": 1
+              },
+              "location": {
+                "part": "text",
+                "lines": 6,
+                "status": "ready"
+              },
+              "warningParts": 0,
+              "scope": "summary_and_cited_location_only",
+              "fullCoverageAvailableOnVersion": true
+            },
+            "limitations": []
+          },
+          "warnings": []
+        }
+      ],
+      "id": "R08",
+      "question": "仅根据选中资料，Exp17 的实测温度是多少？",
+      "expected": "selected document has method only; no experiment read or inferred measured value",
+      "request": {
+        "runId": "agent_run_87531c021ada4e45a2695920",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "readonly-R08-1790727926587",
+        "question": "仅根据选中资料，Exp17 的实测温度是多少？",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 4,
+          "elapsedMs": 13553,
+          "knownCost": null,
+          "toolCalls": 3,
+          "toolRounds": 3,
+          "inputTokens": 11485,
+          "lastActiveAt": 1790727940156,
+          "outputTokens": 1108,
+          "reservedTokens": 0,
+          "visibleToolCalls": 3,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-30T00:25:26.596Z",
+        "updatedAt": "2026-09-30T00:25:40.159Z",
+        "referenceDocuments": [
+          {
+            "label": "Q01-scope.txt",
+            "versionId": "document_version_6dbfe690e9be43dab3b0cfd6",
+            "documentId": "context_doc_e903425d60874a708abd6c72",
+            "versionNumber": 1
+          }
+        ],
+        "sourceScope": "selected"
+      },
+      "artifact": {
+        "id": "answer_9187fed9acba47948afd93e1",
+        "runId": "agent_run_87531c021ada4e45a2695920",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "在选中的资料 Q01-scope.txt 中未找到 Exp17 或其实测温度记录。该文档仅包含项目范围信息：Protocol RQ-001、仅干样、温度 80 C、时长 30 分钟；这里的 80 C 是文档中给出的温度条件，并非 Exp17 的实测温度。",
+              "citations": [
+                {
+                  "evidenceId": "evidence_5dbcf1124e17480b3d876778"
+                }
+              ]
+            }
+          ],
+          "status": "insufficient_evidence",
+          "limitations": [],
+          "missingEvidence": [
+            "选中资料中没有 Exp17 的标识或其实测温度数据；仅凭 Q01-scope.txt 无法回答 Exp17 的实测温度。"
+          ],
+          "provenanceVersion": 2
+        },
+        "evidence": [
+          {
+            "id": "evidence_5dbcf1124e17480b3d876778",
+            "kind": "document_passage",
+            "label": "Q01-scope.txt",
+            "locator": {
+              "kind": "text",
+              "charEnd": 165,
+              "lineEnd": 6,
+              "charStart": 0,
+              "lineStart": 1
+            },
+            "version": {
+              "versionId": "document_version_6dbfe690e9be43dab3b0cfd6",
+              "documentId": "context_doc_e903425d60874a708abd6c72",
+              "contentHash": "0e64e7445dcbac709ddcfbbeb62497a00e662a624476a3eb69a3efa7bee1a068",
+              "versionNumber": 1,
+              "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+            },
+            "coverage": {
+              "scope": "one_passage",
+              "source": {
+                "parts": 1,
+                "scope": "summary_and_cited_location_only",
+                "location": {
+                  "part": "text",
+                  "lines": 6,
+                  "status": "ready"
+                },
+                "statusCounts": {
+                  "ready": 1
+                },
+                "warningParts": 0,
+                "fullCoverageAvailableOnVersion": true
+              },
+              "status": "ready",
+              "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+              "limitations": []
+            },
+            "warnings": []
+          }
+        ],
+        "trace": [
+          {
+            "tool": "search_project_documents",
+            "input": {
+              "query": "Exp17"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [
+              {
+                "kind": "document",
+                "label": "Q01-scope.txt",
+                "target": {
+                  "status": "ready",
+                  "locator": {
+                    "kind": "text",
+                    "charEnd": 165,
+                    "lineEnd": 6,
+                    "charStart": 0,
+                    "lineStart": 1
+                  },
+                  "ordinal": 0,
+                  "snippet": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n",
+                  "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+                  "versionId": "document_version_6dbfe690e9be43dab3b0cfd6",
+                  "documentId": "context_doc_e903425d60874a708abd6c72"
+                }
+              }
+            ],
+            "coverage": {
+              "note": "Search snippets are not complete evidence. This search includes accepted experiment field names as well as documents and confirmed regions. If a precise query and synonym have no relevant matches, answer insufficient_evidence within that search coverage. Do not enumerate experiments or read every field to prove absence.",
+              "scope": "current_project_sources",
+              "complete": true,
+              "includes": [
+                "selected_document_versions"
+              ],
+              "returned": 1,
+              "candidateWindow": 1,
+              "readForCitation": false
+            },
+            "sequence": 1,
+            "elapsedMs": 16,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "returnedCount": 1
+          },
+          {
+            "tool": "search_project_documents",
+            "input": {
+              "query": "实测温度"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [
+              {
+                "kind": "document",
+                "label": "Q01-scope.txt",
+                "target": {
+                  "status": "ready",
+                  "locator": {
+                    "kind": "text",
+                    "charEnd": 165,
+                    "lineEnd": 6,
+                    "charStart": 0,
+                    "lineStart": 1
+                  },
+                  "ordinal": 0,
+                  "snippet": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n",
+                  "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+                  "versionId": "document_version_6dbfe690e9be43dab3b0cfd6",
+                  "documentId": "context_doc_e903425d60874a708abd6c72"
+                }
+              }
+            ],
+            "coverage": {
+              "note": "Search snippets are not complete evidence. This search includes accepted experiment field names as well as documents and confirmed regions. If a precise query and synonym have no relevant matches, answer insufficient_evidence within that search coverage. Do not enumerate experiments or read every field to prove absence.",
+              "scope": "current_project_sources",
+              "complete": true,
+              "includes": [
+                "selected_document_versions"
+              ],
+              "returned": 1,
+              "candidateWindow": 1,
+              "readForCitation": false
+            },
+            "sequence": 2,
+            "elapsedMs": 12,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "returnedCount": 1
+          },
+          {
+            "tool": "read_document_passage",
+            "input": {
+              "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+              "versionId": "document_version_6dbfe690e9be43dab3b0cfd6"
+            },
+            "phase": "read",
+            "status": "ok",
+            "sequence": 3,
+            "elapsedMs": 13,
+            "evidenceIds": [
+              "evidence_5dbcf1124e17480b3d876778"
+            ]
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 4,
+          "elapsedMs": 13553,
+          "knownCost": null,
+          "toolCalls": 3,
+          "toolRounds": 3,
+          "inputTokens": 11485,
+          "lastActiveAt": 1790727940156,
+          "outputTokens": 1108,
+          "reservedTokens": 0,
+          "visibleToolCalls": 3,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-29 20:25:40.157701-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_5dbcf1124e17480b3d876778",
+          "data": {
+            "text": "Project: Synthetic catalyst stability study.\nProtocol: RQ-001.\nSample condition: dry sample only; wet samples are excluded.\nTemperature: 80 C.\nDuration: 30 minutes.\n"
+          },
+          "kind": "document_passage",
+          "label": "Q01-scope.txt",
+          "locator": {
+            "kind": "text",
+            "charEnd": 165,
+            "lineEnd": 6,
+            "charStart": 0,
+            "lineStart": 1
+          },
+          "version": {
+            "versionId": "document_version_6dbfe690e9be43dab3b0cfd6",
+            "documentId": "context_doc_e903425d60874a708abd6c72",
+            "contentHash": "0e64e7445dcbac709ddcfbbeb62497a00e662a624476a3eb69a3efa7bee1a068",
+            "versionNumber": 1,
+            "processingVersion": "labrat.documents.v1.2:pdfjs-6.3.289:tesseract-7.0.0:eng-chi_sim-1.0.0:word-1.0.4:xml-5.11.1"
+          },
+          "coverage": {
+            "scope": "one_passage",
+            "source": {
+              "parts": 1,
+              "scope": "summary_and_cited_location_only",
+              "location": {
+                "part": "text",
+                "lines": 6,
+                "status": "ready"
+              },
+              "statusCounts": {
+                "ready": 1
+              },
+              "warningParts": 0,
+              "fullCoverageAvailableOnVersion": true
+            },
+            "status": "ready",
+            "passageId": "passage_b37b68bf84100eaac095b89683d3897b",
+            "limitations": []
+          },
+          "warnings": []
+        }
+      ],
+      "elapsedMs": 13719,
+      "semanticReview": "pending"
+    },
+    {
+      "trace": [
+        {
+          "sequence": 1,
+          "tool": "find_experiments",
+          "phase": "discovery",
+          "input": {
+            "query": "Exp17"
+          },
+          "status": "ok",
+          "evidenceIds": [],
+          "coverage": {
+            "exactNameOrAlias": true,
+            "complete": true,
+            "note": "Only active accepted snapshot heads are listed."
+          },
+          "matchStatus": "matched",
+          "returnedCount": 1,
+          "matches": [
+            {
+              "kind": "experiment",
+              "label": "Exp17",
+              "target": {
+                "experimentId": "experiment_17",
+                "snapshotId": "snapshot_experiment_17"
+              }
+            }
+          ],
+          "nextCursor": null,
+          "elapsedMs": 16
+        },
+        {
+          "sequence": 2,
+          "tool": "read_experiment_evidence",
+          "phase": "read",
+          "input": {
+            "experimentId": "experiment_17",
+            "snapshotId": "snapshot_experiment_17"
+          },
+          "status": "ok",
+          "evidenceIds": [
+            "evidence_0640f491c79dcfedf986bc5d"
+          ],
+          "elapsedMs": 6
+        }
+      ],
+      "readWindows": [
+        {
+          "id": "evidence_0640f491c79dcfedf986bc5d",
+          "kind": "experiment_snapshot",
+          "label": "Exp17",
+          "version": {
+            "experimentId": "experiment_17",
+            "snapshotId": "snapshot_experiment_17",
+            "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+            "headId": "head_experiment_17",
+            "headUpdatedAt": "2026-09-30T00:25:17.657Z",
+            "recordIndex": 0
+          },
+          "locator": {
+            "fieldOffset": 0,
+            "seriesOffset": 0,
+            "seriesKey": null,
+            "pointOffset": 0
+          },
+          "data": {
+            "snapshotId": "snapshot_experiment_17",
+            "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+            "acceptedAt": "2026-09-30T00:25:17.654Z",
+            "warnings": [],
+            "experimentId": "experiment_17",
+            "sourceAlias": "Exp17",
+            "recordWarnings": [],
+            "sourceRefs": [],
+            "fieldCount": 29,
+            "seriesCount": 1,
+            "fields": [
+              {
+                "unit": "C",
+                "value": 82,
+                "columnId": "temperature",
+                "valueType": "number",
+                "sourceRefs": [
+                  {
+                    "cell": "B2",
+                    "sheet": "Measurements",
+                    "rawValue": 80
+                  }
+                ],
+                "displayName": "Temperature"
+              },
+              {
+                "unit": "%",
+                "value": 0.42,
+                "columnId": "yield_fraction",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Yield",
+                "numericScale": "fraction"
+              },
+              {
+                "unit": "%",
+                "value": 42,
+                "columnId": "yield_points",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Yield",
+                "numericScale": "percent_points"
+              },
+              {
+                "unit": "bar",
+                "value": null,
+                "columnId": "pressure",
+                "valueType": "number",
+                "sourceRefs": [
+                  {
+                    "cell": "H2",
+                    "sheet": "Measurements",
+                    "rawValue": null
+                  }
+                ],
+                "displayName": "Pressure",
+                "missingReason": "source_blank",
+                "formattedValue": null
+              },
+              {
+                "unit": "min",
+                "value": 30,
+                "columnId": "duration",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Duration"
+              },
+              {
+                "unit": "mg",
+                "value": 100,
+                "columnId": "aux_0",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 0"
+              },
+              {
+                "unit": "mg",
+                "value": 101,
+                "columnId": "aux_1",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 1"
+              },
+              {
+                "unit": "mg",
+                "value": 102,
+                "columnId": "aux_2",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 2"
+              },
+              {
+                "unit": "mg",
+                "value": 103,
+                "columnId": "aux_3",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 3"
+              },
+              {
+                "unit": "mg",
+                "value": 104,
+                "columnId": "aux_4",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 4"
+              },
+              {
+                "unit": "mg",
+                "value": 105,
+                "columnId": "aux_5",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 5"
+              },
+              {
+                "unit": "mg",
+                "value": 106,
+                "columnId": "aux_6",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 6"
+              },
+              {
+                "unit": "mg",
+                "value": 107,
+                "columnId": "aux_7",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 7"
+              },
+              {
+                "unit": "mg",
+                "value": 108,
+                "columnId": "aux_8",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 8"
+              },
+              {
+                "unit": "mg",
+                "value": 109,
+                "columnId": "aux_9",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 9"
+              },
+              {
+                "unit": "mg",
+                "value": 110,
+                "columnId": "aux_10",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 10"
+              },
+              {
+                "unit": "mg",
+                "value": 111,
+                "columnId": "aux_11",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 11"
+              },
+              {
+                "unit": "mg",
+                "value": 112,
+                "columnId": "aux_12",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 12"
+              },
+              {
+                "unit": "mg",
+                "value": 113,
+                "columnId": "aux_13",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 13"
+              },
+              {
+                "unit": "mg",
+                "value": 114,
+                "columnId": "aux_14",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 14"
+              }
+            ],
+            "series": [
+              {
+                "label": "Temperature trace",
+                "xField": {
+                  "unit": "min",
+                  "fieldId": "time"
+                },
+                "yField": {
+                  "unit": "C",
+                  "fieldId": "temperature"
+                },
+                "seriesKey": "temperature_trace",
+                "pointCount": 121,
+                "sourceRefs": []
+              }
+            ],
+            "seriesWindow": null
+          },
+          "coverage": {
+            "scope": "accepted_snapshot_window",
+            "fieldCount": 29,
+            "seriesCount": 1,
+            "nextFieldOffset": 20,
+            "nextSeriesOffset": null,
+            "nextPointOffset": null
+          },
+          "warnings": [
+            "Values retain their stored scale and unit; no conversion or new calculation was performed."
+          ]
+        }
+      ],
+      "id": "R12-field",
+      "question": "What is the accepted Pressure for Exp17? If missing, explain the stored reason.",
+      "expected": "missing, source_blank, unit bar; no invented value",
+      "request": {
+        "runId": "agent_run_d7b0d9fb20c643b1b501ede7",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "readonly-R12-field-1790727940307",
+        "question": "What is the accepted Pressure for Exp17? If missing, explain the stored reason.",
+        "status": "completed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 6928,
+          "knownCost": null,
+          "toolCalls": 2,
+          "toolRounds": 2,
+          "inputTokens": 9968,
+          "lastActiveAt": 1790727947251,
+          "outputTokens": 484,
+          "reservedTokens": 0,
+          "visibleToolCalls": 2,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": null,
+        "createdAt": "2026-09-30T00:25:40.316Z",
+        "updatedAt": "2026-09-30T00:25:47.255Z",
+        "referenceDocuments": [],
+        "sourceScope": "project"
+      },
+      "artifact": {
+        "id": "answer_e8fdf7275e934da1a7991abc",
+        "runId": "agent_run_d7b0d9fb20c643b1b501ede7",
+        "projectId": "project_analysis",
+        "createdBy": "user_owner",
+        "schemaVersion": "labrat.answerArtifact.v1",
+        "answer": {
+          "claims": [
+            {
+              "text": "The accepted Pressure for Exp17 is missing (stored value is null, unit bar). The stored missing reason is \"source_blank\", and the source reference points to cell H2 in the Measurements sheet with a null raw value.",
+              "citations": [
+                {
+                  "evidenceId": "evidence_0640f491c79dcfedf986bc5d"
+                }
+              ]
+            }
+          ],
+          "status": "answered",
+          "limitations": [
+            "Values retain their stored scale and unit; no conversion or new calculation was performed.",
+            "Only the listed windows were read; additional records remain available."
+          ],
+          "missingEvidence": [],
+          "provenanceVersion": 2
+        },
+        "evidence": [
+          {
+            "id": "evidence_0640f491c79dcfedf986bc5d",
+            "kind": "experiment_snapshot",
+            "label": "Exp17",
+            "locator": {
+              "seriesKey": null,
+              "fieldOffset": 0,
+              "pointOffset": 0,
+              "seriesOffset": 0
+            },
+            "version": {
+              "headId": "head_experiment_17",
+              "snapshotId": "snapshot_experiment_17",
+              "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+              "recordIndex": 0,
+              "experimentId": "experiment_17",
+              "headUpdatedAt": "2026-09-30T00:25:17.657Z"
+            },
+            "coverage": {
+              "scope": "accepted_snapshot_window",
+              "fieldCount": 29,
+              "seriesCount": 1,
+              "nextFieldOffset": 20,
+              "nextPointOffset": null,
+              "nextSeriesOffset": null
+            },
+            "warnings": [
+              "Values retain their stored scale and unit; no conversion or new calculation was performed."
+            ]
+          }
+        ],
+        "trace": [
+          {
+            "tool": "find_experiments",
+            "input": {
+              "query": "Exp17"
+            },
+            "phase": "discovery",
+            "status": "ok",
+            "matches": [
+              {
+                "kind": "experiment",
+                "label": "Exp17",
+                "target": {
+                  "snapshotId": "snapshot_experiment_17",
+                  "experimentId": "experiment_17"
+                }
+              }
+            ],
+            "coverage": {
+              "note": "Only active accepted snapshot heads are listed.",
+              "complete": true,
+              "exactNameOrAlias": true
+            },
+            "sequence": 1,
+            "elapsedMs": 16,
+            "nextCursor": null,
+            "evidenceIds": [],
+            "matchStatus": "matched",
+            "returnedCount": 1
+          },
+          {
+            "tool": "read_experiment_evidence",
+            "input": {
+              "snapshotId": "snapshot_experiment_17",
+              "experimentId": "experiment_17"
+            },
+            "phase": "read",
+            "status": "ok",
+            "sequence": 2,
+            "elapsedMs": 6,
+            "evidenceIds": [
+              "evidence_0640f491c79dcfedf986bc5d"
+            ]
+          }
+        ],
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": null,
+          "provider": "deepseek",
+          "requests": 3,
+          "elapsedMs": 6928,
+          "knownCost": null,
+          "toolCalls": 2,
+          "toolRounds": 2,
+          "inputTokens": 9968,
+          "lastActiveAt": 1790727947251,
+          "outputTokens": 484,
+          "reservedTokens": 0,
+          "visibleToolCalls": 2,
+          "unknownUsageRequests": 0
+        },
+        "createdAt": "2026-09-29 20:25:47.252434-04"
+      },
+      "evidence": [
+        {
+          "id": "evidence_0640f491c79dcfedf986bc5d",
+          "data": {
+            "fields": [
+              {
+                "unit": "C",
+                "value": 82,
+                "columnId": "temperature",
+                "valueType": "number",
+                "sourceRefs": [
+                  {
+                    "cell": "B2",
+                    "sheet": "Measurements",
+                    "rawValue": 80
+                  }
+                ],
+                "displayName": "Temperature"
+              },
+              {
+                "unit": "%",
+                "value": 0.42,
+                "columnId": "yield_fraction",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Yield",
+                "numericScale": "fraction"
+              },
+              {
+                "unit": "%",
+                "value": 42,
+                "columnId": "yield_points",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Yield",
+                "numericScale": "percent_points"
+              },
+              {
+                "unit": "bar",
+                "value": null,
+                "columnId": "pressure",
+                "valueType": "number",
+                "sourceRefs": [
+                  {
+                    "cell": "H2",
+                    "sheet": "Measurements",
+                    "rawValue": null
+                  }
+                ],
+                "displayName": "Pressure",
+                "missingReason": "source_blank",
+                "formattedValue": null
+              },
+              {
+                "unit": "min",
+                "value": 30,
+                "columnId": "duration",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Duration"
+              },
+              {
+                "unit": "mg",
+                "value": 100,
+                "columnId": "aux_0",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 0"
+              },
+              {
+                "unit": "mg",
+                "value": 101,
+                "columnId": "aux_1",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 1"
+              },
+              {
+                "unit": "mg",
+                "value": 102,
+                "columnId": "aux_2",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 2"
+              },
+              {
+                "unit": "mg",
+                "value": 103,
+                "columnId": "aux_3",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 3"
+              },
+              {
+                "unit": "mg",
+                "value": 104,
+                "columnId": "aux_4",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 4"
+              },
+              {
+                "unit": "mg",
+                "value": 105,
+                "columnId": "aux_5",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 5"
+              },
+              {
+                "unit": "mg",
+                "value": 106,
+                "columnId": "aux_6",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 6"
+              },
+              {
+                "unit": "mg",
+                "value": 107,
+                "columnId": "aux_7",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 7"
+              },
+              {
+                "unit": "mg",
+                "value": 108,
+                "columnId": "aux_8",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 8"
+              },
+              {
+                "unit": "mg",
+                "value": 109,
+                "columnId": "aux_9",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 9"
+              },
+              {
+                "unit": "mg",
+                "value": 110,
+                "columnId": "aux_10",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 10"
+              },
+              {
+                "unit": "mg",
+                "value": 111,
+                "columnId": "aux_11",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 11"
+              },
+              {
+                "unit": "mg",
+                "value": 112,
+                "columnId": "aux_12",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 12"
+              },
+              {
+                "unit": "mg",
+                "value": 113,
+                "columnId": "aux_13",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 13"
+              },
+              {
+                "unit": "mg",
+                "value": 114,
+                "columnId": "aux_14",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 14"
+              }
+            ],
+            "series": [
+              {
+                "label": "Temperature trace",
+                "xField": {
+                  "unit": "min",
+                  "fieldId": "time"
+                },
+                "yField": {
+                  "unit": "C",
+                  "fieldId": "temperature"
+                },
+                "seriesKey": "temperature_trace",
+                "pointCount": 121,
+                "sourceRefs": []
+              }
+            ],
+            "warnings": [],
+            "acceptedAt": "2026-09-30T00:25:17.654Z",
+            "fieldCount": 29,
+            "snapshotId": "snapshot_experiment_17",
+            "sourceRefs": [],
+            "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+            "seriesCount": 1,
+            "sourceAlias": "Exp17",
+            "experimentId": "experiment_17",
+            "seriesWindow": null,
+            "recordWarnings": []
+          },
+          "kind": "experiment_snapshot",
+          "label": "Exp17",
+          "locator": {
+            "seriesKey": null,
+            "fieldOffset": 0,
+            "pointOffset": 0,
+            "seriesOffset": 0
+          },
+          "version": {
+            "headId": "head_experiment_17",
+            "snapshotId": "snapshot_experiment_17",
+            "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+            "recordIndex": 0,
+            "experimentId": "experiment_17",
+            "headUpdatedAt": "2026-09-30T00:25:17.657Z"
+          },
+          "coverage": {
+            "scope": "accepted_snapshot_window",
+            "fieldCount": 29,
+            "seriesCount": 1,
+            "nextFieldOffset": 20,
+            "nextPointOffset": null,
+            "nextSeriesOffset": null
+          },
+          "warnings": [
+            "Values retain their stored scale and unit; no conversion or new calculation was performed."
+          ]
+        }
+      ],
+      "elapsedMs": 7143,
+      "semanticReview": "pending"
+    },
+    {
+      "trace": [
+        {
+          "sequence": 1,
+          "tool": "search_project_documents",
+          "phase": "discovery",
+          "input": {
+            "query": "cobalt concentration"
+          },
+          "status": "ok",
+          "evidenceIds": [],
+          "coverage": {
+            "scope": "current_project_sources",
+            "readForCitation": false,
+            "returned": 0,
+            "candidateWindow": 0,
+            "complete": true,
+            "includes": [
+              "uploaded_documents",
+              "confirmed_regions",
+              "accepted_field_names"
+            ],
+            "note": "Search snippets are not complete evidence. This search includes accepted experiment field names as well as documents and confirmed regions. If a precise query and synonym have no relevant matches, answer insufficient_evidence within that search coverage. Do not enumerate experiments or read every field to prove absence."
+          },
+          "returnedCount": 0,
+          "matches": [],
+          "nextCursor": null,
+          "elapsedMs": 7
+        },
+        {
+          "sequence": 2,
+          "tool": "search_project_documents",
+          "phase": "discovery",
+          "input": {
+            "query": "Co concentration"
+          },
+          "status": "ok",
+          "evidenceIds": [],
+          "coverage": {
+            "scope": "current_project_sources",
+            "readForCitation": false,
+            "returned": 0,
+            "candidateWindow": 0,
+            "complete": true,
+            "includes": [
+              "uploaded_documents",
+              "confirmed_regions",
+              "accepted_field_names"
+            ],
+            "note": "Search snippets are not complete evidence. This search includes accepted experiment field names as well as documents and confirmed regions. If a precise query and synonym have no relevant matches, answer insufficient_evidence within that search coverage. Do not enumerate experiments or read every field to prove absence."
+          },
+          "returnedCount": 0,
+          "matches": [],
+          "nextCursor": null,
+          "elapsedMs": 7
+        },
+        {
+          "sequence": 3,
+          "tool": "find_experiments",
+          "phase": "discovery",
+          "input": {
+            "query": ""
+          },
+          "status": "ok",
+          "evidenceIds": [],
+          "coverage": {
+            "exactNameOrAlias": false,
+            "complete": true,
+            "note": "Only active accepted snapshot heads are listed."
+          },
+          "matchStatus": "matched",
+          "returnedCount": 2,
+          "matches": [
+            {
+              "kind": "experiment",
+              "label": "Exp17",
+              "target": {
+                "experimentId": "experiment_17",
+                "snapshotId": "snapshot_experiment_17"
+              }
+            },
+            {
+              "kind": "experiment",
+              "label": "Exp17B",
+              "target": {
+                "experimentId": "experiment_17b",
+                "snapshotId": "snapshot_experiment_17b"
+              }
+            }
+          ],
+          "nextCursor": null,
+          "elapsedMs": 5
+        },
+        {
+          "sequence": 4,
+          "tool": "read_experiment_evidence",
+          "phase": "read",
+          "input": {
+            "experimentId": "experiment_17",
+            "snapshotId": "snapshot_experiment_17"
+          },
+          "status": "ok",
+          "evidenceIds": [
+            "evidence_0640f491c79dcfedf986bc5d"
+          ],
+          "elapsedMs": 6
+        },
+        {
+          "sequence": 5,
+          "tool": "read_experiment_evidence",
+          "phase": "read",
+          "input": {
+            "experimentId": "experiment_17b",
+            "snapshotId": "snapshot_experiment_17b"
+          },
+          "status": "ok",
+          "evidenceIds": [
+            "evidence_5c98da6d0f11980867affd10"
+          ],
+          "elapsedMs": 5
+        },
+        {
+          "sequence": 6,
+          "tool": "read_experiment_evidence",
+          "phase": "read",
+          "input": {
+            "experimentId": "experiment_17",
+            "snapshotId": "snapshot_experiment_17",
+            "fieldOffset": 20
+          },
+          "status": "ok",
+          "evidenceIds": [
+            "evidence_11a1ed74dde1bb79f56d1605"
+          ],
+          "elapsedMs": 4
+        },
+        {
+          "sequence": 7,
+          "tool": "read_experiment_evidence",
+          "phase": "read",
+          "input": {
+            "experimentId": "experiment_17b",
+            "snapshotId": "snapshot_experiment_17b",
+            "fieldOffset": 20
+          },
+          "status": "ok",
+          "evidenceIds": [
+            "evidence_8b9d01b769b2a1952e016630"
+          ],
+          "elapsedMs": 4
+        },
+        {
+          "sequence": 8,
+          "tool": "read_confirmed_region_evidence",
+          "phase": "read",
+          "input": {
+            "regionId": "region_readonly_eval",
+            "revisionId": "revision_readonly_eval",
+            "range": "A1:G3"
+          },
+          "status": "ok",
+          "evidenceIds": [
+            "evidence_b23e44881f9cdabd607a1aa7"
+          ],
+          "elapsedMs": 10
+        },
+        {
+          "sequence": 9,
+          "tool": "read_confirmed_region_evidence",
+          "phase": "read",
+          "input": {
+            "regionId": "review_region_analysis",
+            "revisionId": "revision_analysis",
+            "range": "A1:C2"
+          },
+          "status": "ok",
+          "evidenceIds": [
+            "evidence_11f3a122a2023a266e30a97b"
+          ],
+          "elapsedMs": 6
+        }
+      ],
+      "readWindows": [
+        {
+          "id": "evidence_0640f491c79dcfedf986bc5d",
+          "kind": "experiment_snapshot",
+          "label": "Exp17",
+          "version": {
+            "experimentId": "experiment_17",
+            "snapshotId": "snapshot_experiment_17",
+            "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+            "headId": "head_experiment_17",
+            "headUpdatedAt": "2026-09-30T00:25:17.657Z",
+            "recordIndex": 0
+          },
+          "locator": {
+            "fieldOffset": 0,
+            "seriesOffset": 0,
+            "seriesKey": null,
+            "pointOffset": 0
+          },
+          "data": {
+            "snapshotId": "snapshot_experiment_17",
+            "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+            "acceptedAt": "2026-09-30T00:25:17.654Z",
+            "warnings": [],
+            "experimentId": "experiment_17",
+            "sourceAlias": "Exp17",
+            "recordWarnings": [],
+            "sourceRefs": [],
+            "fieldCount": 29,
+            "seriesCount": 1,
+            "fields": [
+              {
+                "unit": "C",
+                "value": 82,
+                "columnId": "temperature",
+                "valueType": "number",
+                "sourceRefs": [
+                  {
+                    "cell": "B2",
+                    "sheet": "Measurements",
+                    "rawValue": 80
+                  }
+                ],
+                "displayName": "Temperature"
+              },
+              {
+                "unit": "%",
+                "value": 0.42,
+                "columnId": "yield_fraction",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Yield",
+                "numericScale": "fraction"
+              },
+              {
+                "unit": "%",
+                "value": 42,
+                "columnId": "yield_points",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Yield",
+                "numericScale": "percent_points"
+              },
+              {
+                "unit": "bar",
+                "value": null,
+                "columnId": "pressure",
+                "valueType": "number",
+                "sourceRefs": [
+                  {
+                    "cell": "H2",
+                    "sheet": "Measurements",
+                    "rawValue": null
+                  }
+                ],
+                "displayName": "Pressure",
+                "missingReason": "source_blank",
+                "formattedValue": null
+              },
+              {
+                "unit": "min",
+                "value": 30,
+                "columnId": "duration",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Duration"
+              },
+              {
+                "unit": "mg",
+                "value": 100,
+                "columnId": "aux_0",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 0"
+              },
+              {
+                "unit": "mg",
+                "value": 101,
+                "columnId": "aux_1",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 1"
+              },
+              {
+                "unit": "mg",
+                "value": 102,
+                "columnId": "aux_2",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 2"
+              },
+              {
+                "unit": "mg",
+                "value": 103,
+                "columnId": "aux_3",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 3"
+              },
+              {
+                "unit": "mg",
+                "value": 104,
+                "columnId": "aux_4",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 4"
+              },
+              {
+                "unit": "mg",
+                "value": 105,
+                "columnId": "aux_5",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 5"
+              },
+              {
+                "unit": "mg",
+                "value": 106,
+                "columnId": "aux_6",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 6"
+              },
+              {
+                "unit": "mg",
+                "value": 107,
+                "columnId": "aux_7",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 7"
+              },
+              {
+                "unit": "mg",
+                "value": 108,
+                "columnId": "aux_8",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 8"
+              },
+              {
+                "unit": "mg",
+                "value": 109,
+                "columnId": "aux_9",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 9"
+              },
+              {
+                "unit": "mg",
+                "value": 110,
+                "columnId": "aux_10",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 10"
+              },
+              {
+                "unit": "mg",
+                "value": 111,
+                "columnId": "aux_11",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 11"
+              },
+              {
+                "unit": "mg",
+                "value": 112,
+                "columnId": "aux_12",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 12"
+              },
+              {
+                "unit": "mg",
+                "value": 113,
+                "columnId": "aux_13",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 13"
+              },
+              {
+                "unit": "mg",
+                "value": 114,
+                "columnId": "aux_14",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 14"
+              }
+            ],
+            "series": [
+              {
+                "label": "Temperature trace",
+                "xField": {
+                  "unit": "min",
+                  "fieldId": "time"
+                },
+                "yField": {
+                  "unit": "C",
+                  "fieldId": "temperature"
+                },
+                "seriesKey": "temperature_trace",
+                "pointCount": 121,
+                "sourceRefs": []
+              }
+            ],
+            "seriesWindow": null
+          },
+          "coverage": {
+            "scope": "accepted_snapshot_window",
+            "fieldCount": 29,
+            "seriesCount": 1,
+            "nextFieldOffset": 20,
+            "nextSeriesOffset": null,
+            "nextPointOffset": null
+          },
+          "warnings": [
+            "Values retain their stored scale and unit; no conversion or new calculation was performed."
+          ]
+        },
+        {
+          "id": "evidence_5c98da6d0f11980867affd10",
+          "kind": "experiment_snapshot",
+          "label": "Exp17B",
+          "version": {
+            "experimentId": "experiment_17b",
+            "snapshotId": "snapshot_experiment_17b",
+            "contentHash": "84ea1d21f7c1c7b553ed7550ca177240c8c9ffa5ab076f030fa6a0b2d7f93257",
+            "headId": "head_experiment_17b",
+            "headUpdatedAt": "2026-09-30T00:25:17.660Z",
+            "recordIndex": 0
+          },
+          "locator": {
+            "fieldOffset": 0,
+            "seriesOffset": 0,
+            "seriesKey": null,
+            "pointOffset": 0
+          },
+          "data": {
+            "snapshotId": "snapshot_experiment_17b",
+            "contentHash": "84ea1d21f7c1c7b553ed7550ca177240c8c9ffa5ab076f030fa6a0b2d7f93257",
+            "acceptedAt": "2026-09-30T00:25:17.659Z",
+            "warnings": [],
+            "experimentId": "experiment_17b",
+            "sourceAlias": "Exp17B",
+            "recordWarnings": [],
+            "sourceRefs": [],
+            "fieldCount": 29,
+            "seriesCount": 1,
+            "fields": [
+              {
+                "unit": "C",
+                "value": 82,
+                "columnId": "temperature",
+                "valueType": "number",
+                "sourceRefs": [
+                  {
+                    "cell": "B2",
+                    "sheet": "Measurements",
+                    "rawValue": 80
+                  }
+                ],
+                "displayName": "Temperature"
+              },
+              {
+                "unit": "%",
+                "value": 0.42,
+                "columnId": "yield_fraction",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Yield",
+                "numericScale": "fraction"
+              },
+              {
+                "unit": "%",
+                "value": 42,
+                "columnId": "yield_points",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Yield",
+                "numericScale": "percent_points"
+              },
+              {
+                "unit": "bar",
+                "value": null,
+                "columnId": "pressure",
+                "valueType": "number",
+                "sourceRefs": [
+                  {
+                    "cell": "H2",
+                    "sheet": "Measurements",
+                    "rawValue": null
+                  }
+                ],
+                "displayName": "Pressure",
+                "missingReason": "source_blank",
+                "formattedValue": null
+              },
+              {
+                "unit": "min",
+                "value": 30,
+                "columnId": "duration",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Duration"
+              },
+              {
+                "unit": "mg",
+                "value": 100,
+                "columnId": "aux_0",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 0"
+              },
+              {
+                "unit": "mg",
+                "value": 101,
+                "columnId": "aux_1",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 1"
+              },
+              {
+                "unit": "mg",
+                "value": 102,
+                "columnId": "aux_2",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 2"
+              },
+              {
+                "unit": "mg",
+                "value": 103,
+                "columnId": "aux_3",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 3"
+              },
+              {
+                "unit": "mg",
+                "value": 104,
+                "columnId": "aux_4",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 4"
+              },
+              {
+                "unit": "mg",
+                "value": 105,
+                "columnId": "aux_5",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 5"
+              },
+              {
+                "unit": "mg",
+                "value": 106,
+                "columnId": "aux_6",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 6"
+              },
+              {
+                "unit": "mg",
+                "value": 107,
+                "columnId": "aux_7",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 7"
+              },
+              {
+                "unit": "mg",
+                "value": 108,
+                "columnId": "aux_8",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 8"
+              },
+              {
+                "unit": "mg",
+                "value": 109,
+                "columnId": "aux_9",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 9"
+              },
+              {
+                "unit": "mg",
+                "value": 110,
+                "columnId": "aux_10",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 10"
+              },
+              {
+                "unit": "mg",
+                "value": 111,
+                "columnId": "aux_11",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 11"
+              },
+              {
+                "unit": "mg",
+                "value": 112,
+                "columnId": "aux_12",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 12"
+              },
+              {
+                "unit": "mg",
+                "value": 113,
+                "columnId": "aux_13",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 13"
+              },
+              {
+                "unit": "mg",
+                "value": 114,
+                "columnId": "aux_14",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 14"
+              }
+            ],
+            "series": [
+              {
+                "label": "Temperature trace",
+                "xField": {
+                  "unit": "min",
+                  "fieldId": "time"
+                },
+                "yField": {
+                  "unit": "C",
+                  "fieldId": "temperature"
+                },
+                "seriesKey": "temperature_trace",
+                "pointCount": 121,
+                "sourceRefs": []
+              }
+            ],
+            "seriesWindow": null
+          },
+          "coverage": {
+            "scope": "accepted_snapshot_window",
+            "fieldCount": 29,
+            "seriesCount": 1,
+            "nextFieldOffset": 20,
+            "nextSeriesOffset": null,
+            "nextPointOffset": null
+          },
+          "warnings": [
+            "Values retain their stored scale and unit; no conversion or new calculation was performed."
+          ]
+        },
+        {
+          "id": "evidence_11a1ed74dde1bb79f56d1605",
+          "kind": "experiment_snapshot",
+          "label": "Exp17",
+          "version": {
+            "experimentId": "experiment_17",
+            "snapshotId": "snapshot_experiment_17",
+            "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+            "headId": "head_experiment_17",
+            "headUpdatedAt": "2026-09-30T00:25:17.657Z",
+            "recordIndex": 0
+          },
+          "locator": {
+            "fieldOffset": 20,
+            "seriesOffset": 0,
+            "seriesKey": null,
+            "pointOffset": 0
+          },
+          "data": {
+            "snapshotId": "snapshot_experiment_17",
+            "contentHash": "3bf284ebb8bdad5a13ce567e8192721ad4d5c81adea52a7e9799f33d7da5f7ee",
+            "acceptedAt": "2026-09-30T00:25:17.654Z",
+            "warnings": [],
+            "experimentId": "experiment_17",
+            "sourceAlias": "Exp17",
+            "recordWarnings": [],
+            "sourceRefs": [],
+            "fieldCount": 29,
+            "seriesCount": 1,
+            "fields": [
+              {
+                "unit": "mg",
+                "value": 115,
+                "columnId": "aux_15",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 15"
+              },
+              {
+                "unit": "mg",
+                "value": 116,
+                "columnId": "aux_16",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 16"
+              },
+              {
+                "unit": "mg",
+                "value": 117,
+                "columnId": "aux_17",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 17"
+              },
+              {
+                "unit": "mg",
+                "value": 118,
+                "columnId": "aux_18",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 18"
+              },
+              {
+                "unit": "mg",
+                "value": 119,
+                "columnId": "aux_19",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 19"
+              },
+              {
+                "unit": "mg",
+                "value": 120,
+                "columnId": "aux_20",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 20"
+              },
+              {
+                "unit": "mg",
+                "value": 121,
+                "columnId": "aux_21",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 21"
+              },
+              {
+                "unit": "mg",
+                "value": 122,
+                "columnId": "aux_22",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 22"
+              },
+              {
+                "unit": "mg",
+                "value": 123,
+                "columnId": "aux_23",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 23"
+              }
+            ],
+            "series": [
+              {
+                "label": "Temperature trace",
+                "xField": {
+                  "unit": "min",
+                  "fieldId": "time"
+                },
+                "yField": {
+                  "unit": "C",
+                  "fieldId": "temperature"
+                },
+                "seriesKey": "temperature_trace",
+                "pointCount": 121,
+                "sourceRefs": []
+              }
+            ],
+            "seriesWindow": null
+          },
+          "coverage": {
+            "scope": "accepted_snapshot_window",
+            "fieldCount": 29,
+            "seriesCount": 1,
+            "nextFieldOffset": null,
+            "nextSeriesOffset": null,
+            "nextPointOffset": null
+          },
+          "warnings": [
+            "Values retain their stored scale and unit; no conversion or new calculation was performed."
+          ]
+        },
+        {
+          "id": "evidence_8b9d01b769b2a1952e016630",
+          "kind": "experiment_snapshot",
+          "label": "Exp17B",
+          "version": {
+            "experimentId": "experiment_17b",
+            "snapshotId": "snapshot_experiment_17b",
+            "contentHash": "84ea1d21f7c1c7b553ed7550ca177240c8c9ffa5ab076f030fa6a0b2d7f93257",
+            "headId": "head_experiment_17b",
+            "headUpdatedAt": "2026-09-30T00:25:17.660Z",
+            "recordIndex": 0
+          },
+          "locator": {
+            "fieldOffset": 20,
+            "seriesOffset": 0,
+            "seriesKey": null,
+            "pointOffset": 0
+          },
+          "data": {
+            "snapshotId": "snapshot_experiment_17b",
+            "contentHash": "84ea1d21f7c1c7b553ed7550ca177240c8c9ffa5ab076f030fa6a0b2d7f93257",
+            "acceptedAt": "2026-09-30T00:25:17.659Z",
+            "warnings": [],
+            "experimentId": "experiment_17b",
+            "sourceAlias": "Exp17B",
+            "recordWarnings": [],
+            "sourceRefs": [],
+            "fieldCount": 29,
+            "seriesCount": 1,
+            "fields": [
+              {
+                "unit": "mg",
+                "value": 115,
+                "columnId": "aux_15",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 15"
+              },
+              {
+                "unit": "mg",
+                "value": 116,
+                "columnId": "aux_16",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 16"
+              },
+              {
+                "unit": "mg",
+                "value": 117,
+                "columnId": "aux_17",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 17"
+              },
+              {
+                "unit": "mg",
+                "value": 118,
+                "columnId": "aux_18",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 18"
+              },
+              {
+                "unit": "mg",
+                "value": 119,
+                "columnId": "aux_19",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 19"
+              },
+              {
+                "unit": "mg",
+                "value": 120,
+                "columnId": "aux_20",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 20"
+              },
+              {
+                "unit": "mg",
+                "value": 121,
+                "columnId": "aux_21",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 21"
+              },
+              {
+                "unit": "mg",
+                "value": 122,
+                "columnId": "aux_22",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 22"
+              },
+              {
+                "unit": "mg",
+                "value": 123,
+                "columnId": "aux_23",
+                "valueType": "number",
+                "sourceRefs": [],
+                "displayName": "Auxiliary 23"
+              }
+            ],
+            "series": [
+              {
+                "label": "Temperature trace",
+                "xField": {
+                  "unit": "min",
+                  "fieldId": "time"
+                },
+                "yField": {
+                  "unit": "C",
+                  "fieldId": "temperature"
+                },
+                "seriesKey": "temperature_trace",
+                "pointCount": 121,
+                "sourceRefs": []
+              }
+            ],
+            "seriesWindow": null
+          },
+          "coverage": {
+            "scope": "accepted_snapshot_window",
+            "fieldCount": 29,
+            "seriesCount": 1,
+            "nextFieldOffset": null,
+            "nextSeriesOffset": null,
+            "nextPointOffset": null
+          },
+          "warnings": [
+            "Values retain their stored scale and unit; no conversion or new calculation was performed."
+          ]
+        },
+        {
+          "id": "evidence_b23e44881f9cdabd607a1aa7",
+          "kind": "confirmed_region",
+          "label": "Q09-raw.xlsx / Measurements A1:G3",
+          "version": {
+            "regionId": "region_readonly_eval",
+            "revisionId": "revision_readonly_eval",
+            "regionVersion": 2,
+            "sourceContentHash": "source_hash",
+            "dependencyHash": "dependency_hash",
+            "sourceDocumentId": "source_doc_8a89016e8fc347ba9115718a",
+            "indexVersion": "labrat.sourceIndex.v1",
+            "fileObjectId": "file_5e9f35841ecc4340ba91ce82",
+            "contentHash": "3a0961c9c4bd58463ccfb6415c807784129b09dc7b201299246f78f84081e66a"
+          },
+          "locator": {
+            "sheet": "Measurements",
+            "range": "A1:G3",
+            "semanticOffset": 0
+          },
+          "data": {
+            "regionId": "region_readonly_eval",
+            "version": 2,
+            "sourceDocumentId": "source_doc_8a89016e8fc347ba9115718a",
+            "sheetName": "Measurements",
+            "range": "A1:G3",
+            "acceptedAt": "2026-08-23T12:00:00.000Z",
+            "revisionId": "revision_readonly_eval",
+            "sourceContentHash": "source_hash",
+            "dependencyHash": "dependency_hash",
+            "warnings": [],
+            "interpretation": {
+              "semanticType": "experiment_table"
+            },
+            "fieldCount": 0,
+            "seriesCount": 0,
+            "fields": [],
+            "series": [],
+            "raw": {
+              "schemaVersion": "labrat.sourceRange.v1",
+              "sourceDocumentId": "source_doc_8a89016e8fc347ba9115718a",
+              "sheetName": "Measurements",
+              "range": "A1:G3",
+              "rowCount": 3,
+              "columnCount": 7,
+              "cellCount": 21,
+              "cells": [
+                {
+                  "address": "A1",
+                  "row": 0,
+                  "col": 0,
+                  "rawValue": "Experiment",
+                  "formattedValue": "Experiment",
+                  "type": "string",
+                  "formula": null,
+                  "merged": false,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "missing": false
+                },
+                {
+                  "address": "B1",
+                  "row": 0,
+                  "col": 1,
+                  "rawValue": "Temperature (C)",
+                  "formattedValue": "Temperature (C)",
+                  "type": "string",
+                  "formula": null,
+                  "merged": false,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "missing": false
+                },
+                {
+                  "address": "C1",
+                  "row": 0,
+                  "col": 2,
+                  "rawValue": "Catalyst mass (g)",
+                  "formattedValue": "Catalyst mass (g)",
+                  "type": "string",
+                  "formula": null,
+                  "merged": false,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "missing": false
+                },
+                {
+                  "address": "D1",
+                  "row": 0,
+                  "col": 3,
+                  "rawValue": "Duration (min)",
+                  "formattedValue": "Duration (min)",
+                  "type": "string",
+                  "formula": null,
+                  "merged": false,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "missing": false
+                },
+                {
+                  "address": "E1",
+                  "row": 0,
+                  "col": 4,
+                  "rawValue": "Yield (%)",
+                  "formattedValue": "Yield (%)",
+                  "type": "string",
+                  "formula": null,
+                  "merged": false,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "missing": false
+                },
+                {
+                  "address": "F1",
+                  "row": 0,
+                  "col": 5,
+                  "rawValue": "Saved formula",
+                  "formattedValue": "Saved formula",
+                  "type": "string",
+                  "formula": null,
+                  "merged": false,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "missing": false
+                },
+                {
+                  "address": "G1",
+                  "row": 0,
+                  "col": 6,
+                  "rawValue": "No cached value",
+                  "formattedValue": "No cached value",
+                  "type": "string",
+                  "formula": null,
+                  "merged": false,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "missing": false
+                },
+                {
+                  "address": "A2",
+                  "row": 1,
+                  "col": 0,
+                  "rawValue": "Exp17",
+                  "formattedValue": "Exp17",
+                  "type": "string",
+                  "formula": null,
+                  "merged": false,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "missing": false
+                },
+                {
+                  "address": "B2",
+                  "row": 1,
+                  "col": 1,
+                  "rawValue": 80,
+                  "formattedValue": "80",
+                  "type": "number",
+                  "formula": null,
+                  "merged": false,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "missing": false
+                },
+                {
+                  "address": "C2",
+                  "row": 1,
+                  "col": 2,
+                  "rawValue": 0.12,
+                  "formattedValue": "0.12",
+                  "type": "number",
+                  "formula": null,
+                  "merged": false,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "missing": false
+                },
+                {
+                  "address": "D2",
+                  "row": 1,
+                  "col": 3,
+                  "rawValue": 30,
+                  "formattedValue": "30",
+                  "type": "number",
+                  "formula": null,
+                  "merged": false,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "missing": false
+                },
+                {
+                  "address": "E2",
+                  "row": 1,
+                  "col": 4,
+                  "rawValue": 0.42,
+                  "formattedValue": "42.00%",
+                  "type": "number",
+                  "formula": null,
+                  "merged": false,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "missing": false
+                },
+                {
+                  "address": "F2",
+                  "row": 1,
+                  "col": 5,
+                  "rawValue": 110,
+                  "formattedValue": "110",
+                  "type": "formula",
+                  "formula": "B2+D2",
+                  "merged": false,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "missing": false
+                },
+                {
+                  "address": "G2",
+                  "row": 1,
+                  "col": 6,
+                  "rawValue": null,
+                  "formattedValue": "",
+                  "type": "formula",
+                  "formula": "B2*2",
+                  "merged": false,
+                  "mergedRange": null,
+                  "cacheMissing": true,
+                  "missing": true
+                },
+                {
+                  "address": "A3",
+                  "row": 2,
+                  "col": 0,
+                  "rawValue": "Exp17B",
+                  "formattedValue": "Exp17B",
+                  "type": "string",
+                  "formula": null,
+                  "merged": false,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "missing": false
+                },
+                {
+                  "address": "B3",
+                  "row": 2,
+                  "col": 1,
+                  "rawValue": 85,
+                  "formattedValue": "85",
+                  "type": "number",
+                  "formula": null,
+                  "merged": false,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "missing": false
+                },
+                {
+                  "address": "C3",
+                  "row": 2,
+                  "col": 2,
+                  "rawValue": null,
+                  "formattedValue": null,
+                  "type": "blank",
+                  "formula": null,
+                  "merged": false,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "missing": true
+                },
+                {
+                  "address": "D3",
+                  "row": 2,
+                  "col": 3,
+                  "rawValue": 40,
+                  "formattedValue": "40",
+                  "type": "number",
+                  "formula": null,
+                  "merged": false,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "missing": false
+                },
+                {
+                  "address": "E3",
+                  "row": 2,
+                  "col": 4,
+                  "rawValue": 42,
+                  "formattedValue": "42",
+                  "type": "number",
+                  "formula": null,
+                  "merged": false,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "missing": false
+                },
+                {
+                  "address": "F3",
+                  "row": 2,
+                  "col": 5,
+                  "rawValue": null,
+                  "formattedValue": null,
+                  "type": "blank",
+                  "formula": null,
+                  "merged": false,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "missing": true
+                },
+                {
+                  "address": "G3",
+                  "row": 2,
+                  "col": 6,
+                  "rawValue": null,
+                  "formattedValue": null,
+                  "type": "blank",
+                  "formula": null,
+                  "merged": false,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "missing": true
+                }
+              ],
+              "sourceRef": {
+                "sourceType": "excel_range",
+                "sourceDocumentId": "source_doc_8a89016e8fc347ba9115718a",
+                "fileObjectId": "file_5e9f35841ecc4340ba91ce82",
+                "importRunId": null,
+                "sheet": "Measurements",
+                "range": "A1:G3"
+              },
+              "warnings": []
+            }
+          },
+          "coverage": {
+            "scope": "confirmed_region_window",
+            "nextSemanticOffset": null
+          },
+          "warnings": [
+            "Confirmed interpretation of this region; not a published experimental dataset."
+          ]
+        },
+        {
+          "id": "evidence_11f3a122a2023a266e30a97b",
+          "kind": "confirmed_region",
+          "label": "analysis.xlsx / Carbon A1:C2",
+          "version": {
+            "regionId": "review_region_analysis",
+            "revisionId": "revision_analysis",
+            "regionVersion": 2,
+            "sourceContentHash": "source_hash",
+            "dependencyHash": "dependency_hash",
+            "sourceDocumentId": "source_analysis",
+            "indexVersion": "labrat.sourceIndex.v1",
+            "fileObjectId": null,
+            "contentHash": "dacac7e88ba59f41b33b0f2d86d0b0486f2c01a4617886554941dee13c42a9f3"
+          },
+          "locator": {
+            "sheet": "Carbon",
+            "range": "A1:C2",
+            "semanticOffset": 0
+          },
+          "data": {
+            "regionId": "review_region_analysis",
+            "version": 2,
+            "sourceDocumentId": "source_analysis",
+            "sheetName": "Carbon",
+            "range": "A1:C2",
+            "acceptedAt": "2026-08-23T12:00:00.000Z",
+            "revisionId": "revision_analysis",
+            "sourceContentHash": "source_hash",
+            "dependencyHash": "dependency_hash",
+            "warnings": [],
+            "interpretation": {
+              "semanticType": "component_distribution"
+            },
+            "fieldCount": 0,
+            "seriesCount": 0,
+            "fields": [],
+            "series": [],
+            "raw": {
+              "schemaVersion": "labrat.sourceRange.v1",
+              "sourceDocumentId": "source_analysis",
+              "sheetName": "Carbon",
+              "range": "A1:C2",
+              "rowCount": 2,
+              "columnCount": 3,
+              "cellCount": 6,
+              "cells": [
+                {
+                  "address": "A1",
+                  "row": 0,
+                  "col": 0,
+                  "rawValue": "Carbon",
+                  "formattedValue": "Carbon",
+                  "type": "string",
+                  "formula": null,
+                  "merged": false,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "missing": false
+                },
+                {
+                  "address": "B1",
+                  "row": 0,
+                  "col": 1,
+                  "rawValue": null,
+                  "formattedValue": null,
+                  "type": "blank",
+                  "formula": null,
+                  "merged": false,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "missing": true
+                },
+                {
+                  "address": "C1",
+                  "row": 0,
+                  "col": 2,
+                  "rawValue": null,
+                  "formattedValue": null,
+                  "type": "blank",
+                  "formula": null,
+                  "merged": false,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "missing": true
+                },
+                {
+                  "address": "A2",
+                  "row": 1,
+                  "col": 0,
+                  "rawValue": null,
+                  "formattedValue": null,
+                  "type": "blank",
+                  "formula": null,
+                  "merged": false,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "missing": true
+                },
+                {
+                  "address": "B2",
+                  "row": 1,
+                  "col": 1,
+                  "rawValue": null,
+                  "formattedValue": null,
+                  "type": "blank",
+                  "formula": null,
+                  "merged": false,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "missing": true
+                },
+                {
+                  "address": "C2",
+                  "row": 1,
+                  "col": 2,
+                  "rawValue": null,
+                  "formattedValue": null,
+                  "type": "blank",
+                  "formula": null,
+                  "merged": false,
+                  "mergedRange": null,
+                  "cacheMissing": false,
+                  "missing": true
+                }
+              ],
+              "sourceRef": {
+                "sourceType": "excel_range",
+                "sourceDocumentId": "source_analysis",
+                "fileObjectId": null,
+                "importRunId": null,
+                "sheet": "Carbon",
+                "range": "A1:C2"
+              },
+              "warnings": []
+            }
+          },
+          "coverage": {
+            "scope": "confirmed_region_window",
+            "nextSemanticOffset": null
+          },
+          "warnings": [
+            "Confirmed interpretation of this region; not a published experimental dataset."
+          ]
+        }
+      ],
+      "id": "R12-topic",
+      "question": "What concentration of cobalt does the project evidence establish?",
+      "expected": "bounded search and insufficient evidence",
+      "request": {
+        "runId": "agent_run_541448ea372547c086c56a6c",
+        "labId": "lab_analysis",
+        "projectId": "project_analysis",
+        "actorUserId": "user_owner",
+        "requestKey": "readonly-R12-topic-1790727947451",
+        "question": "What concentration of cobalt does the project evidence establish?",
+        "status": "failed",
+        "attempt": 1,
+        "usage": {
+          "model": "deepseek-v4-pro",
+          "attempt": 1,
+          "failure": "qa_token_limit",
+          "provider": "deepseek",
+          "requests": 4,
+          "elapsedMs": 10591,
+          "knownCost": null,
+          "toolCalls": 9,
+          "toolRounds": 4,
+          "inputTokens": 19813,
+          "lastActiveAt": 1790727958057,
+          "outputTokens": 948,
+          "reservedTokens": 0,
+          "visibleToolCalls": 9,
+          "unknownUsageRequests": 0
+        },
+        "failureCode": "qa_token_limit",
+        "createdAt": "2026-09-30T00:25:47.459Z",
+        "updatedAt": "2026-09-30T00:25:58.057Z",
+        "referenceDocuments": [],
+        "sourceScope": "project"
+      },
+      "artifact": null,
+      "evidence": [],
+      "elapsedMs": 10830,
+      "semanticReview": "pending"
+    }
+  ],
+  "semanticReview": "pending",
+  "files": {
+    "backend/src/research/citedAnswer.js": "3d3afd3872fe493af8507118a35d442882b2e91cefbd1264e9fcf46167ae93cf",
+    "backend/src/research/evidenceTools.js": "7b0e4b45e32d2a91361cb766a426f7227859ae040a8b69ad0982d3ae8ea4fb11",
+    "backend/src/v1/research-qa/research-questions.service.ts": "9542431d87c9c0e1300caf73f5d140a22678a36feb658f4a62a851d69207aad9",
+    "backend/src/v1/research-qa/research-evidence.service.ts": "48644b3a2238d90f5742403e8c4a8c93d4947d7d1a07741936f420aa0d4a9d7c"
+  },
+  "finishedAt": "2026-09-30T00:25:58.282Z"
+}

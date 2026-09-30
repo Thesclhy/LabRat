@@ -36,12 +36,12 @@ await withTestSchema(databaseUrl, async ({ databaseUrl: isolated }) => {
     const fixture = await seedResearchCorpus(app, isolated);
     const provider = app.get(V1_MODEL_PROVIDER);
     let retryFailure = true;
-    let citationFailure = true;
+
     provider.publicConfig = () => ({ configured: true, provider: "test-substitute", model: "synthetic-browser-only" });
     provider.answerResearchQuestion = async (input, { toolHandlers: tools, signal }) => {
-      if (input.question.includes("citation failure") && citationFailure) {
-        if (input.citationRepair) citationFailure = false;
-        return { ok: true, status: "answered", claims: [{ text: "Unsupported synthetic answer.", citations: [{ evidenceId: "unread", quote: "invented" }], numericBindings: [] }], missingEvidence: [] };
+      if (input.question.includes("citation failure")) {
+        if (!input.citationRepair) await tools.get_project_context({});
+        return { ok: true, status: "answered", claims: [{ text: "The saved goal is to study catalyst stability, with an unavailable link.", citations: [{ evidenceId: "unread" }] }], missingEvidence: [] };
       }
       if (input.question.includes("fail once") && retryFailure) {
         retryFailure = false; return { ok: false, warning: { code: "ai_request_failed", message: "HTTP 429" } };
@@ -145,7 +145,7 @@ await withTestSchema(databaseUrl, async ({ databaseUrl: isolated }) => {
     const draft = panel.getByRole("textbox", { name: "Ask LabRat", exact: true });
     await draft.fill("Read the saved project goal, slow response");
     await panel.getByRole("button", { name: "Send message", exact: true }).click();
-    const progress = panel.getByRole("status").filter({ hasText: "Reading sources and checking citations…" });
+    const progress = panel.getByRole("status").filter({ hasText: "Reading sources…" });
     await progress.waitFor();
     const statusLayouts = [];
     for (const width of [1440, 390]) {
@@ -165,16 +165,24 @@ await withTestSchema(databaseUrl, async ({ databaseUrl: isolated }) => {
     await panel.getByText("Question cancelled.", { exact: true }).waitFor();
     await draft.fill("Read the saved project goal, citation failure");
     await panel.getByRole("button", { name: "Send message", exact: true }).click();
-    const citationError = panel.getByRole("alert").filter({ hasText: "citations could not be verified" });
-    await citationError.waitFor();
-    assert.equal(await panel.getByText(/when the service is available/).count(), 0);
-    await panel.getByText("Error details", { exact: true }).click();
-    assert.match(await panel.locator("details[open]").innerText(), /qa_citation_invalid/);
-    await panel.screenshot({ path: path.join(output, "citation-error-390.png") });
-    await panel.getByRole("button", { name: "Retry question", exact: true }).click();
-    await panel.getByText("The saved goal is to study catalyst stability.", { exact: true }).waitFor();
-    await owner.setViewportSize({ width: 1440, height: 1000 });
-    await writeFile(path.join(output, "citation-status-layout.json"), JSON.stringify({ status: "passed", statusLayouts, interactions: ["cancel", "citation failure details", "retry same question"] }, null, 2));
+    const omitted = panel.getByText('The saved goal is to study catalyst stability, with an unavailable link.', { exact:true });
+    await omitted.waitFor();
+    const answerCard = omitted.locator('xpath=ancestor::div[contains(@class,"ask-cited-answer")]');
+    assert.equal(await answerCard.locator('.qa-citations button').count(),0,'Unknown IDs never render links');
+    await answerCard.getByText('Coverage and limitations',{exact:true}).click();
+    await answerCard.getByText('Some source links were unavailable and have been omitted. The sources read are listed below.',{exact:true}).waitFor();
+    await answerCard.getByText('Sources read · 1',{exact:true}).click();
+    await answerCard.getByRole('button',{name:'Saved project background',exact:true}).click();
+    await owner.getByRole('dialog').getByText('Study catalyst stability',{exact:true}).waitFor();
+    await owner.keyboard.press('Escape');
+    await answerCard.getByText('Search and read activity',{exact:true}).click();
+    assert.match(await answerCard.innerText(),/1 evidence windows read/);
+    await panel.screenshot({path:path.join(output,'sources-read-390.png')});
+    assert.ok(await panel.evaluate(el=>el.scrollWidth<=el.clientWidth+1));
+    await owner.setViewportSize({width:1440,height:1000});
+    await panel.screenshot({path:path.join(output,'sources-read-1440.png')});
+    await writeFile(path.join(output,'citation-status-layout.json'),JSON.stringify({status:'passed',statusLayouts,
+      interactions:['cancel','unknown links omitted after one repair','uncited read retained','original source opens','reading activity visible']},null,2));
     await draft.fill("Navigation should keep this unsent question");
     await panel.getByRole("button", { name: "Library", exact: true }).click();
     await owner.getByRole("region", { name: "Reference library" }).waitFor();
@@ -323,6 +331,11 @@ await withTestSchema(databaseUrl, async ({ databaseUrl: isolated }) => {
     await otherDevice.screenshot({ path: path.join(output, "task-other-device-mobile.png"), fullPage: false });
     await otherTask.getByRole("button", { name: "Continue question", exact: true }).click();
     await otherPanel.getByText("The saved goal is to study catalyst stability.", { exact: true }).waitFor();
+    const otherAnswer=otherPanel.getByText("The saved goal is to study catalyst stability.",{exact:true}).locator('xpath=ancestor::div[contains(@class,"ask-cited-answer")]');
+    await otherAnswer.getByText('Sources read · 1',{exact:true}).click();
+    await otherAnswer.getByRole('button',{name:'Saved project background',exact:true}).click();
+    await otherDevice.getByRole('dialog').getByText('Study catalyst stability',{exact:true}).waitFor();
+    await otherDevice.keyboard.press('Escape');
     await otherDevice.screenshot({ path: path.join(output, "task-other-device-continued.png"), fullPage: true });
     assert.equal((await pool.query("select count(*)::int count from research_qa_requests where request_key=$1", [`task-${savedTask.id}`])).rows[0].count, 1);
     await panel.getByText("The saved goal is to study catalyst stability.", { exact: true }).waitFor();

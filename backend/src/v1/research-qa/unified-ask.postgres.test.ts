@@ -57,6 +57,9 @@ describe.skipIf(!databaseUrl)("unified Ask reference identities and scope", () =
         const selected = service.createSession(view.auth, projectId, new AbortController().signal, { referenceDocuments: references, sourceScope: "selected" });
         const selectedHits = await selected.invoke("search_project_documents", { query: "method" });
         expect(selectedHits.items.length).toBeGreaterThan(0);
+        expect(selectedHits.coverage.scope).toBe("selected_document_versions");
+        expect(selectedHits.coverage.includes).toEqual(["selected_document_versions"]);
+        expect(selectedHits.coverage.note).toContain("Only the selected document versions");
         expect(selectedHits.items.every((item: any) => item.target.versionId === first.version.id)).toBe(true);
         await expect(selected.invoke("get_project_context", {})).rejects.toMatchObject({ statusCode: 404 });
         const broader = service.createSession(view.auth, projectId, new AbortController().signal, { referenceDocuments: references, sourceScope: "project" });
@@ -69,7 +72,9 @@ describe.skipIf(!databaseUrl)("unified Ask reference identities and scope", () =
         const model = vi.spyOn(provider, "answerResearchQuestion").mockImplementation(async (input: any, options: any) => {
           expect(input.selectedContext.referenceDocuments).toEqual(references);
           expect(input.selectedContext.sourceScope).toBe("selected");
-          const hit = input.initialDiscovery.items[0];
+          expect(input.initialDiscovery).toBeUndefined();
+          const search = await options.toolHandlers.search_project_documents({ query: 'method' });
+          const hit = search.items[0];
           const { evidence } = await options.toolHandlers.read_document_passage({ versionId: hit.target.versionId, passageId: hit.target.passageId });
           return { ok: true, status: "answered", claims: [{ text: "The original method requires a dry sample.", citations: [{ evidenceId: evidence.id, quote: "dry sample" }], numericBindings: [] }], missingEvidence: [] } as any;
         });

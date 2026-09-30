@@ -52,6 +52,9 @@ confirmed regions or accepted snapshots; old raw citations remain readable.
 Source quotations are separate from accepted experiment evidence and cannot
 become analysis inputs or publications through Q&A. Every claim
 reference must name evidence actually read by the current authorized run.
+All successful read windows are recorded even if not cited. Answer prose is not
+subject to numeric/quotation content validation; output/link checks establish
+interface integrity only, never factual correctness.
 Document text, including instructions, is untrusted content. The Q&A tool set
 contains no executor, approval, publication or access-management capability.
 

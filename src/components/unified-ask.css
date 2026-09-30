@@ -93,3 +93,23 @@
 .ask-task-upload { position: relative; display: inline-flex; padding: 5px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; cursor: pointer; }
 .ask-task-upload:focus-within { outline: 2px solid #7154d8; }
 .ask-task-upload input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
+
+/* Read windows remain compact and separate from the generated answer. */
+.ask-sources-read { margin-top: 12px; border-top: 1px solid var(--border, #e1e6ee); padding-top: 10px; font-size: 12px; line-height: 1.5; }
+.ask-sources-read > summary, .ask-read-activity > summary { cursor: pointer; color: #53617b; font-weight: 500; }
+.ask-sources-scope { color: #697791; font-size: 11px; margin: 8px 0; }
+.ask-source-group { padding: 8px 0; }
+.ask-source-heading { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.ask-source-heading strong { font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
+.ask-source-heading span { color: #697791; font-size: 11px; flex-shrink: 0; }
+.ask-source-windows { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+.ask-source-windows button { font-size: 11px; line-height: 1.4; padding: 4px 7px; max-width: 100%; min-height: 28px; text-align: left; overflow-wrap: anywhere; }
+.ask-read-activity { margin-top: 8px; font-size: 11px; }
+.ask-read-activity ol { margin: 8px 0 0; padding-left: 18px; }
+.ask-read-activity li { margin-bottom: 8px; overflow-wrap: anywhere; }
+.ask-read-activity small { display: block; color: #697791; font-size: 11px; }
+
+.ask-source-windows button { border: 1px solid #dce3ef; border-radius: 6px; background: #f8faff; color: #44556d; cursor: pointer; }
+.ask-source-windows button:hover { background: #eef2fb; }
+.ask-source-windows button:focus-visible { outline: 2px solid #7664df; outline-offset: 2px; }
+.ask-read-activity li > span { font-size: 11px; text-transform: none; letter-spacing: normal; color: #53617b; }

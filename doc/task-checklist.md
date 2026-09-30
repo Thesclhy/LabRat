@@ -2,11 +2,25 @@
 
 Status: active
 Read when: starting or continuing a non-trivial LabRat milestone.
-Last reviewed: 2026-09-28
+Last reviewed: 2026-09-29
 
 This file is the reusable execution checklist for Codex work. It should describe how to run a milestone, not what the current product strategy is. Current milestone state belongs in `doc/current-milestone.md`; recent completed work belongs in `doc/PROGRESS.md`.
 
 ## Long-Task Loop
+
+Read-only Q&A/source trace (2026-09-29):
+
+- [x] Freeze R01–R17 before edits and update the superseding answer contract.
+- [x] Protect original-tree work; use isolated codex/readonly-qa-trace.
+- [x] Keep scientific review/auth boundaries; model-select bounded read tools.
+- [x] Retain shape/read-ID checks, remove prose/number acceptance gates.
+- [x] Persist all returned windows and grouped Sources read across history.
+- [x] Review both providers’ actual answers; retain first failures and limit behavior.
+- [x] Verify PostgreSQL and actual browser/second-session behavior.
+- [x] Complete final full regression and record exact counts.
+- [x] Deliver manual test instructions in doc/qa/readonly-qa-trace.md.
+
+Deployment and user manual acceptance are separate follow-ups, not claimed done.
 
 Cross-device pending Ask tasks (2026-09-28):
 

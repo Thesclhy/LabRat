@@ -5237,7 +5237,7 @@ components:
       required: [request, artifact]
       properties:
         request: { $ref: "#/components/schemas/ResearchQuestion" }
-        artifact: { anyOf: [{ $ref: "#/components/schemas/JsonObject" }, { type: "null" }] }
+        artifact: { description: 'Personal immutable answer, evidence metadata and bounded tool trace. provenanceVersion 2 retains all successful read windows; legacy records may contain cited sources only. Source links are not factual verification.', anyOf: [{ $ref: "#/components/schemas/JsonObject" }, { type: "null" }] }
         reused: { type: boolean }
     ResearchQuestionPage:
       type: object

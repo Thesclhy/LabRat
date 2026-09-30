@@ -77,7 +77,9 @@ are not transferred between devices. Older browser-only pending cards offer
 [the delivery status](doc/plans/cross-device-ask-tasks.md).
 Full-project View members may ask and open citations to exact source versions,
 pages, paragraphs, lines, confirmed regions or accepted data. New computations
-still require analysis-plan review. Public Guest and selected-experiment-only
+still require analysis-plan review. Answers expose a collapsible Sources read
+record with original version/window links. Format and reference IDs are checked;
+answer prose is not automatically fact-checked. Public Guest and selected-experiment-only
 members cannot use project-wide Q&A; personal question history is actor-scoped.
 
 See [the contract](doc/contracts/research-qa-v1.md),

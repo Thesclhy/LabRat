@@ -1,8 +1,15 @@
 # Decisions
-
 Status: reference
 Read when: checking durable architecture or product decisions.
-Last reviewed: 2026-09-28
+Last reviewed: 2026-09-29
+
+## 2026-09-29 — Read-only answers use source trace, not prose acceptance gates
+
+Approved by the user's active goal. Remove generic post-generation numeric,
+unit and verbatim-quote checking; do not require numericBindings for prose.
+Retain output/link integrity and tool authorization. Persist actual read windows
+and expose Sources read without claiming factual verification. Keep scientific
+review/publishing independent. See ../plans/readonly-qa-trace.md.
 
 ## 2026-09-28 — Cross-device pending questions use server task state
 

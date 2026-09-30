@@ -109,10 +109,11 @@ export class ResearchEvidenceService {
         const items = candidates.slice(0, QA_LIMITS.search);
         for (const item of items) if (item.kind === "document") selectedVersions.add(item.target.versionId);
         return { items, nextCursor: candidates.length > items.length ? offset + items.length : null,
-          coverage: { scope: "current_project_sources", readForCitation: false, returned: items.length,
+          coverage: { scope: context.sourceScope === "selected" ? "selected_document_versions" : "current_project_sources", readForCitation: false, returned: items.length,
             candidateWindow: candidates.length, complete: candidates.length <= items.length,
             includes: context.sourceScope === "selected" ? ["selected_document_versions"] : ["uploaded_documents", "confirmed_regions", "accepted_field_names"],
-            note: "Search snippets are not complete evidence. Empty results mean no keyword match, including accepted field names; report insufficient evidence within this search coverage, not universal absence." } };
+            note: context.sourceScope === "selected" ? "Only the selected document versions were searched. Search snippets are not complete evidence; read relevant passages. No experiment records or other project sources were searched."
+              : "Search snippets are not complete evidence. This search includes accepted experiment field names as well as documents and confirmed regions. If a precise query and synonym have no relevant matches, answer insufficient_evidence within that search coverage. Do not enumerate experiments or read every field to prove absence." } };
       }
       if (name === "read_document_passage") {
         if (!selectedVersions.has(input.versionId)) throw missing();
@@ -156,7 +157,9 @@ export class ResearchEvidenceService {
         return { status: ambiguous ? "ambiguous" : items.length ? "matched" : "no_match", items,
           nextCursor: rows.length > items.length ? offset + items.length : null,
           coverage: { exactNameOrAlias: Boolean(input.query.trim()), complete: rows.length <= items.length,
-            note: ambiguous ? "Ask the user for the unique canonical name before reading an experiment." : "Only active accepted snapshot heads are listed." } };
+            note: ambiguous ? "Ask the user for the unique canonical name before reading an experiment."
+              : !items.length && input.query.trim() ? "No exact match. Ask for the correct name; do not substitute another experiment or enumerate unrelated data."
+              : "Only active accepted snapshot heads are listed." } };
       }
       if (name === "read_experiment_evidence") {
         const pinned = experiments.get(`${input.experimentId}:${input.snapshotId}`);
@@ -194,14 +197,25 @@ export class ResearchEvidenceService {
       const start = Date.now(); calls += 1;
       const previousIds = new Set(registry.items.keys());
       let status = "ok";
+      let recordedInput: Record<string, unknown> = {};
+      let output: Record<string, unknown> = {};
+      const sequence = calls;
       try {
         await check();
         if (calls > QA_LIMITS.toolCalls) throw new ApiError(429, "qa_tool_limit", "Q&A reached its tool-call limit.");
         const definition = definitions.get(name);
         if (!definition || !validateJsonSchema(definition.input_schema, input).valid) throw new ApiError(400, "qa_tool_input_invalid", "Tool arguments do not match the read-only schema.");
+        recordedInput = JSON.parse(JSON.stringify(input));
         const result = await read(name, input);
         await check();
         if (Buffer.byteLength(JSON.stringify(result)) > QA_LIMITS.toolBytes) throw new ApiError(422, "qa_tool_result_limit", "This source window is too large; request a smaller range.");
+        const evidenceIds = [result.evidence, ...(result.contextEvidence || [])].filter(Boolean).map((item: any) => item.id);
+        output = { evidenceIds, ...(result.coverage ? { coverage: result.coverage } : {}),
+          ...(result.status ? { matchStatus: result.status } : {}),
+          ...(Array.isArray(result.items) ? { returnedCount: result.items.length,
+            matches: result.items.map((item: any) => ({ kind: item.kind || 'experiment', label: item.label || item.canonicalLabel,
+              target: item.target || { experimentId: item.id, snapshotId: item.snapshotId } })),
+            nextCursor: result.nextCursor ?? null } : {}) };
         return result;
       } catch (error: any) {
         for (const id of registry.items.keys()) if (!previousIds.has(id)) registry.items.delete(id);
@@ -209,7 +223,11 @@ export class ResearchEvidenceService {
         status = String(error.code || "qa_tool_failed");
         if (error instanceof ApiError) throw error;
         throw new ApiError(422, status, "Evidence could not be read within the request limits.");
-      } finally { trace.push({ tool: name, status, elapsedMs: Date.now() - start }); }
+      } finally {
+        trace.push({ sequence, tool: name, phase: ['search_project_documents', 'find_experiments'].includes(name) ? 'discovery' : 'read',
+          input: recordedInput, status, ...output, elapsedMs: Date.now() - start });
+        trace.sort((a, b) => Number(a.sequence) - Number(b.sequence));
+      }
     };
     return { registry, trace, invoke, check,
       handlers: Object.fromEntries(RESEARCH_TOOLS.map((tool) => [tool.name, (input: any) => invoke(tool.name, input)])) };

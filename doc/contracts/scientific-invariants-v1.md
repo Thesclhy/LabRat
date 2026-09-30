@@ -49,10 +49,10 @@ approval at a later boundary.
 - Source selections must stay inside active accepted regions. Experiment
   selections must resolve through frozen active snapshot heads.
 
-Research Q&A additionally reads bounded uploaded document text and exact raw
-workbook cells immediately after indexing. These are distinct `document` and
-`workbook_raw` evidence, never accepted scientific values or legal analysis
-selections. Project background is a frozen user statement. References retain
+Research Q&A reads bounded uploaded PDF/Word/TXT after parsing. New Excel reads
+require confirmed regions or accepted snapshots; historical workbook_raw references
+remain readable. These source statements are never automatically accepted scientific
+values or legal analysis selections. Project background is a frozen user statement. References retain
 content/processing versions, page/paragraph/line/cell locations and uncertainty.
 An answer does not confirm meanings, update profiles, calculate new values or
 publish anything. New scientific calculations still require the analysis review
