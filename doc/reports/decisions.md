@@ -4,6 +4,17 @@ Status: reference
 Read when: checking durable architecture or product decisions.
 Last reviewed: 2026-09-28
 
+## 2026-09-28 — Main page identity belongs to the URL
+
+Use React Router Data mode under `/LabRat`, retaining the JSX app and one stable
+parent for the active project draft. URL changes choose the main page; same-
+project tabs do not hydrate the project again. Leaving the project protects
+unsaved manuscript state; access loss clears it immediately. Server state stays
+authoritative and navigation cannot replay scientific actions. Review and
+management views remain transient for phase one. This avoids a broad App rewrite
+while enabling history and deep links. Scope/evidence:
+`doc/plans/frontend-routing-phase1.md`, `doc/qa/frontend-routing-phase1.md`.
+
 ## 2026-09-28 — Cross-device pending questions use server task state
 
 The user requested cross-device continuation and asked whether the earlier

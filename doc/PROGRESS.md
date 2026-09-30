@@ -13,6 +13,28 @@ Keep entries concise, newest first, and include:
 - verification
 - follow-ups or residual risk
 
+## 2026-09-28 — Frontend routing phase one verified locally
+
+- User activated the routing goal. Started from verified origin/main `06b07be`
+  in the managed frontend-routing-phase1 worktree; primary checkout work remains.
+- Added React Router 7 Data mode with `/LabRat` basename, login return, lab
+  lists, four project pages, unknown/unavailable states and stable project drafts.
+- Added save/discard/stay, native unload warnings, save failure/concurrency,
+  access-loss cleanup and stale-request protection. Main navigation dismisses
+  transient review/management views; chart placement remains a one-shot action.
+- Preflight, full codex:verify and final 78 manuscript/navigation tests passed
+  (26 routing). Full checks passed 469 frontend, 396 legacy and 72 Nest tests;
+  nine existing legacy cases skipped. Builds/entry smoke passed.
+  Windows generated-type byte checks initially failed on CRLF-only differences;
+  regeneration has no content diff and the generated path is now pinned to LF.
+- Actual Chromium/HTTP/PostgreSQL acceptance passed for deep reloads, history,
+  drafts/save failure, review/management, 390px layout and real access/session
+  revocation. Screenshots inspected; test services stopped. No production writes
+  or provider calls. Harness fixes and early failed diagnostics are recorded in
+  `doc/qa/frontend-routing-phase1.md` with a final dated browser receipt.
+- No remaining phase-one implementation blocker. Bundle-size warning remains;
+  review/entity routes are phase two. No push/merge/deployment performed.
+
 ## 2026-09-28 — Read reference PDFs by page
 
 - User requested pages instead of the text-block selector. PDF browsing now uses

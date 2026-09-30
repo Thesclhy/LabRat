@@ -980,6 +980,22 @@ function normalizePageOrientation(value) {
   return value === "landscape" || value === "portrait" ? value : null;
 }
 
+export function manuscriptDraftFingerprint(manuscript = {}) {
+  const blocks = Array.isArray(manuscript.blocks) ? manuscript.blocks : [];
+  const references = Array.isArray(manuscript.references) ? manuscript.references : [];
+  const pages = manuscript.pages;
+  const canvasState = manuscript.canvasState || {};
+  const safeBlocks = normalizeManuscriptBlocks(blocks);
+  const safePages = normalizeManuscriptPages(pages, safeBlocks);
+  const hasStoredPages = Array.isArray(pages) && pages.length > 0;
+  const legacyBlank = !safeBlocks.length && (isBlankLegacyAutoPage(pages) || (!Array.isArray(pages) && Number(canvasState.canvasHeight) === LEGACY_PAGE_HEIGHT));
+  const height = (!safeBlocks.length && !hasStoredPages) || legacyBlank ? 0 : Number(canvasState.canvasHeight) || 0;
+  return JSON.stringify({ blocks, references, pages: safePages, canvasState: {
+    canvasHeight: manuscriptHeight(safePages, height, canvasHeightForBlocks(safeBlocks)),
+    pageOrientationPreference: normalizePageOrientation(canvasState.pageOrientationPreference) || inferPageOrientation(safePages),
+  } });
+}
+
 function inferPageOrientation(pages) {
   const firstPage = Array.isArray(pages) ? pages[0] : null;
   if (!firstPage) return null;

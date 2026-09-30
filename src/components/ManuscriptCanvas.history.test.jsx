@@ -1687,6 +1687,20 @@ describe("ManuscriptCanvas undo/redo", () => {
     await waitFor(() => expect(firstBlock().w).toBe(280));
   });
 
+  it("moves a selected block with arrow keys and preserves its undo boundary", async () => {
+    render(<Harness initialBlocks={[createTextBlock("text-1", "Hello")]} initialPages={[createPage("page-1")]} />);
+    const frame = blockFrameForText("Hello");
+    selectBlockFrame(frame);
+    const original = { x: firstBlock().x, y: firstBlock().y };
+    fireEvent.keyDown(frame, { key: "ArrowRight" });
+    await waitFor(() => expect(firstBlock().x).toBe(original.x + 1));
+    fireEvent.keyDown(frame, { key: "ArrowDown", shiftKey: true });
+    await waitFor(() => expect(firstBlock().y).toBe(original.y + 10));
+    clickUndo();
+    await waitFor(() => expect(firstBlock().y).toBe(original.y));
+    expect(firstBlock().x).toBe(original.x + 1);
+  });
+
   it("undoes and redoes block deletion", async () => {
     render(<Harness initialBlocks={[createTextBlock("text-1", "Hello")]} initialPages={[createPage("page-1")]} />);
 

@@ -1,6 +1,10 @@
 ﻿import { currentPlanRevision as selectCurrentPlanRevision, latestRevisionRun } from "./data/analysisOrdering.js";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { createBrowserRouter, useLocation, useNavigate } from "react-router";
+import { RouterProvider } from "react-router/dom";
+import { APP_BASENAME, dashboardPath, loginReturnPath, projectPath, readWorkspaceRoute, workspaceRoutes } from "./routing/workspaceRoutes.jsx";
+import { useUnsavedNavigation } from "./routing/useUnsavedNavigation.jsx";
 import { useCallback } from "react";
 import { DataGrid } from "react-data-grid";
 import "react-data-grid/lib/styles.css";
@@ -34,7 +38,7 @@ import {
   retryAnalysisThread,
 } from "./data/analysisApi.js";
 import { Plot } from "./charts/Plot";
-import { ManuscriptCanvas } from "./components/ManuscriptCanvas";
+import { ManuscriptCanvas, manuscriptDraftFingerprint } from "./components/ManuscriptCanvas";
 import { BLANK_PROJECT_SOURCE_NAME, blankTemplateLinks, isBlankDataMode } from "./data/appMode.js";
 import { emptyDataset } from "./data/loadEmbeddedDataset.js";
 import {
@@ -3111,9 +3115,19 @@ export function AgentPanel({
   </>;
 }
 
-function App() {
-  const [tab, setTab] = useState("overview");
-  const [workspaceMode, setWorkspaceMode] = useState("dashboard");
+export function App() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const route = readWorkspaceRoute(location.pathname);
+  const locationRef = useRef(location);
+  const navigationGuardRef = useRef(null);
+  locationRef.current = location;
+  const [workbookReviewOpen, setWorkbookReviewOpen] = useState(false);
+  const tab = workbookReviewOpen ? "workbook_review" : route.tab || "overview";
+  const workspaceMode = route.kind === "project" ? "project" : "dashboard";
+  const [routeError, setRouteError] = useState("");
+  const [routeRetry, setRouteRetry] = useState(0);
+  const saveRequestRef = useRef(null);
   const [dataset, setDataset] = useState(() => emptyDataset());
   const [sourceName, setSourceName] = useState(BLANK_PROJECT_SOURCE_NAME);
   const [sourceError, setSourceError] = useState("");
@@ -3128,14 +3142,17 @@ function App() {
   const [selectedChartContext, setSelectedChartContext] = useState(null);
   const [pendingChartAnalysis, setPendingChartAnalysis] = useState(null);
   const [chartSpecInsertRequest, setChartSpecInsertRequest] = useState(null);
-  const [dirty, setDirty] = useState(false);
+  const [savedDraft, setSavedDraft] = useState("");
+  const draftFingerprint = useMemo(() => manuscriptDraftFingerprint({ blocks, pages, references,
+    canvasState: { canvasHeight, pageOrientationPreference } }), [blocks, pages, references, canvasHeight, pageOrientationPreference]);
+  const draftFingerprintRef = useRef(draftFingerprint);
+  draftFingerprintRef.current = draftFingerprint;
   const [agentOpen, setAgentOpen] = useState(false);
 
   const [requestedAnalysisOutputTarget, setRequestedAnalysisOutputTarget] = useState("");
   const [requestedAgentDraft, setRequestedAgentDraft] = useState("");
   const [onboardingRenderVersion, setOnboardingRenderVersion] = useState(0);
   const [analysisReviewState, setAnalysisReviewState] = useState(null);
-  const [projectLoaded, setProjectLoaded] = useState(false);
   const [authState, setAuthState] = useState({ checking: true, loading: false, user: null, labs: [], error: "" });
   const [labs, setLabs] = useState([]);
   const [activeLabId, setActiveLabId] = useState("");
@@ -3151,6 +3168,7 @@ function App() {
   const canManageLab = ["lab_owner", "lab_admin"].includes(activeLab?.role);
   const permissions = permissionsForProject(projectState?.project);
   const canEditProject = permissions.canEdit;
+  const dirty = !!activeProjectId && canEditProject && !!savedDraft && savedDraft !== draftFingerprint;
   const [projectStateLoading, setProjectStateLoading] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newProjectBusy, setNewProjectBusy] = useState(false);
@@ -3170,6 +3188,25 @@ function App() {
   const [activeWorkbookReviewDraftRegionId, setActiveWorkbookReviewDraftRegionId] = useState("");
   const [backgroundWorkbookSessions, setBackgroundWorkbookSessions] = useState([]);
   const [calculationOverlay, setCalculationOverlay] = useState(null);
+  const closeTransientViews = () => {
+    setWorkbookReviewOpen(false); setManagementMode(""); setSelected(null);
+    setAnalysisReviewState(null); setChartReviewOpen(false); setChartLaunchContext(null);
+    setProfileChatOpen(false); setAgentOpen(false); setNewProjectOpen(false);
+  };
+  const go = (path, options) => {
+    if (path === `${locationRef.current.pathname}${locationRef.current.search}`) return;
+    navigate(path, options);
+  };
+  const setTab = (next) => {
+    if (next === "workbook_review") { setWorkbookReviewOpen(true); return; }
+    closeTransientViews();
+    if (activeProjectId) go(projectPath(activeProjectId, next));
+  };
+  const openProject = (projectId) => go(projectPath(projectId));
+  useEffect(() => {
+    closeTransientViews();
+    if (route.tab !== "manuscript") setChartSpecInsertRequest(null);
+  }, [location.key]);
   useEffect(() => {
     setBackgroundWorkbookSessions([]);
   }, [activeProjectId]);
@@ -3224,7 +3261,6 @@ function App() {
 
   const applyProjectShellState = (state) => {
     setSourceName(state?.project?.name || BLANK_PROJECT_SOURCE_NAME);
-    setProjectLoaded(true);
   };
 
   const applyDatasetState = (state) => {
@@ -3243,7 +3279,7 @@ function App() {
     setReferences(asArray(firstManuscript?.references));
     setCanvasHeight(firstManuscript?.canvasState?.canvasHeight || 0);
     setPageOrientationPreference(firstManuscript?.canvasState?.pageOrientationPreference || null);
-    setDirty(false);
+    setSavedDraft(manuscriptDraftFingerprint(firstManuscript || {}));
   };
 
   const applyProjectState = (state) => {
@@ -3296,13 +3332,16 @@ function App() {
       resetReviewState();
       const state = await getServerProjectState(projectId);
       if (epoch !== workspaceEpochRef.current) return;
+      if (!state?.project || state.project.id !== projectId || state.project.status === "archived") throw new Error("This project is unavailable or has been deleted.");
+      const response = await listServerProjects({ labId: state.project.labId });
+      if (epoch !== workspaceEpochRef.current) return;
+      setActiveLabId(state.project.labId);
       setActiveProjectId(projectId);
       setSelectedProjectId(projectId);
-      setWorkspaceMode("project");
-      setTab("overview");
       applyProjectState(state);
+      setProjectList(response.projects || []);
     } catch (err) {
-      if (epoch === workspaceEpochRef.current && !isAbortError(err)) setSourceError(err.message || String(err));
+      if (epoch === workspaceEpochRef.current && !isAbortError(err)) setRouteError(err.message || String(err));
     } finally {
       if (epoch === workspaceEpochRef.current) setProjectStateLoading(false);
     }
@@ -3335,28 +3374,17 @@ function App() {
       : projects[0]?.id || "";
     setSelectedProjectId(nextProjectId);
     if (openPreferred && nextProjectId) {
-      await loadProjectState(nextProjectId);
-    } else {
-      setActiveProjectId("");
-      setProjectState(null);
-      setDataset(emptyDataset());
-      setProjectLoaded(true);
-      setWorkspaceMode("dashboard");
-      resetReviewState();
+      openProject(nextProjectId);
     }
   };
 
-  const loadLabsAndProjects = async (preferredLabId = "", preferredProjectId = "") => {
+  const loadLabs = async () => {
     const epoch = workspaceEpochRef.current;
     const labResponse = await listServerLabs();
     if (epoch !== workspaceEpochRef.current) return;
     const nextLabs = labResponse.labs || [];
     setLabs(nextLabs);
-    const nextLabId = preferredLabId && nextLabs.some((lab) => (lab.id || lab.labId) === preferredLabId)
-      ? preferredLabId
-      : (nextLabs[0]?.id || nextLabs[0]?.labId || "");
-    setActiveLabId(nextLabId);
-    if (nextLabId) await loadProjectsForLab(nextLabId, preferredProjectId);
+    return nextLabs;
   };
 
   useEffect(() => {
@@ -3364,13 +3392,12 @@ function App() {
     getServerSession()
       .then(async (session) => {
         if (cancelled) return;
-        setAuthState({ checking: false, loading: false, user: session.user, labs: session.labs || [], error: "" });
-        await loadLabsAndProjects(session.labs?.[0]?.labId || session.labs?.[0]?.id || "");
+        await loadLabs();
+        if (!cancelled) setAuthState({ checking: false, loading: false, user: session.user, labs: session.labs || [], error: "" });
       })
       .catch((err) => {
-        if (!cancelled) {
+        if (!cancelled && !isAbortError(err)) {
           setAuthState({ checking: false, loading: false, user: null, labs: [], error: err.status === 401 ? "" : (err.message || String(err)) });
-          setProjectLoaded(true);
         }
       });
     return () => {
@@ -3378,15 +3405,50 @@ function App() {
     };
   }, []);
   useEffect(() => {
-    if (projectLoaded && canEditProject) setDirty(true);
-  }, [staged, blocks, pages, references, canvasHeight, pageOrientationPreference, chartTemplates]);
+    if (authState.checking) return;
+    if (!authState.user) {
+      if (route.kind !== "login") {
+        const returnTo = `${locationRef.current.pathname}${locationRef.current.search}`;
+        go(`/login?returnTo=${encodeURIComponent(returnTo)}`, { replace: true });
+      }
+      return;
+    }
+    if (route.kind === "login") { go(loginReturnPath(locationRef.current.search), { replace: true }); return; }
+    if (route.kind === "root") {
+      const labId = labs.find((lab) => (lab.id || lab.labId) === activeLabId)?.id || labs[0]?.id || labs[0]?.labId;
+      if (labId) go(dashboardPath(labId), { replace: true });
+      return;
+    }
+    if (route.kind === "project-root") { go(projectPath(route.projectId), { replace: true }); return; }
+    setRouteError("");
+    if (route.kind === "project") {
+      if (activeProjectId !== route.projectId) loadProjectState(route.projectId);
+    } else {
+      clearWorkspace();
+      setProjectList([]);
+      if (route.kind === "dashboard") {
+        if (!labs.some((lab) => (lab.id || lab.labId) === route.labId)) {
+          setRouteError("This lab is unavailable or you do not have access.");
+          return;
+        }
+        setActiveLabId(route.labId);
+        setProjectStateLoading(true);
+        const epoch = workspaceEpochRef.current;
+        loadProjectsForLab(route.labId).catch((err) => {
+          if (epoch === workspaceEpochRef.current && !isAbortError(err)) setRouteError(err.message);
+        }).finally(() => { if (epoch === workspaceEpochRef.current) setProjectStateLoading(false); });
+      }
+    }
+    return () => { workspaceEpochRef.current += 1; invalidateWorkspaceRequests(); };
+  }, [authState.checking, authState.user?.id, route.kind, route.projectId, route.labId, routeRetry]);
   const clearWorkspace = () => {
     workspaceEpochRef.current += 1;
+    saveRequestRef.current = null;
     currentWorkspaceProjectRef.current = "";
     invalidateWorkspaceRequests();
     setActiveProjectId(""); setProjectState(null); setDataset(emptyDataset());
     setBlocks([]); setPages(null); setReferences([]); setStaged([]); setChartTemplates([]);
-    setCanvasHeight(0); setPageOrientationPreference(null); setDirty(false);
+    setCanvasHeight(0); setPageOrientationPreference(null); setSavedDraft("");
     setSelected(null); setSelectedChartContext(null); setChartSpecInsertRequest(null);
     setAgentOpen(false); setProfileChatOpen(false); setChartReviewOpen(false); setNewProjectOpen(false);
     setDeleteProjectTarget(null); setProjectStateLoading(false); setSourceError("");
@@ -3395,35 +3457,39 @@ function App() {
   };
   const invitationComplete = async ({ auth, lab }) => {
     clearWorkspace(); setManagementMode("");
+    await loadLabs();
     setAuthState({ checking: false, loading: false, user: auth.user, labs: auth.memberships || [], error: "" });
-    await loadLabsAndProjects(lab.id);
+    go(dashboardPath(lab.id), { replace: true });
   };
   const openManagement = (mode) => {
     if (mode === "platform" && !authState.user?.isSuperAdmin) return;
     if (mode === "lab" && !canManageLab) return;
-    clearWorkspace(); setWorkspaceMode("dashboard"); setManagementMode(mode);
+    setManagementMode(mode);
   };
   useEffect(() => onWorkspaceAccessLost((status) => {
-    clearWorkspace(); setManagementMode(""); setWorkspaceMode("dashboard"); setProjectList([]);
-    if (status === 401) {
-      setAuthState({ checking: false, loading: false, user: null, labs: [], error: "Session expired. Please sign in again." });
-      setLabs([]); setActiveLabId("");
-    } else {
-      setSourceError("Your access changed. The workspace has been cleared.");
-      loadLabsAndProjects(activeLabId).catch(() => {});
-    }
-  }), [activeLabId]);
+    navigationGuardRef.current.force(() => {
+      const returnTo = `${locationRef.current.pathname}${locationRef.current.search}`;
+      clearWorkspace(); setManagementMode(""); setProjectList([]);
+      if (status === 401) {
+        setAuthState({ checking: false, loading: false, user: null, labs: [], error: "Session expired. Please sign in again." });
+        setLabs([]); setActiveLabId("");
+        go(`/login?returnTo=${encodeURIComponent(returnTo)}`, { replace: true });
+      } else {
+        setRouteError("This workspace is unavailable or your access has changed.");
+      }
+    });
+  }), [activeLabId, location.key]);
   const login = async ({ username, password }) => {
     setAuthState((current) => ({ ...current, loading: true, error: "" }));
     try {
       const session = await loginToServer({ username, password });
+      await loadLabs();
       setAuthState({ checking: false, loading: false, user: session.user, labs: session.labs || [], error: "" });
-      await loadLabsAndProjects(session.labs?.[0]?.labId || session.labs?.[0]?.id || "");
     } catch (err) {
       setAuthState({ checking: false, loading: false, user: null, labs: [], error: err.message || String(err) });
     }
   };
-  const logout = async () => {
+  const logout = () => guard.run(async () => {
     clearWorkspace(); setManagementMode("");
     try {
       await logoutFromServer();
@@ -3437,22 +3503,12 @@ function App() {
     setSelectedProjectId("");
     setActiveProjectId("");
     setProjectState(null);
-    setWorkspaceMode("dashboard");
     setDataset(emptyDataset());
     setSourceName(BLANK_PROJECT_SOURCE_NAME);
     resetReviewState();
-  };
-  const changeLab = async (labId) => {
-    clearWorkspace(); setManagementMode("");
-    setActiveLabId(labId);
-    setProjectList([]);
-    setSelectedProjectId("");
-    setActiveProjectId("");
-    setProjectState(null);
-    setWorkspaceMode("dashboard");
-    setDataset(emptyDataset());
-    await loadProjectsForLab(labId);
-  };
+    go("/login", { replace: true });
+  });
+  const changeLab = (labId) => go(dashboardPath(labId));
   const openNewProjectModal = () => {
     if (!canManageLab) return;
     setNewProjectError("");
@@ -3505,19 +3561,7 @@ function App() {
       setProjectList(nextProjects);
       setSelectedProjectId(nextSelectedProjectId);
       if (activeProjectId === project.id) {
-        setActiveProjectId("");
-        setProjectState(null);
-        setDataset(emptyDataset());
-        setSourceName(BLANK_PROJECT_SOURCE_NAME);
-        setBlocks([]);
-        setPages(null);
-        setReferences([]);
-        setCanvasHeight(0);
-        setPageOrientationPreference(null);
-        setDirty(false);
-        setWorkspaceMode("dashboard");
-        setTab("overview");
-        resetReviewState();
+        guard.force(() => { clearWorkspace(); go(dashboardPath(activeLabId), { replace: true }); });
       }
       setDeleteProjectTarget(null);
     } catch (err) {
@@ -3529,14 +3573,7 @@ function App() {
     }
   };
   const openProjectDashboard = () => {
-    clearWorkspace(); setManagementMode("");
-    setWorkspaceMode("dashboard");
-    setChartReviewOpen(false);
-    setChartReviewStatusFilter("");
-    setChartReviewInitialMode("review");
-    setChartLaunchContext(null);
-    setProfileChatOpen(false);
-    setSelectedProjectId(activeProjectId || selectedProjectId || projectList[0]?.id || "");
+    go(dashboardPath(activeLabId || labs[0]?.id || labs[0]?.labId));
   };
   const saveProjectProfile = async (projectProfile) => {
     if (!activeProjectId || !canEditProject) return null;
@@ -3715,6 +3752,7 @@ function App() {
     }
   };
   const continueWorkbookReview = async (requestedSession = null) => {
+    const requestLocationKey = locationRef.current.key;
     const session = requestedSession?.id
       ? requestedSession
       : latestItem(projectState?.workbookReviewSessions);
@@ -3725,8 +3763,10 @@ function App() {
     setWorkbookReviewState((current) => ({ ...current, loading: true, error: "" }));
     try {
       const response = await getServerWorkbookReviewSession(session.id);
+      if (requestLocationKey !== locationRef.current.key) return;
       handleWorkbookReviewReadyFromAgent({ response });
     } catch (error) {
+      if (requestLocationKey !== locationRef.current.key || isAbortError(error)) return;
       setWorkbookReviewState((current) => ({
         ...current,
         loading: false,
@@ -4100,6 +4140,7 @@ function App() {
     return applyWorkbookReviewRegionResponse(response, { activate: false });
   };
   const focusExperimentBrowserSource = async (source) => {
+    const requestLocationKey = locationRef.current.key;
     if (!source?.sourceDocumentId || !(source.sheet || source.sheetName) || !(source.range || source.cell)) return;
     const focusSelection = {
       sourceDocumentId: source.sourceDocumentId,
@@ -4121,6 +4162,7 @@ function App() {
     setWorkbookReviewState((current) => ({ ...current, loading: true, error: "" }));
     try {
       const response = await getServerWorkbookReviewSession(session.id);
+      if (requestLocationKey !== locationRef.current.key) return;
       handleWorkbookReviewReadyFromAgent({ response });
       const targetRegion = asArray(response?.reviewRegions).find((region) => (
         region.disposition === "active"
@@ -4131,6 +4173,7 @@ function App() {
       if (targetRegion) setActiveWorkbookReviewDraftRegionId(targetRegion.id);
       setWorkbookReviewFocusSelection(focusSelection);
     } catch (error) {
+      if (requestLocationKey !== locationRef.current.key || isAbortError(error)) return;
       setWorkbookReviewState((current) => ({
         ...current,
         loading: false,
@@ -4181,7 +4224,10 @@ function App() {
     }
   };
   const save = async () => {
-    if (!activeProjectId || !canEditProject) return;
+    if (!activeProjectId || !canEditProject) return false;
+    if (saveRequestRef.current) return saveRequestRef.current;
+    const epoch = workspaceEpochRef.current;
+    const savedFingerprint = draftFingerprint;
     const manuscript = asArray(projectState?.manuscripts)[0] || null;
     const request = {
       title: manuscript?.title || `${projectState?.project?.name || "Untitled"} manuscript`,
@@ -4190,36 +4236,45 @@ function App() {
       canvasState: { canvasHeight, pageOrientationPreference },
       references,
     };
-    try {
-      const response = manuscript?.id
-        ? await patchServerManuscript(manuscript.id, request)
-        : await createServerManuscript(activeProjectId, request);
-      const savedManuscript = response.manuscript;
-      if (savedManuscript?.id) {
+    const pendingSave = (async () => {
+      try {
+        const response = manuscript?.id
+          ? await patchServerManuscript(manuscript.id, request)
+          : await createServerManuscript(activeProjectId, request);
+        if (epoch !== workspaceEpochRef.current) return false;
+        const savedManuscript = response.manuscript;
+        if (!savedManuscript?.id) throw new Error("The server did not confirm the manuscript save.");
         setProjectState((current) => current ? {
           ...current,
           manuscripts: upsertServerRecordById(current.manuscripts, savedManuscript),
         } : current);
+        setSavedDraft(savedFingerprint);
+        setSourceError("");
+        return draftFingerprintRef.current === savedFingerprint;
+      } catch (err) {
+        if (epoch === workspaceEpochRef.current && !isAbortError(err)) setSourceError(err.message || String(err));
+        return false;
       }
-      setDirty(false);
-    } catch (err) {
-      setSourceError(err.message || String(err));
-    }
+    })();
+    saveRequestRef.current = pendingSave;
+    try { return await pendingSave; }
+    finally { if (saveRequestRef.current === pendingSave) saveRequestRef.current = null; }
   };
   const openAnalysisReview = async ({ thread, revision, run = null, result = null, executionStrategy = "model_generated_python" }) => {
+    const requestLocationKey = locationRef.current.key;
     if (!thread?.id) return;
     if (thread.projectId && thread.projectId !== currentWorkspaceProjectRef.current) return;
     const requestedProjectId = currentWorkspaceProjectRef.current;
     if (!revision?.id) {
       try {
         const detail = await getAnalysisThread(thread.id);
-        if (requestedProjectId !== currentWorkspaceProjectRef.current) return;
+        if (requestedProjectId !== currentWorkspaceProjectRef.current || requestLocationKey !== locationRef.current.key) return;
         revision = selectCurrentPlanRevision(detail.planRevisions);
         run = latestRevisionRun(detail.analysisRuns, revision?.id, detail.analysisThread);
         if (!revision) throw new Error("This analysis does not have a reviewable plan yet.");
         thread = detail.analysisThread || thread;
       } catch (error) {
-        if (requestedProjectId === currentWorkspaceProjectRef.current) setSourceError(error.message);
+        if (requestedProjectId === currentWorkspaceProjectRef.current && requestLocationKey === locationRef.current.key && !isAbortError(error)) setSourceError(error.message);
         return;
       }
     }
@@ -4284,7 +4339,9 @@ function App() {
       : acceptAnalysisResultChart(request)
   );
   const loadChartSpecDetailForManuscript = useCallback(async (chartSpecId) => {
+    const requestedProject = currentWorkspaceProjectRef.current;
     const response = await getServerChartSpec(chartSpecId);
+    if (requestedProject !== currentWorkspaceProjectRef.current) throw new DOMException("Project changed.", "AbortError");
     const chartSpec = response?.chartSpec || null;
     if (!chartSpec?.id) throw new Error("The ChartSpec detail response is incomplete.");
     setProjectState((current) => current ? {
@@ -4293,6 +4350,10 @@ function App() {
     } : current);
     return chartSpec;
   }, []);
+  const guard = useUnsavedNavigation({ dirty, projectId: activeProjectId, save,
+    discard: () => applyManuscriptState(projectState) });
+  navigationGuardRef.current = guard;
+  const withGuard = (view) => <>{view}{guard.dialog}</>;
   if (authState.checking) {
     return (
       <main className="server-login">
@@ -4305,12 +4366,24 @@ function App() {
   if (!authState.user) {
     return <WelcomeScreen loading={authState.loading} error={authState.error} onLogin={login} onRegistered={invitationComplete} />;
   }
+  const returnToProjects = () => go(dashboardPath(labs.find((lab) => (lab.id || lab.labId) === activeLabId)?.id || labs[0]?.id || labs[0]?.labId));
+  if (route.kind === "not-found" || routeError) {
+    return withGuard(<main className="server-login"><section className="server-login-panel" role="alert">
+      <h1>{route.kind === "not-found" ? "Page not found" : "Workspace unavailable"}</h1>
+      <p>{routeError || "This address does not identify a LabRat page."}</p>
+      <button onClick={returnToProjects}>Back to projects</button>
+      {routeError && <button onClick={() => setRouteRetry((value) => value + 1)}>Retry</button>}
+    </section></main>);
+  }
   if (managementMode) {
-    return <LabManagement key={`${managementMode}:${activeLabId}`} mode={managementMode} lab={activeLab} projects={projectList} onClose={() => setManagementMode("")} onInvitationComplete={invitationComplete} />;
+    return withGuard(<LabManagement key={`${managementMode}:${activeLabId}`} mode={managementMode} lab={activeLab} projects={projectList} onClose={() => setManagementMode("")} onInvitationComplete={invitationComplete} />);
+  }
+  if ((route.kind === "project" && activeProjectId !== route.projectId) || route.kind === "project-root" || route.kind === "login") {
+    return <main className="server-login"><section className="server-login-panel" role="status">Loading project...</section></main>;
   }
   if (workspaceMode === "dashboard" || !activeProjectId) {
     return (
-      <>
+      <>{guard.dialog}
         <Topbar
           tab={tab}
           setTab={setTab}
@@ -4331,7 +4404,7 @@ function App() {
           onLabChange={changeLab}
           projects={projectList}
           activeProjectId={activeProjectId}
-          onProjectChange={loadProjectState}
+          onProjectChange={openProject}
           onCreateProject={openNewProjectModal}
           onOpenProfile={() => setProfileChatOpen(true)}
           onLogout={logout}
@@ -4347,7 +4420,7 @@ function App() {
           projects={projectList}
           selectedProjectId={selectedProjectId}
           onSelectProject={setSelectedProjectId}
-          onOpenProject={loadProjectState}
+          onOpenProject={openProject}
           onCreateProject={openNewProjectModal}
           onRequestDeleteProject={requestDeleteProject}
           canCreateProject={canManageLab}
@@ -4375,12 +4448,12 @@ function App() {
     );
   }
   const showProjectOnboarding = canEditProject && shouldShowProjectOnboarding(activeProjectId, projectState)
-    && tab !== "workbook_review"
+    && tab === "overview"
     && !analysisReviewState
     && !agentOpen;
   if (showProjectOnboarding) {
     return (
-      <WorkspacePermissions.Provider value={permissions}><ProjectOnboarding
+      <WorkspacePermissions.Provider value={permissions}>{guard.dialog}<ProjectOnboarding
         key={`${activeProjectId}:${onboardingRenderVersion}`}
         projectId={activeProjectId}
         projectState={projectState}
@@ -4442,6 +4515,7 @@ function App() {
   }
   return (
     <WorkspacePermissions.Provider value={permissions}>
+      {guard.dialog}
       <Topbar tab={tab} setTab={setTab} dirty={dirty} onSave={save} onAgent={() => { setAgentOpen(true); }}
         workspaceMode={workspaceMode}
         onOpenDashboard={openProjectDashboard}
@@ -4457,7 +4531,7 @@ function App() {
         onLabChange={changeLab}
         projects={projectList}
         activeProjectId={activeProjectId}
-        onProjectChange={loadProjectState}
+        onProjectChange={openProject}
         onCreateProject={openNewProjectModal}
         onOpenProfile={() => setProfileChatOpen(true)}
         onLogout={logout}
@@ -4468,6 +4542,7 @@ function App() {
       />
       {!canEditProject && <div className="workspace-readonly" role="status">Read-only access · Draft editing and analysis proposals are disabled.</div>}
       {tab === "references" && permissions.canAsk && <ReferenceLibrary key={`references-${authState.user.id}-${activeProjectId}`} projectId={activeProjectId} canEdit={canEditProject} assistantOpen={agentOpen} />}
+      {tab === "references" && !permissions.canAsk && <p className="workspace-readonly" role="alert">References are unavailable with this project's current access.</p>}
       {tab === "overview" && <ProjectOverview
         projectState={projectState}
         onAskLabRat={() => { setAgentOpen(true); }}
@@ -4641,5 +4716,6 @@ function App() {
 
 const rootElement = document.getElementById("root");
 if (rootElement) {
-  createRoot(rootElement).render(<App />);
+  const router = createBrowserRouter(workspaceRoutes(<App />), { basename: APP_BASENAME });
+  createRoot(rootElement).render(<RouterProvider router={router} />);
 }

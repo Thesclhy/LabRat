@@ -1,0 +1,2 @@
+# Generated client checks compare bytes; keep generator output stable on Windows.
+src/data/generated/backendApiV1.d.ts text eol=lf

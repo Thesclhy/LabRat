@@ -103,13 +103,23 @@ and the [authorization contract](doc/contracts/authorization-v1.md).
 
 ## Architecture
 
-- **Frontend:** React 19 / JSX, Vite and Plotly.
+- **Frontend:** React 19 / JSX, React Router Data mode, Vite and Plotly.
 - **Backend:** NestJS + Fastify + TypeScript, with first-party APIs under
   `/api/v1` and a generated OpenAPI client.
 - **Persistence:** PostgreSQL, Drizzle and versioned SQL migrations; durable
   uploaded-file storage and server-backed project state.
 - **AI:** one deployment-selected backend provider, Anthropic or DeepSeek.
   Provider keys stay on the backend, never in browser settings.
+
+Frontend navigation uses the `/LabRat/` base path, with `/login`,
+`/labs/:labId/projects`, and project pages under `/projects/:projectId/`:
+`overview`, `browser`, `manuscript`, `references`. Browser Back/Forward and
+direct page reloads preserve the current page; project tabs share an in-memory
+manuscript draft. Leaving a dirty project offers save, discard or stay;
+refresh/close uses the browser's native warning. Reload restores saved server
+content, not unsaved drafts. Workbook/analysis review and management remain
+transient views in phase one. The production server must retain its SPA fallback
+for `/LabRat/*` (already present in `deploy/lightsail/Caddyfile`).
 
 The previous unversioned `/api` dispatcher is a rollback reference, not the
 current frontend's API. Detailed contracts are linked below.

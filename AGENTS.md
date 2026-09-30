@@ -36,7 +36,7 @@ LabRat Blank is evolving into a multi-lab SaaS research command center for messy
 - Vite 6.
 - Plotly via `plotly.js-dist-min`.
 - Excel parsing via `xlsx`.
-- No TypeScript, no router, no external state library.
+- The frontend uses JSX, React Router Data mode and no external state library.
 - Vitest is configured for frontend tests.
 - The backend uses Node's built-in test runner.
 

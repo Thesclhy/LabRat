@@ -8,6 +8,10 @@ This file is the routing guide for AI agents. It tells you which docs are curren
 
 ## Current Direction
 
+For the active local frontend navigation goal, read
+[phase-one routing](plans/frontend-routing-phase1.md). It changes main-page
+navigation and draft protection, without changing API or scientific contracts.
+
 Cross-device pending Ask tasks are deployed at application commit `e780cff`.
 Read [the task plan](plans/cross-device-ask-tasks.md),
 [release evidence](qa/cross-device-ask-deployment.md) and the current Q&A contract.

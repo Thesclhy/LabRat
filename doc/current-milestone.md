@@ -1,10 +1,23 @@
 # Current Milestone
 
-Status: User manual acceptance in progress — PDF page navigation deployed
+Status: Frontend routing phase one — complete and verified locally
 Read when: checking what the next implementation slice should be.
 Last reviewed: 2026-09-28
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
+
+## Frontend routing phase one
+
+The active user goal is [phase-one routing](plans/frontend-routing-phase1.md),
+implemented in the managed frontend-routing-phase1 worktree from integrated
+main `06b07be`. Main page routes, authenticated direct entry, project draft
+lifetime, save/discard/stay, cancellation and access-loss handling are in place.
+26 focused navigation tests, full codex:verify, real Chromium/HTTP/PostgreSQL
+acceptance and final 78-test manuscript/navigation regression pass. The
+[acceptance report](qa/frontend-routing-phase1.md) audits every requirement and
+records existing skips, resolved test issues and remaining scope limits. Test
+services are stopped. No push, merge or deployment is authorized, and phase two
+is not started. The prior deployed work below remains the production checkpoint.
 
 ## Manual acceptance follow-up
 

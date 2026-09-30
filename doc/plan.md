@@ -8,6 +8,11 @@ This is the short active plan. Current execution status lives in `doc/current-mi
 
 ## Current Focus
 
+The active local goal is [frontend routing phase one](plans/frontend-routing-phase1.md):
+addressable login/project lists/project tabs, browser history and protected
+manuscript drafts. Delivery is local only; phase-two review/entity routes and
+deployment are outside scope. Prior production milestones below are preserved.
+
 Server-backed pending Ask tasks across devices are deployed at application
 commit `e780cff`, using `doc/plans/cross-device-ask-tasks.md`. Migration 037 stores
 personal questions and exact uploaded-file links; continuation reuses the existing
