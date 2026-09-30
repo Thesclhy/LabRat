@@ -6,6 +6,15 @@ Last reviewed: 2026-09-30
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
 
+## Manual-test follow-up: mean-temperature planning
+
+2026-09-30: fixed and verified the scalar-to-series substitution reported
+by the user on codex/analysis-series-mean, reusing the isolated checkout at main
+bad89ca. No calculation-only result type is added. Pure calculations clarify
+output; missing series can return a non-executable clarification. Full regression, both real providers and desktop/narrow card checks passed.
+See doc/qa/analysis-series-mean.md for counts, limits and manual retest. The fix
+is local and not deployed; production remains 159e50b.
+
 ## Active goal: unified read-only Q&A and source trace
 
 2026-09-29: completed doc/plans/readonly-qa-trace.md on

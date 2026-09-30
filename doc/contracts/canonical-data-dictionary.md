@@ -403,6 +403,9 @@ result rows, traces, Plotly, or user-review hashes. Feedback creates a later
 numbered revision and marks the prior awaiting-review revision superseded
 without modifying it.
 
+The internal model draft may instead return clarification with reviewPlan null.
+It does not become an AnalysisPlanRevision; earlier revisions remain unchanged.
+
 ## AnalysisThread v1
 
 A project-scoped conversational workflow container for one analysis goal. It stores the original request, output target, bounded visible messages, status, and ordered ids for plan revisions, runs, accepted results, charts, DataSnapshots, and BrowserViews. It does not store hidden reasoning or duplicate full result arrays into project state.

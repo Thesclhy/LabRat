@@ -179,7 +179,7 @@ test("DeepSeek uses task-specific thinking policies through the backend provider
                     invariants: [],
                   },
                   displayPlan: ["Create a bar chart."],
-                  warnings: [],
+                  warnings: [], clarification: null,
                 }),
               },
             }],
@@ -359,6 +359,7 @@ test("draftAnalysisPlan selects exact confirmed ranges without generating Python
         "reviewPlan",
         "displayPlan",
         "warnings",
+        "clarification",
       ]);
       assert.equal(body.output_config.format.schema.additionalProperties, false);
       assert.equal(
@@ -398,7 +399,7 @@ test("draftAnalysisPlan selects exact confirmed ranges without generating Python
                   invariants: [],
                 },
                 displayPlan: ["Use the red range and create one curve per experiment."],
-                warnings: [],
+                warnings: [], clarification: null,
               }),
             }],
           };
@@ -472,7 +473,7 @@ test("draftExperimentBrowserPlan uses an Anthropic-compatible empty invariants s
                   invariants: [],
                 },
                 displayPlan: ["Add Exp1 and show the new fields."],
-                warnings: [],
+                warnings: [], clarification: null,
               }),
             }],
           };
@@ -527,7 +528,7 @@ test("DeepSeek drafts Experiment Browser plans without thinking", async () => {
                     invariants: [],
                   },
                   displayPlan: ["Add Exp1."],
-                  warnings: [],
+                  warnings: [], clarification: null,
                 }),
               },
             }],
@@ -823,4 +824,24 @@ test("reports truncated workbook-region output separately from malformed JSON", 
 
   assert.equal(result.ok, false);
   assert.equal(result.warning.code, "ai_output_truncated");
+});
+
+test("both plan providers accept a clarification without a dummy chart or data-change plan", async () => {
+  const provider = createBackendModelProvider({ config: { aiProvider: "anthropic", anthropicApiKey: "server-secret", anthropicModel: "claude-test" },
+    fetchImpl: async (_url, request) => {
+      const body = JSON.parse(request.body);
+      assert.match(body.system, /single temperature field is not a temperature series/);
+      assert.match(body.system, /genuine confirmed series may have one point/);
+      assert.match(body.system, /without announcing a mean/);
+      return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({
+        requestSummary: "Mean temperature", clarification: "Which confirmed temperature series should I use?",
+        sourceSelections: [], experimentSelections: [], reviewPlan: null, displayPlan: [], warnings: [],
+      }) }] }) };
+    } });
+  for (const method of ["draftAnalysisPlan", "draftExperimentBrowserPlan"]) {
+    const result = await provider[method]({ originalRequest: "Calculate the mean." });
+    assert.equal(result.ok, true, JSON.stringify(result.warning));
+    assert.equal(result.reviewPlan, null);
+    assert.match(result.clarification, /confirmed temperature series/);
+  }
 });

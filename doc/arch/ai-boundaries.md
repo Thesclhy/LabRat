@@ -72,6 +72,13 @@ Do not send full workbooks, entire DataSnapshot point collections, unrelated pro
 
 ## Review Boundaries
 
+Analysis plan providers can return a structured clarification with no plan. The
+backend does not repair missing evidence into a guessed selection, create a
+revision, or execute it. Ask persists the clarification as a waiting-for-user
+message; direct revision requests return analysis_plan_clarification_required.
+This is a model assessment of input sufficiency, not a guarantee of semantic
+correctness or an answer-text validator. Existing reviews remain required.
+
 ```text
 AI draft
   -> deterministic schema/ownership/evidence validation

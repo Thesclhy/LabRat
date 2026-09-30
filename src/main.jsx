@@ -2992,6 +2992,7 @@ export function AgentPanel({
               revision={m.currentPlanRevision}
               run={m.analysisRun}
               result={m.analysisResult}
+              clarificationRequired={asArray(m.agentRun?.warnings).some((warning) => warning?.code === "analysis_plan_clarification_required")}
               evidenceBlocked={asArray(m.agentRun?.warnings).some((warning) => warning?.code === "analysis_evidence_required")}
               modelAvailable={!analysisCapabilitiesState.loading && analysisCapabilitiesState.value?.model?.configured === true}
               acceptedDataAvailable={!analysisCapabilitiesState.loading && (

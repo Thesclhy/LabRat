@@ -74,6 +74,13 @@ types, formula/display distinctions, ordering and exact cell addresses.
 
 ## Current analysis review
 
+A scalar temperature is not a within-experiment temperature series; a genuine
+confirmed series may contain one point. Plans must establish the requested
+experiment, quantity and series layout from evidence, or ask for clarification.
+Planning describes future computation without announcing derived results.
+Standalone calculation requests must not silently become a chart or data write.
+The current supported outputs remain chart and experiment_browser.
+
 The current plan is the maximum numeric revision, independent of API list order.
 For that plan the current run follows the server's append-ordered analysisRunIds;
 createdAt and id provide a deterministic fallback when no sequence is supplied.

@@ -901,3 +901,45 @@ test("model receives the five latest revisions in numeric order regardless of re
     },
   } });
 });
+
+test("missing temperature series ends planning without a revision, retry repair, or execution", async () => {
+  const { temperaturePlanFixture } = await import("./testing/temperaturePlanFixture.js");
+  for (const outputTarget of ["chart", "experiment_browser"]) {
+    const { store, project, thread } = await temperaturePlanFixture({ outputTarget });
+    let calls = 0;
+    const draft = async (request, options) => {
+      calls += 1;
+      assert.equal(request.confirmedRegions[0].series.length, 0);
+      const cells = await options.inspectSourceRange({ regionUnderstandingRevisionId: "revision_temperature", range: "A1:B3" });
+      assert.equal(cells.cellCount, 6);
+      return { ok: true, clarification: "Exp17 has a scalar temperature, but no temperature series. Which confirmed series should I use?", reviewPlan: null };
+    };
+    await assert.rejects(draftAnalysisPlanRevision({ store, project, analysisThreadId: thread.id,
+      actorUserId: "user_1", modelProvider: { draftAnalysisPlan: draft, draftExperimentBrowserPlan: draft } }),
+    { code: "analysis_plan_clarification_required", statusCode: 422 });
+    assert.equal(calls, 1);
+    assert.equal(store.analysisPlanRevisions.size, 0);
+    assert.equal(store.analysisRuns.size, 0);
+  }
+});
+
+test("clarification while revising preserves the earlier plan and its review status", async () => {
+  const { store, project, thread } = await setup();
+  const previous = await createAnalysisPlanRevision({ store, project, analysisThreadId: thread.id, actorUserId: "user_1", plan: plan() });
+  await assert.rejects(draftAnalysisPlanRevision({ store, project, analysisThreadId: thread.id, actorUserId: "user_1",
+    feedback: "Use the missing temperature series instead.", modelProvider: {
+      draftAnalysisPlan: async () => ({ ok: true, clarification: "Which temperature series?", reviewPlan: null }),
+    } }), { code: "analysis_plan_clarification_required" });
+  assert.equal((await store.findAnalysisPlanRevisionById(previous.id)).status, "awaiting_review");
+  assert.equal(store.analysisPlanRevisions.size, 1);
+});
+
+test("direct drafting cannot bypass the standalone calculation output choice", async () => {
+  const { temperaturePlanFixture } = await import("./testing/temperaturePlanFixture.js");
+  const { store, project, thread } = await temperaturePlanFixture({ seriesPoints: [78, 80, 82], request: "Calculate the mean of Exp17's temperature series." });
+  await assert.rejects(draftAnalysisPlanRevision({ store, project, analysisThreadId: thread.id, actorUserId: "user_1",
+    modelProvider: { draftAnalysisPlan: async () => { assert.fail("Output choice must precede model drafting"); } },
+  }), { code: "analysis_plan_clarification_required" });
+  assert.equal(store.analysisPlanRevisions.size, 0);
+  assert.equal(store.analysisRuns.size, 0);
+});

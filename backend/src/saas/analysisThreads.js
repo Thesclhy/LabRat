@@ -1,3 +1,4 @@
+import { deterministicAnalysisIntent } from "./analysisIntentRouter.js";
 import { orderedPlanRevisions } from "./analysisOrdering.js";
 import {
   ANALYSIS_INPUT_MODES,
@@ -386,6 +387,14 @@ export async function draftAnalysisPlanRevision({
   const inputMode = outputTarget === ANALYSIS_OUTPUT_TARGETS.CHART
     ? thread.inputMode || ANALYSIS_INPUT_MODES.WORKBOOK
     : null;
+  const outputIntent = deterministicAnalysisIntent({
+    message: [thread.originalRequest, text(feedback)].filter(Boolean).join("\n"),
+    selectedContext: outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
+      ? { analysisOutputTarget: outputTarget } : {},
+  });
+  if (outputIntent?.disposition === "clarification") {
+    throw analysisError("analysis_plan_clarification_required", outputIntent.clarification, 422);
+  }
   const draftProvider = outputTarget === ANALYSIS_OUTPUT_TARGETS.EXPERIMENT_BROWSER
     ? modelProvider?.draftExperimentBrowserPlan
     : modelProvider?.draftAnalysisPlan;
@@ -485,6 +494,14 @@ export async function draftAnalysisPlanRevision({
           warning: draft?.warning || null,
           providerMetadata: draft?.metadata || null,
         },
+      );
+    }
+    if (text(draft.clarification)) {
+      throw analysisError(
+        "analysis_plan_clarification_required",
+        text(draft.clarification).slice(0, 2_000),
+        422,
+        { metadata: draft.metadata || null },
       );
     }
     try {

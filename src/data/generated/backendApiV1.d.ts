@@ -1558,6 +1558,7 @@ export interface paths {
         };
         readonly get?: never;
         readonly put?: never;
+        /** @description Missing or ambiguous required inputs return analysis_plan_clarification_required without saving a revision. */
         readonly post: operations["createAnalysisPlanRevision"];
         readonly delete?: never;
         readonly options?: never;
@@ -8360,6 +8361,7 @@ export interface operations {
             readonly 404: components["responses"]["NotFound"];
             readonly 409: components["responses"]["Conflict"];
             readonly 413: components["responses"]["ValidationError"];
+            readonly 422: components["responses"]["ValidationError"];
         };
     };
     readonly retryAnalysisThread: {

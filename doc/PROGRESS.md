@@ -13,6 +13,25 @@ Keep entries concise, newest first, and include:
 - verification
 - follow-ups or residual risk
 
+## 2026-09-30 — Fix mean-temperature plan intent and missing-series clarification
+
+- User reported that a calculation-only Exp17 request produced a chart plan,
+  treated a scalar cell as a series and announced an unexecuted mean.
+- Reused the isolated checkout on codex/analysis-series-mean. Added shared
+  output-choice gating, nullable model clarification for both plan providers,
+  non-executable/durable Ask clarification, and existing-card input status.
+  No standalone calculation result type or answer-prose validator was added.
+- Regression covers direct-draft bypass, Browser surface, missing series,
+  prior-revision preservation, no execution, and actual single-point series.
+  Full verification passed: 452 frontend, 402 Node backend (9 expected skips),
+  74 Nest; API/build/smoke passed. Both real providers' four-case replays and
+  desktop/390px browser card checks passed after fixing initial findings.
+- Final prompt wording refinement rechecked with 17 provider unit tests, backend
+  build and both real providers. Details, first failures and manual retest:
+  doc/qa/analysis-series-mean.md. Fresh PostgreSQL and production checks not run.
+- Local fix only; production remains 159e50b. Existing incorrect Revision 1
+  is not modified or approved. User manual retest follows deployment.
+
 ## 2026-09-30 — Read-only Q&A merged to main and deployed
 
 - User explicitly requested main merge. Confirmed remote baseline unchanged and

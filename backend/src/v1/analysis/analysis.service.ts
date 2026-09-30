@@ -207,16 +207,20 @@ function isEvidenceBlocked(agentRuns: Array<Record<string, any>>, analysisThread
   ));
 }
 
+function isPlanningInputWarning(code: string): boolean {
+  return ["analysis_evidence_required", "analysis_plan_clarification_required"].includes(code);
+}
+
 function planFailure(agentRuns: Array<Record<string, any>>, analysisThreadId: string) {
   const run = agentRuns.find((candidate) => (
     asArray<Record<string, any>>(candidate.proposalRefs).some((ref) => (
       ref.type === "analysis_thread" && ref.id === analysisThreadId
     ))
-    && asArray<Record<string, any>>(candidate.warnings).some((warning) => warning.code !== "analysis_evidence_required")
+    && asArray<Record<string, any>>(candidate.warnings).some((warning) => !isPlanningInputWarning(warning.code))
   ));
   return run
     ? asArray<Record<string, any>>(run.warnings)
-      .filter((warning) => warning.code !== "analysis_evidence_required").at(-1) || null
+      .filter((warning) => !isPlanningInputWarning(warning.code)).at(-1) || null
     : null;
 }
 
@@ -752,6 +756,7 @@ export class AnalysisService {
       });
       const warnings = [...asArray<Record<string, any>>(agentRun.warnings)];
       let failedMetadata = null;
+      let clarificationRequired = false;
       if (accepted.length || (draft.analysisRequest?.outputTarget === "experiment_browser" && heads.length)) {
         try {
           revision = await draftAnalysisPlanRevisionCompat({
@@ -764,8 +769,19 @@ export class AnalysisService {
         } catch (error: any) {
           failedMetadata = error?.details?.metadata || null;
           const warning = planningWarning(error);
-          warnings.push(warning);
-          reply = `I created an analysis thread, but the backend could not draft a reviewable plan. ${warning.message}`;
+          clarificationRequired = error?.code === "analysis_plan_clarification_required";
+          warnings.push({ ...warning, ...(clarificationRequired ? { severity: "info" } : {}) });
+          reply = clarificationRequired ? warning.message
+            : `I created an analysis thread, but the backend could not draft a reviewable plan. ${warning.message}`;
+          if (clarificationRequired) {
+            await store.updateAnalysisThread(thread.id, {
+              messages: [...asArray(thread.messages), {
+                id: makeId("analysis_message"), role: "assistant", content: reply,
+                createdAt: nowIso(), agentRunId: agentRun.id,
+              }],
+              updatedBy: auth.user.id,
+            });
+          }
         }
       } else {
         const message = draft.analysisRequest?.outputTarget === "experiment_browser"
@@ -780,11 +796,12 @@ export class AnalysisService {
       const diagnostics = planningDiagnostics(metadata);
       const priorUsage = agentRun.usage || {};
       agentRun = await store.updateAgentRun(agentRun.id, {
+        ...(clarificationRequired ? { mode: "clarification", status: "waiting_for_user" } : {}),
         visibleSteps: [
           ...asArray(agentRun.visibleSteps),
           {
             stepId: makeId("agent_step"),
-            label: revision ? "Drafted reviewable analysis plan" : "Created analysis thread",
+            label: revision ? "Drafted reviewable analysis plan" : clarificationRequired ? "More information needed" : "Created analysis thread",
             details: { analysisThreadId: thread.id, planRevisionId: revision?.id || null },
             createdAt: nowIso(),
           },
@@ -830,7 +847,7 @@ export class AnalysisService {
         updatedBy: auth.user.id,
       });
       if (!agentRun) throw new ApiError(500, "agent_run_update_failed", "Agent run could not be updated.");
-      if (!revision && warnings.some((warning) => warning.code !== "analysis_evidence_required")) {
+      if (!revision && warnings.some((warning) => !isPlanningInputWarning(warning.code))) {
         await store.updateAnalysisThread(thread.id, { status: "plan_failed", updatedBy: auth.user.id });
       }
       thread = await this.repository.findAnalysisThreadById(thread.id);
