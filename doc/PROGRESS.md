@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-09-30
+Last reviewed: 2026-10-01
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -12,6 +12,175 @@ Keep entries concise, newest first, and include:
 - meaningful changes
 - verification
 - follow-ups or residual risk
+
+## 2026-10-02 — Lightsail 8GB cutover and Docling release preparation
+
+- User confirmed production is 2GB / 2 vCPU and approved the 8GB IPv4 plan at
+  $44/month, retaining the old instance for rollback. Read-only AWS/SSH checks
+  verified the correct account, instance, static IP, services and 8GB bundle.
+- Browser/normal shell sandbox remains unavailable. Approved shell access
+  outside that sandbox recovered the existing CLI profile and SSH key; no
+  credentials were copied or exposed. The separate SSO profile is expired.
+- Fresh database/files backup UTC 20261002030236 passes gzip/tar integrity;
+  snapshot is available and `labrat-prod-8gb-20261001` now serves production
+  at the unchanged static IP. Final checkpoint UTC 20261002040214 restored
+  with hashes/table counts matching. A first clone restore used the wrong DB
+  owner and safely resumed the old site; verified `labrat_app` fixed the rerun.
+- Locked Linux CPU dependencies and frozen assets pass formal service smoke
+  and all PDF cases: paper 11 pages / 62,631 characters / 29 anchors, 63.177s,
+  1.90GiB peak RSS. Deployment/rollback/environment checks pass. Old instance
+  is stopped and retained; its charge and snapshot storage continue.
+- Preflight passed; origin/main remains 933c5fc. Linux runtime validation,
+  actual main-workflow deployment and hosted upload/pages/Q&A remain gates.
+  Evidence: doc/qa/docling-lightsail-deployment.md.
+
+## 2026-10-01 — Docling M4 local acceptance complete
+
+- Completed M0–M4 / A01–A15 in the attached routing worktree. The 11-page
+  paper retains 62,631 characters and all 29 frozen anchors; final real
+  Docling upload/recovery suite passes with the font-free 26-asset package.
+- Reviewed six real DeepSeek cases against their actual windows. Preserved
+  initial D05 absence overclaim and affected over-reading failures; fixed
+  keyword miss backfill, scoped gap wording and advisory budget feedback.
+  Final original catalyst answer uses 26,951 actual total tokens; price gap
+  uses 20,184. Six initial cases plus six affected reruns used 48 requests;
+  full usage and semantic review are in the QA report, without hidden cost estimates.
+- Final codex:verify: 483 frontend, 420 Node with nine existing skips, 74 Nest;
+  API generation, builds and entry smoke pass. Additional PostgreSQL historical
+  PDF/Word/TXT, Excel review boundaries, pending tasks and selected scope pass.
+  Initial corpus initialization/default-wait failures and one unexpected
+  concurrent test-worker exit are preserved; corrected/separate reruns pass.
+- Added original licenses/model cards, installed-runtime notice export, local
+  setup/retention/rollback and manual retest. Tests do not establish Linux/container
+  deployment or perfect OCR/formula interpretation. Review original pages;
+  semantic retrieval and production release remain separate.
+- Details: doc/qa/docling-pdf-pages-verification.md and services/docling/README.md.
+  Test backend/frontend/parser/database stopped; evidence and caches retained.
+  Final diff/script/license checks pass. No push, merge, production migration or deployment.
+
+## 2026-10-01 — Docling M3 page reading, budget and browser integration
+
+- Added whole-page keyword/literal discovery with UTF-16 match cursors,
+  selected-version enforcement, frozen page windows, pinned original-image
+  highlights and compact document payloads. Real isolated DB tests cover long
+  Chinese/formula matches, duplicate names, archive/history and revoked sessions.
+- Replaced byte-as-token reservation: Anthropic uses its model-specific count
+  endpoint; DeepSeek uses a multilingual estimator calibrated against the
+  official V4 tokenizer on eight synthetic cases. Actual cache fields are
+  provider-specific, unknown usage stays reserved, and retry counters persist.
+  Nineteen focused Node tests pass; the 19,999-token regression is included.
+- Added recognized-page text/quality display, continued text loading, same-page
+  window groups, cancellation and explicit reprocessing of the saved PDF.
+  Real Chromium checks pass for all 11 paper pages / 29 anchors, seven synthetic
+  PDF types, cancellation/retry/refresh, long Unicode pages, rotation highlights,
+  old citations after reprocessing, 390px layout and browser back/forward.
+- The first browser run exposed sibling React key collisions leaving stale page
+  controls after navigation. Fixed distinct text/image keys; all paper pages and
+  an added integrated navigation test pass. A separate test harness initially
+  mistook the offscreen closed Ask panel for open; corrected without product changes.
+- Full regression before that final UI fix passed: 482 frontend / 418 Node
+  (9 existing skips) / 74 Nest plus API/build/entry smoke. The final focused UI
+  suite passes 18 tests; M4 will rerun full verification. Initial/fixed browser
+  evidence, tokenizer calibration and same-text payload measurements are retained.
+  M4 real-provider cases and distribution/license completion are active. No deployment.
+
+## 2026-10-01 — Docling M2 real service and durable processing
+
+- Added the local-only authenticated adapter, independent PDF preflight,
+  provenance-based canonical pages, explicit quality states and stable UTF-16
+  windows. Original paper stores 11 pages / 62,631 characters with 29/29 frozen
+  anchors; native tables/rotation/long pages and real scan/mixed samples pass.
+- PostgreSQL owns task IDs, attempts, deadlines, backoff and one CPU lease.
+  Actual backend restart reuses an upstream task; missing-task recovery submits
+  once more. Forced restart of the verified local Docling process during the
+  paper conversion finishes with exactly two attempts and eleven unique pages.
+- Added cancellation and current-session fencing, concurrent-claim/stale-token/
+  archive/Guest tests, plus bounded nonretryable encrypted/corrupt handling.
+  Session FK now allows deletion by clearing its private runtime reference.
+- Added fixed runtime/model manifests, checksum-enforcing preparation/startup
+  and operating notes under services/docling. Auto-review rejected arbitrary
+  endpoint capability; the safer adapter restricts destinations to loopback and
+  the fixed private service name, with redirects forbidden. Retest passed.
+- Full codex:verify passes: 479 frontend, 412 Node (9 existing skips), 74 Nest,
+  builds/API/entry smoke. Three focused storage/legacy DB cases, real service
+  lifecycle suite and separate service-restart case pass. See the verification
+  report for measured scope. M3 page Q&A/budget/UI is next; final browser/provider
+  gates and asset-specific distribution notices remain M4 work. No deployment.
+
+## 2026-10-01 — Docling M1 canonical page storage
+
+- Added migration 038, strict complete-page records, immutable partial retry,
+  page directory/text APIs and generated v1 types. Legacy checkpoint bodies and
+  passage references remain unchanged; model/runtime fields are private.
+- Actual isolated PostgreSQL upgrade/replay and HTTP checks passed: >13k Unicode
+  page reconstruction, size-limit rollback, failed-page fill, successful-page
+  conflict, version pinning and View/selected/other-project isolation.
+- The first integration run exposed a late-write gap after session revocation;
+  result transactions now recheck the active session. Fixed and retested. An
+  initial test-fixture storage column typo was corrected before the real checks.
+- Five page unit tests and full codex:verify passed: 479 frontend, 407 Node
+  backend (9 existing skips), 74 Nest, generated API/build/entry smoke checks.
+  PostgreSQL acceptance is separate from that default command. M2 service,
+  normalization and durable recovery now start; M3–M4/A01–A15 remain open.
+
+## 2026-10-01 — Docling M0 real parser baseline
+
+- Real service tested the original paper and seven controlled native/scan/mixed/
+  error cases. Pinned service 1.21.0 / parser 2.96.1 with official PDFium backend
+  returns all 11 paper pages, 29/29 frozen anchors in 44.781 s, sampled peak
+  process-tree RSS about 2.37 GiB. Scan and mixed content use real local OCR.
+- Preserved first incompatible dependency startup and default-backend partial
+  result (pages 7–11 absent despite eleven page metadata entries). Corrected a
+  fixture Unicode CMap defect; retest preserves Chinese, emoji and symbols.
+- Added repeatable fixture/probe/audit scripts and the acceptance ledger. M1
+  storage now starts; no final gate is complete. Low-quality success, formula
+  source fields, list markers and cross-page/rotation coordinates need explicit
+  normalization handling; see doc/qa/docling-pdf-pages-verification.md.
+- No production changes. Local authenticated Docling service remains running
+  on port 5059 for subsequent end-to-end validation.
+
+## 2026-10-01 — Start Docling PDF pages Goal / M0
+
+- Started the user-authorized M0–M4 Goal in the attached worktree; protected all
+  prior planning/diagnosis changes and the unrelated primary checkout.
+- Preflight passed; freshly fetched origin/main 933c5fc is already included in
+  HEAD 8946d90. Activated the plan and current milestone without changing the
+  completed routing or deployed Q&A records.
+- CPU host has 31.7 GiB RAM. Docker engine is unavailable; preparing an isolated
+  fixed-version official Python service with model/cache files on D:.
+- Real parsing, frozen-anchor/OCR checks and M1–M4 acceptance are pending.
+
+## 2026-10-01 — Prepare Docling page-storage Goal package
+
+- User requested an executable Goal-mode document and launch prompt following
+  the Docling architecture discussion. Added doc/plans/docling-pdf-pages-v1.md
+  and doc/plans/docling-pdf-pages-goal.md; linked them from START_HERE.
+- The plan defines M0–M4, A01–A15 acceptance, real Docling/DB/browser/provider
+  evidence, compact page storage, recoverable jobs, old-citation compatibility
+  and the byte/token budget correction. Semantic chunks and pgvector are later.
+- Checked current code/contracts and official Docling/Goals documentation.
+  Planning files are in the attached worktree at baseline 8946d90; the dirty
+  primary checkout and existing diagnosis materials are preserved.
+- Documentation-only verification: whitespace and local-link checks; no code,
+  runtime, database or production changes. No Goal or implementation started.
+  Current execution milestone remains unchanged until the user launches it.
+
+## 2026-10-01 — Diagnose PDF source labels and Q&A reading limit
+
+- User requested causes only for an uploaded paper, then asked to assess a
+  second diagnosis. No application code, production state or deployment changed.
+- Independent PDF inspection, local application parsing and approved production
+  aggregate queries confirm all 11 pages indexed as ready. Repeated Page labels
+  represent distinct passages; Sources read counts documents/version groups.
+- Matched production counters show qa_token_limit before the next request:
+  3 model requests, 4 tool calls, 19,999 reported tokens, six windows containing
+  only 387 text characters. Byte-based reservation and line-level fragmentation
+  explain the failure; a no-network budget probe confirms the mechanism.
+- Corrected the second diagnosis's read-count, thinking, pricing and evidence-loss
+  claims. Detailed production-content retrieval was rejected; approved queries
+  returned only anonymous counters and metadata, without IDs or source text.
+- Evidence and limits: doc/qa/pdf-reading-limit-diagnosis-2026-10-01.md. Local
+  renders were inspected; documentation diff checks pass. Fixes remain out of scope.
 
 ## 2026-09-30 — Integrate current main into frontend routing
 

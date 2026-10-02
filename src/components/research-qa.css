@@ -54,3 +54,7 @@
 .qa-profile dt { font-weight: 600; font-size: 12px; }
 .qa-profile dd { margin: 3px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 600px) { .qa-panel.agent, .qa-panel.agent.expanded { width: 100vw; right: 0; } .qa-evidence-dialog { padding: 10px; } }
+.qa-page-text { margin: 12px 0; padding: 10px 12px; border: 1px solid #dce1ec; border-radius: 8px; font-size: 13px; }
+.qa-page-text p { margin: 6px 0; }
+.qa-page-text ul { padding-left: 20px; }
+.qa-page-text pre { max-height: 55vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }

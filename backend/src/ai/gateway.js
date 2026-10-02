@@ -131,7 +131,7 @@ export function createAiGateway({ config = {}, fetchImpl = globalThis.fetch, now
     const requestFn = withTools
       ? selectedAdapter.requestJsonWithTools
       : selectedAdapter.requestJson;
-    return requestFn({ ...request, config: settings, fetchImpl: budget ? budget.wrapFetch(fetchImpl) : fetchImpl });
+    return requestFn({ ...request, config: settings, fetchImpl: budget ? budget.wrapFetch(fetchImpl, { provider: settings.provider }) : fetchImpl });
   };
 
   const requestStructuredInternal = async ({

@@ -1,10 +1,57 @@
 # Current Milestone
 
-Status: Frontend routing integrated with current main and verified locally; not deployed
+Status: Docling PDF pages v1 complete locally; authorized Lightsail 8GB upgrade and production deployment in progress
 Read when: checking what the next implementation slice should be.
-Last reviewed: 2026-09-30
+Last reviewed: 2026-10-01
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
+
+## Active deployment: Lightsail 8GB and Docling
+
+The user confirmed the current 2GB / 2 vCPU plan and explicitly approved the
+8GB / 2 vCPU / $44-month plan on 2026-10-01. Existing credentials recovered
+official AWS CLI access despite the local browser sandbox failure. Pre-upgrade
+database/files backup integrity passed; the Lightsail snapshot is available.
+`labrat-prod-8gb-20261001` is now serving production with 8GB / 2 vCPU at the
+same static IP. Formal Linux service and PDF validation passed: 11 pages /
+62,631 characters / 29 anchors. The final paused data checkpoint restored with
+all table counts matching; the old instance is stopped and retained. Application
+release c8a5869 remains active until the Docling main workflow completes.
+Follow `doc/qa/docling-lightsail-deployment.md` for durable release checkpoints.
+Publish the verified Docling release and validate actual upload/pages/Q&A.
+Retain the old instance and checkpoints for rollback.
+
+## Completed local Goal: Docling PDF pages v1
+
+2026-10-01: executing [M0–M4](plans/docling-pdf-pages-v1.md) in the existing
+frontend-routing-phase1 worktree. HEAD 8946d90 includes freshly fetched
+origin/main 933c5fc. The primary checkout and existing planning/diagnosis edits
+are preserved. Preflight passed. M0 tested the real 11-page paper plus native,
+scan, mixed, blank, low-quality, encrypted and corrupt fixtures. Pinned official
+service 1.21.0 / parser 2.96.1 with PDFium covers all 11 pages and 29 frozen
+anchors. First startup/default-backend/fixture failures are preserved in
+[verification](qa/docling-pdf-pages-verification.md). M1 canonical page storage,
+contracts and isolated PostgreSQL checks pass, including Unicode windows and
+session-revocation fencing. M2 actual upload/Docling/DB passes with all 11 pages,
+62,631 characters and 29 anchors. Backend restart resumes the same task; an
+actual forced Docling restart recovers with two total attempts and no duplicate
+pages. Full regression passes (479 frontend, 412 Node + 9 existing skips, 74 Nest).
+M3 page Q&A, provider-aware token budgets and UI are implemented. Real PostgreSQL
+scope/history tests and Chromium upload/read/citation checks pass, including all
+11 pages / 29 anchors, seven PDF fixture types and desktop/390px navigation.
+The first browser run found stale page controls from colliding React keys;
+distinct keys and an integrated regression test fix it. M4 completed all six
+frozen real-provider cases against the configured DeepSeek service. D01/D05
+reruns fixed absence wording, irrelevant search backfill and excess reading;
+all initial failures are retained. Final full regression passes 483 frontend /
+420 Node (nine existing skips) / 74 Nest. Word/TXT/Excel/history/permissions
+PostgreSQL regressions pass. The final runtime excludes an unused visualization
+font, retains original notices, and passes the real ingestion/recovery suite:
+11 paper pages, 62,631 characters and 29 anchors. A01–A15 are audited in the
+verification report; local setup and rollback are in services/docling/README.md.
+CPU validation uses the checksum-verified offline Python service on localhost:5059;
+Docker Desktop is installed but its engine is not running.
+This goal excludes production changes, semantic chunks and vector search.
 
 ## Frontend routing phase one
 

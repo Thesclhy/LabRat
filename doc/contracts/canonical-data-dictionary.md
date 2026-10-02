@@ -65,6 +65,14 @@ logical source, with immutable original FileObject/content hash and parser/OCR
 version on each DocumentVersion. Passages retain original page/region,
 part/paragraph/table or line/character positions and recognition uncertainty.
 Completed pages can be checkpointed; lifecycle state does not change their text.
+New Docling PDF versions instead store complete canonical physical pages in the
+same page table, distinguished by body.schemaVersion=2. Ordered block/table-cell
+UTF-16 ranges point into one full page text; page-level geometry/status/warnings
+are saved once. Version-level file/hash/config and private recoverable-task fields
+are not repeated per page. Successful canonical pages and historical passages are
+immutable; failed pages alone may be completed by a bounded same-version retry.
+See the canonical-page section of research-qa-v1.md and migration 038. Semantic
+chunks and vector indexes are future derivations, not the primary stored text.
 Archiving removes current retrieval eligibility and retains historical references.
 These are source statements available after parsing, not accepted experimental
 meanings, values or analysis inputs. Excel continues using SourceDocument and

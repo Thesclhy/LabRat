@@ -1,7 +1,7 @@
 # Research Q&A v1 contract
 
-Status: read-only source-trace revision deployed and verified 2026-09-30
-Last reviewed: 2026-09-30
+Status: deployed source-trace baseline; Docling page revision implemented and verified locally, not deployed
+Last reviewed: 2026-10-01
 
 Scope: the confirmed research Q&A plan and acceptance matrix. This contract
 extends read-only evidence, not scientific acceptance or analysis execution.
@@ -111,14 +111,113 @@ manuscript actions retain their separate review boundaries in the shared panel.
 
 ## Local processing
 
-Adapters verified on synthetic fixtures: PDF.js for text and raster page rendering;
+The deployed legacy adapter uses PDF.js for text and raster page rendering;
 Tesseract.js with packaged English/Simplified-Chinese traineddata for OCR;
 word-extractor for binary DOC; bounded ZIP/XML traversal for DOCX; explicit
-UTF-8/UTF-16/GB18030 decoding for TXT. No OCR/document service is introduced.
+UTF-8/UTF-16/GB18030 decoding for TXT. Word/TXT and historical PDF versions retain
+those paths. The local Docling revision introduces an authenticated self-hosted
+docling-serve service, standard pipeline with pinned local layout/TableFormer/OCR
+models and PDFium backend. No remote OCR, document URL fetching or generated
+scientific extraction is enabled. Original page previews remain PDF.js.
 No document-provided URL, macro, formula or embedded program is executed.
 PDF coordinates use the original page's displayed rotation and normalized
 top-left rectangles, with page dimensions/rotation retained for exact rendering.
 OCR confidence is the engine's recognition score, never scientific certainty.
+
+### Canonical PDF pages (local revision, migration 038)
+
+New PDF processing versions use `context_document_pages.body.schemaVersion=2`.
+Legacy completed-page checkpoints and passage rows are neither migrated nor
+rewritten. A canonical page contains `page`, `status` (ready, empty, needs_review,
+failed), full `text`, displayed `width`/`height`, original `rotation`, ordered
+`blocks` and bounded warning codes. Each block stores one stable id, kind and
+UTF-16 `[start,end)` range; optional normalized top-left bbox and table row/column
+cell ranges refer to the same page text. Common file/hash/parser/config metadata
+belongs to the version. There is no duplicate full text in block metadata.
+
+Complete page text has no 4,000-character storage cap. The existing two-million
+character document cap and 24 MiB normalized-result cap remain. Every physical
+page is represented; empty is independently established, not inferred from OCR
+returning no text. Sparse OCR and formulas retain explicit recognition/structure
+warnings. Missing scores are not invented. Python provenance indices are converted
+to UTF-16 after extracting exact source spans. Formula/list `orig` may preserve
+source text omitted from `text`; derived/uncertain formatting is not presented as
+a verified scientific value. Ambiguous coordinates have page precision.
+
+Canonical page writes require a current version lease, active document and current
+full-project proposal authorization in one transaction. Identical repeated pages
+are idempotent; ready/empty/needs_review bodies are immutable. Only failed pages
+may be filled in during a bounded retry; a changed successful body is a conflict.
+A format mismatch never overwrites a historical checkpoint. Version completion
+follows an atomic, contiguous 1..pageCount page set and enforces whole-file limits.
+
+Migration 038 also adds private task id, actor/session ids, attempt start time,
+attempt count and retry time on DocumentVersion. They are not returned in public version responses or
+page/model metadata. Recovery must reconstruct current session/user/project access;
+no serialized AuthContext is a capability. The service/state-machine revision is
+tracked in the active plan. One database-fenced CPU lease is active at a time.
+The original live session and current full-project propose permission are checked
+again at lease renewal and commit. Session deletion sets the private reference to
+null and requires a currently authorized user to retry; it does not block session
+cleanup or preserve the old user's authority.
+
+The adapter permits only loopback origins or the fixed private `docling` service,
+never a document-supplied URL or redirect. Service versions and pinned local model
+hashes must match the processing version. Native PDF preflight independently
+checks physical pages, geometry, encryption, text limits and visible blankness.
+Standard Docling uses PDFium, RapidOCR and TableFormer with remote services off.
+All text is normalized from provenance, with source `orig` preserving formulas
+and list markers. Ambiguous cross-page offsets fail affected pages; inconsistent
+coordinate frames downgrade only the affected location. OCR/image/formula
+limitations remain explicit, without fabricated confidence scores.
+
+Successful pages are immutable across retries. Pending jobs and upstream task IDs
+survive backend restarts; missing tasks allow at most three total submissions.
+Each submission has a six-minute local observation deadline (upstream document
+timeout is five minutes); an uncertain submission response waits out that window
+before another attempt. Poll failures retain a known task ID. Exponential retry
+delay caps at 30 seconds. Encrypted, corrupt and oversize sources are not retried.
+`POST .../cancel` requires full-project propose and fences all late writes; no
+upstream cancellation guarantee is made. Existing page records remain readable.
+The dedicated local service retains fetched results for an hour; the backend
+clears completed results older than an hour every ten minutes while running.
+Runbook lifecycle cleanup handles service scratch data and offline periods.
+
+`GET .../context-document-versions/{versionId}/pages` returns a bounded directory
+of canonical page summaries. `GET .../pages/{pageNumber}/text` returns at most
+4,000 UTF-16 units and 200 intersecting blocks, with absolute start/end and explicit
+nextCursor; cursors cannot split surrogate pairs. Joining sequential windows
+exactly reproduces the saved page, including separators. These routes require
+current full-project read, and do not substitute latest for the pinned version.
+Legacy versions return `document_page_format_unsupported` and retain their passage
+routes. `GET .../pages/{pageNumber}` remains the original PNG endpoint.
+
+Discovery returns `document_page` hits for schema-2 pages, including a physical
+page number and UTF-16 cursor near the matched text. The bounded PostgreSQL
+simple-text index supplements whole-page literal matching for chemical identifiers
+and Chinese text. Scope, active document, readable status and pinned/current version
+conditions apply in SQL before ranking. A nonempty keyword query returns matches
+only; it does not silently add the selected document's first pages on a miss.
+An empty query still provides bounded source discovery. Search snippets are never read evidence.
+`read_document_page` freezes the actual text, version/hash/processing version,
+physical page and absolute `[start,end)` range. It returns at most 4,000 characters,
+page status/warnings and a continuation cursor; it cannot read undiscovered or
+unselected versions. Empty/failed page windows do not imply absence of facts.
+`document_passage` remains the explicit historical/Word/TXT evidence type.
+
+The model projection of either document evidence type contains only evidence id,
+page when applicable, text, read status, necessary warnings and continuation.
+Coordinates, hashes, complete coverage and raw parser results stay server-side.
+Frozen evidence and trace retain every actual read. The source endpoint resolves
+new page highlights from the pinned immutable page after checking its saved text
+range/hash/processing version; a missing precise box is disclosed. It never uses
+the latest version to resolve an old citation. Same-page UI groups preserve a
+separate link for each read window.
+
+Reference library reprocessing explicitly registers the existing FileObject with
+documentId and expectedVersion. Changed processing configuration creates a new
+version; an existing identical file/configuration returns that version idempotently.
+No background migration reparses historical documents.
 
 ## Initial resource budgets
 
@@ -128,8 +227,8 @@ These are enforceable engineering limits, not measured latency guarantees.
 | --- | --- |
 | Source file | 25 MiB |
 | PDF | 200 pages; 12 million raster pixels/page; 40 s/page |
-| Parse attempt | 180 s; one document worker; 512 MiB JS heap |
-| Concurrent ingestion | 2 backend workers; 1 active attempt per version |
+| Parse attempt | Native preflight/legacy parser: 180 s / 512 MiB JS heap; Docling: 300 s conversion / 360 s observation / 3 submissions |
+| Concurrent ingestion | 2 legacy workers; 1 database-fenced Docling CPU attempt; 1 active attempt per version |
 | DOCX archive | 64 MiB expanded total; 2,000 entries; no DTD/entities |
 | Text/index | 2 million characters; 10,000 passages; 4,000 characters/passage |
 | Question | 4,000 characters |
@@ -141,8 +240,9 @@ These are enforceable engineering limits, not measured latency guarantees.
 
 An isolated process provides time/heap fault containment, not a hardened OS
 sandbox or a claim of a strict total resident-memory ceiling. Raster and archive
-limits also bound native allocations. Completed PDF pages are checkpointed;
-failed pages may be retried within another bounded attempt. All omitted pages
+limits also bound native allocations. Historical PDF pages use legacy checkpoints;
+Docling conversion resumes by persisted task id and writes its canonical page set
+atomically. Failed pages may be filled during another bounded attempt. All omitted pages
 and unreadable parts are explicit. A question never triggers OCR itself.
 
 Document passage reads also include immediately adjacent passages when their
@@ -163,7 +263,7 @@ Browser UTF-8 upload filenames retain their original Unicode text.
 The model chooses the first tool from the question and selected context; there is
 no unconditional document search. Existing calculation/diagnosis routing remains
 as an early handoff, and the tool set has no execution or publication capability.
-Search covers uploaded passages, confirmed regions and accepted field names, not
+Search covers canonical PDF pages, historical/Word/TXT passages, confirmed regions and accepted field names, not
 unconfirmed workbook indexes. Selected-only questions expose only document search/read
 tools, in addition to enforcing the same scope server-side. Exact experiment names/aliases must resolve before
 a pinned snapshot read. Short abbreviations match whole tokens. Search misses
@@ -221,10 +321,25 @@ interrupted/failed attempt, `/cancel` cancels it, and `/evidence/{evidenceId}` o
 the saved source window. These operations require current full-project read and
 exclude public Guest. The mixed AgentRun action route keeps propose.
 
-Question model repairs share a maximum of twelve provider requests/eight tool
-rounds/twenty-four calls. Each transport reserves a conservative UTF-8 byte-based
-token upper bound before sending, then reconciles reported usage. Unknown usage
-keeps the reservation; cost is null when no provider price is known. Up to three
+Question model repairs share a maximum of twelve generation requests/eight tool
+rounds/twenty-four calls. Anthropic input uses the selected model's count-tokens
+endpoint on the same configured provider, including tools/history/output schema,
+plus 5% and 256 framing tokens; max_tokens is reserved separately for output.
+Counting has an eight-second deadline and at most 24 count calls across attempts.
+If counting is unavailable, generation does not start and the user sees a retryable
+counting failure. No fallback treats UTF-8 bytes as tokens. DeepSeek text-only input
+uses the documented multilingual character estimator calibrated with its published
+V4 tokenizer (including JSON/tools, symbols and identifiers), with a safety margin.
+This estimate is not an exact server count. Changing to another model family
+requires recalibration. Per-request method/model, estimated/reserved input, output
+reservation, byte size, timing and actual usage are recorded without prompt content.
+
+Reported usage releases only that request's reservation. Anthropic input includes
+its additive cache creation/read fields; DeepSeek prompt_tokens already includes
+cache hits/misses. Reasoning is not added twice to output. Unknown/malformed usage
+or an uncertain transport keeps its reservation. The 60,000 aggregate token limit
+still applies, independently of discounted cache pricing. Cost remains null when
+no provider price is known. Up to three
 explicit attempts share persisted request/token counters and elapsed active time.
 Time between explicitly stopped attempts is excluded; an interrupted attempt's
 unknown interval since its last checkpoint is conservatively reserved up to the

@@ -19,6 +19,8 @@ export interface V1Config {
   analysisWorkerEndpoint: string;
   analysisExecutorTimeoutMs: number;
   fileStorageRoot: string;
+  doclingEndpoint?: string;
+  doclingApiKey?: string;
 }
 
 export function loadV1Config(): V1Config {
@@ -29,5 +31,6 @@ export function loadV1Config(): V1Config {
       code: "unsafe_config",
     });
   }
-  return config;
+  return { ...config, doclingEndpoint: process.env.LABRAT_DOCLING_ENDPOINT || "",
+    doclingApiKey: process.env.LABRAT_DOCLING_API_KEY || "" };
 }

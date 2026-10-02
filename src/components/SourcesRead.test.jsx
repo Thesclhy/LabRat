@@ -33,3 +33,17 @@ test('historical cited-only artifacts are not relabeled as complete reading reco
   fireEvent.click(screen.getByText('Saved sources · 1'));
   expect(screen.getByText(/a complete reading record is not available/)).toBeTruthy();
 });
+
+test('same-page windows stay individually accessible under one page label', () => {
+  const onOpen = vi.fn();
+  render(<SourcesRead artifact={{ answer: { provenanceVersion: 2 }, evidence: [
+    { ...passage('a', 2), kind: 'document_page' }, { ...passage('b', 2), kind: 'document_page' }, passage('old', 2), passage('c', 3),
+  ] }} onOpen={onOpen} />);
+  fireEvent.click(screen.getByText('Sources read · 1'));
+  fireEvent.click(screen.getByText('Page 2 · 3 passages'));
+  for (const [index, id] of ['a', 'b', 'old'].entries()) {
+    fireEvent.click(screen.getByRole('button', { name: `Passage ${index + 1}` }));
+    expect(onOpen).toHaveBeenLastCalledWith(id);
+  }
+  fireEvent.click(screen.getByRole('button', { name: 'Page 3' })); expect(onOpen).toHaveBeenLastCalledWith('c');
+});

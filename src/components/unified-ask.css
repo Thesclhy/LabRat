@@ -69,6 +69,9 @@
 .reference-file-name > button { border: 0; text-align: left; padding: 0; max-width: 100%; overflow-wrap: anywhere; font-size: 14px; color: #374769; }
 .reference-file-name small { display: block; font-size: 11px; color: #758097; margin-top: 4px; }
 .reference-row-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.ask-page-windows { border: 1px solid #dce1ec; border-radius: 7px; padding: 6px 9px; }
+.ask-page-windows summary { cursor: pointer; }
+.ask-page-windows button { margin: 6px 6px 0 0; }
 .reference-empty { padding: 35px 0; text-align: center; color: #6d7b91; }
 .reference-versions { margin-top: 20px; border: 1px solid #e0e4ee; border-radius: 12px; padding: 15px; background: #fff; }
 .reference-versions h3 { font-size: 15px; overflow-wrap: anywhere; }

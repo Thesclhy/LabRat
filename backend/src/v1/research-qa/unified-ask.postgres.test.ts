@@ -32,7 +32,7 @@ describe.skipIf(!databaseUrl)("unified Ask reference identities and scope", () =
           await vi.waitFor(async () => {
             const current = await app!.inject({ method: "GET", url: `${base}/context-document-versions/${result.version.id}`, headers: { cookie: view.cookie } });
             expect(current.json().version.status).toBe("ready");
-          });
+          }, { timeout: 10000, interval: 100 });
           return { ...result, file };
         };
         const first = await register("Original method requires a dry sample."), separate = await register("Independent method uses a wet sample.");

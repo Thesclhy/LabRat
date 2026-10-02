@@ -85,7 +85,8 @@ export class ResearchQuestionsService implements OnModuleDestroy {
     const evidence = answer?.evidence.find((item) => item.id === evidenceId);
     if (!evidence) throw new ApiError(404, "evidence_not_found", "Evidence not found.");
     await this.evidence.authorize(auth, projectId);
-    return { evidence, capturedAt: answer!.createdAt };
+    return { evidence: evidence.kind === "document_page" ? await this.documents.pageCitation(auth, projectId, evidence) : evidence,
+      capturedAt: answer!.createdAt };
   }
 
   async retry(auth: AuthContext, projectId: string, runId: string) {
@@ -171,7 +172,7 @@ export class ResearchQuestionsService implements OnModuleDestroy {
         answer.limitations = [...new Set([...(answer.limitations || []), ...selected.flatMap((item: any) => [
           ...(item.warnings || []).map((warning: any) => typeof warning === "string" ? warning : warning.message || warning.code),
           ...(item.coverage?.status === "partial" ? ["This source is only partially readable; unread portions are not evidence."] : []),
-          ...(item.data?.uncertain ? ["OCR text is uncertain. Inspect the original page before relying on it."] : []),
+          ...(item.data?.uncertain ? ["Text recognition or layout needs review. Inspect the original page before relying on it."] : []),
           ...(Object.entries(item.coverage || {}).some(([key, value]) => key.startsWith("next") && (Array.isArray(value) ? value.length > 0 : value != null))
             ? ["Only the listed windows were read; additional records remain available."] : []),
         ]).filter(Boolean)])].slice(0, 24);

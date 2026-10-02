@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { contextDocumentPageUrl, getContextDocumentVersion } from "../data/researchQaApi.js";
+import { PdfPageText } from "./PdfPageText.jsx";
 
 // The source-page endpoint shares the contract's 200-page processing limit.
 const previewLimit = 200;
@@ -59,11 +60,15 @@ export function PdfSourceViewer({ projectId, evidence, cited, onPageChange }) {
     </nav>
     {navigationError && <p className="qa-warning" role="alert">Page navigation: {navigationError} <button type="button" onClick={() => setRefresh((value) => value + 1)}>Retry page count</button></p>}
     {total > previewLimit && <p className="qa-warning">Preview is available for the first {previewLimit} of {total} pages.</p>}
-    {cited && <p className="qa-pdf-citation-note">{highlighted ? "Cited text is highlighted on this page." :
+    {cited && <p className="qa-pdf-citation-note">{highlighted ? (evidence.locator.rectangles?.length
+      ? (evidence.kind === 'document_page' ? 'Source regions containing the read text are highlighted.' : 'Cited text is highlighted on this page.')
+      : 'The source text was located to this page; an exact highlight is not available.') :
       <button type="button" onClick={() => changePage(evidence.locator.page)}>Return to cited page {evidence.locator.page}</button>}</p>}
     {uncertain && <p className="qa-warning">OCR is uncertain. Check the original page before relying on its text or numbers.</p>}
     {pageCoverage && pageCoverage.status !== "ready" && <p className="qa-warning">Searchable text is incomplete on this page. You can still inspect the original below.</p>}
-    <PdfPage key={`${projectId}:${evidence.version.versionId}:${page}`} projectId={projectId} evidence={evidence} page={page} highlighted={highlighted} />
+    {(metadata.pageSchemaVersion === 2 || evidence.kind === 'document_page') && <PdfPageText
+      key={`text:${projectId}:${evidence.version.versionId}:${page}`} projectId={projectId} versionId={evidence.version.versionId} page={page} />}
+    <PdfPage key={`image:${projectId}:${evidence.version.versionId}:${page}`} projectId={projectId} evidence={evidence} page={page} highlighted={highlighted} />
     {highlighted && evidence.data?.text && <section aria-label="Cited text"><h3>Cited text</h3><blockquote className="qa-source-text">{evidence.data.text}</blockquote></section>}
     <details><summary>Source scope and warnings</summary><pre className="qa-source-text">{JSON.stringify({ coverage: metadata.coverage || evidence.coverage, warnings: metadata.warnings || evidence.warnings }, null, 2)}</pre></details>
   </>;

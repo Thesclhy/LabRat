@@ -14,6 +14,15 @@ the old prose numeric/quotation acceptance rules; unrelated safeguards remain.
 
 ## Current Direction
 
+For the next PDF parsing phase, read
+[Docling PDF pages v1](plans/docling-pdf-pages-v1.md) and its
+[Goal launch prompt](plans/docling-pdf-pages-goal.md). As of
+2026-10-01, M0–M4 / A01–A15 pass locally; see
+[verification](qa/docling-pdf-pages-verification.md). It covers self-hosted Docling,
+page storage and citations, recoverable processing and token-budget correction;
+semantic chunking and pgvector are later work. The current execution checkpoint
+is in current-milestone.md; this feature is not deployed.
+
 For the active local frontend navigation goal, read
 [phase-one routing](plans/frontend-routing-phase1.md). It changes main-page
 navigation and draft protection, without changing API or scientific contracts.

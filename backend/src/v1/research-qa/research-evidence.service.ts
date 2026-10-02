@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import * as XLSX from "xlsx";
-import { EvidenceRegistry, evidenceHash, documentCoverage, projectContextWindow, QA_LIMITS, RESEARCH_TOOLS } from "../../research/evidenceTools.js";
+import { EvidenceRegistry, evidenceHash, documentCoverage, projectContextWindow, searchTerms, QA_LIMITS, RESEARCH_TOOLS } from "../../research/evidenceTools.js";
+import { readCanonicalPageWindow } from "../../research/documentPages.js";
 import { validateJsonSchema } from "../../ai/schemaValidation.js";
 import { readSourceDocumentRange } from "../../saas/sourceDocuments.js";
 import { EvidenceRepository } from "../evidence/evidence.repository.js";
@@ -93,7 +94,7 @@ export class ResearchEvidenceService {
       if (preferredVersions.length) await this.resolveReferences(auth, projectId, context.referenceDocuments);
     };
     const read = async (name: string, input: any): Promise<any> => {
-      if (context.sourceScope === "selected" && !["search_project_documents", "read_document_passage"].includes(name)) throw missing();
+      if (context.sourceScope === "selected" && !["search_project_documents", "read_document_passage", "read_document_page"].includes(name)) throw missing();
       if (name === "get_project_context") {
         const data = await this.repository.context(projectId);
         if (!data) throw missing();
@@ -107,13 +108,48 @@ export class ResearchEvidenceService {
         const offset = integer(input.cursor);
         const candidates = await this.repository.search(projectId, input.query, offset, preferredVersions, context.sourceScope === "selected");
         const items = candidates.slice(0, QA_LIMITS.search);
-        for (const item of items) if (item.kind === "document") selectedVersions.add(item.target.versionId);
+        for (const item of items) {
+          item.target.matchType = !input.query.trim() ? "discovery" : "keyword";
+          if (["document", "document_page"].includes(item.kind)) selectedVersions.add(item.target.versionId);
+          if (item.kind !== "document_page") continue;
+          const page = await this.documents.findPage(projectId, item.target.versionId, item.target.page);
+          if (!page || page.schemaVersion !== 2) throw missing();
+          // JS regex offsets use the same UTF-16 units as page windows and citations.
+          const matches = searchTerms(input.query).map((term: string) => page.text.search(new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "iu"))).filter((index: number) => index >= 0);
+          const hit = matches.length ? Math.min(...matches) : 0;
+          const block = page.blocks.find((part: any) => part.start <= hit && part.end > hit);
+          let cursor = block && hit - block.start < 3000 ? block.start : Math.max(0, hit - 1000);
+          if (cursor && /[\uDC00-\uDFFF]/u.test(page.text[cursor])) cursor -= 1;
+          item.target.cursor = cursor;
+          let previewStart = Math.max(cursor, hit - 150);
+          if (previewStart && /[\uDC00-\uDFFF]/u.test(page.text[previewStart])) previewStart -= 1;
+          let previewEnd = Math.min(page.text.length, previewStart + 700);
+          if (previewEnd < page.text.length && /[\uDC00-\uDFFF]/u.test(page.text[previewEnd])) previewEnd -= 1;
+          item.target.snippet = page.text.slice(previewStart, previewEnd);
+        }
         return { items, nextCursor: candidates.length > items.length ? offset + items.length : null,
           coverage: { scope: context.sourceScope === "selected" ? "selected_document_versions" : "current_project_sources", readForCitation: false, returned: items.length,
             candidateWindow: candidates.length, complete: candidates.length <= items.length,
             includes: context.sourceScope === "selected" ? ["selected_document_versions"] : ["uploaded_documents", "confirmed_regions", "accepted_field_names"],
-            note: context.sourceScope === "selected" ? "Only the selected document versions were searched. Search snippets are not complete evidence; read relevant passages. No experiment records or other project sources were searched."
+            note: context.sourceScope === "selected" ? "Only the selected document versions were searched. Search snippets are not complete evidence; read relevant passages. complete describes candidate pagination, not full-source reading or proof of absence. No experiment records or other project sources were searched."
               : "Search snippets are not complete evidence. This search includes accepted experiment field names as well as documents and confirmed regions. If a precise query and synonym have no relevant matches, answer insufficient_evidence within that search coverage. Do not enumerate experiments or read every field to prove absence." } };
+      }
+      if (name === "read_document_page") {
+        if (!selectedVersions.has(input.versionId)) throw missing();
+        const version = await this.documents.findVersion(projectId, input.versionId);
+        const document = version && await this.documents.findDocument(projectId, version.documentId);
+        const page = await this.documents.findPage(projectId, input.versionId, input.page);
+        if (!version || document?.status !== "active" || !["ready", "partial"].includes(version.status)
+          || page?.schemaVersion !== 2) throw missing();
+        const window = readCanonicalPageWindow(page, String(input.cursor ?? 0));
+        const evidence = registry.add({ kind: "document_page", label: document.originalName,
+          version: { documentId: document.id, versionId: version.id, versionNumber: version.versionNumber,
+            contentHash: version.contentHash, processingVersion: version.processingVersion },
+          locator: { kind: "pdf", page: window.page, start: window.start, end: window.end, unit: "utf16" },
+          data: { text: window.text, uncertain: window.status === "needs_review" },
+          coverage: { scope: "page_window", status: window.status, totalCharacters: window.totalCharacters,
+            nextCursor: window.nextCursor === null ? null : Number(window.nextCursor) }, warnings: window.warnings });
+        return { evidence };
       }
       if (name === "read_document_passage") {
         if (!selectedVersions.has(input.versionId)) throw missing();

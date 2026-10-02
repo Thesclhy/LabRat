@@ -1,0 +1,37 @@
+{
+  "frozenAt": "2026-10-01",
+  "material": "User-provided public paper and synthetic PDF fixtures only",
+  "reviewRule": "Inspect the actual answer against its read windows and original PDF. These expectations are evaluation labels, never runtime prose filters. Keep initial failures; rerun only affected cases after a fix.",
+  "cases": [
+    {
+      "id": "D01", "source": "paper", "scope": "project",
+      "question": "based on the article i uploaded, what are some catalyst choices i have for my future experiments",
+      "expect": ["Read the paper rather than stop at the old byte-based budget", "Describe source-reported catalyst options including Zn/b-ZnO; separate literature comparisons from a new experiment recommendation", "Do not invent experimental parameters or represent a compared catalyst as tested in the same study without evidence"]
+    },
+    {
+      "id": "D02", "source": "paper", "scope": "selected",
+      "question": "On page 9, after the precursor is dissolved in 1800 mL of water and ammonia is added, what heating temperature and duration are reported for obtaining the b-ZnO precipitate? Use only this paper.",
+      "expect": ["85 °C for 6 h for obtaining precipitate", "Do not substitute the later 80 °C / 5 h drying step", "Read page 9 and provide its source link"]
+    },
+    {
+      "id": "D03", "source": "paper", "scope": "selected",
+      "question": "Using only this paper, summarize the catalyst cycling stability claim on page 1 and the b-ZnO preparation steps on page 9. Keep the reported stability result distinct from the preparation conditions.",
+      "expect": ["Read both pages 1 and 9", "50 successive cycles is a reported stability claim", "Preparation distinguishes 85 °C / 6 h precipitation and 80 °C / 5 h drying; no new calculations"]
+    },
+    {
+      "id": "D04", "source": "scan", "scope": "selected",
+      "question": "Using only this scanned PDF, list the catalyst name and the temperature and yield that you can read. Mention recognition limitations.",
+      "expect": ["Every read is from the selected scan version", "Zn/b-ZnO, 280 °C and 73 wt% correspond to the synthetic scan", "OCR limitations are disclosed; no unrelated paper or accepted experiment values"]
+    },
+    {
+      "id": "D05", "source": "paper", "scope": "selected",
+      "question": "Does this paper report the purchase price in USD of Zn/b-ZnO from Supplier Unlisted-QA-91? Use only this paper and do not estimate a price.",
+      "expect": ["No invented supplier or purchase price", "An evidence gap or scoped insufficient-evidence response", "Do not read every page solely to prove absence"]
+    },
+    {
+      "id": "D06", "source": "low-quality", "scope": "selected",
+      "question": "What catalyst name and exact temperature can you reliably read from this low-quality scanned PDF? Use only this file.",
+      "expect": ["Read the selected low-quality page", "Explain that its sparse/uncertain recognition cannot support the requested name and temperature", "Do not infer missing values or silently use another source"]
+    }
+  ]
+}

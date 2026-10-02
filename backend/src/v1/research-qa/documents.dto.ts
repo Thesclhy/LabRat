@@ -29,3 +29,8 @@ export class ArchiveDocumentDto {
 }
 
 export class EmptyDocumentDto {}
+
+export class DocumentPageTextDto {
+  @IsOptional() @IsString() @MaxLength(20) cursor?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(2) @Max(4000) limit?: number;
+}

@@ -42,6 +42,7 @@ export function CitedAnswerCard({ projectId, runId, canEdit, onAnalysis, onSettl
     {result?.request.status === "cancelled" && <p>Question cancelled.</p>}
     {["failed", "interrupted"].includes(result?.request.status) && <div className="ask-task"><p role="alert">{result.request.failureCode === "qa_citation_invalid"
       ? "This earlier answer failed a citation check. Try the question again."
+      : result.request.failureCode === "qa_token_count_unavailable" ? "The model service could not check the request size. Retry when the service is available."
       : "The answer was not completed. Please try again."}</p><div className="ask-task-actions"><button type="button" onClick={() => action(api.retryResearchQuestion)}>Retry question</button></div><details><summary>Error details</summary>{result.request.failureCode || "Interrupted"}</details></div>}
     {answer?.claims.map((claim, i) => <div key={i} className="qa-claim"><p>{claim.text}</p><div className="qa-citations">{claim.citations.map((citation, n) => {
       const evidence = result.artifact.evidence.find((item) => item.id === citation.evidenceId);

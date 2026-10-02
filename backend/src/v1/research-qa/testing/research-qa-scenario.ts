@@ -7,6 +7,9 @@ import { sha256Hex } from "../../../saas/ids.js";
 import { EvidenceRepository } from "../../evidence/evidence.repository.js";
 import { IdentityService } from "../../identity/identity.service.js";
 import { DocumentsService } from "../documents.service.js";
+import { DocumentsRepository } from "../documents.repository.js";
+import { parseDocument } from "../../../research/documentParser.js";
+import { DOCUMENT_PROCESSING_VERSION } from "../../../research/documentLimits.js";
 
 export const researchProjectId = "project_analysis";
 export async function researchLogin(app: NestFastifyApplication, username = "owner") {
@@ -38,7 +41,19 @@ export async function seedResearchCorpus(app: NestFastifyApplication, databaseUr
     await pool.query(`update project_access_grants set capabilities='["read"]' where user_id='user_reviewer'`);
     for (const fixture of researchDocuments()) {
       const file = await researchUpload(app, owner.cookie, fixture.name, fixture.buffer);
-      const registered = await documents.register(owner.auth, researchProjectId, file.id);
+      let registered;
+      if (fixture.name.endsWith(".pdf")) {
+        // This fixed corpus exercises retained legacy passages. New PDF ingestion
+        // is covered separately by the opt-in real Docling page suite.
+        const repository = app.get(DocumentsRepository);
+        registered = await repository.register({ projectId: researchProjectId, labId: "lab_analysis", fileObjectId: file.id,
+          originalName: fixture.name, contentHash: sha256Hex(fixture.buffer), processingVersion: DOCUMENT_PROCESSING_VERSION,
+          actorUserId: owner.auth.user.id }, owner.auth);
+        const lease = `legacy-corpus-${fixture.key}`;
+        await repository.claim(researchProjectId, registered.version.id, lease, owner.auth);
+        const parsed = await (parseDocument as any)({ buffer: fixture.buffer, filename: fixture.name, mimeType: "application/pdf" });
+        await repository.finish(researchProjectId, registered.version.id, lease, parsed, owner.auth);
+      } else registered = await documents.register(owner.auth, researchProjectId, file.id);
       const deadline = Date.now() + 60_000;
       let version;
       do {

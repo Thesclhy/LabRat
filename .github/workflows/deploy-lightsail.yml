@@ -12,7 +12,7 @@ concurrency:
 jobs:
   test-build-deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
 
     services:
       postgres:
@@ -56,7 +56,13 @@ jobs:
           bash -n deploy/lightsail/deploy-transaction.sh
           bash -n deploy/lightsail/remote-deploy.sh
           bash -n deploy/lightsail/deploy-switch.test.sh
+          bash -n deploy/lightsail/docling-deploy.sh
+          bash -n deploy/lightsail/docling-switch.test.sh
           bash deploy/lightsail/deploy-switch.test.sh
+          bash deploy/lightsail/docling-switch.test.sh
+          python3 deploy/lightsail/docling-env.test.py
+          python3 -m py_compile services/docling/run.py services/docling/smoke.py \
+            services/docling/prepare-models.py deploy/lightsail/docling-env.py
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -99,7 +105,7 @@ jobs:
       - name: Create release archive
         run: |
           rm -rf .release
-          mkdir -p .release/backend .release/deploy/lightsail
+          mkdir -p .release/backend .release/deploy/lightsail .release/services
           cp -R dist .release/dist
           cp -R backend/src .release/backend/src
           cp -R backend/dist-v1 .release/backend/dist-v1
@@ -107,7 +113,11 @@ jobs:
           cp -R backend/migrations .release/backend/migrations
           cp backend/package.json backend/package-lock.json .release/backend/
           cp deploy/lightsail/provider-env.sh deploy/lightsail/deploy-transaction.sh \
+            deploy/lightsail/docling-deploy.sh deploy/lightsail/docling-env.py \
+            deploy/lightsail/backup-labrat.sh \
             .release/deploy/lightsail/
+          cp -R services/docling .release/services/docling
+          find .release/services/docling -type d -name __pycache__ -prune -exec rm -rf '{}' +
           tar -czf "$RELEASE_ARCHIVE" -C .release .
 
       - name: Prepare SSH

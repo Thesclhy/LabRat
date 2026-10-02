@@ -20,6 +20,18 @@ clarification without an executable plan. See doc/qa/analysis-series-mean-deploy
 
 ## Current Focus
 
+[Docling PDF pages v1](plans/docling-pdf-pages-v1.md) is complete locally:
+real parser validation, complete physical-page storage, recoverable jobs,
+page-based evidence reads and corrected Q&A token accounting. M0–M4 and
+A01–A15 pass, including real Docling/DB/browser/provider checks and full regression.
+See [verification](qa/docling-pdf-pages-verification.md) for retained failures,
+manual retest and limits. Semantic retrieval remains separate. The user approved
+production deployment and the 8GB Lightsail upgrade on 2026-10-01;
+the 8GB host now serves the existing release after Linux parser acceptance and
+final data synchronization. The Docling application release is next. See
+doc/qa/docling-lightsail-deployment.md. No semantic retrieval implementation has
+started.
+
 [Frontend routing phase one](plans/frontend-routing-phase1.md) is complete
 locally: addressable login/project lists/project tabs, browser history and
 protected manuscript drafts. The 2026-09-30 follow-up integrated main 933c5fc

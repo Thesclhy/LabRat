@@ -1,7 +1,7 @@
 # Lightsail Deployment
 
 Status: active deployment guide
-Last reviewed: 2026-08-18
+Last reviewed: 2026-10-02
 
 This guide deploys LabRat to one AWS Lightsail Ubuntu server. The production
 site is same-origin: Caddy serves `https://DOMAIN/LabRat/` and proxies
@@ -9,7 +9,9 @@ site is same-origin: Caddy serves `https://DOMAIN/LabRat/` and proxies
 
 ## Prerequisites
 
-- AWS CLI profile `labrat` can read account `477611841179`.
+- An authenticated AWS CLI profile can read account `477611841179`. The local
+  `default` IAM profile was verified for the 2026-10-01 upgrade; the separate
+  `labrat` SSO profile requires renewed login before use.
 - A domain points to the Lightsail static IP.
 - GitHub repository secrets are configured:
   - `LIGHTSAIL_HOST`
@@ -24,7 +26,16 @@ site is same-origin: Caddy serves `https://DOMAIN/LabRat/` and proxies
 
 Create an Ubuntu 24.04 Lightsail instance in `us-east-1`, attach a static IP,
 and open only ports `22`, `80`, and `443`. Do not expose Postgres `5432` or
-the backend `8787` to the public internet.
+the backend `8787` or parser `5059` to the public internet. Docling production
+requires the approved 8GB / 2-vCPU / 160GB `large_3_0` plan ($44/month).
+The resource check rejects the previous 2GB host before installation/migration.
+
+The approved upgrade created `labrat-prod-8gb-20261001` from a snapshot,
+validated its pinned Python 3.12 CPU parser, restored a final paused-backend
+database/files checkpoint, and moved `labrat-prod-ip` (100.50.25.194). The
+original `labrat-prod-1` remains a separate 2GB instance retained for rollback.
+Stopping it does not remove its plan charge; snapshots also have storage charges.
+See [current deployment evidence](../qa/docling-lightsail-deployment.md).
 
 After DNS points at the static IP, copy the repository or just
 `deploy/lightsail/` to the server and provision it:
@@ -75,16 +86,20 @@ The remote deploy script:
 - extracts the release into `/opt/labrat/releases/TIMESTAMP-SHA`
 - validates the requested provider, root-owned `640` environment file, selected
   server-side key, and HTTPS DeepSeek base URL without printing any value
+- validates RAM/disk/Python, installs the locked CPU Docling runtime and frozen
+  models under `/opt/labrat/docling`, and exports installed license notices
 - installs backend production dependencies
-- runs `npm --prefix backend run migrate`
-- backs up `/etc/labrat/backend.env` and atomically changes only its unique
-  `LABRAT_AI_PROVIDER` line
+- creates and checks a fresh database/files backup before migration
+- backs up `/etc/labrat/backend.env`, activates the dedicated parser and requires
+  an actual synthetic PDF conversion, then atomically applies the provider and
+  private localhost parser settings
+- runs `npm --prefix backend run migrate` (including forward-only migration 038)
 - switches `/opt/labrat/current`
 - restarts `labrat-backend`
 - checks `http://127.0.0.1:8787/health`
 - keeps the newest five releases
-- restores both the old environment file and old release, then restarts the old
-  service, if release switching, startup, or health verification fails
+- restores the previous parser runtime, environment file and application
+  release if parser activation, migration, switching or health verification fails
 
 ## Bootstrap Admin
 
@@ -123,13 +138,20 @@ sudo systemctl restart labrat-backend
 Database migrations are forward-only. Restore the database from backup when a
 database-level rollback is required.
 
+Migration 038 and canonical pages must remain when rolling back the parser or
+application; do not delete historical evidence. Parser runtimes have their own
+`/opt/labrat/docling/current` symlink. Keep the matching private parser key and
+backend environment when restoring a previous parser. After the new instance
+accepts writes, the retained old database is stale: a machine rollback requires
+a fresh reverse data synchronization before moving the static IP back.
+
 For a provider rollback, change the GitHub Repository Variable and run the
 workflow again so the same validation and joint environment/release transaction
 is used. Do not place either API key in GitHub.
 
 ## Acceptance Checks
 
-- `aws sts get-caller-identity --profile labrat` returns account `477611841179`.
+- `aws sts get-caller-identity --profile YOUR_AUTHENTICATED_PROFILE` returns account `477611841179`.
 - `https://DOMAIN/LabRat/` loads and browser refresh does not 404.
 - `https://DOMAIN/health` returns backend health JSON.
 - Browser API calls use same-origin `/api/...` and show no CORS errors.
@@ -145,6 +167,8 @@ is used. Do not place either API key in GitHub.
 - A push to `main` deploys the pushed commit SHA, or leaves the previous
   provider configuration and release active on failure.
 - Daily backups exist and at least one restore drill has been completed.
+- The actual Docling service is private, passes a real conversion, and a fresh
+  upload of the original paper saves all 11 physical pages and 29 frozen anchors.
 - An AWS Budget monthly alert is configured.
 - `LABRAT_ANALYSIS_EXECUTOR=disabled` unless a hardened no-network worker is
   separately deployed.

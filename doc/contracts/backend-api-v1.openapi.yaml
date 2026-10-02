@@ -1541,6 +1541,57 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "429": { description: Parser concurrency is exhausted. }
+  /api/v1/projects/{projectId}/context-document-versions/{versionId}/cancel:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }, { $ref: "#/components/parameters/ContextDocumentVersionId" }]
+    post:
+      tags: [Evidence]
+      operationId: cancelContextDocumentProcessing
+      x-labrat-capability: propose
+      x-labrat-scope: all_experiments
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, additionalProperties: false } } }
+      responses:
+        "200": { description: "Processing cancelled locally; late results cannot write. Completed pages and historical references remain.", content: { application/json: { schema: { $ref: "#/components/schemas/ContextDocumentVersionResponse" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /api/v1/projects/{projectId}/context-document-versions/{versionId}/pages:
+    parameters: [{ $ref: "#/components/parameters/ProjectId" }, { $ref: "#/components/parameters/ContextDocumentVersionId" }]
+    get:
+      tags: [Evidence]
+      operationId: listContextDocumentPages
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      parameters: [{ $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/DocumentPageLimit" }]
+      responses:
+        "200": { description: "Canonical physical page directory, without repeated full text.", content: { application/json: { schema: { $ref: "#/components/schemas/CanonicalDocumentPageDirectory" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: Historical version uses passage format., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
+  /api/v1/projects/{projectId}/context-document-versions/{versionId}/pages/{pageNumber}/text:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectId" }
+      - { $ref: "#/components/parameters/ContextDocumentVersionId" }
+      - { name: pageNumber, in: path, required: true, schema: { type: integer, minimum: 1, maximum: 200 } }
+    get:
+      tags: [Evidence]
+      operationId: readContextDocumentPageText
+      x-labrat-capability: read
+      x-labrat-scope: all_experiments
+      parameters:
+        - { name: cursor, in: query, schema: { type: string, maxLength: 20, pattern: "^(0|[1-9][0-9]*)$" }, description: Absolute UTF-16 offset; must not split a surrogate pair. }
+        - { name: limit, in: query, schema: { type: integer, minimum: 2, maximum: 4000, default: 4000 } }
+      responses:
+        "200": { description: Continuous page text window with original page locations., content: { application/json: { schema: { $ref: "#/components/schemas/CanonicalDocumentPageWindow" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: Historical version uses passage format., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } } }
   /api/v1/projects/{projectId}/context-document-versions/{versionId}/passages:
     parameters: [{ $ref: "#/components/parameters/ProjectId" }, { $ref: "#/components/parameters/ContextDocumentVersionId" }]
     get:
@@ -5251,6 +5302,7 @@ components:
     ResearchEvidenceResponse:
       type: object
       additionalProperties: false
+      description: 'Frozen evidence at the read version. document_page evidence uses a physical PDF page and absolute UTF-16 start/end; original-page rectangles are resolved from the pinned canonical page after text/hash checks. document_passage remains the historical/Word/TXT type. Missing precise coordinates are disclosed, never inferred from the latest version.'
       required: [evidence, capturedAt]
       properties:
         evidence: { $ref: "#/components/schemas/JsonObject" }
@@ -5277,6 +5329,58 @@ components:
         createdBy: { $ref: "#/components/schemas/OpaqueId" }
         createdAt: { $ref: "#/components/schemas/Timestamp" }
         updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    CanonicalDocumentPageSummary:
+      type: object
+      additionalProperties: false
+      required: [page, status, characterCount, width, height, rotation, warnings]
+      properties:
+        page: { type: integer, minimum: 1, maximum: 200 }
+        status: { type: string, enum: [ready, empty, needs_review, failed] }
+        characterCount: { type: integer, minimum: 0, maximum: 2000000 }
+        width: { type: number, exclusiveMinimum: 0 }
+        height: { type: number, exclusiveMinimum: 0 }
+        rotation: { type: integer, enum: [0, 90, 180, 270] }
+        warnings: { type: array, maxItems: 32, items: { type: string, maxLength: 80 } }
+    CanonicalDocumentPageDirectory:
+      type: object
+      additionalProperties: false
+      required: [versionId, pageCount, items, nextCursor]
+      properties:
+        versionId: { $ref: "#/components/schemas/OpaqueId" }
+        pageCount: { type: [integer, "null"], minimum: 1, maximum: 200 }
+        items: { type: array, maxItems: 40, items: { $ref: "#/components/schemas/CanonicalDocumentPageSummary" } }
+        nextCursor: { $ref: "#/components/schemas/NullableString" }
+    CanonicalDocumentPageBlockWindow:
+      type: object
+      additionalProperties: false
+      required: [id, kind, start, end]
+      properties:
+        id: { type: string, minLength: 1, maxLength: 160 }
+        kind: { type: string, enum: [text, title, section_header, caption, formula, table, picture, footnote, page_header, page_footer, list_item, code, unknown] }
+        start: { type: integer, minimum: 0, maximum: 2000000 }
+        end: { type: integer, minimum: 0, maximum: 2000000 }
+        bbox:
+          description: Normalized displayed-page [left, top, right, bottom]. Omitted for page-only precision.
+          type: array
+          minItems: 4
+          maxItems: 4
+          items: { type: number, minimum: 0, maximum: 1 }
+    CanonicalDocumentPageWindow:
+      type: object
+      additionalProperties: false
+      required: [versionId, schemaVersion, page, status, start, end, text, totalCharacters, nextCursor, warnings, blocks]
+      properties:
+        versionId: { $ref: "#/components/schemas/OpaqueId" }
+        schemaVersion: { type: integer, const: 2 }
+        page: { type: integer, minimum: 1, maximum: 200 }
+        status: { type: string, enum: [ready, empty, needs_review, failed] }
+        start: { type: integer, minimum: 0, maximum: 2000000 }
+        end: { type: integer, minimum: 0, maximum: 2000000 }
+        text: { type: string, maxLength: 4000 }
+        totalCharacters: { type: integer, minimum: 0, maximum: 2000000 }
+        nextCursor: { $ref: "#/components/schemas/NullableString" }
+        warnings: { type: array, maxItems: 32, items: { type: string, maxLength: 80 } }
+        blocks: { type: array, maxItems: 200, items: { $ref: "#/components/schemas/CanonicalDocumentPageBlockWindow" } }
     ContextDocumentPassage:
       type: object
       additionalProperties: false

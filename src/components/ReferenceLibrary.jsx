@@ -4,11 +4,23 @@ import { uploadServerProjectFile } from "../data/serverApi.js";
 import { ResearchEvidenceViewer } from "./ResearchEvidenceViewer.jsx";
 import "./unified-ask.css";
 
+const failureLabels = {
+  document_encrypted: 'Password-protected PDF. Upload an unlocked copy.',
+  document_corrupt: 'This PDF could not be opened. Check or replace the original file.',
+  document_page_limit: 'The PDF exceeds the 200-page limit.',
+  document_page_size: 'A page exceeds the supported rendering size.',
+  document_text_limit: 'The PDF exceeds the supported text size.',
+  document_cancelled: 'Reading was cancelled.',
+  document_service_unavailable: 'The document reader is unavailable. Retry when it is running.',
+  document_session_interrupted: 'Reading stopped after the initiating session ended. Retry to continue.',
+};
+
 export function ReferenceLibrary({ projectId, canEdit, onChanged, assistantOpen }) {
   const [page, setPage] = useState({ items: [], nextCursor: null }), [search, setSearch] = useState("");
   const [status, setStatus] = useState(""), [type, setType] = useState(""), [sort, setSort] = useState("newest");
   const [refresh, setRefresh] = useState(0), [loading, setLoading] = useState(false), [error, setError] = useState("");
   const [source, setSource] = useState(null), [versions, setVersions] = useState(null), [busy, setBusy] = useState("");
+  const [notice, setNotice] = useState('');
   const input = useRef(null), target = useRef(null), lifetime = useRef(null), listRequest = useRef(null);
   useEffect(() => { const controller = new AbortController(); lifetime.current = controller; return () => controller.abort(); }, [projectId]);
   const query = { search, status, type, sort, limit: 30 };
@@ -30,7 +42,7 @@ export function ReferenceLibrary({ projectId, canEdit, onChanged, assistantOpen 
   }, [projectId, search, status, type, sort, refresh]);
   const changed = () => { setRefresh((n) => n + 1); onChanged?.(); };
   const perform = async (label, action, refreshList = true) => {
-    const signal = lifetime.current.signal; setBusy(label); setError("");
+    const signal = lifetime.current.signal; setBusy(label); setError(""); setNotice('');
     try { await action(signal); if (!signal.aborted && refreshList) changed(); }
     catch (failure) { if (!signal.aborted) setError(failure.message); }
     finally { if (!signal.aborted) setBusy(""); }
@@ -58,14 +70,27 @@ export function ReferenceLibrary({ projectId, canEdit, onChanged, assistantOpen 
       <select aria-label="Reference order" value={sort} onChange={(event) => setSort(event.target.value)}><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select>
     </div>
     {error && <p role="alert" className="qa-warning">{error}</p>}
+    {notice && <p role="status">{notice}</p>}
     {busy && <p role="status">Working on {busy}…</p>}
     {loading && <p role="status">Loading references…</p>}
     {!loading && !page.items.length && <p className="reference-empty">{search || type || status ? "No references match these filters." : "Add your first reference, then type @ in Ask to select it."}</p>}
     <div className="reference-list">{page.items.map((item) => <article className="reference-row" key={item.document.id}>
       <div className="reference-file-name"><button type="button" title={item.document.originalName} disabled={!['ready', 'partial'].includes(item.currentVersion?.status)} onClick={() => setSource(item)}>{item.document.originalName}</button>
-        <small>v{item.currentVersion?.versionNumber || 1} · {item.currentVersion?.status || "pending"} · {new Date(item.document.updatedAt).toLocaleDateString()}</small></div>
+        <small>v{item.currentVersion?.versionNumber || 1} · {item.currentVersion?.status || "pending"} · {new Date(item.document.updatedAt).toLocaleDateString()}</small>
+        {item.currentVersion?.failureCode && <small className="qa-warning">{failureLabels[item.currentVersion.failureCode] || 'Reading could not finish. Retry processing or check the original file.'}</small>}</div>
       <div className="reference-row-actions"><button type="button" onClick={() => perform("version history", async (signal) => { const data = await api.getContextDocument(projectId, item.document.id, {}, { signal }); if (!signal.aborted) setVersions(data); }, false)}>Versions</button>
         {canEdit && <><button type="button" disabled={Boolean(busy)} onClick={() => { target.current = item.document; input.current.click(); }}>New version</button>
+          {/\.pdf$/i.test(item.document.originalName) && !['pending', 'processing'].includes(item.currentVersion?.status)
+            && <button type="button" disabled={Boolean(busy)} title="Read the saved PDF with the current parser; preserve earlier versions and citations"
+              onClick={() => perform(item.document.originalName, async (signal) => {
+                const result = await api.registerContextDocument(projectId, item.currentVersion.fileObjectId, { signal },
+                  { documentId: item.document.id, expectedVersion: item.document.version });
+                if (!signal.aborted) setNotice(result.reused ? 'This PDF already has a version from the current reader. Use Retry for interrupted or failed processing.'
+                  : 'A new version is being read from the saved PDF. Earlier versions and citations remain available.');
+              })}>Reprocess PDF</button>}
+          {['pending', 'processing'].includes(item.currentVersion?.status) && item.currentVersion?.processingVersion?.startsWith('labrat.pdf.pages.v1:')
+            && <button type="button" disabled={Boolean(busy)} onClick={() => perform(item.document.originalName,
+              (signal) => api.cancelContextDocumentVersion(projectId, item.currentVersion.id, { signal }))}>Cancel reading</button>}
           {["failed", "partial", "interrupted", "pending"].includes(item.currentVersion?.status) && <button type="button" disabled={Boolean(busy)} onClick={() => perform(item.document.originalName, (signal) => api.retryContextDocumentVersion(projectId, item.currentVersion.id, { signal }))}>Retry</button>}
           <button type="button" disabled={Boolean(busy)} title="Exclude from future questions; preserve historical citations" onClick={() => perform(item.document.originalName, (signal) => api.archiveContextDocument(projectId, item.document.id, item.document.version, { signal }))}>Archive</button></>}
       </div>

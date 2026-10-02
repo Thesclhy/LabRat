@@ -13,6 +13,7 @@ const failures = { ai_unavailable: "The project model is not configured.", qa_ci
   qa_provider_balance: "The configured model account has insufficient balance. A project administrator needs to restore service.",
   qa_provider_rate_limit: "The model service is rate limited. Retry later.", qa_provider_credentials: "The model service rejected its configured credentials. An administrator needs to update them.",
   qa_timeout: "The question reached its time limit.", qa_token_limit: "The question reached its model budget. Try a narrower question.",
+  qa_token_count_unavailable: "The model service could not check the request size. Retry when the service is available.",
   qa_interrupted: "The service stopped before the answer was saved.", qa_request_limit: "The question reached its model request limit.",
   ai_request_failed: "The configured model could not complete the request.", qa_tool_limit: "The question reached its evidence-reading limit." };
 const delay = (ms, signal) => new Promise((resolve, reject) => {

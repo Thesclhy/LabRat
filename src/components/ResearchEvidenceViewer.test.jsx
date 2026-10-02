@@ -6,7 +6,7 @@ import * as api from "../data/researchQaApi.js";
 
 vi.mock("../data/researchQaApi.js", () => ({
   getResearchEvidence: vi.fn(), getContextDocumentVersion: vi.fn(), listContextDocumentPassages: vi.fn(),
-  contextDocumentPageUrl: vi.fn(),
+  contextDocumentPageUrl: vi.fn(), readContextDocumentPage: vi.fn(),
 }));
 const selection = { document: { originalName: "Protocol.pdf" }, currentVersion: { id: "v1", versionNumber: 1,
   metadata: { extension: "pdf", pageCount: 3, coverage: [
@@ -23,6 +23,25 @@ beforeEach(() => {
   api.contextDocumentPageUrl.mockImplementation((project, version, page) => `/${project}/${version}/pages/${page}`);
   api.getResearchEvidence.mockResolvedValue({ evidence: citation });
   api.getContextDocumentVersion.mockResolvedValue({ version: { ...selection.currentVersion, id: "historic-v1" } });
+});
+
+test('canonical page navigation replaces the text and image together without retaining a previous page', async () => {
+  api.readContextDocumentPage.mockImplementation(async (_p, _v, number) => ({ page: number, status: 'ready',
+    text: `Text from page ${number}`, end: 16, totalCharacters: 16, nextCursor: null, warnings: [] }));
+  render(<ResearchEvidenceViewer projectId="p" selection={{ ...selection, currentVersion: { ...selection.currentVersion,
+    metadata: { pageSchemaVersion: 2, pageCount: 3 } } }} onClose={() => {}} />);
+  await screen.findByRole('button', { name: 'Show page text' });
+  fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
+  await screen.findByRole('region', { name: 'Recognized text on page 2' });
+  await waitFor(() => expect(screen.getAllByRole('button', { name: 'Show page text' })).toHaveLength(1));
+  expect(screen.queryByRole('region', { name: 'Recognized text on page 1' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Show page text' }));
+  expect(screen.getByText('Text from page 2')).toBeTruthy();
+  expect(screen.queryByText('Text from page 1')).toBeNull();
+  expect(screen.getAllByRole('img')).toHaveLength(1);
+  fireEvent.click(screen.getByRole('button', { name: 'Previous page' }));
+  await screen.findByRole('region', { name: 'Recognized text on page 1' });
+  expect(screen.queryByRole('region', { name: 'Recognized text on page 2' })).toBeNull();
 });
 
 test("library PDF shows every page once, including unreadable pages, without fetching passage batches", async () => {

@@ -9,6 +9,7 @@ APP_USER="${LABRAT_APP_USER:-labrat}"
 ENV_FILE="${LABRAT_ENV_FILE:-/etc/labrat/backend.env}"
 SERVICE_NAME="${LABRAT_SERVICE_NAME:-labrat-backend}"
 KEEP_RELEASES="${LABRAT_KEEP_RELEASES:-5}"
+DOCLING_ROOT="$DEPLOY_ROOT/docling"
 
 RELEASES_DIR="$DEPLOY_ROOT/releases"
 CURRENT_LINK="$DEPLOY_ROOT/current"
@@ -18,6 +19,8 @@ RELEASE_DIR="$RELEASES_DIR/$STAMP-$SHORT_SHA"
 ENV_BACKUP=""
 PREVIOUS_RELEASE=""
 ROLLBACK_ARMED=false
+DOCLING_ROLLBACK_ARMED=false
+PREVIOUS_DOCLING_RUNTIME=""
 
 fail() {
   echo "deploy failed: $*" >&2
@@ -38,6 +41,11 @@ rollback_on_exit() {
   local status="$?"
   local keep_env_backup=false
   trap - EXIT
+  if (( status != 0 )) && [[ "$DOCLING_ROLLBACK_ARMED" == "true" ]]; then
+    if ! rollback_docling_runtime "$PREVIOUS_DOCLING_RUNTIME" "$DOCLING_ROOT"; then
+      echo "parser rollback was incomplete; inspect labrat-docling.service." >&2
+    fi
+  fi
   if (( status != 0 )) && [[ "$ROLLBACK_ARMED" == "true" ]]; then
     if ! rollback_deployment_transaction \
       "$ENV_BACKUP" "$ENV_FILE" "$PREVIOUS_RELEASE" "$CURRENT_LINK" "$SERVICE_NAME"; then
@@ -84,17 +92,38 @@ test -f "$RELEASE_DIR/deploy/lightsail/provider-env.sh" \
   || fail "release archive is missing provider-env.sh"
 test -f "$RELEASE_DIR/deploy/lightsail/deploy-transaction.sh" \
   || fail "release archive is missing deploy-transaction.sh"
+test -f "$RELEASE_DIR/deploy/lightsail/docling-deploy.sh" \
+  || fail "release archive is missing docling-deploy.sh"
+test -f "$RELEASE_DIR/deploy/lightsail/docling-env.py" \
+  || fail "release archive is missing docling-env.py"
+test -f "$RELEASE_DIR/services/docling/requirements-linux.lock" \
+  || fail "release archive is missing the verified Linux parser runtime"
 
 # shellcheck source=deploy-transaction.sh
 source "$RELEASE_DIR/deploy/lightsail/deploy-transaction.sh"
+source "$RELEASE_DIR/deploy/lightsail/docling-deploy.sh"
 validate_provider_env "$SELECTED_PROVIDER" "$ENV_FILE" \
   || fail "selected provider configuration is incomplete"
 echo "validated AI provider configuration for $SELECTED_PROVIDER"
+check_docling_resources "$DEPLOY_ROOT" || fail "parser resource preflight failed"
+
+if [[ -L "$DOCLING_ROOT/current" ]]; then
+  PREVIOUS_DOCLING_RUNTIME="$(readlink -f "$DOCLING_ROOT/current")"
+fi
+DOCLING_RUNTIME="$(prepare_docling_runtime "$RELEASE_DIR" "$DOCLING_ROOT")" \
+  || fail "parser preparation failed before migration"
 
 chown -R "$APP_USER:$APP_USER" "$RELEASE_DIR"
 
 sudo -H -u "$APP_USER" npm --prefix "$RELEASE_DIR/backend" ci --omit=dev
-sudo -H -u "$APP_USER" bash -c "set -a; source '$ENV_FILE'; set +a; npm --prefix '$RELEASE_DIR/backend' run migrate"
+
+BACKUP_DIR="/var/backups/labrat/deploy-$STAMP-$SHORT_SHA"
+install -d -m 0700 "$BACKUP_DIR"
+env LABRAT_BACKUP_DIR="$BACKUP_DIR" LABRAT_BACKUP_RETENTION_DAYS=36500 \
+  bash "$RELEASE_DIR/deploy/lightsail/backup-labrat.sh" \
+  || fail "pre-migration data backup failed"
+for backup in "$BACKUP_DIR"/*.sql.gz; do gzip -t "$backup"; done
+for backup in "$BACKUP_DIR"/*.tar.gz; do tar -tzf "$backup" >/dev/null; done
 
 if [[ -L "$CURRENT_LINK" ]]; then
   PREVIOUS_RELEASE="$(readlink -f "$CURRENT_LINK" || true)"
@@ -103,9 +132,16 @@ fi
 ENV_BACKUP="$(create_provider_env_backup "$ENV_FILE")" \
   || fail "could not back up the provider environment"
 ROLLBACK_ARMED=true
+DOCLING_ROLLBACK_ARMED=true
+activate_docling_runtime "$DOCLING_RUNTIME" "$DOCLING_ROOT" \
+  || fail "real parser conversion failed before migration"
 apply_provider_env "$SELECTED_PROVIDER" "$ENV_FILE" \
   || fail "could not select AI provider $SELECTED_PROVIDER"
+python3.12 "$RELEASE_DIR/deploy/lightsail/docling-env.py" \
+  --env-file "$ENV_FILE" --key-file /etc/labrat/docling.key \
+  || fail "could not configure the backend parser"
 echo "selected AI provider: $SELECTED_PROVIDER"
+sudo -H -u "$APP_USER" bash -c "set -a; source '$ENV_FILE'; set +a; npm --prefix '$RELEASE_DIR/backend' run migrate"
 
 ln -sfn "$RELEASE_DIR" "$CURRENT_LINK"
 chown -h "$APP_USER:$APP_USER" "$CURRENT_LINK" || true
@@ -118,6 +154,7 @@ if ! health_check; then
 fi
 
 ROLLBACK_ARMED=false
+DOCLING_ROLLBACK_ARMED=false
 discard_provider_env_backup "$ENV_BACKUP"
 ENV_BACKUP=""
 

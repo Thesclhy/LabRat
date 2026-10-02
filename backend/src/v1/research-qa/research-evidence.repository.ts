@@ -43,6 +43,20 @@ export class ResearchEvidenceRepository {
       join context_document_versions v on v.id=p.version_id and v.project_id=$1 and v.status in ('ready','partial')
       where p.project_id=$1 and v.document_id=d.id and (not $6 or p.version_id=any($5::text[]))
       union all
+      select 'document_page',p.version_id || ':' || lpad(p.page_number::text,3,'0'),
+        d.original_name,p.body->>'text',
+        jsonb_build_object('versionId',v.id,'documentId',d.id,'page',p.page_number,
+          'cursor',0,'status',p.body->>'status','ordinal',p.page_number-1)
+      from context_document_pages p
+      join context_document_versions v on v.id=p.version_id and v.project_id=$1 and v.status in ('ready','partial')
+      join context_documents d on d.id=v.document_id and d.project_id=$1 and d.status='active'
+      where p.body->>'schemaVersion'='2' and (not $6 or v.id=any($5::text[]))
+        and (v.id=any($5::text[]) or (d.current_version_id=v.id and not exists
+          (select 1 from context_document_versions selected where selected.document_id=d.id and selected.id=any($5::text[]))))
+        and ($4 or to_tsvector('simple',left(p.body->>'text',100000)) @@ plainto_tsquery('simple',$7)
+          or exists(select 1 from unnest($2::text[]) t where position(t in lower(p.body->>'text'))>0
+            or position(t in lower(d.original_name))>0))
+      union all
       select 'confirmed_region',r.id,coalesce(d.metadata->>'workbookName',d.id) || ' / ' || r.sheet_name || ' ' || r.range_ref,
         coalesce(v.summary::text,'') || ' ' || r.sheet_name || ' ' || coalesce(d.metadata->>'workbookName',''),
         jsonb_build_object('regionId',r.id,'revisionId',v.id,'sourceDocumentId',r.source_document_id,
@@ -65,10 +79,9 @@ export class ResearchEvidenceRepository {
         +case when case when t ~ '^[a-z0-9]{1,3}$' then lower(label) ~ ('(^|[^[:alnum:]_])' || t || '([^[:alnum:]_]|$)')
         else position(t in lower(label))>0 end then 1 else 0 end),0) from unnest($2::text[]) t) score
       from candidates
-    ) select kind,label,target,score from ranked where $4 or score>0 or
-      (kind='document' and target->>'versionId'=any($5::text[]) and (target->>'ordinal')::int<2)
-      order by (kind='document' and target->>'versionId'=any($5::text[])) desc,
-        score desc,sort_id offset $3 limit 40`, [projectId, terms, offset, !query.trim(), preferredVersions, selectedOnly]);
+    ) select kind,label,target,score from ranked where $4 or score>0
+      order by (kind in ('document','document_page') and target->>'versionId'=any($5::text[])) desc,
+        score desc,sort_id offset $3 limit 40`, [projectId, terms, offset, !query.trim(), preferredVersions, selectedOnly, query]);
   }
 
   async neighbors(projectId: string, versionId: string, ordinal: number) {

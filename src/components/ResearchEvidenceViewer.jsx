@@ -13,7 +13,7 @@ export function evidenceLocation(evidence) {
 }
 
 const display = (value) => value == null ? "Missing" : typeof value === "object" ? JSON.stringify(value) : String(value);
-const kindLabels = { document_passage: "Uploaded document", workbook_raw: "Raw workbook evidence", confirmed_region: "Confirmed region interpretation",
+const kindLabels = { document_page: "Uploaded document", document_passage: "Uploaded document", workbook_raw: "Raw workbook evidence", confirmed_region: "Confirmed region interpretation",
   experiment_snapshot: "Accepted experimental data", project_context: "User-authored project background" };
 
 function CellEvidence({ data }) {

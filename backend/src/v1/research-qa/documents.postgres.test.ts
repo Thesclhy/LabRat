@@ -10,6 +10,9 @@ import { seedAnalysisScenario } from "../testing/analysis-review-fixture.js";
 import { applyTestMigrations, withTestSchema } from "../testing/postgres-test-database.js";
 import { DocumentsRepository } from "./documents.repository.js";
 import { IdentityService } from "../identity/identity.service.js";
+import { parseDocument } from "../../research/documentParser.js";
+import { DOCUMENT_PROCESSING_VERSION } from "../../research/documentLimits.js";
+import { sha256Hex } from "../../saas/ids.js";
 
 const databaseUrl = process.env.LABRAT_TEST_DATABASE_URL;
 const projectId = "project_analysis";
@@ -72,7 +75,18 @@ describe.skipIf(!databaseUrl)("research document PostgreSQL lifecycle", () => {
           ["method.pdf", syntheticPdf([{ text: ["Protocol RQ-001 for dry samples", "Temperature 80 C"] }, { scan: { chinese: true } }])],
         ] as const) {
           const file = await upload(app, owner, name, buffer);
-          const result = await register(app, owner, file);
+          let result;
+          if (name.endsWith(".pdf")) {
+            // Retained pre-Docling versions must remain readable without a parsing service.
+            const repository = app.get(DocumentsRepository);
+            const auth = (await app.get(IdentityService).authenticateCookieHeader(owner))!;
+            result = await repository.register({ projectId, labId: "lab_analysis", fileObjectId: file,
+              originalName: name, contentHash: sha256Hex(buffer), processingVersion: DOCUMENT_PROCESSING_VERSION,
+              actorUserId: auth.user.id }, auth);
+            await repository.claim(projectId, result.version.id, "legacy-fixture", auth);
+            const parsed = await (parseDocument as any)({ buffer, filename: name, mimeType: "application/pdf" });
+            await repository.finish(projectId, result.version.id, "legacy-fixture", parsed, auth);
+          } else result = await register(app, owner, file);
           const version = await processed(app, viewer, result.version.id);
           expect(["ready", "partial"], JSON.stringify(version)).toContain(version.status);
           const response = await app.inject({ method: "GET", url: `${base}/context-document-versions/${version.id}/passages?limit=1`, headers: { cookie: viewer } });
@@ -150,7 +164,7 @@ describe.skipIf(!databaseUrl)("research document PostgreSQL lifecycle", () => {
         const retry = await app.inject({ method: "POST", url: `${base}/context-document-versions/${first.version.id}/retry`, headers: { cookie: owner }, payload: {} });
         expect(retry.statusCode).toBe(200); expect((await processed(app, owner, first.version.id)).status).toBe("ready");
         expect((await pool.query("select count(*)::int count from context_document_passages where version_id=$1", [first.version.id])).rows[0].count).toBe(1);
-        const revokedFile = await upload(app, proposer, "revoked.pdf", syntheticPdf([{ scan: {} }, { scan: { chinese: true } }]));
+        const revokedFile = await upload(app, proposer, "revoked.docx", syntheticDocx());
         const revoked = await register(app, proposer, revokedFile);
         await pool.query("update project_access_grants set status='inactive' where user_id='user_proposer'");
         await expect(repository.claim(projectId, first.version.id, "stale-authority", proposerAuth!)).rejects.toMatchObject({ statusCode: 404 });

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { answerWithReadLinks, validateCitedAnswer, researchBoundary, researchQuestionRequest } from "./citedAnswer.js";
+import { answerWithReadLinks, validateCitedAnswer, researchBoundary, researchQuestionRequest, modelDocumentEvidence } from "./citedAnswer.js";
 import { createQaBudget } from "./qaBudget.js";
 import { documentCoverage, projectContextWindow, QA_LIMITS } from "./evidenceTools.js";
 import { createAiGateway } from "../ai/gateway.js";
@@ -72,13 +72,13 @@ test("citation repair reuses authorized evidence in a tool-free provider request
   let requests = 0, toolCalls = 0;
   const corrected = answer({ text: "Dry samples use 80 C.", citations: [{ evidenceId: "doc", quote: "Use 80 C for dry samples only." }] });
   const budget = createQaBudget();
-  const gateway = createAiGateway({ config: { aiProvider: "deepseek", deepseekApiKey: "synthetic-key", deepseekModel: "synthetic" },
+  const gateway = createAiGateway({ config: { aiProvider: "deepseek", deepseekApiKey: "synthetic-key", deepseekModel: "deepseek-v4-pro" },
     fetchImpl: async (_url, options) => {
       requests += 1;
       const request = JSON.parse(options.body);
       assert.equal(request.tools, undefined);
       assert.equal(request.thinking.type, "disabled");
-      assert.deepEqual(JSON.parse(request.messages[1].content).citationRepair.readEvidence, [doc]);
+      assert.deepEqual(JSON.parse(request.messages[1].content).citationRepair.readEvidence, JSON.parse(JSON.stringify([modelDocumentEvidence(doc)])));
       return Response.json({ choices: [{ message: { content: JSON.stringify(corrected) }, finish_reason: "stop" }], usage: { prompt_tokens: 100, completion_tokens: 60 } });
     } });
   const result = await gateway.requestStructuredWithTools(researchQuestionRequest({ question: "What is the documented temperature?",
@@ -127,10 +127,11 @@ test("one shared budget bounds gateway repairs, tools and unknown-billing recove
   let count = 0; const checkpoints = [];
   const budget = createQaBudget({ limits: { ...QA_LIMITS, requests: 1 }, checkpoint: async (usage) => checkpoints.push(usage) });
   const gateway = createAiGateway({ config: { aiProvider: "anthropic", anthropicApiKey: "synthetic-key", anthropicModel: "synthetic" },
-    fetchImpl: async () => { count += 1; return Response.json({ content: [{ type: "text", text: "not JSON" }], usage: { input_tokens: 20, output_tokens: 5 } }); } });
+    fetchImpl: async (url) => { if (url.endsWith('/count_tokens')) return Response.json({ input_tokens: 20 });
+      count += 1; return Response.json({ content: [{ type: "text", text: "not JSON" }], usage: { input_tokens: 20, output_tokens: 5 } }); } });
   await gateway.requestStructured({ system: "test", payload: {}, outputSchema: { type: "object", properties: { value: { type: "string" } }, required: ["value"] }, budget });
   assert.equal(count, 1); assert.equal(budget.stats().requests, 1); assert.equal(budget.stats().failure, "qa_request_limit");
-  assert.ok(checkpoints[0].reservedTokens > 0); assert.equal(checkpoints[1].reservedTokens, 0);
+  assert.ok(checkpoints.some((item) => item.reservedTokens > 0)); assert.equal(checkpoints.at(-1).reservedTokens, 0);
   const unknown = createQaBudget();
   await unknown.wrapFetch(async () => Response.json({}, { status: 502 }))("https://invalid.example", { body: "{}" });
   assert.equal(unknown.stats().unknownUsageRequests, 1); assert.ok(unknown.stats().reservedTokens > 0);
@@ -189,9 +190,25 @@ test("long multilingual project context can be continued without silently losing
   assert.equal(methods.coverage.complete, true);
 });
 
-test('selected-only questions expose only their two authorized document tools', () => {
+test('selected-only questions expose only their authorized document tools', () => {
   const request=researchQuestionRequest({selectedContext:{sourceScope:'selected'}},{});
-  assert.deepEqual(request.tools.map(tool=>tool.name),['search_project_documents','read_document_passage']);
+  assert.deepEqual(request.tools.map(tool=>tool.name),['search_project_documents','read_document_passage','read_document_page']);
   assert.ok(researchQuestionRequest({selectedContext:{sourceScope:'project'}},{}).tools.some(tool=>tool.name==='find_experiments'));
   assert.deepEqual(researchQuestionRequest({citationRepair:{},selectedContext:{sourceScope:'selected'}},{}).tools,[]);
+});
+
+test('document model payload keeps text and continuation while server evidence and repair remain pinned', async () => {
+  const saved = { id: 'page-1-window-2', kind: 'document_page', label: 'Original.pdf',
+    version: { versionId: 'v1', contentHash: 'hash' }, locator: { page: 1, start: 4000, end: 4035, rectangles: [{ left: .2 }] },
+    data: { text: '催化剂 ZnO −12.5 °C 🔬', uncertain: true },
+    coverage: { scope: 'page_window', nextCursor: 4035, status: 'needs_review', raw: 'private audit' }, warnings: ['ocr_check_original'] };
+  const before = structuredClone(saved);
+  const request = researchQuestionRequest({}, { toolHandlers: { read_document_page: async () => ({ evidence: saved }) } });
+  const { evidence } = await request.toolHandlers.read_document_page({});
+  assert.deepEqual(evidence, modelDocumentEvidence(saved)); assert.equal(evidence.text, saved.data.text);
+  assert.equal(evidence.nextCursor, 4035); assert.equal(evidence.id, saved.id);
+  for (const forbidden of ['rectangles', 'contentHash', 'private audit', 'scope', 'Original.pdf']) assert.ok(!JSON.stringify(evidence).includes(forbidden));
+  assert.deepEqual(saved, before);
+  const repair = researchQuestionRequest({ citationRepair: { readEvidence: [saved] } }, {});
+  assert.deepEqual(repair.payload.citationRepair.readEvidence, [evidence]);
 });

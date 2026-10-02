@@ -2,6 +2,7 @@ node_modules/
 dist/
 .vite/
 artifacts/
+__pycache__/
 original/
 extra data/
 .vitest/

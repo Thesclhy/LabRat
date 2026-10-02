@@ -1,0 +1,62 @@
+[
+  {
+    "file": "docling-slim-LICENSE.txt",
+    "source": "installed docling-slim==2.96.1 / docling_slim-2.96.1.dist-info/licenses/LICENSE",
+    "sha256": "9816fb12b11c33c552f4e8621879d0da493be47c0f86be785b53a2cf7f7ae4c6"
+  },
+  {
+    "file": "docling-core-LICENSE.txt",
+    "source": "installed docling-core==2.78.0 / docling_core-2.78.0.dist-info/licenses/LICENSE",
+    "sha256": "d8cf7ee84a10d6cc45ced4ce917180b7050326f9d66801dd07d058595c06908c"
+  },
+  {
+    "file": "docling-ibm-models-LICENSE.txt",
+    "source": "installed docling-ibm-models==3.13.2 / docling_ibm_models-3.13.2.dist-info/licenses/LICENSE",
+    "sha256": "9816fb12b11c33c552f4e8621879d0da493be47c0f86be785b53a2cf7f7ae4c6"
+  },
+  {
+    "file": "docling-parse-LICENSE.txt",
+    "source": "installed docling-parse==6.2.0 / docling_parse-6.2.0.dist-info/licenses/LICENSE",
+    "sha256": "19200a6a9407e592065a5a504c0eefe58adf102c9ac5aa2151bd6f257faa7a9c"
+  },
+  {
+    "file": "docling-serve-LICENSE.txt",
+    "source": "installed docling-serve==1.21.0 / docling_serve-1.21.0.dist-info/licenses/LICENSE",
+    "sha256": "9816fb12b11c33c552f4e8621879d0da493be47c0f86be785b53a2cf7f7ae4c6"
+  },
+  {
+    "file": "docling-jobkit-LICENSE.txt",
+    "source": "installed docling-jobkit==1.20.1 / docling_jobkit-1.20.1.dist-info/licenses/LICENSE",
+    "sha256": "9816fb12b11c33c552f4e8621879d0da493be47c0f86be785b53a2cf7f7ae4c6"
+  },
+  {
+    "file": "RapidOCR-LICENSE.txt",
+    "source": "https://raw.githubusercontent.com/RapidAI/RapidOCR/v3.8.1/LICENSE",
+    "sha256": "3e0af25fdd06aa9586ae97adb00ea927ebe5a3805ac77d2d3a81ce5f55693333"
+  },
+  {
+    "file": "PaddleOCR-LICENSE.txt",
+    "source": "https://raw.githubusercontent.com/PaddlePaddle/PaddleOCR/v2.7.0/LICENSE",
+    "sha256": "ff6311c56c1b22c9209c96cc8afc16da91c24ee55a15e14ebc46fe1960dbd856"
+  },
+  {
+    "file": "Heron-MODEL-CARD.md",
+    "source": "https://huggingface.co/docling-project/docling-layout-heron/resolve/8f39ad3c0b4c58e9c2d2c84a38465abf757272d8/README.md",
+    "sha256": "175700839bc7808eac6af1d0c23e4f483606ab2276fe01122f4093e61a1a65b6"
+  },
+  {
+    "file": "TableFormer-MODEL-CARD.md",
+    "source": "https://huggingface.co/docling-project/docling-models/resolve/fc0f2d45e2218ea24bce5045f58a389aed16dc23/README.md",
+    "sha256": "d17f233378eff1240b623b36da76ee8b40afcca05d505949713bf03f7e00822a"
+  },
+  {
+    "file": "CDLA-Permissive-2.0.txt",
+    "source": "https://raw.githubusercontent.com/Community-Data-License-Agreements/Releases/main/CDLA-Permissive-2.0.txt",
+    "sha256": "4531a67d443284d93ffed0803df5b10634aff21c3d77e381f2d48af01d875868"
+  },
+  {
+    "file": "Apache-2.0.txt",
+    "source": "installed transformers==5.9.0 / dist-info/licenses/LICENSE",
+    "sha256": "77fd4710def9ec3c0f6225800e0235f15a425abd4a8b03559127fcd782612049"
+  }
+]

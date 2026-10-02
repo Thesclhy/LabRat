@@ -1103,6 +1103,64 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/api/v1/projects/{projectId}/context-document-versions/{versionId}/cancel": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly versionId: components["parameters"]["ContextDocumentVersionId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        readonly post: operations["cancelContextDocumentProcessing"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/projects/{projectId}/context-document-versions/{versionId}/pages": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly versionId: components["parameters"]["ContextDocumentVersionId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly get: operations["listContextDocumentPages"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/api/v1/projects/{projectId}/context-document-versions/{versionId}/pages/{pageNumber}/text": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly versionId: components["parameters"]["ContextDocumentVersionId"];
+                readonly pageNumber: number;
+            };
+            readonly cookie?: never;
+        };
+        readonly get: operations["readContextDocumentPageText"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/api/v1/projects/{projectId}/context-document-versions/{versionId}/passages": {
         readonly parameters: {
             readonly query?: never;
@@ -3129,6 +3187,7 @@ export interface components {
             readonly items: readonly components["schemas"]["ResearchQuestion"][];
             readonly nextCursor: string | null;
         };
+        /** @description Frozen evidence at the read version. document_page evidence uses a physical PDF page and absolute UTF-16 start/end; original-page rectangles are resolved from the pinned canonical page after text/hash checks. document_passage remains the historical/Word/TXT type. Missing precise coordinates are disclosed, never inferred from the latest version. */
         readonly ResearchEvidenceResponse: {
             readonly evidence: components["schemas"]["JsonObject"];
             readonly capturedAt: string;
@@ -3149,6 +3208,47 @@ export interface components {
             readonly createdBy: components["schemas"]["OpaqueId"];
             readonly createdAt: components["schemas"]["Timestamp"];
             readonly updatedAt: components["schemas"]["Timestamp"];
+        };
+        readonly CanonicalDocumentPageSummary: {
+            readonly page: number;
+            /** @enum {string} */
+            readonly status: "ready" | "empty" | "needs_review" | "failed";
+            readonly characterCount: number;
+            readonly width: number;
+            readonly height: number;
+            /** @enum {integer} */
+            readonly rotation: 0 | 90 | 180 | 270;
+            readonly warnings: readonly string[];
+        };
+        readonly CanonicalDocumentPageDirectory: {
+            readonly versionId: components["schemas"]["OpaqueId"];
+            readonly pageCount: number | null;
+            readonly items: readonly components["schemas"]["CanonicalDocumentPageSummary"][];
+            readonly nextCursor: components["schemas"]["NullableString"];
+        };
+        readonly CanonicalDocumentPageBlockWindow: {
+            readonly id: string;
+            /** @enum {string} */
+            readonly kind: "text" | "title" | "section_header" | "caption" | "formula" | "table" | "picture" | "footnote" | "page_header" | "page_footer" | "list_item" | "code" | "unknown";
+            readonly start: number;
+            readonly end: number;
+            /** @description Normalized displayed-page [left, top, right, bottom]. Omitted for page-only precision. */
+            readonly bbox?: readonly number[];
+        };
+        readonly CanonicalDocumentPageWindow: {
+            readonly versionId: components["schemas"]["OpaqueId"];
+            /** @constant */
+            readonly schemaVersion: 2;
+            readonly page: number;
+            /** @enum {string} */
+            readonly status: "ready" | "empty" | "needs_review" | "failed";
+            readonly start: number;
+            readonly end: number;
+            readonly text: string;
+            readonly totalCharacters: number;
+            readonly nextCursor: components["schemas"]["NullableString"];
+            readonly warnings: readonly string[];
+            readonly blocks: readonly components["schemas"]["CanonicalDocumentPageBlockWindow"][];
         };
         readonly ContextDocumentPassage: {
             readonly versionId: components["schemas"]["OpaqueId"];
@@ -4911,6 +5011,10 @@ export type SchemaResearchQuestionPage = components['schemas']['ResearchQuestion
 export type SchemaResearchEvidenceResponse = components['schemas']['ResearchEvidenceResponse'];
 export type SchemaEmptyRequest = components['schemas']['EmptyRequest'];
 export type SchemaContextDocumentVersion = components['schemas']['ContextDocumentVersion'];
+export type SchemaCanonicalDocumentPageSummary = components['schemas']['CanonicalDocumentPageSummary'];
+export type SchemaCanonicalDocumentPageDirectory = components['schemas']['CanonicalDocumentPageDirectory'];
+export type SchemaCanonicalDocumentPageBlockWindow = components['schemas']['CanonicalDocumentPageBlockWindow'];
+export type SchemaCanonicalDocumentPageWindow = components['schemas']['CanonicalDocumentPageWindow'];
 export type SchemaContextDocumentPassage = components['schemas']['ContextDocumentPassage'];
 export type SchemaRegisterContextDocumentResponse = components['schemas']['RegisterContextDocumentResponse'];
 export type SchemaContextDocumentResponse = components['schemas']['ContextDocumentResponse'];
@@ -7620,6 +7724,117 @@ export interface operations {
                     readonly [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    readonly cancelContextDocumentProcessing: {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly versionId: components["parameters"]["ContextDocumentVersionId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": Record<string, never>;
+            };
+        };
+        readonly responses: {
+            /** @description Processing cancelled locally; late results cannot write. Completed pages and historical references remain. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ContextDocumentVersionResponse"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+        };
+    };
+    readonly listContextDocumentPages: {
+        readonly parameters: {
+            readonly query?: {
+                readonly cursor?: components["parameters"]["Cursor"];
+                readonly limit?: components["parameters"]["DocumentPageLimit"];
+            };
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly versionId: components["parameters"]["ContextDocumentVersionId"];
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Canonical physical page directory, without repeated full text. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["CanonicalDocumentPageDirectory"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            /** @description Historical version uses passage format. */
+            readonly 409: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    readonly readContextDocumentPageText: {
+        readonly parameters: {
+            readonly query?: {
+                /** @description Absolute UTF-16 offset; must not split a surrogate pair. */
+                readonly cursor?: string;
+                readonly limit?: number;
+            };
+            readonly header?: never;
+            readonly path: {
+                readonly projectId: components["parameters"]["ProjectId"];
+                readonly versionId: components["parameters"]["ContextDocumentVersionId"];
+                readonly pageNumber: number;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Continuous page text window with original page locations. */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["CanonicalDocumentPageWindow"];
+                };
+            };
+            readonly 400: components["responses"]["ValidationError"];
+            readonly 401: components["responses"]["Unauthorized"];
+            readonly 403: components["responses"]["Forbidden"];
+            readonly 404: components["responses"]["NotFound"];
+            /** @description Historical version uses passage format. */
+            readonly 409: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["ErrorResponse"];
+                };
             };
         };
     };

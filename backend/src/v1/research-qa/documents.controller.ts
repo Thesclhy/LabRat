@@ -2,7 +2,7 @@ import { Body, Controller, Get, HttpCode, Param, Post, Query, Res } from "@nestj
 import type { FastifyReply } from "fastify";
 import { CurrentAuth } from "../identity/current-auth.js";
 import type { AuthContext } from "../identity/identity.types.js";
-import { ArchiveDocumentDto, DocumentPageDto, EmptyDocumentDto, RegisterDocumentDto } from "./documents.dto.js";
+import { ArchiveDocumentDto, DocumentPageDto, DocumentPageTextDto, EmptyDocumentDto, RegisterDocumentDto } from "./documents.dto.js";
 import { DocumentsService } from "./documents.service.js";
 
 @Controller("api/v1/projects/:projectId/context-documents")
@@ -44,6 +44,11 @@ export class ContextDocumentVersionsController {
     return this.documents.retry(auth, projectId, id);
   }
 
+  @Post("cancel") @HttpCode(200)
+  cancel(@CurrentAuth() auth: AuthContext, @Param("projectId") projectId: string, @Param("versionId") id: string, @Body() _body: EmptyDocumentDto) {
+    return this.documents.cancel(auth, projectId, id);
+  }
+
   @Get("passages")
   passages(@CurrentAuth() auth: AuthContext, @Param("projectId") projectId: string, @Param("versionId") id: string, @Query() query: DocumentPageDto) {
     return this.documents.listPassages(auth, projectId, id, query);
@@ -59,5 +64,17 @@ export class ContextDocumentVersionsController {
     @Param("pageNumber") pageNumber: string, @Res() response: FastifyReply) {
     const image = await this.documents.pageImage(auth, projectId, id, Number(pageNumber));
     return response.header("Cache-Control", "private, no-store").header("X-Content-Type-Options", "nosniff").type("image/png").send(image);
+  }
+
+  @Get("pages")
+  pages(@CurrentAuth() auth: AuthContext, @Param("projectId") projectId: string, @Param("versionId") id: string,
+    @Query() query: DocumentPageDto) {
+    return this.documents.listPages(auth, projectId, id, query);
+  }
+
+  @Get("pages/:pageNumber/text")
+  pageText(@CurrentAuth() auth: AuthContext, @Param("projectId") projectId: string, @Param("versionId") id: string,
+    @Param("pageNumber") pageNumber: string, @Query() query: DocumentPageTextDto) {
+    return this.documents.pageText(auth, projectId, id, Number(pageNumber), query);
   }
 }
