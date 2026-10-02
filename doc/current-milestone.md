@@ -1,12 +1,12 @@
 # Current Milestone
 
-Status: Docling PDF pages v1 complete locally; authorized Lightsail 8GB upgrade and production deployment in progress
+Status: Docling/8GB production deployment complete; page/budget checks pass, hosted Q&A semantic acceptance remains open
 Read when: checking what the next implementation slice should be.
 Last reviewed: 2026-10-02
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
 
-## Active deployment: Lightsail 8GB and Docling
+## Production checkpoint: Lightsail 8GB and Docling
 
 The user confirmed the current 2GB / 2 vCPU plan and explicitly approved the
 8GB / 2 vCPU / $44-month plan on 2026-10-01. Existing credentials recovered
@@ -16,19 +16,21 @@ database/files backup integrity passed; the Lightsail snapshot is available.
 same static IP. Formal Linux service and PDF validation passed: 11 pages /
 62,631 characters / 29 anchors. The final paused data checkpoint restored with
 all table counts matching; the old instance is stopped and retained. Application
-release 1ffa086 is deployed, migration 038 is applied, and fresh hosted upload
-retains all pages/anchors. The production provider is Anthropic; its original
-catalyst question still hits the cumulative budget after three read windows.
-Reading-closure release de920cc is deployed; a fresh question answers within
-48,096 tokens with all page/source checks passing. Semantic review caught a
-source-name character substitution. The scoped final-context follow-up omits
-discovery and intermediate assistant drafts while retaining actual reads; full
-regression and real-Claude saved-state semantic review pass (43,901 total tokens).
-Preserve all initial answers and failures. Publication and a fresh hosted
-semantic review remain gates.
+release 7e4a106 is deployed after 1ffa086/de920cc; migration 038 is applied.
+Fresh hosted upload/rechecks retain all pages/anchors. Anthropic's original
+budget failure is preserved. Reading closure/final context retain actual reads
+within the same cap; the new hosted question completes in 26.880s / 45,542
+tokens with source body/version/highlight checks passing. Full local/hosted
+regression and actual service/compiled-source checks pass. Hosted semantic review
+still finds b-ZnO replaced by β-ZnO and an unsupported HZSM5 reactor suggestion;
+correct stored text and successful replays do not establish answer correctness.
+All failed answers remain unchanged; the dedicated QA project is archived.
+New/old instance tags are production/rollback, with old host stopped and retained.
 Follow `doc/qa/docling-lightsail-deployment.md` for durable release checkpoints.
-Publish the verified reading-closure follow-up and validate a new hosted question.
-Retain the old instance and checkpoints for rollback.
+Engineering deployment is complete; source-name/condition fidelity is the open
+Q&A quality follow-up. User manual UI/OCR/source acceptance remains required.
+Preserve the no-prose-content-gate contract and all failed evidence. Retain the
+old instance/checkpoints for rollback; account for overlap/storage charges.
 
 ## Completed local Goal: Docling PDF pages v1
 
@@ -63,6 +65,10 @@ Docker Desktop is installed but its engine is not running.
 This goal excludes production changes, semantic chunks and vector search.
 
 ## Frontend routing phase one
+
+Later authorized publication: included in Docling application 1ffa086 and now
+production 7e4a106. Hosted SPA routes/assets pass; local browser acceptance
+remains the interaction evidence, with hosted user manual acceptance pending.
 
 The active user goal is [phase-one routing](plans/frontend-routing-phase1.md),
 implemented in the managed frontend-routing-phase1 worktree from integrated

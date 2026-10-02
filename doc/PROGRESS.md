@@ -2,7 +2,7 @@
 
 Status: active
 Read when: checking recent work, verification status, and follow-up items.
-Last reviewed: 2026-10-01
+Last reviewed: 2026-10-02
 
 Use this file for recent progress only. Older entries live in `doc/reports/progress-archive-2026-06.md`.
 
@@ -12,6 +12,28 @@ Keep entries concise, newest first, and include:
 - meaningful changes
 - verification
 - follow-ups or residual risk
+
+## 2026-10-02 — 8GB/Docling production checkpoint; Q&A semantics remain open
+
+- Application 7e4a106 / workflow 36969128891 deployed successfully. Hosted
+  regression/PostgreSQL/builds, compiled-source instructions, all services and
+  live SPA/assets/health pass. Full local regression: 483 frontend / 424 Node
+  plus nine existing skips / 74 Nest.
+- Final new hosted question completes in 26.880s / 45,542 aggregate tokens,
+  four read windows/eight links; every body/version window matches canonical
+  pages. All 11 pages / 62,631 characters / 29 anchors, page 9 and 401 pass.
+- Semantic review **failed**: b-ZnO becomes β-ZnO and HZSM5 is suggested for an
+  unsupported reactor category. Stored text is correct and production build
+  matches source. Saved-state replay success does not establish live factual
+  acceptance. No paper-specific replacements or prose/numeric gates added.
+- QA project archived; earlier answers/usage checked unchanged and final
+  failure retained. Source-name/condition fidelity and user manual review
+  remain follow-ups. Engineering deployment/page/budget checks are complete.
+- New instance tag corrected to production; old stopped instance to rollback.
+  Static IP points to the 8GB host. Old instance/checkpoints retained, with
+  overlap/storage charges. Routing phase one ships in the same release;
+  historical local-only status is reconciled. See
+  doc/qa/docling-lightsail-deployment.md for full evidence and retained failures.
 
 ## 2026-10-02 — Hosted Docling acceptance and Q&A closure follow-up
 

@@ -1,7 +1,7 @@
 # Docling / Lightsail 8GB deployment
 
 Started: 2026-10-01 (America/New_York); continued 2026-10-02.
-Status: 8GB instance and Docling application deployed; hosted Q&A follow-up in progress.
+Status: 8GB/Docling deployed; infrastructure, page storage and Q&A budget acceptance pass. Hosted answer semantics remain unaccepted.
 
 The user authorized upgrading the 2GB production instance to the 8GB IPv4
 Lightsail plan ($44/month), retaining the original instance for rollback, and
@@ -75,6 +75,10 @@ deploying the locally verified Docling page implementation.
 - Once the new host accepts writes, machine rollback requires a fresh reverse
   data sync. Prefer application/parser rollback on the new host. Old instance
   charges continue while retained; snapshot storage is charged separately.
+- Corrected the new instance's temporary `Environment=upgrade-validation` tag
+  to `production` after cutover; the stopped old instance is tagged `rollback`.
+  Both retain `Project=LabRat`. Tag operations succeeded and read-back matches,
+  so production-filtered console inventory now reflects the serving 8GB host.
 
 ## Application release and hosted Q&A follow-up
 
@@ -142,6 +146,40 @@ deploying the locally verified Docling page implementation.
   state. Neither initial harness failure created another provider request. An
   initial service probe used port 8080; the configured 8787 probe passed.
 
+## Final production checkpoint (2026-10-02)
+
+- Application `7e4a106b6f468014e30306ecce0054ae5095512f` deployed through
+  [workflow 36969128891](https://github.com/Thesclhy/LabRat/actions/runs/36969128891).
+  Full hosted tests, PostgreSQL integration, builds and deployment passed.
+  Active release: `/opt/labrat/releases/20261002053215-7e4a106b6f46`.
+  Compiled/source answer instructions match; the compiled closure disables tools,
+  omits assistant drafts and retains actual reads. All production services and
+  configured-port health pass. The parser/runtime and migration 038 are unchanged.
+- New hosted question `agent_run_e606980b2af746b6b12f7f50` completes in 26.880s:
+  five generations, 44,253 input + 1,289 output = 45,542 aggregate tokens,
+  four actual read windows (pages 1/5/3/7), eight source links, readingClosed=true,
+  no unknown usage/reservation/failure. Every source body equals its pinned
+  canonical `[start,end)` window. All 11 pages / 62,631 characters / 29 anchors,
+  original page 9 and anonymous 401 still pass after the release.
+- **Semantic acceptance failed.** The answer again substitutes Greek `β-ZnO`
+  for the source's Latin `b-ZnO` and expands it as beta-zinc oxide; every actual
+  read body has the correct Latin b, and page 1 states bifunctional ZnO. It also
+  suggests HZSM5 for microwave systems while the actual comparison identifies
+  Ru/HZSM5 in an autoclave reactor. Successful saved-state replays therefore do
+  not establish hosted factual correctness. No runtime prose/numeric content
+  gate or paper-specific replacement was introduced. Source-name/condition
+  fidelity is a separate remaining Q&A quality issue, not an OCR page-loss issue.
+- Dedicated QA project is archived after recording that failed semantic review.
+  Original budget failure and first closure answer/usage are unchanged; checked
+  through authenticated APIs before cleanup. The final answer/history is retained
+  as well. Private ignored evidence: `production-canary-closure-report.json`,
+  `production-canary-closure-question.json`, `production-canary-closure-sources.json`,
+  `production-canary-semantic-review.json`, and `production-final-build-check.log`.
+- New instance is running with `Environment=production`; old 2GB instance is
+  stopped with `Environment=rollback`. Static IP is attached to the 8GB instance.
+  Both keep Project=LabRat; original instance/checkpoints are retained for rollback
+  and incur overlap/storage charges. No automatic deletion is scheduled.
+
 ## Remaining gates
 
 - Done: create and isolate the new instance; verify identity and 8GB resources.
@@ -150,9 +188,13 @@ deploying the locally verified Docling page implementation.
   existing static IP switched to the 8GB host.
 - Done: publish Docling through the main workflow and verify actual parser,
   migration, frontend, fresh upload and original page access.
-- Publish the scoped Q&A closure follow-up and verify a fresh original question
-  with actual source bodies and semantic review. Keep the failed history.
-- Retain the original instance and checkpoints; report overlap/storage charges.
+- Done: publish reading closure/final-context follow-ups and verify the fresh
+  original question's engineering behavior and source bodies within the hard cap.
+- Open: hosted source-name and condition fidelity. Preserve failed semantic
+  evidence; user/manual source review remains necessary. Existing contracts do
+  not certify generated prose facts. Do not mark full Q&A acceptance complete.
+- Done: retain original instance/checkpoints, correct console labels and record
+  overlap/storage charges. Later deletion requires explicit authorization.
 
 Browser automation remains unavailable because its local sandbox cannot start.
 An approved read-only command outside that sandbox recovered CLI access. AWS

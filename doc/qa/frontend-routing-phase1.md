@@ -1,7 +1,17 @@
 # Frontend routing phase one acceptance
 
 Date: 2026-09-28; integration follow-up: 2026-09-30.
-Status: phase one and current-main integration verified locally; not published.
+Status: phase one/current-main integration verified locally; published with application 1ffa086 on 2026-10-02.
+
+## Later authorized publication
+
+The later Docling/8GB deployment includes this completed routing implementation.
+Actual production `/LabRat/`, `/LabRat/login` and `/LabRat/projects` return the
+SPA successfully and its asset matches the verified build. See
+[deployment evidence](docling-lightsail-deployment.md). The local browser cases
+below remain the interaction evidence; hosted browser manual acceptance is still
+needed because the current browser automation sandbox cannot start. Phase-two
+entity/review routes remain separate.
 
 ## Integration with current main
 

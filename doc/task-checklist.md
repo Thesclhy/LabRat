@@ -2,11 +2,29 @@
 
 Status: active
 Read when: starting or continuing a non-trivial LabRat milestone.
-Last reviewed: 2026-09-30
+Last reviewed: 2026-10-02
 
 This file is the reusable execution checklist for Codex work. It should describe how to run a milestone, not what the current product strategy is. Current milestone state belongs in `doc/current-milestone.md`; recent completed work belongs in `doc/PROGRESS.md`.
 
 ## Long-Task Loop
+
+Docling/Lightsail deployment (2026-10-02):
+
+- [x] Verify 8GB plan authorization, instance identity, snapshots and backups.
+- [x] Validate offline pinned Linux parser against paper and PDF corpus.
+- [x] Restore final paused checkpoint with matching hashes/table counts and
+  transfer the existing static IP to the 8GB host.
+- [x] Publish migration 038/Docling and scoped Q&A budget/context follow-ups;
+  complete local and hosted regression including PostgreSQL.
+- [x] Verify fresh upload, all 11 physical pages/29 anchors, source bodies,
+  pinned versions, original images and anonymous rejection.
+- [x] Verify new question completes within unchanged 60,000 aggregate cap.
+- [x] Record hosted semantic failure, preserve initial history and archive QA
+  project; correct production/rollback console tags and retain rollback assets.
+- [ ] Hosted source-name/condition fidelity acceptance and user manual UI/OCR
+  source review. Model prose is not certified by successful source links.
+
+Release evidence: doc/qa/docling-lightsail-deployment.md.
 
 Mean-temperature fix release (2026-09-30):
 

@@ -2,7 +2,7 @@
 
 Status: active
 Read when: deciding what LabRat should build next.
-Last reviewed: 2026-09-30
+Last reviewed: 2026-10-02
 
 This is the short active plan. Current execution status lives in `doc/current-milestone.md`; detailed implementation plans live under `doc/plans/`.
 
@@ -27,18 +27,21 @@ A01–A15 pass, including real Docling/DB/browser/provider checks and full regre
 See [verification](qa/docling-pdf-pages-verification.md) for retained failures,
 manual retest and limits. Semantic retrieval remains separate. The user approved
 production deployment and the 8GB Lightsail upgrade on 2026-10-01;
-the 8GB host now serves the existing release after Linux parser acceptance and
-final data synchronization. Docling application 1ffa086 is deployed; hosted
-Anthropic verification found a need for deterministic budget closure before
-another retrieval round. This scoped follow-up is being verified. See
+the 8GB host serves application 7e4a106 after Linux parser acceptance, final
+data sync and main-workflow release. Hosted upload retains all 11 pages/anchors;
+reading closure and reduced final context complete the new question within
+45,542 tokens. Hosted semantic review still catches source-name/condition
+overclaims, so full Q&A acceptance remains open. See
 doc/qa/docling-lightsail-deployment.md. No semantic retrieval implementation has
-started.
+started; it must not be treated as a guarantee of correct generated prose.
 
 [Frontend routing phase one](plans/frontend-routing-phase1.md) is complete
 locally: addressable login/project lists/project tabs, browser history and
 protected manuscript drafts. The 2026-09-30 follow-up integrated main 933c5fc
-and passed full regression and browser acceptance. Delivery is local only;
-phase-two review/entity routes and deployment are outside scope. Prior
+and passed full regression and browser acceptance. The later authorized Docling
+publication includes phase one; hosted SPA routes/assets pass, while hosted
+manual interaction acceptance remains. Phase-two review/entity routes remain
+separate. Prior
 production milestones below are preserved.
 
 Server-backed pending Ask tasks across devices are deployed at application

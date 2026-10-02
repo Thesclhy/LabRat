@@ -1,7 +1,9 @@
 # Docling PDF pages v1 verification
 
-Status: M0–M4 / A01–A15 passed locally. Reviewable delivery; not pushed, merged or deployed.
-Started: 2026-10-01. Scope: local only; production unchanged.
+Status: M0–M4 / A01–A15 passed locally; later production release tracked separately.
+Started: 2026-10-01. Original Goal scope: local only. The later user-authorized
+8GB upgrade and production publication are in
+[deployment evidence](docling-lightsail-deployment.md).
 
 ## Baseline and fixed inputs
 

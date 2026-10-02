@@ -2,7 +2,7 @@
 
 Status: active
 Read when: starting any non-trivial LabRat coding or documentation task.
-Last reviewed: 2026-09-28
+Last reviewed: 2026-10-02
 
 This file is the routing guide for AI agents. It tells you which docs are current source of truth, which docs are long-term plans, and which docs are historical reports.
 
@@ -22,10 +22,12 @@ For the next PDF parsing phase, read
 page storage and citations, recoverable processing and token-budget correction;
 semantic chunking and pgvector are later work. The current execution checkpoint
 is in current-milestone.md. Canonical PDF pages and the 8GB host are deployed;
-the hosted Anthropic budget-closure follow-up is in progress. See
+the hosted Anthropic reading-closure/final-context release passes page/source
+and budget checks. Hosted semantic acceptance remains open for source-name and
+condition fidelity; saved-state replay success is not factual certification. See
 [production evidence](qa/docling-lightsail-deployment.md).
 
-For the active local frontend navigation goal, read
+For the deployed phase-one frontend navigation implementation, read
 [phase-one routing](plans/frontend-routing-phase1.md). It changes main-page
 navigation and draft protection, without changing API or scientific contracts.
 
