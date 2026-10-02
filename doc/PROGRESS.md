@@ -15,6 +15,15 @@ Keep entries concise, newest first, and include:
 
 ## 2026-10-02 — Hosted Docling acceptance and Q&A closure follow-up
 
+- Reading-closure release de920cc / workflow 36967969761 deployed. Fresh
+  question completes in 25.625s / 48,096 actual tokens; 11 pages/29 anchors,
+  source body/version/highlights and 401 pass. Semantic review found b-ZnO
+  rewritten as β-ZnO despite correct saved text; retain that answer. Final
+  context now preserves original input/actual reads, omitting discovery and
+  assistant drafts. Full regression and final Claude replay semantic review
+  pass (43,901 tokens); publication/fresh hosted review remain a
+  gate. Locator/resume harness and wrong-port probe failures are preserved.
+
 - Main application 1ffa086 and workflow 36963511637 deployed successfully on
   the 8GB host; migration 038, private parser/runtime, frontend assets/routes
   and health pass. Fresh hosted PDF upload retains 11 pages / 62,631 characters /

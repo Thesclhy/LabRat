@@ -117,6 +117,31 @@ deploying the locally verified Docling page implementation.
   and comparisons, without the earlier abbreviation/axis overclaims. Initial
   replays and failures are retained; a fresh hosted question remains required.
 
+- Q&A closure application `de920ccb318677fba984c8096bc6b603b3bf06a0`
+  deployed through [workflow 36967969761](https://github.com/Thesclhy/LabRat/actions/runs/36967969761).
+  Hosted tests, PostgreSQL integration, builds and deployment all passed; active
+  release `/opt/labrat/releases/20261002051606-de920ccb3186` is healthy.
+- Its fresh question `agent_run_12aca308ffe44567b749cea6` completed in 25.625s,
+  with 48,096 actual aggregate tokens, two read windows, three source links and
+  readingClosed=true. Every full source body matches the canonical page window;
+  version pins/highlights, all 11 pages/29 anchors, page 9 and 401 still pass.
+  Semantic review caught `b-ZnO` rewritten as `β-ZnO`. The saved canonical text
+  is correct. Keep this initial answer and do not rewrite its history.
+- The next scoped follow-up rebuilds final-generation context from the original
+  user/system context and full actual read results. Intermediate assistant drafts
+  and discovery results are omitted from that request; saved reads and trace stay
+  intact. This targets draft contamination and also reduces input size. Source
+  character/option guidance applies to format repair as well. Focused tests and
+  full regression pass. Final real-Claude replay uses 43,901 aggregate tokens;
+  review against actual windows confirms supported names/caveats and distinguishes
+  this study from literature comparisons without the earlier axis overclaim.
+  Publish this follow-up and check a new hosted question before closing deployment.
+- Acceptance harness fixes are retained: source responses correctly add block
+  rectangles/precision to the saved locator, so compare canonical locator fields
+  before checking text. Resume must recover the saved request ID before writing
+  state. Neither initial harness failure created another provider request. An
+  initial service probe used port 8080; the configured 8787 probe passed.
+
 ## Remaining gates
 
 - Done: create and isolate the new instance; verify identity and 8GB resources.

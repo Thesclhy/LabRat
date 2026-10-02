@@ -19,9 +19,13 @@ all table counts matching; the old instance is stopped and retained. Application
 release 1ffa086 is deployed, migration 038 is applied, and fresh hosted upload
 retains all pages/anchors. The production provider is Anthropic; its original
 catalyst question still hits the cumulative budget after three read windows.
-The scoped reading-closure follow-up passes full regression and real-Claude
-saved-state semantic review (43,873 total tokens); preserve the initial failure
-and old history. Publication and a fresh hosted question are the remaining gates.
+Reading-closure release de920cc is deployed; a fresh question answers within
+48,096 tokens with all page/source checks passing. Semantic review caught a
+source-name character substitution. The scoped final-context follow-up omits
+discovery and intermediate assistant drafts while retaining actual reads; full
+regression and real-Claude saved-state semantic review pass (43,901 total tokens).
+Preserve all initial answers and failures. Publication and a fresh hosted
+semantic review remain gates.
 Follow `doc/qa/docling-lightsail-deployment.md` for durable release checkpoints.
 Publish the verified reading-closure follow-up and validate a new hosted question.
 Retain the old instance and checkpoints for rollback.

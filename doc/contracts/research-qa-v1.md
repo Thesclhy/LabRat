@@ -331,9 +331,10 @@ is counted before generation and shares the same hard token/request/time limits;
 there is no unbudgeted final call or guarantee that every question will fit.
 Discovery-only retries may still perform their first authorized read. Source
 abbreviations may be expanded only when the read evidence defines them.
-Discovery tool-result text is replaced by an explicit discovery-only marker in
-that final provider request; saved discovery trace and actual read results are
-unchanged. This reduces snippet contamination without claiming factual validation.
+That final provider request retains the original user/system context and every
+actual read result, omitting discovery tool results and intermediate assistant
+drafts. Saved discovery trace and actual read results are unchanged. This reduces
+snippet/draft contamination without claiming factual validation.
 Prompt guidance distinguishes tested results from literature comparisons and
 warns that extracted figure axis ticks do not establish measured data points.
 
