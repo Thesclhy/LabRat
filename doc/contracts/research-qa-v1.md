@@ -321,6 +321,22 @@ interrupted/failed attempt, `/cancel` cancels it, and `/evidence/{evidenceId}` o
 the saved source window. These operations require current full-project read and
 exclude public Guest. The mixed AgentRun action route keeps propose.
 
+Once half of the cumulative token allowance is spent (30,000 with the default
+60,000 cap) and the current model conversation contains an authorized read,
+the next generation disables further tool selection using the provider's
+`tool_choice: none`. A trusted system instruction asks for concise JSON from
+the existing evidence and explicit remaining gaps. Every read window, source
+ID, tool definition and output schema remains intact. The transformed request
+is counted before generation and shares the same hard token/request/time limits;
+there is no unbudgeted final call or guarantee that every question will fit.
+Discovery-only retries may still perform their first authorized read. Source
+abbreviations may be expanded only when the read evidence defines them.
+Discovery tool-result text is replaced by an explicit discovery-only marker in
+that final provider request; saved discovery trace and actual read results are
+unchanged. This reduces snippet contamination without claiming factual validation.
+Prompt guidance distinguishes tested results from literature comparisons and
+warns that extracted figure axis ticks do not establish measured data points.
+
 Question model repairs share a maximum of twelve generation requests/eight tool
 rounds/twenty-four calls. Anthropic input uses the selected model's count-tokens
 endpoint on the same configured provider, including tools/history/output schema,

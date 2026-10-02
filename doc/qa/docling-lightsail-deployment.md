@@ -1,7 +1,7 @@
 # Docling / Lightsail 8GB deployment
 
 Started: 2026-10-01 (America/New_York); continued 2026-10-02.
-Status: 8GB instance serving production; Linux acceptance passed; application release pending.
+Status: 8GB instance and Docling application deployed; hosted Q&A follow-up in progress.
 
 The user authorized upgrading the 2GB production instance to the 8GB IPv4
 Lightsail plan ($44/month), retaining the original instance for rollback, and
@@ -76,16 +76,57 @@ deploying the locally verified Docling page implementation.
   data sync. Prefer application/parser rollback on the new host. Old instance
   charges continue while retained; snapshot storage is charged separately.
 
+## Application release and hosted Q&A follow-up
+
+- Application `1ffa0861fc52735fbcaa6cd25a6dcbc56663d4e1` deployed through
+  [workflow 36963511637](https://github.com/Thesclhy/LabRat/actions/runs/36963511637).
+  All hosted tests/builds/deployment passed. Active release is
+  `/opt/labrat/releases/20261002041636-1ffa0861fc52`; migration 038 is applied.
+  Parser runtime `6ff2252f65c4385df9018e1cbfbdcbc091502609a6a79234dc8c3c11e33b6b3c`
+  is active. Private environment/key permissions and `pip check` pass.
+- Root/login/project-list routes and actual frontend asset
+  `index-BkgbdccU.js` pass HTTPS checks and match the verified local build.
+- Hosted fresh upload in a separate QA project saves 11 pages / 62,631
+  characters / 29 anchors in 75.674s. Original page 9 renders as PNG; anonymous
+  page access returns 401. Full evidence bodies intentionally require the
+  authorized source endpoint; they are absent from question summaries.
+- The original catalyst question still exhausted the shared budget on the
+  deployed Anthropic / `claude-sonnet-4-5` provider: five generation requests,
+  48,565 input / 499 output tokens, three read windows on pages 1/5/3 and three
+  discovery queries. Exact provider counting is correct; a further request
+  cannot fit under 60,000. Local M4 had used DeepSeek, so its success did not
+  establish this provider's full hosted behavior. Initial result is retained.
+- Added deterministic reading closure after half the allowance is spent and
+  actual evidence exists in the current conversation. The next provider
+  request disables tools, preserves the full read history/schema, and asks for
+  a concise evidence-grounded answer. Exact counting, output reservation and
+  the 60,000 hard cap remain. Both wire formats and discovery-only retry behavior
+  have focused tests. Full `codex:verify` passed (483 frontend / 424 Node plus
+  nine existing skips / 74 Nest); latest source-name prompt guidance also
+  passes focused tests.
+- An isolated actual-provider replay of the saved reading state produced an
+  answer within 49,313 total tokens. Semantic review caught an unsupported
+  expansion of `b-ZnO` as beta-ZnO; the paper defines it as bifunctional ZnO on
+  page 2. Added general abbreviation guidance, without a runtime prose filter.
+  Repeats also exposed suggestions from search-only snippets and a figure-axis
+  value presented as a measured result. Final-generation discovery results now
+  carry a marker instead of snippet text; every saved read and discovery trace
+  remains intact. Added source-option/figure guidance and both-provider regression
+  coverage. The final real-Claude replay answers in 43,873 total tokens;
+  review against the three actual windows finds supported catalyst identities
+  and comparisons, without the earlier abbreviation/axis overclaims. Initial
+  replays and failures are retained; a fresh hosted question remains required.
+
 ## Remaining gates
 
 - Done: create and isolate the new instance; verify identity and 8GB resources.
 - Done: verify the pinned Python runtime and real offline conversions on Linux.
 - Done: final paused checkpoint, exact restore and unchanged-release acceptance;
   existing static IP switched to the 8GB host.
-- Publish the Docling release through the existing main deployment workflow.
-- Pipeline changes are verified locally/Linux; confirm its actual production
-  execution. Migration 038 remains forward-only.
-- Verify the actual deployed release, original paper pages and new question.
+- Done: publish Docling through the main workflow and verify actual parser,
+  migration, frontend, fresh upload and original page access.
+- Publish the scoped Q&A closure follow-up and verify a fresh original question
+  with actual source bodies and semantic review. Keep the failed history.
 - Retain the original instance and checkpoints; report overlap/storage charges.
 
 Browser automation remains unavailable because its local sandbox cannot start.

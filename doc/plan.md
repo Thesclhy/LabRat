@@ -28,7 +28,9 @@ See [verification](qa/docling-pdf-pages-verification.md) for retained failures,
 manual retest and limits. Semantic retrieval remains separate. The user approved
 production deployment and the 8GB Lightsail upgrade on 2026-10-01;
 the 8GB host now serves the existing release after Linux parser acceptance and
-final data synchronization. The Docling application release is next. See
+final data synchronization. Docling application 1ffa086 is deployed; hosted
+Anthropic verification found a need for deterministic budget closure before
+another retrieval round. This scoped follow-up is being verified. See
 doc/qa/docling-lightsail-deployment.md. No semantic retrieval implementation has
 started.
 

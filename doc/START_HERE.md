@@ -21,7 +21,9 @@ For the next PDF parsing phase, read
 [verification](qa/docling-pdf-pages-verification.md). It covers self-hosted Docling,
 page storage and citations, recoverable processing and token-budget correction;
 semantic chunking and pgvector are later work. The current execution checkpoint
-is in current-milestone.md; this feature is not deployed.
+is in current-milestone.md. Canonical PDF pages and the 8GB host are deployed;
+the hosted Anthropic budget-closure follow-up is in progress. See
+[production evidence](qa/docling-lightsail-deployment.md).
 
 For the active local frontend navigation goal, read
 [phase-one routing](plans/frontend-routing-phase1.md). It changes main-page

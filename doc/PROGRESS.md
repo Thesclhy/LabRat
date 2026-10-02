@@ -13,6 +13,26 @@ Keep entries concise, newest first, and include:
 - verification
 - follow-ups or residual risk
 
+## 2026-10-02 — Hosted Docling acceptance and Q&A closure follow-up
+
+- Main application 1ffa086 and workflow 36963511637 deployed successfully on
+  the 8GB host; migration 038, private parser/runtime, frontend assets/routes
+  and health pass. Fresh hosted PDF upload retains 11 pages / 62,631 characters /
+  29 anchors; original page 9 and anonymous-read rejection pass.
+- Production uses Claude Sonnet 4.5, while local M4 used DeepSeek. Its original
+  catalyst question spent 49,064 actual tokens and exhausted the next request
+  after three read windows. Preserve the failed run. Added tool-choice closure
+  at half the shared allowance after an actual read, retaining all evidence,
+  exact counting and the unchanged 60,000 cap.
+- Full regression passes 483 frontend / 424 Node plus nine existing skips /
+  74 Nest. Actual saved-state Claude replay answers within 49,313 tokens;
+  semantic review found guessed abbreviations, search-snippet suggestions and
+  a figure-axis overclaim. Final generation now omits discovery text while
+  preserving read evidence and saved trace; source-option/figure guidance and
+  both-provider regressions pass. Final Claude replay answers in 43,873 tokens;
+  semantic review against actual windows passes. Fresh hosted question
+  acceptance remains a gate. See doc/qa/docling-lightsail-deployment.md.
+
 ## 2026-10-02 — Lightsail 8GB cutover and Docling release preparation
 
 - User confirmed production is 2GB / 2 vCPU and approved the 8GB IPv4 plan at

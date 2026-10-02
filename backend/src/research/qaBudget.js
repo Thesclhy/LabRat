@@ -1,5 +1,6 @@
 import { QA_LIMITS } from "./evidenceTools.js";
 import { countQaInput, reportedQaUsage } from "./qaTokenCount.js";
+import { closeQaReadingRequest } from "./qaReadClosure.js";
 
 export function createQaBudget({ signal, now = Date.now, limits = QA_LIMITS, previous = {}, checkpoint = async () => {} } = {}) {
   const started = now();
@@ -23,8 +24,15 @@ export function createQaBudget({ signal, now = Date.now, limits = QA_LIMITS, pre
       return async (...args) => {
         check();
         if (usage.requests >= limits.requests) fail("qa_request_limit");
-        const requestText = String(args[1]?.body || "");
+        let requestText = String(args[1]?.body || "");
         const request = JSON.parse(requestText || "{}");
+        // Keep the final generation inside the same budget and retain all reads.
+        const spent = usage.inputTokens + usage.outputTokens + usage.reservedTokens;
+        const readingClosed = spent >= Math.floor(limits.tokens / 2) && closeQaReadingRequest(request, provider);
+        if (readingClosed) {
+          requestText = JSON.stringify(request);
+          args = [args[0], { ...args[1], body: requestText }, ...args.slice(2)];
+        }
         const outputReservation = Number(request.max_tokens || 0);
         if (!Number.isSafeInteger(outputReservation) || outputReservation < 0) fail("qa_token_count_unavailable");
         if (usage.inputTokens + usage.outputTokens + usage.reservedTokens + outputReservation > limits.tokens) fail("qa_token_limit");
@@ -46,6 +54,7 @@ export function createQaBudget({ signal, now = Date.now, limits = QA_LIMITS, pre
         const measurement = { method: counted.method, provider: provider || "unconfigured", model: request.model || null,
           estimatedInputTokens: counted.estimatedInputTokens, inputReservation, outputReservation,
           requestBytes: Buffer.byteLength(requestText), countMs: now() - countStarted,
+          ...(readingClosed ? { readingClosed: true } : {}),
           actualInputTokens: null, actualOutputTokens: null };
         usage.measurements.push(measurement);
         usage.requests += 1; usage.reservedTokens += reservation; usage.unknownUsageRequests += 1;

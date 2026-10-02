@@ -73,3 +73,82 @@ test('offline estimates distinguish text scripts and retain tool/schema framing'
   assert.ok(chinese > 600); assert.ok(ascii > 500); assert.ok(estimateDeepSeekInput(request) > ascii);
   await assert.rejects(countQaInput({ provider: 'deepseek', request: { model: 'unverified-model' } }), { code: 'qa_token_count_unavailable' });
 });
+
+test('a counted final answer closes tools after half the shared budget while retaining every read', async () => {
+  const read = { evidence: { id: 'read-window', page: 9, text: '催化剂 Zn/b-ZnO −12.5 °C 🔬', warnings: ['ocr_check_original'] } };
+  const input = { ...request, messages: [{ role: 'user', content: 'Use the uploaded paper.' },
+    { role: 'assistant', content: [{ type: 'tool_use', id: 'call1', name: 'read_page', input: { page: 9 } }] },
+    { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'call1', content: JSON.stringify(read) }] }],
+    output_config: { format: { type: 'json_schema', schema: { type: 'object' } } } };
+  const before = structuredClone(input);
+  let counted, generated;
+  const budget = createQaBudget({ previous: { inputTokens: 33000, outputTokens: 300 } });
+  await budget.wrapFetch(async (url, init) => {
+    if (url.endsWith('/count_tokens')) { counted = JSON.parse(init.body); return Response.json({ input_tokens: 14000 }); }
+    generated = JSON.parse(init.body); return Response.json({ usage: { input_tokens: 14000, output_tokens: 900 } });
+  }, { provider: 'anthropic' })(endpoint, { body: JSON.stringify(input) });
+  assert.deepEqual(generated.tool_choice, { type: 'none' });
+  assert.deepEqual(counted.tool_choice, generated.tool_choice); assert.equal(counted.system, generated.system);
+  assert.deepEqual(generated.messages, before.messages); assert.deepEqual(generated.tools, before.tools);
+  assert.deepEqual(generated.output_config, before.output_config); assert.deepEqual(input, before);
+  assert.match(generated.system, /reading stage is now closed/);
+  assert.equal(budget.stats().measurements[0].readingClosed, true);
+  assert.equal(budget.stats().inputTokens + budget.stats().outputTokens, 48200);
+  assert.equal(budget.stats().reservedTokens, 0);
+});
+
+test('DeepSeek closure uses its own tool-choice shape; discovery-only retries still may read', async () => {
+  const input = { model: 'deepseek-v4-pro', max_tokens: 4000, tools: request.tools,
+    messages: [{ role: 'system', content: 'Read only authorized evidence.' },
+      { role: 'tool', tool_call_id: 'read1', content: JSON.stringify({ evidence: { id: 'page9', text: '85 °C for 6 h' } }) }] };
+  let sent;
+  const budget = createQaBudget({ previous: { inputTokens: 30000 } });
+  await budget.wrapFetch(async (_url, init) => { sent = JSON.parse(init.body);
+    return Response.json({ usage: { prompt_tokens: 1000, completion_tokens: 300 } });
+  }, { provider: 'deepseek' })('https://api.deepseek.com/chat/completions', { body: JSON.stringify(input) });
+  assert.equal(sent.tool_choice, 'none'); assert.deepEqual(sent.messages[1], input.messages[1]);
+  assert.equal(input.tool_choice, undefined);
+  for (const content of [JSON.stringify({ items: [{ target: { snippet: 'Discovery only' } }] }), 'not JSON']) {
+    const fresh = createQaBudget({ previous: { inputTokens: 30000 } });
+    await fresh.wrapFetch(async (_url, init) => { sent = JSON.parse(init.body);
+      return Response.json({ usage: { prompt_tokens: 1000, completion_tokens: 100 } });
+    }, { provider: 'deepseek' })('https://api.deepseek.com/chat/completions',
+      { body: JSON.stringify({ ...input, messages: [input.messages[0], { role: 'tool', content }] }) });
+    assert.equal(sent.tool_choice, undefined); assert.equal(fresh.stats().measurements[0].readingClosed, undefined);
+  }
+});
+
+test('closing tools never bypasses the hard cumulative token cap', async () => {
+  let generated = 0;
+  const budget = createQaBudget({ previous: { inputTokens: 50000 } });
+  const body = JSON.stringify({ ...request, messages: [{ role: 'user', content: [{ type: 'tool_result', content: JSON.stringify({ evidence: { id: 'read1' } }) }] }] });
+  await assert.rejects(budget.wrapFetch(async (url) => url.endsWith('/count_tokens')
+    ? Response.json({ input_tokens: 10000 }) : (generated++, Response.json({})),
+  { provider: 'anthropic' })(endpoint, { body }), { code: 'qa_token_limit' });
+  assert.equal(generated, 0);
+});
+
+test('final generation omits discovery snippets for both providers, preserving actual reads and original history', async () => {
+  const discovery = { items: [{ snippet: 'UNREAD_CANDIDATE', target: { page: 8 } }] };
+  const read = { evidence: { id: 'actual-read', text: 'READ_CANDIDATE', warnings: ['check_figure'] } };
+  for (const provider of ['anthropic', 'deepseek']) {
+    const messages = provider === 'anthropic' ? [
+      { role: 'assistant', content: [{ type: 'tool_use', id: 'search1', name: 'search_project_documents', input: { query: 'candidate' } }] },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'search1', content: JSON.stringify(discovery) }, { type: 'tool_result', tool_use_id: 'read1', content: JSON.stringify(read) }] },
+    ] : [{ role: 'system', content: 'Read evidence only.' },
+      { role: 'assistant', tool_calls: [{ id: 'search1', type: 'function', function: { name: 'find_experiments', arguments: '{}' } }] },
+      { role: 'tool', tool_call_id: 'search1', content: JSON.stringify(discovery) },
+      { role: 'tool', tool_call_id: 'read1', content: JSON.stringify(read) }];
+    const input = { ...request, model: provider === 'deepseek' ? 'deepseek-v4-pro' : request.model, messages };
+    const original = JSON.stringify(input); let sent, counted;
+    await createQaBudget({ previous: { inputTokens: 30000 } }).wrapFetch(async (url, init) => {
+      if (url.endsWith('/count_tokens')) { counted = JSON.parse(init.body); return Response.json({ input_tokens: 1000 }); }
+      sent = JSON.parse(init.body);
+      return Response.json({ usage: provider === 'anthropic' ? { input_tokens: 1000, output_tokens: 100 } : { prompt_tokens: 1000, completion_tokens: 100 } });
+    }, { provider })(endpoint, { body: original });
+    assert.ok(!JSON.stringify(sent).includes('UNREAD_CANDIDATE'));
+    assert.ok(JSON.stringify(sent).includes(JSON.stringify(read).replaceAll('"', '\\"')));
+    assert.equal(JSON.stringify(input), original); assert.deepEqual(sent.tools, input.tools);
+    if (counted) assert.deepEqual(counted.messages, sent.messages);
+  }
+});

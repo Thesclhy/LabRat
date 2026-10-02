@@ -2,7 +2,7 @@
 
 Status: Docling PDF pages v1 complete locally; authorized Lightsail 8GB upgrade and production deployment in progress
 Read when: checking what the next implementation slice should be.
-Last reviewed: 2026-10-01
+Last reviewed: 2026-10-02
 
 This file tracks the active execution state. Keep `doc/plan.md` as the short roadmap, `doc/task-checklist.md` as the reusable execution checklist, and `doc/PROGRESS.md` as the completed-work log.
 
@@ -16,9 +16,14 @@ database/files backup integrity passed; the Lightsail snapshot is available.
 same static IP. Formal Linux service and PDF validation passed: 11 pages /
 62,631 characters / 29 anchors. The final paused data checkpoint restored with
 all table counts matching; the old instance is stopped and retained. Application
-release c8a5869 remains active until the Docling main workflow completes.
+release 1ffa086 is deployed, migration 038 is applied, and fresh hosted upload
+retains all pages/anchors. The production provider is Anthropic; its original
+catalyst question still hits the cumulative budget after three read windows.
+The scoped reading-closure follow-up passes full regression and real-Claude
+saved-state semantic review (43,873 total tokens); preserve the initial failure
+and old history. Publication and a fresh hosted question are the remaining gates.
 Follow `doc/qa/docling-lightsail-deployment.md` for durable release checkpoints.
-Publish the verified Docling release and validate actual upload/pages/Q&A.
+Publish the verified reading-closure follow-up and validate a new hosted question.
 Retain the old instance and checkpoints for rollback.
 
 ## Completed local Goal: Docling PDF pages v1
