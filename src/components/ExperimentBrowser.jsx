@@ -15,6 +15,11 @@ import {
   updateManualExperiment,
   updateProjectBrowserConfig,
 } from "../data/experimentBrowserApi.js";
+import {
+  buildExperimentBrowserWorkbook,
+  downloadExperimentBrowserWorkbook,
+  loadAllExperimentBrowserRows,
+} from "../export/experimentBrowserExport.js";
 import { ExperimentAnnotationStar } from "./ExperimentAnnotationStar.jsx";
 import { ExperimentDetailDrawer } from "./ExperimentDetailDrawer.jsx";
 import { ExperimentGridHeaderCell } from "./ExperimentGridHeaderCell.jsx";
@@ -213,6 +218,7 @@ export function ExperimentBrowser({
   updateManualRow = updateManualExperiment,
   deleteManualRow = deleteManualExperiment,
   saveManualValue = saveManualExperimentValue,
+  downloadWorkbook = downloadExperimentBrowserWorkbook,
 }) {
   const [columns, setColumns] = useState([]);
   const [columnSettings, setColumnSettings] = useState([]);
@@ -227,6 +233,8 @@ export function ExperimentBrowser({
   const [filters, setFilters] = useState([]);
   const [sort, setSort] = useState([]);
   const [starredOnly, setStarredOnly] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
   const [filterColumnId, setFilterColumnId] = useState("");
   const [filterOperator, setFilterOperator] = useState("contains");
   const [filterInput, setFilterInput] = useState("");
@@ -388,6 +396,20 @@ export function ExperimentBrowser({
       .filter((setting) => !setting.hidden && columnsById.has(setting.columnId))
       .map((setting) => ({ ...columnsById.get(setting.columnId), width: setting.width }));
   }, [columnSettings, displayColumns]);
+  const exportToExcel = async () => {
+    setExporting(true);
+    setExportError("");
+    try {
+      const allRows = nextCursor
+        ? await loadAllExperimentBrowserRows(loadProjection, projectId, { search, filters, sort, starredOnly }, { pageLimit: PAGE_LIMIT })
+        : rows;
+      downloadWorkbook(buildExperimentBrowserWorkbook({ columns: visibleColumns, rows: allRows }));
+    } catch (requestError) {
+      setExportError(errorMessage(requestError, "Experiment Browser could not be exported."));
+    } finally {
+      setExporting(false);
+    }
+  };
   const hiddenColumns = useMemo(() => {
     const columnsById = new Map(displayColumns.map((column) => [column.id, column]));
     return orderedColumnSettings(columnSettings)
@@ -762,7 +784,9 @@ export function ExperimentBrowser({
             ) : null}
             <button type="button" disabled={!canEditSharedConfig || addingRow} title={canEditSharedConfig ? "Log an experiment by hand" : viewError ? "Edit access could not be checked. Reload the page." : "You need Edit or Approve access to this project to add rows."} onClick={() => setAddingRow(true)}>Add row</button>
             <button type="button" disabled={!canEditSharedConfig} onClick={addCustomColumn}>Add column</button>
+            <button type="button" disabled={exporting || !rows.length} title="Download the rows matching the current search and filters, with the visible columns" onClick={exportToExcel}>{exporting ? "Exporting..." : "Export to Excel"}</button>
           </div>
+          {exportError && <p className="browser-error" role="alert">{exportError}</p>}
           {addingRow && (
             <form
               className="experiment-add-row"

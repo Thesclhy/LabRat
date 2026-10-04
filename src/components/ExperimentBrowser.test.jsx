@@ -47,6 +47,25 @@ function viewApi(overrides = {}) {
 }
 
 describe("ExperimentBrowser", () => {
+  it("exports every matching row with the visible columns to Excel", async () => {
+    const loadProjection = vi.fn(async (_projectId, query) => (query.cursor === "page_2"
+      ? projection({ rows: [{ ...rows[0], experimentId: "exp_2", label: "Exp 2" }], totalCount: 2, nextCursor: null })
+      : projection({ totalCount: 2, nextCursor: "page_2" })));
+    const downloadWorkbook = vi.fn();
+    render(<ExperimentBrowser projectId="project_1" loadProjection={loadProjection} downloadWorkbook={downloadWorkbook} {...viewApi()} />);
+    await screen.findByText("Exp 1");
+
+    fireEvent.click(screen.getByRole("button", { name: "Export to Excel" }));
+
+    await waitFor(() => expect(downloadWorkbook).toHaveBeenCalledTimes(1));
+    expect(loadProjection).toHaveBeenLastCalledWith("project_1", expect.objectContaining({ cursor: "page_2" }), expect.anything());
+    const workbook = downloadWorkbook.mock.calls[0][0];
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    expect(sheet.A2.v).toBe("Exp 1");
+    expect(sheet.A3.v).toBe("Exp 2");
+    expect(sheet.B2.v).toBe(250);
+  });
+
   it("assigns horizontal scrolling only to the shared grid frame", () => {
     const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
     const frameRule = css.match(/\.experiment-grid-frame\s*\{([^}]*)\}/)?.[1] || "";
@@ -517,6 +536,7 @@ describe("ExperimentBrowser", () => {
       "Add or update data",
       "Add row",
       "Add column",
+      "Export to Excel",
     ]);
     within(actions).getAllByRole("button").forEach((button) => expect(button.className).not.toContain("primary-action"));
   });
