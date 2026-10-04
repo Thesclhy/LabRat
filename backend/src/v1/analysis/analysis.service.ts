@@ -694,7 +694,12 @@ export class AnalysisService {
       this.repository.listSourceDocuments({ projectId }),
       this.repository.listAcceptedRegionUnderstandings({ projectId }),
     ]);
-    const boundedChartSpecs = chartSpecs.map(chartSpecListItem).filter(Boolean);
+    // Other charts are bounded to metadata, but chart commentary reads the
+    // selected chart's Plotly traces, so that one keeps its full spec.
+    const selectedChartSpecId = String(input.selectedContext?.selectedChartSpecId || "").trim();
+    const boundedChartSpecs = chartSpecs
+      .map((chartSpec) => (chartSpecListItem(chartSpec) && chartSpec.id === selectedChartSpecId ? chartSpec : chartSpecListItem(chartSpec)))
+      .filter(Boolean);
     const draft = await buildAgentRunDraftCompat({
       context: { store, modelProvider: this.modelProvider },
       project,

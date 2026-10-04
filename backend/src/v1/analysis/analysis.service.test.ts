@@ -233,6 +233,52 @@ test("a standalone mean request cannot create an analysis thread or a plan", asy
   expect(result.reply).toContain("standalone numeric answer");
 });
 
+test("manuscript chart commentary reads the selected chart's traces rather than its bounded list item", async () => {
+  const base = fixture();
+  const chartSpec = {
+    id: "chart_1",
+    projectId: "project_1",
+    spec: {
+      schemaVersion: "labrat.chartSpec.v3",
+      origin: "analysis_result",
+      status: "accepted",
+      chartType: "grouped_bar",
+      title: "Gas product distribution",
+      plotly: {
+        data: [
+          { type: "bar", name: "Exp45", x: ["C1", "C2"], y: [40, 15] },
+          { type: "bar", name: "Exp46", x: ["C1", "C2"], y: [300, 140] },
+        ],
+        layout: {},
+      },
+      traceCatalog: [
+        { traceId: "trace_1", name: "Exp45", type: "bar", pointCount: 2 },
+        { traceId: "trace_2", name: "Exp46", type: "bar", pointCount: 2 },
+      ],
+      defaultChartView: { visibleTraceIds: ["trace_1", "trace_2"] },
+    },
+  };
+  base.repository.listChartSpecs.mockResolvedValue([chartSpec] as never);
+  const answerChartCommentary = vi.fn(async () => ({ ok: true, answer: "Exp46 produces more C1." }));
+  const service = new AnalysisService(base.repository as never, base.authorization as never, base.identityRepository as never, {
+    ...base.modelProvider,
+    answerChartCommentary,
+  } as never, base.executor as never);
+
+  const result = await service.createAgentRun(auth, "project_1", {
+    message: "Write a manuscript-ready analysis of the selected chart.",
+    selectedContext: {
+      requestedWorkflow: "chart_commentary",
+      selectedChartSpecId: "chart_1",
+      selectedChartView: { visibleTraceIds: ["trace_1", "trace_2"] },
+    },
+  });
+
+  expect(result.reply).toBe("Exp46 produces more C1.");
+  expect(answerChartCommentary).toHaveBeenCalledTimes(1);
+  expect((answerChartCommentary.mock.calls[0] as any)[0].chart.traces).toHaveLength(2);
+});
+
 test("missing series remains a durable clarification, not a provider failure or executable revision", async () => {
   const { temperaturePlanFixture } = await import("../../saas/testing/temperaturePlanFixture.js");
   const { store, project } = await temperaturePlanFixture();
